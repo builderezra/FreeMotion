@@ -138,6 +138,23 @@ window.FM = window.FM || {};
   function openId() { return FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null; }
   function leftSince(pid) { return pid != null && openId() !== pid; }
 
+  /* ═══ ASPECT ON AUTO NEVER RESHAPES A PROJECT THAT ALREADY HAS SOMETHING IN IT (queue 690, hunt d) ═══════════════════
+   * The Director builds into the project he has open — it is handed his media and told not to recreate it — but with the
+   * Aspect chip on auto nobody told it the canvas: the Interpreter is asked to assume 9:16, the planner to ALWAYS send a
+   * setProject sized from that, and the digest calls 1080x1920 the default. So his 16:9 project, his clip already in it,
+   * came back a tall portrait frame with the clip hanging off one side, and it exported that shape. Now, with Aspect on
+   * auto: the models are told the canvas; if the project already holds anything, the brief carries that size as FIXED
+   * and every stage's setProject has its width and height taken off before it is applied — structural, because a
+   * prompt is only a request. A chosen Aspect, or an empty project, still sizes the canvas as before; Refine is his own
+   * sentence and is left alone. */
+  function sizeKept(ops, keep) {
+    if (!keep || !Array.isArray(ops)) return ops;
+    return ops.map(function (o) {
+      if (!o || o.op !== 'setProject' || (o.width == null && o.height == null)) return o;
+      var c = Object.assign({}, o); delete c.width; delete c.height; return c;
+    });
+  }
+
   // ---- the pipeline ----
   async function generateScene(prompt, chips, opts) {
     opts = opts || {};
@@ -153,6 +170,13 @@ window.FM = window.FM || {};
     var beforeLen = FM.scene.layers.length;
     var mctx = { prompt: prompt, chips: chips };
     var home = openId(), homeName = (FM.scene.project && FM.scene.project.name) || 'Untitled';   // queue 690
+    // queue 690 (hunt d): the canvas he already has — see sizeKept above
+    var P0 = FM.scene.project, W0 = P0.width, H0 = P0.height;
+    var autoAspect = !(chips && chips.aspect), keepCanvas = autoAspect && FM.scene.layers.length > 0;
+    var shape0 = (FM.aiTemplates && FM.aiTemplates.aspectOf) ? FM.aiTemplates.aspectOf(W0, H0) : (W0 + ':' + H0);
+    var canvasNote = !autoAspect ? '' : keepCanvas
+      ? '\n\nCANVAS: ' + W0 + 'x' + H0 + ' (' + shape0 + '). The project already holds the user\'s own content, so this size is FIXED — build for it.'
+      : '\n\nCANVAS: the project is ' + W0 + 'x' + H0 + ' (' + shape0 + ') — keep that shape unless the request asks for another.';
 
     function left() { return leftSince(home); }
     function aborted() { return state.abort || left(); }
@@ -164,11 +188,12 @@ window.FM = window.FM || {};
       P.row('intent', 'Reading your brief', 'active', null, 'Interpreter · Haiku');
       var intent;
       try {
-        var ir = await call(MODELS.intent, M.systemPrompts.intent, [um(prompt || (chips && chips.subject) || 'a short title card')], M.tools.intent, { maxTokens: 1024, mock: mctx });
+        var ir = await call(MODELS.intent, M.systemPrompts.intent, [um((prompt || (chips && chips.subject) || 'a short title card') + canvasNote)], M.tools.intent, { maxTokens: 1024, mock: mctx });
         intent = ir.out || deriveIntent(chips);
       } catch (e) { intent = deriveIntent(chips); }
       if (left()) throw { cancelled: true };   // queue 690: before the first write, not after it
       if (chips) { ['subject', 'style', 'pacing', 'aspect'].forEach(function (k) { if (chips[k]) intent[k] = chips[k]; }); if (chips.duration) intent.durationSec = parseFloat(chips.duration) || intent.durationSec; }
+      if (keepCanvas) { intent.aspect = shape0; intent.canvas = W0 + 'x' + H0 + ', fixed — the project already has the user\'s content'; }   // queue 690 (hunt d): every later stage reads INTENT
       FM.scene.project.aiIntent = intent;
       P.row('intent', 'Read your brief', 'done', null, 'Interpreter · Haiku');
       if (aborted()) throw { cancelled: true };
@@ -183,7 +208,7 @@ window.FM = window.FM || {};
       P.row('plan', 'Planned the scene', 'done', null, 'Director · Opus');
 
       // 2a) SCAFFOLD — the guaranteed floor, applied immediately
-      FM.aiOps.applyOps(plan.scaffoldOps, refMap);
+      FM.aiOps.applyOps(sizeKept(plan.scaffoldOps, keepCanvas), refMap);
       FM.refreshAll();
       var tasks = Array.isArray(plan.tasks) ? plan.tasks.slice(0, 6) : [];
       tasks.forEach(function (t) { P.row(t.id, t.label || t.goal || 'Build', 'queued', null, 'Builder · Haiku'); });
@@ -201,7 +226,7 @@ window.FM = window.FM || {};
         try {
           var r = await call(model, M.systemPrompts.build, [um(taskTail(t, intent))], M.tools.ops, { maxTokens: 2048, mock: { taskId: t.id }, dryDelay: 300 + i * 220 });
           if (left()) return;   // queue 690: this builder's layers belong to a project he has left
-          var log = FM.aiOps.applyOps((r.out && r.out.ops) || [], refMap);
+          var log = FM.aiOps.applyOps(sizeKept((r.out && r.out.ops) || [], keepCanvas), refMap);
           FM.refreshAll();
           if (log.dropped.length && model === MODELS.build && !t._retried && (r.out && r.out.ops && r.out.ops.length)) {
             t._retried = true; t._errs = log.dropped.map(function (d) { return d.op + ': ' + d.reason; });
@@ -238,7 +263,7 @@ window.FM = window.FM || {};
           if (left()) break;   // queue 690: the throw below says so
           var fixOps = (crit && Array.isArray(crit.ops)) ? crit.ops.slice(0, 6) : [];
           if (!fixOps.length) { P.row('critic', 'Looks good', 'done', 0, 'Critic · Opus'); break; }
-          var fl = FM.aiOps.applyOps(fixOps, refMap); FM.refreshAll();
+          var fl = FM.aiOps.applyOps(sizeKept(fixOps, keepCanvas), refMap, { at: beat }); FM.refreshAll();   // at: the frame it was shown (queue 690, hunt d)
           P.row('critic', 'Polished the look', 'done', fl.appliedCount, 'Critic · Opus');
           if (P.criticThumbs) { try { P.criticThumbs(png, renderToBase64(FM.scene, beat)); } catch (e) {} }
         }
@@ -248,7 +273,7 @@ window.FM = window.FM || {};
 
       // 7) COMMIT ONCE — the whole build is a single undo step
       if (plan.heroRef && refMap[plan.heroRef]) { FM.scene.selectedId = refMap[plan.heroRef]; FM.scene.selectedIds = [FM.scene.selectedId]; }
-      FM.ai._lastBuild = { intent: intent, tasks: tasks, refMap: refMap, dry: dry };   // enables per-task re-roll
+      FM.ai._lastBuild = { intent: intent, tasks: tasks, refMap: refMap, dry: dry, keepCanvas: keepCanvas };   // enables per-task re-roll
       FM.refreshAll();
       if (FM.history) FM.history.commit();
       P.done({ layersAdded: FM.scene.layers.length - beforeLen });
@@ -310,7 +335,7 @@ window.FM = window.FM || {};
       var ids = (task.refs || []).map(function (r) { return lb.refMap[r]; }).filter(Boolean);
       FM.scene.layers = FM.scene.layers.filter(function (l) { return ids.indexOf(l.id) < 0; });
       (task.refs || []).forEach(function (r) { delete lb.refMap[r]; });
-      var log = FM.aiOps.applyOps((r.out && r.out.ops) || [], lb.refMap);
+      var log = FM.aiOps.applyOps(sizeKept((r.out && r.out.ops) || [], lb.keepCanvas), lb.refMap);
       if (!log.appliedCount) throw new Error('empty');   // no replacement built → restore the original rather than wipe the task
       FM.refreshAll();
       if (FM.history) FM.history.commit();
@@ -359,7 +384,7 @@ window.FM = window.FM || {};
       }], M.tools.critique, { maxTokens: 1500, mock: { refine: true, instruction: instruction.trim() } })).out;
       if (leftSince(home)) { P.row('refine', 'Refine stopped — you opened another project', 'done', null, 'nothing changed'); return; }   // queue 690: its ops name the project he left
       var ops = (crit && Array.isArray(crit.ops)) ? crit.ops.slice(0, 8) : [];
-      var log = FM.aiOps.applyOps(ops, refMap);
+      var log = FM.aiOps.applyOps(ops, refMap, { at: beat });   // at: the frame it was shown — a setProp on an animated channel means "this, there" (queue 690, hunt d)
       FM.refreshAll(); if (FM.history) FM.history.commit();
       P.row('refine', log.appliedCount ? 'Refined your scene' : 'No change needed', 'done', log.appliedCount, 'Critic · Opus');
     } catch (e) {

@@ -855,6 +855,20 @@ window.FM = window.FM || {};
   // Demo mode blanks anything that would expose the user's own files on a screen recording: the
   // preview frame AND the filename (which is often just as revealing).
   function demo() { return !!(FM.settings && FM.settings.get('demoMode')); }
+  /* DEMO MODE REACHES A MENU ALREADY ON SCREEN (queue 690). demo() is read only while a tile is DRAWN, and on
+     PC the Add panel is on screen whenever nothing is selected — so with Add, Media open, turning Demo mode
+     on in Settings left his clip's real filename and its picture right there until he happened to change
+     tab. A recording started straight away showed exactly what the switch promises to hide. (The phone
+     sheet redraws each time it opens, js/mobile.js openAdd, which is why only PC showed it.)
+     ONE listener, subscribed once at load — not one per render(), which is the leak js/mobile.js warns
+     about — and it redraws only a live menu whose tiles were drawn under the OTHER value, so any other
+     setting changing leaves the menu alone. The redraw keeps the tab and page; only the tiles change. */
+  if (FM.settings && FM.settings.onChange) FM.settings.onChange(function () {
+    var on = demo();
+    [].forEach.call(document.querySelectorAll('.addmenu'), function (r) {
+      if (r._amRedraw && r._amDemo !== on) r._amRedraw();
+    });
+  });
 
   /* Queue 145 — Ezra: "you can add colour to all the sub section buttons".
    * A CURATED ring rather than a colour per item, and rather than a hash of the label. Per-item
@@ -1197,6 +1211,7 @@ window.FM = window.FM || {};
       }
 
       function drawBody() {
+        root._amDemo = demo();   // what Demo mode was when these tiles were drawn — see the settings listener below
         bodyEl.innerHTML = '';
         pinnedEl.innerHTML = '';
         pinnedEl.classList.remove('is-on');
@@ -1608,6 +1623,7 @@ window.FM = window.FM || {};
        * detached). QUEUE 50 measures the panel to size the tiles, and a detached subtree measures
        * 0x0 — every rect would have been zero and the fit would have silently never engaged. */
       drawBody();
+      root._amRedraw = drawBody;   // for the Demo-mode listener: redraw THIS menu's current tab, in place
 
       /* Re-fit when the panel's box changes: dragging the timeline's top edge changes --tl-h, which
        * is Studio's band height, and resizing the window changes --insp-w. The signature guard is

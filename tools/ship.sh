@@ -127,6 +127,26 @@ if [ -z "${FM_SHIP_IGNORE_LOAD:-}" ] && [ -n "$_LOAD1" ] && awk -v l="$_LOAD1" -
   exit 1
 fi
 
+# ⚠️ EVERY CHANGED SCRIPT MUST PARSE, AND THIS IS SAID IN ONE SECOND RATHER than after the proof step (25 Sep, v16.97).
+# Six hunt branches were stitched into tests/tests.js by a naive "ours then theirs" merge, which dropped one `});` per
+# seam; nothing noticed until prove.sh had spent its time and every test came back "FMTests did not load". A parse costs
+# a second with the JavaScriptCore that ships with macOS. Plain scripts only — this app has no modules.
+_JSC=/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc
+if [ -x "$_JSC" ]; then
+  _BADJS=""
+  for _f in $( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E '^(js|tests)/.*\.js$' | sort -u ); do
+    [ -f "$_f" ] || continue
+    _r="$("$_JSC" -e "try { new Function(read('$_f')); print('ok') } catch (e) { print('ERR ' + e) }" 2>&1)"
+    [ "$_r" = "ok" ] || _BADJS="$_BADJS
+   $_f: $_r"
+  done
+  if [ -n "$_BADJS" ]; then
+    echo "❌ A CHANGED SCRIPT DOES NOT PARSE — the app or the suite would not even load:$_BADJS"
+    _WHY="a changed script does not parse"
+    exit 1
+  fi
+fi
+
 # ⚠️ A RELEASE CANNOT RUN WITHOUT A LOCAL SERVER, AND THE OLD FAILURE WAS DISCOVERED TOO LATE (queue 814,
 # 6 Sep). `tests/_cdp.py` does not start one — it expects port 8777 to be serving — and when nothing was,
 # a ship spent its whole proof step and then died at the suite with "Connection refused", having proved

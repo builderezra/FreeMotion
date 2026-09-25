@@ -46,6 +46,7 @@ def main():
     ap.add_argument('out_pos', nargs='?', default=None, help='(v16.07 form) the PNG to write')
     ap.add_argument('--out', default=None)
     ap.add_argument('--setup', default=None, help='(v16.07 form) JS run AFTER Home is closed')
+    ap.add_argument('--fresh', action='store_true', help='a REAL fresh start: no seeded project (queue 936) — Home shows its empty state')
     a = ap.parse_args()
     a.out = a.out or a.out_pos
     if not a.out:
@@ -64,6 +65,11 @@ def main():
             # #920: the top-of-screen strip lives in the iPhone's safe area, which a desktop browser does not have — so every
             # earlier attempt measured env(safe-area-inset-top) = 0 and could not see it. Chrome ≥136 can fake the insets.
             cdp.send('Emulation.setSafeAreaInsetsOverride', insets={'top': a.safe_top, 'bottom': a.safe_bottom, 'left': 0, 'right': 0})
+        if not a.fresh:
+            # queue 936: a fresh start no longer makes a project, and every caller of this tool so far expects one
+            # (--setup closes Home INTO it). The same key tests/run.html sets; --fresh shows what a new device sees.
+            cdp.send('Page.addScriptToEvaluateOnNewDocument',
+                     source="try { localStorage.setItem('fm.test.seedProject', '1'); } catch (e) {}")
         cdp.send('Page.navigate', url=f'http://localhost:{a.port}{a.path}')
         deadline = time.time() + 30
         while time.time() < deadline:

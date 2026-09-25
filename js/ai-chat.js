@@ -64,7 +64,8 @@ window.FM = window.FM || {};
     'TASTE: keep text inside safe margins and legible against what is behind it. Prefer one confident ' +
     'change over five timid ones. When they ask for a feeling ("make it pop", "calmer") pick concrete ' +
     'values and tell them what you picked, so they can ask for more or less.\n\n' +
-    'Times are seconds. Colours are #rrggbb. z is the stacking index and 0 is the FRONT.';
+    'Times are seconds. Colours are #rrggbb. z is the stacking index and 0 is the FRONT. A layer\'s `animated` lists its ' +
+    'keyframed transform channels and what each reads at the playhead.';
 
   /* What is on screen RIGHT NOW. layerSummary() in ai.js emits {id,type,name,x,y}, which cannot answer
      "make this bigger" — no selection, no time, no duration, no text, no effect list. This is the block
@@ -77,6 +78,13 @@ window.FM = window.FM || {};
       if (l.parent) o.parent = l.parent;
       var fx = (l.effects || []).map(function (e) { return e.type; });
       if (fx.length) o.effects = fx;
+      /* queue 690 (hunt d): WHICH CHANNELS MOVE, and what each reads at the playhead. Without this the model had no way
+         to know a Director title's size was keyframed, so "make it bigger" flattened its pop-in. A setProp on one of
+         these now moves the whole animation to read that value here (js/ai-ops.js setNumericPath), so the number it
+         is measured against is the one worth sending. Only animated channels, so a still project costs nothing. */
+      var tr = l.transform || {}, anim = null;
+      Object.keys(tr).forEach(function (k) { if (FM.isAnimated && FM.isAnimated(tr[k])) { anim = anim || {}; anim[k] = r2(FM.evalProp(tr[k], FM.time)); } });
+      if (anim) o.animated = anim;
       if (l.visible === false) o.hidden = true;
       if (l.locked) o.locked = true;
       if (l.id === s.selectedId) o.selected = true;
@@ -171,10 +179,12 @@ window.FM = window.FM || {};
     setBusy(true);
 
     // the user turn: any tool_result we still owe, then the live scene, then what they said
-    var content = pendingResults.slice();
+    var owed = pendingResults;   // kept until this turn has an answer — see the catch below (queue 690, hunt d)
+    var content = owed.slice();
     pendingResults = [];
     content.push({ type: 'text', text: sceneBlock() + '\n\nTHEY SAID: ' + text });
-    messages.push({ role: 'user', content: content });
+    var turn = { role: 'user', content: content };
+    messages.push(turn);
 
     /* queue 690 (hunt f): the project this sentence was about. The reply takes seconds, the Assistant can be
        closed while it thinks, and Home → another project in that time used to get this project's edits applied
@@ -214,8 +224,19 @@ window.FM = window.FM || {};
       trim();
     } catch (e) {
       /* The turn failed, so the transcript must not keep a user message the model never answered —
-         the next send would post two user turns in a row and the API would reject the lot. */
-      messages.pop();
+         the next send would post two user turns in a row and the API would reject the lot.
+         ⚠️ AND THE ANSWERS IT WAS CARRYING GO BACK WHERE THEY CAME FROM (queue 690, hunt d). That user turn was the
+         ONLY copy of the tool_result owed for the edit Claude made one turn earlier (pendingResults was emptied into
+         it above). Popping it threw that away, and the history was left ending in an edit nothing answered — which
+         the API refuses with a 400 on EVERY later request ("tool_use ids were found without tool_result blocks").
+         So one dropped connection, one overloaded reply or one cut-off answer broke the Assistant until the app was
+         restarted: nothing in the app calls reset(). Cut back to exactly where this turn began (by identity, so it
+         also takes a reply that landed before something later threw) and owe the same answers again; a result for a
+         reply that is now cut away is dropped with it, since answering an edit the history no longer holds is also
+         a 400. */
+      var at = messages.indexOf(turn);
+      if (at >= 0) messages.length = at;
+      pendingResults = owed;
       note((e && e.message) || 'Something went wrong reaching Claude.', 'aic-err');
     } finally {
       setBusy(false);

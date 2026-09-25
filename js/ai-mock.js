@@ -13,21 +13,36 @@ window.FM = window.FM || {};
     return s || 'Your Big Idea';
   }
 
+  /* ⚠️ THE DEMO BUILDS ON HIS CANVAS (queue 690, hunt d). It was drawn for 1080x1920 and forced the project to that size,
+     so "Watch a demo run" turned his landscape project — his clip in it — portrait. With Aspect on auto it now keeps the
+     project's shape (FM.aiTemplates.canvasFor, the same rule as Build a scene without a key), so its layout is laid onto
+     that shape: every position is the same FRACTION of the frame, every size follows the short side. On a 1080x1920
+     project these are exactly the numbers it always had. */
+  function canvas(ctx) { return (FM.aiTemplates && FM.aiTemplates.canvasFor) ? FM.aiTemplates.canvasFor(ctx && ctx.chips) : [1080, 1920]; }
+  function fit(W, H) {
+    var sx = W / 1080, sy = H / 1920, k = Math.min(W, H) / 1080;
+    return { x: function (v) { return Math.round(v * sx); }, y: function (v) { return Math.round(v * sy); }, s: function (v) { return Math.round(v * k); } };
+  }
+  // builders and the critic run after the scaffold has sized the project, so they read the live canvas
+  function liveFit() { var P = FM.scene && FM.scene.project; return fit((P && P.width) || 1080, (P && P.height) || 1920); }
+
   function intent(ctx) {
+    var c = canvas(ctx);
     return {
       subject: title(ctx), style: 'punchy promo', palette: ['#0e1320', '#29d9bb', '#ffce4a', '#ffffff'],
-      pacing: 'fast', durationSec: 6, aspect: '9:16', captions: true, mood: 'energetic, premium',
+      pacing: 'fast', durationSec: 6, aspect: FM.aiTemplates && FM.aiTemplates.aspectOf ? FM.aiTemplates.aspectOf(c[0], c[1]) : '9:16', captions: true, mood: 'energetic, premium',
     };
   }
 
   function plan(ctx) {
     var subj = title(ctx);
+    var c = canvas(ctx), W = c[0], H = c[1], f = fit(W, H);
     return {
       heroRef: 'title',
       scaffoldOps: [
-        { op: 'setProject', width: 1080, height: 1920, fps: 30, duration: 6, background: '#0e1320', name: 'AI Scene' },
-        { op: 'addShape', ref: 'bg', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#0e1320', z: 6, duration: 6 },
-        { op: 'addText', ref: 'title', text: subj, x: 540, y: 780, fontSize: 150, color: '#ffffff', bold: true, align: 'center', z: 0, duration: 6 },
+        { op: 'setProject', width: W, height: H, fps: 30, duration: 6, background: '#0e1320', name: 'AI Scene' },
+        { op: 'addShape', ref: 'bg', shape: 'rect', x: f.x(540), y: f.y(960), shapeW: W, shapeH: H, fill: '#0e1320', z: 6, duration: 6 },
+        { op: 'addText', ref: 'title', text: subj, x: f.x(540), y: f.y(780), fontSize: f.s(150), color: '#ffffff', bold: true, align: 'center', z: 0, duration: 6 },
       ],
       tasks: [
         { id: 't_title', label: 'Hero title', goal: 'pop + gradient the title', refs: ['title'], z: 0 },
@@ -53,10 +68,10 @@ window.FM = window.FM || {};
       case 't_accent': {
         var cols = pickN([['#29d9bb', '#ffce4a'], ['#df5b5b', '#9b6dff'], ['#46c98a', '#4d8bf0'], ['#e85f9e', '#ffce4a']], nonce);
         var shp = pickN(['star', 'heart', 'triangle', 'ellipse'], nonce);
-        var jx = (nonce % 3) * 60;
+        var jx = (nonce % 3) * 60, f = liveFit();
         return { ops: [
-          { op: 'addShape', ref: 'accent1', shape: 'ellipse', x: 300 + jx, y: 1180, shapeW: 220, shapeH: 220, fill: cols[0], z: 4, duration: 6 },
-          { op: 'addShape', ref: 'accent2', shape: shp, x: 820 - jx, y: 520, shapeW: 180, shapeH: 180, fill: cols[1], z: 4, duration: 6 },
+          { op: 'addShape', ref: 'accent1', shape: 'ellipse', x: f.x(300 + jx), y: f.y(1180), shapeW: f.s(220), shapeH: f.s(220), fill: cols[0], z: 4, duration: 6 },
+          { op: 'addShape', ref: 'accent2', shape: shp, x: f.x(820 - jx), y: f.y(520), shapeW: f.s(180), shapeH: f.s(180), fill: cols[1], z: 4, duration: 6 },
           { op: 'addKeyframe', ref: 'accent2', path: 'transform.rotation', keys: [{ t: 0, v: 0 }, { t: 6, v: 360, e: 'linear' }] },
           { op: 'addKeyframe', ref: 'accent1', path: 'transform.scale', keys: [{ t: 0, v: 0.8 }, { t: 3, v: 1.1 }, { t: 6, v: 0.8 }], loopMode: 'pingpong' },
         ] };
@@ -67,14 +82,14 @@ window.FM = window.FM || {};
           ['Type a sentence', 'Get a timeline', 'Keep editing'],
           ['Heaps of agents', 'One scene', 'Zero hassle'],
         ];
-        var s = pickN(sets, nonce);
+        var s = pickN(sets, nonce), fc = liveFit();
         return { ops: [
-          { op: 'addCaptionTrack', ref: 'caps', captionBg: true, fontSize: 76, color: '#ffffff', x: 540, y: 1560, z: 1,
+          { op: 'addCaptionTrack', ref: 'caps', captionBg: true, fontSize: fc.s(76), color: '#ffffff', x: fc.x(540), y: fc.y(1560), z: 1,
             segments: [ { start: 0.3, end: 2.2, text: s[0] }, { start: 2.2, end: 4.2, text: s[1] }, { start: 4.2, end: 6, text: s[2] } ] },
         ] };
       }
       case 't_camera': return { ops: [
-        { op: 'addCamera', ref: 'cam' },
+        { op: 'addCamera', ref: 'cam', z: 99 },   // the bottom row, where the demo has always put it (no z now means on top — queue 690, hunt d)
         { op: 'addKeyframe', ref: 'cam', path: 'transform.scale', keys: [{ t: 0, v: pickN([1.18, 1.1, 1.25, 1.0], nonce) }, { t: 2.4, v: 1, e: 'easeOut' }] },
       ] };
       default: return { ops: [] };
@@ -143,7 +158,7 @@ window.FM = window.FM || {};
             return { assessment: 'applied: ' + (ctx.instruction || ''), ops: ops };
           }
           // build-time critic: first pass nudges, later passes are clean (stops the loop)
-          if (ctx.pass === 0) return { assessment: 'title a touch large for safe margins', ops: [{ op: 'setProp', ref: 'title', path: 'fontSize', value: 132 }] };
+          if (ctx.pass === 0) return { assessment: 'title a touch large for safe margins', ops: [{ op: 'setProp', ref: 'title', path: 'fontSize', value: liveFit().s(132) }] };
           return { assessment: 'looks good', ops: [] };
         }
         default: return { ops: [] };

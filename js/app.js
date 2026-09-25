@@ -883,6 +883,12 @@ window.FM = window.FM || {};
     updateReadout();
     render();
     syncTopBar();
+    /* THE NOTES DOT TELLS THE TRUTH ABOUT THE PROJECT ON SCREEN (queue 690). It was only ever repainted from
+       inside notepad.js — ticking, typing, closing the pad — so nothing lit it when a project was OPENED:
+       reopen the app over a project whose reminder is waiting and the dot was dark (the one moment it exists
+       for), move to a project with no notes and it kept the last one's dot. Every project load, boot
+       restore and undo lands here, so repainting here covers all of them. It is two class toggles. */
+    if (FM.notepad && FM.notepad.sync) FM.notepad.sync();
     FM.syncSelectionChrome();
     // PC: build the one-row transport once, then keep its selection-dependent buttons honest (queue 168)
     if (FM.pcTransportLayout) { FM.pcTransportLayout(); FM.pcTransportSync(); }
@@ -1054,9 +1060,11 @@ window.FM = window.FM || {};
     const mkThumb = (L) => { const cv = document.createElement('canvas'); cv.className = 'ctx-thumb'; cv.width = 38; cv.height = 24; if (FM.renderThumb) { try { FM.renderThumb(L, cv); } catch (e) {} } return cv; };
     const mkGlyph = (g) => { const s = document.createElement('span'); s.className = 'ctx-thumb ctx-thumb-glyph'; s.textContent = g; return s; };
     const cands = FM.scene.layers.filter(l => l.id !== layer.id && l.type !== 'camera' && !(FM.isAncestor && FM.isAncestor(FM.scene, layer.id, l.id)));
-    const items = [{ label: (!layer.parent ? '✓ ' : '') + 'None', iconEl: mkGlyph('⊘'), action: () => { layer.parent = null; FM.refreshAll(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Parent removed', 1200); } }, { sep: true }];
+    // Through FM.relinkParent (queue 690, third hunt): linking and unlinking keep the layer where he sees it.
+    const link = (id, said, ms) => { const note = FM.relinkParent(layer, id); FM.refreshAll(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast(note ? said + '. ' + note : said, note ? 5000 : ms); };
+    const items = [{ label: (!layer.parent ? '✓ ' : '') + 'None', iconEl: mkGlyph('⊘'), action: () => link(null, 'Parent removed', 1200) }, { sep: true }];
     if (!cands.length) items.push({ label: 'No other layers to attach to', disabled: true });
-    cands.forEach(c => items.push({ label: (layer.parent === c.id ? '✓ ' : '') + (c.name || c.type), iconEl: mkThumb(c), action: () => { layer.parent = c.id; if (!layer.parentMode) layer.parentMode = 'normal'; FM.refreshAll(); if (FM.history) FM.history.commit(); if (FM.toast) FM.toast('Parented to ' + (c.name || c.type), 1300); } }));
+    cands.forEach(c => items.push({ label: (layer.parent === c.id ? '✓ ' : '') + (c.name || c.type), iconEl: mkThumb(c), action: () => link(c.id, 'Parented to ' + (c.name || c.type), 1300) }));
     if (FM.contextMenu) FM.contextMenu.show(Math.max(8, x), y, items);
   };
 
@@ -1459,9 +1467,12 @@ window.FM = window.FM || {};
   /* Exposed for the timeline's own "Add marker here" (context menu), which adds to the same array from
      another module and had the identical omission (queue 243). */
   FM.updateReadout = () => updateReadout();
-  FM.toggleMarkerAtPlayhead = function () {
+  /* `at` (queue 690): the moment to mark, when that is not the playhead NOW — the head's tap passes the time
+     the finger touched down while the song plays, because the click that calls this fires on the lift, a tap's
+     length later. Only a number counts, so a stray event object passed by a listener can never become a time. */
+  FM.toggleMarkerAtPlayhead = function (at) {
     const P = FM.scene.project; if (!P.markers) P.markers = [];
-    const t = FM.time;
+    const t = (typeof at === 'number' && isFinite(at)) ? at : FM.time;
     // "already here?" = SAME FRAME only (was 0.12s ≈ 3-4 frames — adding a benchmark on the very
     // next frame used to delete the previous one instead)
     const near = P.markers.find(m => !m.thumb && Math.abs(m.t - t) < 0.5 / (P.fps || 30));   // never let a benchmark tap eat the thumbnail-frame marker (they can share a frame)
@@ -2780,7 +2791,11 @@ window.FM = window.FM || {};
     setTimeout(function () { if (FM.loadingDot) FM.loadingDot.check(); }, 0);
     const scene = FM.scene, P = scene.project;
     const first = scene.layers.length === 0;
-    if (first && rec.width && rec.height) {
+    /* ⚠️ queue 690 (HUNT-a): ONLY A SIZE NOBODY CHOSE. A project made from a New project tile other than Custom
+       carries `sizePicked` (js/home.js createFromDialog) — he named its shape and size, so his first clip is
+       fitted INTO that canvas below like any later clip, instead of silently replacing it. Every other empty
+       project (Custom, which says Auto adjusts, and the ones the app makes itself) still takes the file's size. */
+    if (first && rec.width && rec.height && !P.sizePicked) {
       const fit = FM.fitProjectSize(rec.width, rec.height);
       P.width = fit.w; P.height = fit.h;
       // Say so rather than quietly disagreeing with the file — a capped project is a real choice the
@@ -3157,6 +3172,12 @@ window.FM = window.FM || {};
     // for the blue tick (queue 523). Passed the INCOMING id, because selectedId has not been written
     // yet at this point.
     if (FM.textEdit && FM.textEdit.syncToSelection) FM.textEdit.syncToSelection(id);
+    /* WHAT HE WAS WORKING ON A MOMENT AGO (queue 690). A few recent selections, newest first, so a tool
+       opened from one clip can aim at the one he had before it. The case that needed it: Audio →
+       keyframes is only reachable from the SONG's own Volume card, so by the time the sheet opens the
+       song is the selection and the Logo he was just working on is not — and a song has no picture to
+       drive. Ids only, never saved (it lives on FM, not the scene); a stale id simply fails to resolve. */
+    if (id) { const r = FM._recentSel || (FM._recentSel = []); const at = r.indexOf(id); if (at >= 0) r.splice(at, 1); r.unshift(id); if (r.length > 8) r.length = 8; }
     FM.scene.selectedId = id;
     FM.scene.selectedIds = id ? [id] : [];
     FM.syncSelectionChrome();   // BEFORE the rebuild — sel-mode/sel-multi change what it renders
@@ -3554,6 +3575,31 @@ window.FM = window.FM || {};
   }
   FM._planParentBake = planParentBake;   // suite seam (queue 914.4)
 
+  /* ═══ LINKING A LAYER TO A PARENT, OR UNLINKING IT, LEAVES IT WHERE IT IS (queue 690, third hunt) ═════════════
+   * The link button (#btn-parent on PC, #m-dup on the phone) and the Parent row in Move & Transform only wrote
+   * `layer.parent = id`. The renderer reads a child's x/y as an offset FROM its parent (applyParentChain
+   * translates to the parent's x/y first), so the layer was drawn at parent + its own numbers: add a shape and a
+   * Controller — both land in the middle — and link them, exactly as the Controller's own toast says to, and the
+   * shape jumped to the bottom-right corner with three quarters of it off the canvas. Picking None threw a linked
+   * layer the other way. For deleting a parent and for grouping he already chose *"Stay exactly where they are"*
+   * (#914 clauses 4 and 13), and planParentBake is that maths; this is the one door both pickers now go through.
+   * The groups whose families change are pinned first (FM.settleGroupPivotsAbove), so a layer joining or leaving
+   * a scaled group does not drag the pivot its neighbours turn about. What cannot be kept — a keyframed path that
+   * would have to be TURNED into the new frame with x and y keyed at different moments — is still linked (he
+   * asked for the link) and SAID, in the words deleting a parent uses. Returns that note, or ''. */
+  function relinkParent(layer, toId) {
+    toId = toId || null;
+    const from = layer.parent || null;
+    if (from === toId) return '';
+    if (FM.settleGroupPivotsAbove) { FM.settleGroupPivotsAbove(from); FM.settleGroupPivotsAbove(toId); }
+    const plan = planParentBake(layer, toId, FM.time);
+    if (plan) plan.apply();
+    layer.parent = toId;
+    if (toId && !layer.parentMode) layer.parentMode = 'normal';
+    return (plan || !layer.transform) ? '' : '“' + (layer.name || 'Layer') + '” could not keep its place — a keyframed path cannot be turned into its new parent without changing it';
+  }
+  FM.relinkParent = relinkParent;
+
   // ---- AM-style grouping: a 'group' layer is an invisible transform parent; members follow it
   // via the existing parent chain. Timeline shows the group as a collapsible row.
   // opts.mask → MASKING group: the top member clips the rest (composited as one unit in renderScene).
@@ -3684,7 +3730,6 @@ window.FM = window.FM || {};
     // read as identity, returned 0, and its keyframes were dropped without a word.
     if (anim) return { baked: 0, skipped: -1 };            // -1 = "there was something, and it is animated"
     if (identity) return { baked: 0, skipped: 0 };
-    const rad = grot * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
     /* ═══ THE BAKE MUST USE THE SAME PIVOT THE RENDERER DOES (queue 630) ═════════════════════════════
      * This function is the algebra of `applyParentChain` written out longhand, so the two are a matched
      * pair: whatever the renderer does to place a member, this must reproduce exactly, or ungrouping
@@ -3692,29 +3737,30 @@ window.FM = window.FM || {};
      * its ANCHOR instead of the origin, this still baked about the origin — and the shipped test
      * "ungrouping leaves the layers where the group put them" caught it immediately, reporting members
      * jumping from 59,22..148,159 to 41,64..103,159.
-     * Read the pivot BEFORE the members are re-parented — which is already why ungroup() calls this
-     * first, and it is the reason that ordering is load-bearing rather than incidental.
-     * Null pivot (an empty group, or no measurable members) falls back to the origin, which is exactly
-     * what the renderer does in the same case. */
-    const _piv = (FM.groupPivot && FM.groupPivot(g, FM.scene, 0)) || { x: 0, y: 0 };
-    const Px = _piv.x || 0, Py = _piv.y || 0;
-    let baked = 0;
+     * ═══ …AND A MEMBER WITH ITS OWN MOTION PATH KEEPS ITS PLACE TOO (queue 690, third hunt) ═════════════
+     * This used to skip any member whose own x or y was keyframed — "cannot be shifted by editing one
+     * number" — and say nothing. So after he dragged a group into place and tapped Ungroup, the still layers
+     * stayed where the group put them and every layer with a move animation (the ones that make it a motion
+     * graphic) snapped back to where it was before the move: measured 224 px, from 700,500 to 500,600 at 2 s.
+     * A keyframed path CAN be re-expressed exactly — a move shifts every key, a scale multiplies them, a turn
+     * needs x and y keyed together — and planParentBake (queue 914.4) already does precisely that, reading
+     * both frames off the renderer's own matrices (so the pivot, split halves and a child's rotation mode come
+     * with it by construction). Every member now goes through it, still and animated alike, so the two kinds
+     * cannot come out of one group by two different sums. What it cannot carry — a path keyed on x and y at
+     * different moments inside a TURNED group — is named by the caller, never dropped quietly.
+     * ALL plans are made before ANY is applied, and the pivots above are pinned first: moving one member
+     * changes the box a group without a stored pivot measures, and the next member's frame would then be
+     * read off a different pivot than the one it was drawn with. */
+    const to = g.parent || null;
+    if (FM.settleGroupPivotsAbove) { FM.settleGroupPivotsAbove(g.id); }
+    const plans = [], unbaked = [];
     FM.scene.layers.forEach(l => {
-      if (l.parent !== g.id) return;
-      const t = l.transform; if (!t) return;
-      // A member with its OWN animated position cannot be shifted by editing one number either.
-      if (FM.isAnimated && (FM.isAnimated(t.x) || FM.isAnimated(t.y))) return;
-      const lx = (FM.evalProp(t.x, 0) || 0) - Px, ly = (FM.evalProp(t.y, 0) || 0) - Py;
-      t.x = gx + Px + (cos * lx - sin * ly) * sc;
-      t.y = gy + Py + (sin * lx + cos * ly) * sc;
-      if (grot && !(FM.isAnimated && FM.isAnimated(t.rotation))) t.rotation = (FM.evalProp(t.rotation, 0) || 0) + grot;
-      if (sc !== 1 && !(FM.isAnimated && FM.isAnimated(t.scale))) {
-        const ls = FM.evalProp(t.scale, 0);
-        t.scale = ((typeof ls === 'number' && isFinite(ls)) ? ls : 1) * sc;
-      }
-      baked++;
+      if (l.parent !== g.id || !l.transform) return;
+      const plan = planParentBake(l, to, FM.time);
+      if (plan) plans.push(plan); else unbaked.push(l);
     });
-    return { baked: baked, skipped: 0 };
+    plans.forEach(p => p.apply());
+    return { baked: plans.length, skipped: 0, unbaked: unbaked };
   }
 
   /* WHAT ELSE THE GROUP WAS CARRYING (bug hunt, 21 Aug). bakeGroupTransform above settles WHERE the
@@ -3760,7 +3806,12 @@ window.FM = window.FM || {};
     // BOTH losses are said (queue 739): the animated-position note used to hide the effects/look note behind an else.
     const animMsg = 'This group’s position is animated — ungrouping cannot carry that onto the layers, so they go back to their own positions';
     const lostMsg = lost.length ? 'Ungrouped — but ' + lost.join(' and ') + ' belonged to the group itself and cannot be carried onto the layers individually' : '';
-    if (FM.toast) { if (bake.skipped === -1 && lostMsg) FM.toast(animMsg + '. ' + lostMsg, 7000); else if (bake.skipped === -1) FM.toast(animMsg, 6000); else if (lostMsg) FM.toast(lostMsg, 6000); }
+    // …and a member whose keyframed path could not be carried out of the group is NAMED (queue 690, third hunt):
+    // it drops into the group's parent with its own numbers, which moves it, and a silent move is the bug.
+    const ub = bake.unbaked || [];
+    const ubMsg = ub.length ? '“' + (ub[0].name || 'Layer') + '”' + (ub.length > 1 ? ' and ' + (ub.length - 1) + ' more' : '') + ' could not keep ' + (ub.length > 1 ? 'their' : 'its') + ' place — a keyframed path cannot be turned out of the group without changing it' : '';
+    const msgs = [bake.skipped === -1 ? animMsg : '', lostMsg, ubMsg].filter(Boolean);
+    if (FM.toast && msgs.length) FM.toast(msgs.join('. '), msgs.length > 1 ? 7000 : 6000);
     FM.scene.layers.forEach(l => { if (l.parent === id) l.parent = g.parent || null; });   // members lift into the parent context
     FM.scene.layers = FM.scene.layers.filter(l => l !== g);
     FM.selectLayer(null);
@@ -4276,18 +4327,73 @@ window.FM = window.FM || {};
     }
     return true;
   });
+  /* ⚠️ queue 690 (HUNT-a): THE NEW FILE TAKES THE OLD ONE'S PLACE, NOT ITS PIXEL SCALE. A media layer's size on the
+     canvas is the FILE's pixel size times transform.scale (FM.layerSize), and the scale was chosen on import to fit
+     THAT file. Kept as it was, a 4K clip swapped in for a 1080p one of the same shape came in twice as wide and twice
+     as tall — only its middle quarter showed — a 12 MP photo nearly four times, and a small file tiny. So the scale
+     (every keyframe of it) is multiplied by what makes the new file fit the box the old one drew, the same `min` the
+     importer uses to fit a file into the canvas. A crop is in SOURCE pixels, so it is moved onto the new file as the
+     same fraction of the frame. Called only from the swap HE makes (below) — never from replaceMediaWith, which an
+     undo also calls with the layer's own scale already put back by history. Song ↔ song (no picture) is untouched. */
+  function mulProp(obj, key, f) {
+    const p = obj && obj[key];
+    if (FM.isAnimated(p)) p.kf.forEach(k => {
+      if (typeof k.v === 'number' && isFinite(k.v)) k.v *= f;
+      if (Number.isFinite(k.to)) k.to *= f;   // a tangent is in the value's own units, so it scales with it
+      if (Number.isFinite(k.ti)) k.ti *= f;
+    });
+    else if (typeof p === 'number' && isFinite(p)) obj[key] = p * f;
+  }
+  function fitReplacedMedia(layer, old, nrec) {
+    const ow = old && old.width, oh = old && old.height, nw = nrec && nrec.width, nh = nrec && nrec.height;
+    if (!layer || !layer.transform || !(ow > 0 && oh > 0 && nw > 0 && nh > 0)) return;
+    if (layer.crop) {
+      const kx = nw / ow, ky = nh / oh;
+      mulProp(layer.crop, 'x', kx); mulProp(layer.crop, 'w', kx);
+      mulProp(layer.crop, 'y', ky); mulProp(layer.crop, 'h', ky);
+    }
+    const k = Math.min(ow / nw, oh / nh);
+    if (isFinite(k) && k > 0 && Math.abs(k - 1) > 1e-9) mulProp(layer.transform, 'scale', k);
+  }
+  FM._fitReplacedMedia = fitReplacedMedia;   // suite seam (queue 690)
+
+  /* RETURNS A PROMISE THAT SETTLES WHEN THE SWAP HAS LANDED (queue 690, HUNT-e) — true once the new file is in
+     the layer, false if he cancelled or it would not load. The layer ⋯ menu ignores it, as it always has. The
+     Insert your Media screen needs it: it used to guess when to redraw (on window focus, and on a 1.2 s timer),
+     and both guesses land BEFORE the swap does — the focus comes back while his photo is still decoding and the
+     timer fires while he is still choosing — so the slot kept the template's picture and the swap looked like
+     it had done nothing. A picker that is dismissed in a browser without the `cancel` event never settles; a
+     caller that waits on it simply never hears back, which is exactly what happened before. */
   FM.replaceMedia = function (id) {
     const layer = FM.layerById(FM.scene, id);
-    if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return;
+    if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return Promise.resolve(false);
+    /* ⚠️ queue 690 (HUNT-a): A SONG IS REPLACED BY A SONG. A song is a video layer with no picture, so the ⋯ menu offers
+       it Replace media… like any clip (and a template's Insert your Media lists it as a slot) — but this picker asked
+       for video/*,image/* only, which on his iPhone greys out every song in Files, and a song that reached it anyway
+       was loaded as a PHOTO, failed, and the toast said Could not load that file. So a song opens the same picker
+       Add ▸ Audio does (the extensions are what iOS matches — see ACCEPT_AUDIO in js/addmenu.js), and the file is
+       sorted by FM.mediaKind exactly as an import is: audio rides the pictureless-video path, and a VIDEO picked
+       for a song gives up its sound, as it does under Add ▸ Audio (queue 448), so the layer stays a song. */
+    const cur = FM.media.get(id);
+    const isSong = layer.type === 'video' && !!cur && !(cur.width > 0 && cur.height > 0);
+    let settle = null;
+    const landed = new Promise(res => { settle = res; });
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'video/*,image/*'; input.style.display = 'none';
-    input.addEventListener('change', async () => {
+    input.type = 'file'; input.accept = (isSong && FM._audioAccept) ? FM._audioAccept() : 'video/*,image/*'; input.style.display = 'none';
+    const swap = async () => {
       const file = input.files && input.files[0]; input.remove();
-      if (!file) return;
-      const isVideo = /^video\//.test(file.type) || /\.(mp4|mov|webm|mkv|m4v)$/i.test(file.name);
+      if (!file) return false;
+      const kind = mediaKind(file);
       let nrec = null;
-      try { nrec = isVideo ? await FM.loadVideoFile(file) : await FM.loadImageFile(file); } catch (e) { nrec = null; }
-      if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return; }
+      try {
+        if (isSong && kind === 'video') {
+          const wav = await audioFromVideo(file);
+          if (!wav) { if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — the song is unchanged', 4200); return false; }
+          nrec = await FM.loadVideoFile(wav);
+        } else if (kind === 'video' || kind === 'audio') nrec = await FM.loadVideoFile(file);
+        else nrec = await FM.loadImageFile(file);   // an image, or a name nothing recognises (the old fall-through)
+      } catch (e) { nrec = null; }
+      if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return false; }
       /* queue 829: keep the outgoing file BEFORE anything replaces it. The next save writes the new blob
          over the same key, so without this the original is gone from the registry, from IndexedDB and
          from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
@@ -4296,6 +4402,7 @@ window.FM = window.FM || {};
         try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {}
       }
       FM.replaceMediaWith(id, nrec);
+      fitReplacedMedia(FM.layerById(FM.scene, id), outgoing, nrec);   // queue 690 (HUNT-a): same place, same size — before the commit, so undo puts the old scale back
       if (layer.reversed && FM.ensureReverseCache) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
       /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.
        *
@@ -4323,9 +4430,14 @@ window.FM = window.FM || {};
         FM.mediaLib.list().filter(e => e.key === id).forEach(e => FM.mediaLib.remove(e.mid));
         FM.mediaLib.add(nrec, id);
       }
-    });
+      return true;
+    };
+    input.addEventListener('cancel', () => { input.remove(); settle(false); });
+    // a throw still surfaces as the unhandled rejection it always was — the caller just hears "no swap" first
+    input.addEventListener('change', () => { swap().then(settle, e => { settle(false); throw e; }); });
     document.body.appendChild(input);
     input.click();
+    return landed;
   };
 
   // ===== Playhead-is-outside-the-clip actions (Alight Motion parity) =====
@@ -6146,12 +6258,20 @@ window.FM = window.FM || {};
          button does are about marking the frame you are parked on.
          Same shape as the pill's hold so the two feel identical: 550ms, cancelled by an 8px drag, and it
          suppresses the trailing click so a hold never also drops a bookmark. */
-      let hLp = null, hFired = false, hDown = null;
+      let hLp = null, hFired = false, hDown = null, hPressT = null;
       const hEnd = () => { clearTimeout(hLp); hLp = null; hDown = null; };
       headTap.addEventListener('pointerdown', (e) => {
         e.stopPropagation();   // must not start a scrub, or the line jumps out from under the finger
+        hPressT = null;        // a press that never became a click must not leave its time for the next one
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         hDown = { x: e.clientX, y: e.clientY }; hFired = false;
+        /* A BEAT IS MARKED WHERE THE FINGER LANDS (queue 690). Marking a song is: press play, tap this on
+           every beat. The bookmark is dropped by the CLICK below, which fires when the finger LIFTS — so
+           while the song played every mark landed a tap's length late (the hunt measured 4-5 frames), a cut
+           on it trailed the music, and the same beat marked with M on PC (keydown, the press itself) landed
+           somewhere else. The time is taken here, at the press, and used only while playing: parked, the
+           playhead has not moved between press and lift, so there is nothing to correct. */
+        hPressT = FM.playing ? FM.time : null;
         clearTimeout(hLp);
         hLp = setTimeout(() => { hLp = null; hFired = true; if (FM.setThumbnailFrame) FM.setThumbnailFrame(); }, 550);
       });
@@ -6160,13 +6280,14 @@ window.FM = window.FM || {};
       headTap.addEventListener('pointercancel', hEnd);
       headTap.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();          // never let it fall through to a scrub
+        const pressT = hPressT; hPressT = null;            // one press, one use — a keyboard click has no press and marks NOW
         if (hFired) { hFired = false; return; }            // the hold already handled this press
         /* queue 921 S7 review: parked on a comment, the head IS that comment's mark (it covers it), so the
            tap opens it — it used to drop a bookmark on top of it instead. */
         const CMx = FM.collab && FM.collab.comments;
         const cmAt = CMx && CMx.installed && CMx.installed() && CMx.atHead ? CMx.atHead() : null;
         if (cmAt) { CMx.open({ at: cmAt }); return; }
-        if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead();
+        if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead(pressT);
       });
       headTap.title = 'Tap: add or remove a bookmark here · hold: set this frame as the project thumbnail';
     }
@@ -7661,12 +7782,21 @@ window.FM = window.FM || {};
          screen out side of it it wil close the menu." It closes WITHOUT applying — the same as Cancel
          — because a stray tap on the backdrop must never silently resize someone's project.
          On the BACKDROP only (`e.target === cvDialog`), so a click that lands on the card itself, or
-         on anything inside it, is untouched. And on pointerdown rather than click: a drag that starts
-         inside the card and releases outside it would otherwise count as an outside click and shut
-         the dialog mid-gesture. The cog itself is excluded — it sits above the scrim now (v8.10), and
-         without this a click on it would close and immediately reopen the dialog. */
-      cvDialog.addEventListener('pointerdown', (e) => {
-        if (e.target !== cvDialog) return;
+         on anything inside it, is untouched. The cog itself is excluded on PC — it sits above the scrim
+         (v8.10), and without that a click on it would close and immediately reopen the dialog.
+         ⚠️ ON CLICK, NOT POINTERDOWN (queue 690), and only when the press BEGAN on the backdrop. This used to
+         close on pointerdown, so that a drag starting inside the card and let go outside it would not count
+         as an outside click — the start-on-the-backdrop check covers that now. Closing on the way down
+         handed the rest of a real tap to whatever was under the backdrop, because its click is hit-tested
+         after the dialog has gone: on the phone, where nothing is lifted above the scrim, a second tap on
+         the cog shut the dialog and opened it again in one tap — "tap it again it should close it not open
+         it again" (#762) — and a tap over the top bar could press the button underneath. js/ask.js wrote
+         this rule down for its own scrim first. */
+      let cvDownOnScrim = false;
+      cvDialog.addEventListener('pointerdown', (e) => { cvDownOnScrim = e.target === cvDialog; });
+      cvDialog.addEventListener('click', (e) => {
+        const began = cvDownOnScrim; cvDownOnScrim = false;
+        if (e.target !== cvDialog || !began) return;
         (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         cvDialog.classList.add('hidden');
       });
@@ -7819,6 +7949,11 @@ window.FM = window.FM || {};
       // Escape is deliberately still allowed through: it is how several of these overlays close.
       // Both key and code are checked — a synthesised event may carry only one of them.
       const isEscape = e.code === 'Escape' || e.key === 'Escape';
+      /* ⚠️ queue 690: THE ? SHEET IS ITSELF A FULL-SCREEN OVERLAY, so the rule below threw away the second ?
+         and the sheet could not be put away with the key that opened it — while its own list says
+         "? — Show / hide this help". So a ? with the sheet up hides it, first. Not in a text field (a ? typed
+         there is a character) and not with ⌘/Ctrl held (that combo is the browser's). */
+      if (e.key === '?' && !inEdit && !e.metaKey && !e.ctrlKey && FM.shortcuts && FM.shortcuts.isOpen()) { e.preventDefault(); FM.shortcuts.hide(); return; }
       if (!isEscape && FM.overlayOwnsScreen()) return;
       /* ⚠️ queue 809: AN OPEN BROWSER OWNS THE KEYBOARD, and unlike the rule above that is not a
          geometry question. On PC the effects browser is docked over the INSPECTOR COLUMN, so
@@ -7882,6 +8017,15 @@ window.FM = window.FM || {};
       // combos above all return, so reaching here with a modifier held means we must NOT hijack the
       // bare-key chain below (⌘S was silently splitting the clip, ⌘M dropping a marker).
       if (mod) return;
+      /* ⚠️ queue 690: ESC WHILE WRITING A NOTE CLOSES NOTES. + Add a note puts the cursor in the new line, so
+         after adding one the Escape always comes from inside a text field — and the line below returns for
+         every key typed in a field, so it never reached the Escape branch that closes Notes. Only the pad's
+         own fields: Escape in any other field is still that field's business. FM.notepad.escape() commits
+         the line being typed before the pad goes (see close() in js/notepad.js). */
+      if (inEdit && isEscape && tgt.closest && tgt.closest('.np-scrim') && FM.notepad && FM.notepad.escape) {
+        if (!e.defaultPrevented && FM.notepad.escape()) e.preventDefault();
+        return;
+      }
       if (inEdit) return;
       if (e.code === 'Space') { e.preventDefault(); FM.togglePlay(); }
       else if (e.key === '?') { e.preventDefault(); if (FM.shortcuts) FM.shortcuts.toggle(); }

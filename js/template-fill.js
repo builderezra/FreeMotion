@@ -27,6 +27,7 @@ window.FM = window.FM || {};
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
   let root, cv, ctx, scrub, slotsEl, btnReplace, textWrap, textIn, colorWrap, colorIn, sel = null, raf = 0;
+  let chipPlate = null;   // one offscreen canvas every text/shape chip renders through (see drawThumb)
 
   /* WHAT COUNTS AS A SLOT (queue 619, and this is the whole of that entry).
    * It used to be media layers ONLY, and `open()` returned false when there were none — with the
@@ -98,11 +99,24 @@ window.FM = window.FM || {};
     if (kindOf(layer) !== 'media') {
       const P = FM.scene.project || { width: 1080, height: 1920 };
       const s2 = Math.min(c.width / P.width, c.height / P.height) || 0.1;
-      g.save();
-      g.translate((c.width - P.width * s2) / 2, (c.height - P.height * s2) / 2);
-      g.scale(s2, s2);
-      try { FM.renderScene(g, { project: Object.assign({}, P, { background: null }), layers: [layer] }, (layer.start || 0) + 0.01); } catch (e) {}
-      g.restore();
+      /* ⚠️ RENDERED OFF TO THE SIDE, THEN PLACED (queue 690, HUNT-e). This used to translate and scale the
+         chip's own context and render straight into it — but FM.renderScene works out its scale from the
+         CANVAS (108 / 1080 here) and its first act is setTransform, which throws the fit-to-the-box
+         transform away. The whole canvas was drawn from the chip's top-left at 0.1, so on his 1080 x 1920
+         phone templates only the top 1080 px ever reached the chip: a lower-third title or bar came out
+         as an empty dark square, a centred title as half a one, and clearRect wiped the chip's own
+         background as well. A canvas sized to the fitted composition gives renderScene exactly the scale
+         it derives, and drawImage puts the result in the middle of the chip. */
+      const w = Math.max(1, Math.round(P.width * s2)), h = Math.max(1, Math.round(P.height * s2));
+      if (!chipPlate) chipPlate = document.createElement('canvas');
+      if (chipPlate.width !== w || chipPlate.height !== h) { chipPlate.width = w; chipPlate.height = h; }
+      const pg = chipPlate.getContext('2d');
+      pg.setTransform(1, 0, 0, 1, 0, 0);
+      pg.clearRect(0, 0, w, h);
+      try {
+        FM.renderScene(pg, { project: Object.assign({}, P, { background: null }), layers: [layer] }, (layer.start || 0) + 0.01);
+        g.drawImage(chipPlate, Math.round((c.width - w) / 2), Math.round((c.height - h) / 2));
+      } catch (e) {}
       return;
     }
     const rec = FM.media && FM.media.get ? FM.media.get(layer.id) : null;
@@ -246,15 +260,15 @@ window.FM = window.FM || {};
     btnReplace.addEventListener('click', () => {
       if (!sel || !FM.replaceMedia) return;
       const id = sel;
-      FM.replaceMedia(id);
-      /* FM.replaceMedia is a file picker and resolves whenever the user gets round to it, with no
-         callback to hang the refresh on. Rather than invent one and change a path four other things
-         use, the row re-reads itself when the window comes back — which is exactly when a picker
-         closes — and once more shortly after, for the case where the file was already to hand and the
-         decode finished first. Cheap: it redraws six chips. */
+      /* ⚠️ REDRAW WHEN THE SWAP HAS LANDED, NOT WHEN IT MIGHT HAVE (queue 690, HUNT-e). This used to guess:
+         once when the window got focus back ("exactly when a picker closes") and once on a 1.2 s timer. Both
+         land BEFORE the swap — focus returns while his photo is still decoding, and the timer fires while he is
+         still choosing — so the slot kept the template's picture, and with a real phone photo the big preview
+         did too: the screen built to show the template becoming his said the swap had done nothing.
+         FM.replaceMedia now settles when the new file is in the layer, so the row and the preview redraw then. */
       const again = () => { if (root && !root.classList.contains('hidden')) { drawSlots(); select(FM.layerById(FM.scene, id)); } };
-      window.addEventListener('focus', again, { once: true });
-      setTimeout(again, 1200);
+      const landed = FM.replaceMedia(id);
+      if (landed && landed.then) landed.then(again, again);
     });
     root.appendChild(btnReplace);
 

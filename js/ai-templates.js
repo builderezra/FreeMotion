@@ -9,6 +9,26 @@ window.FM = window.FM || {};
 
   function pick(chips, key, dflt) { return (chips && chips[key] != null && chips[key] !== '') ? chips[key] : dflt; }
 
+  /* ⚠️ ASPECT ON AUTO IS HIS PROJECT'S OWN SHAPE (queue 690, hunt d). AI Scene is opened from the Add menu of the project he
+     is IN and builds into it, and auto used to mean 9:16: "Build a scene without a key" (and the demo, js/ai-mock.js) sent
+     a setProject that turned his 16:9 project — his clip already in it — into a tall 1080x1920 frame with the clip hanging
+     off one side, and it exported that shape. On the no-key screen he could not even choose, because the Aspect chip is on
+     the compose screen, which is hidden there. A template and the demo have no brief to read a shape from, so the shape he
+     gave the project is the one signal there is. A chosen Aspect still sets the size. */
+  function canvasFor(chips) {
+    var a = pick(chips, 'aspect', '');
+    if (a && ASPECT[a]) return ASPECT[a].slice();
+    var P = FM.scene && FM.scene.project;
+    if (P && P.width > 0 && P.height > 0) return [P.width, P.height];
+    return ASPECT['9:16'].slice();
+  }
+  /* A canvas as the ratio the Director's brief speaks in — 1920x1080 is "16:9", 1080x1350 is "4:5". */
+  function aspectOf(W, H) {
+    var a = Math.round(W) || 1, b = Math.round(H) || 1, x = a, y = b;
+    while (y) { var r = x % y; x = y; y = r; }
+    return (a / x) + ':' + (b / x);
+  }
+
   // Three distinct looks, chosen from the style/pacing keyword so "Build without a key" varies.
   var LOOKS = {
     punchy:  { palette: ['#0e1320', '#29d9bb', '#ffce4a', '#ffffff'], titleAnim: 'pop',    accent: 'orbit', glow: true,  cam: 1.16 },
@@ -25,7 +45,7 @@ window.FM = window.FM || {};
   function build(chips) {
     chips = chips || {};
     var subject = String(pick(chips, 'subject', 'Your Big Idea')).slice(0, 80);
-    var dims = ASPECT[pick(chips, 'aspect', '9:16')] || ASPECT['9:16'];
+    var dims = canvasFor(chips);
     var W = dims[0], H = dims[1];
     var dur = Math.max(2, Math.min(30, parseFloat(pick(chips, 'duration', 6)) || 6));
     var look = LOOKS[chooseLook(chips)];
@@ -42,7 +62,7 @@ window.FM = window.FM || {};
       { op: 'addKeyframe', ref: 'title', path: 'transform.opacity', keys: [{ t: 0, v: 0 }, { t: 0.4, v: 1, e: 'easeOut' }] },
       { op: 'addCaptionTrack', ref: 'caps', captionBg: true, fontSize: Math.round(H / 26), color: ink, x: W / 2, y: H * 0.82, z: 1,
         segments: [ { start: 0.4, end: dur * 0.4, text: 'No key needed' }, { start: dur * 0.4, end: dur * 0.75, text: 'Fully editable' }, { start: dur * 0.75, end: dur, text: 'Make it yours' } ] },
-      { op: 'addCamera', ref: 'cam' },
+      { op: 'addCamera', ref: 'cam', z: 99 },   // z past the end = the bottom row, where this build has always put it (no z now means on top — queue 690, hunt d)
       { op: 'addKeyframe', ref: 'cam', path: 'transform.scale', keys: [{ t: 0, v: 1.0 + (look.cam - 1) }, { t: Math.min(2.4, dur), v: 1, e: 'easeOut' }] },
     ];
     if (look.glow) {
@@ -70,5 +90,5 @@ window.FM = window.FM || {};
     return { applied: log.appliedCount, dropped: log.dropped, refMap: refMap };
   }
 
-  FM.aiTemplates = { build: build };
+  FM.aiTemplates = { build: build, canvasFor: canvasFor, aspectOf: aspectOf };   // the demo and the Director size themselves by the same rule
 })(window.FM);

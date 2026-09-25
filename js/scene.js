@@ -321,6 +321,15 @@ window.FM = window.FM || {};
   // this (tracker/AI write kf arrays directly), so it never fires inside a tight batch loop.
   function kfInserted() { if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); }
 
+  /* A GROUP'S PIVOT IS PINNED BEFORE ITS SCALE OR TURN CHANGES (queue 690, third hunt). The renderer turns and
+     scales a group about a point it keeps (compositor.js, FM.settleGroupPivot); this is the moment that point is
+     measured or frozen — every scale and rotation write on a group comes through here or shiftTransform, the
+     canvas handles, the pinch and Move & Transform alike. At 100% and 0° it re-measures the members' middle
+     (free — nothing on screen depends on it yet); otherwise it only makes sure one is stored, so nothing the
+     group contains can drag it about afterwards. */
+  function settlePivotBefore(layer, key, time) {
+    if (layer && layer.type === 'group' && (key === 'scale' || key === 'rotation') && FM.settleGroupPivot) FM.settleGroupPivot(layer, FM.scene, time);
+  }
   /* Set a transform value at the given time. If the prop is already keyframed, this
    * inserts/updates a keyframe at `time`; otherwise it sets the static value. */
   function setTransform(layer, key, value, time) {
@@ -329,6 +338,7 @@ window.FM = window.FM || {};
     // pause() re-snaps FM.time to the frame grid, so re-snap the (already-captured) `time` too or the
     // keyframe lands ~half a frame off the now-snapped playhead (undeletable + duplicate on next edit).
     if (FM.playing && FM.pause) { FM.pause(); if (FM.snapFrame) time = FM.snapFrame(time); }
+    settlePivotBefore(layer, key, time);
     const p = layer.transform[key];
     if (isAnimated(p)) { if (upsertKeyframe(p, time, value)) kfInserted(); }
     else layer.transform[key] = value;
@@ -340,6 +350,7 @@ window.FM = window.FM || {};
    * is what canvas dragging uses — Ezra wants a canvas drag to reposition the whole thing, never to
    * drop a stray keyframe at the playhead the way Move & Transform deliberately does). */
   FM.shiftTransform = function (layer, key, value, time) {
+    settlePivotBefore(layer, key, time);
     const p = layer.transform[key];
     if (!isAnimated(p)) { layer.transform[key] = value; return; }
     if (key === 'scale' || key === 'scaleX' || key === 'scaleY') {

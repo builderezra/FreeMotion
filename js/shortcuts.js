@@ -122,7 +122,18 @@ window.FM = window.FM || {};
     row.append(tut, close);
     card.appendChild(row);
     overlay.appendChild(card);
-    overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) FM.shortcuts.hide(); });
+    /* A TAP OUTSIDE CLOSES IT ON CLICK, NOT ON POINTERDOWN (queue 690) — the rule js/ask.js already wrote
+       down for its own scrim. Hiding on the finger going down hands the rest of that tap to whatever was
+       under the sheet: its click is hit-tested after the backdrop has gone. Measured with a real finger on
+       the phone: with a layer selected, a tap on the top bar to get rid of this sheet pressed the BIN under
+       it and the layer was gone; and a second tap on ? — his #762, "tap it again it should close it not
+       open it again" — closed the sheet on the way down and opened it again on the way up. PC never showed
+       it because popFrom lifts the ? above the backdrop there; on the phone nothing is lifted.
+       On click the whole tap has landed here and is spent. And only when the press STARTED on the backdrop,
+       so a drag that begins on the card and lets go outside it is not a request to close. */
+    let downOnOverlay = false;
+    overlay.addEventListener('pointerdown', (e) => { downOnOverlay = e.target === overlay; });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay && downOnOverlay) FM.shortcuts.hide(); downOnOverlay = false; });
     document.body.appendChild(overlay);
   }
   /* POP OUT OF THE ? BUTTON (queue 548). The card opened dead centre at 500,63 with no animation;

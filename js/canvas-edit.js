@@ -116,7 +116,8 @@ window.FM = window.FM || {};
     return { x: (x - (c.__fmOX || 0)) * ds, y: (y - (c.__fmOY || 0)) * ds };
   };
 
-  function eventToProject(e) {
+  /* WHERE IN THE FRAME the pointer is — the picture as it comes out of the camera. */
+  function eventToFrame(e) {
     const r = canvas.getBoundingClientRect();
     const sc = canvas.__fmRS || 1;
     // fraction across the canvas -> project units it spans -> plus the crop origin, so this stays
@@ -126,6 +127,16 @@ window.FM = window.FM || {};
       y: (canvas.__fmOY || 0) + ((e.clientY - r.top) / r.height) * (canvas.height / sc),
     };
   }
+  /* …and WHERE AMONG THE LAYERS that is: back through the camera (queue 690, third hunt). Layers are placed in
+     the plate the camera films, so a tap has to be un-zoomed, un-turned and un-panned before it can be tested
+     against one or moved as one — see FM.cameraView in compositor.js. With the camera zoomed to 200% the
+     editor looked for the layer where it would be without the camera, so a tap ON it deselected it and a drag
+     moved it at twice the finger's speed. No camera on at the playhead: the same point as eventToFrame. */
+  function frameToScene(p) {
+    const v = FM.cameraView ? FM.cameraView(FM.scene, FM.time) : null;
+    return v ? FM.frameToScene(p.x, p.y, v) : p;
+  }
+  function eventToProject(e) { return frameToScene(eventToFrame(e)); }
 
   // Use the canonical size (handles text / shape / null / media) so shapes get a correct,
   // correctly-sized selection box and hit region instead of a fixed 100×100.
@@ -349,11 +360,13 @@ window.FM = window.FM || {};
     }
     if (drag) return;   // a drag from ANOTHER pointer is in flight — a stray finger must not hijack it
     if (FM.playing) FM.pause();   // editing while playing shifted animated layers by their own motion
-    const p = eventToProject(e);
+    const pf = eventToFrame(e), p = frameToScene(pf);   // the frame point, and the layer-space point under it (queue 690)
     const sel = FM.selectedLayer(FM.scene);
     if (sel && sel.type === 'camera') {   // camera selected → dragging anywhere pans the view (grab-the-scene)
       e.preventDefault();
-      drag = { mode: 'campan', pointerId: e.pointerId, layer: sel, startP: p, zoom: FM.evalProp(sel.transform.scale, FM.time) || 1, rot: (FM.evalProp(sel.transform.rotation, FM.time) || 0) * Math.PI / 180, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time) };
+      // FRAME points, not layer-space ones: this drag MOVES the camera, so a point read back through it would
+      // chase its own tail — the maths below already un-zooms and un-turns the frame delta itself.
+      drag = { mode: 'campan', pointerId: e.pointerId, layer: sel, startP: pf, startF: pf, zoom: FM.evalProp(sel.transform.scale, FM.time) || 1, rot: (FM.evalProp(sel.transform.rotation, FM.time) || 0) * Math.PI / 180, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time) };
       return;
     }
     if (sel) {
@@ -363,7 +376,7 @@ window.FM = window.FM || {};
       e.preventDefault();
       // snapshot the align targets at GRAB time: recomputing per move fed the layer's own live-shifting
       // keyframe values back in as targets, so slow drags ratcheted in ~14px steps (self-snap)
-      drag = { mode: 'move', pointerId: e.pointerId, layer: sel, startP: p, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time), fromSelected: true,
+      drag = { mode: 'move', pointerId: e.pointerId, layer: sel, startP: p, startF: pf, startX: FM.evalProp(sel.transform.x, FM.time), startY: FM.evalProp(sel.transform.y, FM.time), fromSelected: true,
                tx: FM.alignTargets ? FM.alignTargets(sel, 'x') : [FM.scene.project.width / 2, 0, FM.scene.project.width],
                ty: FM.alignTargets ? FM.alignTargets(sel, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height] };
       if (sel.parent) { drag.pxf = parentXform(sel, FM.time); drag.tx = []; drag.ty = []; }   // parented: deltas map through the parent frame; world snap targets don't apply to local coords
@@ -385,7 +398,7 @@ window.FM = window.FM || {};
     // NOTHING selected: a tap selects what's under it (resolved on release, so a drag never selects);
     // a DRAG grabs the whole player — pans FM.viewport (view-only; reset via canvas dialog / home).
     e.preventDefault();
-    drag = { mode: 'viewpan', pointerId: e.pointerId, startP: p, sx: e.clientX, sy: e.clientY, vx: FM.viewport.x, vy: FM.viewport.y };
+    drag = { mode: 'viewpan', pointerId: e.pointerId, startP: p, startF: pf, sx: e.clientX, sy: e.clientY, vx: FM.viewport.x, vy: FM.viewport.y };
   }
 
   function startHandle(role) {
@@ -562,18 +575,20 @@ window.FM = window.FM || {};
        and the view still pans and pinches, but nothing on the canvas moves. After the selection handling
        on purpose (the tap still resolves in onUp). A courtesy: the host refuses the edit anyway. */
     if (drag.mode !== 'viewpan' && FM.collab && FM.collab.readOnly && FM.collab.readOnly()) return;
-    const p = eventToProject(e);
+    const pf = eventToFrame(e), p = frameToScene(pf);   // queue 690: layer edits read the layer-space point
     const L = drag.layer;
     if (!drag.moved) {
       // ignore sub-threshold jitter so a tap isn't treated as a move (no no-op undo spam).
       // move/campan have startP; scale/rotate (handle grabs) don't and are always intentional.
-      if (drag.startP) {
-        const ds = dispScale(), dpx = Math.hypot((p.x - drag.startP.x) * ds, (p.y - drag.startP.y) * ds);
+      // Measured in the FRAME (what is on screen), so a zoomed camera does not change how far a tap may wobble.
+      if (drag.startF) {
+        const ds = dispScale(), dpx = Math.hypot((pf.x - drag.startF.x) * ds, (pf.y - drag.startF.y) * ds);
         if (dpx < 4) return;
       }
       drag.moved = true;
     }
     if (drag.mode === 'campan') {   // pan the camera so the grabbed scene point follows the cursor
+      const p = pf;   // frame points throughout — see startMove
       // UN-ROTATE the finger delta, not just un-zoom it. The composite applies ctx.rotate(rot) to the
       // whole scene, so a screen-space drag has to come back through the camera's inverse rotation
       // before it can be written as camera x/y. Without it the scene moved off by exactly the camera
@@ -718,7 +733,7 @@ window.FM = window.FM || {};
     }
     if (sel.type !== 'camera') return;   // a layer is selected → only the camera steers, leave the page alone
     e.preventDefault();
-    const P = FM.scene.project, cx = P.width / 2, cy = P.height / 2, pc = eventToProject(e);
+    const P = FM.scene.project, cx = P.width / 2, cy = P.height / 2, pc = eventToFrame(e);   // a FRAME point: the sums below are about where it shows
     const zoom = FM.evalProp(sel.transform.scale, FM.time) || 1;
     const nz = Math.max(0.1, Math.min(8, zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
     if (nz === zoom) return;
@@ -784,6 +799,18 @@ window.FM = window.FM || {};
     if (layer.type === 'group' && FM.groupBounds) {
       const gb = FM.groupBounds(layer, FM.scene, t);
       if (gb) { bw = gb.w * ds; bh = gb.h * ds; bcx = gb.x; bcy = gb.y; ax = 0.5; ay = 0.5; }
+    }
+    /* THROUGH THE CAMERA, LAST (queue 690, third hunt). Everything above is where the layer sits among the
+       layers; the renderer then films that through the camera — centre + zoom · turn · (point − camera) — so the
+       outline, its handles and the anchor dot go through the very same map (FM.cameraView), and the box grows
+       with the zoom and turns with the camera. Measured before: at a 200% camera the box was drawn 48 screen px
+       off the layer and half its width. The skew term needs nothing: a uniform zoom cancels out of its ratio. */
+    const cam = FM.cameraView ? FM.cameraView(FM.scene, t) : null;
+    if (cam) {
+      const c = FM.sceneToFrame(bcx, bcy, cam), a = FM.sceneToFrame(apx, apy, cam);
+      bcx = c.x; bcy = c.y; apx = a.x; apy = a.y;
+      bw *= cam.zoom; bh *= cam.zoom;
+      rot += cam.rot * 180 / Math.PI;
     }
     return {
       wrapLocal: true,

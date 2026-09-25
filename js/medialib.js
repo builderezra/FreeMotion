@@ -277,7 +277,7 @@ window.FM = window.FM || {};
       if (!file) return null;
       let url = null;
       try {
-        const loaded = e.kind === 'image' ? await FM.loadImageFile(file) : await FM.loadVideoFile(file);
+        const loaded = e.kind === 'image' ? await FM.loadImageFile(file, { still: true }) : await FM.loadVideoFile(file);   // still: a tile needs one frame, not a GIF's every frame (queue 690)
         // loadVideoFile resolves at 'loadedmetadata' (readyState 1) — drawing a video that has no
         // decoded frame yet paints NOTHING, which used to bake a solid black tile into the cache
         // forever. Wait for a real frame first, and bail rather than cache a blank.

@@ -12716,7 +12716,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const tr = layer.transform || {};
     return { w: w || 1, h: h || 1, ax: anchorX(tr), ay: anchorY(tr) };
   }
+  /* …and THROUGH THE CAMERA (queue 690, third hunt). "Canvas" here is the preview frame the overlays are laid on,
+     and the renderer puts every layer through the camera after placing it; layerCTM deliberately does not (it
+     answers in the plate's space, which the bake and the collision tests need), so these two add it on the way
+     out and take it off on the way in. Without it the Customise Points and Crop handles sat where the layer
+     would be with no camera, and a dragged point landed somewhere else. No camera on at t: unchanged. */
   FM.layerUVToCanvas = function (layer, u, v, w, h, scene) {
+    const cv = FM.cameraView ? FM.cameraView(scene || FM.scene, FM.time) : null;
+    const q = uvToPlate(layer, u, v, w, h, scene);
+    return cv ? FM.sceneToFrame(q.x, q.y, cv) : q;
+  };
+  function uvToPlate(layer, u, v, w, h, scene) {
     const b = uvBasis(layer, w, h);
     const M = (function () { try { return layerCTM(layer, FM.time, scene || FM.scene); } catch (e) { return null; } })();
     const lx = (u - b.ax) * b.w, ly = (v - b.ay) * b.h;
@@ -12732,8 +12742,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     qx *= sx; qy *= sy;
     const c = Math.cos(rot), s = Math.sin(rot);
     return { x: FM.evalProp(tr.x, t) + qx * c - qy * s, y: FM.evalProp(tr.y, t) + qx * s + qy * c };
-  };
+  }
   FM.layerCanvasToUV = function (layer, cx, cy, w, h, scene) {
+    const cv = FM.cameraView ? FM.cameraView(scene || FM.scene, FM.time) : null;
+    if (cv) { const q = FM.frameToScene(cx, cy, cv); cx = q.x; cy = q.y; }   // the frame point → the plate point under it
     const b = uvBasis(layer, w, h);
     const M = (function () { try { return layerCTM(layer, FM.time, scene || FM.scene); } catch (e) { return null; } })();
     if (M) {
@@ -14764,6 +14776,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           return;
         }
         let src = null;
+        /* ⚠️ queue 690 (HUNT-a): AN ANIMATED GIF PICKS ITS FRAME FROM THE CLIP'S OWN TIME. m.el is a detached <img>, which
+           only ever paints frame 0, so the frames are decoded on load (js/media.js, `anim`) and chosen here — looping,
+           through layerLocalTime so a trim, a speed change and Reverse move it like a clip, and the export (same
+           renderScene) matches the preview. A still image has no `anim` and takes the old path untouched. */
+        if (m.anim && m.anim.frames && m.anim.frames.length > 1 && FM.animFrameAt) {
+          const local = FM.layerLocalTime(layer, t);
+          src = FM.animFrameAt(m.anim, local == null ? 0 : local);
+        }
         // Render from the pre-decoded frame cache: reversed clips always; forward clips when
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
         // nearest source frames so slow motion looks smooth instead of stuttering on dupes.
@@ -15440,6 +15460,51 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     drawLayer(ctx, buildGroupUnit(ctx, u, t, scene), t, scene);
   }
 
+  /* ═══ THE CAMERA, AS ONE MAP THE EDITOR CAN ASK FOR (queue 690, third hunt) ═══════════════════════════════════
+   * renderScene draws every layer into one plate and then puts that plate through the camera — translate to the
+   * frame centre, zoom, turn, minus the camera's x/y. The canvas editor never did: its selection box, its tap
+   * test, its move drag and the Customise Points / Crop overlays all worked in the plate's space, so with the
+   * camera zoomed to 200% the outline sat 48 screen px off the layer at half its size, a tap ON the layer where
+   * he saw it landed off the layer the editor thought it was and DESELECTED it, and a drag moved it at twice his
+   * finger's speed. Nothing lined up once the camera did anything, which is the only reason to have a camera.
+   * So the camera's pose is worked out HERE, once — the same function renderScene's composite uses, behaviours
+   * (shake, drift) included — and the editor maps through it rather than re-deriving it:
+   *   FM.cameraView(scene, t)        the pose at t, or null when no camera is on at t
+   *   FM.sceneToFrame(x, y, view)    a point in the plate (where layers live) → where it shows in the frame
+   *   FM.frameToScene(x, y, view)    …and back: a tap in the frame → the point in the plate under it
+   * A layer given depth (z) also slides against a PANNING camera (parallax), which this does not add; at z = 0 —
+   * every layer unless he sets Depth — the map is exact. */
+  function activeCam(scene, t) {
+    return (scene && scene.layers) ? (scene.layers.find(l => l.type === 'camera' && l.visible !== false && FM.isLayerVisibleAt(l, t)) || null) : null;
+  }
+  function camPose(cam, tt) {
+    const tr = cam.transform, bv2 = FM.behaviorValue;
+    return {
+      zoom: Math.max(1e-3, (bv2 ? bv2(cam, 'scale', FM.evalProp(tr.scale, tt) || 1, tt) : (FM.evalProp(tr.scale, tt) || 1))),   // clamp so an overshoot/negative camera scale can't mirror or collapse the whole scene (#10)
+      x: bv2 ? bv2(cam, 'x', FM.evalProp(tr.x, tt), tt) : FM.evalProp(tr.x, tt),
+      y: bv2 ? bv2(cam, 'y', FM.evalProp(tr.y, tt), tt) : FM.evalProp(tr.y, tt),
+      rot: ((bv2 ? bv2(cam, 'rotation', FM.evalProp(tr.rotation, tt) || 0, tt) : (FM.evalProp(tr.rotation, tt) || 0))) * Math.PI / 180,
+    };
+  }
+  FM.cameraView = function (scene, t) {
+    scene = scene || FM.scene;
+    const P = scene && scene.project, cam = activeCam(scene, t);
+    if (!P || !cam || !cam.transform) return null;
+    const k = camPose(cam, t);
+    if (![k.zoom, k.x, k.y, k.rot].every(isFinite)) return null;   // a camera the composite cannot place draws nothing to line up with
+    return { zoom: k.zoom, x: k.x, y: k.y, rot: k.rot, cx: P.width / 2, cy: P.height / 2 };
+  };
+  FM.sceneToFrame = function (x, y, v) {
+    if (!v) return { x: x, y: y };
+    const dx = x - v.x, dy = y - v.y, c = Math.cos(v.rot), s = Math.sin(v.rot);
+    return { x: v.cx + v.zoom * (dx * c - dy * s), y: v.cy + v.zoom * (dx * s + dy * c) };
+  };
+  FM.frameToScene = function (x, y, v) {
+    if (!v) return { x: x, y: y };
+    const dx = (x - v.cx) / v.zoom, dy = (y - v.cy) / v.zoom, c = Math.cos(-v.rot), s = Math.sin(-v.rot);
+    return { x: v.x + dx * c - dy * s, y: v.y + dx * s + dy * c };
+  };
+
   /* The camera transforms to blit the plate under, or null for "just draw it once".
    *
    * Returns null whenever the result would be the sharp frame anyway — switched off, or the camera has
@@ -15550,7 +15615,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ctx.canvas.__fmRS = (RS > 0 && isFinite(RS)) ? RS : 1;
       ctx.canvas.__fmOX = 0; ctx.canvas.__fmOY = 0;
     }
-    const cam = scene.layers.find(l => l.type === 'camera' && l.visible !== false && FM.isLayerVisibleAt(l, t));
+    const cam = activeCam(scene, t);   // the one FM.cameraView asks for, so the editor maps through the camera that is drawn
     let target = ctx;
     if (cam) {
       /* The camera's plate lives on the TARGET's pixel grid, not the project's — the same rule
@@ -15714,15 +15779,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cx = P.width / 2, cy = P.height / 2;
       /* Behavior-resolved (same as the parallax stash above — the two MUST agree or depth layers shear
          off the shake): camera behaviors = whole-scene shake/drift with one tap. */
-      const camAt = (tt) => {
-        const tr = cam.transform, bv2 = FM.behaviorValue;
-        return {
-          zoom: Math.max(1e-3, (bv2 ? bv2(cam, 'scale', FM.evalProp(tr.scale, tt) || 1, tt) : (FM.evalProp(tr.scale, tt) || 1))),   // clamp so an overshoot/negative camera scale can't mirror or collapse the whole scene (#10)
-          x: bv2 ? bv2(cam, 'x', FM.evalProp(tr.x, tt), tt) : FM.evalProp(tr.x, tt),
-          y: bv2 ? bv2(cam, 'y', FM.evalProp(tr.y, tt), tt) : FM.evalProp(tr.y, tt),
-          rot: ((bv2 ? bv2(cam, 'rotation', FM.evalProp(tr.rotation, tt) || 0, tt) : (FM.evalProp(tr.rotation, tt) || 0))) * Math.PI / 180,
-        };
-      };
+      const camAt = (tt) => camPose(cam, tt);   // ONE pose, shared with FM.cameraView (queue 690, third hunt)
       const putCam = (k) => { ctx.translate(cx, cy); ctx.scale(k.zoom, k.zoom); ctx.rotate(k.rot); ctx.translate(-k.x, -k.y); };
       ctx.save();
       baseT(ctx);
@@ -15978,11 +16035,118 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { x: b.minX + ax * b.w, y: b.minY + ay * b.h };
   }
 
-  FM.groupPivot = function (group, scene, t) {
+  /* ═══ THE PIVOT MUST NOT MOVE ON ITS OWN — IT IS A PLACE, NOT A MEASUREMENT (queue 690, third hunt) ═══════════
+   * #630 made a group scale and turn about the middle of its members, and it measured that middle LIVE, every
+   * frame, from `groupBoundsLocal` — which skips a member that is not on screen at t and reads every member's x/y
+   * at t. So in a group he had scaled or turned, the point everything pivots about moved whenever a member came
+   * on, went off or moved, and every OTHER member, standing perfectly still, was drawn somewhere new. Measured in
+   * the HUNT-c pass: a group at 70%, a red square with no animation at all jumped 108 px the moment a blue layer
+   * in the same group came on screen, and slid 102 px across the canvas while blue slid in; turned 20° instead,
+   * it wandered 120 px. Preview and export alike — it is renderScene.
+   * So the pivot is now a POINT the group keeps (`group.pivot`, in its own child space), not a box re-measured
+   * per frame:
+   *   · STORED when it matters — the moment the group leaves 100% / 0° (settleGroupPivot, called by every
+   *     scale and rotation write), when he places the anchor, and when a layer joins or leaves the group's
+   *     family (relinking, ungrouping), so a change of membership moves nothing either.
+   *   · MEASURED only while it cannot be seen: at 100% and 0° the pivot sandwich collapses to nothing, so
+   *     re-measuring then is free — and it is measured on what is ON SCREEN at the playhead, exactly as #630
+   *     always did, so a pinch shrinks what he is looking at about its own middle. It is the per-frame
+   *     re-measuring that was wrong, not the measurement.
+   *   · Until a group has one (an older project, a group built by a template), it falls back to the REST box:
+   *     every member that is not switched off, whether or not it is on screen at t, each at the group's own
+   *     start — a place that does not change with the playhead, so even those never slide during playback. */
+  function storedPivot(group) {
+    const p = group && group.pivot;
+    return (p && typeof p.x === 'number' && typeof p.y === 'number' && isFinite(p.x) && isFinite(p.y)) ? p : null;
+  }
+  /* The members' box in the group's child space, independent of the playhead: the same walk as
+     groupBoundsLocal (nested groups add their offset, Nulls/cameras/adjustments carry no box), but a member
+     counts whether or not it is on screen at t, and everything is read at ONE moment — the group's start. */
+  FM.groupRestBoundsLocal = function (group, scene) {
+    if (!group || !scene || !scene.layers) return null;
+    const t = (typeof group.start === 'number' && isFinite(group.start)) ? group.start : 0;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
+    const seen = new Set();
+    (function walk(gid, ox, oy) {
+      if (seen.has(gid)) return;
+      seen.add(gid);
+      scene.layers.forEach(l => {
+        if (l.parent !== gid) return;
+        if (l.type === 'group') { walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0)); return; }
+        if (l.type === 'camera' || l.type === 'adjustment' || l.type === 'null') return;
+        if (l.visible === false) return;   // switched off by its eye — not "off screen right now", which no longer counts
+        const sz = FM.layerSize(l);
+        const sc = FM.evalProp(l.transform.scale, t) || 1;
+        const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
+        const w = sz.w * sc / 2, h = sz.h * sc / 2;
+        any = true;
+        minX = Math.min(minX, x - w); maxX = Math.max(maxX, x + w);
+        minY = Math.min(minY, y - h); maxY = Math.max(maxY, y + h);
+      });
+    })(group.id, 0, 0);
+    if (!any) return null;
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
+  };
+  /* Where the anchor puts the pivot on the members' box — what a FRESH measurement gives. With a time, the box of
+     what is on screen then (the playhead, when he pinches or places the anchor); with none, or nothing on screen
+     at that time, the rest box. */
+  FM.groupPivotMeasured = function (group, scene, t) {
     if (!group || group.type !== 'group') return null;
-    const b = FM.groupBoundsLocal(group, scene, t);
+    scene = scene || FM.scene;
+    let b = (typeof t === 'number' && isFinite(t)) ? FM.groupBoundsLocal(group, scene, t) : null;
+    if (!b) b = FM.groupRestBoundsLocal(group, scene);
     if (!b || !(b.w >= 0)) return null;
     return pivotIn(group, b);
+  };
+  /* AT 100% AND 0°, NOTHING ANIMATED OR DRIVEN, a group's pivot moves nothing on screen: applyParentChain skips the
+     sandwich entirely, and the selection box's pivot terms cancel. The only thing that shows it is the anchor dot. */
+  function pivotFree(group) {
+    const tr = group.transform || {}, anim = FM.isAnimated;
+    if (Array.isArray(group.behaviors) && group.behaviors.some(b => b && b.enabled !== false && (b.prop === 'scale' || b.prop === 'rotation'))) return false;
+    if (anim && (anim(tr.scale) || anim(tr.rotation))) return false;
+    const sc = FM.evalProp(tr.scale, 0);
+    return (sc == null || sc === 1) && !(FM.evalProp(tr.rotation, 0) || 0);
+  }
+  /* The pivot the renderer turns and scales the group about. Once the group is scaled or turned it is the STORED
+     point (or the rest box's, until one is stored) and `t` plays no part — that is the fix. While the group is at
+     100% and 0° nothing is drawn about it, so it answers with what a scale or turn starting NOW would measure (the
+     members on screen at t), which keeps the anchor dot showing the point the next pinch will really use. */
+  FM.groupPivot = function (group, scene, t) {
+    if (!group || group.type !== 'group') return null;
+    if (pivotFree(group)) return FM.groupPivotMeasured(group, scene, t);
+    const s = storedPivot(group);
+    if (s) return { x: s.x, y: s.y };
+    return FM.groupPivotMeasured(group, scene);
+  };
+  /* Store the pivot, or refresh it while that is free. Called BEFORE anything writes a group's scale or rotation
+     (setTransform / shiftTransform), and before a layer joins or leaves a group's family:
+       · at 100% and 0°, nothing animated — the pivot changes nothing on screen, so re-measure it: the next
+         scale or turn goes about the middle of the members as they are now (#630's "the middle");
+       · otherwise, if the group has none stored yet, store the one it is drawn with right now — the same
+         point, so nothing moves — and from then on nothing it contains can drag it about;
+       · otherwise leave it exactly where it is. */
+  FM.settleGroupPivot = function (group, scene, t) {
+    if (!group || group.type !== 'group' || !group.transform) return;
+    const free = pivotFree(group);
+    if (!free && storedPivot(group)) return;
+    // Free: measure what is on screen at the playhead. Not free and none stored: keep the one it is drawn with
+    // right now (the rest box's) — the same point, so storing it moves nothing.
+    const p = free ? FM.groupPivotMeasured(group, scene || FM.scene, (typeof t === 'number' && isFinite(t)) ? t : FM.time)
+                   : FM.groupPivot(group, scene || FM.scene);
+    if (p) group.pivot = { x: p.x, y: p.y };
+  };
+  /* …and the same for every group a layer hangs inside, from `pid` up: those are the families whose membership a
+     relink or an ungroup changes. */
+  FM.settleGroupPivotsAbove = function (pid, scene) {
+    scene = scene || FM.scene;
+    const seen = new Set();
+    while (pid && !seen.has(pid)) {
+      seen.add(pid);
+      const pl = scene.layers.find(l => l.id === pid);
+      if (!pl) break;
+      if (pl.type === 'group') FM.settleGroupPivot(pl, scene);
+      pid = pl.parent;
+    }
   };
 
   /* ═══ THE GROUP'S BOX IN ITS PARENT'S SPACE — AND IT MUST PIVOT LIKE THE RENDERER (queue 630) ═════
@@ -16002,7 +16166,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!b) return null;
     const gx = FM.evalProp(group.transform.x, t) || 0, gy = FM.evalProp(group.transform.y, t) || 0;
     const gs = FM.evalProp(group.transform.scale, t) || 1;
-    const p = pivotIn(group, b);
+    // The pivot the RENDERER uses (stored, or the rest box's) — not one read off this live box, or the outline
+    // would slide about exactly the way the picture used to (queue 690, third hunt).
+    const p = FM.groupPivot(group, scene, t) || pivotIn(group, b);
     const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
     return { x: gx + p.x + (cx - p.x) * gs, y: gy + p.y + (cy - p.y) * gs, w: b.w * gs, h: b.h * gs };
   };

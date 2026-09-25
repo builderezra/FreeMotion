@@ -56,6 +56,7 @@ window.FM = window.FM || {};
       try { rec.el.removeAttribute('src'); rec.el.load(); } catch (e) {}
     }
     if (rec.frameCache && FM.clearFrameCache) { try { FM.clearFrameCache(rec); } catch (e) {} }
+    closeAnim(rec);   // an animated GIF's decoded frames (queue 690, HUNT-a) — the biggest thing an image record can hold
     rec.audioBuffer = null;
     return true;
   }
@@ -610,14 +611,212 @@ window.FM = window.FM || {};
     }, FM.decodeWait);
   };
 
-  /* Load an image file -> { kind:'image', el, width, height, url } */
-  FM.loadImageFile = function (file) {
-    return new Promise((resolve, reject) => {
+  /* ---- AN ANIMATED GIF MOVES (queue 690, HUNT-a) ------------------------------------------------
+   * A GIF used to load into a detached <img> and nothing else. An image that is not in the page never
+   * advances its animation, and drawImage of an animated image paints its first frame anyway — so a
+   * reaction GIF or animated sticker he added sat frozen on frame 0, in the preview and in every export
+   * (the exporter renders through the same FM.renderScene), and nothing said so.
+   *
+   * So the frames are decoded ONCE, on load, and kept on the record as `anim`: one bitmap per frame and
+   * the time each one starts. The compositor picks the frame from the clip's own time (FM.animFrameAt),
+   * looping, the way it already picks a reversed clip's frame out of its frame cache — so scrubbing, the
+   * export and a speed change all agree with no clock of their own.
+   *
+   * THE DECODER IS PLAIN JS, NOT ImageDecoder, ON PURPOSE. ImageDecoder is WebCodecs, which iPhone Safari —
+   * his device — has not shipped; a fix that only worked on the PC would leave his phone exactly where it
+   * was. A GIF is a small format (LZW plus three disposal rules), so this is the same code on every
+   * device, and the suite in Chrome runs what his phone runs.
+   *
+   * TWO CEILINGS, because decoded frames are w x h x 4 bytes EACH and mobile Safari kills a tab over its
+   * bitmaps long before the phone is out of memory (the v4.70 lesson FM.frameCacheLimits encodes): at most
+   * GIF_MAX_FRAMES frames, and half the device's frame-cache budget for all of them (80 MB on a phone,
+   * never more than 160) — past that the frames are kept SMALLER (softer, never dropped), and the
+   * compositor already samples a source by its real size (the crop path rescales by it). A reaction GIF
+   * or a sticker is far inside it at full size. Anything the decoder cannot read leaves the picture
+   * exactly as it was before this existed — the first frame — and says so, instead of failing the import. */
+  const GIF_MAX_FRAMES = 1000;
+  const MB = 1024 * 1024;
+  function gifBudget() {
+    const lim = (FM.frameCacheLimits && FM.frameCacheLimits().maxBytes) || 128 * MB;
+    return Math.max(32 * MB, Math.min(160 * MB, lim / 2));
+  }
+  // By its type or its name — and, when a phone hands over neither (an empty type is common from Files), by its first bytes.
+  async function looksLikeGif(file) {
+    if (!file) return false;
+    const t = String(file.type || '').toLowerCase();
+    if (t === 'image/gif' || /\.gif$/i.test(String(file.name || ''))) return true;
+    if (t && t !== 'application/octet-stream') return false;   // a PNG or a JPEG that says so is not read at all
+    try { const h = new Uint8Array(await file.slice(0, 4).arrayBuffer()); return h[0] === 0x47 && h[1] === 0x49 && h[2] === 0x46 && h[3] === 0x38; } catch (e) { return false; }
+  }
+  // Walk the blocks: the frames' rectangles, palettes, disposal and delay, and where each one's pixel data sits.
+  function parseGif(b) {
+    if (b.length < 13 || b[0] !== 0x47 || b[1] !== 0x49 || b[2] !== 0x46 || b[3] !== 0x38) return null;   // "GIF8"
+    const W = b[6] | (b[7] << 8), H = b[8] | (b[9] << 8), pk = b[10];
+    let p = 13, gct = null, gce = null;
+    if (pk & 0x80) { const n = 3 << ((pk & 7) + 1); gct = b.subarray(p, p + n); p += n; }
+    const frames = [];
+    const skipBlocks = () => { while (p < b.length) { const n = b[p++]; if (!n) break; p += n; } };
+    while (p < b.length && frames.length < GIF_MAX_FRAMES) {
+      const tag = b[p++];
+      if (tag === 0x3B) break;                                   // trailer
+      if (tag === 0x21) {                                        // an extension
+        const label = b[p++];
+        if (label === 0xF9 && b[p] >= 4 && p + 4 < b.length) {  // graphic control: disposal, transparency, delay
+          const q = p + 1;
+          gce = { disposal: (b[q] >> 2) & 7, transparent: (b[q] & 1) ? b[q + 3] : -1, delay: b[q + 1] | (b[q + 2] << 8) };
+        }
+        skipBlocks();
+        continue;
+      }
+      if (tag !== 0x2C || p + 10 > b.length) break;              // not an image either: keep what was read
+      const x = b[p] | (b[p + 1] << 8), y = b[p + 2] | (b[p + 3] << 8), w = b[p + 4] | (b[p + 5] << 8), h = b[p + 6] | (b[p + 7] << 8), ipk = b[p + 8];
+      p += 9;
+      let pal = gct;
+      if (ipk & 0x80) { const n = 3 << ((ipk & 7) + 1); pal = b.subarray(p, p + n); p += n; }
+      const minCode = b[p++], from = p;
+      skipBlocks();
+      frames.push({ x: x, y: y, w: w, h: h, interlaced: !!(ipk & 0x40), pal: pal, minCode: minCode, from: from, to: p,
+                    disposal: gce ? gce.disposal : 0, transparent: gce ? gce.transparent : -1, delay: gce ? gce.delay : 0 });
+      gce = null;
+    }
+    return { width: W, height: H, frames: frames };
+  }
+  // One frame's colour indices, out of its LZW sub-blocks. A short or corrupt stream stops early, as a browser does.
+  function gifIndices(b, f) {
+    const npix = f.w * f.h, out = new Uint8Array(npix);
+    let len = 0;
+    for (let q = f.from; q < f.to;) { const n = b[q++]; if (!n) break; len += n; q += n; }
+    const data = new Uint8Array(len);
+    for (let q = f.from, o = 0; q < f.to;) { const n = b[q++]; if (!n) break; data.set(b.subarray(q, Math.min(q + n, b.length)), o); o += n; q += n; }
+    const minCode = Math.max(2, Math.min(11, f.minCode)), clear = 1 << minCode, eoi = clear + 1;
+    const prefix = new Uint16Array(4096), suffix = new Uint8Array(4096), first = new Uint8Array(4096), lens = new Uint16Array(4096);
+    for (let i = 0; i < clear; i++) { suffix[i] = i; first[i] = i; lens[i] = 1; }
+    let size = minCode + 1, next = eoi + 1, prev = -1, acc = 0, bits = 0, di = 0, op = 0;
+    const emit = code => {
+      const L = lens[code];
+      for (let k = L - 1, c = code; k >= 0; k--) { if (op + k < npix) out[op + k] = suffix[c]; c = prefix[c]; }
+      op += L;
+    };
+    while (op < npix) {
+      while (bits < size && di < data.length) { acc |= data[di++] << bits; bits += 8; }
+      if (bits < size) break;
+      const code = acc & ((1 << size) - 1); acc >>>= size; bits -= size;
+      if (code === clear) { size = minCode + 1; next = eoi + 1; prev = -1; continue; }
+      if (code === eoi) break;
+      if (prev < 0) { if (code >= clear) break; emit(code); prev = code; continue; }
+      if (code < next) {
+        emit(code);
+        if (next < 4096) { prefix[next] = prev; suffix[next] = first[code]; first[next] = first[prev]; lens[next] = lens[prev] + 1; next++; }
+      } else if (code === next && next < 4096) {
+        prefix[next] = prev; suffix[next] = first[prev]; first[next] = first[prev]; lens[next] = lens[prev] + 1; next++;
+        emit(code);
+      } else break;                                              // a code from nowhere: the stream is damaged
+      prev = code;
+      if (next === (1 << size) && size < 12) size++;
+    }
+    return out;
+  }
+  // Every frame, composed the way a browser shows it (disposal 2 clears to transparent, 3 restores), as bitmaps.
+  async function decodeGifAnimation(file) {
+    const b = new Uint8Array(await file.arrayBuffer());
+    const g = parseGif(b);
+    if (!g || g.frames.length < 2 || !(g.width > 0 && g.height > 0)) return null;
+    const W = g.width, H = g.height, n = g.frames.length;
+    // a header claiming a picture this big is damaged (or hostile) — the arrays below would be gigabytes
+    if (W * H > 64e6 || g.frames.some(f => f.w * f.h > 64e6)) throw new Error('a GIF of ' + W + 'x' + H + ' is too big to animate');
+    const k = Math.min(1, Math.sqrt(gifBudget() / (W * H * 4 * n)));
+    const ow = Math.max(1, Math.round(W * k)), oh = Math.max(1, Math.round(H * k));
+    const screen = new Uint8ClampedArray(W * H * 4);
+    const work = document.createElement('canvas'); work.width = W; work.height = H;
+    const wctx = work.getContext('2d');
+    const small = (ow !== W || oh !== H) ? document.createElement('canvas') : null;
+    if (small) { small.width = ow; small.height = oh; }
+    const frames = [], starts = [];
+    let t = 0, saved = null, before = null;
+    for (let i = 0; i < n; i++) {
+      const f = g.frames[i];
+      if (before) {                                             // the previous frame's disposal, applied now
+        if (before.disposal === 2) {
+          for (let yy = Math.max(0, before.y); yy < Math.min(H, before.y + before.h); yy++) {
+            screen.fill(0, (yy * W + Math.max(0, before.x)) * 4, (yy * W + Math.min(W, before.x + before.w)) * 4);
+          }
+        } else if (before.disposal === 3 && saved) screen.set(saved);
+      }
+      saved = f.disposal === 3 ? screen.slice() : null;
+      const idx = gifIndices(b, f), pal = f.pal;
+      if (pal) {
+        // interlaced rows arrive in four passes: every 8th from 0, every 8th from 4, every 4th from 2, every 2nd from 1
+        const rows = new Int32Array(f.h);
+        if (f.interlaced) { let r = 0; [[0, 8], [4, 8], [2, 4], [1, 2]].forEach(ps => { for (let yy = ps[0]; yy < f.h; yy += ps[1]) rows[r++] = yy; }); }
+        else for (let yy = 0; yy < f.h; yy++) rows[yy] = yy;
+        for (let r = 0; r < f.h; r++) {
+          const sy = f.y + rows[r];
+          if (sy < 0 || sy >= H) continue;
+          for (let xx = 0; xx < f.w; xx++) {
+            const sx = f.x + xx;
+            if (sx >= W) break;
+            const ci = idx[r * f.w + xx];
+            if (ci === f.transparent) continue;
+            const pi = ci * 3;
+            if (pi + 2 >= pal.length) continue;
+            const o = (sy * W + sx) * 4;
+            screen[o] = pal[pi]; screen[o + 1] = pal[pi + 1]; screen[o + 2] = pal[pi + 2]; screen[o + 3] = 255;
+          }
+        }
+      }
+      wctx.putImageData(new ImageData(screen, W, H), 0, 0);
+      let src = work;
+      if (small) { const sc = small.getContext('2d'); sc.clearRect(0, 0, ow, oh); sc.drawImage(work, 0, 0, ow, oh); src = small; }
+      let bm = null;
+      if (window.createImageBitmap) { try { bm = await createImageBitmap(src); } catch (e) { bm = null; } }
+      if (!bm) { bm = document.createElement('canvas'); bm.width = ow; bm.height = oh; bm.getContext('2d').drawImage(src, 0, 0); }
+      frames.push(bm); starts.push(t);
+      // centiseconds; 0 or 1 is shown at 100 ms by every browser, so a GIF plays here at the speed it plays there
+      t += (f.delay <= 1 ? 10 : f.delay) / 100;
+      before = f;
+      if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));   // a long GIF must not freeze the page while it decodes
+    }
+    return { frames: frames, starts: starts, total: t, width: ow, height: oh };
+  }
+  FM._decodeGifAnimation = decodeGifAnimation;   // suite seam (queue 690)
+  /* The frame showing `local` seconds into the clip, looping — a sticker keeps moving for as long as its clip lasts. */
+  FM.animFrameAt = function (anim, local) {
+    if (!anim || !anim.frames || !anim.frames.length) return null;
+    const total = anim.total > 0 ? anim.total : 0;
+    let pos = total > 0 ? (+local || 0) % total : 0;
+    if (pos < 0) pos += total;
+    const s = anim.starts;
+    let lo = 0, hi = s.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (s[mid] <= pos + 1e-9) lo = mid; else hi = mid - 1; }
+    return anim.frames[lo] || anim.frames[0];
+  };
+  function closeAnim(rec) {
+    if (!rec || !rec.anim) return;
+    const a = rec.anim; rec.anim = null;
+    (a.frames || []).forEach(f => { if (f && f.close) { try { f.close(); } catch (e) {} } });
+  }
+
+  /* Load an image file -> { kind:'image', el, width, height, url, anim? }
+     `opts.still` — only the first frame is wanted (a thumbnail), so an animated GIF is not decoded. */
+  FM.loadImageFile = function (file, opts) {
+    const still = new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
       const el = new Image();
       el.onload = () => resolve({ kind: 'image', el, url, file, width: el.naturalWidth, height: el.naturalHeight });
       el.onerror = () => { try { URL.revokeObjectURL(url); } catch (e2) {} reject(new Error('Could not load image: ' + file.name)); };
       el.src = url;
+    });
+    if (opts && opts.still) return still;
+    return still.then(async rec => {
+      if (!(await looksLikeGif(file))) return rec;
+      try {
+        const anim = await decodeGifAnimation(file);
+        if (anim) rec.anim = anim;
+      } catch (e) {
+        console.warn('[media] the frames of ' + (file.name || 'a GIF') + ' could not be read — it will show as a still', e);
+        if (FM.toast) FM.toast('“' + (file.name || 'That GIF') + '” will play as a still — its frames could not be read', 4200);
+      }
+      return rec;
     });
   };
 

@@ -1024,7 +1024,12 @@ window.FM = window.FM || {};
       if (drag && drag.fine) glide.cancelDrag();
       pend = null; drag = null;
     });   // attachGlide's own pointerup starts the glide and settles
-    strip.addEventListener('pointercancel', end); strip.addEventListener('lostpointercapture', end);
+    strip.addEventListener('pointercancel', end);
+    /* ONLY THE STRIP'S OWN CAPTURE ENDING ends the drag (queue 690). lostpointercapture BUBBLES, so a child
+       that had held the touch — the centre line did, by being where the finger landed — handing it to the
+       strip at the 6px lock reached this listener as if the strip had lost it, and the drag died after its
+       first notch. The CSS now keeps touches off the line; this keeps any other child from doing the same. */
+    strip.addEventListener('lostpointercapture', (e) => { if (e.target === strip) end(); });
     strip._sync = sync;
     return strip;
   }
@@ -2297,7 +2302,10 @@ window.FM = window.FM || {};
         /* The refusals come back as a WORD, not as false, so the button can say why instead of doing
            nothing — "it does nothing" is the report this app gets most often, and each of these is a
            case where auditioning would be a lie about what the project sounds like. */
-        const r = FM.audioFxLive.audition(layer);
+        /* `control` names this button, so the audition stops itself the moment no lit Hear button is on
+           screen — backing out with ‹ Effects, deselecting the clip, anything (queue 690). The refresh
+           below renders it lit before the audition's first frame looks for it. */
+        const r = FM.audioFxLive.audition(layer, { control: '#inspector-panel .fx-hear.on' });
         const why = { reversed: 'A reversed clip\u2019s sound is rebuilt on playback, so it cannot be auditioned here',
                       silent: 'This layer is hidden or muted \u2014 there is nothing to hear',
                       solo: 'Another layer is soloed, so this one is silent' }[r];
@@ -4909,8 +4917,13 @@ window.FM = window.FM || {};
            route (boxes, pad, Centre) came through this clamp, which still pinned it to 0…1: type 150% and the readout
            snapped back to 100%. The clamp now matches the boxes. */
         const nx = Math.max(-4, Math.min(5, ax)), ny = Math.max(-4, Math.min(5, ay));
+        // A group turns about a point it KEEPS (queue 690, third hunt — compositor.js FM.settleGroupPivot), so the
+        // pivot it is drawn with right now is read before the anchor changes, and the new one is stored after.
+        const gP0 = isGroupPivot ? FM.groupPivot(layer, FM.scene, FM.time) : null;
         layer.transform.anchorX = Math.round(nx * 1000) / 1000;
         layer.transform.anchorY = Math.round(ny * 1000) / 1000;
+        const gP1 = isGroupPivot ? FM.groupPivotMeasured(layer, FM.scene, FM.time) : null;
+        if (gP1) layer.pivot = { x: gP1.x, y: gP1.y };
         // Keep it visually still. The anchor moved (nx-oldX) of the layer's SCALED width — but that
         // displacement is in the LAYER's own space, and the layer is drawn translate → rotate →
         // scale, so it has to be rotated into the parent frame before it can be added to x/y.
@@ -4921,6 +4934,10 @@ window.FM = window.FM || {};
            is the whole reason the law below differs. */
         let dx = (nx - oldX) * asz.w * (isGroupPivot ? 1 : aEffX());
         let dy = (ny - oldY) * asz.h * (isGroupPivot ? 1 : aEffY());
+        /* For a group δ is the STORED pivot's actual travel, not the anchor's step across today's box: the point it
+           was turning about may have been measured on a different box (members moved since), and compensating by
+           the anchor step would then correct for a move that is not the one that happened. */
+        if (isGroupPivot) { dx = (gP0 && gP1) ? gP1.x - gP0.x : 0; dy = (gP0 && gP1) ? gP1.y - gP0.y : 0; }
         const rot = (mtEval(layer, 'rotation') || 0) * Math.PI / 180;
         if (isGroupPivot) {
           // (R·S − 1)·δ : zero when the group is unrotated and unscaled, which is exactly when moving
@@ -5006,12 +5023,21 @@ window.FM = window.FM || {};
   // Parent picker (moved out of the old Element Properties so it lives with the transform it controls).
   function parentControl(layer) {
     const wrap = el('div', 'parent-ctl');
-    const candidates = FM.scene.layers.filter(l => l.id !== layer.id && !FM.isAncestor(FM.scene, layer.id, l.id));
+    /* The CAMERA is not offered, exactly as the link button's picker leaves it out: it is the view, not a
+       transform parent, and hanging a layer on it read its x/y as an offset from the camera's (queue 690). One
+       already hung on a camera (an older project) still lists it, so the row does not claim None. */
+    const candidates = FM.scene.layers.filter(l => l.id !== layer.id && (l.type !== 'camera' || l.id === layer.parent) && !FM.isAncestor(FM.scene, layer.id, l.id));
     const row = el('div', 'prop-row'); row.appendChild(el('label', null, 'Parent'));
     const sel = document.createElement('select');
     const none = document.createElement('option'); none.value = ''; none.textContent = 'None'; if (!layer.parent) none.selected = true; sel.appendChild(none);
     candidates.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; if (layer.parent === c.id) o.selected = true; sel.appendChild(o); });
-    sel.addEventListener('change', () => { layer.parent = sel.value || null; FM.requestRender(); FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH(); });
+    // Through FM.relinkParent (queue 690, third hunt): choosing a parent here keeps the layer where he sees it,
+    // the same as the link button — it used to write the id alone and the layer jumped by its new parent's x/y.
+    sel.addEventListener('change', () => {
+      const note = FM.relinkParent ? FM.relinkParent(layer, sel.value || null) : ((layer.parent = sel.value || null), '');
+      FM.requestRender(); FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH();
+      if (note && FM.toast) FM.toast(note, 5000);
+    });
     row.appendChild(sel); wrap.appendChild(row);
     if (layer.parent) {
       if (!layer.parentMode) layer.parentMode = 'normal';

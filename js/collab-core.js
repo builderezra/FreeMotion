@@ -416,6 +416,10 @@ window.FM = window.FM || {};
        fire on state the test did not put there. SYNCHRONOUS and here rather than in the agent, because
        the agent loads asynchronously and storage.load() would already have read the old index. */
     try { if (/(^|[?&])fmwipe=1(&|$)/.test(location.search)) localStorage.clear(); } catch (e) {}
+    /* queue 936: a wiped test instance used to boot with a project minted for it; a fresh start no longer mints one,
+       and every collab test is written against an instance that has one. `fmseed=0` is the one frame that must see
+       the real fresh start (the #936 test). */
+    try { if (!/(^|[?&])fmseed=0(&|$)/.test(location.search)) localStorage.setItem('fm.test.seedProject', '1'); } catch (e) {}
     try {
       const sc = document.createElement('script');
       sc.src = 'tests/collab-agent.js';

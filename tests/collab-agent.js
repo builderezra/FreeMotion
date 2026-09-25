@@ -61,11 +61,29 @@
   });
 
   /* ── the fixed action table ─────────────────────────────────────────────────────────────────── */
+  function snap936() {
+    const all = (FM.projects && FM.projects.list()) || [];
+    const real = all.filter(function (p) { return !p.elementDraft && !p.templateDraft; });
+    const home = document.getElementById('home-screen');
+    const et = home && home.querySelector('.hm-empty-title');
+    const keys = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^fm\.proj\./.test(k)) keys.push(k); } } catch (e) {}
+    return {
+      projects: real.length, names: real.map(function (p) { return p.name; }), all: all.length,
+      cur: FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : 'no FM.storage',   // THIS window's project
+      shared: FM.projects ? FM.projects.currentId() : null,
+      homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()),
+      emptyTitle: et ? et.textContent : '', openBadges: home ? home.querySelectorAll('.hm-open-badge').length : -1,
+      docKeys: keys, docNames: keys.map(function (k) { try { return (JSON.parse(localStorage.getItem(k)).project || {}).name; } catch (e) { return '?'; } }), sceneName: FM.scene && FM.scene.project && FM.scene.project.name, layers: (FM.scene && FM.scene.layers || []).length
+    };
+  }
   const ACTS = {
     /* Wait until the app has finished booting: FM.scene populated and storage settled. */
     ready: async function () {
       for (let i = 0; i < 200; i++) {
         if (FM.scene && FM.scene.project && FM.storage && FM.projects && FM.projects.currentId()) break;
+        /* queue 936: a real fresh start (`fmseed=0`) has NO project and never will until one is made — the boot is
+           done when Home is up. A seeded instance still has its project first: migrate() sets it before Home opens. */
+        if (/(^|[?&])fmseed=0(&|$)/.test(location.search) && FM.home && FM.home.isOpen && FM.home.isOpen()) break;
         await sleep(100);
       }
       return { tag: TAG, pid: FM.projects.currentId(), phone: !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()), w: window.innerWidth };
@@ -219,6 +237,31 @@
       return true;
     },
     wipe: function () { try { localStorage.clear(); } catch (e) {} return true; },
+    /* queue 936: what a fresh start left behind — projects listed, one open, the empty state, the OPEN badge, and
+       every project doc in storage (a fresh start must write none). */
+    fresh936: function () { return snap936(); },
+    /* a window with nothing open doing what it does when it is hidden or switches: flush, stamp its card, re-render Home */
+    fresh936flush: async function () {
+      FM.storage.flushSync(); FM.projects.touchCurrent(true);
+      if (FM.home && FM.home.refresh) FM.home.refresh();
+      await sleep(400); return snap936();
+    },
+    fresh936make: async function () { await FM.projects.create({ name: 'First', confirmed: true }); await sleep(700); return snap936(); },
+    fresh936delete: async function () {
+      const cur = FM.projects.currentId();
+      const ids = cur ? [cur] : FM.projects.list().filter(function (p) { return !p.elementDraft && !p.templateDraft; }).map(function (p) { return p.id; });
+      for (const id of ids) await FM.projects.remove(id);
+      await sleep(900); return snap936();
+    },
+    /* his reinstall-then-restore: back up the one project, delete it, restore — the cards come back, nothing is opened */
+    fresh936restore: async function () {
+      const b = await FM.storage.buildBackup();
+      const id = FM.projects.currentId(); if (id) await FM.projects.remove(id); await sleep(600);
+      const r = await FM.storage.restoreBackup(b, null);
+      if (FM.home && FM.home.refresh) FM.home.refresh();
+      await sleep(900);
+      const out = snap936(); out.restored = r && r.restored; return out;
+    },
     /* S6 (§14.2): what the boot did with an invite — the stash, and whether the address still shows it. */
     pendingJoin: function () {
       let pj = null;

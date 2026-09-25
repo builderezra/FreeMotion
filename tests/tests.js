@@ -16629,7 +16629,13 @@
     const cog = document.getElementById('btn-settings');
     if (!dlg || !cog) throw new Error('need #canvas-dialog and #btn-settings');
     const w0 = FM.scene.project.width, h0 = FM.scene.project.height;
-    const down = (el, x, y) => el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
+    /* A WHOLE press — down, up and the click — because the backdrop closes on the CLICK now, and only when the
+       press began on it (queue 690: closing on pointerdown let a real phone tap carry on to what was under it). */
+    const down = (el, x, y) => {
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
+      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y }));
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+    };
     const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     try {
       if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
@@ -92172,6 +92178,2257 @@
         });
       }, 360);
     } finally { probe.remove(); if (FM.hideToast) FM.hideToast(); else t.classList.add('hidden'); }
+  });
+
+  /* ═══ HUNT-a — IMPORTING FROM HIS PHONE (queue 690, 25 Sep) ════════════════════════════════════════════════════════════
+   * Four findings from a hunt through the Add sheet, the picker, the media library and Replace media. Each test goes in by
+   * the route he uses: the New project dialog and the ⋯ menu are driven with a REAL finger at phone width, and every file
+   * arrives through the app's own #file-input `change` (exactly what the iOS picker does) or through the input
+   * FM.replaceMedia creates — only the picker's own sheet, which no page can drive, is stood in for.
+   * Found as four failing HUNT-a tests; all four fixed (js/home.js + js/app.js sizePicked, js/app.js replaceMedia, js/media.js
+   * + js/compositor.js GIF frames) and renamed 690 for what they now hold, with controls beside them. */
+  function h3aCodec(w, h) { return w * h <= 414720 ? 'avc1.42e01e' : w * h <= 2100000 ? 'avc1.640028' : 'avc1.640033'; }
+  // A real H.264 MP4 made the way a phone clip is (constant frame duration), painted by `paint(g, k, w, h)`.
+  async function h3aClip(w, h, n, name, paint) {
+    const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: w, height: h }, fastStart: 'in-memory' });
+    let encErr = null;
+    const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { encErr = e; } });
+    enc.configure({ codec: h3aCodec(w, h), width: w, height: h, bitrate: 4e6, framerate: 30 });
+    const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d');
+    for (let k = 0; k < n; k++) {
+      paint(g, k, w, h);
+      const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / 30), duration: Math.round(1e6 / 30) });
+      enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
+    }
+    await enc.flush(); enc.close();
+    if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
+    muxer.finalize();
+    return new File([muxer.target.buffer], name, { type: 'video/mp4', lastModified: Date.now() });
+  }
+  function h3aWav(secs, hz, name) {
+    const rate = 8000, n = Math.round(secs * rate);
+    const buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * hz * i / rate) * 12000), true);
+    return new File([buf], name, { type: 'audio/wav', lastModified: Date.now() });
+  }
+  // A file through the app's own picker input — the `change` the iOS photo picker fires. Resolves with the new layer.
+  async function h3aImport(file) {
+    const fi = document.getElementById('file-input');
+    if (!fi) throw new Error('setup: there is no #file-input, the picker the Add sheet opens');
+    const had = new Set(FM.scene.layers.map(l => l.id));
+    const dt = new DataTransfer(); dt.items.add(file); fi.files = dt.files;
+    fi.dispatchEvent(new Event('change'));
+    const L = await hcUntil('the import of ' + file.name, () => FM.scene.layers.find(l => !had.has(l.id)), 10000);
+    await sleep(200);
+    return L;
+  }
+  // Every file input the app clicks while `fn` runs is handed `file`, as the picker would. Records what it asked for.
+  async function h3aPicker(file, fn) {
+    const realClick = HTMLInputElement.prototype.click, seen = { accept: null, n: 0 };
+    HTMLInputElement.prototype.click = function () {
+      if (this.type !== 'file') return realClick.apply(this, arguments);
+      seen.accept = this.getAttribute('accept'); seen.n++;
+      const dt = new DataTransfer(); dt.items.add(file); this.files = dt.files;
+      this.dispatchEvent(new Event('change'));
+    };
+    try { await fn(); } finally { HTMLInputElement.prototype.click = realClick; }
+    return seen;
+  }
+  // A real finger on `el`, which must be inside the part of the frame real input can reach.
+  async function h3aTap(el, what) {
+    if (!el) throw new Error('setup: nothing to tap for ' + what);
+    const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0) || x > 350 || y > 740 || x < 0 || y < 0) throw new Error('setup: ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
+    await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+  }
+  // ⋯ → an item of the layer menu, by a real finger on the phone top bar (the only door to Replace media on a phone).
+  async function h3aLayerMenu(L, re, what) {
+    FM.selectLayer(L.id); FM.refreshAll(); await sleep(450);
+    const more = document.getElementById('m-more');
+    if (!more || !more.getBoundingClientRect().width) throw new Error('setup: the phone ⋯ (#m-more) is not on screen with ' + L.name + ' selected');
+    await h3aTap(more, 'a tap on ⋯');
+    const item = await hcMenuItem(re);
+    await h3aTap(item, what);
+  }
+  function h3aLibSnapshot() { return new Set(FM.mediaLib.list().map(e => e.mid)); }
+  function h3aLibRestore(before) { FM.mediaLib.list().forEach(e => { if (!before.has(e.mid)) FM.mediaLib.remove(e.mid); }); }
+  function h3aPixel(t) {   // the centre-left and centre of the whole frame, rendered as the canvas renders it
+    const P = FM.scene.project, s = 0.25;
+    const c = document.createElement('canvas'); c.width = Math.max(4, Math.round(P.width * s)); c.height = Math.max(4, Math.round(P.height * s));
+    const g = c.getContext('2d'); g.setTransform(s, 0, 0, s, 0, 0);
+    FM.renderScene(g, FM.scene, t);
+    const at = (x, y) => Array.prototype.slice.call(g.getImageData(x, y, 1, 1).data, 0, 3);
+    return { edge: at(1, c.height >> 1), centre: at(c.width >> 1, c.height >> 1) };
+  }
+  function h3aName(rgb) {
+    const [r, g, b] = rgb;
+    if (r > 180 && g > 180 && b < 90) return 'yellow';
+    if (r > 150 && g < 90 && b < 90) return 'red';
+    if (g > 120 && r < 90 && b < 90) return 'green';
+    if (b > 150 && r < 90 && g < 110) return 'blue';
+    return 'rgb(' + rgb.join(',') + ')';
+  }
+
+  test('690 a new project keeps the aspect and size he picked when the first thing he adds is a phone clip of another shape', { item: '690', budgetMs: 90000 }, async function () {
+    /* He starts every project in the New project dialog, and the dialog exists so a project starts the way he wants it
+       instead of being corrected later in Canvas settings. Its sixth tile is Custom, labelled Auto adjusts (his words,
+       #659) — so the other five are promises. addMediaLayer breaks them: the first clip or photo added to an empty
+       project REPLACES the canvas size with the file's own (js/app.js, FM.addMediaLayer, `first && rec.width && rec.height`),
+       whatever tile he picked. A 16:9 project becomes portrait the moment his phone clip lands; a 1080p pick becomes 4K
+       when the clip is 4K, and the export follows the canvas. Dialog driven with a real finger at 360. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    let remembered = null; try { remembered = localStorage.getItem('fm.newproj'); } catch (e) {}
+    try {
+      try { localStorage.setItem('fm.newproj', JSON.stringify({ aspect: '9:16', res: '1080', fps: 30, bg: '#000000', w: 1080, h: 1920 })); } catch (e) {}
+      const clip = await h3aClip(1080, 1920, 6, 'IMG_2041.MOV', function (g, k, w, h) { g.fillStyle = '#2050d0'; g.fillRect(0, 0, w, h); g.fillStyle = '#f0c040'; g.fillRect(w * 0.3, h * 0.4, w * 0.4, h * 0.2); });
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.home.open(); await sleep(900);
+          const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+          if (tab) { tab.click(); await sleep(300); }
+          const before = new Set(FM.projects.list().map(p => p.id));
+          await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
+          const wide = await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden') ? d.querySelector('.hm-aspect[data-aspect="16:9"]') : null; }, 4000);
+          await sleep(350);
+          await h3aTap(wide, 'a tap on 16:9 Wide');
+          await sleep(150);
+          const said = (document.getElementById('hm-new-size') || {}).textContent || '';
+          if (!/1920\D+1080/.test(said)) throw new Error('setup: after a tap on 16:9 Wide the dialog reads ' + said + ', not 1920 x 1080 — the pick did not happen');
+          await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
+          const pid = await hcUntil('the new project to open', () => { const id = FM.projects.currentId(); return (id && !before.has(id) && !FM.home.isOpen()) ? id : null; }, 8000);
+          made.push(pid);
+          await sleep(400);
+          const P = FM.scene.project;
+          if (P.width !== 1920 || P.height !== 1080) throw new Error('setup: the new project opened at ' + P.width + ' x ' + P.height + ', not the 1920 x 1080 the dialog showed');
+          if (FM.scene.layers.length) throw new Error('setup: the new project is not empty');
+          /* …and he may not add the clip today: leave the empty project and come back to it, so the pick has to have been
+             SAVED with the project, not merely remembered by the page that made it. */
+          if (!FM.storage.flushSync()) throw new Error('setup: the new project could not be saved');
+          made.push(await FM.projects.create({ name: 'HUNT-a away', width: 320, height: 240 }));
+          await FM.projects.open(pid, { confirmed: true });
+          await sleep(300);
+          if (FM.projects.currentId() !== pid || FM.scene.project.width !== 1920) throw new Error('setup: the 16:9 project did not reopen at 1920 x 1080');
+          const L = await h3aImport(clip);
+          const W = FM.scene.project.width, H = FM.scene.project.height;
+          if (W !== 1920 || H !== 1080) {
+            throw new Error('he picked 16:9 Wide at 1080p in New project (1920 x 1080) and added his portrait phone clip first — the project silently became ' +
+              W + ' x ' + H + ': the canvas he chose is gone, the preview turned portrait and the export will come out ' + W + ' x ' + H + '. Only the Custom tile says Auto adjusts');
+          }
+          // …and the clip is FITTED into the canvas he chose, the way every later clip is — whole, centred, not cropped off
+          const sz = FM.layerSize(L), dw = sz.w * L.transform.scale, dh = sz.h * L.transform.scale;
+          if (Math.abs(dh - 1080) > 2 || dw > 1920 + 2 || Math.abs(L.transform.x - 960) > 1 || Math.abs(L.transform.y - 540) > 1) {
+            throw new Error('the canvas kept its 1920 x 1080, but his portrait clip draws ' + Math.round(dw) + ' x ' + Math.round(dh) + ' at ' + Math.round(L.transform.x) + ',' + Math.round(L.transform.y) + ' — it should sit whole in the middle, 1080 tall');
+          }
+        });
+      }, 360);
+    } finally {
+      try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
+      try { const d = document.getElementById('hm-dialog'); if (d) d.classList.add('hidden'); } catch (e) {}
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 CONTROL a Custom project still takes the size of the first clip, as its tile says Auto adjusts', { item: '690', budgetMs: 90000 }, async function () {
+    /* The fix above keeps a picked tile's size; this is the other half of the same rule. Custom is the one tile that says
+       Auto adjusts (his words, #659), so a project made with it must STILL take the size of the first thing added — and a
+       project the app makes by itself (no dialog, nothing picked) must too. Same real finger at 360 as the test above. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    let remembered = null; try { remembered = localStorage.getItem('fm.newproj'); } catch (e) {}
+    try {
+      try { localStorage.setItem('fm.newproj', JSON.stringify({ aspect: '9:16', res: '1080', fps: 30, bg: '#000000', w: 1080, h: 1920 })); } catch (e) {}
+      const clip = await h3aClip(1280, 720, 4, 'IMG_2042.MOV', function (g, k, w, h) { g.fillStyle = '#20a050'; g.fillRect(0, 0, w, h); });
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.home.open(); await sleep(900);
+          const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+          if (tab) { tab.click(); await sleep(300); }
+          const before = new Set(FM.projects.list().map(p => p.id));
+          await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
+          const custom = await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden') ? d.querySelector('.hm-aspect[data-aspect="custom"]') : null; }, 4000);
+          await sleep(350);
+          await h3aTap(custom, 'a tap on Custom');
+          await sleep(150);
+          await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
+          const pid = await hcUntil('the new project to open', () => { const id = FM.projects.currentId(); return (id && !before.has(id) && !FM.home.isOpen()) ? id : null; }, 8000);
+          made.push(pid);
+          await sleep(400);
+          if (FM.scene.project.width !== 1080 || FM.scene.project.height !== 1920) throw new Error('setup: the Custom project opened at ' + FM.scene.project.width + ' x ' + FM.scene.project.height + ', not 1080 x 1920');
+          await h3aImport(clip);
+          const W = FM.scene.project.width, H = FM.scene.project.height;
+          if (W !== 1280 || H !== 720) throw new Error('a project made with Custom (Auto adjusts) stayed ' + W + ' x ' + H + ' when his 1280 x 720 clip was added first — the one tile that promises to adjust did not');
+        });
+      }, 360);
+      // …and a project nobody sized (made by the app, not the dialog) adjusts as it always has
+      made.push(await FM.projects.create({ name: 'HUNT-a unsized', width: 1080, height: 1920 }));
+      await sleep(250);
+      await h3aImport(await h3aClip(640, 480, 3, 'IMG_2043.MOV', function (g, k, w, h) { g.fillStyle = '#a02050'; g.fillRect(0, 0, w, h); }));
+      if (FM.scene.project.width !== 640 || FM.scene.project.height !== 480) throw new Error('a project no one sized stayed ' + FM.scene.project.width + ' x ' + FM.scene.project.height + ' when a 640 x 480 clip was added first');
+    } finally {
+      try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
+      try { const d = document.getElementById('hm-dialog'); if (d) d.classList.add('hidden'); } catch (e) {}
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 Replace media puts the new clip where the old one was at the same size, instead of blowing it up by its pixel count', { item: '690', budgetMs: 90000 }, async function () {
+    /* Replace media (the ⋯ menu, and the Replace Media button of a template's Insert your Media sheet, which calls the
+       same FM.replaceMedia) keeps the layer's transform — and a media layer's size on the canvas is the FILE's pixel size
+       times that scale (FM.layerSize). So the scale that made the old file fit is applied to a file of a different
+       pixel count: a 4K clip swapped in for a 1080p one of the SAME shape comes in twice as wide and twice as tall, and
+       he sees only its middle quarter. His phone shoots 4K and 12 MP stills, so nearly every swap does this. Driven
+       with a real finger on the phone ⋯. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    try {
+      if (wasOpen) FM.home.close();
+      made.push(await FM.projects.create({ name: 'HUNT-a replace', width: 1080, height: 1920 }));
+      await sleep(250);
+      const bordered = function (g, k, w, h) { g.fillStyle = '#00c000'; g.fillRect(0, 0, w, h); const b = Math.round(w * 0.12); g.fillStyle = '#0030ff'; g.fillRect(b, b, w - 2 * b, h - 2 * b); };
+      const hd = await h3aClip(1080, 1920, 4, 'IMG_1001.MOV', function (g, k, w, h) { g.fillStyle = '#d02020'; g.fillRect(0, 0, w, h); });
+      const uhd = await h3aClip(2160, 3840, 3, 'IMG_1002.MOV', bordered);   // his 4K portrait clip: green border, blue middle
+      const L = await h3aImport(hd);
+      const size0 = FM.layerSize(L).w * L.transform.scale;
+      if (Math.abs(size0 - 1080) > 11) throw new Error('setup: the first clip does not fill the 1080 px canvas (' + Math.round(size0) + ' px wide)');
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const seen = await h3aPicker(uhd, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+          if (!seen.n) throw new Error('setup: tapping Replace media… opened no file picker');
+        });
+      }, 360);
+      const m = await hcUntil('the 4K clip to replace the old one', () => { const r = FM.media.get(L.id); return r && r.width === 2160 ? r : null; }, 8000);
+      // the timeline re-draws the new clip's filmstrip by seeking its own element; the canvas holds nothing until that is done
+      await hcUntil('the 4K clip to decode a frame and its filmstrip to finish', () => m.el && m.el.readyState >= 2 && !m.el.seeking && !m._stripBuilding && m.stripFrames !== undefined, 10000);
+      await sleep(200);
+      await hcUntil('the 4K clip to hold a decoded frame', () => m.el.readyState >= 2 && !m.el.seeking, 4000);
+      const Lnow = FM.layerById(FM.scene, L.id);
+      const drawn = FM.layerSize(Lnow).w * Lnow.transform.scale;
+      const px = h3aPixel(Lnow.start + 0.02);
+      if (Math.abs(drawn - 1080) > 22) {
+        throw new Error('he swapped his 1080 x 1920 clip for a 4K portrait clip of the same shape with Replace media — the new clip came in ' + (drawn / 1080).toFixed(2) +
+          ' times the size, ' + Math.round(drawn) + ' px wide on the 1080 px canvas, so only its middle quarter shows: the left edge of the canvas is ' + h3aName(px.edge) +
+          ' where the clip green border should be. Filling a template slot (Insert your Media) with his own 4K clip or 12 MP photo goes the same way');
+      }
+      if (h3aName(px.edge) !== 'green') throw new Error('the replaced clip reports the right size but the left edge of the canvas is ' + h3aName(px.edge) + ', not the clip green border');
+      /* UNDO puts the old clip back at the old size. The rescale is part of the replace's own undo step, and the undo's
+         media swap (FM.restoreReplacedMedia → replaceMediaWith) must not rescale a second time on top of it. */
+      FM.history.undo();
+      await hcUntil('undo to bring the 1080p clip back', () => { const r = FM.media.get(L.id); return r && r.width === 1080 ? r : null; }, 8000);
+      await sleep(150);
+      const Lu = FM.layerById(FM.scene, L.id), back = FM.layerSize(Lu).w * Lu.transform.scale;
+      if (Math.abs(back - 1080) > 11) throw new Error('after Undo the original 1080p clip is back but draws ' + Math.round(back) + ' px wide on the 1080 px canvas — the undo rescaled it a second time');
+    } finally {
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 Replace media fits a file of another size or shape into the box the old one drew, keyframed scale and crop included', { item: '690' }, function () {
+    /* The rule behind the test above, on the cases a real swap can bring: a keyframed scale (every keyframe moves by the same
+       factor, so the animation keeps its shape), a crop (source pixels, so it becomes the same FRACTION of the new frame and
+       shows the same part of the picture), a file of another shape (fits inside the old box, never spills out of it), a
+       small file (grows to the old box), and a song (no picture: nothing to fit). */
+    const fit = FM._fitReplacedMedia;
+    if (typeof fit !== 'function') throw new Error('FM._fitReplacedMedia is missing');
+    const near = (a, b) => Math.abs(a - b) < 1e-6;
+    const L = FM.makeLayer('video', { x: 540, y: 960 });
+    L.transform.scale = { kf: [{ t: 0, v: 0.5 }, { t: 1, v: 1, to: 0.2, ti: -0.1 }] };
+    L.crop = { x: 100, y: { kf: [{ t: 0, v: 200 }, { t: 1, v: 400 }] }, w: 500, h: 600 };
+    fit(L, { width: 1080, height: 1920 }, { width: 2160, height: 3840 });
+    const kf = L.transform.scale.kf;
+    if (!near(kf[0].v, 0.25) || !near(kf[1].v, 0.5) || !near(kf[1].to, 0.1) || !near(kf[1].ti, -0.05)) throw new Error('a keyframed scale became ' + JSON.stringify(kf) + ' for a same-shape file twice the size — every keyframe (and its tangents) should halve');
+    if (!near(L.crop.x, 200) || !near(L.crop.w, 1000) || !near(L.crop.h, 1200) || !near(L.crop.y.kf[0].v, 400) || !near(L.crop.y.kf[1].v, 800)) throw new Error('the crop became ' + JSON.stringify(L.crop) + ' — on a file twice the size it should cover the same part of the picture, so twice the source pixels');
+    const S = FM.makeLayer('image', {}); S.transform.scale = 1;
+    fit(S, { width: 1080, height: 1920 }, { width: 1920, height: 1080 });
+    if (!near(S.transform.scale, 1080 / 1920)) throw new Error('a landscape file swapped in for a portrait one came in at scale ' + S.transform.scale + ' — it should fit inside the old box (1080 / 1920)');
+    const T = FM.makeLayer('image', {}); T.transform.scale = 0.5;
+    fit(T, { width: 4032, height: 3024 }, { width: 1008, height: 756 });
+    if (!near(T.transform.scale, 2)) throw new Error('a small file swapped in for a 12 MP photo came in at scale ' + T.transform.scale + ' — it should grow to the box the photo drew (2)');
+    const A = FM.makeLayer('video', {}); A.transform.scale = 0.7;
+    fit(A, { width: 0, height: 0 }, { width: 0, height: 0 });
+    if (A.transform.scale !== 0.7) throw new Error('a song swapped for a song had its scale changed to ' + A.transform.scale);
+  });
+
+  test('690 an animated GIF he adds moves on the canvas, instead of freezing on its first frame — and still moves when he reopens the project', { item: '690', budgetMs: 60000 }, async function () {
+    /* The importer takes .gif as a picture (RE_IMAGE in js/app.js) and loads it into an <img> that is never in the page.
+       A detached image never advances its animation, so drawImage paints frame 0 for the whole clip, in the preview and in
+       every export (the exporter renders through the same FM.renderScene). Nothing tells him: the reaction GIF or animated
+       sticker he added simply sits still. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    try {
+      if (wasOpen) FM.home.close();
+      made.push(await FM.projects.create({ name: 'HUNT-a gif', width: 1080, height: 1920 }));
+      await sleep(250);
+      const W = 240, H = 240, cols = [[230, 30, 30], [30, 60, 230], [30, 200, 40], [240, 220, 30]];
+      const enc = FM.gifEncoder.create(W, H, { loop: true });
+      cols.forEach(function (c) {
+        const rgba = new Uint8ClampedArray(W * H * 4);
+        for (let i = 0; i < W * H; i++) { rgba[i * 4] = c[0]; rgba[i * 4 + 1] = c[1]; rgba[i * 4 + 2] = c[2]; rgba[i * 4 + 3] = 255; }
+        enc.addFrame(rgba, 250);
+      });
+      const gif = new File([enc.finish()], 'reaction.gif', { type: 'image/gif', lastModified: Date.now() });
+      /* CONTROL: the fixture really is a four-frame animation, as the browser itself reads it. */
+      if (window.ImageDecoder) {
+        const d = new ImageDecoder({ data: await gif.arrayBuffer(), type: 'image/gif' });
+        await d.tracks.ready;
+        const n = d.tracks.selectedTrack.frameCount;
+        const f2 = await d.decode({ frameIndex: 2 });
+        const oc = new OffscreenCanvas(4, 4), og = oc.getContext('2d'); og.drawImage(f2.image, 0, 0, 4, 4); f2.image.close();
+        const c2 = h3aName(Array.prototype.slice.call(og.getImageData(2, 2, 1, 1).data, 0, 3));
+        d.close();
+        if (n !== 4 || c2 !== 'green') throw new Error('CONTROL: the browser reads the fixture as ' + n + ' frame(s) with frame 3 ' + c2 + ' — it is not the four-colour animation this test needs');
+      }
+      const L = await h3aImport(gif);
+      if (L.type !== 'image') throw new Error('setup: the GIF imported as a ' + L.type + ' layer');
+      const at = [0.1, 0.35, 0.6, 0.85].map(function (dt) { return { dt: dt, c: h3aName(h3aPixel(L.start + dt).centre) }; });
+      if (at[0].c !== 'red') throw new Error('setup: 0.1 s into the GIF the canvas centre is ' + at[0].c + ', not its first frame (red) — the layer is not drawing');
+      const distinct = new Set(at.map(function (a) { return a.c; }));
+      if (distinct.size < 3) {
+        throw new Error('his animated GIF (four frames a second, red, blue, green, yellow) is frozen on its first frame — the canvas shows ' +
+          at.map(function (a) { return a.c + ' at ' + a.dt + ' s'; }).join(', ') + '. It never moves, in the preview or in the export');
+      }
+      // each quarter-second is its own frame, in order, and it LOOPS for as long as the clip lasts
+      const want = ['red', 'blue', 'green', 'yellow'];
+      const seq = [0.1, 0.35, 0.6, 0.85, 1.1, 2.6].map(function (dt) { return h3aName(h3aPixel(L.start + dt).centre); });
+      const exp = ['red', 'blue', 'green', 'yellow', 'red', 'green'];
+      if (seq.join() !== exp.join()) throw new Error('the GIF moves but out of step: at 0.1, 0.35, 0.6, 0.85, 1.1 and 2.6 s the canvas shows ' + seq.join(', ') + ' — expected ' + exp.join(', ') + ' (' + want.join(', ') + ', looping)');
+      /* …AND AFTER A REOPEN. The frames are decoded on load, so every other way the file comes back (a reopened project,
+         a restored backup, a clip from the media library) goes through the same FM.loadImageFile — this proves that door. */
+      const pid = FM.projects.currentId();
+      FM.storage.markDirty(); await FM.storage.save();
+      made.push(await FM.projects.create({ name: 'HUNT-a gif away', width: 320, height: 240 }));
+      await FM.projects.open(pid, { confirmed: true });
+      await hcUntil('the reopened GIF to load its frames', function () { const m = FM.media.get(L.id); return m && m.anim && m.anim.frames.length === 4; }, 10000);
+      const again = [0.1, 0.6].map(function (dt) { return h3aName(h3aPixel(L.start + dt).centre); });
+      if (again.join() !== 'red,green') throw new Error('after he left the project and came back the GIF shows ' + again.join(', ') + ' at 0.1 and 0.6 s — it froze again on reopen');
+    } finally {
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  // A GIF built by hand, byte by byte, so it carries what the export encoder never writes: a global palette, frames smaller
+  // than the screen at an offset, an interlaced frame, a local palette, disposal 2 and 3, and a transparent index. The LZW is
+  // the uncompressed form (a clear code before the table can grow), which every decoder has to read.
+  function h3aGifBytes(W, H, gct, frames) {
+    const out = [], u8 = function (v) { out.push(v & 255); }, u16 = function (v) { u8(v); u8(v >> 8); };
+    const str = function (t) { for (let i = 0; i < t.length; i++) u8(t.charCodeAt(i)); };
+    const depth = function (pal) { let d = 1; while ((1 << d) < pal.length) d++; return Math.max(2, d); };
+    const table = function (pal) { const d = depth(pal); for (let i = 0; i < (1 << d); i++) { const c = pal[i] || [0, 0, 0]; u8(c[0]); u8(c[1]); u8(c[2]); } };
+    str('GIF89a'); u16(W); u16(H); u8(0xF0 | (depth(gct) - 1)); u8(0); u8(0); table(gct);
+    u8(0x21); u8(0xFF); u8(11); str('NETSCAPE2.0'); u8(3); u8(1); u16(0); u8(0);
+    frames.forEach(function (f) {
+      u8(0x21); u8(0xF9); u8(4); u8((f.disposal << 2) | (f.transparent >= 0 ? 1 : 0)); u16(f.delay); u8(f.transparent >= 0 ? f.transparent : 0); u8(0);
+      u8(0x2C); u16(f.x); u16(f.y); u16(f.w); u16(f.h);
+      u8((f.interlaced ? 0x40 : 0) | (f.lct ? 0x80 | (depth(f.lct) - 1) : 0));
+      if (f.lct) table(f.lct);
+      const rows = [];
+      if (f.interlaced) [[0, 8], [4, 8], [2, 4], [1, 2]].forEach(function (ps) { for (let y = ps[0]; y < f.h; y += ps[1]) rows.push(y); });
+      else for (let y = 0; y < f.h; y++) rows.push(y);
+      const idx = []; rows.forEach(function (y) { for (let x = 0; x < f.w; x++) idx.push(f.px(x, y)); });
+      const minCode = depth(f.lct || gct), clear = 1 << minCode, size = minCode + 1, group = clear - 2, data = [];
+      let acc = 0, bits = 0;
+      const put = function (c) { acc |= c << bits; bits += size; while (bits >= 8) { data.push(acc & 255); acc >>= 8; bits -= 8; } };
+      for (let i = 0; i < idx.length; i++) { if (i % group === 0) put(clear); put(idx[i]); }
+      put(clear + 1);
+      if (bits > 0) data.push(acc & 255);
+      u8(minCode);
+      for (let o = 0; o < data.length; o += 255) { const n = Math.min(255, data.length - o); u8(n); for (let k = 0; k < n; k++) u8(data[o + k]); }
+      u8(0);
+    });
+    u8(0x3B);
+    return new Uint8Array(out);
+  }
+
+  test('690 the GIF frames match the browser decoder pixel for pixel — 12-bit LZW, transparency, interlace, offsets and every disposal', { item: '690', budgetMs: 60000 }, async function () {
+    /* The frames are decoded by plain JS on purpose (iPhone Safari has no ImageDecoder), so this holds that decoder to the
+       browser: every frame of two GIFs, composed, compared with what Chrome's ImageDecoder makes of the same bytes. One is
+       noise through the app's own GIF encoder (a transparent key, 255 colours, a code table that fills to 4096 and clears);
+       the other is built by hand with everything that encoder never writes. Timing too: each frame starts where the
+       browser says it does, and a zero delay plays at 100 ms, as every browser plays it. */
+    if (!window.ImageDecoder) throw new Error('setup: this browser has no ImageDecoder to compare against');
+    if (typeof FM._decodeGifAnimation !== 'function') throw new Error('FM._decodeGifAnimation is missing');
+    const cmp = async function (bytes, what, checkTimes) {
+      const file = new File([bytes], what + '.gif', { type: 'image/gif' });
+      const mine = await FM._decodeGifAnimation(file);
+      const d = new ImageDecoder({ data: bytes.buffer ? bytes.buffer.slice(bytes.byteOffset || 0) : await file.arrayBuffer(), type: 'image/gif' });
+      await d.tracks.ready; await d.completed;
+      const n = d.tracks.selectedTrack.frameCount;
+      if (!mine || mine.frames.length !== n) throw new Error(what + ': the app read ' + (mine ? mine.frames.length : 'no') + ' frames, the browser reads ' + n);
+      const W = mine.width, H = mine.height;
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      let t = 0;
+      for (let i = 0; i < n; i++) {
+        const r = await d.decode({ frameIndex: i });
+        g.clearRect(0, 0, W, H); g.drawImage(r.image, 0, 0, W, H);
+        const ref = g.getImageData(0, 0, W, H).data;
+        const dur = r.image.duration; r.image.close();
+        g.clearRect(0, 0, W, H); g.drawImage(mine.frames[i], 0, 0, W, H);
+        const got = g.getImageData(0, 0, W, H).data;
+        for (let p = 0; p < ref.length; p += 4) {
+          const bad = Math.abs(ref[p + 3] - got[p + 3]) > 2 || (ref[p + 3] > 250 && (Math.abs(ref[p] - got[p]) > 2 || Math.abs(ref[p + 1] - got[p + 1]) > 2 || Math.abs(ref[p + 2] - got[p + 2]) > 2));
+          if (bad) {
+            const px = p / 4;
+            throw new Error(what + ': frame ' + (i + 1) + ' of ' + n + ' differs from the browser at ' + (px % W) + ',' + Math.floor(px / W) + ' — browser rgba(' +
+              Array.prototype.slice.call(ref, p, p + 4).join(',') + '), app rgba(' + Array.prototype.slice.call(got, p, p + 4).join(',') + ')');
+          }
+        }
+        if (checkTimes && dur != null && Math.abs(mine.starts[i] - t) > 0.002) throw new Error(what + ': frame ' + (i + 1) + ' starts at ' + mine.starts[i].toFixed(3) + ' s in the app and ' + t.toFixed(3) + ' s in the browser');
+        t += (dur || 0) / 1e6;
+      }
+      d.close();
+      return mine;
+    };
+    /* 1. noise through the app's own encoder, with a transparent key */
+    const NW = 96, NH = 64;
+    const enc = FM.gifEncoder.create(NW, NH, { loop: true, transparent: true });
+    let seed = 7;
+    const rnd = function () { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let f = 0; f < 3; f++) {
+      const rgba = new Uint8ClampedArray(NW * NH * 4);
+      for (let i = 0; i < NW * NH; i++) { rgba[i * 4] = rnd() * 255; rgba[i * 4 + 1] = rnd() * 255; rgba[i * 4 + 2] = rnd() * 255; rgba[i * 4 + 3] = rnd() < 0.2 ? 0 : 255; }
+      enc.addFrame(rgba, 120);
+    }
+    await cmp(new Uint8Array(await enc.finish().arrayBuffer()), 'noise', true);
+    /* 2. by hand: a global palette, then an interlaced sub-rect restored after (disposal 3), a local palette cleared after
+          (disposal 2), and a corner drawn over what the clear left */
+    const gct = [[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40], [240, 220, 30], [200, 40, 200], [40, 200, 200], [255, 255, 255]];
+    const lct = [[10, 10, 10], [250, 120, 0], [0, 120, 250], [120, 250, 0]];
+    const hand = h3aGifBytes(40, 30, gct, [
+      { x: 0, y: 0, w: 40, h: 30, disposal: 1, transparent: -1, delay: 20, px: function (x, y) { return ((x >> 2) + (y >> 2)) % 8; } },
+      { x: 5, y: 4, w: 20, h: 15, disposal: 3, transparent: 0, delay: 15, interlaced: true, px: function (x, y) { return (x + y) % 3 === 0 ? 0 : 1 + ((x * y) % 7); } },
+      { x: 10, y: 10, w: 25, h: 16, disposal: 2, transparent: 3, delay: 25, lct: lct, px: function (x, y) { return (x * 3 + y) % 4; } },
+      { x: 0, y: 0, w: 12, h: 12, disposal: 1, transparent: -1, delay: 30, px: function (x, y) { return (x + y) % 8; } },
+    ]);
+    const h = await cmp(hand, 'hand-built', true);
+    if (Math.abs(h.total - 0.9) > 1e-6) throw new Error('hand-built: the loop is ' + h.total + ' s long, not the 0.9 s its four delays add up to');
+    /* 3. a zero delay plays at 100 ms, the way every browser plays it — never as a frame that flashes past */
+    const zero = h3aGifBytes(8, 8, gct, [
+      { x: 0, y: 0, w: 8, h: 8, disposal: 1, transparent: -1, delay: 0, px: function () { return 1; } },
+      { x: 0, y: 0, w: 8, h: 8, disposal: 1, transparent: -1, delay: 0, px: function () { return 2; } },
+    ]);
+    const z = await FM._decodeGifAnimation(new File([zero], 'zero.gif', { type: 'image/gif' }));
+    if (!z || Math.abs(z.total - 0.2) > 1e-6 || Math.abs(z.starts[1] - 0.1) > 1e-6) throw new Error('two zero-delay frames make a loop of ' + (z && z.total) + ' s — each should last 100 ms');
+    /* 4. a single-frame GIF is a still: nothing is decoded or kept for it */
+    const one = h3aGifBytes(8, 8, gct, [{ x: 0, y: 0, w: 8, h: 8, disposal: 1, transparent: -1, delay: 0, px: function () { return 3; } }]);
+    if (await FM._decodeGifAnimation(new File([one], 'one.gif', { type: 'image/gif' }))) throw new Error('a one-frame GIF was decoded as an animation — it should stay a plain still');
+  });
+
+  test('690 Replace media on a song lets him pick another song, and the layer then plays it', { item: '690', budgetMs: 60000 }, async function () {
+    /* A song is a video layer with no picture, so its ⋯ menu offers Replace media… like any clip (and a template's Insert
+       your Media sheet lists it as a slot). But FM.replaceMedia opens a picker for video/*,image/* only — on his iPhone
+       every song in Files is greyed out — and it decides photo-or-video from the file itself: a song handed to it is
+       loaded as a PICTURE, fails, and the toast says Could not load that file. The layer keeps the old song; the only way
+       to try another is to delete the layer and lose its cuts, volume and fades. Driven with a real finger on the ⋯. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    const toasts = [], realToast = FM.toast;
+    try {
+      if (wasOpen) FM.home.close();
+      made.push(await FM.projects.create({ name: 'HUNT-a song', width: 1080, height: 1920 }));
+      await sleep(250);
+      const L = await h3aImport(h3aWav(6, 440, 'Song A.wav'));
+      const m0 = FM.media.get(L.id);
+      if (!m0 || !m0.file || m0.file.name !== 'Song A.wav' || L.type !== 'video') throw new Error('setup: Song A did not import as a song layer');
+      const songB = h3aWav(9, 660, 'Song B.wav');
+      FM.toast = function (msg) { toasts.push(String(msg)); return realToast.apply(this, arguments); };
+      let seen = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          seen = await h3aPicker(songB, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+        });
+      }, 360);
+      if (!seen || !seen.n) throw new Error('setup: tapping Replace media… on the song opened no file picker');
+      let rec = null;
+      for (let i = 0; i < 60; i++) { rec = FM.media.get(L.id); if (rec && rec.file === songB) break; await sleep(50); }
+      const offersAudio = /audio/i.test(seen.accept || '');
+      const replaced = !!(rec && rec.file === songB);
+      if (!offersAudio || !replaced) {
+        throw new Error('Replace media… on his song opens a picker for ' + (seen.accept || 'anything') + (offersAudio ? '' : ' only — on his iPhone every song in Files is greyed out') +
+          ', and Song B handed to it anyway ' + (replaced ? 'did replace it' : 'was refused' + (toasts.length ? ' (toast: ' + toasts[toasts.length - 1] + ')' : '') +
+          ' — the layer still plays ' + ((rec && rec.file && rec.file.name) || 'nothing')));
+      }
+      if (!(Math.abs(FM.layerById(FM.scene, L.id).duration - 6) < 0.2)) throw new Error('the song was replaced but its clip length changed to ' + FM.layerById(FM.scene, L.id).duration + ' s');
+      /* …and a VIDEO picked for a song gives up its sound, as it does under Add ▸ Audio (queue 448): the layer stays a song,
+         with no picture arriving on the canvas. (A WAV typed as an MP4 is what an .mp4 off the camera roll looks like to the
+         importer, and it decodes — the same stand-in the queue 448 test uses.) */
+      const clipB = new File([await h3aWav(3, 330, 'x.wav').arrayBuffer()], 'IMG_3001.mp4', { type: 'video/mp4', lastModified: Date.now() });
+      let seen2 = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          seen2 = await h3aPicker(clipB, async function () { await h3aLayerMenu(FM.layerById(FM.scene, L.id), /^Replace media/, 'a second tap on Replace media…'); });
+        });
+      }, 360);
+      if (!seen2 || !seen2.n) throw new Error('setup: the second Replace media… opened no file picker');
+      const r2 = await hcUntil('the video to replace the song', function () { const r = FM.media.get(L.id); return r && r.file && r.file !== songB ? r : null; }, 8000).catch(function () { return null; });
+      if (!r2 || !/IMG_3001 \(audio\)\.wav$/.test(r2.file.name) || r2.width || r2.height) {
+        throw new Error('a video picked to replace his song ' + (r2 ? 'came in as ' + r2.file.name + ' at ' + r2.width + ' x ' + r2.height : 'did not replace it' + (toasts.length ? ' (toast: ' + toasts[toasts.length - 1] + ')' : '')) + ' — it should give its sound, like Add ▸ Audio, and leave the song a song');
+      }
+      if (FM.layerById(FM.scene, L.id).duration > 3.05) throw new Error('a 3 s sound replaced the 6 s song but the clip still claims ' + FM.layerById(FM.scene, L.id).duration + ' s');
+    } finally {
+      FM.toast = realToast;
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* ═══ HUNT-b (queue 690, 25 Sep, third hunt) — THE AUDIO EDITING UI, WITH A REAL FINGER ═══════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four faults in the audio editing UI — the Audio →
+   * keyframes sheet, the audio effect Hear button, the Volume ruler and the bookmarks he taps on the beat — each found by
+   * driving the real control at 380 px with trusted touches (tests/_cdp.py), each written to FAIL first with a message
+   * that says what he would see, then fixed and proven red against the reverted fix. Each carries a CONTROL on the same
+   * run, so a red here cannot be the harness. */
+  function hbAudSay(msg) { return String(msg).replace(/"/g, "'"); }   // runtime names go into these messages; the suite forbids a double quote in one
+  async function hbAudSong(secs, name) {
+    // loud for 2 s, quiet to 4 s, then a pulse on every half second — a song with something to react to
+    const fn = t => (t < 2 ? 0.8 : (t < 4 ? 0.03 : ((t * 2) % 1 < 0.2 ? 0.9 : 0.02))) * Math.sin(2 * Math.PI * 220 * t);
+    return FM.loadVideoFile(huntEWav(secs, fn, name || 'hbaud'));
+  }
+  async function hbAudScene(extra, secs) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+    const dur = secs || 8;
+    const rec = await hbAudSong(dur, 'hbaud-song');
+    const song = FM.makeLayer('video', { name: 'Song', x: 540, y: 960, start: 0, duration: dur });
+    FM.media.set(song.id, rec);
+    FM.scene = scene((extra || []).concat([song]), { project: { width: 1080, height: 1920, fps: 30, duration: dur, background: '#000000' } });
+    FM.selectLayer(song.id); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    await sleep(500);
+    return song;
+  }
+  function hbAudCentre(elm, what) {
+    if (!elm) throw new Error('setup: no ' + what + ' on screen');
+    const r = elm.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0 && r.height > 0) || x < 0 || x > 375 || y < 0 || y > 745) throw new Error('setup: the ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+    return { x: x, y: y, r: r };
+  }
+  const hbAudTap = (x, y, hold) => [{ t: 'touchStart', x: x, y: y, ms: hold || 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }];
+
+  /* 690 (HUNT-b 1) — AUDIO → KEYFRAMES, OPENED FROM A SONG, DROVE THE SONG.
+   * The only door into the sheet is the "Audio → keyframes…" button on the Volume card (js/inspector.js volumePanel), so
+   * the selected layer is always the clip he is looking at. For a song — an mp3 or a wav, a video with a 0x0 picture — the
+   * sheet's own default (js/audio-react.js openSheet: `targetId: (sel && !isAudioOnly(sel)) ? sel.id : layer.id`) falls
+   * through to `layer.id`: the SONG. Apply then bakes Scale keyframes onto a layer that has no picture, the toast says
+   * Baked 77 keyframes onto Song, the song clip fills with diamonds and nothing on the canvas moves. The feature is
+   * music → motion, and with the defaults it does nothing he can see until he finds the Target layer menu.
+   * Driven through the real button and the real Apply with a finger. CONTROL: the sheet lists the Logo as a target, so a
+   * picture layer was there to pick.
+   * FIXED: openSheet's defaultTarget — the selection if it draws, else the picture layer he selected just before
+   * (FM._recentSel, kept by FM.selectLayer), else the topmost layer with its own picture. The second half covers the
+   * verifier's related case: an Extract Audio twin HAS a picture (a copy of the video at opacity 0) and so slipped past
+   * the 0x0 check — it is flagged audioOnly and must not be the default either. */
+  test('690 Audio to keyframes opened from a song aims at a picture layer, so Apply moves something on the canvas', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const q = s => [].slice.call(document.querySelectorAll(s));
+    let twinId = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const logo = FM.makeLayer('shape', { name: 'Logo', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#c05030', start: 0, duration: 8 });
+          const song = await hbAudScene([logo], 8);
+          FM.selectLayer(logo.id); await sleep(200);   // he has been working on the Logo…
+          FM.selectLayer(song.id); await sleep(250);   // …then opens the song to make the Logo pulse to it
+          FM.inspector.openCategory('volume'); await sleep(500);
+          const btn = q('#inspector-panel .vol-tool-btn').filter(b => /keyframes/.test(b.textContent))[0];
+          if (!btn) throw new Error('setup: the Volume card has no Audio → keyframes button');
+          btn.scrollIntoView({ block: 'center' }); await sleep(250);
+          const b = hbAudCentre(btn, 'Audio → keyframes button');
+          await realInput924(hbAudTap(b.x, b.y), 'a tap on Audio → keyframes');
+          await sleep(900);
+          const sheet = document.getElementById('ar-sheet');
+          if (!sheet) throw new Error('a real tap on Audio → keyframes did not open its sheet');
+          const targetSel = sheet.querySelectorAll('select')[0];
+          if (!targetSel) throw new Error('setup: the sheet has no Target layer menu');
+          const offered = [].slice.call(targetSel.options).map(o => o.value);
+          /* CONTROL: the Logo is right there in the target list — a picture layer was there to be the default. */
+          if (offered.indexOf(logo.id) < 0) throw new Error('CONTROL: the Target layer menu does not even list the Logo, so this test cannot say which default was wrong');
+          const picked = targetSel.options[targetSel.selectedIndex] ? targetSel.options[targetSel.selectedIndex].textContent : '(none)';
+          const apply = [].slice.call(sheet.querySelectorAll('button')).filter(x => /Apply/.test(x.textContent))[0];
+          if (!apply) throw new Error('setup: the sheet has no Apply button');
+          apply.scrollIntoView({ block: 'center' }); await sleep(250);
+          const a = hbAudCentre(apply, 'Apply button');
+          await realInput924(hbAudTap(a.x, a.y), 'a tap on Apply');
+          await sleep(1600);
+          const L = FM.layerById(FM.scene, logo.id), S = FM.layerById(FM.scene, song.id);
+          const songKf = FM.isAnimated(S.transform.scale) ? S.transform.scale.kf.length : 0;
+          const logoMoves = FM.isAnimated(L.transform.scale) || FM.isAnimated(L.transform.opacity) || FM.isAnimated(L.transform.rotation);
+          if (songKf || !logoMoves) {
+            throw new Error(hbAudSay('Audio → keyframes opened from his song comes up aimed at the song itself (Target layer: ' + picked + '), so Apply with the defaults baked ' + songKf + ' Scale keyframes onto an audio layer with no picture and the Logo did not move at all — the toast says Baked onto Song, the song clip fills with diamonds, and nothing on the canvas pulses to the music'));
+          }
+          /* The Extract Audio twin: a video WITH a picture, at opacity 0, flagged audioOnly (FM.extractAudio). Opened
+             from the twin with the Logo nowhere in his recent selections, the default must still be the Logo. */
+          const twin = FM.makeLayer('video', { name: 'Clip (audio)', x: 540, y: 960, start: 0, duration: 8 });
+          twinId = twin.id;
+          twin.audioOnly = true; twin.transform.opacity = 0;
+          FM.media.set(twin.id, { kind: 'video', el: document.createElement('video'), width: 1080, height: 1920, duration: 8 });   // its own element: removing it must not release the song's
+          FM.scene.layers.unshift(twin);   // on top of the stack, where a duplicate lands
+          FM._recentSel = [];
+          FM.selectLayer(twin.id); await sleep(200);
+          FM.audioReact.openSheet(twin); await sleep(300);
+          const sheet2 = document.getElementById('ar-sheet');
+          const tsel2 = sheet2 && sheet2.querySelectorAll('select')[0];
+          if (!tsel2) throw new Error('setup: Audio → keyframes did not open from the Extract Audio twin');
+          const aim2 = tsel2.value, aimName2 = tsel2.options[tsel2.selectedIndex] ? tsel2.options[tsel2.selectedIndex].textContent : '(none)';
+          FM.closeAudioReactSheet();
+          if (aim2 !== logo.id) throw new Error(hbAudSay('Audio → keyframes opened from an Extract Audio twin comes up aimed at ' + aimName2 + ' — the twin is a copy of the video at opacity 0, so keyframes baked there move nothing he can see; the Logo was right there'));
+        });
+      }, 380);
+    } finally {
+      try { if (FM.closeAudioReactSheet) FM.closeAudioReactSheet(); } catch (e) {}
+      if (twinId) { try { FM.media.remove(twinId); } catch (e) {} }
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 2) — THE HEAR BUTTON KEPT PLAYING AFTER HE LEFT THE EFFECT.
+   * An audio effect row's ▶ (queue 653) auditions the clip on a 2.5 s loop so he can hear a slider while he drags it. It
+   * is not the transport, so nothing that stops playback stops it; js/audio-fx-live.js audition() stops itself only when
+   * the transport starts, an export starts or the layer is deleted, and js/inspector.js stops it only when that one row is
+   * COLLAPSED. Every other way out of the panel leaves it running: the card's ‹ Effects back button (js/inspector.js
+   * `back.addEventListener('click', () => { view = 'home' …`), tapping away to deselect the clip. The same 2.5 s of his
+   * song then loops forever over a panel that no longer has a stop button on it — the stuck state the audition's own
+   * comments call the worst this app can have, because there is nothing on screen to connect the sound to.
+   * Measured on the element itself (paused, currentTime), through a real ▶ tap and a real tap on ‹ Effects. CONTROL: the
+   * ▶ tap really started the audition and the element really played.
+   * FIXED: the Hear button passes its own selector as the audition's `control`, and the audition's tick stops the moment
+   * no lit Hear button is on screen (js/audio-fx-live.js) — every way out of the panel at once, not one exit at a time. */
+  test('690 an audio effect Hear preview stops when he backs out of the effect or deselects the clip — the song never loops on with no stop on screen', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const q = s => [].slice.call(document.querySelectorAll(s));
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const song = await hbAudScene([], 8);
+          const rv = FM.audioFxRegistry.makeInstance('reverb'); rv._expanded = true;
+          FM.layerById(FM.scene, song.id).audioFx = [rv];
+          FM.refreshAll(); FM.selectLayer(song.id); await sleep(200);
+          FM.inspector.openCategory('audiofx'); await sleep(500);
+          const m = FM.media.get(song.id);
+          const startHear = async function (why) {
+            FM.inspector.openCategory('audiofx'); await sleep(400);
+            const hear = q('#inspector-panel .fx-row.fx-open .fx-hear')[0];
+            const h = hbAudCentre(hear, 'Hear button on the Reverb row');
+            await realInput924(hbAudTap(h.x, h.y), 'a tap on Hear ' + why);
+            await sleep(700);
+            /* CONTROL: the tap really started it, and the song is really coming out of the element. */
+            if (!FM.audioFxLive.auditioning() || m.el.paused) throw new Error('CONTROL: a real tap on the Hear button did not start the preview (auditioning ' + FM.audioFxLive.auditioning() + ', element paused ' + m.el.paused + ')');
+          };
+          const bad = [];
+          /* 1. ‹ Effects, the card's own back button, with a real finger. */
+          await startHear('before backing out');
+          const back = q('#inspector-panel .cat-back')[0];
+          const bk = hbAudCentre(back, '‹ Effects back button');
+          await realInput924(hbAudTap(bk.x, bk.y), 'a tap on ‹ Effects');
+          await sleep(3200);   // longer than one 2.5 s loop
+          if (FM.audioFxLive.auditioning() || !m.el.paused) bad.push('backing out with ‹ Effects: 3 s later the song is still ' + (m.el.paused ? 'held as a preview' : 'playing') + ' (at ' + m.el.currentTime.toFixed(1) + ' s of its 2.5 s loop) and the panel on screen has ' + q('#inspector-panel .fx-hear').length + ' stop buttons');
+          try { FM.audioFxLive.stopAudition(); } catch (e) {}
+          /* 2. Tapping away — the clip is deselected and the whole card goes. */
+          FM.selectLayer(song.id); await sleep(250);
+          await startHear('before deselecting');
+          FM.selectLayer(null); await sleep(1500);
+          if (FM.audioFxLive.auditioning() || !m.el.paused) bad.push('deselecting the clip: the song is still ' + (m.el.paused ? 'held as a preview' : 'looping') + ' with no card open at all');
+          if (bad.length) throw new Error('the Hear preview of an audio effect keeps looping the same 2.5 s of his song after he leaves the effect, with no stop button anywhere on screen — only pressing Play or finding that row again stops it: ' + bad.join('; '));
+        });
+      }, 380);
+    } finally {
+      try { FM.audioFxLive.stopAudition(); } catch (e) {}
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 3) — THE VOLUME RULER, GRABBED ON ITS LINE, MOVED ONE NOTCH AND STOPPED.
+   * The cyan centre line of every scrub ruler is `.fx-scrub-notch` (styles.css), a 2 px element with no
+   * `pointer-events: none` — so a finger that lands on the line is implicitly captured by the LINE, not the ruler. The
+   * ruler (js/inspector.js tickStrip) waits for 6 px of travel, then calls strip.setPointerCapture, which moves the capture
+   * from the line to itself: the browser fires lostpointercapture at the line and it BUBBLES to the ruler, where
+   * `strip.addEventListener('lostpointercapture', end)` takes it for the end of the drag. The first move has already
+   * applied one notch (5 percent on Volume); every move after it is ignored. The line is the obvious thing to grab — it
+   * is the one bright mark on the ruler — so on his phone some drags of Volume, the fades and every effect slider move a
+   * single notch and then go dead under his finger.
+   * The same real drag is made twice, 80 px to the left and held still before lifting (no glide): CONTROL starting 40 px
+   * off the line, which must move the volume the whole way; then starting on the line.
+   * FIXED twice over: `.fx-scrub-notch` is pointer-events: none (styles.css), and tickStrip ends a drag on
+   * lostpointercapture only when the STRIP lost it (e.target === strip), not when a child's loss bubbles up. */
+  test('690 a real finger that grabs a scrub ruler on its centre line drags the whole way, not one notch', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const q = s => [].slice.call(document.querySelectorAll(s));
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const song = await hbAudScene([], 8);
+          const drag = async function (offset, what) {
+            FM.layerById(FM.scene, song.id).volume = 1;
+            FM.inspector.openCategory('volume'); FM.inspector.refresh(); await sleep(400);
+            const strip = q('#inspector-panel .vol-strip')[0];
+            const c = hbAudCentre(strip, 'Volume ruler');
+            const x0 = c.x + offset, y = c.y;
+            const steps = [{ t: 'touchStart', x: x0, y: y, ms: 40 }];
+            for (let k = 1; k <= 8; k++) steps.push({ t: 'touchMove', x: x0 - k * 10, y: y, ms: 30 });
+            steps.push({ t: 'touchMove', x: x0 - 80, y: y, ms: 200 });   // held still before lifting — a placing drag, no glide
+            steps.push({ t: 'touchEnd', x: x0 - 80, y: y, ms: 40 });
+            await realInput924(steps, what);
+            await sleep(400);
+            return Math.round(FM.evalProp(FM.layerById(FM.scene, song.id).volume, FM.time) * 100);
+          };
+          const off = await drag(40, 'a drag starting beside the line');
+          /* CONTROL: 80 px of a real drag started beside the line moves Volume by over 40 percent (a notch is 7 px and 5 percent). */
+          if (!(off >= 140)) throw new Error('CONTROL: an 80 px real drag started beside the centre line only took Volume from 100 to ' + off + ' percent, so the harness is not driving the ruler');
+          const on = await drag(0, 'a drag starting on the line');
+          if (!(on >= 140)) throw new Error('a real finger that lands on the Volume ruler’s bright centre line and drags 80 px moves the volume from 100 to ' + on + ' percent — one notch — and ignores the rest of the drag; the same drag started 40 px to the side reaches ' + off + ' percent. Grabbing the line is the natural way to hold the ruler, and the fades and every effect slider behave the same');
+        });
+      }, 380);
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 4) — A BEAT TAPPED ON THE PLAYHEAD LANDED WHEN THE FINGER LIFTED.
+   * Marking the beats of a song is: press play, tap the bookmark on every beat (the playhead's head, #tl-headtap — his
+   * "benchmarks", queue 364), then cut and keyframe on the marks. On the phone the mark is dropped by the head's CLICK
+   * handler (js/app.js, `headTap.addEventListener('click', …) → FM.toggleMarkerAtPlayhead()`), and toggleMarkerAtPlayhead
+   * stamps `FM.time` as it is at that moment — the moment the finger LIFTS, which is a normal tap's length after the beat
+   * it was aimed at. On PC the M key (keydown) marks the press itself, so the same beat lands in two different places on
+   * his two devices, and every phone mark is late: a cut on it visibly trails the music.
+   * Three real taps on the head while the song plays, each held 110 ms like an ordinary tap; the time is read by a capture
+   * listener at the real pointerdown. CONTROL: all three taps made a mark and playback carried on.
+   * FIXED: the head's pointerdown takes FM.time while playing and the click hands it to FM.toggleMarkerAtPlayhead(at). */
+  test('690 a beat tapped on the playhead while the song plays is marked on the frame the finger touched, not when it lifted', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    let head = null, onDown = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await hbAudScene([], 8);
+          FM.scene.project.markers = [];
+          FM.selectLayer(null); await sleep(300);
+          head = document.getElementById('tl-headtap');
+          const h = hbAudCentre(head, 'playhead head (bookmark button)');
+          const downs = [];
+          onDown = function () { downs.push(FM.time); };
+          head.addEventListener('pointerdown', onDown, true);
+          FM.setTime(0); FM.play(); await sleep(400);
+          for (let k = 0; k < 3; k++) { await realInput924(hbAudTap(h.x, h.y, 110), 'a beat tap on the playhead'); await sleep(450); }
+          const stillPlaying = !!FM.playing;
+          FM.pause();
+          const marks = (FM.scene.project.markers || []).filter(mk => !mk.thumb).map(mk => mk.t).sort((a, b) => a - b);
+          /* CONTROL: every tap was a real press on the head, made a mark, and did not stop the song. */
+          if (downs.length !== 3 || marks.length !== 3 || !stillPlaying) throw new Error('CONTROL: 3 real taps on the playing head gave ' + downs.length + ' presses, ' + marks.length + ' bookmarks, and playback ' + (stillPlaying ? 'running' : 'stopped'));
+          const fps = FM.scene.project.fps || 30;
+          const lates = marks.map((t, i) => (t - downs[i]) * fps);
+          const worst = Math.max.apply(null, lates.map(Math.abs));
+          if (worst > 1.01) throw new Error('beats tapped on the playhead while the song plays are marked ' + lates.map(f => f.toFixed(1)).join(', ') + ' frames after the finger touched — the mark is taken when the finger lifts, so every beat he marks on the phone is late and a cut on it trails the music (on PC the M key marks the press itself)');
+        });
+      }, 380);
+    } finally {
+      if (head && onDown) head.removeEventListener('pointerdown', onDown, true);
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* ═══ HUNT-c (queue 690, third hunt, 25 Sep) — GROUPS, PARENTING AND THE CAMERA ═════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings, each written as a failing test FIRST,
+   * confirmed by a skeptic, then fixed — each test proven to fail with its fix reverted. Every one is measured by
+   * RENDERING the scene with the app's own renderScene and finding the
+   * layer's ink, so what is asserted is what he sees in the preview and in the export, not a number in the data.
+   * The camera finding is driven by a REAL finger through tests/_cdp.py, because the tap resolves through the canvas's
+   * own pointer handling. */
+  function huntC3Ink(t, col) {
+    const P = FM.scene.project, k = 0.25;
+    const cv = offscreen(Math.round(P.width * k), Math.round(P.height * k));
+    const c = cv.getContext('2d');
+    FM.renderScene(c, FM.scene, t);
+    const d = c.getImageData(0, 0, cv.width, cv.height).data;
+    let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, n = 0;
+    for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) {
+      const i = (y * cv.width + x) * 4, r = d[i], g = d[i + 1], b = d[i + 2];
+      const hit = col === 'blue' ? (b > 150 && r < 90 && g < 120) : (r > 150 && g < 90 && b < 90);
+      if (hit) { n++; if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    }
+    if (!n) return null;
+    return { x: Math.round((x0 + x1 + 1) / 2 / k), y: Math.round((y0 + y1 + 1) / 2 / k), w: Math.round((x1 - x0 + 1) / k), h: Math.round((y1 - y0 + 1) / k) };
+  }
+  function huntC3Scene(layers) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);
+    FM.scene = scene(layers || [], { project: { width: 1080, height: 1920, fps: 30, duration: 5, background: '#000000' } });
+    FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.refreshAll();
+  }
+  function huntC3Dist(a, b) { return (a && b) ? Math.hypot(a.x - b.x, a.y - b.y) : Infinity; }
+  function huntC3P(a) { return a ? a.x + ',' + a.y : 'nowhere (not on the canvas at all)'; }
+
+  /* HUNT-c 1 — A GROUP'S PIVOT IS RE-MEASURED EVERY FRAME FROM WHICHEVER MEMBERS ARE ON SCREEN.
+   * #630 made a group scale and rotate about the centre of its members' box (FM.groupPivot → groupBoundsLocal), and
+   * applyParentChain applies that pivot per frame. But the box is measured LIVE: groupBoundsLocal skips a member that is
+   * not visible at t (`if (!FM.isLayerVisibleAt(l, t)) return;`) and reads every member's x/y at t. So in any group he has
+   * scaled or turned, the pivot moves whenever a member comes on screen, goes off, or moves — and every OTHER member,
+   * standing still, is drawn somewhere new. Unscaled groups are untouched (the pivot sandwich collapses at scale 1), which
+   * is the control. Preview and export alike: it is renderScene. */
+  test('690 a scaled or turned group keeps its still layers still when another layer in it comes on screen, moves, or is moved', { item: '690' }, async function () {
+    const saved = FM.scene, bad = [], mode0 = FM._mtMode;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      const red = FM.makeLayer('shape', { name: 'HUNTc3 red', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
+      const blue = FM.makeLayer('shape', { name: 'HUNTc3 blue', shape: 'rect', x: 700, y: 1200, shapeW: 200, shapeH: 200, fill: '#0000ff', start: 2, duration: 3 });
+      huntC3Scene([red, blue]);
+      FM.scene.selectedIds = [red.id, blue.id]; FM.scene.selectedId = red.id;
+      FM.groupSelection();
+      const g = FM.scene.layers.find(l => l.type === 'group');
+      if (!g || red.parent !== g.id || blue.parent !== g.id) throw new Error('setup: Group did not take both layers');
+      /* CONTROL: an unscaled group — the red square (never animated) is in the same place before and after blue appears. */
+      const c1 = huntC3Ink(1.5, 'red'), c2 = huntC3Ink(2.5, 'red');
+      if (!c1 || !c2 || huntC3Dist(c1, c2) > 2) throw new Error('CONTROL: in an UNSCALED group the still red square moved when blue appeared (' + huntC3P(c1) + ' to ' + huntC3P(c2) + ') — the fixture is wrong, not the pivot');
+      if (Math.abs(c1.x - 300) > 4 || Math.abs(c1.y - 600) > 4) throw new Error('CONTROL: grouping alone moved the red square to ' + huntC3P(c1));
+      /* He pinches the group to 70 percent (the pinch and the corner handle both write the group scale). */
+      g.transform.scale = 0.7;
+      const s1 = huntC3Ink(1.5, 'red'), s2 = huntC3Ink(2.5, 'red');
+      if (!s1 || !s2) throw new Error('setup: the scaled red square is not on the canvas');
+      if (Math.abs(s1.w - 140) > 12) throw new Error('CONTROL: the group scale did not reach the red square (it is ' + s1.w + ' px wide, expected about 140)');
+      const jump = huntC3Dist(s1, s2);
+      if (jump > 3) bad.push('in a group scaled to 70 percent, the red square — which has no animation at all — jumps ' + Math.round(jump) + ' px (from ' + huntC3P(s1) + ' to ' + huntC3P(s2) + ') at 2 s, the moment the blue layer in the same group comes on screen');
+      /* …and when a member MOVES, the still ones slide with it. Blue slides in from the left across the whole clip. */
+      blue.start = 0; blue.duration = 5; blue.transform.x = { kf: [{ t: 0, v: 100 }, { t: 4, v: 1000 }] };
+      const m0 = huntC3Ink(0.5, 'red'), m1 = huntC3Ink(3.5, 'red');
+      const drift = huntC3Dist(m0, m1);
+      if (drift > 3) bad.push('with blue sliding in, the still red square slides ' + Math.round(drift) + ' px across the canvas during playback (' + huntC3P(m0) + ' at 0.5 s, ' + huntC3P(m1) + ' at 3.5 s) — the group re-centres itself on its moving layer every frame, in the preview and in the export');
+      g.transform.scale = 1; g.transform.rotation = 20;
+      const r0 = huntC3Ink(0.5, 'red'), r1 = huntC3Ink(3.5, 'red');
+      const rdrift = huntC3Dist(r0, r1);
+      if (rdrift > 3) bad.push('turned 20 degrees instead of scaled, the still red square wanders ' + Math.round(rdrift) + ' px the same way');
+      /* THROUGH HIS OWN WRITE PATH. The pinch, the corner handle and Move & Transform all write a group's scale through
+         FM.shiftTransform / FM.setTransform, and that is where the pivot is pinned (FM.settleGroupPivot). Everything
+         above wrote the number directly, which is the older-project path (a pivot measured off the rest box). */
+      g.transform.rotation = 0; g.transform.scale = 1;
+      blue.transform.x = 700; blue.start = 2; blue.duration = 3;
+      /* A pivot left over from an earlier layout (members moved while the group sat at 100 percent): the scale must
+         still go about the middle of the members AS THEY ARE — at 100 percent re-measuring it changes nothing on
+         screen, so it is re-measured the moment the scale leaves 100 (#630's middle). */
+      g.pivot = { x: 0, y: 0 };
+      /* With only red on screen at the playhead, a pinch shrinks what he is looking at about ITS middle — red stays
+         centred where it is, it does not slide toward a layer he cannot see. */
+      FM.setTime(1.5);
+      const o0 = huntC3Ink(1.5, 'red');
+      FM.shiftTransform(g, 'scale', 0.7, 1.5);
+      const o1 = huntC3Ink(1.5, 'red');
+      if (huntC3Dist(o0, o1) > 4) bad.push('with only red on screen, scaling the group through the pinch/handle write path slid red ' + Math.round(huntC3Dist(o0, o1)) + ' px (' + huntC3P(o0) + ' to ' + huntC3P(o1) + ') toward a layer that is not on screen');
+      g.transform.scale = 1; g.pivot = { x: 0, y: 0 };
+      FM.setTime(2.5);
+      const mid = (a, b) => (a && b) ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
+      const w0 = mid(huntC3Ink(2.5, 'red'), huntC3Ink(2.5, 'blue'));
+      FM.shiftTransform(g, 'scale', 0.7, 2.5);
+      if (!g.pivot || (g.pivot.x === 0 && g.pivot.y === 0)) bad.push('scaling the group through the pinch/handle write path did not re-measure its pivot (it is ' + JSON.stringify(g.pivot).replace(/\x22/g, '') + ')');
+      const w1 = mid(huntC3Ink(2.5, 'red'), huntC3Ink(2.5, 'blue'));
+      if (huntC3Dist(w0, w1) > 4) bad.push('scaled through the pinch/handle write path, the group did not shrink about the middle of its layers: their middle moved ' + Math.round(huntC3Dist(w0, w1)) + ' px (' + huntC3P(w0) + ' to ' + huntC3P(w1) + ')');
+      /* …and from then on it is PINNED: he drags blue somewhere else inside the scaled group (or switches it off), and
+         the red square, which he did not touch, stays exactly where it is. */
+      const e0 = huntC3Ink(2.5, 'red');
+      blue.transform.x = 1000; blue.transform.y = 1700;
+      const e1 = huntC3Ink(2.5, 'red');
+      if (huntC3Dist(e0, e1) > 3) bad.push('moving blue inside the scaled group dragged the red square ' + Math.round(huntC3Dist(e0, e1)) + ' px (' + huntC3P(e0) + ' to ' + huntC3P(e1) + ')');
+      blue.visible = false;
+      const e2 = huntC3Ink(2.5, 'red');
+      if (huntC3Dist(e0, e2) > 3) bad.push('switching blue off moved the red square ' + Math.round(huntC3Dist(e0, e2)) + ' px');
+      blue.visible = true;
+      /* Placing the ANCHOR on that scaled group in Move & Transform moves nothing either, although blue has moved since
+         the pivot was stored: the correction is the stored pivot's real travel, not the anchor's step across today's box. */
+      FM.selectLayer(g.id); FM._mtMode = 'anchor'; FM.inspector.openCategory('transform'); FM.inspector.refresh(); await sleep(200);
+      if (!FM.inspector._setAnchor) throw new Error('setup: the anchor mode did not render (no _setAnchor seam)');
+      const n0 = huntC3Ink(2.5, 'red'), nb0 = huntC3Ink(2.5, 'blue');
+      FM.inspector._setAnchor(0, 0); await sleep(30);
+      const n1 = huntC3Ink(2.5, 'red'), nb1 = huntC3Ink(2.5, 'blue');
+      if (huntC3Dist(n0, n1) > 3 || huntC3Dist(nb0, nb1) > 3) bad.push('placing the anchor at the top-left of the scaled group moved its layers (red ' + huntC3P(n0) + ' to ' + huntC3P(n1) + ', blue ' + huntC3P(nb0) + ' to ' + huntC3P(nb1) + ')');
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally { FM._mtMode = mode0; FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+  });
+
+  /* HUNT-c 2 — PICKING A PARENT MOVES THE LAYER. FM.openParentPicker (the link button: #btn-parent on PC, #m-dup on the
+   * phone) and the Parent row in Move & Transform (inspector.js parentControl) both just write `layer.parent = id`. The
+   * renderer then reads the layer's x/y as an offset FROM the parent (applyParentChain translates to the parent's x/y
+   * first), so the layer is drawn at parent + its own position. The Add menu puts a new shape AND a new Controller in the
+   * middle of the frame, so the very first step of the rig the Controller's own toast describes — parent layers to it —
+   * throws the layer to the bottom-right corner, three quarters off the canvas. Picking None throws a parented layer the
+   * other way. He already chose, for deleting a parent and for grouping one (#914 clauses 4 and 13): Stay exactly where
+   * they are. planParentBake (queue 914.4) is the maths; the picker never calls it. */
+  test('690 linking a layer to a Controller, or unlinking it, with the link button or the Parent row leaves it where it is', { item: '690' }, async function () {
+    const saved = FM.scene, bad = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    async function pick(layer, re) {
+      FM.selectLayer(layer.id); await sleep(80);
+      FM.openParentPicker(layer, 40, 40); await sleep(150);
+      const it = [].slice.call(document.querySelectorAll('#ctx-menu .ctx-item')).find(e => re.test(e.textContent));
+      if (!it) throw new Error('setup: the parent picker has no item matching ' + re + ' (it lists ' + [].slice.call(document.querySelectorAll('#ctx-menu .ctx-item')).map(e => e.textContent.trim()).join(' / ') + ')');
+      it.click(); await sleep(150);
+    }
+    try {
+      huntC3Scene([]);
+      /* Exactly what the Add menu makes: a shape in the middle, then a Controller in the middle. */
+      FM.addShapeLayer('rect', { name: 'HUNTc3 box' });
+      const box = FM.scene.layers.find(l => l.name === 'HUNTc3 box');
+      if (!box) throw new Error('setup: Add shape made nothing');
+      box.fill = '#ff0000'; box.start = 0; box.duration = 5;
+      FM.addNullLayer();
+      const ctl = FM.scene.layers.find(l => l.type === 'null');
+      if (!ctl) throw new Error('setup: Add Controller made nothing');
+      FM.setTime(1); FM.refreshAll(); await sleep(60);
+      const before = huntC3Ink(1, 'red');
+      if (!before || Math.abs(before.x - 540) > 6 || Math.abs(before.y - 960) > 6) throw new Error('setup: the new shape is not in the middle of the frame (' + huntC3P(before) + ')');
+      await pick(box, /Controller/);
+      if (box.parent !== ctl.id) throw new Error('CONTROL: picking Controller in the parent picker did not link the layer to it');
+      const after = huntC3Ink(1, 'red');
+      const d1 = huntC3Dist(before, after);
+      if (d1 > 3) bad.push('he adds a shape and a Controller (both land in the middle), taps the link button and picks Controller: the shape jumps from the middle of the frame (' + huntC3P(before) + ') ' + (after ? 'to the corner — what is left on the canvas is centred at ' + huntC3P(after) + (after.w < 300 ? ', only a quarter of the shape' : '') : 'right off the canvas') + ' (' + (isFinite(d1) ? Math.round(d1) + ' px' : 'gone') + ')');
+      /* Unlinking: a layer parented to a Controller he has moved, sitting where he put it. */
+      box.parent = null; box.transform.x = 540; box.transform.y = 960;
+      ctl.transform.x = 760; ctl.transform.y = 1300;
+      box.parent = ctl.id; box.transform.x = -220; box.transform.y = -340;   // drawn at 540,960 through the Controller
+      FM.refreshAll(); await sleep(60);
+      const linked = huntC3Ink(1, 'red');
+      if (!linked || Math.abs(linked.x - 540) > 6 || Math.abs(linked.y - 960) > 6) throw new Error('setup: the parented shape is not drawn in the middle (' + huntC3P(linked) + ')');
+      await pick(box, /None/);
+      if (box.parent) throw new Error('CONTROL: picking None did not unlink the layer');
+      const freed = huntC3Ink(1, 'red');
+      const d2 = huntC3Dist(linked, freed);
+      if (d2 > 3) bad.push('picking None on a layer linked to a Controller he had moved throws it ' + (isFinite(d2) ? Math.round(d2) + ' px' : 'off the canvas') + ', from ' + huntC3P(linked) + ' to ' + huntC3P(freed));
+      /* THE OTHER DOOR: the Parent row in Move & Transform (inspector.js parentControl). Same promise, and the camera is
+         not offered there as a parent — exactly as the link button's picker leaves it out. */
+      const camL = FM.makeLayer('camera', { name: 'HUNTc3 cam', x: 540, y: 960, start: 0, duration: 5 });
+      FM.scene.layers.push(camL);
+      box.parent = null; box.transform.x = 540; box.transform.y = 960; box.transform.rotation = 0; box.transform.scale = 1;   // back in the middle, on its own
+      ctl.transform.x = 300; ctl.transform.y = 500; ctl.transform.rotation = 30; ctl.transform.scale = 1.5;
+      FM.selectLayer(box.id); FM.refreshAll(); await sleep(80);
+      FM.inspector.openCategory('transform'); await sleep(150);
+      const rowSel = () => document.querySelector('.parent-ctl select');
+      if (!rowSel()) throw new Error('setup: Move & Transform has no Parent row for the shape');
+      if ([].slice.call(rowSel().options).some(o => o.value === camL.id)) bad.push('the Parent row in Move & Transform offers the camera as a parent');
+      const row0 = huntC3Ink(1, 'red');
+      if (!row0 || Math.abs(row0.x - 540) > 6 || Math.abs(row0.y - 960) > 6) throw new Error('setup: the unlinked shape is not back in the middle (' + huntC3P(row0) + ')');
+      rowSel().value = ctl.id; rowSel().dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
+      if (box.parent !== ctl.id) throw new Error('CONTROL: choosing Controller in the Parent row did not link the layer');
+      const row1 = huntC3Ink(1, 'red');
+      if (huntC3Dist(row0, row1) > 3) bad.push('choosing a turned, scaled Controller in the Move and Transform Parent row moves the shape ' + (isFinite(huntC3Dist(row0, row1)) ? Math.round(huntC3Dist(row0, row1)) + ' px' : 'off the canvas') + ' (' + huntC3P(row0) + ' to ' + huntC3P(row1) + ')');
+      if (!rowSel()) throw new Error('setup: the Parent row went away after linking');
+      rowSel().value = ''; rowSel().dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
+      if (box.parent) throw new Error('CONTROL: choosing None in the Parent row did not unlink the layer');
+      const row2 = huntC3Ink(1, 'red');
+      if (huntC3Dist(row0, row2) > 3) bad.push('choosing None in the Parent row moves the shape ' + (isFinite(huntC3Dist(row0, row2)) ? Math.round(huntC3Dist(row0, row2)) + ' px' : 'off the canvas') + ' (' + huntC3P(row0) + ' to ' + huntC3P(row2) + ')');
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally { try { FM.contextMenu.hide(); } catch (e) {} FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+  });
+
+  /* HUNT-c 3 — THE CANVAS DOES NOT KNOW ABOUT THE CAMERA. renderScene draws every layer into a plate and then puts the
+   * plate through the camera (translate to the frame centre, zoom, rotate, minus the camera's x/y). The canvas editor
+   * never does: boxFor, hitTest/hitSelected and the move drag in js/canvas-edit.js all work in plain project space
+   * (eventToProject has no camera term, boxFor has none, and FM._layerCTM — which the point and crop overlays use — runs
+   * outside the render loop, so it has none either). With the camera zoomed or panned at the playhead — which is what a
+   * camera is for — the selection box and its handles sit where the layer would be WITHOUT the camera, and a tap ON the
+   * layer where he sees it lands off the layer the editor thinks it is, so it DESELECTS it. Real finger, phone width. */
+  test('690 with the camera zoomed in, the selection box sits on the layer, a tap on it keeps it selected and a drag follows the finger', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, bad = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const cam = FM.makeLayer('camera', { name: 'Camera', x: 540, y: 960, start: 0, duration: 5 });
+          const LX = 540, LY = 640, S = 360;
+          const red = FM.makeLayer('shape', { name: 'HUNTc3 cam red', shape: 'rect', x: LX, y: LY, shapeW: S, shapeH: S, fill: '#ff0000', start: 0, duration: 5 });
+          huntC3Scene([cam, red]);
+          if (FM.viewport && FM.viewport.reset) FM.viewport.reset();
+          FM.setTime(1);
+          const cv = document.getElementById('preview');
+          function toScreen(px, py) {
+            const r = cv.getBoundingClientRect(), rs = cv.__fmRS || 1;
+            return { x: r.left + (px - (cv.__fmOX || 0)) / (cv.width / rs) * r.width, y: r.top + (py - (cv.__fmOY || 0)) / (cv.height / rs) * r.height };
+          }
+          function redAt(px, py) {
+            const rs = cv.__fmRS || 1;
+            const d = cv.getContext('2d').getImageData(Math.round((px - (cv.__fmOX || 0)) * rs), Math.round((py - (cv.__fmOY || 0)) * rs), 1, 1).data;
+            return d[0] > 150 && d[1] < 90 && d[2] < 90;
+          }
+          async function trial(zoom) {
+            cam.transform.scale = zoom;
+            FM.selectLayer(red.id); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update();
+            await sleep(500);
+            /* Where the camera draws the layer: the frame centre plus zoom times its offset from the camera. */
+            const dx = 540 + zoom * (LX - 540), dy = 960 + zoom * (LY - 960), dS = S * zoom;
+            if (!redAt(dx, dy)) throw new Error('CONTROL: at zoom ' + zoom + ' the preview is not red where the camera maths says the layer is drawn — the test is looking in the wrong place');
+            /* A point ON the drawn layer that nothing else covers (the handles carry wide touch pads). At rest, the one
+               nearest the middle; zoomed, the one farthest from where the layer would be without the camera. */
+            const cands = [];
+            for (let i = 1; i <= 9; i++) for (let j = 1; j <= 9; j++) {
+              const px = dx + (i / 10 - 0.5) * dS * 0.9, py = dy + (j / 10 - 0.5) * dS * 0.9, sc = toScreen(px, py);
+              if (sc.x < 8 || sc.x > 370 || sc.y < 8 || sc.y > 740) continue;
+              if (document.elementFromPoint(sc.x, sc.y) !== cv || !redAt(px, py)) continue;
+              cands.push({ px: px, py: py, s: sc, dMid: Math.hypot(px - dx, py - dy), dRaw: Math.hypot(px - LX, py - LY) });
+            }
+            if (!cands.length) throw new Error('setup: at zoom ' + zoom + ' no point on the drawn layer is uncovered and in reach of real input');
+            cands.sort((a, b) => zoom === 1 ? a.dMid - b.dMid : b.dRaw - a.dRaw);
+            const tap = cands[0].s, mid = toScreen(dx, dy);
+            const sb = document.getElementById('select-box');
+            const br = sb && sb.style.display !== 'none' ? sb.getBoundingClientRect() : null;
+            const off = br ? Math.hypot(br.left + br.width / 2 - mid.x, br.top + br.height / 2 - mid.y) : Infinity;
+            const drawnW = dS / (cv.width / (cv.__fmRS || 1)) * cv.getBoundingClientRect().width;
+            const downs = [];
+            const onDown = e => downs.push({ trusted: e.isTrusted, kind: e.pointerType, on: e.target === cv });
+            window.addEventListener('pointerdown', onDown, true);
+            try { await realInput924([{ t: 'touchStart', x: tap.x, y: tap.y, ms: 80 }, { t: 'touchEnd', x: tap.x, y: tap.y, ms: 60 }], 'a tap on the layer at camera zoom ' + zoom); }
+            finally { window.removeEventListener('pointerdown', onDown, true); }
+            await sleep(250);
+            if (!downs.length || !downs[0].trusted || downs[0].kind !== 'touch' || !downs[0].on) throw new Error('CONTROL: the tap at zoom ' + zoom + ' was not a trusted touch on the canvas (' + JSON.stringify(downs).replace(/\x22/g, '') + ')');
+            return { off: off, boxW: br ? br.width : 0, drawnW: drawnW, selected: FM.scene.selectedId === red.id, tap: tap };
+          }
+          /* CONTROL: the camera at rest. The box is on the layer and a tap on the layer keeps it selected. */
+          const rest = await trial(1);
+          if (rest.off > 6) throw new Error('CONTROL: with the camera at rest the selection box is already ' + Math.round(rest.off) + ' px off the layer');
+          if (!rest.selected) throw new Error('CONTROL: with the camera at rest, a tap on the selected layer deselected it');
+          const z = await trial(2);
+          if (z.off > 6) bad.push('with the camera zoomed to 200 percent, the selection box and its handles are drawn ' + Math.round(z.off) + ' screen px away from the layer, and ' + Math.round(z.boxW) + ' px wide round a layer that is ' + Math.round(z.drawnW) + ' px wide');
+          if (!z.selected) bad.push('a tap right on the layer where he sees it DESELECTS it, because the canvas looks for the layer where it would be without the camera');
+          /* …and a DRAG follows the finger: 40 screen px of finger is 40 screen px of layer on screen, not 80. Selected
+             again first, so this half is measured even when the tap above lost the selection. */
+          {
+            FM.selectLayer(red.id); FM.requestRender(); if (FM.canvasEdit) FM.canvasEdit.update();
+            await sleep(300);
+            const x0 = FM.evalProp(red.transform.x, FM.time), st = z.tap;
+            const steps = [{ t: 'touchStart', x: st.x, y: st.y, ms: 60 }];
+            for (let k = 1; k <= 8; k++) steps.push({ t: 'touchMove', x: st.x + 5 * k, y: st.y, ms: 30 });
+            steps.push({ t: 'touchEnd', x: st.x + 40, y: st.y, ms: 60 });
+            await realInput924(steps, 'a drag of the layer at camera zoom 2');
+            await sleep(200);
+            const perPx = cv.getBoundingClientRect().width / (cv.width / (cv.__fmRS || 1));
+            const onScreenMove = (FM.evalProp(red.transform.x, FM.time) - x0) * 2 * perPx;
+            if (Math.abs(onScreenMove - 40) > 6) bad.push('dragging the layer 40 screen px with the camera zoomed to 200 percent moves it ' + Math.round(onScreenMove) + ' px on screen');
+          }
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+  });
+
+  /* HUNT-c 4 — UNGROUP BAKES THE GROUP'S MOVE INTO ITS STILL LAYERS AND SILENTLY SKIPS ITS ANIMATED ONES.
+   * bakeGroupTransform (js/app.js) folds the group's position, turn and scale into each member so ungrouping leaves them
+   * where the group put them — but `if (FM.isAnimated(t.x) || FM.isAnimated(t.y)) return;` skips any member whose own
+   * position is keyframed, and the toast only covers an animated GROUP. So after he drags a group into place (a plain
+   * number on the group, nothing animated about it) and ungroups, every layer with a move animation — the ones that make
+   * it a motion graphic — snaps back to where it was before the group moved, the still ones stay, and nothing is said.
+   * A translation folds into keyframes exactly (shift every x and y key by the same amount), so nothing forces the skip. */
+  test('690 ungrouping a group he moved, scaled or turned keeps its animated layers where the group put them, and names any it cannot', { item: '690' }, function () {
+    const saved = FM.scene, toasts = [], toast0 = FM.toast, bad = [];
+    try {
+      const red = FM.makeLayer('shape', { name: 'HUNTc3 slide', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
+      red.transform.x = { kf: [{ t: 0, v: 300 }, { t: 4, v: 700 }] };   // slides right across the clip
+      const blue = FM.makeLayer('shape', { name: 'HUNTc3 still', shape: 'rect', x: 500, y: 1400, shapeW: 200, shapeH: 200, fill: '#0000ff', start: 0, duration: 5 });
+      huntC3Scene([red, blue]);
+      FM.scene.selectedIds = [red.id, blue.id]; FM.scene.selectedId = red.id;
+      FM.groupSelection();
+      const g = FM.scene.layers.find(l => l.type === 'group');
+      if (!g || red.parent !== g.id || blue.parent !== g.id) throw new Error('setup: Group did not take both layers');
+      /* He drags the group 200 px right and 100 px up — a canvas drag of a group writes plain numbers to its x/y. */
+      FM.shiftTransform(g, 'x', 200, 2); FM.shiftTransform(g, 'y', -100, 2);
+      if (FM.isAnimated(g.transform.x) || FM.isAnimated(g.transform.y)) throw new Error('setup: moving the group keyframed it');
+      FM.refreshAll();
+      const r0 = huntC3Ink(2, 'red'), b0 = huntC3Ink(2, 'blue');
+      if (!r0 || !b0 || Math.abs(b0.x - 700) > 4 || Math.abs(b0.y - 1300) > 4) throw new Error('setup: the moved group is not where it was dragged (still layer at ' + huntC3P(b0) + ')');
+      FM.toast = function (m) { toasts.push(String(m)); return toast0.apply(this, arguments); };
+      FM.ungroup(g.id);
+      FM.toast = toast0;
+      if (FM.scene.layers.some(l => l.type === 'group') || red.parent || blue.parent) throw new Error('CONTROL: Ungroup did not ungroup');
+      const r1 = huntC3Ink(2, 'red'), b1 = huntC3Ink(2, 'blue');
+      if (huntC3Dist(b0, b1) > 3) throw new Error('CONTROL: the still layer moved on ungroup too (' + huntC3P(b0) + ' to ' + huntC3P(b1) + ') — the bake itself is broken, which is a different bug');
+      const jump = huntC3Dist(r0, r1);
+      const said = toasts.filter(m => /animat|position|moved|back/i.test(m));
+      if (jump > 3) bad.push('after moving a group and tapping Ungroup, the still layer stays where the group put it but the animated one snaps ' + Math.round(jump) + ' px back (' + huntC3P(r0) + ' to ' + huntC3P(r1) + ' at 2 s) to where it was before he moved the group' + (said.length ? '' : ' — and nothing is said') + (toasts.length ? ' (toasts: ' + toasts.join(' / ') + ')' : ''));
+      /* …and at EVERY moment of the animation, not just the one measured — a scaled and TURNED group this time, which
+         is where re-expressing a path is hardest (x keyed alone, so y has to take x's keying once the turn folds in). */
+      const red2 = FM.makeLayer('shape', { name: 'HUNTc3 slide2', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
+      red2.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 4, v: 700, e: 'easeInOut' }] };
+      const blue2 = FM.makeLayer('shape', { name: 'HUNTc3 still2', shape: 'rect', x: 500, y: 1400, shapeW: 200, shapeH: 200, fill: '#0000ff', start: 0, duration: 5 });
+      huntC3Scene([red2, blue2]);
+      FM.scene.selectedIds = [red2.id, blue2.id]; FM.scene.selectedId = red2.id;
+      FM.groupSelection();
+      const g2 = FM.scene.layers.find(l => l.type === 'group');
+      if (!g2) throw new Error('setup: the second Group was not made');
+      FM.shiftTransform(g2, 'x', 60, 2); FM.shiftTransform(g2, 'y', -40, 2);
+      FM.shiftTransform(g2, 'scale', 0.8, 2); FM.shiftTransform(g2, 'rotation', 15, 2);
+      const ts = [0, 1, 2.5, 4];
+      const beforeR = ts.map(t => huntC3Ink(t, 'red')), beforeB = ts.map(t => huntC3Ink(t, 'blue'));
+      FM.ungroup(g2.id);
+      ts.forEach((t, i) => {
+        const a = huntC3Ink(t, 'red'), b = huntC3Ink(t, 'blue');
+        if (huntC3Dist(beforeR[i], a) > 4) bad.push('in a scaled, turned group the animated layer moved ' + Math.round(huntC3Dist(beforeR[i], a)) + ' px at ' + t + ' s on Ungroup (' + huntC3P(beforeR[i]) + ' to ' + huntC3P(a) + ')');
+        if (huntC3Dist(beforeB[i], b) > 4) bad.push('in a scaled, turned group the still layer moved ' + Math.round(huntC3Dist(beforeB[i], b)) + ' px at ' + t + ' s on Ungroup');
+      });
+      /* What cannot be carried is NAMED: a path keyed on x and y at DIFFERENT moments cannot be turned exactly. */
+      const red3 = FM.makeLayer('shape', { name: 'HUNTc3 zigzag', shape: 'rect', x: 300, y: 600, shapeW: 200, shapeH: 200, fill: '#ff0000', start: 0, duration: 5 });
+      red3.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 4, v: 700, e: 'linear' }] };
+      red3.transform.y = { kf: [{ t: 0, v: 600, e: 'linear' }, { t: 1, v: 800, e: 'linear' }] };
+      const blue3 = FM.makeLayer('shape', { name: 'HUNTc3 still3', shape: 'rect', x: 500, y: 1400, shapeW: 200, shapeH: 200, fill: '#0000ff', start: 0, duration: 5 });
+      huntC3Scene([red3, blue3]);
+      FM.scene.selectedIds = [red3.id, blue3.id]; FM.scene.selectedId = red3.id;
+      FM.groupSelection();
+      const g3 = FM.scene.layers.find(l => l.type === 'group');
+      if (!g3) throw new Error('setup: the third Group was not made');
+      FM.shiftTransform(g3, 'rotation', 25, 2);
+      const said3 = [];
+      FM.toast = function (m) { said3.push(String(m)); return toast0.apply(this, arguments); };
+      FM.ungroup(g3.id);
+      FM.toast = toast0;
+      if (!said3.some(m => /zigzag/.test(m))) bad.push('a layer whose path could not be carried out of a turned group was not named (' + (said3.join(' / ') || 'nothing was said') + ')');
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally { FM.toast = toast0; FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+  });
+
+  /* ═══ QUEUE 690, HUNT d (25 Sep) — THE AI DIRECTOR AND THE ASSISTANT ═══════════════════════════════════════════════════
+     Found under his standing brief ("go re audit, find some bugs coz theres a shit load"). NO NETWORK, EVER: the Assistant's
+     one model call is answered by a stand-in for FM.ai.call, and the Director's and Refine's own call() by a stand-in for
+     window.fetch that answers api.anthropic.com in the page and never lets the request out. The key they see is a fake one.
+     Shared helpers are prefixed hd so they cannot collide with anything else here. */
+
+  /* The Messages API's own rule, enforced with a 400 before it reads anything else: every tool_use the model made must be
+     answered by a tool_result in the very NEXT message. Returns the API's complaint, or '' when the history is well formed. */
+  function hdApiCheck(messages) {
+    for (let i = 0; i < (messages || []).length; i++) {
+      const m = messages[i];
+      if (!m || m.role !== 'assistant' || !Array.isArray(m.content)) continue;
+      const ids = m.content.filter(function (b) { return b && b.type === 'tool_use'; }).map(function (b) { return b.id; });
+      if (!ids.length) continue;
+      const next = messages[i + 1];
+      const answered = (next && next.role === 'user' && Array.isArray(next.content))
+        ? next.content.filter(function (b) { return b && b.type === 'tool_result'; }).map(function (b) { return b.tool_use_id; }) : [];
+      const missing = ids.filter(function (id) { return answered.indexOf(id) < 0; });
+      if (missing.length) return 'messages.' + (i + 1) + ': tool_use ids were found without tool_result blocks immediately after: ' + missing.join(', ') + '. Each tool_use block must have a corresponding tool_result block in the next message.';
+    }
+    return '';
+  }
+  /* window.fetch answered in the page for api.anthropic.com only; `answer(toolName, body)` returns the tool's input. */
+  function hdFakeApi(answer) {
+    const real = window.fetch, seen = [];
+    window.fetch = async function (url, init) {
+      if (String(url).indexOf('https://api.anthropic.com/') !== 0) return real.apply(this, arguments);   // the suite's own file reads
+      const body = JSON.parse((init && init.body) || '{}');
+      const name = (body.tool_choice && body.tool_choice.name) || (body.tools && body.tools[0] && body.tools[0].name) || '';
+      seen.push(name);
+      const input = answer(name, body);
+      await sleep(15);
+      return new Response(JSON.stringify({ content: [{ type: 'tool_use', id: 'toolu_hd_' + seen.length, name: name, input: input }], stop_reason: 'tool_use', usage: { input_tokens: 10, output_tokens: 10 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    return { seen: seen, restore: function () { window.fetch = real; } };
+  }
+  const HD_FAKE_KEY = 'sk-ant-api03-HUNTd-not-a-real-key-0000000000000000';
+
+  test('690 one failed Assistant reply does not break the Assistant — the next messages still reach Claude and still edit', { item: '690', budgetMs: 45000 }, async function () {
+    /* HUNT d. He asks the Assistant for an edit and it makes it (a tool_use). His next message fails — a dropped connection on
+       his phone, Claude overloaded past the retries, a reply cut off at max_tokens. send() popped the user turn it had just
+       added, and that turn was the ONLY place the tool_result answering the earlier edit lived (pendingResults was emptied into
+       it). From then on the history held an unanswered tool_use, which the API rejects with a 400 on every request, until the
+       app was restarted. Fixed in js/ai-chat.js send(): a failed turn cuts the history back to where it began and owes the same
+       answers again. hdApiCheck below is the API's own rule and nothing else. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realCall = FM.ai.call, realHas = FM.aiKey.has, dry0 = FM.ai.DRY_RUN;
+    try {
+      if (!FM.aiChat || !FM.aiChat.send) throw new Error('setup: FM.aiChat.send is missing');
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'HUNTd chat', width: 1080, height: 1920 }); made.push(pid);
+      const L = FM.makeLayer('text', { name: 'HUNTd title', text: 'Summer', x: 540, y: 960 });
+      L.start = 0; L.duration = 4; FM.scene.layers.unshift(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      FM.ai.DRY_RUN = false;
+      FM.aiKey.has = function () { return true; };
+      const replies = [
+        { content: [{ type: 'text', text: 'Made it bigger.' }, { type: 'tool_use', id: 'toolu_hd_1', name: 'emit_ops', input: { ops: [{ op: 'setProp', ref: L.id, path: 'transform.scale', value: 1.3 }] } }] },
+        'fail',
+        { content: [{ type: 'text', text: 'Made it gold.' }, { type: 'tool_use', id: 'toolu_hd_3', name: 'emit_ops', input: { ops: [{ op: 'setProp', ref: L.id, path: 'color', value: '#ffce4a' }] } }] },
+        { content: [{ type: 'text', text: 'Made it gold.' }, { type: 'tool_use', id: 'toolu_hd_4', name: 'emit_ops', input: { ops: [{ op: 'setProp', ref: L.id, path: 'color', value: '#ffce4a' }] } }] },
+      ];
+      let n = 0; const rejected = [];
+      FM.ai.call = async function (model, system, messages) {
+        const bad = hdApiCheck(messages);   // what api.anthropic.com answers, with a 400, before it reads the request
+        if (bad) { rejected.push(bad); throw new Error(bad); }
+        const r = replies[n++];
+        await sleep(30);
+        if (r === 'fail') throw new Error('Network error reaching Claude');   // what FM.ai.call throws once its retries are spent
+        return r;
+      };
+      FM.aiChat.reset(); FM.aiChat.show(); await sleep(150);
+      const input = document.querySelector('#ai-chat .aic-input');
+      if (!input) throw new Error('setup: the Assistant composer is not in the DOM');
+      input.value = 'make it bigger'; await FM.aiChat.send();
+      if (Math.abs(FM.evalProp(L.transform.scale, FM.time) - 1.3) > 1e-6) throw new Error('CONTROL: the first reply did not apply, so this fixture cannot see what comes after it');
+      input.value = 'a bit bigger again'; await FM.aiChat.send();   // the connection drops on this one
+      const list = document.querySelector('#ai-chat .aic-list');
+      if (!list || !/Network error/.test(list.textContent)) throw new Error('CONTROL: the failed reply did not say so in the chat');
+      input.value = 'make it gold'; await FM.aiChat.send();
+      input.value = 'make it gold please'; await FM.aiChat.send();
+      if (rejected.length || L.color !== '#ffce4a') {
+        throw new Error('after ONE Assistant reply failed (a dropped connection), ' + rejected.length + ' of the 2 messages he typed next were rejected by Claude before it read them, each showing him: ' +
+          String(rejected[0] || 'nothing applied').replace(/"/g, "'") + ' — the edit Claude made just before the failure is never answered again, so every later message fails the same way and only restarting the app brings the Assistant back');
+      }
+    } finally {
+      FM.ai.call = realCall; FM.aiKey.has = realHas; FM.ai.DRY_RUN = dry0;
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 asking the Assistant or Refine to make an animated title bigger keeps its pop-in, and a keyed fade survives a setProp', { item: '690', budgetMs: 45000 }, async function () {
+    /* HUNT d. Every title the Director builds pops in: keyframed scale and opacity (js/ai-mock.js t_title, and a real builder
+       is asked for motion). "Make the title bigger" in the Assistant, or in the Director's own Refine box, arrives as
+       setProp transform.scale — and js/ai-ops.js setNumericPath assigned the number straight over the {kf:[…]} object, so the
+       animation was gone and the title just sat there at the new size. The model could not even avoid it: nothing it was shown
+       said the channel was animated. Fixed: a setProp on an animated channel moves the WHOLE animation through FM.shiftTransform
+       (the canvas drag and pinch rule) to read the value in the frame the model was shown — the playhead for the Assistant,
+       the rendered frame for Refine — and the Assistant's scene block now lists the animated channels. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realCall = FM.ai.call, realHas = FM.aiKey.has, realGet = FM.aiKey.get, dry0 = FM.ai.DRY_RUN, last0 = FM.ai._lastBuild;
+    let api = null;
+    const popIn = function () { return { kf: [{ t: 0, v: 0.6, e: 'easeOut' }, { t: 0.6, v: 1.06, e: 'easeOut' }, { t: 0.9, v: 1, e: 'easeInOut' }] }; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'HUNTd animated title', width: 1080, height: 1920 }); made.push(pid);
+      const L = FM.makeLayer('text', { name: 'HUNTd title', text: 'SUMMER SALE', x: 540, y: 800 });
+      L.start = 0; L.duration = 6;
+      L.transform.scale = popIn();
+      L.transform.opacity = { kf: [{ t: 0, v: 0, e: 'easeOut' }, { t: 0.4, v: 1, e: 'easeOut' }] };
+      FM.scene.layers.unshift(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      FM.setTime(2);   // he is looking at the finished title, after the pop-in
+      const before = FM.evalProp(L.transform.scale, 2);
+      const animated = function () { const s = L.transform.scale; return !!(s && Array.isArray(s.kf) && s.kf.length >= 2); };
+      const popsIn = function () { return animated() && FM.evalProp(L.transform.scale, 0) < FM.evalProp(L.transform.scale, 2) - 0.05; };
+
+      /* 1. the Assistant */
+      FM.ai.DRY_RUN = false;
+      FM.aiKey.has = function () { return true; };
+      let told = '';
+      FM.ai.call = async function (model, system, messages) {
+        const last = messages[messages.length - 1];
+        told = (Array.isArray(last.content) ? last.content : []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('\n');
+        await sleep(30);
+        return { content: [{ type: 'text', text: 'Made the title bigger.' }, { type: 'tool_use', id: 'toolu_hd_kf', name: 'emit_ops', input: { ops: [{ op: 'setProp', ref: L.id, path: 'transform.scale', value: 1.4 }] } }] };
+      };
+      FM.aiChat.reset(); FM.aiChat.show(); await sleep(150);
+      const input = document.querySelector('#ai-chat .aic-input');
+      if (!input) throw new Error('setup: the Assistant composer is not in the DOM');
+      input.value = 'make the title bigger'; await FM.aiChat.send();
+      const after = FM.evalProp(L.transform.scale, 2);
+      if (!(after > before + 0.05) && animated()) throw new Error('CONTROL: the stand-in reply changed nothing at all, so this fixture cannot see the bug');
+      if (!popsIn()) {
+        throw new Error('he asked the Assistant to make his animated title bigger, and it DELETED the title pop-in: its scale keyframes were replaced by a flat ' +
+          JSON.stringify(L.transform.scale).replace(/"/g, "'") + ', so the title no longer grows in at the start — nothing says so, and the model could not have known the size was animated');
+      }
+      if (!(after > before + 0.05)) throw new Error('the pop-in survived, but the title is no bigger where he is looking (scale ' + before + ' before, ' + after + ' after at 2 s)');
+      if (Math.abs(after - 1.4) > 0.01) throw new Error('he was shown scale 1 at the playhead and asked for 1.4, and the title now reads ' + after + ' there');
+      const seen = (function () { try { return JSON.parse(told.slice(told.indexOf('{'), told.indexOf('\n\nTHEY SAID'))); } catch (e) { return null; } })();
+      const row = seen && (seen.layers || []).find(function (x) { return x.id === L.id; });
+      if (!row) throw new Error('CONTROL: the scene block the Assistant sent could not be read back, so this cannot see what it told the model');
+      if (!row.animated || row.animated.scale !== 1 || row.animated.opacity !== 1) {
+        throw new Error('the Assistant still does not tell the model his title is animated — its row says ' + JSON.stringify(row).replace(/"/g, "'") + ' — so it cannot know a setProp there moves a pop-in');
+      }
+      FM.aiChat.hide();
+
+      /* 2. Refine, on the Director's done screen — its own call(), answered by the fake API */
+      L.transform.scale = popIn(); FM.refreshAll(); FM.history.commit();
+      FM.aiKey.get = function () { return HD_FAKE_KEY; };
+      FM.ai._lastBuild = { intent: { subject: 'SUMMER SALE' }, tasks: [], refMap: { title: L.id }, dry: false };
+      if (FM.aiBudget) FM.aiBudget.reset();
+      api = hdFakeApi(function (name) { return name === 'emit_critique' ? { assessment: 'bigger title', ops: [{ op: 'setProp', ref: 'title', path: 'transform.scale', value: 1.4 }] } : { ops: [] }; });
+      /* The playhead is on the very START of the pop-in (scale 0.6 there), but Refine is SHOWN the frame at 45% of the
+         project — 2.7 s here, scale 1 — so its 1.4 means 1.4 at rest, not 1.4 over the shrunken start (which would leave
+         the finished title at 2.33, well past what he asked for). */
+      FM.setTime(0);
+      const beat = Math.max(0.01, Math.min((FM.scene.project.duration || 6) * 0.45, (FM.scene.project.duration || 6) - 0.01));
+      await FM.ai.refine('make the title bigger');
+      if (api.seen.indexOf('emit_critique') < 0) throw new Error('CONTROL: Refine never asked the critic, so this fixture cannot see what its answer does');
+      if (!popsIn()) {
+        throw new Error('he typed make the title bigger into the Director Refine box and it DELETED the title pop-in that the Director had just built: the scale keyframes became a flat ' +
+          JSON.stringify(L.transform.scale).replace(/"/g, "'"));
+      }
+      const rest = FM.evalProp(L.transform.scale, beat);
+      if (Math.abs(rest - 1.4) > 0.01) throw new Error('Refine was shown the frame at ' + beat.toFixed(2) + ' s, where the title reads 1, and asked for 1.4 — the finished title now reads ' + rest.toFixed(3) + ' there (it measured against the playhead at 0, the shrunken start of the pop-in)');
+      api.restore(); api = null;
+
+      /* 3. the same rule for a fade: more see-through on a keyed fade-in, and quieter on a keyed volume fade — the curve is
+         moved, never flattened, and never pushed past its range (a fade-in moved down would start below 0). */
+      FM.setTime(2);
+      L.transform.opacity = { kf: [{ t: 0, v: 0, e: 'easeOut' }, { t: 0.4, v: 1, e: 'easeOut' }] };
+      L.volume = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] };
+      const r3 = FM.aiOps.applyOps([{ op: 'setProp', ref: L.id, path: 'transform.opacity', value: 0.5 }, { op: 'setProp', ref: L.id, path: 'volume', value: 0.5 }], {});
+      if (r3.appliedCount !== 2) throw new Error('CONTROL: the two setProps did not both apply (' + JSON.stringify(r3.dropped).replace(/"/g, "'") + ')');
+      const op = L.transform.opacity, vol = L.volume;
+      if (!(op && Array.isArray(op.kf) && op.kf.length === 2)) throw new Error('more see-through DELETED his fade-in: opacity became ' + JSON.stringify(op).replace(/"/g, "'"));
+      if (op.kf.some(function (k) { return k.v < 0 || k.v > 1; })) throw new Error('more see-through pushed his fade-in outside 0..1: ' + JSON.stringify(op.kf).replace(/"/g, "'"));
+      if (Math.abs(FM.evalProp(op, 2) - 0.5) > 0.01 || FM.evalProp(op, 0) > 0.01) throw new Error('the fade-in no longer fades from 0 to the half he asked for: ' + JSON.stringify(op.kf).replace(/"/g, "'"));
+      if (!(vol && Array.isArray(vol.kf) && vol.kf.length === 2)) throw new Error('quieter DELETED his volume fade: volume became ' + JSON.stringify(vol).replace(/"/g, "'"));
+      if (Math.abs(FM.evalProp(vol, 2) - 0.5) > 0.01 || FM.evalProp(vol, 0) > 0.01) throw new Error('the volume fade no longer rises from silence to the half he asked for: ' + JSON.stringify(vol.kf).replace(/"/g, "'"));
+    } finally {
+      if (api) api.restore();
+      FM.ai.call = realCall; FM.aiKey.has = realHas; FM.aiKey.get = realGet; FM.ai.DRY_RUN = dry0; FM.ai._lastBuild = last0;
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      try { FM.aiPanel.hide(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 Aspect on auto keeps his landscape project landscape — Build a scene without a key, the demo and the Director', { item: '690', budgetMs: 60000 }, async function () {
+    /* HUNT d. The Director is reached from the Add menu of the project he is IN (✨ AI Scene), and it builds into that
+       project — it is told about his existing media and told not to recreate it. With Aspect left on auto, the no-key template
+       (js/ai-templates.js pick(chips, 'aspect', '9:16')) and the demo (js/ai-mock.js plan, 1080x1920) both sent a setProject
+       that resized his canvas to 1080x1920. His landscape project — with his clip already in it — became a tall portrait
+       frame with the clip hanging off one side, and it exported that shape. The real Director was never told the canvas size
+       either, so its planner sized from the Interpreter's default 9:16. Fixed: auto is the project's own shape for the
+       template and the demo (the demo lays itself out on it), and the Director is told the canvas and has width and height
+       taken off every setProject while the project already holds something. A chosen Aspect still sizes it (the control). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realHas = FM.aiKey.has, realGet = FM.aiKey.get;
+    let api = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'HUNTd landscape', width: 1920, height: 1080 }); made.push(pid);
+      const clip = FM.makeLayer('shape', { shape: 'rect', x: 960, y: 540, shapeW: 1920, shapeH: 1080, fill: '#2050ff' });
+      clip.name = 'HUNTd my clip'; clip.start = 0; clip.duration = 10;
+      FM.scene.layers.push(clip); FM.refreshAll(); FM.history.commit();
+      const P0 = FM.scene.project;
+      if (P0.width !== 1920 || P0.height !== 1080) throw new Error('setup: the project is ' + P0.width + 'x' + P0.height + ', not 1920x1080');
+      FM.aiKey.has = function () { return false; };   // the no-key screen: Watch a demo run / Build a scene without a key
+      const openKeyScreen = async function () {
+        FM.aiPanel.hide(); await sleep(60); FM.aiPanel.show(); await sleep(200);
+        const form = document.querySelector('#ai-panel .ai-keyform');
+        if (!form || !form.classList.contains('on')) throw new Error('setup: the Director did not show its no-key screen');
+        const aspect = [...document.querySelectorAll('#ai-panel .ai-field select')].find(function (s) { return [...s.options].some(function (o) { return o.value === '16:9'; }); });
+        if (aspect && aspect.value) throw new Error('setup: the Aspect chip is ' + aspect.value + ', not auto');
+        return [...form.querySelectorAll('.ai-link')];
+      };
+      const shape = function () { return FM.scene.project.width + 'x' + FM.scene.project.height; };
+
+      /* 1. Build a scene without a key */
+      let links = await openKeyScreen();
+      const tmpl = links.find(function (b) { return /without a key/i.test(b.textContent); });
+      if (!tmpl) throw new Error('setup: no Build a scene without a key button');
+      const n0 = FM.scene.layers.length;
+      tmpl.click();
+      for (let i = 0; i < 150 && FM.scene.layers.length === n0; i++) await sleep(20);
+      await sleep(100);
+      if (FM.scene.layers.length === n0) throw new Error('CONTROL: Build a scene without a key built nothing, so this cannot see what it does to his canvas');
+      const afterTemplate = shape();
+      FM.history.undo(); await sleep(80);
+      if (shape() !== '1920x1080') throw new Error('setup: undo did not put the canvas back (' + shape() + ')');
+
+      /* 2. Watch a demo run */
+      links = await openKeyScreen();
+      const demo = links.find(function (b) { return /demo/i.test(b.textContent); });
+      if (!demo) throw new Error('setup: no Watch a demo run button');
+      demo.click();
+      for (let i = 0; i < 100 && !FM.ai.isRunning(); i++) await sleep(20);
+      for (let i = 0; i < 1000 && FM.ai.isRunning(); i++) await sleep(20);
+      await sleep(100);
+      if (FM.ai.isRunning()) throw new Error('setup: the demo run never finished');
+      if (FM.scene.layers.length <= n0) throw new Error('CONTROL: the demo built nothing, so this cannot see what it does to his canvas');
+      const afterDemo = shape();
+      /* the demo is laid onto HIS frame: its full-frame backdrop is his canvas, centred */
+      const plate = FM.scene.layers.find(function (l) { return l.type === 'shape' && l.fill === '#0e1320'; });
+      const plateFits = !!plate && plate.shapeW === FM.scene.project.width && plate.shapeH === FM.scene.project.height &&
+        Math.abs(FM.evalProp(plate.transform.x, 0) - FM.scene.project.width / 2) < 1 && Math.abs(FM.evalProp(plate.transform.y, 0) - FM.scene.project.height / 2) < 1;
+      FM.history.undo(); await sleep(80);
+      if (shape() !== '1920x1080' || FM.scene.layers.length !== n0) throw new Error('setup: undo did not take the demo back (' + shape() + ', ' + FM.scene.layers.length + ' layers)');
+
+      /* 3. the Director with a key (answered in the page, never the network): the Interpreter defaults to 9:16 and the
+         planner sends the setProject it is told to ALWAYS send, sized from that */
+      FM.aiKey.has = function () { return true; };
+      FM.aiKey.get = function () { return HD_FAKE_KEY; };
+      if (FM.aiBudget) FM.aiBudget.reset();
+      let intentAsk = '', planAsk = '';
+      api = hdFakeApi(function (name, body) {
+        const said = JSON.stringify(body.messages || []);
+        if (name === 'emit_intent') { intentAsk = said; return { subject: 'SALE', style: 'bold', palette: ['#101010', '#ff0000'], pacing: 'fast', durationSec: 6, aspect: '9:16', captions: false, mood: 'loud' }; }
+        if (name === 'emit_plan') { planAsk = said; return { heroRef: 'title', tasks: [], scaffoldOps: [
+          { op: 'setProject', width: 1080, height: 1920, fps: 30, duration: 6, background: '#101010' },
+          { op: 'addText', ref: 'title', text: 'SALE', x: 540, y: 960, fontSize: 200, color: '#ff0000', z: 0 },
+        ] }; }
+        return { ops: [] };
+      });
+      await FM.ai.generateScene('a loud sale title card', null, { skipCritic: true });
+      if (api.seen.indexOf('emit_plan') < 0) throw new Error('CONTROL: the Director never asked the planner, so this cannot see what its plan does to his canvas');
+      if (!FM.scene.layers.some(function (l) { return l.type === 'text' && l.text === 'SALE'; })) throw new Error('CONTROL: the Director built nothing');
+      const afterDirector = shape();
+      const toldCanvas = /1920x1080/.test(intentAsk) && /1920x1080/.test(planAsk);
+      FM.history.undo(); await sleep(80);
+      if (shape() !== '1920x1080') throw new Error('setup: undo did not put the canvas back after the Director (' + shape() + ')');
+      /* CONTROL: with an Aspect CHOSEN, the Director still sizes the canvas — the fix keeps auto, it does not lock the size */
+      if (FM.aiBudget) FM.aiBudget.reset();
+      await FM.ai.generateScene('a loud sale title card', { aspect: '9:16' }, { skipCritic: true });
+      const chosen = shape();
+      FM.history.undo(); await sleep(80);
+      if (chosen !== '1080x1920') throw new Error('CONTROL: with Aspect set to 9:16 the Director left the canvas ' + chosen + ' — the size can no longer be chosen at all');
+
+      const bad = [];
+      if (afterTemplate !== '1920x1080') bad.push('Build a scene without a key made it ' + afterTemplate);
+      if (afterDemo !== '1920x1080') bad.push('Watch a demo run made it ' + afterDemo);
+      if (afterDirector !== '1920x1080') bad.push('the Director with a key made it ' + afterDirector);
+      if (bad.length) {
+        throw new Error('his 1920x1080 landscape project, with his own clip already in it, was turned into a portrait one with Aspect left on auto — ' + bad.join('; ') +
+          '. His clip now hangs off the side of a tall frame and the export comes out the wrong shape');
+      }
+      if (!plateFits) throw new Error('the demo kept his landscape canvas but laid itself out for a portrait one — its backdrop is ' + (plate ? plate.shapeW + 'x' + plate.shapeH + ' at ' + FM.evalProp(plate.transform.x, 0) + ',' + FM.evalProp(plate.transform.y, 0) : 'missing') + ', not his 1920x1080 frame');
+      if (!toldCanvas) throw new Error('the Director kept his canvas but was never told its size, so its models laid the scene out for the 1080x1920 they assume');
+    } finally {
+      if (api) api.restore();
+      FM.aiKey.has = realHas; FM.aiKey.get = realGet;
+      for (let i = 0; i < 300 && FM.ai.isRunning(); i++) await sleep(20);
+      try { FM.aiPanel.hide(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 a box or title the Assistant or the Director adds without a z goes on top, where he can see it', { item: '690', budgetMs: 60000 }, async function () {
+    /* HUNT d. z is optional in the op schema, and the digest invited leaving it out ("Omit z to stack in plan order").
+       js/ai-ops.js insertAt() then put the new layer at scene.layers.length — the very BACK (the compositor draws index 0 in
+       front). The app's own Add puts a new layer on top (FM.insertLayer / FM.addAt). So "put a red box in the middle" over his
+       full-screen clip was added, reported as done, and hidden under the clip; and a Director plan written in the natural
+       order — background first, then the title — built the title BEHIND its own background. Fixed: no z means index 0, the
+       front, and the digest says so. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realCall = FM.ai.call, realHas = FM.aiKey.has, realGet = FM.aiKey.get, dry0 = FM.ai.DRY_RUN;
+    let api = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: 'HUNTd stacking', width: 1080, height: 1920 }); made.push(pid);
+      const bg = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#2050ff' });
+      bg.name = 'HUNTd his clip'; bg.start = 0; bg.duration = 8;
+      FM.scene.layers.push(bg); FM.selectLayer(null); FM.refreshAll(); FM.history.commit();
+      FM.setTime(1);
+      const centre = function () {
+        const c = document.createElement('canvas'); c.width = 1080; c.height = 1920;
+        const ctx = c.getContext('2d'); FM.renderScene(ctx, FM.scene, FM.time);
+        return ctx.getImageData(540, 960, 1, 1).data;
+      };
+      const c0 = centre();
+      if (!(c0[2] > 200 && c0[0] < 80)) throw new Error('setup: the full-screen clip does not draw blue at the centre (' + [c0[0], c0[1], c0[2]] + ')');
+
+      /* 1. the Assistant */
+      FM.ai.DRY_RUN = false;
+      FM.aiKey.has = function () { return true; };
+      FM.ai.call = async function () {
+        await sleep(30);
+        return { content: [{ type: 'text', text: 'Put a red box in the middle.' }, { type: 'tool_use', id: 'toolu_hd_z', name: 'emit_ops', input: { ops: [{ op: 'addShape', ref: 'box', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#ff0000' }] } }] };
+      };
+      FM.aiChat.reset(); FM.aiChat.show(); await sleep(150);
+      const input = document.querySelector('#ai-chat .aic-input');
+      if (!input) throw new Error('setup: the Assistant composer is not in the DOM');
+      input.value = 'put a red box in the middle'; await FM.aiChat.send();
+      const box = FM.scene.layers.find(function (l) { return l.type === 'shape' && l.fill === '#ff0000'; });
+      if (!box) throw new Error('CONTROL: the stand-in reply added no box, so this fixture cannot see where it goes');
+      const c1 = centre();
+      if (!(c1[0] > 200 && c1[2] < 80)) {
+        throw new Error('the Assistant said it put a red box in the middle, and it did add one, but it went in BEHIND his full-screen clip (layer ' +
+          FM.scene.layers.indexOf(box) + ' of ' + FM.scene.layers.length + ', 0 is the front) — the middle of the canvas is still ' + [c1[0], c1[1], c1[2]] + ' and he sees nothing change');
+      }
+      FM.aiChat.hide();
+      FM.history.undo(); await sleep(60);
+
+      /* 2. the Director, a plan written background-first, answered by the fake API */
+      FM.aiKey.get = function () { return HD_FAKE_KEY; };
+      if (FM.aiBudget) FM.aiBudget.reset();
+      api = hdFakeApi(function (name) {
+        if (name === 'emit_intent') return { subject: 'SALE', style: 'bold', palette: ['#101010', '#ff0000'], pacing: 'fast', durationSec: 6, aspect: '9:16', captions: false, mood: 'loud' };
+        if (name === 'emit_plan') return { heroRef: 'title', tasks: [], scaffoldOps: [
+          { op: 'addShape', ref: 'plate', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#101010' },
+          { op: 'addText', ref: 'title', text: 'SALE', x: 540, y: 960, fontSize: 300, color: '#ff0000' },
+        ] };
+        return { ops: [] };
+      });
+      const res = await FM.ai.generateScene('a loud sale title card', null, { skipCritic: true });
+      if (api.seen.indexOf('emit_plan') < 0) throw new Error('CONTROL: the Director never asked the planner, so this fixture cannot see what its plan builds (' + JSON.stringify(res && res.error && res.error.message).replace(/"/g, "'") + ')');
+      const plate = FM.scene.layers.find(function (l) { return l.type === 'shape' && l.fill === '#101010'; });
+      const title = FM.scene.layers.find(function (l) { return l.type === 'text' && l.text === 'SALE'; });
+      if (!plate || !title) throw new Error('CONTROL: the Director did not build both the background and the title');
+      const pi = FM.scene.layers.indexOf(plate), ti = FM.scene.layers.indexOf(title);
+      if (ti > pi) {
+        throw new Error('the Director built its background and then its title, in plan order as the digest tells the model to, and the title went BEHIND its own full-screen background (title layer ' +
+          ti + ', background layer ' + pi + ', 0 is the front), so the scene it built has no title he can see');
+      }
+    } finally {
+      if (api) api.restore();
+      FM.ai.call = realCall; FM.aiKey.has = realHas; FM.aiKey.get = realGet; FM.ai.DRY_RUN = dry0;
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      try { FM.aiPanel.hide(); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* ═══ HUNT-e (queue 690, 25 Sep) — TEMPLATES AND ELEMENTS, WITH A REAL FINGER AT 380 AND A REAL MOUSE AT 1280 ═══════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below FAILED on v16.95 because of
+   * the bug it guards against, says what he would see, and passes with its fix — each re-proven failing with that fix
+   * reverted (app.js and template-fill.js for Replace Media, template-fill.js for the chips, storage.js for the rest). Every one reaches the screen he uses the way he reaches it — a real tap
+   * or click on the Home card, the ⋯ menu, the Replace Media button, the Undo button — not a call into the store.
+   * Shared helpers are prefixed he so they cannot collide with anything else here. */
+  function heCard(id) { return document.querySelector('#home-screen .hm-card[data-pid="' + id + '"]'); }
+  async function heImage(fill, name, w, h) {
+    const c = document.createElement('canvas'); c.width = w || 540; c.height = h || 960;
+    const g = c.getContext('2d'); g.fillStyle = fill; g.fillRect(0, 0, c.width, c.height);
+    const blob = await new Promise(function (r) { c.toBlob(r, 'image/png'); });
+    return new File([blob], name, { type: 'image/png' });
+  }
+  function heCount(canvas, pred) {
+    const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128 && pred(d[i], d[i + 1], d[i + 2])) n++;
+    return n;
+  }
+  // what the preview shows of a scene at time t, at a quarter of its size (renderScene derives its scale from the canvas)
+  function heShot(scene, t) {
+    const P = scene.project;
+    const c = document.createElement('canvas'); c.width = Math.max(2, Math.round(P.width / 4)); c.height = Math.max(2, Math.round(P.height / 4));
+    FM.renderScene(c.getContext('2d'), scene, t);
+    return c;
+  }
+  const heOrange = function (r, g, b) { return r > 190 && g > 80 && g < 150 && b < 110; };   // #e76f51, the bar
+  async function heOpenHome(tab) {
+    FM.home.open(); await sleep(800);
+    FM.home._render(tab); await sleep(450);
+    const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+    await sleep(150);
+  }
+  async function heTidy(o) {
+    try { if (FM.templateFill && FM.templateFill.isOpen && FM.templateFill.isOpen()) FM.templateFill.close(); } catch (e) {}
+    try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    // put any element / template workspace away WITHOUT going Home first — Home would write it back over the fixture
+    try { if (o.orig && FM.projects.currentId() !== o.orig && FM.projects.list().some(function (p) { return p.id === o.orig; })) await FM.projects.open(o.orig, { confirmed: true }); } catch (e) {}
+    for (const p of FM.projects.list().filter(function (p) { return (p.elementDraft && o.eids.indexOf(p.ofElement) >= 0) || (p.templateDraft && o.tids.indexOf(p.ofTemplate) >= 0); })) { try { await FM.projects.discardDraftAnyway(p.id); } catch (e) {} }
+    for (const id of o.eids) { try { await FM.elements.remove(id); } catch (e) {} }
+    for (const id of o.tids) { try { await FM.templates.remove(id); } catch (e) {} }
+    // projects a template made (fromTemplate) go too
+    for (const p of FM.projects.list().filter(function (p) { return p.fromTemplate && o.tids.indexOf(p.fromTemplate) >= 0; })) o.made.push(p.id);
+    await hcCleanup(o.made, o.orig, o.wasOpen);
+  }
+
+  /* PRESS AN ELEMENT CARD AND WAIT FOR IT TO OPEN — and when it does not, say what state things are in. At load 50–150
+     (the parallel hunt worktrees) a real press's release has arrived 400 ms to 17 s after the press itself, which Home
+     rightly reads as a HOLD and goes into Select (measured with these very tests: every such timeout said so). That is
+     the driver, not the app, and not what these tests are about, so ONE such hold is let go of the way he would — the
+     Select button, now reading Done — and the press is made again. Anything else, or a second hold, fails with the
+     state it found, so a real race cannot hide behind the retry. `press` re-finds the card each time: the hold rebuilt it. */
+  /* BRING AN ELEMENT'S (OR TEMPLATE'S) CARD INTO THE LIST'S VIEW, as he would by scrolling to it. Drafts lead the Elements tab and a
+     full suite leaves plenty behind, so after 1800 tests the card can sit below the bottom of the Home list — where a
+     real press lands on nothing (measured: the stub test's click reached no element at all in both full runs, and
+     passed in every run of 6 and of 99 tests). The list scrolls inside the frame, so sliding the frame cannot reveal it. */
+  async function heReveal(el) {
+    const c = heCard(el.id);
+    if (!c) throw new Error('setup: the ' + el.name + ' card is not on Home');
+    const sc = document.querySelector('#home-screen .hm-scroll');
+    const r = c.getBoundingClientRect();
+    if (sc && (r.top < 80 || r.bottom > innerHeight - 40)) {
+      const sr = sc.getBoundingClientRect();
+      sc.scrollTop += (r.top - sr.top) - Math.max(0, (sc.clientHeight - r.height) / 2);
+      await sleep(400);
+    }
+    return heCard(el.id);
+  }
+  async function heOpenByPress(el, press, what) {
+    let held = 0;
+    // what the press reached, for the message if it opens nothing: the clicks the document saw, and the open call
+    const seen = [], ofe = FM.elements.openForEdit;
+    const onClick = function (e) { seen.push('click on ' + ((e.target && e.target.className) || (e.target && e.target.tagName) || '?') + (card0 && card0.contains(e.target) ? ' (the card)' : '')); };
+    let card0 = heCard(el.id);
+    FM.elements.openForEdit = function () {
+      seen.push('openForEdit called');
+      const r = ofe.apply(this, arguments);
+      Promise.resolve(r).then(function (v) { seen.push('openForEdit gave ' + v); }, function (e) { seen.push('openForEdit threw ' + (e && e.message)); });
+      return r;
+    };
+    document.addEventListener('click', onClick, true);
+    try {
+      for (;;) {
+        const t0 = Date.now();
+        card0 = heCard(el.id);
+        await press();
+        for (;;) {
+          if (!FM.home.isOpen() && FM.scene.project.ofElement === el.id) return held;
+          const hold = document.body.classList.contains('hm-selecting');
+          if ((hold && !held) || Date.now() - t0 > 15000) break;
+          await sleep(40);
+        }
+        if (document.body.classList.contains('hm-selecting') && !held) {
+          held++;
+          const done = document.getElementById('hm-select-btn');
+          if (done) done.click();
+          await sleep(500);
+          if (document.body.classList.contains('hm-selecting')) throw new Error('setup: the press on the ' + el.name + ' element arrived as a hold and Select would not let go');
+          continue;
+        }
+        const P = FM.scene.project || {};
+        const ask = document.getElementById('fm-ask');
+        throw new Error('timed out waiting for ' + (what || 'the element to open for editing') + ' — ' + (Date.now() - t0) + ' ms after the press Home is ' + (FM.home.isOpen() ? 'open' : 'closed') +
+          (document.body.classList.contains('hm-selecting') ? ' and in Select, so the press arrived as a HOLD (twice)' : '') +
+          ', and the open project is ' + (P.name || '?') + (P.ofElement ? ' (a workspace for ' + (P.ofElement === el.id ? 'this' : 'another') + ' element)' : '') + ' with ' + FM.scene.layers.length + ' layers' +
+          '; the press reached: ' + (seen.join(', ') || 'nothing') + (ask && !ask.classList.contains('hidden') ? '; a question is up: ' + ask.textContent.slice(0, 160) : ''));
+      }
+    } finally {
+      document.removeEventListener('click', onClick, true);
+      FM.elements.openForEdit = ofe;
+    }
+  }
+
+  test('690 after Replace Media on Insert your Media, the slot and the preview show his photo once it has landed', { item: '690', budgetMs: 90000 }, async function () {
+    /* Home → Templates → ⋯ → New project from template opens Insert your Media (queue 343 / 619). He taps Replace Media,
+       picks his own photo, and the photo really does go into the project — but the screen he is looking at still shows the
+       template's picture in the slot — and, with a real phone photo that takes more than a frame to decode, in the big
+       preview too (with the small test PNG the preview's repaint sometimes lands after the swap by luck; the slot never
+       does). The refresh is hung on the window getting focus back and on a 1.2 s timer; the first fires before the picked
+       file has even decoded, the second while he is still choosing. So the one screen that exists so he can SEE the
+       template become his tells him the swap did nothing. A real finger at 380.
+       The system photo picker is the one thing a test cannot drive, so it is stood in for at input.click(): it hands back
+       his photo after 1.5 s of choosing, and fires change and then focus in the order most generous to the app. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    const realClick = HTMLInputElement.prototype.click;
+    let picked = 0;
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe promo src', width: 1080, height: 1920 }); o.made.push(src);
+      const T = FM.makeLayer('text', { name: 'HUNTe words', text: 'HUNTE', x: 540, y: 300, fontSize: 90 });
+      T.start = 0; T.duration = 4; FM.scene.layers.push(T); FM.refreshAll();
+      const rec = await FM.loadImageFile(await heImage('#2a9d8f', 'HUNTe-template.png'));
+      FM.addMediaLayer(rec);
+      FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 4; });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      await FM.storage.save(); await sleep(300);
+      if (!(await FM.templates.save('HUNTe promo', src))) throw new Error('setup: could not save the template');
+      const tpl = FM.templates.list().filter(function (t) { return t.name === 'HUNTe promo'; })[0];
+      o.tids.push(tpl.id);
+      const mine = await heImage('#ff00ff', 'HUNTe-mine.png');
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          await heOpenHome('templates');
+          const card = await heReveal(tpl);
+          if (!card) throw new Error('setup: the HUNTe promo template has no card under Templates');
+          await realInput924(hcTap(hcPt(card.querySelector('.hm-card-more'))), 'a finger on the ⋯ of HUNTe promo');
+          const item = await hcMenuItem(/New project from template/);
+          await realInput924(hcTap(hcPt(item)), 'a finger on New project from template');
+          await hcUntil('Insert your Media to open', function () { return FM.templateFill && FM.templateFill.isOpen(); }, 8000);
+          await sleep(700);
+          const fill = document.getElementById('tpl-fill');
+          const chip = function () { const c = fill.querySelector('.tfill-slot canvas'); return c ? [].slice.call(c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data, 0, 3) : null; };
+          const view = function () { const c = fill.querySelector('.tfill-cv'); return [].slice.call(c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data, 0, 3); };
+          const teal = function (p) { return !!p && p[1] > 120 && p[2] > 110 && p[0] < 90; };
+          const pink = function (p) { return !!p && p[0] > 200 && p[2] > 200 && p[1] < 80; };
+          const L = FM.scene.layers.filter(function (l) { return l.type === 'image'; })[0];
+          if (!L) throw new Error('setup: the project made from the template has no image layer');
+          const first = fill.querySelector('.tfill-slot.is-sel');
+          if (!first || first.dataset.id !== L.id) throw new Error('setup: the photo is not the slot selected when the screen opened');
+          /* CONTROL: before the swap, both show the template's teal picture */
+          if (!teal(chip()) || !teal(view())) throw new Error('CONTROL: before the swap the slot shows ' + JSON.stringify(chip()) + ' and the preview ' + JSON.stringify(view()) + ', not the template teal picture — nothing below could be judged');
+          HTMLInputElement.prototype.click = function () {
+            if (this.type !== 'file') return realClick.call(this);
+            const input = this; picked++;
+            setTimeout(function () {
+              const dt = new DataTransfer(); dt.items.add(mine); input.files = dt.files;
+              input.dispatchEvent(new Event('change'));
+              window.dispatchEvent(new Event('focus'));
+            }, 1500);
+          };
+          const btn = fill.querySelector('.tfill-replace');
+          if (!btn || btn.disabled) throw new Error('setup: no enabled Replace Media button for the photo slot');
+          await realInput924(hcTap(hcPt(btn)), 'a finger on Replace Media');
+          if (!picked) throw new Error('a real tap on Replace Media did not open the photo picker at all');
+          await hcUntil('his photo to reach the project', function () { const r = FM.media.get(L.id); return r && r.file && r.file.name === 'HUNTe-mine.png'; }, 8000);
+          await sleep(2500);
+          const c1 = chip(), v1 = view();
+          if (!pink(c1) || !pink(v1)) {
+            throw new Error('he tapped Replace Media on Insert your Media and chose his own photo — the photo is in the project now, but the screen still shows the template picture: the slot is ' +
+              (pink(c1) ? 'his photo' : 'still the template teal ' + JSON.stringify(c1)) + ' and the big preview is ' + (pink(v1) ? 'his photo' : 'still the template teal ' + JSON.stringify(v1)) +
+              '. The screen refreshes on window focus and a 1.2 s timer, both before the picked photo has loaded, so the swap looks like it did nothing');
+          }
+        }, 380);
+      });
+    } finally {
+      HTMLInputElement.prototype.click = realClick;
+      await heTidy(o);
+    }
+  });
+
+  test('690 an element made on his phone-shaped canvas opens for editing on that canvas, with its layers on screen', { item: '690', budgetMs: 90000 }, async function () {
+    /* Elements → tap an element opens its own workspace (queue 342 / 505). That workspace is ALWAYS 1080 x 1080, but the
+       element's layers keep the positions they had on the canvas they were made on — and his canvas is a 1080 x 1920 phone.
+       A lower-third caption and bar made there sit at y 1574, which is 494 px below the bottom of the square. He taps his
+       element to change it and gets a black square with nothing on it. A real finger at 380. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe caption src', width: 1080, height: 1920 }); o.made.push(src);
+      const bar = FM.makeLayer('shape', { name: 'HUNTe bar', shape: 'rect', x: 540, y: 1574, shapeW: 900, shapeH: 160, fill: '#e76f51' });
+      const txt = FM.makeLayer('text', { name: 'HUNTe name', text: 'EZRA SMITH', x: 540, y: 1574, fontSize: 80 });
+      [txt, bar].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      const onSrc = heCount(heShot(FM.scene, 0.5), heOrange);
+      if (onSrc < 1000) throw new Error('CONTROL: the bar is not visible even on the canvas it was made on (' + onSrc + ' orange pixels), so nothing below could be judged');
+      if (!(await FM.elements.saveFromProject(src, 'HUNTe caption'))) throw new Error('setup: could not save the element');
+      const el = FM.elements.list().filter(function (e) { return e.name === 'HUNTe caption'; })[0];
+      o.eids.push(el.id);
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          await heOpenHome('elements');
+          if (!heCard(el.id)) throw new Error('setup: the HUNTe caption element has no card under Elements');
+          await heOpenByPress(el, async function () { return realInput924(hcTap(hcPt((await heReveal(el)).querySelector('.hm-name'))), 'a finger on the HUNTe caption element'); });
+          await sleep(700);
+        }, 380);
+      });
+      const P = FM.scene.project;
+      if (FM.scene.layers.length !== 2) throw new Error('setup: the element workspace holds ' + FM.scene.layers.length + ' layers, not the element 2');
+      const inDraft = heCount(heShot(FM.scene, 0.5), heOrange);
+      if (inDraft < onSrc * 0.5) {
+        const b = FM.layerById(FM.scene, FM.scene.layers.filter(function (l) { return l.type === 'shape'; })[0].id);
+        throw new Error('he tapped his HUNTe caption element (made on his 1080 x 1920 phone canvas) to edit it — the workspace opened as a ' + P.width + ' x ' + P.height +
+          ' square with the bar and the caption at y ' + Math.round(FM.evalProp(b.transform.y, 0.5)) + ', below its bottom edge: the canvas shows ' + inDraft + ' of the bar orange pixels (' + onSrc +
+          ' on the canvas it was made on), so he is looking at an empty square');
+      }
+      if (P.width !== 1080 || P.height !== 1920) throw new Error('his HUNTe caption element opened on a ' + P.width + ' x ' + P.height + ' workspace, not the 1080 x 1920 phone canvas it was made on');
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  test('690 on Insert your Media the text and shape slots of a phone-shaped template show their layer, even in the lower half', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 619 made his text-and-shape templates fillable, and its own words are that each chip RENDERS its layer because
+       otherwise "every non-media chip is an identical dark square and the row stops telling you which slot is which". The
+       chip sets up its own fit-to-the-box transform and then calls FM.renderScene — which throws that transform away and
+       draws the whole canvas from the chip's top-left at 108/1080 scale. On a 1080 x 1920 template only the TOP 1080 px land
+       in the chip, and clearRect wipes the chip background too; a lower-third title and bar come out as empty squares.
+       A real mouse at 1280, through Home → Templates → ⋯ → New project from template. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe title src', width: 1080, height: 1920 }); o.made.push(src);
+      const txt = FM.makeLayer('text', { name: 'HUNTe title', text: 'BIG SALE', x: 540, y: 1420, fontSize: 150, color: '#ffffff' });
+      const bar = FM.makeLayer('shape', { name: 'HUNTe strip', shape: 'rect', x: 540, y: 1640, shapeW: 900, shapeH: 220, fill: '#e76f51' });
+      [txt, bar].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      await FM.storage.save(); await sleep(200);
+      if (!(await FM.templates.save('HUNTe title', src))) throw new Error('setup: could not save the template');
+      const tpl = FM.templates.list().filter(function (t) { return t.name === 'HUNTe title'; })[0];
+      o.tids.push(tpl.id);
+      let got = null;
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          await heOpenHome('templates');
+          const card = await heReveal(tpl);
+          if (!card) throw new Error('setup: the HUNTe title template has no card under Templates');
+          await hcMouse(card.querySelector('.hm-card-more'), 'a click on the ⋯ of HUNTe title');
+          const item = await hcMenuItem(/New project from template/);
+          await hcMouse(item, 'a click on New project from template');
+          await hcUntil('Insert your Media to open', function () { return FM.templateFill && FM.templateFill.isOpen(); }, 8000);
+          await sleep(800);
+          const fill = document.getElementById('tpl-fill');
+          const slots = [].slice.call(fill.querySelectorAll('.tfill-slot'));
+          const kindOf = function (b) { const l = FM.layerById(FM.scene, b.dataset.id); return l ? l.type : '?'; };
+          const bright = function (r, g, b) { return Math.max(r, g, b) > 90; };
+          got = slots.map(function (b) { const c = b.querySelector('canvas'); return { kind: kindOf(b), lit: c ? heCount(c, bright) : -1, orange: c ? heCount(c, heOrange) : -1 }; });
+          /* CONTROL: the preview above the row does show them, so the layers render and it is the chip that is blind */
+          const pv = fill.querySelector('.tfill-cv');
+          const pvOrange = heCount(pv, heOrange);
+          if (pvOrange < 200) throw new Error('CONTROL: the big preview does not show the bar either (' + pvOrange + ' orange pixels), so a blank chip would not mean the chip is at fault');
+        }, 1280);
+      });
+      const t = got.filter(function (g) { return g.kind === 'text'; })[0], s = got.filter(function (g) { return g.kind === 'shape'; })[0];
+      if (!t || !s) throw new Error('setup: the slots are ' + got.map(function (g) { return g.kind; }).join(', ') + ' — expected one text and one shape slot');
+      if (t.lit < 15 || s.orange < 15) {
+        throw new Error('on Insert your Media for his phone-shaped HUNTe title template, the slot for the words has ' + t.lit + ' lit pixels and the slot for the orange strip ' + s.orange +
+          ' orange ones — both are blank dark squares while the preview above shows them fine. The chip draws only the top 1080 px of the 1920 px canvas, so a title or strip in the lower half never reaches it and the row cannot show which slot is which');
+      }
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  test('690 opening an element for editing leaves nothing to undo — one Undo cannot wipe it, and it never reopens empty', { item: '690', budgetMs: 90000 }, async function () {
+    /* Opening an element for editing makes a fresh workspace and then INSERTS the element into it, and that insert commits
+       an undo step — so the Undo button is lit before he has done anything, and one press takes every layer of the element
+       away. The template twin resets history after loading; the element path never did. Worse, the empty workspace is
+       what is saved: going Home refuses to write an empty workspace over the element (good) but keeps the draft, and the
+       next tap on the element reopens THAT draft — empty — every time. A real mouse at 1280. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe badge src', width: 1080, height: 1080 }); o.made.push(src);
+      const ring = FM.makeLayer('shape', { name: 'HUNTe ring', shape: 'ellipse', x: 540, y: 540, shapeW: 600, shapeH: 600, fill: '#e76f51' });
+      const word = FM.makeLayer('text', { name: 'HUNTe word', text: 'EZ', x: 540, y: 540, fontSize: 200 });
+      [word, ring].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      if (!(await FM.elements.saveFromProject(src, 'HUNTe badge'))) throw new Error('setup: could not save the element');
+      const el = FM.elements.list().filter(function (e) { return e.name === 'HUNTe badge'; })[0];
+      o.eids.push(el.id);
+      const res = {};
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          await heOpenHome('elements');
+          if (!heCard(el.id)) throw new Error('setup: the HUNTe badge element has no card under Elements');
+          await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a click on the HUNTe badge element'); });
+          await sleep(800);
+          res.opened = FM.scene.layers.length;
+          if (res.opened !== 2) throw new Error('setup: the element opened with ' + res.opened + ' layers, not its 2');
+          const undo = document.getElementById('btn-undo');
+          if (!undo || !undo.getBoundingClientRect().width) throw new Error('setup: no Undo button on screen in the element workspace');
+          res.lit = !undo.classList.contains('is-off') && undo.getAttribute('aria-disabled') !== 'true';   // how history.js greys it
+          await hcMouse(undo, 'a click on Undo');
+          await sleep(600);
+          res.afterUndo = FM.scene.layers.length;
+          if (res.afterUndo < res.opened) {
+            /* what that costs him: Home keeps the empty draft, and the element card now opens it */
+            FM.home.open(); await sleep(1800);
+            res.keptDraft = FM.projects.list().some(function (p) { return p.elementDraft && p.ofElement === el.id; });
+            FM.home._render('elements'); await sleep(450);
+            if (heCard(el.id)) {
+              await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a second click on the HUNTe badge element'); }, 'the element to reopen');
+              await sleep(800);
+              res.reopened = FM.scene.layers.length;
+            }
+          }
+        }, 1280);
+      });
+      if (res.afterUndo < res.opened) {
+        throw new Error('he opened his HUNTe badge element and pressed Undo once, before changing anything (the Undo button was ' + (res.lit ? 'lit' : 'not lit') + ') — it took ' +
+          (res.opened - res.afterUndo) + ' of the element ' + res.opened + ' layers away' +
+          (res.keptDraft ? '. Going Home refused to save the empty workspace but kept it as a draft' : '') +
+          (res.reopened != null ? ', and tapping the element again reopened that draft with ' + res.reopened + ' layers — his element looks gone' : ''));
+      }
+      if (res.lit) throw new Error('he opened his HUNTe badge element and the Undo button was lit before he had changed anything — opening a document is not an edit');
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  test('690 an element saved from a selection opens on its own canvas, and one saved before sizes were recorded opens on a canvas that holds its layers', { item: '690', budgetMs: 90000 }, async function () {
+    /* The phone-canvas fix above records the canvas an element was made on. Two routes are not covered by it:
+       Save as element from a SELECTION in the editor (FM.elements.save, a different packer), and every element
+       he already has, saved before any size was recorded. The first is checked on a 1080 x 1350 canvas — a
+       shape nothing could guess — with the bar below the square. The second strips the size from a real pack
+       (exactly what an old one looks like) and asks for a canvas that shows the bar: the phone one it was made
+       on. And an old badge whose layers all sit inside the square still opens square. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    /* Opened through the call the Elements card makes, not a tap: the size is decided inside openForEdit whatever
+       opened it, and the tap itself is proven with a real finger by the phone-canvas test above. Three more real taps
+       here only added chances for a release delivered late under load to read as a HOLD (measured: the driver's
+       touchEnd arrived 400 ms to 3 s after touchStart at load 50, and Home rightly went into Select instead). */
+    const openEl = async function (el) {
+      const pid = await FM.elements.openForEdit(el.id);
+      if (!pid || FM.scene.project.ofElement !== el.id) throw new Error('setup: the ' + el.name + ' element did not open for editing (' + pid + ')');
+      await sleep(300);
+      return { w: FM.scene.project.width, h: FM.scene.project.height, orange: heCount(heShot(FM.scene, 0.5), heOrange) };
+    };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      /* 1. a selection saved on a 4:5 canvas */
+      const src = await FM.projects.create({ name: 'HUNTe sel src', width: 1080, height: 1350 }); o.made.push(src);
+      const bar = FM.makeLayer('shape', { name: 'HUNTe sel bar', shape: 'rect', x: 540, y: 1200, shapeW: 900, shapeH: 160, fill: '#e76f51' });
+      bar.start = 0; bar.duration = 4; FM.scene.layers.push(bar);
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      const onSrc = heCount(heShot(FM.scene, 0.5), heOrange);
+      if (onSrc < 1000) throw new Error('CONTROL: the bar is not visible even on the canvas it was made on (' + onSrc + ' orange pixels), so nothing below could be judged');
+      if (!(await FM.elements.save('HUNTe sel', [bar]))) throw new Error('setup: could not save the selection as an element');
+      const sel = FM.elements.list().filter(function (e) { return e.name === 'HUNTe sel'; })[0];
+      o.eids.push(sel.id);
+      const a = await openEl(sel);
+      if (a.w !== 1080 || a.h !== 1350 || a.orange < onSrc * 0.5) {
+        throw new Error('his HUNTe sel element, saved from a selection on a 1080 x 1350 canvas, opened for editing on a ' + a.w + ' x ' + a.h + ' workspace showing ' + a.orange + ' of the bar orange pixels (' + onSrc + ' where it was made) — the selection route does not carry its canvas');
+      }
+      /* 1b. the whole-project route (Home ⋯ → Save as element, Elements + From an existing project) on the same canvas */
+      await FM.projects.open(src, { confirmed: true });
+      if (!(await FM.elements.saveFromProject(src, 'HUNTe whole'))) throw new Error('setup: could not save the project as an element');
+      const whole = FM.elements.list().filter(function (e) { return e.name === 'HUNTe whole'; })[0];
+      o.eids.push(whole.id);
+      const a2 = await openEl(whole);
+      if (a2.w !== 1080 || a2.h !== 1350 || a2.orange < onSrc * 0.5) {
+        throw new Error('his HUNTe whole element, saved from a whole 1080 x 1350 project, opened for editing on a ' + a2.w + ' x ' + a2.h + ' workspace showing ' + a2.orange + ' of the bar orange pixels (' + onSrc + ' where it was made) — the project route does not carry its canvas');
+      }
+      /* 2. an element saved before sizes were recorded: a real pack from a phone canvas, with its size taken out */
+      await FM.projects.open(src, { confirmed: true });
+      const src2 = await FM.projects.create({ name: 'HUNTe old src', width: 1080, height: 1920 }); o.made.push(src2);
+      const bar2 = FM.makeLayer('shape', { name: 'HUNTe old bar', shape: 'rect', x: 540, y: 1574, shapeW: 900, shapeH: 160, fill: '#e76f51' });
+      bar2.start = 0; bar2.duration = 4; FM.scene.layers.push(bar2);
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the second source project could not be saved');
+      if (!(await FM.elements.saveFromProject(src2, 'HUNTe old'))) throw new Error('setup: could not save the old-style element');
+      const old = FM.elements.list().filter(function (e) { return e.name === 'HUNTe old'; })[0];
+      o.eids.push(old.id);
+      const pack = await FM.elements.getPack(old.id);
+      if (!pack) throw new Error('setup: the old-style element has no pack');
+      delete pack.canvas;
+      await q915aPut('elem:' + old.id, pack);
+      const back = await FM.elements.getPack(old.id);
+      if (!back || back.canvas) throw new Error('setup: the size could not be taken out of the pack, so it does not look like an old one');
+      const b = await openEl(old);
+      if (b.orange < 1000) {
+        throw new Error('his HUNTe old element, saved on a 1080 x 1920 phone canvas before sizes were recorded, opened for editing on a ' + b.w + ' x ' + b.h + ' workspace showing ' + b.orange + ' orange pixels — the bar at y 1574 is off its bottom edge');
+      }
+      if (b.w !== 1080 || b.h !== 1920) throw new Error('his old phone-canvas element opened on ' + b.w + ' x ' + b.h + ', not the 1080 x 1920 phone canvas its layers fit');
+      /* 3. …while an old badge whose layers all sit inside the square keeps the square it always opened on */
+      const sq = FM._elementCanvas({ layers: [{ type: 'shape', start: 0, transform: { x: 540, y: 540 } }, { type: 'text', start: 0, transform: { x: 900, y: 1000 } }] });
+      if (sq.width !== 1080 || sq.height !== 1080) throw new Error('an old element whose layers all sit inside the square would open on ' + sq.width + ' x ' + sq.height + ', not the 1080 x 1080 it has always opened on');
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  test('690 an element whose kept workspace is empty reopens with the element in it, not the empty stub', { item: '690', budgetMs: 90000 }, async function () {
+    /* The workspace for editing an element is made first and filled second, and the empty first half is on
+       disk with the element pointer already on it. Anything that leaves it empty — a crash before the fill
+       landed, or (until the fix above) one Undo straight after opening — left a draft that Home rightly will
+       not write over the element and keeps, and every later tap on the element reopened THAT: empty, every
+       time, so his element looked gone. The stub here is made the way openForEdit makes it. A real mouse at 1280. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe stub src', width: 1080, height: 1080 }); o.made.push(src);
+      const ring = FM.makeLayer('shape', { name: 'HUNTe stub ring', shape: 'ellipse', x: 540, y: 540, shapeW: 600, shapeH: 600, fill: '#e76f51' });
+      const word = FM.makeLayer('text', { name: 'HUNTe stub word', text: 'EZ', x: 540, y: 540, fontSize: 200 });
+      [word, ring].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      if (!(await FM.elements.saveFromProject(src, 'HUNTe stub'))) throw new Error('setup: could not save the element');
+      const el = FM.elements.list().filter(function (e) { return e.name === 'HUNTe stub'; })[0];
+      o.eids.push(el.id);
+      const stub = await FM.projects.create({ name: 'HUNTe stub', width: 1080, height: 1080, elementDraft: true, ofElement: el.id });
+      if (!stub) throw new Error('setup: the empty workspace could not be made');
+      FM.scene.project.background = null; FM.storage.markDirty(); await FM.storage.save();
+      await FM.projects.open(src, { confirmed: true });
+      const res = {};
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          await heOpenHome('elements');
+          if (!heCard(el.id)) throw new Error('setup: the HUNTe stub element has no card under Elements');
+          await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a click on the HUNTe stub element'); });
+          await sleep(800);
+          res.pid = FM.projects.currentId();
+          res.layers = FM.scene.layers.length;
+          res.orange = heCount(heShot(FM.scene, 0.5), heOrange);
+          const undo = document.getElementById('btn-undo');
+          res.lit = !!undo && !undo.classList.contains('is-off');
+        }, 1280);
+      });
+      const drafts = FM.projects.list().filter(function (p) { return p.elementDraft && p.ofElement === el.id; }).length;
+      if (res.layers !== 2 || res.orange < 1000) {
+        throw new Error('he tapped his HUNTe stub element while an empty workspace for it was kept — it opened with ' + res.layers + ' of its 2 layers and ' + res.orange + ' orange pixels on the canvas, so his element looks gone');
+      }
+      if (res.pid !== stub || drafts !== 1) throw new Error('the element opened in ' + (res.pid === stub ? 'the kept workspace' : 'a new workspace') + ' and ' + drafts + ' workspaces for it exist — the kept one should be reused, not joined by another');
+      if (res.lit) throw new Error('the refilled workspace opened with Undo lit — one press would empty it again');
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  /* ═══ HUNT-f — SETTINGS, THEMES AND HELP (#690, third real-input hunt) ═════════════════════════════════════════════════
+   * Four findings, each a failing test first. The phone ones are driven by a REAL finger (tests/_cdp.py), because the
+   * bug is in what a real tap does after the pointerdown — a synthetic .click() never has a pointerdown to hide on. */
+  function huntfCenter(el) { const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: r.width, h: r.height }; }
+  function huntfTap(p) { return [{ t: 'touchStart', x: p.x, y: p.y, ms: 60 }, { t: 'touchEnd', x: p.x, y: p.y, ms: 0 }]; }
+  function huntfCanvasUp() { const d = document.getElementById('canvas-dialog'); return !!d && !d.classList.contains('hidden'); }
+  function huntfShutAll() {
+    try { if (FM.shortcuts && FM.shortcuts.isOpen()) FM.shortcuts.hide(); } catch (e) {}
+    // the Before you export card goes out through its own Back, so the export awaiting it gets its answer
+    try { const bk = document.querySelector('.np-remind .np-back'); if (bk) bk.click(); } catch (e) {}
+    try { const xd = document.getElementById('export-dialog'); if (xd && !xd.classList.contains('hidden')) { const c = document.getElementById('exp-cancel'); if (c) c.click(); else xd.classList.add('hidden'); } } catch (e) {}
+    try { if (FM.notepad && FM.notepad.isOpen()) FM.notepad.close(); } catch (e) {}
+    try { if (huntfCanvasUp()) { const c = document.getElementById('cv-cancel'); if (c) c.click(); } } catch (e) {}
+  }
+
+  test('690 on the phone a tap outside the ? sheet, Notes, Canvas settings or the Before you export card only closes it — it never presses what is under the finger (the bin, Export), and a second tap on the button that opened one closes it', { item: '690', budgetMs: 90000 }, async function () {
+    /* The ? sheet (#shortcuts-overlay), the Notes pad (.np-scrim) and Canvas settings (#canvas-dialog) all close on
+       POINTERDOWN on their backdrop and are gone at once. A real tap then goes on: its click is hit-tested AFTER the
+       backdrop has left, so it lands on whatever was under the finger. js/ask.js says exactly this about its own scrim
+       and closes on click for that reason; these three never got the same treatment. On PC the opener is lifted above
+       the backdrop (popFrom / cv-anchored) so the double-tap case works there — on the phone nothing is lifted.
+       Two things he sees: (1) tapping the top bar to get rid of the ? sheet presses the bin under that spot and the
+       layer is gone; (2) his #762 — "tap it again it should close it not open it again" — Notes, ? and the cog each
+       flash shut and pop straight back open. The Before you export card (js/notepad.js confirmExport) had the same
+       pointerdown close: a tap outside it over the phone's Export button pressed Export again and the card came back.
+       FIXED (queue 690): all four close on the CLICK, and only when the press began on the backdrop — ask.js's rule. */
+    const saved = FM.scene, wasHome = FM.home.isOpen();
+    const probs = [];
+    try {
+      if (wasHome) FM.home.close();
+      huntfShutAll();
+      const L = FM.makeLayer('shape', { name: 'HUNTf keep me', shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 60, fill: '#e76f51', start: 0, duration: 3 });
+      FM.scene = scene([L]); FM.selectLayer(null); FM.refreshAll();
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          await sleep(400);
+          /* ── 1: tap-away over the bin deletes the layer ── */
+          FM.selectLayer(L.id); FM.refreshAll(); await sleep(400);
+          const help = document.getElementById('m-help'), del = document.getElementById('m-del');
+          if (!help || !del) throw new Error('setup: #m-help or #m-del is missing from the phone bar');
+          const ph = huntfCenter(help), pd = huntfCenter(del);
+          if (!(ph.w > 0) || !(pd.w > 0)) throw new Error('setup: with a layer selected the phone bar does not show both ? and the bin (? ' + ph.w + ' px, bin ' + pd.w + ' px wide)');
+          await realInput924(huntfTap(ph), 'a tap on ? with a layer selected');
+          await sleep(450);
+          if (!FM.shortcuts.isOpen()) throw new Error('setup: a real tap on ? did not open the shortcuts sheet');
+          const under = document.elementFromPoint(pd.x, pd.y);
+          if (!under || under.id !== 'shortcuts-overlay') throw new Error('setup: the spot over the bin is not the sheet backdrop (it is ' + (under ? (under.id || under.className) : 'nothing') + '), so a tap there is not a tap outside the sheet');
+          await realInput924(huntfTap(pd), 'a tap on the top bar outside the ? sheet, over the bin');
+          await sleep(500);
+          const gone = !FM.layerById(FM.scene, L.id);
+          if (gone) probs.push('with a layer selected he opened ? and tapped the top bar outside the sheet to close it — the sheet closed AND the bin under his finger fired: the layer HUNTf keep me was deleted');
+          else if (FM.shortcuts.isOpen()) probs.push('a tap outside the ? sheet did not close it');
+          huntfShutAll();
+          if (gone) { FM.scene = scene([L]); FM.refreshAll(); }
+          FM.selectLayer(null); FM.refreshAll(); await sleep(400);
+          /* ── 2: his #762 on the phone — a second tap on the button closes what it opened ── */
+          const doors = [
+            { id: 'm-help', name: 'the ? button', up: () => FM.shortcuts.isOpen() },
+            { id: 'm-notes', name: 'the Notes button', up: () => FM.notepad.isOpen() },
+            { id: 'm-settings', name: 'the cog (Canvas settings)', up: huntfCanvasUp },
+          ];
+          for (const d of doors) {
+            huntfShutAll(); await sleep(250);
+            const b = document.getElementById(d.id);
+            if (!b) throw new Error('setup: #' + d.id + ' is missing');
+            const p = huntfCenter(b);
+            if (!(p.w > 0)) throw new Error('setup: ' + d.name + ' is not on the phone bar with nothing selected');
+            await realInput924(huntfTap(p), 'a first tap on ' + d.name);
+            await sleep(500);
+            if (!d.up()) throw new Error('setup: a real tap on ' + d.name + ' did not open it');
+            await realInput924(huntfTap(p), 'a second tap on ' + d.name);
+            await sleep(600);
+            if (d.up()) probs.push('a second tap on ' + d.name + ' did not close it — it closed on the finger going down and the same tap opened it again');
+          }
+          /* ── 3: the Before you export card — a tap outside it, over the phone's Export button ── */
+          huntfShutAll(); await sleep(250);
+          FM.scene.project.notes = [{ id: 'hf3', text: 'Swap the logo', remind: true }];
+          const xb = document.getElementById('m-export');
+          if (!xb) throw new Error('setup: #m-export is missing from the phone bar');
+          const px = huntfCenter(xb);
+          if (!(px.w > 0)) throw new Error('setup: the phone Export button is not on screen with nothing selected');
+          await realInput924(huntfTap(px), 'a tap on Export with a ticked reminder');
+          await sleep(500);
+          if (!document.querySelector('.np-remind')) throw new Error('setup: a real tap on Export with a ticked reminder did not bring up the Before you export card');
+          const ux = document.elementFromPoint(px.x, px.y);
+          if (!ux || !ux.classList.contains('np-remind')) throw new Error('setup: the spot over Export is not the reminder card backdrop (it is ' + (ux ? (ux.id || ux.className) : 'nothing') + ')');
+          await realInput924(huntfTap(px), 'a tap outside the reminder card, over Export');
+          await sleep(600);
+          if (document.querySelector('.np-remind')) probs.push('a tap outside the Before you export card, over the Export button, closed it and pressed Export again — the card came straight back');
+          huntfShutAll();
+          FM.scene.project.notes = [];
+        }, 380);
+      });
+      if (probs.length) throw new Error('On the phone: ' + probs.join('; ') + '.');
+    } finally {
+      huntfShutAll();
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll();
+      if (wasHome) FM.home.open();
+      await sleep(150);
+    }
+  });
+
+  test('690 the Notes reminder dot tells the truth about the project on screen — lit when he opens a project with a ticked reminder, off in a project with none', { item: '690', budgetMs: 60000 }, async function () {
+    /* The dot on the Notes button (queue 139: a ticked note is a reminder that stops an export) is only ever repainted
+       from inside notepad.js — opening or closing the pad, ticking, typing. Nothing repaints it when a project is
+       OPENED, and FM.notepad.sync is exported but called by nobody. So after the app is reopened the dot is dark over a
+       project whose reminder is waiting (the only moment it matters), and after moving to another project it keeps the
+       LAST project's dot. Measured on the phone bar: tick a reminder, reload — pending 1, dot off.
+       FIXED (queue 690): refreshAll repaints the dot — every project load, boot restore and undo lands there. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const lit = () => ['m-notes-dot', 'btn-notes-dot'].map(id => document.getElementById(id)).filter(Boolean).some(d => d.classList.contains('on'));
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      if (!document.getElementById('m-notes-dot') && !document.getElementById('btn-notes-dot')) throw new Error('setup: neither Notes button has its dot');
+      const a = await FM.projects.create({ name: 'HUNTf reminder', width: 320, height: 240 }); made.push(a);
+      FM.scene.project.notes = [{ id: 'hf1', text: 'Swap the logo before export', remind: true }];
+      FM.storage.markDirty();
+      if (!FM.storage.flushSync()) throw new Error('setup: HUNTf reminder could not be saved');
+      const b = await FM.projects.create({ name: 'HUNTf no notes', width: 320, height: 240 }); made.push(b);
+      FM.notepad.sync();                      // in the project with no notes the dot is honestly off
+      if (lit()) throw new Error('setup: the dot is lit in a project with no notes even after a sync');
+      const probs = [];
+      await FM.projects.open(a, { confirmed: true }); await sleep(300);
+      if (FM.notepad.pending().length !== 1) throw new Error('setup: HUNTf reminder did not come back with its one ticked reminder (' + FM.notepad.pending().length + ')');
+      if (!lit()) probs.push('he opened a project with a ticked reminder (Swap the logo before export) and the dot on the Notes button stayed dark — nothing tells him a reminder is waiting until he opens the pad');
+      FM.notepad.sync();                      // light it honestly for the second half
+      await FM.projects.open(b, { confirmed: true }); await sleep(300);
+      if (FM.notepad.pending().length !== 0) throw new Error('setup: HUNTf no notes has reminders');
+      if (lit()) probs.push('he moved to a project with no notes at all and the dot stayed lit — it is still showing the last project reminder');
+      if (probs.length) throw new Error(probs.join('; ') + '.');
+    } finally {
+      await hcCleanup(made, orig, wasOpen);
+      try { FM.notepad.sync(); } catch (e) {}
+    }
+  });
+
+  test('690 turning on Demo mode hides his clip names and pictures in the Add menu already on screen on PC — not only after he changes tab', { item: '690', budgetMs: 60000 }, async function () {
+    /* Settings says Demo mode hides your photo and video previews and their filenames in the Add menu, so a screen
+       recording never shows your camera roll. The Add menu reads the switch only when it draws a tab, and nothing
+       redraws it when the switch changes (only Home subscribes to FM.settings.onChange). On PC the Add panel is always
+       on screen with nothing selected: with Add, Media open, Canvas settings, App settings, Demo mode on, close —
+       and his clip, its filename and its picture, are still there until he happens to change tab.
+       FIXED (queue 690): js/addmenu.js subscribes once to FM.settings.onChange and redraws a live menu whose tiles
+       were drawn under the other Demo-mode value. */
+    const wasHome = FM.home.isOpen(), savedSel = FM.scene.selectedId;
+    let lib0 = null; try { lib0 = localStorage.getItem('fm.medialib'); } catch (e) {}
+    const demo0 = !!FM.settings.get('demoMode');
+    const NAME = 'IMG_4821 HUNTf family beach.mov';
+    try {
+      if (wasHome) FM.home.close();
+      if (demo0) FM.settings.set('demoMode', false);
+      const list = (function () { try { return JSON.parse(lib0 || '[]') || []; } catch (e) { return []; } })();
+      localStorage.setItem('fm.medialib', JSON.stringify([{ mid: 'm_huntf1', name: NAME, kind: 'video', w: 1920, h: 1080, dur: 12, key: 'huntf_nokey', added: Date.now(), audio: false }].concat(list)));
+      await atWideWidth(async function () {
+        FM.selectLayer(null); FM.refreshAll(); await sleep(250);
+        if (!FM.addMenu || !FM.addMenu.openTab || !FM.addMenu.TAB_KEYS) throw new Error('setup: FM.addMenu.openTab is missing');
+        const mediaKey = FM.addMenu.TAB_KEYS.find(k => k === 'media');
+        if (!mediaKey) throw new Error('setup: the Add menu has no media tab (' + FM.addMenu.TAB_KEYS.join(', ') + ')');
+        FM.addMenu.openTab(mediaKey); await sleep(400);
+        const shown = () => [].slice.call(document.querySelectorAll('.addmenu-lbl')).filter(e => e.isConnected && e.offsetParent !== null && e.textContent === NAME);
+        if (!shown().length) throw new Error('setup: with Add, Media open on PC the library tile for ' + NAME + ' is not on screen');
+        FM.settings.open(); await sleep(500);
+        const row = [].slice.call(document.querySelectorAll('.set-row')).find(r => { const l = r.querySelector('.set-label'); return l && l.textContent.trim() === 'Demo mode'; });
+        if (!row) throw new Error('setup: Settings has no Demo mode row');
+        row.querySelector('.set-switch').click(); await sleep(100);
+        if (!FM.settings.get('demoMode')) throw new Error('setup: the Demo mode switch did not turn it on');
+        FM.settings.close(); await sleep(450);
+        if (shown().length) throw new Error('he turned Demo mode on and closed Settings, and the Add menu on screen still shows his clip by name (' + NAME + ') with its picture — Demo mode only reaches the menu after he changes tab, so a recording started now shows his camera roll');
+      });
+    } finally {
+      try { if (FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      try { FM.settings.set('demoMode', demo0); } catch (e) {}
+      try { if (lib0 == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', lib0); } catch (e) {}
+      try { if (FM.addMenu && FM.addMenu.openTab) FM.addMenu.openTab(FM.addMenu.TAB_KEYS[0]); } catch (e) {}
+      if (savedSel) FM.selectLayer(savedSel);
+      if (wasHome) FM.home.open();
+      await sleep(150);
+    }
+  });
+
+  test('690 on PC the keys that close help and Notes work — a second ? hides the shortcuts sheet it says it toggles, and Esc while writing a note closes Notes', { item: '690', budgetMs: 45000 }, async function () {
+    /* The sheet lists ? as Show / hide this help. The first ? opens it; the second is thrown away by the
+       overlay-owns-the-screen guard at the top of the editor key handler (the open sheet IS a full-screen overlay), so
+       the sheet cannot be closed with the key that opened it. And Esc, which #690 taught to close Notes, never gets
+       there while he is typing: + Add a note focuses the new line, and the handler returns for any key in a text field
+       before it reaches the Escape branch — so Esc after writing a note does nothing.
+       FIXED (queue 690): the key handler hides an open sheet on ? before the overlay guard, and answers Escape from
+       inside the pad's own fields before the in-a-field return. */
+    const wasHome = FM.home.isOpen(), P = FM.scene.project, notes0 = P.notes;
+    const probs = [];
+    const key = (target, k, code, shift) => target.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: code, shiftKey: !!shift, bubbles: true, cancelable: true }));
+    try {
+      if (wasHome) FM.home.close();
+      huntfShutAll();
+      await atWideWidth(async function () {
+        await sleep(200);
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        key(document.body, '?', 'Slash', true); await sleep(200);
+        if (!FM.shortcuts.isOpen()) throw new Error('setup: ? did not open the shortcuts sheet');
+        key(document.body, '?', 'Slash', true); await sleep(200);
+        if (FM.shortcuts.isOpen()) probs.push('he pressed ? to open the shortcuts sheet and ? again to put it away, as the sheet itself says — it stayed up');
+        huntfShutAll(); await sleep(150);
+        FM.scene.project.notes = [];
+        FM.notepad.open(); await sleep(250);
+        const add = document.querySelector('.np-add');
+        if (!add) throw new Error('setup: the Notes pad has no + Add a note');
+        add.click(); await sleep(150);
+        const ta = document.activeElement;
+        if (!ta || !ta.classList || !ta.classList.contains('np-text')) throw new Error('setup: + Add a note did not put him in the new note field');
+        ta.value = 'Fix the logo'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+        key(ta, 'Escape', 'Escape'); await sleep(200);
+        if (FM.notepad.isOpen()) probs.push('he wrote a note and pressed Esc — Notes stayed open (Esc closes it only when nothing in it has the cursor)');
+      });
+      if (probs.length) throw new Error('On PC: ' + probs.join('; ') + '.');
+    } finally {
+      huntfShutAll();
+      P.notes = notes0;
+      if (wasHome) FM.home.open();
+      await sleep(100);
+    }
+  });
+
+
+  /* ═══ QUEUE 936 — A FRESH START OPENS NOTHING ═════════════════════════════════════════════════════════════════════
+     Ezra, 25 Sep: *"When you start the app fresh it shouldnt start with an open project, it should start empty like all
+     the other pages with some inviting text"*. His reinstalled phone listed an "Untitled" marked OPEN that he never made:
+     storage.migrate() minted it whenever no project was current.
+     THIS SUITE CANNOT SEE A FRESH START IN ITS OWN FRAME — run.html seeds a project for the 1,850 tests written against
+     one. So this boots a whole app on its OWN origin (fresh storage) with `fmseed=0`, the one frame that gets the real
+     boot, and reads it through the collab test agent. Then the two other roads to "nothing open": making the first
+     project (the control — the + must still work) and deleting it again (which used to mint an "Untitled" too), and a
+     reboot, which must come back empty rather than with a project nobody made. */
+  test('936 a fresh start opens no project — Projects shows its empty state, nothing is saved, and deleting the only project goes back to it', { item: '936', budgetMs: 150000 }, async function () {
+    const R = rig921();
+    const tag = 'f936';
+    const src = 'http://f936.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&fmseed=0&tag=' + tag;
+    const say = s => JSON.stringify({ projects: s.projects, names: s.names, cur: s.cur, home: s.homeOpen, empty: s.emptyTitle, open: s.openBadges, docs: s.docKeys }).replace(/"/g, "'");
+    try {
+      await R.bootSrc(tag, src, 390, 844);
+      await R.until('the fresh instance to be on Home', async () => { const s = await R.rpc(tag, 'fresh936'); return s.homeOpen ? s : null; }, 40000);
+      await R.sleep(1500);   // past the 600ms autosave and the Home thumbnail capture — anything that would write has written
+      const s0 = await R.rpc(tag, 'fresh936');
+      if (s0.projects !== 0 || s0.cur) throw new Error('a fresh start made a project he never asked for: ' + say(s0));
+      if (s0.openBadges) throw new Error('a fresh start shows an OPEN badge: ' + say(s0));
+      if (!s0.emptyTitle) throw new Error('a fresh start does not show the Projects empty state: ' + say(s0));
+      if (s0.docKeys.length) throw new Error('a fresh start wrote a project to storage: ' + say(s0));
+
+      /* CONTROL: the + still makes a project on this instance — a boot that could not make one would pass everything above */
+      const s1 = await R.rpc(tag, 'fresh936make');
+      if (s1.projects !== 1 || !s1.cur || !s1.docKeys.length) throw new Error('control: making the first project on a fresh start failed: ' + say(s1));
+
+      /* deleting the only project goes back to the empty state — this minted an "Untitled" too */
+      const s2 = await R.rpc(tag, 'fresh936delete');
+      if (s2.projects !== 0 || s2.cur) throw new Error('deleting the only project left one behind: ' + say(s2));
+      if (!s2.homeOpen || !s2.emptyTitle) throw new Error('deleting the only project did not land on the empty Projects tab: ' + say(s2));
+      if (s2.docKeys.length) throw new Error('deleting the only project left a project doc in storage: ' + say(s2));
+
+      /* his reinstall-then-Restore (review finding): the backup's cards come back and NOTHING is opened — restoring used to
+         leave the last restored entry open, and with nothing open before, that was a project he never chose */
+      await R.rpc(tag, 'fresh936make');
+      const s2b = await R.rpc(tag, 'fresh936restore');
+      if (s2b.restored !== 1 || s2b.projects !== 1) throw new Error('control: the restore did not bring the project back: ' + say(s2b));
+      if (s2b.cur || s2b.openBadges) throw new Error('restoring a backup with nothing open left a project open: ' + say(s2b));
+      await R.rpc(tag, 'fresh936delete');   // back to nothing for the relaunch below (a card tap would open it — delete removes by the index)
+
+      /* …and it stays empty across a relaunch */
+      await R.reboot(tag);
+      await R.until('the relaunched instance to be on Home', async () => { const s = await R.rpc(tag, 'fresh936'); return s.homeOpen ? s : null; }, 40000);
+      await R.sleep(1200);
+      const s3 = await R.rpc(tag, 'fresh936');
+      if (s3.projects !== 0 || s3.cur || s3.docKeys.length) throw new Error('relaunching with no projects made one: ' + say(s3));
+
+      /* TWO WINDOWS, ONE OF THEM WITH NOTHING OPEN (review finding — data loss). Same origin, so they share storage: window B
+         makes a project, then window A — nothing open — flushes and stamps its card, which it does on every hide and switch.
+         A used to fall back to the SHARED current-project pointer, i.e. B's project, and wrote its blank "Untitled" over it. */
+      await R.bootSrc(tag + 'b', 'http://f936.localhost:' + location.port + '/index.html?fmtest=collab&fmseed=0&tag=' + tag + 'b', 390, 844);
+      await R.until('the second window to be on Home', async () => { const s = await R.rpc(tag + 'b', 'fresh936'); return s.homeOpen ? s : null; }, 40000);
+      const b1 = await R.rpc(tag + 'b', 'fresh936make');
+      if (b1.projects !== 1 || !b1.cur) throw new Error('control: window B could not make a project: ' + say(b1));
+      const a1 = await R.rpc(tag, 'fresh936flush');
+      if (a1.cur) throw new Error('window A, with nothing open, took window B\'s project as its own: ' + say(a1));
+      if (a1.openBadges) throw new Error('window A, with nothing open, marks window B\'s project OPEN — a tap there would close Home onto a blank: ' + say(a1));
+      const b2 = await R.rpc(tag + 'b', 'fresh936');
+      if (b2.names.join() !== 'First' || b2.docNames.join() !== 'First') throw new Error('window A (nothing open) wrote over window B\'s project — B now reads ' + JSON.stringify({ names: b2.names, docs: b2.docNames }).replace(/"/g, "'"));
+    } finally { R.drop(tag); R.drop(tag + 'b'); }
   });
 
 })();

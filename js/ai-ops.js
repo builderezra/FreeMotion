@@ -35,21 +35,52 @@ window.FM = window.FM || {};
   // can't touch a non-uniformly-scaled/skewed/Z layer and fight the user's transform). (#10)
   var TRANSFORM_RANGE = { x: null, y: null, scale: [0, 10], scaleX: [0, 10], scaleY: [0, 10], skewX: [-80, 80], skewY: [-80, 80], z: null, rotation: null, opacity: [0, 1], anchorX: [0, 1], anchorY: [0, 1] };
 
-  function setNumericPath(layer, path, value) {
+  /* ⚠️ AN ANIMATED CHANNEL KEEPS ITS ANIMATION (queue 690, hunt d). Every title the Director builds pops in — keyframed
+     scale and opacity — and "make the title bigger", in the Assistant or in the Director's own Refine box, arrives here as
+     setProp transform.scale 1.4. This used to assign the number straight over the {kf:[…]} object: the title got bigger
+     and its pop-in was simply gone, with nothing to say so ("move it up" did the same to a slide-in, "more see-through" to
+     a fade-in). The model could not have avoided it — nothing it is shown said the size was animated.
+     A setProp now means what a canvas drag or pinch means, through the SAME function: FM.shiftTransform moves the WHOLE
+     animation so it reads `value` at the moment the model was shown — `at`: the playhead for the Assistant, the rendered
+     frame for Refine and the critic — timing untouched (scale multiplies, the rest shift). That is Ezra's rule for
+     the canvas, "reposition the whole thing, never … drop a stray keyframe at the playhead". To REPLACE the motion the
+     model uses addKeyframe, which the digest now says.
+     A shifted curve can cross a limit its resting value does not (a fade-in moved down goes below 0 at its start), so
+     the keys are held inside the channel's range afterwards — but a SCALE key only at 0, not at the AI's own ceiling of
+     10: the app has no ceiling on scale, and a pop-in's overshoot, or a key he made by hand past 10, must not be cut. */
+  function clampKeys(p, r) {
+    if (r && p && Array.isArray(p.kf)) p.kf.forEach(function (k) { if (typeof k.v === 'number') k.v = clamp(k.v, r[0], r[1]); });
+  }
+  function setNumericPath(layer, path, value, at) {
     if (path.indexOf('transform.') === 0) {
       var k = path.slice(10);
       if (!Object.prototype.hasOwnProperty.call(TRANSFORM_RANGE, k)) return false;   // hasOwnProperty, not `in`: inherited prototype keys (constructor, __proto__…) must not pass the whitelist
       var r = TRANSFORM_RANGE[k], n = num(value, null);
       if (n == null) return false;
-      layer.transform[k] = r ? clamp(n, r[0], r[1]) : n;
+      n = r ? clamp(n, r[0], r[1]) : n;
+      var cur = layer.transform[k];
+      if (FM.isAnimated && FM.isAnimated(cur) && FM.shiftTransform) {
+        FM.shiftTransform(layer, k, n, at);
+        clampKeys(cur, (k === 'scale' || k === 'scaleX' || k === 'scaleY') ? [0, Infinity] : r);
+      } else layer.transform[k] = n;
       return true;
     }
     return false;
   }
+  /* The same for a keyframed VOLUME (a fade drawn with keys): "make it quieter" scales the whole fade, as scale does above,
+     instead of flattening it. At ~0 (the playhead on the silent start of a fade-in) a ratio means nothing, so it shifts.
+     Its keys are held to the APP's range, 0..10 (VOL_MAX in js/inspector.js, "up to like 1000%"), not to the 0..1 an AI
+     value is clamped to — a boost he keyed by hand must not be cut down by an edit to some other part of the fade. */
+  function setAnimatedLevel(p, n, r, at) {
+    var cur = FM.evalProp(p, at);
+    if (typeof cur === 'number' && Math.abs(cur) >= 1e-3) { var ratio = n / cur; if (isFinite(ratio)) p.kf.forEach(function (k) { k.v *= ratio; }); }
+    else { var d = n - (Number(cur) || 0); p.kf.forEach(function (k) { k.v += d; }); }
+    clampKeys(p, r);
+  }
 
   // setProp path → how to coerce/clamp. Returns true if applied.
-  function applySetProp(layer, path, value) {
-    if (setNumericPath(layer, path, value)) return true;
+  function applySetProp(layer, path, value, at) {
+    if (setNumericPath(layer, path, value, at)) return true;
     switch (path) {
       case 'fontSize': { var fs = clampNum(value, 1, 2000); if (fs == null) return false; layer.fontSize = fs; return true; }
       case 'letterSpacing': { var ls = clampNum(value, -200, 400); if (ls == null) return false; layer.letterSpacing = ls; return true; }
@@ -77,7 +108,7 @@ window.FM = window.FM || {};
        * branch and is dropped with a logged reason, like any other path we do not honour. */
       case 'reversed': { if (layer.type === 'video') layer.reversed = bool(value, false); return layer.type === 'video'; }
       case 'frameBlend': { layer.frameBlend = bool(value, false); return true; }
-      case 'volume': { var v = clampNum(value, 0, 1); if (v == null) return false; layer.volume = v; return true; }
+      case 'volume': { var v = clampNum(value, 0, 1); if (v == null) return false; if (FM.isAnimated && FM.isAnimated(layer.volume)) setAnimatedLevel(layer.volume, v, [0, 10], at); else layer.volume = v; return true; }   // queue 690 (hunt d): a keyed fade survives
       case 'fadeIn': { var fi = clampNum(value, 0, 60); if (fi == null) return false; layer.fadeIn = fi; return true; }
       case 'fadeOut': { var fo = clampNum(value, 0, 60); if (fo == null) return false; layer.fadeOut = fo; return true; }
       case 'speed': { var sp = clampNum(value, 0.0625, 16); if (sp == null) return false; layer.speed = sp; return true; }
@@ -91,9 +122,12 @@ window.FM = window.FM || {};
   // --------- the applier ---------
   // ops: array of op objects. refMap: shared {ref -> real layer id} across a build.
   // Returns { appliedCount, dropped:[{op,ref,reason}], results:[{op,ref,applied,reason}] }.
-  function applyOps(ops, refMap) {
+  // opts.at: the time the model was LOOKING at (the frame it was shown); a setProp on an animated channel means "this value
+  // there" — see setNumericPath. Defaults to the playhead, which is what the Assistant is told it is looking at.
+  function applyOps(ops, refMap, opts) {
     var scene = FM.scene, P = scene.project;
     refMap = refMap || {};
+    var at = (opts && typeof opts.at === 'number' && isFinite(opts.at)) ? opts.at : (FM.time || 0);
     var dropped = [], results = [], applied = 0;
 
     function drop(op, ref, reason) { dropped.push({ op: op, ref: ref, reason: reason }); results.push({ op: op, ref: ref, applied: false, reason: reason }); }
@@ -109,8 +143,14 @@ window.FM = window.FM || {};
       return layer;
     }
 
+    /* ⚠️ NO z MEANS ON TOP (queue 690, hunt d). It used to mean the very BACK — scene.layers.length, and the compositor
+       draws index 0 in front — while the app's own Add puts a new layer on top (FM.insertLayer). z is optional in the op
+       schema and the digest invited leaving it out, so "put a red box in the middle" over his full-screen clip was added,
+       reported as "1 change applied", and hidden under the clip; and a Director plan written background-first built its
+       title BEHIND its own background. Index 0 is the front, so a batch with no z stacks each new layer over the last —
+       the order a scene is naturally listed in — and the digest says so. An explicit z is untouched. */
     function insertAt(layer, z) {
-      var idx = (z == null) ? scene.layers.length : clamp(Math.round(z), 0, scene.layers.length);
+      var idx = (z == null) ? 0 : clamp(Math.round(z), 0, scene.layers.length);
       scene.layers.splice(idx, 0, layer);
     }
 
@@ -215,7 +255,7 @@ window.FM = window.FM || {};
           case 'setProp': {
             layer = resolveExisting(ref, false);
             if (!layer) { drop(o.op, ref, 'unknown ref'); break; }
-            if (typeof o.path !== 'string' || !applySetProp(layer, o.path, o.value)) { drop(o.op, ref, 'bad path/value: ' + o.path); break; }
+            if (typeof o.path !== 'string' || !applySetProp(layer, o.path, o.value, at)) { drop(o.op, ref, 'bad path/value: ' + o.path); break; }
             ok(o.op, ref); break;
           }
 

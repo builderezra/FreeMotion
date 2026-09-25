@@ -26,7 +26,26 @@ window.FM = window.FM || {};
   // localStorage at every write, so a second tab opening another project made this tab's next
   // autosave overwrite THAT project's doc with this tab's scene.
   let boundId = null;
-  function curKey() { return 'fm.proj.' + (boundId || curId() || 'default'); }
+  /* ⚠️ …AND ONCE load() HAS RUN, boundId IS THE ANSWER EVEN WHEN IT IS NULL (queue 936 review). `boundId || curId()`
+     fell back to the SHARED pointer whenever this tab had nothing open — unreachable while every boot minted a project,
+     live the moment "nothing open" became real: a second window that made a project turned an empty window's next flush
+     into a write of its blank scene over that project, and its card renamed "Untitled" with a black thumbnail. The
+     fallback is kept only for the moment before this tab's first load(). */
+  let _bound = false;
+  function tabId() { return _bound ? boundId : curId(); }
+  /* ⚠️ NO PROJECT OPEN IS A REAL STATE NOW (queue 936), so there is no key to write. This fell back to
+     `fm.proj.default`, which is how "nothing open" used to be impossible: a fresh start minted a project
+     before anything could ask. Every caller below reads null as "nothing to read, nothing to write". */
+  function curKey() { const id = tabId(); return id ? 'fm.proj.' + id : null; }
+  /* …and with nothing open the editor holds a blank that is never saved, so Home is where he lands (queue 936).
+     Home already open (a card's Delete, a draft committed on the way home) just re-renders, so the empty state shows. */
+  function landOnHome() {
+    try {
+      if (!FM.home) return;
+      if (FM.home.isOpen && FM.home.isOpen()) { if (FM.home.refresh) FM.home.refresh(); }
+      else if (FM.home.open) FM.home.open();
+    } catch (e) {}
+  }
 
   /* ---- THE STALE-TAB GUARD (#306) -------------------------------------------------------------
    * boundId above stops a second tab writing THIS tab's scene into ANOTHER project's doc. It does
@@ -46,7 +65,8 @@ window.FM = window.FM || {};
   let lastRev = 0, _stale = false, _staleWarned = false;
   function diskRev() {
     try {
-      const raw = localStorage.getItem(curKey());
+      const k = curKey(); if (!k) return 0;   // no project open (queue 936)
+      const raw = localStorage.getItem(k);
       if (!raw) return 0;
       const m = /^\{"rev":(\d+)/.exec(raw);   // rev is written first, so this never parses the whole doc
       return m ? +m[1] : 0;
@@ -63,6 +83,7 @@ window.FM = window.FM || {};
   let _writeFail = null;
   // The ONE place a scene doc is written. Returns true only if the bytes actually landed.
   function writeScene() {
+    if (!curKey()) { _writeFail = null; return true; }   // queue 936: no project open — nothing to save, and nothing lost
     if (_stale) { _writeFail = 'stale'; return false; }
     const dr = diskRev();
     if (dr > lastRev) { _stale = true; warnStale(); _writeFail = 'stale'; return false; }
@@ -82,7 +103,7 @@ window.FM = window.FM || {};
      can be refused too — and asking "leave anyway?" over nothing would teach him to tap through the one
      question that matters. The project and its layers are what he made; the selection is not compared. */
   function unsavedOnScreen() {
-    if (_writeFail !== 'refused') return false;
+    if (_writeFail !== 'refused' || !curKey()) return false;
     try {
       const raw = localStorage.getItem(curKey());
       if (!raw) return true;
@@ -672,7 +693,7 @@ window.FM = window.FM || {};
     },
     // THIS tab's open project — not the shared fm.currentProject, which a second tab can move (see boundId).
     // mediaLib.use captures it at the tap, so a reuse can never land in a project he did not tap in.
-    openProjectId() { return boundId || curId(); },
+    openProjectId() { return tabId(); },
     // Every key in the store, optionally narrowed to one prefix. Export crash-resume needs it to sweep
     // its own leftovers (`xr:part:*`) without knowing how many there were — a job that died mid-write
     // is precisely the case where the count on record is not to be trusted.
@@ -691,9 +712,10 @@ window.FM = window.FM || {};
 
     async load() {
       if (FM.projects) FM.projects.migrate();   // legacy single-project fm.scene → indexed project (one-time)
-      boundId = curId();                        // pin every future save in this tab to the project being loaded
+      boundId = curId(); _bound = true;         // pin every future save in this tab to the project being loaded — or to none (queue 936)
       adoptRev(0);                              // a project with no doc yet must not inherit the previous one's rev (#306)
       if (FM.fonts) FM.fonts.rehydrateAll();     // register imported custom fonts (idempotent; re-renders when ready)
+      if (!boundId) return false;                // queue 936: no project open — a fresh start, or the last one deleted
       let scene = readJSON(curKey(), null);
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
       adoptRev(scene.rev);        // this tab is now level with what is on disk (#306)
@@ -739,6 +761,7 @@ window.FM = window.FM || {};
     // Reset the CURRENT project only (blank doc + drop its media blobs). Never .clear() the whole
     // IDB store — it also holds every OTHER project's media plus template/element packs.
     async clear() {
+      if (!curKey()) return;   // queue 936: no project open
       try {
         const doc = readJSON(curKey(), null);
         const db = await openDB();
@@ -873,6 +896,7 @@ window.FM = window.FM || {};
     if ('background' in p && p.background !== null && !(typeof p.background === 'string' && p.background.length <= 64)) p.background = null;   // null IS a value: transparent
     ['loopIn', 'loopOut'].forEach(k => { if (k in p && p[k] !== null && !(typeof p[k] === 'number' && isFinite(p[k]))) p[k] = null; });
     if ('thumbPinned' in p && typeof p.thumbPinned !== 'boolean') p.thumbPinned = false;
+    if ('sizePicked' in p && typeof p.sizePicked !== 'boolean') delete p.sizePicked;   // queue 690 (HUNT-a): read by truthiness, and "false" is truthy
     if ('notes' in p) {
       if (!Array.isArray(p.notes)) p.notes = [];
       else {
@@ -1701,7 +1725,7 @@ window.FM = window.FM || {};
        which switches the open project once per entry — so a restore left the EDITOR on the last restored
        project while Home's OPEN badge still sat on his own, and a restore from inside a project dropped
        him into a different one behind his back. Adding things must not move him. */
-    const wasOn = curId();
+    const wasOn = tabId();
     /* queue 690: every entry goes through create(), which leaves the open project — so ask about HIS project
        once, up front, instead of once per entry; after that the project being left is one this restore made. */
     if (FM.projects && FM.projects.confirmLeave && !(await FM.projects.confirmLeave())) {
@@ -1718,8 +1742,11 @@ window.FM = window.FM || {};
       try { ok = await FM.storage.importObject(one, null, { quiet: true, draft: draft, confirmed: true }); } catch (e) { ok = false; }
       if (ok) { restored++; if (draft) drafts++; } else failed.push(nm);
     }
-    if (wasOn && FM.projects && curId() !== wasOn && FM.projects.list().some(p => p.id === wasOn)) {
-      try { await FM.projects.open(wasOn, { confirmed: true }); } catch (e) {}   // queue 690: what is left is a restored copy, not his work
+    if (FM.projects && tabId() !== wasOn) {
+      /* queue 690: what is left is a restored copy, not his work — so back to his project, or, when he had none open (a
+         reinstall, then Restore), back to none (queue 936): restoring puts cards on Home, it does not open one of them. */
+      const back = (wasOn && FM.projects.list().some(p => p.id === wasOn)) ? wasOn : null;
+      try { await FM.projects.open(back, { confirmed: true }); } catch (e) {}
     }
     return { ok: restored > 0, restored: restored, drafts: drafts, failed: failed, total: obj.projects.length };
   };
@@ -1933,7 +1960,7 @@ window.FM = window.FM || {};
      reads as "my edit didn't save". When the source IS the open scene, render it now. Null (a pinned
      picture he chose, media released on Home, not the open project) falls through to the stored one. */
   function liveThumbOf(id) {
-    if (!id || id !== (boundId || curId())) return null;
+    if (!id || id !== tabId()) return null;
     if (FM.scene && FM.scene.project && FM.scene.project.thumbPinned) return null;
     return makeThumb();
   }
@@ -2178,6 +2205,18 @@ window.FM = window.FM || {};
         }
       }
       const legacy = readJSON(SCENE_KEY, null);
+      /* ═══ A FRESH START OPENS NOTHING (queue 936) ════════════════════════════════════════════════════════
+       * Ezra, 25 Sep: *"When you start the app fresh it shouldnt start with an open project, it should start
+       * empty like all the other pages with some inviting text"*. This line minted "My project" whenever there
+       * was no valid current project — so a new install (and his reinstall) landed on Home with an "Untitled"
+       * card marked OPEN that he never made. Now nothing is minted: the Projects tab shows its empty state,
+       * nothing is written (curKey() is null), and the first project is the one he makes with +.
+       * A pointer at a project that is gone is dropped rather than replaced for the same reason.
+       * ⚠️ THE ONE EXCEPTION IS THE TEST HARNESS. 1,850 tests were written against a boot that always has a
+       * project, so tests/run.html, the collab test frames and tools/shot.py set `fm.test.seedProject` to keep
+       * that world. A real device never has it; the #936 test boots a fresh origin without it. */
+      let seeded = false; try { seeded = localStorage.getItem('fm.test.seedProject') === '1'; } catch (e) {}
+      if (!(legacy && legacy.project) && !seeded) { if (id) { try { localStorage.removeItem(CUR_KEY); } catch (e) {} } return; }
       id = newId('p');
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
       if (legacy && legacy.project) {
@@ -2198,7 +2237,7 @@ window.FM = window.FM || {};
      * in order to be rendered, and it is nearly free. So the two are separable, and home.open() takes
      * the cheap half now and the picture a moment later. */
     touchCurrent(forceThumb, noThumb) {
-      const id = boundId || curId(); if (!id) return true;   // (nothing to write) THIS tab's project, not the shared fm.currentProject — else a 2nd tab makes us stamp its card/thumbnail with our scene
+      const id = tabId(); if (!id) return true;   // (nothing to write) THIS tab's project, not the shared fm.currentProject — else a 2nd tab makes us stamp its card/thumbnail with our scene
       const idx = this.list();
       const e = idx.find(p => p.id === id); if (!e) return true;   // (nothing to write)
       const P = FM.scene.project;
@@ -2220,7 +2259,7 @@ window.FM = window.FM || {};
     // here — rendering an arbitrary time later would draw the wrong video frame). The pin flag lives on
     // the project doc, so touchCurrent() stops auto-overwriting it. Returns false if nothing to capture.
     pinThumbnail() {
-      const id = boundId || curId(); if (!id) return false;   // pin the thumbnail to THIS tab's project (see touchCurrent)
+      const id = tabId(); if (!id) return false;   // pin the thumbnail to THIS tab's project (see touchCurrent)
       const t = makeThumb(); if (!t) return false;
       const idx = this.list(); const e = idx.find(p => p.id === id);
       if (e) { e.thumb = null; this.saveIndex(idx); }
@@ -2233,7 +2272,16 @@ window.FM = window.FM || {};
     // Resolves FALSE when the project could not be saved and he chose to stay (queue 690) — nothing changed.
     // `opts.confirmed`: the caller has already asked (confirmLeave), or what is being left is being thrown away.
     async open(id, opts) {
-      if (id === curId()) return true;
+      /* THIS tab's project, not the shared pointer (queue 936 review): a tab with nothing open that is asked for the project
+         another tab made current must really load it, and open(null) with nothing open must not clear another tab's pointer. */
+      if (id === tabId() && (id === null || id === curId())) return true;
+      /* …and a project that is no longer on this device is refused BEFORE anything is torn down. load()'s migrate() drops a
+         pointer at nothing now instead of minting over it, so opening a vanished card (deleted in another tab) would otherwise
+         land in the editor with no project at all, where every save "succeeds" by writing nothing. */
+      if (id && !this.list().some(p => p.id === id)) {
+        let doc = null; try { doc = localStorage.getItem('fm.proj.' + id); } catch (e) {}
+        if (!doc) { if (FM.toast) FM.toast('That project is no longer on this device', 3200); if (FM.home && FM.home.refresh) FM.home.refresh(); return false; }
+      }
       if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel();   // drop any tracking overlay from the outgoing project
       if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
       if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
@@ -2262,7 +2310,9 @@ window.FM = window.FM || {};
       if (FM.collab && FM.collab.onReset) FM.collab.onReset({ force: true });
       FM.releaseProjectMedia(FM.scene.layers);
       _released.clear();   // a different scene from here on — the ids above no longer describe it
-      try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
+      /* queue 936: `open(null)` closes to NO project — the last one deleted, or a draft committed with nothing to go
+         back to. Same teardown as a switch; load() then reads nothing and the scene below is a blank that is never saved. */
+      try { if (id) localStorage.setItem(CUR_KEY, id); else localStorage.removeItem(CUR_KEY); } catch (e) {}
       // Motion Blur (Footage) keeps a per-layer canvas of the previous frame. Those belong to the
       // OUTGOING project's layer ids and nothing else ever clears them (only the exporter did), so
       // the store grew for the whole session and a re-used id could inherit a stranger's frame.
@@ -2293,6 +2343,7 @@ window.FM = window.FM || {};
       // Anything else is rejected rather than written into the doc — this value goes straight to fillStyle.
       if ('background' in opts) fresh.project.background = /^#[0-9a-f]{6}$/i.test(String(opts.background || '')) ? opts.background : null;
       clampProjectDims(fresh.project);   // opts can come from an untrusted import (importFile passes obj.project.width/height straight through)
+      if (opts.sizePicked) fresh.project.sizePicked = true;   // queue 690 (HUNT-a): he picked this size in New project — the first import must not replace it (FM.addMediaLayer)
       /* WHICH element this workspace is editing (queue 505), stamped on the DOC so it survives a reload
          — the same two-place trick `fromTemplate` uses. Without it the editing session cannot know
          which element it came from, which is the whole reason saving could only ever mint a new one. */
@@ -2548,9 +2599,10 @@ window.FM = window.FM || {};
       if (FM.storage && FM.storage.flushSync) FM.storage.flushSync();
       const others = this.list().filter(p => p.id !== id);
       const target = (others.filter(p => !p.elementDraft && !p.templateDraft)[0] || others[0] || {}).id;
-      if (!target) return { ok: false, why: 'last' };
-      await this.open(target, { confirmed: true });   // queue 690: the draft being left is the one being discarded
+      /* queue 936: the last one can go too — "nothing open" is a real state now, so there is somewhere to land. */
+      await this.open(target || null, { confirmed: true });   // queue 690: the draft being left is the one being discarded
       const ok = await this.discardDraft(id);
+      if (!target) landOnHome();
       return { ok: ok, why: ok ? '' : 'refused' };
     },
     async remove(id) {
@@ -2611,7 +2663,7 @@ window.FM = window.FM || {};
         const rest = this.list().filter(p => !p.elementDraft && !p.templateDraft);
         // confirmed (queue 690): the project being left is the one he just deleted — nothing to ask about
         if (rest.length) await this.open(rest[0].id, { confirmed: true });
-        else { try { localStorage.removeItem(CUR_KEY); } catch (e) {} await this.create({ confirmed: true }); }
+        else { await this.open(null, { confirmed: true }); landOnHome(); }   // queue 936: the last one gone → the empty Projects tab, not a new "Untitled"
         // open()/create() flushSync'd BEFORE switching CUR_KEY, resurrecting the deleted doc as an
         // unindexed localStorage orphan that leaks quota forever — remove it (again) now. (#r2)
         try { localStorage.removeItem('fm.proj.' + id); localStorage.removeItem('fm.proj.default'); } catch (e) {}
@@ -2714,6 +2766,9 @@ window.FM = window.FM || {};
    * wrong loses the media silently.
    * `wantProject` is the one real difference: a template carries the project object so it can become a
    * new project, an element carries only layers because it is dropped INTO one. */
+  function elementCanvasOf(P) {
+    return (P && P.width > 0 && P.height > 0) ? { width: P.width, height: P.height } : null;
+  }
   async function packFromProject(projectId, wantProject) {
     const id = projectId || curId();
     if (id === curId()) FM.storage.flushSync();     // the doc on disk must be what he just saw
@@ -2741,6 +2796,13 @@ window.FM = window.FM || {};
       delete pack.project.ofTemplate;
       delete pack.project.ofElement;
       delete pack.project.returnTo;
+    } else {
+      /* AN ELEMENT CARRIES THE SIZE OF THE CANVAS IT WAS MADE ON (queue 690, HUNT-e). Its layers keep
+         absolute positions, so without this the workspace that opens it for editing has to guess a size —
+         and it guessed a 1080 x 1080 square every time. His canvas is a 1080 x 1920 phone: a lower-third
+         made there sits at y 1574, 494 px below the square's bottom edge, and he got an empty black box.
+         Only the two numbers travel — not the project, which is exactly what an element is not. */
+      pack.canvas = elementCanvasOf(doc.project);
     }
     try {
       const db = await openDB();
@@ -2927,7 +2989,7 @@ window.FM = window.FM || {};
         }
         return existing.id;
       }
-      const returnTo = curId();
+      const returnTo = tabId();   // THIS tab's project, or none (queue 936) — never another window's
       const pid = await FM.projects.create({ name: meta.name || 'Template', width: pack.project.width, height: pack.project.height, templateDraft: true, ofTemplate: tid });
       if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       // the pack's project replaces the doc's, so the session's own pointers ride in as `extra`
@@ -2952,8 +3014,11 @@ window.FM = window.FM || {};
       const P = FM.scene && FM.scene.project;
       const tid = P && P.ofTemplate;
       if (!tid) return false;
-      const pid = curId();
-      if (!pid) return false;
+      /* THIS TAB'S OWN DRAFT OF THIS TEMPLATE, OR NOTHING (queue 936 review). `curId()` is the shared pointer: with another
+         window's project current, this packed THAT project into the template and then discarded it. */
+      const pid = tabId();
+      const rec = pid && FM.projects.list().find(p => p.id === pid);
+      if (!rec || !rec.templateDraft || (rec.ofTemplate && rec.ofTemplate !== tid)) return false;
       /* THE FLUSH MUST LAND (review, 2 Sep). writeScene returns false on quota or a stale rev; the old code ignored
          it and went on to pack the doc ON DISK — which, after a failed write, is an older or empty version — and
          write that over the template, then discard the draft that held his real edits. Keep the draft instead. */
@@ -2966,11 +3031,15 @@ window.FM = window.FM || {};
       if (!live) { const cur = await this.getPack(tid); if (cur && cur.layers && cur.layers.length) return false; }
       const ok = await this.updateFrom(tid, pid);
       if (!ok) return false;
+      if (tabId() !== pid) { await FM.projects.discardDraft(pid); return true; }   // queue 936 review: he opened something else meanwhile — the edit has landed; put the old workspace away and leave the new one alone
       const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);
       const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
-      if (!back) return true;
-      await FM.projects.open(back);
+      /* queue 936: nothing to go back to is no longer a reason to KEEP the draft open. It used to be, because "no project
+         open" could not exist — so a draft committed on a fresh start stayed the open project, and the next launch
+         reopened the workspace. Now it closes to nothing, like deleting the last project. */
+      await FM.projects.open(back || null, { confirmed: !back });
       await FM.projects.discardDraft(pid);
+      if (!back) landOnHome();
       return true;
     },
     /* WRITE A PROJECT BACK OVER THE TEMPLATE IT CAME FROM (queue 408 clause 2). Same shape as the preset
@@ -3042,6 +3111,55 @@ window.FM = window.FM || {};
     },
   };
 
+  /* THE CANVAS AN ELEMENT OPENS ON FOR EDITING (queue 690, HUNT-e). A pack saved since this fix records the
+     canvas its layers were made on (`pack.canvas`, written by packFromProject and elements.save), and the
+     workspace is that size, so every layer is where he put it. An older pack has no record, so the size is
+     read off where its layers sit: all inside the square keeps the 1080 x 1080 it has always opened at (a
+     "Build a new one…" element is square, and so is a logo or badge); anything below or beside it gets the
+     phone canvas or its landscape twin — the app's own default shapes, so almost always the one it was made
+     on — and past those, a canvas big enough to hold them. Top-level layers only: a parented layer's
+     position is relative to its parent, and cameras have no place on the canvas. */
+  function elementCanvas(pack) {
+    const c = pack && pack.canvas;
+    if (c && c.width > 0 && c.height > 0) return { width: c.width, height: c.height };
+    let maxX = 0, maxY = 0;
+    ((pack && pack.layers) || []).forEach(l => {
+      if (!l || l.parent || l.type === 'camera' || !l.transform) return;
+      const t = l.start || 0;
+      const x = +(FM.evalProp ? FM.evalProp(l.transform.x, t) : l.transform.x);
+      const y = +(FM.evalProp ? FM.evalProp(l.transform.y, t) : l.transform.y);
+      if (isFinite(x)) maxX = Math.max(maxX, x);
+      if (isFinite(y)) maxY = Math.max(maxY, y);
+    });
+    const fits = (w, h) => maxX <= w && maxY <= h;
+    if (fits(1080, 1080)) return { width: 1080, height: 1080 };
+    if (fits(1080, 1920)) return { width: 1080, height: 1920 };
+    if (fits(1920, 1080)) return { width: 1920, height: 1080 };
+    return { width: Math.max(1080, Math.ceil(maxX + 120)), height: Math.max(1080, Math.ceil(maxY + 120)) };
+  }
+  FM._elementCanvas = elementCanvas;   // seam: the suite checks the old-pack guess directly
+  /* THE LAST STEP OF OPENING AN ELEMENT FOR EDITING, shared by a fresh workspace and a refilled stub. */
+  async function arriveInElement() {
+    /* ⚠️ ARRIVE WITH NOTHING SELECTED. Ezra: "it's just opening you having every layer selected".
+       `insert()` selects what it just added, which is right when you are dropping an element INTO a
+       project — you want to move the thing you added. It is wrong for an EDIT: you are opening a
+       document, and no editor opens with everything selected. Measured before this: all three layers
+       selected and the multi-select header up, so the first thing he saw was a bulk-edit bar. */
+    if (FM.selectLayer) FM.selectLayer(null);
+    FM.scene.selectedIds = [];
+    if (FM.selectMode) FM.selectMode = false;
+    if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+    if (FM.refreshAll) FM.refreshAll();
+    /* ⚠️ AND WITH NOTHING TO UNDO (queue 690, HUNT-e). `insert()` commits an undo step — right when an
+       element is dropped INTO a project, wrong here: on top of the empty workspace `create()` had just
+       reset, it lit the Undo button before he had touched anything, and one press took every layer of
+       the element away. Going Home then refused to save the empty workspace and kept it, and the element
+       reopened empty from then on. The template twin has always reset history after loading; this path
+       never did. Opening a document is not an edit. */
+    if (FM.history) FM.history.reset();
+    if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+  }
+
   FM.elements = {
     list() { return readJSON(ELEM_INDEX, []); },
     // Save the given layers (the current selection) as a reusable element.
@@ -3049,6 +3167,7 @@ window.FM = window.FM || {};
       if (!layers || !layers.length) return false;
       const eid = newId('e');
       const pack = packLayers(layers);
+      pack.canvas = elementCanvasOf(FM.scene.project);   // the canvas these layers sit on — see packFromProject (queue 690, HUNT-e)
       let put = false;   // queue 915 clause 2 — see templates.save
       try { const db = await openDB(); put = await idbPut(db, 'elem:' + eid, pack); db.close(); } catch (e) { return false; }
       if (!put) return false;
@@ -3097,9 +3216,34 @@ window.FM = window.FM || {};
       const meta = this.list().find(e => e.id === eid);
       if (!meta) return null;
       const existing = FM.projects.list().find(p => p.elementDraft && p.ofElement === eid);
-      if (existing) { return (await FM.projects.open(existing.id)) === false ? false : existing.id; }   // queue 690: false = he chose to stay
-      const returnTo = curId();
-      const pid = await FM.projects.create({ name: meta.name || 'Element', width: 1080, height: 1080, elementDraft: true, ofElement: eid });
+      if (existing) {
+        if ((await FM.projects.open(existing.id)) === false) return false;   // queue 690: false = he chose to stay
+        /* ⚠️ AN EMPTY WORKSPACE IS A STUB, NOT HIS EDIT (queue 690, HUNT-e) — the rule commitDraft already
+           applies on the way out, applied on the way back in. `create()` stamps `ofElement` on a doc with no
+           layers, so a crash before the insert landed — or, until the history reset below, one Undo straight
+           after opening — left a workspace that Home rightly refused to write over the element and kept, and
+           every later tap on the element reopened THAT: empty, every time, so his element looked gone.
+           Refill it from the element instead; there is nothing in it to lose. */
+        if (!(FM.scene.layers || []).length && FM.scene.project && FM.scene.project.ofElement === eid) {
+          const pack = await this.getPack(eid);
+          if (pack && pack.layers && pack.layers.length) {
+            const size = elementCanvas(pack);
+            FM.scene.project.width = size.width; FM.scene.project.height = size.height;
+            clampProjectDims(FM.scene.project);
+            FM.scene.project.background = null;
+            if (FM.resizeCanvas) FM.resizeCanvas();
+            if (await this.insert(eid)) await arriveInElement();
+          }
+        }
+        return existing.id;
+      }
+      /* the pack BEFORE the workspace, as the template twin does: its size decides the workspace's, and a
+         missing pack now returns before anything is minted rather than after */
+      const pack = await this.getPack(eid);
+      if (!pack) return null;
+      const size = elementCanvas(pack);
+      const returnTo = tabId();   // THIS tab's project, or none (queue 936) — never another window's
+      const pid = await FM.projects.create({ name: meta.name || 'Element', width: size.width, height: size.height, elementDraft: true, ofElement: eid });
       if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       FM.scene.project.background = null;              // transparent, like the element itself
       if (returnTo) FM.scene.project.returnTo = returnTo;   // where to land when he goes back
@@ -3121,17 +3265,7 @@ window.FM = window.FM || {};
         else await FM.projects.discardDraftAnyway(pid);
         return null;
       }
-      /* ⚠️ ARRIVE WITH NOTHING SELECTED. Ezra: "it's just opening you having every layer selected".
-         `insert()` selects what it just added, which is right when you are dropping an element INTO a
-         project — you want to move the thing you added. It is wrong for an EDIT: you are opening a
-         document, and no editor opens with everything selected. Measured before this: all three layers
-         selected and the multi-select header up, so the first thing he saw was a bulk-edit bar. */
-      if (FM.selectLayer) FM.selectLayer(null);
-      FM.scene.selectedIds = [];
-      if (FM.selectMode) FM.selectMode = false;
-      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
-      if (FM.refreshAll) FM.refreshAll();
-      if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+      await arriveInElement();
       return pid;
     },
     /* ═══ SAVE THE EDIT BACK AND PUT THE WORKSPACE AWAY (queue 505).
@@ -3149,8 +3283,9 @@ window.FM = window.FM || {};
       const P = FM.scene && FM.scene.project;
       const eid = P && P.ofElement;
       if (!eid) return false;
-      const pid = curId();
-      if (!pid) return false;
+      const pid = tabId();   // queue 936 review: THIS tab's own draft of this element, or nothing — see the template twin
+      const rec = pid && FM.projects.list().find(p => p.id === pid);
+      if (!rec || !rec.elementDraft || (rec.ofElement && rec.ofElement !== eid)) return false;
       /* ⚠️ queue 825: THE FLUSH MUST LAND — the same rule the TEMPLATE twin above got on 2 Sep, and this
          copy never did. writeScene returns false on quota, on a stale rev and on a read-back mismatch; the
          old code threw that away and went on to pack the doc ON DISK, which after a failed write is an
@@ -3165,11 +3300,12 @@ window.FM = window.FM || {};
       if (!liveLayers) { const cur = await this.getPack(eid); if (cur && cur.layers && cur.layers.length) return false; }
       const ok = await this.updateFrom(eid, pid);
       if (!ok) return false;                                       // failed write — keep the draft
+      if (tabId() !== pid) { await FM.projects.discardDraft(pid); return true; }   // queue 936 review: see the template twin
       const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);   // a template workspace is not somewhere to land either
       const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
-      if (!back) return true;                                      // nowhere to land — edit saved, draft kept
-      await FM.projects.open(back);
+      await FM.projects.open(back || null, { confirmed: !back });   // queue 936: nowhere to land closes to nothing — see the template twin
       await FM.projects.discardDraft(pid);
+      if (!back) landOnHome();
       return true;
     },
     async updateFrom(eid, projectId) {

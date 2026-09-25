@@ -32,6 +32,10 @@
   <div id="sum">Loading app…</div>
   <div id="list"></div>
   <div class="note">Regression must be all-green to ship. Re-run after any change.</div>
+  <!-- queue 936: a fresh start no longer makes a project, and every test here was written against a boot that has one.
+       Same origin as the app frame, so this key reaches its storage.migrate() before it runs. A real device never
+       carries it; the #936 test boots a fresh origin without it to measure the real fresh start. -->
+  <script>try { localStorage.setItem('fm.test.seedProject', '1'); } catch (e) {}</script>
   <iframe id="app" src="../index.html"></iframe>
   <script>
     var frame = document.getElementById('app');

@@ -1279,7 +1279,7 @@ window.FM = window.FM || {};
   function projectCard(p, subOverride) {
     // a DIV, not a button — a card is a <button> and the ⋯ is a nested <button>, which is invalid
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
-    const isOpen = p.id === FM.projects.currentId();
+    const isOpen = p.id === FM.storage.openProjectId();   // THIS tab's project (queue 936 review): a window with nothing open must not badge another window's
     const card = el('div', 'hm-card' + (isOpen ? ' hm-open' : '') + (selectMode && selected.has(p.id) ? ' hm-sel' : ''));
     /* NO PER-CARD GRAIN ANY MORE (queue 157) — the four rounds of tuning that produced the phase
        offset and the per-card tile pair moved to the background with the field itself, where there is
@@ -1407,11 +1407,12 @@ window.FM = window.FM || {};
         // the project FILE (.fmotion.json) is a different thing — a backup you can re-import — so it
         // keeps its own entry, and still exports without stealing the OPEN badge from your project
         { label: 'Save project file…', action: async () => {
-          const prev = FM.projects.currentId();
+          const prev = FM.storage.openProjectId();
           const ok = await openProject(p.id, true);
           if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }   // switch was skipped (another open in flight): exporting now would serialize the WRONG scene
           await FM.storage.exportFile();
           if (prev && prev !== p.id) { await openProject(prev, true); render(); }
+          else if (!prev) { await FM.projects.open(null, { confirmed: true }); render(); }   // queue 936: nothing was open — saving a file must not leave one open
         } },
         { sep: true },
         { label: 'Delete…', danger: true, action: async () => {
@@ -1636,7 +1637,7 @@ window.FM = window.FM || {};
         // delete the CURRENTLY-OPEN project LAST: remove() does a full project-switch (media decode +
         // refreshAll) whenever it deletes the open one, so deleting it first made every other doomed
         // project get fully opened in turn — order it last so that expensive switch happens once.
-        const cur = FM.projects.currentId();
+        const cur = FM.storage.openProjectId();
         ids = ids.sort((a, b) => (a === cur ? 1 : 0) - (b === cur ? 1 : 0));
       }
       /* ⚠️ A DRAFT IS A PROJECT WEARING AN ELEMENTS-TAB CARD, so it must not go through that tab's
@@ -1932,7 +1933,7 @@ window.FM = window.FM || {};
     async function use() {
       // Elements go INTO a project, so there has to be one open. Home is reachable with no project
       // loaded (first run, or after deleting the last one) — say so rather than failing silently.
-      if (!FM.projects.currentId || !FM.projects.currentId()) {
+      if (!FM.storage.openProjectId()) {   // THIS tab's project (queue 936 review)
         cancelPress(card);
         if (FM.toast) FM.toast('Open a project first, then add the element', 2200);
         return;
@@ -2074,12 +2075,9 @@ window.FM = window.FM || {};
              him to do by hand. */
           const res = await FM.projects.discardDraftAnyway(p.id);
           if (!res.ok && FM.toast) {
-            /* The only remaining refusal is the genuinely last project: deleting it would leave the
-               current-project pointer dangling and the next boot would mint one. Say the thing he can
-               actually do about it, rather than restating the refusal. */
-            FM.toast(res.why === 'last'
-              ? 'This is the only project you have left — make another one first, then delete this.'
-              : 'That draft could not be deleted.', 4200);
+            /* The last project is no longer a refusal (queue 936): with nothing left, nothing is open and Home shows
+               its empty state. What remains is a store that said no. */
+            FM.toast('That draft could not be deleted.', 4200);
           }
           render();
         } },
@@ -2210,7 +2208,7 @@ window.FM = window.FM || {};
        reaches the push in the same task as before. Resolves null (not false) so the ⋯ actions do not report
        "busy" for a choice he just made. */
     let confirmed = false;
-    if (id !== FM.projects.currentId() && FM.storage && FM.storage.lastWriteRefused && FM.storage.lastWriteRefused()) {
+    if (id !== FM.storage.openProjectId() && FM.storage && FM.storage.lastWriteRefused && FM.storage.lastWriteRefused()) {
       if (!(await FM.projects.confirmLeave())) return null;
       confirmed = true;
     }
@@ -2223,7 +2221,7 @@ window.FM = window.FM || {};
      * Only when a push is actually going to play. On desktop close() hides home instantly, and
      * starting THAT before the load would show the previous project for the whole load, which is the
      * artefact this split exists to avoid rather than cause. */
-    const needsLoad = id !== FM.projects.currentId();
+    const needsLoad = id !== FM.storage.openProjectId();   // THIS tab's (queue 936 review): with nothing open here, another window's project must LOAD, not just close Home over a blank
     const split = !keepOpen && needsLoad && FM.home.pushWillRun && FM.home.pushWillRun();
     let phase1 = false;
     if (split) {
@@ -2681,7 +2679,12 @@ window.FM = window.FM || {};
     const s = npCompute(), fps = npFps();
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
-    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg });
+    /* ⚠️ queue 690 (HUNT-a): A TILE IS A PROMISE. Only Custom says Auto adjusts (his words, #659); the other five
+       name a shape and a size, and he picked one. The first clip or photo used to replace that size with the
+       file's own for EVERY tile (FM.addMediaLayer), so a 16:9 project turned portrait the moment his phone clip
+       landed and a 1080p one became 4K. `sizePicked` rides on the project so addMediaLayer can tell his choice
+       from a size nobody chose; Custom leaves it off and keeps adjusting, as its label says. */
+    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg, sizePicked: npAspect !== 'custom' });
     if (!pid) return;   // queue 690: his open project could not be saved and he chose to stay — Home stays as it is
     FM.home.close({ push: true });   // same hand-off as tapping a card — every route from home into a project pushes
   }
