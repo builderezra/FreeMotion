@@ -93599,6 +93599,473 @@
       try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
       try { FM.aiPanel.hide(); } catch (e) {}
       await hfCleanup(made, orig, wasOpen);
+  /* ═══ HUNT-e (queue 690, 25 Sep) — TEMPLATES AND ELEMENTS, WITH A REAL FINGER AT 380 AND A REAL MOUSE AT 1280 ═══════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below FAILED on v16.95 because of
+   * the bug it guards against, says what he would see, and passes with its fix — each re-proven failing with that fix
+   * reverted (app.js and template-fill.js for Replace Media, template-fill.js for the chips, storage.js for the rest). Every one reaches the screen he uses the way he reaches it — a real tap
+   * or click on the Home card, the ⋯ menu, the Replace Media button, the Undo button — not a call into the store.
+   * Shared helpers are prefixed he so they cannot collide with anything else here. */
+  function heCard(id) { return document.querySelector('#home-screen .hm-card[data-pid="' + id + '"]'); }
+  async function heImage(fill, name, w, h) {
+    const c = document.createElement('canvas'); c.width = w || 540; c.height = h || 960;
+    const g = c.getContext('2d'); g.fillStyle = fill; g.fillRect(0, 0, c.width, c.height);
+    const blob = await new Promise(function (r) { c.toBlob(r, 'image/png'); });
+    return new File([blob], name, { type: 'image/png' });
+  }
+  function heCount(canvas, pred) {
+    const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128 && pred(d[i], d[i + 1], d[i + 2])) n++;
+    return n;
+  }
+  // what the preview shows of a scene at time t, at a quarter of its size (renderScene derives its scale from the canvas)
+  function heShot(scene, t) {
+    const P = scene.project;
+    const c = document.createElement('canvas'); c.width = Math.max(2, Math.round(P.width / 4)); c.height = Math.max(2, Math.round(P.height / 4));
+    FM.renderScene(c.getContext('2d'), scene, t);
+    return c;
+  }
+  const heOrange = function (r, g, b) { return r > 190 && g > 80 && g < 150 && b < 110; };   // #e76f51, the bar
+  async function heOpenHome(tab) {
+    FM.home.open(); await sleep(800);
+    FM.home._render(tab); await sleep(450);
+    const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+    await sleep(150);
+  }
+  async function heTidy(o) {
+    try { if (FM.templateFill && FM.templateFill.isOpen && FM.templateFill.isOpen()) FM.templateFill.close(); } catch (e) {}
+    try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    // put any element / template workspace away WITHOUT going Home first — Home would write it back over the fixture
+    try { if (o.orig && FM.projects.currentId() !== o.orig && FM.projects.list().some(function (p) { return p.id === o.orig; })) await FM.projects.open(o.orig, { confirmed: true }); } catch (e) {}
+    for (const p of FM.projects.list().filter(function (p) { return (p.elementDraft && o.eids.indexOf(p.ofElement) >= 0) || (p.templateDraft && o.tids.indexOf(p.ofTemplate) >= 0); })) { try { await FM.projects.discardDraftAnyway(p.id); } catch (e) {} }
+    for (const id of o.eids) { try { await FM.elements.remove(id); } catch (e) {} }
+    for (const id of o.tids) { try { await FM.templates.remove(id); } catch (e) {} }
+    // projects a template made (fromTemplate) go too
+    for (const p of FM.projects.list().filter(function (p) { return p.fromTemplate && o.tids.indexOf(p.fromTemplate) >= 0; })) o.made.push(p.id);
+    await hcCleanup(o.made, o.orig, o.wasOpen);
+  }
+
+  /* PRESS AN ELEMENT CARD AND WAIT FOR IT TO OPEN — and when it does not, say what state things are in. At load 50–150
+     (the parallel hunt worktrees) a real press's release has arrived 400 ms to 17 s after the press itself, which Home
+     rightly reads as a HOLD and goes into Select (measured with these very tests: every such timeout said so). That is
+     the driver, not the app, and not what these tests are about, so ONE such hold is let go of the way he would — the
+     Select button, now reading Done — and the press is made again. Anything else, or a second hold, fails with the
+     state it found, so a real race cannot hide behind the retry. `press` re-finds the card each time: the hold rebuilt it. */
+  /* BRING AN ELEMENT'S (OR TEMPLATE'S) CARD INTO THE LIST'S VIEW, as he would by scrolling to it. Drafts lead the Elements tab and a
+     full suite leaves plenty behind, so after 1800 tests the card can sit below the bottom of the Home list — where a
+     real press lands on nothing (measured: the stub test's click reached no element at all in both full runs, and
+     passed in every run of 6 and of 99 tests). The list scrolls inside the frame, so sliding the frame cannot reveal it. */
+  async function heReveal(el) {
+    const c = heCard(el.id);
+    if (!c) throw new Error('setup: the ' + el.name + ' card is not on Home');
+    const sc = document.querySelector('#home-screen .hm-scroll');
+    const r = c.getBoundingClientRect();
+    if (sc && (r.top < 80 || r.bottom > innerHeight - 40)) {
+      const sr = sc.getBoundingClientRect();
+      sc.scrollTop += (r.top - sr.top) - Math.max(0, (sc.clientHeight - r.height) / 2);
+      await sleep(400);
+    }
+    return heCard(el.id);
+  }
+  async function heOpenByPress(el, press, what) {
+    let held = 0;
+    // what the press reached, for the message if it opens nothing: the clicks the document saw, and the open call
+    const seen = [], ofe = FM.elements.openForEdit;
+    const onClick = function (e) { seen.push('click on ' + ((e.target && e.target.className) || (e.target && e.target.tagName) || '?') + (card0 && card0.contains(e.target) ? ' (the card)' : '')); };
+    let card0 = heCard(el.id);
+    FM.elements.openForEdit = function () {
+      seen.push('openForEdit called');
+      const r = ofe.apply(this, arguments);
+      Promise.resolve(r).then(function (v) { seen.push('openForEdit gave ' + v); }, function (e) { seen.push('openForEdit threw ' + (e && e.message)); });
+      return r;
+    };
+    document.addEventListener('click', onClick, true);
+    try {
+      for (;;) {
+        const t0 = Date.now();
+        card0 = heCard(el.id);
+        await press();
+        for (;;) {
+          if (!FM.home.isOpen() && FM.scene.project.ofElement === el.id) return held;
+          const hold = document.body.classList.contains('hm-selecting');
+          if ((hold && !held) || Date.now() - t0 > 15000) break;
+          await sleep(40);
+        }
+        if (document.body.classList.contains('hm-selecting') && !held) {
+          held++;
+          const done = document.getElementById('hm-select-btn');
+          if (done) done.click();
+          await sleep(500);
+          if (document.body.classList.contains('hm-selecting')) throw new Error('setup: the press on the ' + el.name + ' element arrived as a hold and Select would not let go');
+          continue;
+        }
+        const P = FM.scene.project || {};
+        const ask = document.getElementById('fm-ask');
+        throw new Error('timed out waiting for ' + (what || 'the element to open for editing') + ' — ' + (Date.now() - t0) + ' ms after the press Home is ' + (FM.home.isOpen() ? 'open' : 'closed') +
+          (document.body.classList.contains('hm-selecting') ? ' and in Select, so the press arrived as a HOLD (twice)' : '') +
+          ', and the open project is ' + (P.name || '?') + (P.ofElement ? ' (a workspace for ' + (P.ofElement === el.id ? 'this' : 'another') + ' element)' : '') + ' with ' + FM.scene.layers.length + ' layers' +
+          '; the press reached: ' + (seen.join(', ') || 'nothing') + (ask && !ask.classList.contains('hidden') ? '; a question is up: ' + ask.textContent.slice(0, 160) : ''));
+      }
+    } finally {
+      document.removeEventListener('click', onClick, true);
+      FM.elements.openForEdit = ofe;
+    }
+  }
+
+  test('690 after Replace Media on Insert your Media, the slot and the preview show his photo once it has landed', { item: '690', budgetMs: 90000 }, async function () {
+    /* Home → Templates → ⋯ → New project from template opens Insert your Media (queue 343 / 619). He taps Replace Media,
+       picks his own photo, and the photo really does go into the project — but the screen he is looking at still shows the
+       template's picture in the slot — and, with a real phone photo that takes more than a frame to decode, in the big
+       preview too (with the small test PNG the preview's repaint sometimes lands after the swap by luck; the slot never
+       does). The refresh is hung on the window getting focus back and on a 1.2 s timer; the first fires before the picked
+       file has even decoded, the second while he is still choosing. So the one screen that exists so he can SEE the
+       template become his tells him the swap did nothing. A real finger at 380.
+       The system photo picker is the one thing a test cannot drive, so it is stood in for at input.click(): it hands back
+       his photo after 1.5 s of choosing, and fires change and then focus in the order most generous to the app. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    const realClick = HTMLInputElement.prototype.click;
+    let picked = 0;
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe promo src', width: 1080, height: 1920 }); o.made.push(src);
+      const T = FM.makeLayer('text', { name: 'HUNTe words', text: 'HUNTE', x: 540, y: 300, fontSize: 90 });
+      T.start = 0; T.duration = 4; FM.scene.layers.push(T); FM.refreshAll();
+      const rec = await FM.loadImageFile(await heImage('#2a9d8f', 'HUNTe-template.png'));
+      FM.addMediaLayer(rec);
+      FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 4; });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      await FM.storage.save(); await sleep(300);
+      if (!(await FM.templates.save('HUNTe promo', src))) throw new Error('setup: could not save the template');
+      const tpl = FM.templates.list().filter(function (t) { return t.name === 'HUNTe promo'; })[0];
+      o.tids.push(tpl.id);
+      const mine = await heImage('#ff00ff', 'HUNTe-mine.png');
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          await heOpenHome('templates');
+          const card = await heReveal(tpl);
+          if (!card) throw new Error('setup: the HUNTe promo template has no card under Templates');
+          await realInput924(hcTap(hcPt(card.querySelector('.hm-card-more'))), 'a finger on the ⋯ of HUNTe promo');
+          const item = await hcMenuItem(/New project from template/);
+          await realInput924(hcTap(hcPt(item)), 'a finger on New project from template');
+          await hcUntil('Insert your Media to open', function () { return FM.templateFill && FM.templateFill.isOpen(); }, 8000);
+          await sleep(700);
+          const fill = document.getElementById('tpl-fill');
+          const chip = function () { const c = fill.querySelector('.tfill-slot canvas'); return c ? [].slice.call(c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data, 0, 3) : null; };
+          const view = function () { const c = fill.querySelector('.tfill-cv'); return [].slice.call(c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data, 0, 3); };
+          const teal = function (p) { return !!p && p[1] > 120 && p[2] > 110 && p[0] < 90; };
+          const pink = function (p) { return !!p && p[0] > 200 && p[2] > 200 && p[1] < 80; };
+          const L = FM.scene.layers.filter(function (l) { return l.type === 'image'; })[0];
+          if (!L) throw new Error('setup: the project made from the template has no image layer');
+          const first = fill.querySelector('.tfill-slot.is-sel');
+          if (!first || first.dataset.id !== L.id) throw new Error('setup: the photo is not the slot selected when the screen opened');
+          /* CONTROL: before the swap, both show the template's teal picture */
+          if (!teal(chip()) || !teal(view())) throw new Error('CONTROL: before the swap the slot shows ' + JSON.stringify(chip()) + ' and the preview ' + JSON.stringify(view()) + ', not the template teal picture — nothing below could be judged');
+          HTMLInputElement.prototype.click = function () {
+            if (this.type !== 'file') return realClick.call(this);
+            const input = this; picked++;
+            setTimeout(function () {
+              const dt = new DataTransfer(); dt.items.add(mine); input.files = dt.files;
+              input.dispatchEvent(new Event('change'));
+              window.dispatchEvent(new Event('focus'));
+            }, 1500);
+          };
+          const btn = fill.querySelector('.tfill-replace');
+          if (!btn || btn.disabled) throw new Error('setup: no enabled Replace Media button for the photo slot');
+          await realInput924(hcTap(hcPt(btn)), 'a finger on Replace Media');
+          if (!picked) throw new Error('a real tap on Replace Media did not open the photo picker at all');
+          await hcUntil('his photo to reach the project', function () { const r = FM.media.get(L.id); return r && r.file && r.file.name === 'HUNTe-mine.png'; }, 8000);
+          await sleep(2500);
+          const c1 = chip(), v1 = view();
+          if (!pink(c1) || !pink(v1)) {
+            throw new Error('he tapped Replace Media on Insert your Media and chose his own photo — the photo is in the project now, but the screen still shows the template picture: the slot is ' +
+              (pink(c1) ? 'his photo' : 'still the template teal ' + JSON.stringify(c1)) + ' and the big preview is ' + (pink(v1) ? 'his photo' : 'still the template teal ' + JSON.stringify(v1)) +
+              '. The screen refreshes on window focus and a 1.2 s timer, both before the picked photo has loaded, so the swap looks like it did nothing');
+          }
+        }, 380);
+      });
+    } finally {
+      HTMLInputElement.prototype.click = realClick;
+      await heTidy(o);
+    }
+  });
+
+  test('690 an element made on his phone-shaped canvas opens for editing on that canvas, with its layers on screen', { item: '690', budgetMs: 90000 }, async function () {
+    /* Elements → tap an element opens its own workspace (queue 342 / 505). That workspace is ALWAYS 1080 x 1080, but the
+       element's layers keep the positions they had on the canvas they were made on — and his canvas is a 1080 x 1920 phone.
+       A lower-third caption and bar made there sit at y 1574, which is 494 px below the bottom of the square. He taps his
+       element to change it and gets a black square with nothing on it. A real finger at 380. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe caption src', width: 1080, height: 1920 }); o.made.push(src);
+      const bar = FM.makeLayer('shape', { name: 'HUNTe bar', shape: 'rect', x: 540, y: 1574, shapeW: 900, shapeH: 160, fill: '#e76f51' });
+      const txt = FM.makeLayer('text', { name: 'HUNTe name', text: 'EZRA SMITH', x: 540, y: 1574, fontSize: 80 });
+      [txt, bar].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      const onSrc = heCount(heShot(FM.scene, 0.5), heOrange);
+      if (onSrc < 1000) throw new Error('CONTROL: the bar is not visible even on the canvas it was made on (' + onSrc + ' orange pixels), so nothing below could be judged');
+      if (!(await FM.elements.saveFromProject(src, 'HUNTe caption'))) throw new Error('setup: could not save the element');
+      const el = FM.elements.list().filter(function (e) { return e.name === 'HUNTe caption'; })[0];
+      o.eids.push(el.id);
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          await heOpenHome('elements');
+          if (!heCard(el.id)) throw new Error('setup: the HUNTe caption element has no card under Elements');
+          await heOpenByPress(el, async function () { return realInput924(hcTap(hcPt((await heReveal(el)).querySelector('.hm-name'))), 'a finger on the HUNTe caption element'); });
+          await sleep(700);
+        }, 380);
+      });
+      const P = FM.scene.project;
+      if (FM.scene.layers.length !== 2) throw new Error('setup: the element workspace holds ' + FM.scene.layers.length + ' layers, not the element 2');
+      const inDraft = heCount(heShot(FM.scene, 0.5), heOrange);
+      if (inDraft < onSrc * 0.5) {
+        const b = FM.layerById(FM.scene, FM.scene.layers.filter(function (l) { return l.type === 'shape'; })[0].id);
+        throw new Error('he tapped his HUNTe caption element (made on his 1080 x 1920 phone canvas) to edit it — the workspace opened as a ' + P.width + ' x ' + P.height +
+          ' square with the bar and the caption at y ' + Math.round(FM.evalProp(b.transform.y, 0.5)) + ', below its bottom edge: the canvas shows ' + inDraft + ' of the bar orange pixels (' + onSrc +
+          ' on the canvas it was made on), so he is looking at an empty square');
+      }
+      if (P.width !== 1080 || P.height !== 1920) throw new Error('his HUNTe caption element opened on a ' + P.width + ' x ' + P.height + ' workspace, not the 1080 x 1920 phone canvas it was made on');
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  test('690 on Insert your Media the text and shape slots of a phone-shaped template show their layer, even in the lower half', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 619 made his text-and-shape templates fillable, and its own words are that each chip RENDERS its layer because
+       otherwise "every non-media chip is an identical dark square and the row stops telling you which slot is which". The
+       chip sets up its own fit-to-the-box transform and then calls FM.renderScene — which throws that transform away and
+       draws the whole canvas from the chip's top-left at 108/1080 scale. On a 1080 x 1920 template only the TOP 1080 px land
+       in the chip, and clearRect wipes the chip background too; a lower-third title and bar come out as empty squares.
+       A real mouse at 1280, through Home → Templates → ⋯ → New project from template. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe title src', width: 1080, height: 1920 }); o.made.push(src);
+      const txt = FM.makeLayer('text', { name: 'HUNTe title', text: 'BIG SALE', x: 540, y: 1420, fontSize: 150, color: '#ffffff' });
+      const bar = FM.makeLayer('shape', { name: 'HUNTe strip', shape: 'rect', x: 540, y: 1640, shapeW: 900, shapeH: 220, fill: '#e76f51' });
+      [txt, bar].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      await FM.storage.save(); await sleep(200);
+      if (!(await FM.templates.save('HUNTe title', src))) throw new Error('setup: could not save the template');
+      const tpl = FM.templates.list().filter(function (t) { return t.name === 'HUNTe title'; })[0];
+      o.tids.push(tpl.id);
+      let got = null;
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          await heOpenHome('templates');
+          const card = await heReveal(tpl);
+          if (!card) throw new Error('setup: the HUNTe title template has no card under Templates');
+          await hcMouse(card.querySelector('.hm-card-more'), 'a click on the ⋯ of HUNTe title');
+          const item = await hcMenuItem(/New project from template/);
+          await hcMouse(item, 'a click on New project from template');
+          await hcUntil('Insert your Media to open', function () { return FM.templateFill && FM.templateFill.isOpen(); }, 8000);
+          await sleep(800);
+          const fill = document.getElementById('tpl-fill');
+          const slots = [].slice.call(fill.querySelectorAll('.tfill-slot'));
+          const kindOf = function (b) { const l = FM.layerById(FM.scene, b.dataset.id); return l ? l.type : '?'; };
+          const bright = function (r, g, b) { return Math.max(r, g, b) > 90; };
+          got = slots.map(function (b) { const c = b.querySelector('canvas'); return { kind: kindOf(b), lit: c ? heCount(c, bright) : -1, orange: c ? heCount(c, heOrange) : -1 }; });
+          /* CONTROL: the preview above the row does show them, so the layers render and it is the chip that is blind */
+          const pv = fill.querySelector('.tfill-cv');
+          const pvOrange = heCount(pv, heOrange);
+          if (pvOrange < 200) throw new Error('CONTROL: the big preview does not show the bar either (' + pvOrange + ' orange pixels), so a blank chip would not mean the chip is at fault');
+        }, 1280);
+      });
+      const t = got.filter(function (g) { return g.kind === 'text'; })[0], s = got.filter(function (g) { return g.kind === 'shape'; })[0];
+      if (!t || !s) throw new Error('setup: the slots are ' + got.map(function (g) { return g.kind; }).join(', ') + ' — expected one text and one shape slot');
+      if (t.lit < 15 || s.orange < 15) {
+        throw new Error('on Insert your Media for his phone-shaped HUNTe title template, the slot for the words has ' + t.lit + ' lit pixels and the slot for the orange strip ' + s.orange +
+          ' orange ones — both are blank dark squares while the preview above shows them fine. The chip draws only the top 1080 px of the 1920 px canvas, so a title or strip in the lower half never reaches it and the row cannot show which slot is which');
+      }
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  test('690 opening an element for editing leaves nothing to undo — one Undo cannot wipe it, and it never reopens empty', { item: '690', budgetMs: 90000 }, async function () {
+    /* Opening an element for editing makes a fresh workspace and then INSERTS the element into it, and that insert commits
+       an undo step — so the Undo button is lit before he has done anything, and one press takes every layer of the element
+       away. The template twin resets history after loading; the element path never did. Worse, the empty workspace is
+       what is saved: going Home refuses to write an empty workspace over the element (good) but keeps the draft, and the
+       next tap on the element reopens THAT draft — empty — every time. A real mouse at 1280. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe badge src', width: 1080, height: 1080 }); o.made.push(src);
+      const ring = FM.makeLayer('shape', { name: 'HUNTe ring', shape: 'ellipse', x: 540, y: 540, shapeW: 600, shapeH: 600, fill: '#e76f51' });
+      const word = FM.makeLayer('text', { name: 'HUNTe word', text: 'EZ', x: 540, y: 540, fontSize: 200 });
+      [word, ring].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      if (!(await FM.elements.saveFromProject(src, 'HUNTe badge'))) throw new Error('setup: could not save the element');
+      const el = FM.elements.list().filter(function (e) { return e.name === 'HUNTe badge'; })[0];
+      o.eids.push(el.id);
+      const res = {};
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          await heOpenHome('elements');
+          if (!heCard(el.id)) throw new Error('setup: the HUNTe badge element has no card under Elements');
+          await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a click on the HUNTe badge element'); });
+          await sleep(800);
+          res.opened = FM.scene.layers.length;
+          if (res.opened !== 2) throw new Error('setup: the element opened with ' + res.opened + ' layers, not its 2');
+          const undo = document.getElementById('btn-undo');
+          if (!undo || !undo.getBoundingClientRect().width) throw new Error('setup: no Undo button on screen in the element workspace');
+          res.lit = !undo.classList.contains('is-off') && undo.getAttribute('aria-disabled') !== 'true';   // how history.js greys it
+          await hcMouse(undo, 'a click on Undo');
+          await sleep(600);
+          res.afterUndo = FM.scene.layers.length;
+          if (res.afterUndo < res.opened) {
+            /* what that costs him: Home keeps the empty draft, and the element card now opens it */
+            FM.home.open(); await sleep(1800);
+            res.keptDraft = FM.projects.list().some(function (p) { return p.elementDraft && p.ofElement === el.id; });
+            FM.home._render('elements'); await sleep(450);
+            if (heCard(el.id)) {
+              await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a second click on the HUNTe badge element'); }, 'the element to reopen');
+              await sleep(800);
+              res.reopened = FM.scene.layers.length;
+            }
+          }
+        }, 1280);
+      });
+      if (res.afterUndo < res.opened) {
+        throw new Error('he opened his HUNTe badge element and pressed Undo once, before changing anything (the Undo button was ' + (res.lit ? 'lit' : 'not lit') + ') — it took ' +
+          (res.opened - res.afterUndo) + ' of the element ' + res.opened + ' layers away' +
+          (res.keptDraft ? '. Going Home refused to save the empty workspace but kept it as a draft' : '') +
+          (res.reopened != null ? ', and tapping the element again reopened that draft with ' + res.reopened + ' layers — his element looks gone' : ''));
+      }
+      if (res.lit) throw new Error('he opened his HUNTe badge element and the Undo button was lit before he had changed anything — opening a document is not an edit');
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  test('690 an element saved from a selection opens on its own canvas, and one saved before sizes were recorded opens on a canvas that holds its layers', { item: '690', budgetMs: 90000 }, async function () {
+    /* The phone-canvas fix above records the canvas an element was made on. Two routes are not covered by it:
+       Save as element from a SELECTION in the editor (FM.elements.save, a different packer), and every element
+       he already has, saved before any size was recorded. The first is checked on a 1080 x 1350 canvas — a
+       shape nothing could guess — with the bar below the square. The second strips the size from a real pack
+       (exactly what an old one looks like) and asks for a canvas that shows the bar: the phone one it was made
+       on. And an old badge whose layers all sit inside the square still opens square. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    /* Opened through the call the Elements card makes, not a tap: the size is decided inside openForEdit whatever
+       opened it, and the tap itself is proven with a real finger by the phone-canvas test above. Three more real taps
+       here only added chances for a release delivered late under load to read as a HOLD (measured: the driver's
+       touchEnd arrived 400 ms to 3 s after touchStart at load 50, and Home rightly went into Select instead). */
+    const openEl = async function (el) {
+      const pid = await FM.elements.openForEdit(el.id);
+      if (!pid || FM.scene.project.ofElement !== el.id) throw new Error('setup: the ' + el.name + ' element did not open for editing (' + pid + ')');
+      await sleep(300);
+      return { w: FM.scene.project.width, h: FM.scene.project.height, orange: heCount(heShot(FM.scene, 0.5), heOrange) };
+    };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      /* 1. a selection saved on a 4:5 canvas */
+      const src = await FM.projects.create({ name: 'HUNTe sel src', width: 1080, height: 1350 }); o.made.push(src);
+      const bar = FM.makeLayer('shape', { name: 'HUNTe sel bar', shape: 'rect', x: 540, y: 1200, shapeW: 900, shapeH: 160, fill: '#e76f51' });
+      bar.start = 0; bar.duration = 4; FM.scene.layers.push(bar);
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      const onSrc = heCount(heShot(FM.scene, 0.5), heOrange);
+      if (onSrc < 1000) throw new Error('CONTROL: the bar is not visible even on the canvas it was made on (' + onSrc + ' orange pixels), so nothing below could be judged');
+      if (!(await FM.elements.save('HUNTe sel', [bar]))) throw new Error('setup: could not save the selection as an element');
+      const sel = FM.elements.list().filter(function (e) { return e.name === 'HUNTe sel'; })[0];
+      o.eids.push(sel.id);
+      const a = await openEl(sel);
+      if (a.w !== 1080 || a.h !== 1350 || a.orange < onSrc * 0.5) {
+        throw new Error('his HUNTe sel element, saved from a selection on a 1080 x 1350 canvas, opened for editing on a ' + a.w + ' x ' + a.h + ' workspace showing ' + a.orange + ' of the bar orange pixels (' + onSrc + ' where it was made) — the selection route does not carry its canvas');
+      }
+      /* 1b. the whole-project route (Home ⋯ → Save as element, Elements + From an existing project) on the same canvas */
+      await FM.projects.open(src, { confirmed: true });
+      if (!(await FM.elements.saveFromProject(src, 'HUNTe whole'))) throw new Error('setup: could not save the project as an element');
+      const whole = FM.elements.list().filter(function (e) { return e.name === 'HUNTe whole'; })[0];
+      o.eids.push(whole.id);
+      const a2 = await openEl(whole);
+      if (a2.w !== 1080 || a2.h !== 1350 || a2.orange < onSrc * 0.5) {
+        throw new Error('his HUNTe whole element, saved from a whole 1080 x 1350 project, opened for editing on a ' + a2.w + ' x ' + a2.h + ' workspace showing ' + a2.orange + ' of the bar orange pixels (' + onSrc + ' where it was made) — the project route does not carry its canvas');
+      }
+      /* 2. an element saved before sizes were recorded: a real pack from a phone canvas, with its size taken out */
+      await FM.projects.open(src, { confirmed: true });
+      const src2 = await FM.projects.create({ name: 'HUNTe old src', width: 1080, height: 1920 }); o.made.push(src2);
+      const bar2 = FM.makeLayer('shape', { name: 'HUNTe old bar', shape: 'rect', x: 540, y: 1574, shapeW: 900, shapeH: 160, fill: '#e76f51' });
+      bar2.start = 0; bar2.duration = 4; FM.scene.layers.push(bar2);
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the second source project could not be saved');
+      if (!(await FM.elements.saveFromProject(src2, 'HUNTe old'))) throw new Error('setup: could not save the old-style element');
+      const old = FM.elements.list().filter(function (e) { return e.name === 'HUNTe old'; })[0];
+      o.eids.push(old.id);
+      const pack = await FM.elements.getPack(old.id);
+      if (!pack) throw new Error('setup: the old-style element has no pack');
+      delete pack.canvas;
+      await q915aPut('elem:' + old.id, pack);
+      const back = await FM.elements.getPack(old.id);
+      if (!back || back.canvas) throw new Error('setup: the size could not be taken out of the pack, so it does not look like an old one');
+      const b = await openEl(old);
+      if (b.orange < 1000) {
+        throw new Error('his HUNTe old element, saved on a 1080 x 1920 phone canvas before sizes were recorded, opened for editing on a ' + b.w + ' x ' + b.h + ' workspace showing ' + b.orange + ' orange pixels — the bar at y 1574 is off its bottom edge');
+      }
+      if (b.w !== 1080 || b.h !== 1920) throw new Error('his old phone-canvas element opened on ' + b.w + ' x ' + b.h + ', not the 1080 x 1920 phone canvas its layers fit');
+      /* 3. …while an old badge whose layers all sit inside the square keeps the square it always opened on */
+      const sq = FM._elementCanvas({ layers: [{ type: 'shape', start: 0, transform: { x: 540, y: 540 } }, { type: 'text', start: 0, transform: { x: 900, y: 1000 } }] });
+      if (sq.width !== 1080 || sq.height !== 1080) throw new Error('an old element whose layers all sit inside the square would open on ' + sq.width + ' x ' + sq.height + ', not the 1080 x 1080 it has always opened on');
+    } finally {
+      await heTidy(o);
+    }
+  });
+
+  test('690 an element whose kept workspace is empty reopens with the element in it, not the empty stub', { item: '690', budgetMs: 90000 }, async function () {
+    /* The workspace for editing an element is made first and filled second, and the empty first half is on
+       disk with the element pointer already on it. Anything that leaves it empty — a crash before the fill
+       landed, or (until the fix above) one Undo straight after opening — left a draft that Home rightly will
+       not write over the element and keeps, and every later tap on the element reopened THAT: empty, every
+       time, so his element looked gone. The stub here is made the way openForEdit makes it. A real mouse at 1280. */
+    const o = { wasOpen: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], eids: [], tids: [] };
+    try {
+      if (o.wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'HUNTe stub src', width: 1080, height: 1080 }); o.made.push(src);
+      const ring = FM.makeLayer('shape', { name: 'HUNTe stub ring', shape: 'ellipse', x: 540, y: 540, shapeW: 600, shapeH: 600, fill: '#e76f51' });
+      const word = FM.makeLayer('text', { name: 'HUNTe stub word', text: 'EZ', x: 540, y: 540, fontSize: 200 });
+      [word, ring].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
+      FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      if (!(await FM.elements.saveFromProject(src, 'HUNTe stub'))) throw new Error('setup: could not save the element');
+      const el = FM.elements.list().filter(function (e) { return e.name === 'HUNTe stub'; })[0];
+      o.eids.push(el.id);
+      const stub = await FM.projects.create({ name: 'HUNTe stub', width: 1080, height: 1080, elementDraft: true, ofElement: el.id });
+      if (!stub) throw new Error('setup: the empty workspace could not be made');
+      FM.scene.project.background = null; FM.storage.markDirty(); await FM.storage.save();
+      await FM.projects.open(src, { confirmed: true });
+      const res = {};
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          await heOpenHome('elements');
+          if (!heCard(el.id)) throw new Error('setup: the HUNTe stub element has no card under Elements');
+          await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a click on the HUNTe stub element'); });
+          await sleep(800);
+          res.pid = FM.projects.currentId();
+          res.layers = FM.scene.layers.length;
+          res.orange = heCount(heShot(FM.scene, 0.5), heOrange);
+          const undo = document.getElementById('btn-undo');
+          res.lit = !!undo && !undo.classList.contains('is-off');
+        }, 1280);
+      });
+      const drafts = FM.projects.list().filter(function (p) { return p.elementDraft && p.ofElement === el.id; }).length;
+      if (res.layers !== 2 || res.orange < 1000) {
+        throw new Error('he tapped his HUNTe stub element while an empty workspace for it was kept — it opened with ' + res.layers + ' of its 2 layers and ' + res.orange + ' orange pixels on the canvas, so his element looks gone');
+      }
+      if (res.pid !== stub || drafts !== 1) throw new Error('the element opened in ' + (res.pid === stub ? 'the kept workspace' : 'a new workspace') + ' and ' + drafts + ' workspaces for it exist — the kept one should be reused, not joined by another');
+      if (res.lit) throw new Error('the refilled workspace opened with Undo lit — one press would empty it again');
+    } finally {
+      await heTidy(o);
     }
   });
 

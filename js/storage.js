@@ -2716,6 +2716,9 @@ window.FM = window.FM || {};
    * wrong loses the media silently.
    * `wantProject` is the one real difference: a template carries the project object so it can become a
    * new project, an element carries only layers because it is dropped INTO one. */
+  function elementCanvasOf(P) {
+    return (P && P.width > 0 && P.height > 0) ? { width: P.width, height: P.height } : null;
+  }
   async function packFromProject(projectId, wantProject) {
     const id = projectId || curId();
     if (id === curId()) FM.storage.flushSync();     // the doc on disk must be what he just saw
@@ -2743,6 +2746,13 @@ window.FM = window.FM || {};
       delete pack.project.ofTemplate;
       delete pack.project.ofElement;
       delete pack.project.returnTo;
+    } else {
+      /* AN ELEMENT CARRIES THE SIZE OF THE CANVAS IT WAS MADE ON (queue 690, HUNT-e). Its layers keep
+         absolute positions, so without this the workspace that opens it for editing has to guess a size —
+         and it guessed a 1080 x 1080 square every time. His canvas is a 1080 x 1920 phone: a lower-third
+         made there sits at y 1574, 494 px below the square's bottom edge, and he got an empty black box.
+         Only the two numbers travel — not the project, which is exactly what an element is not. */
+      pack.canvas = elementCanvasOf(doc.project);
     }
     try {
       const db = await openDB();
@@ -3044,6 +3054,55 @@ window.FM = window.FM || {};
     },
   };
 
+  /* THE CANVAS AN ELEMENT OPENS ON FOR EDITING (queue 690, HUNT-e). A pack saved since this fix records the
+     canvas its layers were made on (`pack.canvas`, written by packFromProject and elements.save), and the
+     workspace is that size, so every layer is where he put it. An older pack has no record, so the size is
+     read off where its layers sit: all inside the square keeps the 1080 x 1080 it has always opened at (a
+     "Build a new one…" element is square, and so is a logo or badge); anything below or beside it gets the
+     phone canvas or its landscape twin — the app's own default shapes, so almost always the one it was made
+     on — and past those, a canvas big enough to hold them. Top-level layers only: a parented layer's
+     position is relative to its parent, and cameras have no place on the canvas. */
+  function elementCanvas(pack) {
+    const c = pack && pack.canvas;
+    if (c && c.width > 0 && c.height > 0) return { width: c.width, height: c.height };
+    let maxX = 0, maxY = 0;
+    ((pack && pack.layers) || []).forEach(l => {
+      if (!l || l.parent || l.type === 'camera' || !l.transform) return;
+      const t = l.start || 0;
+      const x = +(FM.evalProp ? FM.evalProp(l.transform.x, t) : l.transform.x);
+      const y = +(FM.evalProp ? FM.evalProp(l.transform.y, t) : l.transform.y);
+      if (isFinite(x)) maxX = Math.max(maxX, x);
+      if (isFinite(y)) maxY = Math.max(maxY, y);
+    });
+    const fits = (w, h) => maxX <= w && maxY <= h;
+    if (fits(1080, 1080)) return { width: 1080, height: 1080 };
+    if (fits(1080, 1920)) return { width: 1080, height: 1920 };
+    if (fits(1920, 1080)) return { width: 1920, height: 1080 };
+    return { width: Math.max(1080, Math.ceil(maxX + 120)), height: Math.max(1080, Math.ceil(maxY + 120)) };
+  }
+  FM._elementCanvas = elementCanvas;   // seam: the suite checks the old-pack guess directly
+  /* THE LAST STEP OF OPENING AN ELEMENT FOR EDITING, shared by a fresh workspace and a refilled stub. */
+  async function arriveInElement() {
+    /* ⚠️ ARRIVE WITH NOTHING SELECTED. Ezra: "it's just opening you having every layer selected".
+       `insert()` selects what it just added, which is right when you are dropping an element INTO a
+       project — you want to move the thing you added. It is wrong for an EDIT: you are opening a
+       document, and no editor opens with everything selected. Measured before this: all three layers
+       selected and the multi-select header up, so the first thing he saw was a bulk-edit bar. */
+    if (FM.selectLayer) FM.selectLayer(null);
+    FM.scene.selectedIds = [];
+    if (FM.selectMode) FM.selectMode = false;
+    if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+    if (FM.refreshAll) FM.refreshAll();
+    /* ⚠️ AND WITH NOTHING TO UNDO (queue 690, HUNT-e). `insert()` commits an undo step — right when an
+       element is dropped INTO a project, wrong here: on top of the empty workspace `create()` had just
+       reset, it lit the Undo button before he had touched anything, and one press took every layer of
+       the element away. Going Home then refused to save the empty workspace and kept it, and the element
+       reopened empty from then on. The template twin has always reset history after loading; this path
+       never did. Opening a document is not an edit. */
+    if (FM.history) FM.history.reset();
+    if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+  }
+
   FM.elements = {
     list() { return readJSON(ELEM_INDEX, []); },
     // Save the given layers (the current selection) as a reusable element.
@@ -3051,6 +3110,7 @@ window.FM = window.FM || {};
       if (!layers || !layers.length) return false;
       const eid = newId('e');
       const pack = packLayers(layers);
+      pack.canvas = elementCanvasOf(FM.scene.project);   // the canvas these layers sit on — see packFromProject (queue 690, HUNT-e)
       let put = false;   // queue 915 clause 2 — see templates.save
       try { const db = await openDB(); put = await idbPut(db, 'elem:' + eid, pack); db.close(); } catch (e) { return false; }
       if (!put) return false;
@@ -3099,9 +3159,34 @@ window.FM = window.FM || {};
       const meta = this.list().find(e => e.id === eid);
       if (!meta) return null;
       const existing = FM.projects.list().find(p => p.elementDraft && p.ofElement === eid);
-      if (existing) { return (await FM.projects.open(existing.id)) === false ? false : existing.id; }   // queue 690: false = he chose to stay
+      if (existing) {
+        if ((await FM.projects.open(existing.id)) === false) return false;   // queue 690: false = he chose to stay
+        /* ⚠️ AN EMPTY WORKSPACE IS A STUB, NOT HIS EDIT (queue 690, HUNT-e) — the rule commitDraft already
+           applies on the way out, applied on the way back in. `create()` stamps `ofElement` on a doc with no
+           layers, so a crash before the insert landed — or, until the history reset below, one Undo straight
+           after opening — left a workspace that Home rightly refused to write over the element and kept, and
+           every later tap on the element reopened THAT: empty, every time, so his element looked gone.
+           Refill it from the element instead; there is nothing in it to lose. */
+        if (!(FM.scene.layers || []).length && FM.scene.project && FM.scene.project.ofElement === eid) {
+          const pack = await this.getPack(eid);
+          if (pack && pack.layers && pack.layers.length) {
+            const size = elementCanvas(pack);
+            FM.scene.project.width = size.width; FM.scene.project.height = size.height;
+            clampProjectDims(FM.scene.project);
+            FM.scene.project.background = null;
+            if (FM.resizeCanvas) FM.resizeCanvas();
+            if (await this.insert(eid)) await arriveInElement();
+          }
+        }
+        return existing.id;
+      }
+      /* the pack BEFORE the workspace, as the template twin does: its size decides the workspace's, and a
+         missing pack now returns before anything is minted rather than after */
+      const pack = await this.getPack(eid);
+      if (!pack) return null;
+      const size = elementCanvas(pack);
       const returnTo = curId();
-      const pid = await FM.projects.create({ name: meta.name || 'Element', width: 1080, height: 1080, elementDraft: true, ofElement: eid });
+      const pid = await FM.projects.create({ name: meta.name || 'Element', width: size.width, height: size.height, elementDraft: true, ofElement: eid });
       if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       FM.scene.project.background = null;              // transparent, like the element itself
       if (returnTo) FM.scene.project.returnTo = returnTo;   // where to land when he goes back
@@ -3123,17 +3208,7 @@ window.FM = window.FM || {};
         else await FM.projects.discardDraftAnyway(pid);
         return null;
       }
-      /* ⚠️ ARRIVE WITH NOTHING SELECTED. Ezra: "it's just opening you having every layer selected".
-         `insert()` selects what it just added, which is right when you are dropping an element INTO a
-         project — you want to move the thing you added. It is wrong for an EDIT: you are opening a
-         document, and no editor opens with everything selected. Measured before this: all three layers
-         selected and the multi-select header up, so the first thing he saw was a bulk-edit bar. */
-      if (FM.selectLayer) FM.selectLayer(null);
-      FM.scene.selectedIds = [];
-      if (FM.selectMode) FM.selectMode = false;
-      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
-      if (FM.refreshAll) FM.refreshAll();
-      if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+      await arriveInElement();
       return pid;
     },
     /* ═══ SAVE THE EDIT BACK AND PUT THE WORKSPACE AWAY (queue 505).
