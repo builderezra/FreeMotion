@@ -19,6 +19,47 @@ window.FM = window.FM || {};
     return p;
   }
 
+  /* HOLD THE ELEMENT FOR AS LONG AS YOU NEED IT, not just for one seek (queue 690). The exporter
+   * steps every clip's OWN <video> frame by frame, and took no part in the queue above — so an export
+   * started while the timeline was still drawing a clip's filmstrip fought it for the element. The
+   * export's frame landed mid-seek (readyState 1, which the compositor skips in an export) and came
+   * out BLACK: measured, the first 16-22 frames of a 3 s file, with nothing said. On his phone, with
+   * several 4K clips, the strips take seconds to draw after a project opens — about as long as it
+   * takes to tap Export and Export MP4.
+   * A per-seek lock is not enough: a strip queued behind another clip could start between the
+   * export's seek landing and the compositor drawing that frame. So the exporter takes the lock
+   * ONCE, before its first frame, and gives it back when the file is done; anything that asks in
+   * between (a strip, a preview cache build) simply waits its turn.
+   * `ready` resolves when every earlier user has finished; `release` may be called before that too
+   * (a Cancel while waiting), in which case the lock is passed straight on the moment it arrives. */
+  FM.holdSeekLock = function (rec) {
+    let give = null, released = false, onReady = null;
+    const ready = new Promise(function (r) { onReady = r; });
+    seekLock(rec, function () {
+      return new Promise(function (done) {
+        if (released) { done(); onReady(); return; }
+        give = done; onReady();
+      });
+    });
+    return { ready: ready, release: function () { released = true; if (give) { const g = give; give = null; g(); } } };
+  };
+
+  /* SEEK INSIDE THE FRAME, NOT ONTO ITS EDGE (queue 690). A clip's frame k starts at k/fps, and the
+   * browser holds that in whole microseconds — a phone's 30 fps clip has frames at 33333, 66667,
+   * 100000 µs … — while a seek to 2/30 = 0.0666666… is held as 66666 µs: one microsecond BEFORE
+   * frame 2 starts, so the element shows frame 1. Every export frame is taken at exactly f / fps, so
+   * it hit that edge on a third of them: the file read 0,1,1,3,4,4,6,7,7 … — source frames 2, 5, 8 …
+   * never in it and the one before each played twice. A plain 30 fps phone clip juddered in the
+   * export while the preview (which plays the clip natively) was smooth.
+   * Half a millisecond is far below one frame at any real rate (4 ms at 240 fps), and lands every
+   * seek unambiguously inside the frame that starts at that moment. Measured on a bare element:
+   * k/30 showed 1,1,3,4,4,6 …, k/30 + 0.5 ms showed 1,2,3,4,5,6. Clamped short of the clip's end,
+   * the same as the old targets were. */
+  const INSIDE_FRAME = 0.0005;
+  FM.frameSeekTarget = function (time, dur) {
+    return Math.min(Math.max(time || 0, 0) + INSIDE_FRAME, Math.max(0, (dur || 0) - 0.001));
+  };
+
   // Seek to t and capture as soon as the seek completes. (Avoid post-'seeked' timers:
   // backgrounded tabs clamp setTimeout to ~1s, which would make decoding crawl.)
   function seekAndPaint(el, t) {
@@ -125,7 +166,9 @@ window.FM = window.FM || {};
       };
       for (let i = 0; i < count; i++) {
         if (shouldAbort && shouldAbort()) return giveUp();
-        await seekAndPaint(el, Math.min((i * dur) / count, Math.max(0, dur - 0.001)));
+        // inside frame i, not on its edge — on the edge a third of a 30 fps clip's cache held the
+        // frame BEFORE, so a reversed or frame-blend clip repeated one and skipped the next (see FM.frameSeekTarget)
+        await seekAndPaint(el, FM.frameSeekTarget((i * dur) / count, dur));
         try {
           frames[i] = useResize
             ? await createImageBitmap(el, { resizeWidth: tw, resizeHeight: th, resizeQuality: 'medium' })

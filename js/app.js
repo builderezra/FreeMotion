@@ -5496,10 +5496,12 @@ window.FM = window.FM || {};
          "Picking up an interrupted export…", in amber, and the reason the file had no sound was gone. Both
          writers now live side by side in exporter.js with one rule. */
       const onNote = (text) => { if (FM._exportInfo) FM._exportInfo(text); };
+      /* outW/outH go to ALL THREE (queue 690). They used to reach the MP4 only, so a Custom size typed
+         for a GIF or PNG frames — boxes on screen, no warning — came out at the project size. */
       if (fmt === 'gif') {
-        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, onProgress });
+        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress });
       } else if (fmt === 'frames') {
-        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', onProgress });
+        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress });
       } else {
         await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress, onNote,
                                 onReady: showExportReady });

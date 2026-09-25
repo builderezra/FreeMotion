@@ -90154,7 +90154,9 @@
     return { files: names, stop: function () { URL.createObjectURL = mk; HTMLAnchorElement.prototype.click = click; } };
   }
 
-  /* HUNT-d 1 — A 30 FPS CLIP COMES OUT OF THE EXPORT WITH EVERY THIRD FRAME MISSING.
+  /* 690 (HUNT-d export 1) — A 30 FPS CLIP CAME OUT OF THE EXPORT WITH EVERY THIRD FRAME MISSING. Fixed: every
+   * export seek lands half a millisecond INSIDE its frame (FM.frameSeekTarget, js/frames.js) — the account below is
+   * of the bug as found.
    * run() puts each exported frame on the video by writing `el.currentTime = t` with t = f / fps — exactly ON the
    * boundary between two source frames. A 30 fps clip's frames sit on k/30 (a phone writes them as 20/600-second
    * steps, which the browser holds in whole microseconds: 33333, 66667, 100000 …), while the seek target 2/30 =
@@ -90164,7 +90166,7 @@
    * clip natively and shows every frame, so it looks smooth while he edits and judders in the file.
    * CONTROL: the fixture clip itself decodes as 0..89 in order, which proves the demuxer, the decoder and the bar reader
    * before anything is blamed on the exporter. The filmstrip is kept off this element (that collision is HUNT-d 2). */
-  test('HUNT-d a 30 fps clip exported at 30 fps drops every third frame and shows the one before it twice', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 a 30 fps clip exported at 30 fps shows every source frame once, in order', { item: '690', budgetMs: 120000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, made = [];
@@ -90189,7 +90191,48 @@
     }
   });
 
-  /* HUNT-d 2 — EXPORT WHILE THE TIMELINE IS STILL DRAWING A CLIP'S THUMBNAILS, AND THE START OF THE VIDEO IS BLACK.
+  /* 690 (HUNT-d export 1, the frame cache) — THE SAME EDGE, IN THE CACHE A REVERSED CLIP IS DRAWN FROM.
+   * A reversed (or frame-blend slow-mo) clip is not drawn from the element: prepareCaches decodes it into a frame
+   * cache first, by seeking the element to i / fps for every i — the same frame edges as above. So a third of the
+   * cache held the frame BEFORE the one it was meant to, and a reversed 30 fps clip in the export showed one frame
+   * twice and skipped the next, every three frames, the same judder backwards. The cache's seeks now go through the
+   * same FM.frameSeekTarget.
+   * Expected: frame f of the export draws cache index round((3 - f/30) * 30) = 90 - f (89 at f = 0, the clamp), and
+   * that cache frame must BE source frame 90 - f.
+   * CONTROL: the fixture reads 0..89 in order, as in the forward test. */
+  test('690 a reversed 30 fps clip exported at 30 fps shows every source frame once, backwards', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    try {
+      const file = await hunt2dIndexedClip(90, 30);
+      const src = await hunt2dDecodeMp4(file);
+      if (src.length !== 90 || src.some((v, i) => v !== i)) throw new Error('CONTROL: the fixture clip itself reads back as ' + src.join(',') + ' instead of 0..89, so the reader is wrong and nothing below means anything');
+      const rec = await hunt2dLoadWarm(file);
+      rec.stripFrames = [];   // no timeline thumbnails seeking this element while the cache is built
+      const V = hunt2dClipLayer(rec, made);
+      V.reversed = true;
+      FM.clearFrameCache(rec);
+      FM.scene = hunt2dScene([V], { duration: 3 });
+      FM.refreshAll();
+      const got = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }));
+      if (got.length !== 90) throw new Error('the export has ' + got.length + ' frames, not the 90 of a 3 s project at 30 fps');
+      const wrong = [], never = [];
+      got.forEach((v, f) => { const want = Math.min(89, 90 - f); if (v !== want) wrong.push('frame ' + f + ' shows ' + v + ' not ' + want); });
+      for (let k = 1; k < 90; k++) if (got.indexOf(k) < 0) never.push(k);
+      if (wrong.length) throw new Error(wrong.length + ' of the 90 frames of the reversed clip in the exported MP4 show the wrong moment (' + wrong.slice(0, 4).join(', ') + ' …), and source frames ' + never.slice(0, 8).join(', ') + ' … are not in the file at all — the frame cache a reversed clip is drawn from holds the frame before on every third edge, so the reversed export judders. File reads: ' + got.slice(0, 15).join(',') + ' …');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-d export 2) — EXPORT WHILE THE TIMELINE IS STILL DRAWING A CLIP'S THUMBNAILS, AND THE START OF THE VIDEO
+   * WAS BLACK. Fixed: the export holds every clip's element on its seek lock from before its first frame to after its
+   * last (holdVideoElements, js/exporter.js), and seekVideo no longer takes a 'seeked' fired while the element is still
+   * seeking, or calls an element with no decoded frame already there. The account below is of the bug as found.
+   * HUNT-d 2 — EXPORT WHILE THE TIMELINE IS STILL DRAWING A CLIP'S THUMBNAILS, AND THE START OF THE VIDEO IS BLACK.
    * Every clip's filmstrip is drawn by SEEKING THE CLIP'S OWN <video> eight times (js/frames.js _extractStrip). It runs
    * whenever a video row is drawn with no strip yet — on every import, duplicate, paste or replace, and for EVERY clip
    * each time a project is opened (strips are not saved), one clip after another. frames.js serialises its own users
@@ -90202,7 +90245,7 @@
    * The check allows a frame to be one off its index, so it measures this race and not HUNT-d 1.
    * CONTROL: the same clip exported again once its filmstrip is finished has no black frame and no frame more than one
    * away from where it belongs. */
-  test('HUNT-d exporting while the timeline is still drawing a clip thumbnails bakes black frames into the start of the video', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 an export started while the timeline is still drawing a clip thumbnails has no black or misplaced frame', { item: '690', budgetMs: 120000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
     if (!FM.buildClipStrip) throw new Error('setup: the timeline filmstrip builder is gone, so there is nothing to race');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
@@ -90242,14 +90285,55 @@
     }
   });
 
-  /* HUNT-d 3 — A GIF PLAYS AT THE WRONG SPEED.
+  /* 690 (HUNT-d export 2, the other half) — AN EXPORT SEEK ANSWERS ONLY WHEN ITS OWN FRAME IS THERE.
+   * Holding the element's lock keeps the filmstrip from seeking DURING the export, but the strip's last act is to
+   * put the element back where it was, and that write can still be landing when the export takes over. Two ways
+   * that used to end in a black frame, both in seekVideo:
+   *   (a) currentTime reports a seek's target the moment it is written, so an element still SEEKING to the frame
+   *       the export wanted read as already there, and the frame was drawn from an element with nothing decoded;
+   *   (b) a 'seeked' already queued for somebody else's seek was taken as this one landing.
+   * Neither can be made to happen on cue inside a real export, so this drives the exporter's own seekVideo
+   * (FM._exportSeekVideo) into each, and reads the element at the instant it answers: it must not be seeking.
+   * The stray 'seeked' in (b) is dispatched by hand, which is exactly what a stale one looks like to a listener. */
+  test('690 an export seek answers only once its own frame is there, not while the element is still seeking', { item: '690', budgetMs: 60000 }, async function () {
+    if (!FM._exportSeekVideo || !FM.frameSeekTarget) throw new Error('setup: the exporter seek seam or FM.frameSeekTarget is gone');
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so the fixture clip cannot be made');
+    const rec = await hunt2dLoadWarm(await hunt2dIndexedClip(90, 30));
+    const el = rec.el;
+    const settle = async t => { await new Promise(r => { const on = () => { if (el.seeking) return; el.removeEventListener('seeked', on); r(); }; el.addEventListener('seeked', on); el.currentTime = t; setTimeout(r, 3000); }); if (el.seeking || el.readyState < 2) throw new Error('setup: the clip did not settle at ' + t + ' s'); };
+    const at = async p => { await p; return { seeking: el.seeking, ready: el.readyState, t: el.currentTime }; };
+    try {
+      // (a) somebody else is already seeking the element to exactly the export's target
+      await settle(2.5);
+      el.currentTime = FM.frameSeekTarget(1, rec.duration);
+      if (!el.seeking) throw new Error('setup: writing currentTime did not start a seek, so there is nothing under way to catch');
+      const a = await at(FM._exportSeekVideo(rec, 1, 'test clip'));
+      if (a.seeking || a.ready < 2) throw new Error('(a) the export seek answered while the element was still seeking to its frame (seeking ' + a.seeking + ', readyState ' + a.ready + ') — it took currentTime, which reports a seek target the moment it is written, as the frame being there, so the compositor draws nothing and the frame is black in the file');
+      // (b) a stray 'seeked' arrives while the export seek is still under way
+      await settle(2.5);
+      const pb = FM._exportSeekVideo(rec, 0.5, 'test clip');
+      if (!el.seeking) throw new Error('setup: the export seek did not start one, so there is nothing to answer too early');
+      el.dispatchEvent(new Event('seeked'));
+      const b = await at(pb);
+      if (b.seeking || b.ready < 2) throw new Error('(b) the export seek answered on a seeked event that was not its own, while the element was still seeking (seeking ' + b.seeking + ', readyState ' + b.ready + ') — a queued seeked from the filmstrip would end this frame mid-seek, and the frame is black in the file');
+      if (Math.abs(b.t - FM.frameSeekTarget(0.5, rec.duration)) > 1e-3) throw new Error('(b) the export seek landed at ' + b.t + ' s, not at its target');
+    } finally {
+      try { el.pause(); el.removeAttribute('src'); el.load(); } catch (e) {}   // never registered on a layer, so just let the element go
+    }
+  });
+
+  /* 690 (HUNT-d export 3) — A GIF PLAYED AT THE WRONG SPEED. Fixed: runGif gives each frame the hundredths from its
+   * start to the next frame's start on one exact clock (3, 4, 3 … at 30 fps), and samples above 50 fps at 50, the
+   * fastest a GIF can honestly play. Also checked now: a 30 fps GIF keeps all 60 of its frames, and one asked for
+   * at 60 fps is written as 100 frames of 2 cs. The account below is of the bug as found.
+   * HUNT-d 3 — A GIF PLAYS AT THE WRONG SPEED.
    * GIF frame delays are whole hundredths of a second, and runGif hands each frame 1000 / fps ms, which js/gif-encode.js
    * rounds ON ITS OWN, every frame, with no carry: 33.3 ms becomes 3 cs (30 ms), 16.7 ms becomes 2 cs (20 ms), 8.3 ms
    * is floored to 2 cs. Read out of the file's own bytes, a 2 s project exports as a GIF that plays for 1.80 s at
    * 30 fps (10 percent fast — and 30 is the default project rate), 2.40 s at 60 fps (20 percent slow) and 4.80 s at
    * 120 fps. The motion in a GIF does not match the project he made, and a looping GIF drifts against anything timed.
    * CONTROL: at 25 fps the delay is exactly 4 cs, and the same parser reads that GIF as 2.00 s — so the reader is right. */
-  test('HUNT-d a GIF plays at the wrong speed, a 30 fps GIF runs 10 percent fast and a 60 fps one 20 percent slow', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 a GIF lasts as long as the project at 25, 30, 60 and 120 fps', { item: '690', budgetMs: 120000 }, async function () {
     if (!FM.exporter || !FM.exporter.runGif || !FM.gifEncoder) throw new Error('setup: the GIF exporter is not reachable');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, dl = hunt2dCatchDownloads();
@@ -90271,6 +90355,9 @@
       const g30 = await lengthAt(30), g60 = await lengthAt(60), g120 = await lengthAt(120);
       const off = [[30, g30], [60, g60], [120, g120]].filter(x => Math.abs(x[1].secs - 2) > 0.04);
       if (off.length) throw new Error('a 2 s project exported as a GIF plays for ' + off.map(x => x[1].secs.toFixed(2) + ' s at ' + x[0] + ' fps').join(', ') + ' — each frame delay is rounded to whole hundredths of a second on its own, so a 30 fps GIF runs 10 percent fast and a 60 fps one 20 percent slow; the animation in the GIF is not the speed he made it');
+      // …and the speed was not bought by throwing frames away where a GIF can show them all
+      if (g30.frames !== 60) throw new Error('the 30 fps GIF of a 2 s project has ' + g30.frames + ' frames, not 60 — its length is right only because frames were dropped');
+      if (g60.frames !== 100 || g120.frames !== 100) throw new Error('above 50 fps a GIF should be sampled at 50 fps, the fastest a GIF can play: 100 frames of 2 cs for 2 s, but 60 fps gave ' + g60.frames + ' frames and 120 fps ' + g120.frames);
     } finally {
       dl.stop();
       FM.scene = saved;
@@ -90278,24 +90365,40 @@
     }
   });
 
-  /* HUNT-d 4 — CUSTOM SIZE IS OFFERED FOR GIF AND PNG FRAMES, AND IGNORED BY BOTH.
+  /* 690 (HUNT-d export 4) — CUSTOM SIZE WAS OFFERED FOR GIF AND PNG FRAMES, AND IGNORED BY BOTH. Fixed: runExport
+   * hands outW/outH to runGif and runFrames too, and both contain the project in it with FM.exportFitRect, as the MP4
+   * does. Also checked now: the picture is CONTAINED, not stretched — in the 200 x 200 file the 60 x 60 box is square
+   * (37.5 px), so a point 25 px above its centre is background; stretched, the box would be 67 px tall and cover it.
+   * The account below is of the bug as found.
+   * HUNT-d 4 — CUSTOM SIZE IS OFFERED FOR GIF AND PNG FRAMES, AND IGNORED BY BOTH.
    * The export dialog shows Resolution → Custom size… and its width/height boxes for every picture format. runExport
    * reads them into outW/outH — and hands them to exporter.run (MP4) only; runGif and runFrames get the scale (1 for a
    * custom size) and nothing else, and size themselves off the project. Measured through the real dialog: Custom size
    * 200 x 200 on a 320 x 180 project, and both the GIF and the PNG frames came out 320 x 180, with the 200 x 200 still on
    * screen. A square GIF for a profile picture or a post, which is what the box is for, cannot be made.
    * CONTROL: the Custom size row really is on screen for the format when Export is pressed, so it was offered. */
-  test('HUNT-d a Custom size set in the export dialog is ignored for GIF and PNG frames, the file comes out at the project size', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 a Custom size set in the export dialog is the size of the GIF and of the PNG frames, the project contained in it', { item: '690', budgetMs: 120000 }, async function () {
     if (!FM.showExportDialog || !FM.exporter || !FM.exporter.runGif || !FM.exporter.runFrames) throw new Error('setup: the export dialog or the GIF / frames exporters are not reachable');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, dl = hunt2dCatchDownloads();
     let prefs0 = null; try { prefs0 = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
     const $ = id => document.getElementById(id);
+    // [width, height, the picture itself] — the first GIF frame, or the first PNG cut out of the store-only zip
     const sizeOf = async (fmt, blob) => {
       const b = new Uint8Array(await blob.arrayBuffer());
-      if (fmt === 'gif') return [b[6] | (b[7] << 8), b[8] | (b[9] << 8)];
-      for (let i = 0; i + 12 < b.length; i++) if (b[i] === 0x49 && b[i + 1] === 0x48 && b[i + 2] === 0x44 && b[i + 3] === 0x52) { const dv = new DataView(b.buffer); return [dv.getUint32(i + 4), dv.getUint32(i + 8)]; }
+      if (fmt === 'gif') return [b[6] | (b[7] << 8), b[8] | (b[9] << 8), blob];
+      for (let i = 0; i + 12 < b.length; i++) if (b[i] === 0x49 && b[i + 1] === 0x48 && b[i + 2] === 0x44 && b[i + 3] === 0x52) {
+        const dv = new DataView(b.buffer);
+        let e = i; while (e + 3 < b.length && !(b[e] === 0x49 && b[e + 1] === 0x45 && b[e + 2] === 0x4E && b[e + 3] === 0x44)) e++;
+        return [dv.getUint32(i + 4), dv.getUint32(i + 8), new Blob([b.slice(i - 12, e + 8)], { type: 'image/png' })];
+      }
       throw new Error('setup: the frames zip holds no PNG');
+    };
+    // what colour the file has at (x, y): 'box' (the blue square), 'bg' (black) or something else
+    const colourAt = async (pic, x, y) => {
+      const bmp = await createImageBitmap(pic), c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d');
+      g.drawImage(bmp, 0, 0); const d = g.getImageData(x, y, 1, 1).data;
+      return (d[2] > 150 && d[0] < 120) ? 'box' : (d[0] < 40 && d[1] < 40 && d[2] < 40) ? 'bg' : 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
     };
     const through = async fmt => {
       dl.files.length = 0;
@@ -90323,6 +90426,11 @@
       const png = await through('frames');
       const wrong = [['the GIF', gif], ['the PNG frames', png]].filter(x => x[1][0] !== 200 || x[1][1] !== 200);
       if (wrong.length) throw new Error('Custom size 200 x 200 was set and on screen in the export dialog, and ' + wrong.map(x => x[0] + ' came out ' + x[1][0] + ' x ' + x[1][1]).join(' and ') + ' — the project size. The box is offered for these formats and silently ignored, so a square GIF cannot be made');
+      // contained, not stretched: centre is the box, 25 px above it is background (stretched, the box reaches it)
+      for (const x of [['the GIF', gif], ['the PNG frames', png]]) {
+        const mid = await colourAt(x[1][2], 100, 100), above = await colourAt(x[1][2], 100, 75);
+        if (mid !== 'box' || above !== 'bg') throw new Error(x[0] + ' at 200 x 200 is not the project contained in the frame: the centre reads ' + mid + ' (want box) and 25 px above it reads ' + above + ' (want bg) — the picture was stretched or misplaced to fill the custom size');
+      }
     } finally {
       dl.stop();
       try { if (prefs0 == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', prefs0); } catch (e) {}
