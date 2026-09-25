@@ -52664,6 +52664,10 @@
       const base = (typeof v === 'number' && isFinite(v)) ? v : 1;
       child.params[key] = { kf: [ { t: 0, v: base, e: 'linear' }, { t: 2, v: base + 1, e: 'linear' } ] };
       child._expanded = true;                 // he has the child's controls open — the state the scope reads
+      /* …which he can only have INSIDE AN OPEN FILTER: a child's controls are drawn in its filter's body. queue 690 (sixth
+         hunt) made the scope ask for that too — a child left `_expanded` in a SHUT filter held the keyframe focus and froze
+         the effect he was actually looking at — so the fixture opens the filter, the state this test always meant. */
+      box._expanded = true;
       L.effects = [box];
       FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(160);
       if (FM.inspector.openCategory) FM.inspector.openCategory('effects');
@@ -97458,6 +97462,10 @@
 
 
   /* ═══ HUNT-a (queue 690, sixth hunt, 26 Sep) — EFFECT SETTINGS: EDITING AN EFFECT ONCE IT IS ON A LAYER ════════════════
+   * Found by the hunt as four failing HUNT-a tests; all four fixed (js/fx-thumbs.js + js/inspector.js take the changes-
+   * nothing verdict across the clip and ask again when the playhead moves; js/history.js carries the open rows across an
+   * undo; kfScope counts a filter's child as open only while its filter is; the curve button records the effect itself)
+   * and renamed 690 for what they now hold, with one more test for the playhead half of the first.
    * His standing brief: "go re audit, find some bugs coz theres a shit load". Four findings in editing an effect's settings —
    * the open effect's own hint, undo, the keyframes of the open effect and the per-parameter easing curve — each written
    * as a test that FAILS on v16.99 because of the bug it names, with a message that says what he would see. Every tap,
@@ -97521,8 +97529,10 @@
    * playhead sits whenever he adds an effect to a layer he has just made. So Spin lands with the sentence he has fought
    * the app over for weeks (#460, #477: effects that do nothing), and the sentence stays there while the box turns. Added
    * with his real taps through the effects sheet. CONTROL: a Spin at speed 0 — which really does nothing — gets the line,
-   * so the check runs here and speaks; and the same Spin visibly turns the box by 1.5 s. */
-  test('HUNT-a Spin added at the start of its clip is told it changes nothing, and keeps saying so while the box turns', { item: '690', budgetMs: 120000 }, async function () {
+   * so the check runs here and speaks; and the same Spin visibly turns the box by 1.5 s.
+   * FIXED: the verdict is taken at the playhead AND at moments spread through the clip (fx-thumbs noopTimes), one moment
+   * per timer slice, so a Spin is seen turning at the second moment and never gets the line. */
+  test('690 a Spin added at the start of its clip is not told it changes nothing while the box turns', { item: '690', budgetMs: 120000 }, async function () {
     const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint', 'fm.fx.tapHint']);
     const hint = () => { const h = document.querySelector('#inspector-panel .fx-row.fx-open .fx-noop-hint'); return h ? h.textContent.trim() : ''; };
     try {
@@ -97587,13 +97597,52 @@
     }
   });
 
+  /* 690 — …AND A LINE THAT IS SHOWING GOES BY ITSELF WHEN HE PARKS WHERE THE EFFECT ACTS. The second half of HUNT-a 1:
+   * the panel does not rebuild while he scrubs, and the verdict was filed under the effect's settings with no time in
+   * it, so whatever the check said stood wherever the playhead went. Eight moments of the clip can still all miss an
+   * effect that acts only for a moment — a blur that flashes once, a Blink between flashes — so a line that IS showing
+   * has to be asked again where he stops. Here a Gaussian Blur whose radius is 0 except for a flash at 2.2–2.6 s, which
+   * no moment of the check lands on. CONTROL: the line is shown (the check runs and the fixture really is dead at every
+   * moment it looked at), and it stays when he parks at 1 s, where the blur is still 0. Then the playhead goes to 2.4 s,
+   * the top of the flash, through FM.setTime — the funnel every time change takes, a scrub included — and the panel is
+   * NOT rebuilt: the line must go on its own. */
+  test('690 a changes-nothing line goes by itself when he parks the playhead where the effect shows', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.tapHint']);
+    const hint = () => { const h = document.querySelector('#inspector-panel .fx-row.fx-open .fx-noop-hint'); return h ? h.textContent.trim() : ''; };
+    const until = async (ok, ms) => { const end = Date.now() + ms; while (!ok() && Date.now() < end) await h6Sleep(100); return ok(); };
+    try {
+      await atPhoneWidth(async function () {
+        try { localStorage.setItem('fm.fx.tapHint', '1'); } catch (e) {}
+        const B = h6Box('H6 flash');
+        const fx = FM.fxRegistry.makeInstance('blur'); fx._expanded = true;
+        fx.params.radius = { kf: [{ t: 2.2, v: 0, e: 'linear' }, { t: 2.4, v: 20, e: 'linear' }, { t: 2.6, v: 0, e: 'linear' }] };
+        B.effects = [fx];
+        const L = await h6Open(B, 0);
+        const asked = FM.fxThumbs.noopTimes ? FM.fxThumbs.noopTimes(L) : [FM.time];
+        if (asked.some(t => t > 2.2 && t < 2.6)) throw new Error('setup: the check asks a moment inside the flash (' + asked.map(t => t.toFixed(2)).join(', ') + ') — pick a flash between its moments');
+        if (!await until(() => /changes nothing/.test(hint()), 5000)) throw new Error('CONTROL: a Gaussian Blur at radius 0 everywhere the check looks got no changes-nothing line in 5 s (' + h6Say(hint() || 'no hint') + ') — the check is not running, so the line going below would prove nothing');
+        FM.setTime(1); await h6Sleep(1200);
+        if (!/changes nothing/.test(hint())) throw new Error('CONTROL: parked at 1 s, where the blur is still 0 and the box is untouched, the line went — it is being dropped on any move, not re-asked');
+        const rows = document.querySelector('#inspector-panel .fx-row.fx-open');
+        FM.setTime(2.4);
+        const gone = await until(() => !hint(), 3000);
+        if (document.querySelector('#inspector-panel .fx-row.fx-open') !== rows) throw new Error('setup: the effect row was rebuilt after the playhead moved — this test is about the panel that is NOT rebuilt while he scrubs');
+        if (!gone) throw new Error(h6Say('he parks the playhead at 2.4 s, the top of the blur flash, where the box on screen is blurred 20 px — and 3 s later the open Gaussian Blur still says: ' + hint() + ' The line was measured at the start of the clip and nothing asks again when the playhead moves'));
+      }, 380);
+    } finally {
+      hb2Restore(keep);
+      FM.scene = saved; try { FM.setTime(0); FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   /* HUNT-a 2 — UNDO SHUTS THE EFFECT HE WAS EDITING.
    * Which effect row is open is `fx._expanded`, a runtime flag, and FM.jsonReplacer strips every `_` key from the undo
    * snapshots — so FM.history.restore() puts back a scene in which NO effect is open. Drag a slider, tap Undo to compare:
    * the value comes back and the controls he was using fold shut under his thumb; Redo does the same. To try the value
    * again he has to find the effect and tap it open, every time. Real drag on the Gaussian Blur slider, real taps on Undo
-   * and Redo. CONTROL: the drag changed the blur and Undo / Redo really moved it back and forth. */
-  test('HUNT-a Undo and Redo close the effect whose slider he just moved, on the phone and on the PC', { item: '690', budgetMs: 150000 }, async function () {
+   * and Redo. CONTROL: the drag changed the blur and Undo / Redo really moved it back and forth.
+   * FIXED: history.restore carries the open rows from the scene it replaces onto the one it puts back (keepOpenRows). */
+  test('690 Undo and Redo keep open the effect whose slider he just moved, on the phone and on the PC', { item: '690', budgetMs: 150000 }, async function () {
     const saved = FM.scene, keep = hb2Keep(['fm.fx.tapHint']);
     /* One run per device: a real finger at 380, a real mouse at 1280. `mouse` changes only how he presses. */
     const run = async function (mouse, W) {
@@ -97660,8 +97709,9 @@
    * the Tint inside his filter, then open Gaussian Blur: the Blur is the only effect on screen, and its keyframes are
    * hollow outlines that take no touch — a hold-and-drag on one goes through it to the CLIP and slides the whole clip —
    * while an effect he cannot see holds the focus. Real taps and a
-   * real hold-and-drag at 380. CONTROL: on the same layer, before the filter was touched, the same drag moves the key. */
-  test('HUNT-a after he opens an effect inside a filter, the next effect he opens has keyframes he cannot drag', { item: '690', budgetMs: 120000 }, async function () {
+   * real hold-and-drag at 380. CONTROL: on the same layer, before the filter was touched, the same drag moves the key.
+   * FIXED: kfScope counts a filter's child as the open effect only while its filter is open too. */
+  test('690 after he opens an effect inside a filter, the next effect he opens still has keyframes he can drag', { item: '690', budgetMs: 120000 }, async function () {
     const saved = FM.scene, keep = hb2Keep(['fm.fx.tapHint']);
     const build = () => {
       const B = h6Box('H6 look');
@@ -97739,8 +97789,11 @@
    * `layer.effects[fxIdx]` — the LAYER's list. For an effect inside a filter (or on a caption cue) that is some other
    * effect: here the Glow at the top of his stack, which also has a Radius. So he opens the Gaussian Blur inside his
    * filter, taps the curve button on its slider and picks Ease In, and it is the GLOW's animation that changes, while the Blur he was
-   * shaping stays linear. Real taps throughout. CONTROL: the curve button opened the editor and the preset tap landed. */
-  test('HUNT-a the easing curve of an effect inside a filter changes a different effect', { item: '690', budgetMs: 90000 }, async function () {
+   * shaping stays linear. Real taps throughout. CONTROL: the curve button opened the editor and the preset tap landed.
+   * FIXED: the curve button records the effect itself (and where it was, so an Undo — which swaps in new objects — still
+   * finds it); the editor is built from that. Asserted after an Undo too: he taps Undo to compare, picks Ease Out, and it
+   * is still the Blur that changes. */
+  test('690 the easing curve of an effect inside a filter changes that effect and no other', { item: '690', budgetMs: 90000 }, async function () {
     const saved = FM.scene, keep = hb2Keep(['fm.fx.tapHint']);
     try {
       await atPhoneWidth(async function () {
@@ -97753,6 +97806,7 @@
           box.effects = [kid];
           B.effects = [glow, box];
           const L = await h6Open(B, 0.5);
+          if (FM.history) FM.history.commit();   // the scene as he has it is the step Undo goes back to (h6Open installs it without one)
           const eases = () => {
             const l = FM.layerById(FM.scene, L.id), g = l.effects.filter(e => e.type === 'glow')[0], f = l.effects.filter(e => e.type === 'filter')[0];
             const b = f && (f.effects || []).filter(e => e.type === 'blur')[0];
@@ -97781,6 +97835,18 @@
               ' — the curve editor is reading the effect at the same position in the layer list, not the one inside the filter'));
           }
           if (e1.glow !== e0.glow) throw new Error(h6Say('easing the Blur inside his filter also changed the Glow above it (' + e0.glow + ' to ' + e1.glow + ')'));
+          /* …and after an Undo to compare. Undo puts NEW effect objects in, so the editor must find the Blur again by where
+             it was — not fall back to the layer's list, which is the bug again. Real tap on Undo, real tap on Ease Out. */
+          p = h6Reach(document.getElementById('btn-undo'), 'Undo button');
+          await realInput924(h6Tap(p), 'Undo'); await h6Sleep(600);
+          const e2 = eases();
+          if (e2.blur !== e0.blur || e2.glow !== e0.glow) throw new Error('CONTROL: a real tap on Undo did not take the Ease In back (blur ' + e2.blur + ', glow ' + e2.glow + ')');
+          const easeOut = [].slice.call(document.querySelectorAll('#inspector-panel .es-preset')).filter(b => b._key === 'easeOut')[0];
+          if (!easeOut) throw new Error(h6Say('after Undo the curve editor he had open is gone (' + ((document.querySelector('#inspector-panel .cat-body') || {}).textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90) + ')'));
+          p = await h6Bring(easeOut, 'Ease Out preset');
+          await realInput924(h6Tap(p), 'the Ease Out preset'); await h6Sleep(400);
+          const e3 = eases();
+          if (e3.blur === e2.blur || e3.glow !== e2.glow) throw new Error(h6Say('after Undo he picked Ease Out in the curve editor he had open on the Blur inside his filter: the Blur went ' + e2.blur + ' to ' + e3.blur + ' and the Glow ' + e2.glow + ' to ' + e3.glow + ' — the editor lost the effect he picked when Undo put new objects in'));
         });
       }, 380);
     } finally {
