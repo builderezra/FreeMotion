@@ -848,6 +848,69 @@ window.FM = window.FM || {};
     }
   };
 
+  /* ---- "Does the FILE list a sound track at all?" ------------------------------ (queue 690) ----
+   * decodeAudio answers null for two very different files: one whose sound track will not decode (a
+   * real loss, which the export must say out loud — #215), and one that simply HAS no sound track (an
+   * iPhone time-lapse, a screen recording with the sound off), which is ordinary and must not. It cannot
+   * tell them apart — decodeAudioData rejects both the same way — so the export called every time-lapse
+   * "NO SOUND — none of the audio clips could be read", in the warning colour, on a file that was exactly
+   * right. The container can tell them apart: an MP4 / MOV / M4A lists its tracks in the `moov` box, and
+   * each track's `mdia/hdlr` names what it carries — 'soun' for sound, 'vide' for picture.
+   *
+   * Answers true (a sound track is listed), false (the track list was read in full and none of it is
+   * sound) or null (not an MP4-family file, or not one this can read — WebM, a damaged header). Only a
+   * definite false is ever used to stay quiet; anything else is left to report exactly as before.
+   * Reads the box HEADERS with Blob.slice and then only the `moov` box itself — never the media data,
+   * which is the whole size of the file — so a 500 MB time-lapse costs a few kilobytes to ask. */
+  FM.soundTrackInFile = async function (file) {
+    try {
+      if (!file || typeof file.slice !== 'function' || !(file.size >= 16)) return null;
+      const u32 = (b, o) => ((b[o] << 24) >>> 0) + (b[o + 1] << 16) + (b[o + 2] << 8) + b[o + 3];
+      const tag = (b, o) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]);
+      const isTag = s => /^[\x20-\x7e]{4}$/.test(s);                 // printable, as every top-level box type is
+      // 1. the top-level boxes, header by header, until `moov`
+      let pos = 0, moov = null, n = 0;
+      while (pos + 8 <= file.size && n++ < 64) {
+        const h = new Uint8Array(await file.slice(pos, pos + 16).arrayBuffer());
+        let size = u32(h, 0), head = 8;
+        const type = tag(h, 4);
+        if (!isTag(type)) return null;                                   // not an ISO box — not a file this reads
+        if (size === 1) { if (h.length < 16) return null; size = u32(h, 8) * 4294967296 + u32(h, 12); head = 16; }
+        else if (size === 0) size = file.size - pos;                     // "runs to the end of the file"
+        if (size < head || pos + size > file.size) return null;          // a torn or foreign header
+        if (type === 'moov') { moov = { at: pos + head, len: size - head }; break; }
+        pos += size;
+      }
+      if (!moov || moov.len > (64 << 20)) return null;                   // no track list, or an absurd one
+      const b = new Uint8Array(await file.slice(moov.at, moov.at + moov.len).arrayBuffer());
+      // 2. each `trak` inside it, and the handler of its media
+      const kids = (s, e) => {                                           // the boxes directly inside [s, e)
+        const out = [];
+        for (let p = s; p + 8 <= e;) {
+          const sz = u32(b, p), ty = tag(b, p + 4);
+          if (sz < 8 || p + sz > e) return null;
+          out.push({ type: ty, at: p + 8, end: p + sz });
+          p += sz;
+        }
+        return out;
+      };
+      const top = kids(0, b.length);
+      if (!top) return null;
+      const traks = top.filter(k => k.type === 'trak');
+      if (!traks.length) return null;                                    // a compressed or empty moov — cannot say
+      let sound = false;
+      for (const t of traks) {
+        const mdia = (kids(t.at, t.end) || []).find(k => k.type === 'mdia');
+        const hdlr = mdia && (kids(mdia.at, mdia.end) || []).find(k => k.type === 'hdlr');
+        if (!hdlr || hdlr.end - hdlr.at < 12) return null;              // a track this cannot name — do not guess
+        if (tag(b, hdlr.at + 8) === 'soun') sound = true;               // version/flags (4), pre_defined (4), handler_type
+      }
+      return sound;
+    } catch (e) {
+      return null;
+    }
+  };
+
   /* Above this, decoding the audio track to draw a waveform is not worth the risk of losing the tab:
    * file.arrayBuffer() alone has to hold the whole file in RAM before decoding even starts. A clip with
    * no waveform is a small cosmetic loss; a browser that kills the tab loses the project. */
