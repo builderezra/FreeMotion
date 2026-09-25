@@ -349,16 +349,24 @@ window.FM = window.FM || {};
   let _picked = [];
   const sheetMode = () => !!(root && root.classList.contains('fxb-sheet'));
   function pickIndex(id) { return _picked.indexOf(id); }
+  /* ONE TILE'S NUMBER — and every tile gets it AT BIRTH (queue 690). paintPicks below used to be the only thing that drew
+     the badges, and it ran on open(), on a pick and on Clear; every screen that builds FRESH tiles — a category (and its
+     ‹ › arrows), the search results, the faves, the main grid after a search is cleared — never called it. So a picked
+     effect came back BARE the next time he saw it, while the bar still said Add 1 effect, and a bare tile reads as not
+     picked: he taps it to pick it, and togglePick UN-picks it. Another way his picks "do nothing". Rather than a call at
+     the end of each of those builders (the next one would forget), the tile paints itself where it is born: guardedAdd
+     and the Mask tile call this the moment they give it its data-fxid, which is the mark paintPicks finds tiles by. */
+  function paintPick(elm) {
+    const n = pickIndex(elm.dataset.fxid);
+    let b = elm.querySelector('.fxb-pick');
+    if (n < 0) { if (b) b.remove(); elm.classList.remove('is-picked'); return; }
+    if (!b) { b = el('span', 'fxb-pick'); elm.appendChild(b); }
+    b.textContent = String(n + 1);
+    elm.classList.add('is-picked');
+  }
   function paintPicks() {
     if (!root) return;
-    root.querySelectorAll('[data-fxid]').forEach(elm => {
-      const n = pickIndex(elm.dataset.fxid);
-      let b = elm.querySelector('.fxb-pick');
-      if (n < 0) { if (b) b.remove(); elm.classList.remove('is-picked'); return; }
-      if (!b) { b = el('span', 'fxb-pick'); elm.appendChild(b); }
-      b.textContent = String(n + 1);
-      elm.classList.add('is-picked');
-    });
+    root.querySelectorAll('[data-fxid]').forEach(paintPick);
     const bar = root.querySelector('.fxb-commit');
     if (bar) {
       bar.classList.toggle('hidden', !_picked.length);
@@ -462,15 +470,19 @@ window.FM = window.FM || {};
   function setKeepValues(on) { try { localStorage.setItem(KEEP_KEY, on ? '1' : '0'); } catch (e) {} }
   FM._fxKeepValues = keepValues;      // for the suite
 
-  function commitPicks() {
+  /* `last` (queue 690) is one more effect to land AFTER the picks, in the same commit: a preset row tapped while he has
+     numbered picks — see addFromSheet. Only an object with a string id counts, because this is also bound straight to a
+     click (the bar's Add), and a click event must never be read as an effect to add. */
+  function commitPicks(last) {
     const list = _picked.slice();
+    const tail = (last && typeof last.id === 'string') ? last : null;
     /* Snapshot the previewed instances BEFORE stopPreview clears them — that is the whole point of the
        toggle, and reading them afterwards would hand back an empty list. */
     const shown = (FM._fxPreview && FM._fxPreview.list) ? FM._fxPreview.list.slice() : [];
     const keep = keepValues();
     _picked = [];
     stopPreview();          // the previewed copies go before the real ones land, or the layer gets both
-    if (!list.length) { FM.fxBrowser.close(); return; }
+    if (!list.length && !tail) { FM.fxBrowser.close(); return; }
     /* In tap order, and quietly — addEffect closes the browser and jumps the inspector on its own,
        which is right for one tap and wrong nine times in a row. */
     let added = 0;
@@ -482,6 +494,8 @@ window.FM = window.FM || {};
       const seed = keep ? (shown.find(sh => sh && (sh.type === id || sh.id === id)) || null) : null;   // queue 759: by id — `shown` and `list` are not the same length once pseudo-tiles are filtered out
       if (addEffect(id, null, true, seed)) added++;
     });
+    // …and the preset he tapped last lands last, numbered after his picks the way it was chosen (queue 690).
+    if (tail && addEffect(tail.id, tail.preset || null, true)) added++;
     FM.fxBrowser.close();
     if (FM.inspector) { if (FM.inspector.openCategory) FM.inspector.openCategory('effects'); else FM.inspector.refresh(); }
     if (FM.refreshAll) FM.refreshAll();
@@ -493,6 +507,7 @@ window.FM = window.FM || {};
   // The click that ENDS a long-press must not also add the plain effect.
   function guardedAdd(elm, id) {
     elm.dataset.fxid = id;                 // so the badge painter can find every tile in one sweep
+    paintPick(elm);                        // …and born wearing its number if it is already picked (queue 690, see paintPick)
     return () => {
       if (elm._lpFired) { elm._lpFired = false; return; }
       if (sheetMode()) { togglePick(id); return; }
@@ -557,6 +572,7 @@ window.FM = window.FM || {};
        PREVIEW of themselves — a mask has no result to preview until you have drawn one, which is what
        the editor that opens on Add is for. */
     wrap.dataset.fxid = '_mask';
+    paintPick(wrap);                       // born wearing its number, like every other tile (queue 690)
     wrap.addEventListener('click', () => { if (sheetMode()) togglePick('_mask'); else addMaskFromBrowser(); });
     return wrap;
   }
@@ -607,6 +623,19 @@ window.FM = window.FM || {};
   // for that reason, and a preview rendered from a detached object would be a picture of a layer
   // that no longer exists.
   function liveLayer() { return (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null; }
+
+  /* A PRESET ROW IS AN EXIT TOO (queue 690). Queue 389 made every way out of the browser mean Done — the X, the backdrop,
+     the Visual/Filters/Audio switch — because his report was eight numbered badges and *"The effects selected here still
+     don't do anything at allllllllllllllllll"*. The rows in a presets sheet were the one exit that was missed: each called
+     addEffect on its own, whose close() empties the picks, so picking Gaussian Blur and Zoom Blur and then holding Shake
+     for its Beat Slam landed ONLY the Shake and threw the two numbered picks away without a word — while the Done button
+     at the top of the very same sheet adds them. With picks on the board the row joins them: his picks in their numbered
+     order, then the preset he tapped, in one commit (one undo step, one toast). With nothing picked it is exactly the
+     single add it always was. The Default row goes the same way — it is a preset row with no preset. */
+  function addFromSheet(id, preset) {
+    if (_picked.length) { commitPicks({ id: id, preset: preset || null }); return; }
+    addEffect(id, preset);
+  }
 
   // Full-cover preset sheet for one effect (same chrome as the category view, incl. the
   // depth-tracked pause of the featured auto-scroll).
@@ -675,7 +704,7 @@ window.FM = window.FM || {};
         });
         row.appendChild(del);
       }
-      row.addEventListener('click', () => addEffect(reg.id, preset));
+      row.addEventListener('click', () => addFromSheet(reg.id, preset));
       return row;
     }
 
@@ -695,7 +724,7 @@ window.FM = window.FM || {};
     // The effect's own sentence when it has one — far more use than "Plain <name> at its normal settings".
     ptxt.appendChild(el('div', 'fxp-desc', reg.desc || ('Plain ' + reg.label + ' at its normal settings')));
     plain.appendChild(ptxt);
-    plain.addEventListener('click', () => addEffect(reg.id));
+    plain.addEventListener('click', () => addFromSheet(reg.id, null));
     list.appendChild(plain);
 
     const pools = FM.effectPresets.for(reg.type);
@@ -1837,7 +1866,7 @@ window.FM = window.FM || {};
         keep.addEventListener('click', () => { setKeepValues(!keepValues()); paintKeep(); });
         paintKeep();
         clear.addEventListener('click', () => { _picked = []; paintPicks(); restartPreview(); });
-        go.addEventListener('click', commitPicks);
+        go.addEventListener('click', () => commitPicks());   // not bound bare: commitPicks' argument is an effect to add, and a click event is not one
         bar.appendChild(clear); bar.appendChild(keep); bar.appendChild(go);
         root.appendChild(bar);
       }

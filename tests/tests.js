@@ -90037,8 +90037,8 @@
   });
 
   /* ═══ 690 — HUNT-b: EFFECTS AND FILTERS, with a real finger where the finger is the point ═════════════════════════════
-   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in adding, picking, presets and copying
-   * looks, each written as a test that FAILS on the code as it stands, with a message that says what he would see. The
+   * His brief: "go re audit, find some bugs coz theres a shit load". Three findings in picking, presets and copying looks,
+   * each written first as a test that FAILED on the code as it stood, with a message that says what he would see. The
    * browser tests run at 380 in the effects SHEET (multi-pick, numbered badges) — the mode his phone uses — and drive the
    * taps and holds through tests/_cdp.py as trusted touches. */
   function hb2Layer(name, start, dur, fill) {
@@ -90065,80 +90065,14 @@
   function hb2Keep(keys) { const o = {}; keys.forEach(k => { try { o[k] = localStorage.getItem(k); } catch (e) { o[k] = null; } }); return o; }
   function hb2Restore(o) { Object.keys(o).forEach(k => { try { if (o[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, o[k]); } catch (e) {} }); }
 
-  test('HUNT-b holding an effect to see its presets adds it instead and shuts the browser, because the lift lands on the Default row that opened under his finger', { item: '690', budgetMs: 90000 }, async function () {
-    /* The browser tells him how to reach presets: "Tip: hold any effect to browse its presets". attachLongPress opens the
-       presets sheet after 420 ms WHILE THE FINGER IS STILL DOWN, and the sheet covers the tile. When he lifts, the
-       browser turns the touch into a click and hit-tests it where the finger is now — on the sheet, whose first row is
-       "Default" (addEffect(reg.id)). So the hold that was meant to LOOK at presets adds the effect at its defaults, closes
-       the browser and drops any numbered picks with it. guardedAdd's _lpFired only swallows a click aimed at the TILE;
-       this click never goes there. A mouse cannot do this (its click goes to the common ancestor of press and release),
-       which is why it only shows under a finger. The tile held is chosen by measuring where the sheet puts Default, so the
-       test aims at the case rather than hoping a layout lines up. */
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint']);
-    try {
-      await atPhoneWidth(async function () {
-        await onScreen924(async function () {
-          const L = await huntBScene(() => [hb2Layer('HB2 hold')]);
-          try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (e) {}
-          const root = await hb2OpenBrowser(L[0], 'blur');
-          const cat = hb2TopView(root);
-          /* Find a tile that sits where its OWN presets sheet will put the Default row. */
-          let aim = null;
-          const tiles = [].slice.call(cat.querySelectorAll('.fxb-tile[data-fxid]'));
-          for (let i = 0; i < tiles.length && !aim; i++) {
-            const t = tiles[i], r = t.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-            if (!(r.height > 0) || cy < 0 || cy > 740 || cx > 370) continue;
-            FM._fxOpenPresets(FM.fxRegistry.get(t.dataset.fxid)); await sleep(120);
-            const pv = hb2TopView(root), def = pv && pv !== cat ? pv.querySelector('.fxp-row') : null;
-            const d = def && def.getBoundingClientRect();
-            if (pv && pv !== cat) {
-              const back = pv.querySelector('.fxb-back');   // closed like a tap (press, then click); removed outright if a fix swallows even that
-              if (back) { back.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' })); back.click(); }
-              await sleep(80);
-              if (pv.isConnected) pv.remove();
-            }
-            if (d && cy > d.top + 6 && cy < d.bottom - 6 && cx > d.left + 6 && cx < d.right - 6) aim = { id: t.dataset.fxid, x: cx, y: cy };
-          }
-          if (!aim) throw new Error('setup: no Blur tile on screen sits under the Default row of its own presets sheet — the layout moved, so re-aim this test');
-          if (hb2TopView(root) !== cat) throw new Error('setup: a measuring presets sheet was left open');
-          const label = FM.fxRegistry.get(aim.id).label;
-          const n0 = (FM.scene.layers[0].effects || []).length;
-          let sheetSeen = false;
-          const mo = new MutationObserver(() => { if (root.querySelector('.fxp-list')) sheetSeen = true; });
-          mo.observe(root, { childList: true, subtree: true });
-          try {
-            await realInput924([{ t: 'touchStart', x: aim.x, y: aim.y, ms: 650 }, { t: 'touchEnd', x: aim.x, y: aim.y, ms: 0 }], 'holding ' + label);
-            await sleep(700);
-          } finally { mo.disconnect(); }
-          /* CONTROL: the real hold did what a hold is for — it opened the presets sheet while the finger was down. */
-          if (!sheetSeen) throw new Error('CONTROL: a 650 ms real hold on ' + label + ' never opened its presets sheet — the hold did not register, so this cannot see the bug');
-          const fx = (FM.scene.layers[0].effects || []).map(e => (FM.fxRegistry.get(e.type) || {}).label || e.type);
-          const added = fx.length > n0, closed = !FM.fxBrowser.isOpen();
-          const sheetUp = !closed && !!root.querySelector('.fxp-list');
-          if (added || closed || !sheetUp) {
-            throw new Error(hb2Say('he held ' + label + ' to look at its presets and let go: ' +
-              (added ? label + ' was ADDED to his layer at its default settings (' + fx.join(', ') + ')' : 'nothing was added') +
-              (closed ? ' and the effects browser SHUT' : (sheetUp ? '' : ' and the presets sheet was gone')) +
-              ' — the tap the browser makes from his lift lands on the Default row that had just opened under his finger, so the hold he is told to use for browsing presets adds the effect instead, and would throw away anything he had already picked'));
-          }
-        });
-      }, 380);
-    } finally {
-      try { FM.fxBrowser.close(); } catch (e) {}
-      hb2Restore(keep);
-      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
-    }
-  });
-
-  test('HUNT-b picked effects are thrown away when he adds one from a presets sheet', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 a preset row tapped while he has numbered picks adds his picks and then the preset, in one go', { item: '690', budgetMs: 90000 }, async function () {
     /* Queue 389 made every exit from the browser mean Done — the X, the backdrop and the Visual/Filters/Audio switch all
        add the numbered picks, because his report was eight badges on screen and "The effects selected here still don't do
        anything at allllll". A preset row is the exit that was missed: presetRow's click calls addEffect(reg.id, preset),
        whose non-quiet path calls FM.fxBrowser.close(), and close() empties _picked. So picking Gaussian Blur and Zoom
        Blur, then holding Shake and choosing one of its presets, lands ONLY the Shake. The picks are made with real taps
        and the preset row is tapped for real; the presets sheet is opened through the seam so this measures the preset
-       row alone and not the hold (which has its own test above). */
+       row alone and not the hold. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint']);
     try {
@@ -90178,6 +90112,12 @@
               (types.map(t => (FM.fxRegistry.get(t) || {}).label || t).join(', ') || 'nothing') + (FM.fxBrowser.isOpen() ? '' : ' and the browser closed') +
               ' — ' + lost.join(' and ') + ' were thrown away without a word. The X, Done and the tabs all add his picks; a preset row is the one way out that still drops them'));
           }
+          /* …in the order he chose them — his numbered picks, then the preset he tapped last — and the Shake is the PRESET,
+             not a plain Shake at its defaults (the preset row must still mean its preset when it joins the picks). */
+          if (types.join(',') !== 'blur,zoomblur,shake') throw new Error('his picks and the preset landed as ' + types.join(', ') + ', not Gaussian Blur, Zoom Blur, then Shake — the order he chose them in');
+          const shakeFx = (FM.scene.layers[0].effects || []).filter(e => e.type === 'shake')[0];
+          if (JSON.stringify(shakeFx.params) === JSON.stringify(FM.fxRegistry.makeInstance('shake').params)) throw new Error('the Shake landed at its plain defaults — the ' + String(name).trim() + ' preset he tapped was not applied');
+          if (FM.fxBrowser.isOpen()) throw new Error('the browser stayed open after the preset row added everything — a preset row is an exit, like Done');
         });
       }, 380);
     } finally {
@@ -90187,21 +90127,23 @@
     }
   });
 
-  test('HUNT-b an animated effect put on a clip that starts later does not animate there, by Copy and Paste or by a look + animations preset', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 an animated effect copied onto a clip that starts later animates from that clip start, by Copy and Paste and by a look + animations preset', { item: '690', budgetMs: 60000 }, async function () {
     /* Keyframe times are ABSOLUTE project time (scene.js says so above shiftLayerKeyframes), so anything that moves an
        animation to another clip has to re-anchor it by the difference in start. Paste look does (applyStyle's dt) and the
-       one-effect presets do (effectPresets.capture / makeInstance). Two paths do not:
+       one-effect presets do (effectPresets.capture / makeInstance). Two paths did not:
        · the effect clipboard — Copy / Paste under the stack and Copy effect / Paste in each row's ⋯ (FM.fxClipboard) —
-         lands the keyframes at the SOURCE clip's times;
-       · "Save look + animations" (FM.layerPresets) re-anchors the transform with shiftKf and stores `effects` raw, so the
-         preset's own name is half true: the rotation arrives on time and the blur beside it does not.
-       On a clip that starts after the source's animation has finished, the effect just sits at its last value — his blur-in
-       is a flat full blur. Driven through the real Copy and Paste buttons; the preset through its store, which is what the
-       Save look + animations button and its row call. The rotation in the same preset is the CONTROL: it proves this test
-       sees a re-anchored animation when there is one. */
+         landed the keyframes at the SOURCE clip's times; it now records the source start and read(at) re-anchors;
+       · "Save look + animations" (FM.layerPresets) re-anchored the transform with shiftKf and stored `effects` raw, so the
+         preset's own name was half true: the rotation arrived on time and the blur beside it did not.
+       On a clip that starts after the source's animation has finished, the effect just sat at its last value — his blur-in
+       was a flat full blur. Driven through the real Copy and Paste buttons and the real row ⋯ menu; the preset through its
+       store, which is what the Save look + animations button and its row call. The rotation in the same preset is the
+       CONTROL: it proves this test sees a re-anchored animation when there is one. Writing the row-menu half found a worse
+       fault under it — that Paste never reached the layer at all (it spliced into the merged stack copy and called
+       afterFx instead of the stack's own done) — so the row half asserts the blur lands before it asserts when. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, keep = hb2Keep(['fm.fxclip', 'fm.layerpresets']);
-    const PRESET = 'HUNT-b blur in';
+    const PRESET = '690 probe blur in';
     try {
       const A = hb2Layer('HB2 source', 0, 3, '#c05030');
       const blurIn = FM.fxRegistry.makeInstance('blur');
@@ -90210,7 +90152,10 @@
       A.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'linear' }] };
       const B = hb2Layer('HB2 pasted', 3, 3, '#3050c0');
       const C = hb2Layer('HB2 preset', 3, 3, '#30a050');
-      await huntBScene(() => [A, B, C]);
+      const D = hb2Layer('HB2 row paste', 3, 3, '#a0a030');
+      const sepia = FM.fxRegistry.makeInstance('sepia'); sepia._expanded = true;   // a row of its own, open, so D has a ⋯ to paste from
+      D.effects = [sepia];
+      await huntBScene(() => [A, B, C, D]);
       const radiusOf = (layer, t) => { const l = FM.layerById(FM.scene, layer.id), fx = (l.effects || []).filter(e => e.type === 'blur')[0]; return fx ? FM.evalProp(fx.params.radius, t) : NaN; };
       const kfTimes = (layer) => { const l = FM.layerById(FM.scene, layer.id), fx = (l.effects || []).filter(e => e.type === 'blur')[0]; const r = fx && fx.params.radius; return r && r.kf ? r.kf.map(k => +k.t.toFixed(2)).join(' and ') + ' s' : 'none'; };
       /* CONTROL on the source: the blur really does animate on A, 0 at its start and 20 a second in. */
@@ -90238,22 +90183,50 @@
       if (Math.abs(FM.evalProp(Cl.transform.rotation, 3) - 0) > 0.5 || Math.abs(FM.evalProp(Cl.transform.rotation, 4) - 90) > 0.5) throw new Error('CONTROL: the look + animations preset did not re-anchor its own rotation onto the later clip either, so this cannot tell the blur apart');
       const c0 = radiusOf(C, 3), c1 = radiusOf(C, 4);
       if (Math.abs(c0 - 0) > 0.5 || Math.abs(c1 - 20) > 0.5) bad.push('Save look + animations applied to a clip starting at 3 s turned its rotation on time but gave the blur ' + c0.toFixed(0) + ' on the first frame and ' + c1.toFixed(0) + ' one second in (keyframes at ' + kfTimes(C) + ')');
+      /* 3. The row's own ⋯ — Copy effect on A's blur, Paste on D's row. The other door onto the same clipboard. */
+      const menuItem = re => [].slice.call(document.querySelectorAll('#ctx-menu .ctx-item')).filter(n => re.test((n.textContent || '').trim()))[0];
+      const openMore = (layer, what) => {
+        FM.selectLayer(layer.id); FM.inspector.openCategory('effects');
+        const btn = document.querySelector('#inspector-panel .fx-row.fx-open .fx-head .fx-icon-btn[title=More]');
+        if (!btn) throw new Error('setup: no ⋯ on the open effect row of ' + what);
+        btn.click();
+      };
+      FM.layerById(FM.scene, A.id).effects[0]._expanded = true;
+      openMore(A, 'the source clip'); await sleep(150);
+      const copyIt = menuItem(/^Copy effect$/); if (!copyIt) throw new Error('setup: the ⋯ menu has no Copy effect');
+      copyIt.click(); await sleep(150);
+      openMore(D, 'the later clip'); await sleep(150);
+      const pasteIt = menuItem(/^Paste /); if (!pasteIt) throw new Error('setup: the ⋯ menu offers no Paste after Copy effect');
+      pasteIt.click(); await sleep(300);
+      if (!(FM.layerById(FM.scene, D.id).effects || []).some(e => e.type === 'blur')) throw new Error('the row menu Paste said Pasted but put nothing on the later clip — it spliced into the merged copy of the stack and never wrote it back');
+      const d0 = radiusOf(D, 3), d1 = radiusOf(D, 4);
+      if (Math.abs(d0 - 0) > 0.5 || Math.abs(d1 - 20) > 0.5) bad.push('Copy effect then Paste from a row menu onto a clip starting at 3 s gave radius ' + d0.toFixed(0) + ' on its first frame and ' + d1.toFixed(0) + ' one second in (keyframes at ' + kfTimes(D) + ')');
+      /* …and pasting back onto a clip at the SAME start leaves the times exactly as copied (nothing to re-anchor). */
+      openMore(A, 'the source clip'); await sleep(150);
+      const pasteBack = menuItem(/^Paste /); if (!pasteBack) throw new Error('setup: no Paste on the source row');
+      pasteBack.click(); await sleep(300);
+      const again = (FM.layerById(FM.scene, A.id).effects || []).filter(e => e.type === 'blur');
+      const tb = again.length === 2 && again[1].params.radius.kf ? again[1].params.radius.kf.map(k => k.t).join(',') : 'missing';
+      if (tb !== '0,1') bad.push('pasted back onto its own clip, the blur keyframes moved to ' + tb + ' s instead of staying at 0 and 1');
       if (bad.length) throw new Error('his blur-in (0 to 20 over the first second) moved onto a later clip does not animate there — it sits at full blur from the first frame: ' + bad.join('; '));
     } finally {
       try { FM.layerPresets.remove(PRESET); } catch (e) {}
+      try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
       hb2Restore(keep);
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
   });
 
-  test('HUNT-b a picked effect loses its number when he goes back to its category or searches for it, and tapping it again un-picks it', { item: '690', budgetMs: 90000 }, async function () {
-    /* paintPicks() — the one function that draws the 1, 2, 3 badges — runs on open(), on a pick and on Clear. The
+  test('690 a picked effect keeps its number when he pages back to its category, searches for it or opens his faves', { item: '690', budgetMs: 90000 }, async function () {
+    /* paintPicks() — the one function that drew the 1, 2, 3 badges — ran on open(), on a pick and on Clear. The
        category views (openCategory, and its ‹ › arrows), the search results (rebuild) and the faves screen all build
-       FRESH tiles and never call it. So a picked effect shows no number the next time he sees it: pick Gaussian Blur,
-       page to Warping and back, and its tile is bare while the bar still says Add 1 effect. A bare tile reads as not
-       picked, he taps it — and togglePick REMOVES it. That is one way his picks "do nothing". Every tap here is real. */
+       FRESH tiles and never called it. So a picked effect showed no number the next time he saw it: pick Gaussian Blur,
+       page to Warping and back, and its tile was bare while the bar still said Add 1 effect. A bare tile reads as not
+       picked, he taps it — and togglePick REMOVES it. That is one way his picks "do nothing". The fix paints each tile
+       as it is born (paintPick, from guardedAdd), so this walks all three screens. Every tap is real except the search
+       box and the faves seam. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint']);
+    const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint', 'fm.fx.fav']);
     try {
       await atPhoneWidth(async function () {
         await onScreen924(async function () {
@@ -90280,7 +90253,16 @@
           if (FM._fxPicks().join(',') !== 'blur') throw new Error('CONTROL: paging categories changed the picks themselves (' + FM._fxPicks().join(', ') + ')');
           const back = tileIn(hb2TopView(root), 'blur');
           if (badgeOf(back) !== '1') bad.push('after paging to ' + away + ' and back, the Gaussian Blur tile shows ' + (badgeOf(back) ? 'the number ' + badgeOf(back) : 'NO number') + ' while the bar still says ' + ((root.querySelector('.fxb-commit-go') || {}).textContent || '?'));
-          /* 2. Out to the main grid, and search for it. */
+          /* 2. His faves, with Gaussian Blur starred — a third screen that builds its own fresh tiles. Opened through the
+             seam (the pull-up gesture has its own tests); the badge is what is measured here. */
+          try { localStorage.setItem('fm.fx.fav', JSON.stringify(['blur'])); } catch (e) {}
+          const fav = FM._fxOpenFavourites(); await sleep(400);
+          const favTile = fav && fav.querySelector('.fxb-tile[data-fxid="blur"]');
+          if (!favTile) throw new Error('setup: the faves screen did not show the starred Gaussian Blur');
+          if (badgeOf(favTile) !== '1') bad.push('in his faves, the starred Gaussian Blur shows ' + (badgeOf(favTile) ? 'the number ' + badgeOf(favTile) : 'NO number'));
+          { const fb = fav.querySelector('.fxb-back'); if (fb) fb.click(); await sleep(250); if (fav.isConnected) fav.remove(); }
+          if (titleOf(hb2TopView(root)) !== 'Blur') throw new Error('setup: closing the faves did not come back to Blur');
+          /* 3. Out to the main grid, and search for it. */
           const view = hb2TopView(root); const bk = view && view.querySelector('.fxb-back'); if (bk) bk.click(); await sleep(300);
           const sb = root.querySelector('.fxb-search-btn'); if (!sb) throw new Error('setup: no search button');
           sb.click(); await sleep(200);
