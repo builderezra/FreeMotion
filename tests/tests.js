@@ -92117,4 +92117,69 @@
     } finally { probe.remove(); if (FM.hideToast) FM.hideToast(); else t.classList.add('hidden'); }
   });
 
+
+  /* ═══ QUEUE 936 — A FRESH START OPENS NOTHING ═════════════════════════════════════════════════════════════════════
+     Ezra, 25 Sep: *"When you start the app fresh it shouldnt start with an open project, it should start empty like all
+     the other pages with some inviting text"*. His reinstalled phone listed an "Untitled" marked OPEN that he never made:
+     storage.migrate() minted it whenever no project was current.
+     THIS SUITE CANNOT SEE A FRESH START IN ITS OWN FRAME — run.html seeds a project for the 1,850 tests written against
+     one. So this boots a whole app on its OWN origin (fresh storage) with `fmseed=0`, the one frame that gets the real
+     boot, and reads it through the collab test agent. Then the two other roads to "nothing open": making the first
+     project (the control — the + must still work) and deleting it again (which used to mint an "Untitled" too), and a
+     reboot, which must come back empty rather than with a project nobody made. */
+  test('936 a fresh start opens no project — Projects shows its empty state, nothing is saved, and deleting the only project goes back to it', { item: '936', budgetMs: 150000 }, async function () {
+    const R = rig921();
+    const tag = 'f936';
+    const src = 'http://f936.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&fmseed=0&tag=' + tag;
+    const say = s => JSON.stringify({ projects: s.projects, names: s.names, cur: s.cur, home: s.homeOpen, empty: s.emptyTitle, open: s.openBadges, docs: s.docKeys }).replace(/"/g, "'");
+    try {
+      await R.bootSrc(tag, src, 390, 844);
+      await R.until('the fresh instance to be on Home', async () => { const s = await R.rpc(tag, 'fresh936'); return s.homeOpen ? s : null; }, 40000);
+      await R.sleep(1500);   // past the 600ms autosave and the Home thumbnail capture — anything that would write has written
+      const s0 = await R.rpc(tag, 'fresh936');
+      if (s0.projects !== 0 || s0.cur) throw new Error('a fresh start made a project he never asked for: ' + say(s0));
+      if (s0.openBadges) throw new Error('a fresh start shows an OPEN badge: ' + say(s0));
+      if (!s0.emptyTitle) throw new Error('a fresh start does not show the Projects empty state: ' + say(s0));
+      if (s0.docKeys.length) throw new Error('a fresh start wrote a project to storage: ' + say(s0));
+
+      /* CONTROL: the + still makes a project on this instance — a boot that could not make one would pass everything above */
+      const s1 = await R.rpc(tag, 'fresh936make');
+      if (s1.projects !== 1 || !s1.cur || !s1.docKeys.length) throw new Error('control: making the first project on a fresh start failed: ' + say(s1));
+
+      /* deleting the only project goes back to the empty state — this minted an "Untitled" too */
+      const s2 = await R.rpc(tag, 'fresh936delete');
+      if (s2.projects !== 0 || s2.cur) throw new Error('deleting the only project left one behind: ' + say(s2));
+      if (!s2.homeOpen || !s2.emptyTitle) throw new Error('deleting the only project did not land on the empty Projects tab: ' + say(s2));
+      if (s2.docKeys.length) throw new Error('deleting the only project left a project doc in storage: ' + say(s2));
+
+      /* his reinstall-then-Restore (review finding): the backup's cards come back and NOTHING is opened — restoring used to
+         leave the last restored entry open, and with nothing open before, that was a project he never chose */
+      await R.rpc(tag, 'fresh936make');
+      const s2b = await R.rpc(tag, 'fresh936restore');
+      if (s2b.restored !== 1 || s2b.projects !== 1) throw new Error('control: the restore did not bring the project back: ' + say(s2b));
+      if (s2b.cur || s2b.openBadges) throw new Error('restoring a backup with nothing open left a project open: ' + say(s2b));
+      await R.rpc(tag, 'fresh936delete');   // back to nothing for the relaunch below (a card tap would open it — delete removes by the index)
+
+      /* …and it stays empty across a relaunch */
+      await R.reboot(tag);
+      await R.until('the relaunched instance to be on Home', async () => { const s = await R.rpc(tag, 'fresh936'); return s.homeOpen ? s : null; }, 40000);
+      await R.sleep(1200);
+      const s3 = await R.rpc(tag, 'fresh936');
+      if (s3.projects !== 0 || s3.cur || s3.docKeys.length) throw new Error('relaunching with no projects made one: ' + say(s3));
+
+      /* TWO WINDOWS, ONE OF THEM WITH NOTHING OPEN (review finding — data loss). Same origin, so they share storage: window B
+         makes a project, then window A — nothing open — flushes and stamps its card, which it does on every hide and switch.
+         A used to fall back to the SHARED current-project pointer, i.e. B's project, and wrote its blank "Untitled" over it. */
+      await R.bootSrc(tag + 'b', 'http://f936.localhost:' + location.port + '/index.html?fmtest=collab&fmseed=0&tag=' + tag + 'b', 390, 844);
+      await R.until('the second window to be on Home', async () => { const s = await R.rpc(tag + 'b', 'fresh936'); return s.homeOpen ? s : null; }, 40000);
+      const b1 = await R.rpc(tag + 'b', 'fresh936make');
+      if (b1.projects !== 1 || !b1.cur) throw new Error('control: window B could not make a project: ' + say(b1));
+      const a1 = await R.rpc(tag, 'fresh936flush');
+      if (a1.cur) throw new Error('window A, with nothing open, took window B\'s project as its own: ' + say(a1));
+      if (a1.openBadges) throw new Error('window A, with nothing open, marks window B\'s project OPEN — a tap there would close Home onto a blank: ' + say(a1));
+      const b2 = await R.rpc(tag + 'b', 'fresh936');
+      if (b2.names.join() !== 'First' || b2.docNames.join() !== 'First') throw new Error('window A (nothing open) wrote over window B\'s project — B now reads ' + JSON.stringify({ names: b2.names, docs: b2.docNames }).replace(/"/g, "'"));
+    } finally { R.drop(tag); R.drop(tag + 'b'); }
+  });
+
 })();
