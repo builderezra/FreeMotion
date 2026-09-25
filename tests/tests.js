@@ -90037,4 +90037,301 @@
   });
 
 
+  /* ═══ HUNT-d, SECOND PASS (queue 690, 25 Sep) — EXPORT, MEASURED IN THE FILE ═══════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Every test here makes a real file through the real
+   * exporter and reads it back: the MP4 is demuxed and every frame decoded with VideoDecoder, the GIF's frame delays and
+   * size come out of its own bytes, the PNG size out of the zip. So what is measured is what he would get, not what the
+   * code meant to write.
+   * The video fixture is built in the test: a clip whose frame k carries k as eight black/white bars (bit 0 leftmost), so
+   * a decoded frame says exactly WHICH source frame it shows — and reads -1 when nothing was drawn at all (all black). */
+  function hunt2dDrawIndex(g, k, w, h) {
+    const bw = w / 8;
+    for (let b = 0; b < 8; b++) { g.fillStyle = ((k >> b) & 1) ? '#ffffff' : '#000000'; g.fillRect(b * bw, 0, bw, h); }
+  }
+  function hunt2dReadIndex(g, w, h) {
+    const d = g.getImageData(0, h >> 1, w, 1).data, bw = w / 8;
+    let k = 0;
+    for (let b = 0; b < 8; b++) { const i = Math.floor(b * bw + bw / 2) * 4; if (d[i] > 128) k |= (1 << b); }
+    return k - 1;   // frame k is drawn as k + 1, so an empty (black) frame reads -1
+  }
+  // A 128x32 H.264 clip of `n` frames at `fps`, frame k carrying k — made the way a phone clip is: constant frame
+  // duration, timestamps on the k/fps grid (the muxer lands them on k * 1920 / 57600, i.e. exactly k/30 at 30 fps).
+  async function hunt2dIndexedClip(n, fps) {
+    const w = 128, h = 32;
+    const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: w, height: h }, fastStart: 'in-memory' });
+    let encErr = null;
+    const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { encErr = e; } });
+    enc.configure({ codec: 'avc1.42e01e', width: w, height: h, bitrate: 2e6, framerate: fps });
+    const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d');
+    for (let k = 0; k < n; k++) {
+      hunt2dDrawIndex(g, k + 1, w, h);
+      const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / fps), duration: Math.round(1e6 / fps) });
+      enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
+    }
+    await enc.flush(); enc.close();
+    if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
+    muxer.finalize();
+    return new File([muxer.target.buffer], 'hunt2d-indexed.mp4', { type: 'video/mp4' });
+  }
+  // Demux the video track of an MP4 (moov at either end) and decode EVERY sample; returns the bar index of each frame,
+  // in presentation order.
+  async function hunt2dDecodeMp4(blob) {
+    const buf = new Uint8Array(await blob.arrayBuffer()), dv = new DataView(buf.buffer);
+    const u32 = o => dv.getUint32(o);
+    const typ = o => String.fromCharCode(buf[o], buf[o + 1], buf[o + 2], buf[o + 3]);
+    const kids = (s, e) => { const out = []; let o = s; while (o + 8 <= e) { let sz = u32(o), hdr = 8; const t = typ(o + 4); if (sz === 1) { sz = Number(dv.getBigUint64(o + 8)); hdr = 16; } if (sz === 0) sz = e - o; if (sz < 8) break; out.push({ t: t, b: o + hdr, e: o + sz }); o += sz; } return out; };
+    const moov = kids(0, buf.length).find(b => b.t === 'moov');
+    if (!moov) throw new Error('setup: the file has no moov box, so it is not a finished MP4');
+    for (const trak of kids(moov.b, moov.e).filter(b => b.t === 'trak')) {
+      const md = kids(kids(trak.b, trak.e).find(b => b.t === 'mdia').b, kids(trak.b, trak.e).find(b => b.t === 'mdia').e);
+      if (typ(md.find(b => b.t === 'hdlr').b + 8) !== 'vide') continue;
+      const ts = u32(md.find(b => b.t === 'mdhd').b + 12);
+      const minf = md.find(b => b.t === 'minf');
+      const stbl = kids(minf.b, minf.e).find(b => b.t === 'stbl');
+      const st = kids(stbl.b, stbl.e), box = t => st.find(b => b.t === t);
+      const ent = box('stsd').b + 8, entSize = u32(ent);
+      const w = dv.getUint16(ent + 32), h = dv.getUint16(ent + 34);
+      const avcC = kids(ent + 86, ent + entSize).find(b => b.t === 'avcC');
+      const desc = buf.slice(avcC.b, avcC.e);
+      const codec = 'avc1.' + [desc[1], desc[2], desc[3]].map(x => x.toString(16).padStart(2, '0')).join('');
+      const stsz = box('stsz'), fixed = u32(stsz.b + 4), count = u32(stsz.b + 8);
+      const sizes = []; for (let i = 0; i < count; i++) sizes.push(fixed || u32(stsz.b + 12 + i * 4));
+      const stco = box('stco'), co64 = box('co64'), offs = [];
+      if (stco) { for (let i = 0, n = u32(stco.b + 4); i < n; i++) offs.push(u32(stco.b + 8 + i * 4)); }
+      else { for (let i = 0, n = u32(co64.b + 4); i < n; i++) offs.push(Number(dv.getBigUint64(co64.b + 8 + i * 8))); }
+      const stsc = box('stsc'), sc = []; for (let i = 0, n = u32(stsc.b + 4); i < n; i++) sc.push([u32(stsc.b + 8 + i * 12), u32(stsc.b + 12 + i * 12)]);
+      const stts = box('stts'), dts = []; for (let i = 0, n = u32(stts.b + 4), t = 0; i < n; i++) { const c = u32(stts.b + 8 + i * 8), d = u32(stts.b + 12 + i * 8); for (let k = 0; k < c; k++) { dts.push(t); t += d; } }
+      const ctts = box('ctts'), cto = new Array(count).fill(0);
+      if (ctts) { for (let i = 0, n = u32(ctts.b + 4), k = 0; i < n; i++) { const c = u32(ctts.b + 8 + i * 8), o = dv.getInt32(ctts.b + 12 + i * 8); for (let j = 0; j < c; j++) cto[k++] = o; } }
+      const stss = box('stss'), keys = new Set(); if (stss) for (let i = 0, n = u32(stss.b + 4); i < n; i++) keys.add(u32(stss.b + 8 + i * 4) - 1);
+      const soff = []; let s = 0;
+      for (let c = 0; c < offs.length; c++) {
+        let per = 0; for (let i = sc.length - 1; i >= 0; i--) if (c + 1 >= sc[i][0]) { per = sc[i][1]; break; }
+        let o = offs[c]; for (let k = 0; k < per && s < count; k++) { soff.push(o); o += sizes[s]; s++; }
+      }
+      const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d', { willReadFrequently: true });
+      const got = []; let decErr = null;
+      const dec = new VideoDecoder({ output: f => { g.clearRect(0, 0, w, h); g.drawImage(f, 0, 0); got.push({ ts: f.timestamp, k: hunt2dReadIndex(g, w, h) }); f.close(); }, error: e => { decErr = e; } });
+      dec.configure({ codec: codec, description: desc, codedWidth: w, codedHeight: h });
+      for (let i = 0; i < count; i++) {
+        dec.decode(new EncodedVideoChunk({ type: (!stss || keys.has(i)) ? 'key' : 'delta', timestamp: Math.round((dts[i] + cto[i]) / ts * 1e6), data: buf.subarray(soff[i], soff[i] + sizes[i]) }));
+      }
+      await dec.flush(); dec.close();
+      if (decErr) throw new Error('setup: the file would not decode: ' + decErr);
+      got.sort((a, b) => a.ts - b.ts);
+      return got.map(x => x.k);
+    }
+    throw new Error('setup: the file has no video track');
+  }
+  async function hunt2dLoadWarm(file) {
+    const rec = await FM.loadVideoFile(file);
+    const t0 = Date.now();
+    while (rec.el.readyState < 2 && Date.now() - t0 < 8000) await new Promise(r => setTimeout(r, 30));
+    if (rec.el.readyState < 2) throw new Error('setup: the fixture clip never decoded a frame (readyState ' + rec.el.readyState + ')');
+    return rec;
+  }
+  function hunt2dScene(layers, P) {
+    return scene(layers, { project: Object.assign({ width: 128, height: 32, fps: 30, duration: 3, background: '#000000' }, P || {}) });
+  }
+  function hunt2dClipLayer(rec, made) {
+    const V = FM.makeLayer('video', { name: 'hunt2d clip', x: 64, y: 16, start: 0, duration: 3 });
+    V.trimStart = 0; V.trimEnd = 3;
+    FM.media.set(V.id, rec); made.push(V.id);
+    return V;
+  }
+  async function hunt2dExport(opts) {
+    let blob = null;
+    await FM.exporter.run(Object.assign({ scale: 1, name: 'hunt2d', onProgress: function () {}, onReady: async function (r) { blob = r.blob; } }, opts));
+    if (!blob) throw new Error('setup: the export produced no file');
+    return blob;
+  }
+  // Catch what the app hands to a download link, without anything actually downloading.
+  function hunt2dCatchDownloads() {
+    const blobs = [], names = [];
+    const mk = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
+    URL.createObjectURL = function (b) { const u = mk.call(URL, b); if (b instanceof Blob) blobs.push({ url: u, blob: b }); return u; };
+    HTMLAnchorElement.prototype.click = function () { if (this.download) { names.push({ name: this.download, blob: (blobs.find(x => x.url === this.href) || {}).blob || null }); return; } return click.call(this); };
+    return { files: names, stop: function () { URL.createObjectURL = mk; HTMLAnchorElement.prototype.click = click; } };
+  }
+
+  /* HUNT-d 1 — A 30 FPS CLIP COMES OUT OF THE EXPORT WITH EVERY THIRD FRAME MISSING.
+   * run() puts each exported frame on the video by writing `el.currentTime = t` with t = f / fps — exactly ON the
+   * boundary between two source frames. A 30 fps clip's frames sit on k/30 (a phone writes them as 20/600-second
+   * steps, which the browser holds in whole microseconds: 33333, 66667, 100000 …), while the seek target 2/30 =
+   * 0.0666666… is held as 66666 µs — one microsecond BEFORE frame 2 starts. So the seek lands on frame 1. It happens
+   * for every frame whose start rounds up (k = 2, 5, 8, …), i.e. a third of them: measured, the file reads
+   * 0,1,1,3,4,4,6,7,7… — frames 2, 5, 8 … are never in it and the one before each plays twice. The preview plays the
+   * clip natively and shows every frame, so it looks smooth while he edits and judders in the file.
+   * CONTROL: the fixture clip itself decodes as 0..89 in order, which proves the demuxer, the decoder and the bar reader
+   * before anything is blamed on the exporter. The filmstrip is kept off this element (that collision is HUNT-d 2). */
+  test('HUNT-d a 30 fps clip exported at 30 fps drops every third frame and shows the one before it twice', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    try {
+      const file = await hunt2dIndexedClip(90, 30);
+      const src = await hunt2dDecodeMp4(file);
+      if (src.length !== 90 || src.some((v, i) => v !== i)) throw new Error('CONTROL: the fixture clip itself reads back as ' + src.join(',') + ' instead of 0..89, so the reader is wrong and nothing below means anything');
+      const rec = await hunt2dLoadWarm(file);
+      rec.stripFrames = [];   // no timeline thumbnails seeking this element — that race is HUNT-d 2, kept out of this one
+      FM.scene = hunt2dScene([hunt2dClipLayer(rec, made)], { duration: 3 });
+      FM.refreshAll();
+      const got = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }));
+      if (got.length !== 90) throw new Error('the export has ' + got.length + ' frames, not the 90 of a 3 s project at 30 fps');
+      const wrong = [], never = [];
+      got.forEach((v, i) => { if (v !== i) wrong.push('frame ' + i + ' shows ' + v); });
+      for (let k = 0; k < 90; k++) if (got.indexOf(k) < 0) never.push(k);
+      if (wrong.length) throw new Error(wrong.length + ' of the 90 frames in the exported MP4 show the wrong moment of the clip (' + wrong.slice(0, 5).join(', ') + ' …), and source frames ' + never.slice(0, 8).join(', ') + ' … are not in the file at all — every third frame of a plain 30 fps clip is dropped and the one before it plays twice, so the export judders where the preview plays smoothly. File reads: ' + got.slice(0, 15).join(',') + ' …');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-d 2 — EXPORT WHILE THE TIMELINE IS STILL DRAWING A CLIP'S THUMBNAILS, AND THE START OF THE VIDEO IS BLACK.
+   * Every clip's filmstrip is drawn by SEEKING THE CLIP'S OWN <video> eight times (js/frames.js _extractStrip). It runs
+   * whenever a video row is drawn with no strip yet — on every import, duplicate, paste or replace, and for EVERY clip
+   * each time a project is opened (strips are not saved), one clip after another. frames.js serialises its own users
+   * through the element's seek lock and FM.seekBusy, and the preview stands down for it — but the exporter's seekVideo
+   * takes no lock and asks nothing. So an export started while strips are still being drawn fights them for the same
+   * element: the export's frame lands mid-seek (readyState 1, which the compositor skips in an export, so the frame is
+   * BLACK) or on the thumbnail's moment instead of its own. Measured: 19 to 22 black frames at the start of a 3 s file.
+   * On his phone, with several 4K clips, drawing the strips after opening a project takes seconds — about as long as
+   * it takes to tap Export and Export MP4.
+   * The check allows a frame to be one off its index, so it measures this race and not HUNT-d 1.
+   * CONTROL: the same clip exported again once its filmstrip is finished has no black frame and no frame more than one
+   * away from where it belongs. */
+  test('HUNT-d exporting while the timeline is still drawing a clip thumbnails bakes black frames into the start of the video', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (!FM.buildClipStrip) throw new Error('setup: the timeline filmstrip builder is gone, so there is nothing to race');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const badOf = got => got.map((v, i) => (v < 0 || Math.abs(v - i) > 1) ? i : -1).filter(i => i >= 0);
+    try {
+      const rec = await hunt2dLoadWarm(await hunt2dIndexedClip(90, 30));   // decoded and on screen, like a clip he is looking at
+      /* He presses Export while the strip is being drawn: the export starts the moment the filmstrip's first seek goes
+         out on this element. (Waiting on the element's own event rather than a timer, so a strip queued behind another
+         clip's is still caught when it really starts.) */
+      const firstStripSeek = new Promise(res => {
+        const on = () => { rec.el.removeEventListener('seeking', on); res(true); };
+        rec.el.addEventListener('seeking', on);
+        setTimeout(() => { rec.el.removeEventListener('seeking', on); res(false); }, 30000);   // generous: the strip queue is global, one clip at a time
+      });
+      FM.scene = hunt2dScene([hunt2dClipLayer(rec, made)], { duration: 3 });
+      FM.refreshAll();   // the timeline draws the new row and starts the clip's filmstrip, exactly as it does after an import or on opening a project
+      if (!rec._stripPending && !rec._stripBuilding && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (!rec._stripPending && !rec._stripBuilding) throw new Error('setup: the timeline did not ask for this clip filmstrip (stripFrames ' + (rec.stripFrames ? rec.stripFrames.length : rec.stripFrames) + '), so the export is not racing anything');
+      if (!(await firstStripSeek) || !rec._stripBuilding) throw new Error('setup: the filmstrip never started seeking this clip (building ' + rec._stripBuilding + ', stripFrames ' + (rec.stripFrames ? rec.stripFrames.length : rec.stripFrames) + '), so the export is not racing anything');
+      const got = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }));
+      // CONTROL: once the filmstrip is finished, the same export is clean
+      const t1 = Date.now();
+      while ((rec._stripBuilding || rec.stripFrames === undefined) && Date.now() - t1 < 10000) await new Promise(r => setTimeout(r, 30));
+      const again = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }));
+      const againBad = badOf(again);
+      if (again.length !== 90 || againBad.length) throw new Error('CONTROL: with the filmstrip finished the export still has ' + againBad.length + ' black or misplaced frames (' + again.slice(0, 20).join(',') + ' …), so the fault below is not the race');
+      const bad = badOf(got);
+      if (bad.length) {
+        const black = bad.filter(i => got[i] < 0);
+        throw new Error('exported while the timeline was still drawing the clip thumbnails, ' + bad.length + ' of the 90 frames came out wrong — ' + black.length + ' of them BLACK (frames ' + black.slice(0, 6).join(', ') + (black.length > 6 ? ' …' : '') + ')' + (bad.length > black.length ? ' and ' + (bad.length - black.length) + ' showing another moment of the clip' : '') + '. So the start of the video in his file is black or jumps about, with nothing said. File reads: ' + got.slice(0, 24).join(',') + ' …');
+      }
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-d 3 — A GIF PLAYS AT THE WRONG SPEED.
+   * GIF frame delays are whole hundredths of a second, and runGif hands each frame 1000 / fps ms, which js/gif-encode.js
+   * rounds ON ITS OWN, every frame, with no carry: 33.3 ms becomes 3 cs (30 ms), 16.7 ms becomes 2 cs (20 ms), 8.3 ms
+   * is floored to 2 cs. Read out of the file's own bytes, a 2 s project exports as a GIF that plays for 1.80 s at
+   * 30 fps (10 percent fast — and 30 is the default project rate), 2.40 s at 60 fps (20 percent slow) and 4.80 s at
+   * 120 fps. The motion in a GIF does not match the project he made, and a looping GIF drifts against anything timed.
+   * CONTROL: at 25 fps the delay is exactly 4 cs, and the same parser reads that GIF as 2.00 s — so the reader is right. */
+  test('HUNT-d a GIF plays at the wrong speed, a 30 fps GIF runs 10 percent fast and a 60 fps one 20 percent slow', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.exporter || !FM.exporter.runGif || !FM.gifEncoder) throw new Error('setup: the GIF exporter is not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, dl = hunt2dCatchDownloads();
+    const delaysOf = async blob => { const b = new Uint8Array(await blob.arrayBuffer()), out = []; for (let i = 0; i + 7 < b.length; i++) if (b[i] === 0x21 && b[i + 1] === 0xF9 && b[i + 2] === 4) { out.push(b[i + 4] | (b[i + 5] << 8)); i += 7; } return out; };
+    const lengthAt = async fps => {
+      dl.files.length = 0;
+      await FM.exporter.runGif({ scale: 1, fps: fps, name: 'hunt2d', onProgress: function () {} });
+      const f = dl.files[dl.files.length - 1];
+      if (!f || !f.blob) throw new Error('setup: the ' + fps + ' fps GIF export handed nothing to the download link');
+      const d = await delaysOf(f.blob);
+      return { frames: d.length, secs: d.reduce((a, x) => a + x, 0) / 100 };
+    };
+    try {
+      const box = FM.makeLayer('shape', { name: 'hunt2d box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5', start: 0, duration: 2 });
+      FM.scene = scene([box], { project: { width: 64, height: 64, fps: 30, duration: 2, background: '#000000' } });
+      FM.refreshAll();
+      const c25 = await lengthAt(25);
+      if (c25.frames !== 50 || Math.abs(c25.secs - 2) > 0.001) throw new Error('CONTROL: the 25 fps GIF reads as ' + c25.frames + ' frames lasting ' + c25.secs + ' s, not 50 frames and 2.00 s, so the delay reader is wrong');
+      const g30 = await lengthAt(30), g60 = await lengthAt(60), g120 = await lengthAt(120);
+      const off = [[30, g30], [60, g60], [120, g120]].filter(x => Math.abs(x[1].secs - 2) > 0.04);
+      if (off.length) throw new Error('a 2 s project exported as a GIF plays for ' + off.map(x => x[1].secs.toFixed(2) + ' s at ' + x[0] + ' fps').join(', ') + ' — each frame delay is rounded to whole hundredths of a second on its own, so a 30 fps GIF runs 10 percent fast and a 60 fps one 20 percent slow; the animation in the GIF is not the speed he made it');
+    } finally {
+      dl.stop();
+      FM.scene = saved;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-d 4 — CUSTOM SIZE IS OFFERED FOR GIF AND PNG FRAMES, AND IGNORED BY BOTH.
+   * The export dialog shows Resolution → Custom size… and its width/height boxes for every picture format. runExport
+   * reads them into outW/outH — and hands them to exporter.run (MP4) only; runGif and runFrames get the scale (1 for a
+   * custom size) and nothing else, and size themselves off the project. Measured through the real dialog: Custom size
+   * 200 x 200 on a 320 x 180 project, and both the GIF and the PNG frames came out 320 x 180, with the 200 x 200 still on
+   * screen. A square GIF for a profile picture or a post, which is what the box is for, cannot be made.
+   * CONTROL: the Custom size row really is on screen for the format when Export is pressed, so it was offered. */
+  test('HUNT-d a Custom size set in the export dialog is ignored for GIF and PNG frames, the file comes out at the project size', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.showExportDialog || !FM.exporter || !FM.exporter.runGif || !FM.exporter.runFrames) throw new Error('setup: the export dialog or the GIF / frames exporters are not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, dl = hunt2dCatchDownloads();
+    let prefs0 = null; try { prefs0 = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+    const $ = id => document.getElementById(id);
+    const sizeOf = async (fmt, blob) => {
+      const b = new Uint8Array(await blob.arrayBuffer());
+      if (fmt === 'gif') return [b[6] | (b[7] << 8), b[8] | (b[9] << 8)];
+      for (let i = 0; i + 12 < b.length; i++) if (b[i] === 0x49 && b[i + 1] === 0x48 && b[i + 2] === 0x44 && b[i + 3] === 0x52) { const dv = new DataView(b.buffer); return [dv.getUint32(i + 4), dv.getUint32(i + 8)]; }
+      throw new Error('setup: the frames zip holds no PNG');
+    };
+    const through = async fmt => {
+      dl.files.length = 0;
+      await FM.showExportDialog();
+      if ($('export-dialog').classList.contains('hidden')) throw new Error('setup: the export dialog did not open');
+      $('exp-format').value = fmt; $('exp-format').dispatchEvent(new Event('change'));
+      $('exp-range').value = 'whole';
+      $('exp-res').value = 'custom'; $('exp-res').dispatchEvent(new Event('change'));
+      $('exp-cw').value = '200'; $('exp-ch').value = '200';
+      const row = $('exp-custom-field');
+      if (!row || row.classList.contains('hidden') || !row.getBoundingClientRect().height) throw new Error('CONTROL: the Custom size row is not on screen for ' + fmt + ', so the dialog never offered it');
+      $('exp-go').click();
+      const t0 = Date.now();
+      while (!dl.files.length && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 40));
+      const f = dl.files[0];
+      if (!f || !f.blob) throw new Error('setup: the ' + fmt + ' export handed nothing to the download link');
+      await new Promise(r => setTimeout(r, 1100));   // the progress card lingers 900 ms on Done
+      return sizeOf(fmt, f.blob);
+    };
+    try {
+      const box = FM.makeLayer('shape', { name: 'hunt2d box', shape: 'rect', x: 160, y: 90, shapeW: 60, shapeH: 60, fill: '#3a7bd5', start: 0, duration: 0.3 });
+      FM.scene = scene([box], { project: { width: 320, height: 180, fps: 10, duration: 0.3, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll();
+      const gif = await through('gif');
+      const png = await through('frames');
+      const wrong = [['the GIF', gif], ['the PNG frames', png]].filter(x => x[1][0] !== 200 || x[1][1] !== 200);
+      if (wrong.length) throw new Error('Custom size 200 x 200 was set and on screen in the export dialog, and ' + wrong.map(x => x[0] + ' came out ' + x[1][0] + ' x ' + x[1][1]).join(' and ') + ' — the project size. The box is offered for these formats and silently ignored, so a square GIF cannot be made');
+    } finally {
+      dl.stop();
+      try { if (prefs0 == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', prefs0); } catch (e) {}
+      try { $('exp-format').value = 'mp4'; $('exp-res').value = '1'; $('exp-res').dispatchEvent(new Event('change')); $('exp-cw').value = ''; $('exp-ch').value = ''; if (FM._syncExportFormat) FM._syncExportFormat(); } catch (e) {}
+      try { $('export-dialog').classList.add('hidden'); $('export-overlay').classList.add('hidden'); } catch (e) {}
+      FM.scene = saved;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
 })();
