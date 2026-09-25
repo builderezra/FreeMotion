@@ -16621,7 +16621,13 @@
     const cog = document.getElementById('btn-settings');
     if (!dlg || !cog) throw new Error('need #canvas-dialog and #btn-settings');
     const w0 = FM.scene.project.width, h0 = FM.scene.project.height;
-    const down = (el, x, y) => el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
+    /* A WHOLE press — down, up and the click — because the backdrop closes on the CLICK now, and only when the
+       press began on it (queue 690: closing on pointerdown let a real phone tap carry on to what was under it). */
+    const down = (el, x, y) => {
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
+      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y }));
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+    };
     const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     try {
       if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
@@ -92125,11 +92131,14 @@
   function huntfCanvasUp() { const d = document.getElementById('canvas-dialog'); return !!d && !d.classList.contains('hidden'); }
   function huntfShutAll() {
     try { if (FM.shortcuts && FM.shortcuts.isOpen()) FM.shortcuts.hide(); } catch (e) {}
+    // the Before you export card goes out through its own Back, so the export awaiting it gets its answer
+    try { const bk = document.querySelector('.np-remind .np-back'); if (bk) bk.click(); } catch (e) {}
+    try { const xd = document.getElementById('export-dialog'); if (xd && !xd.classList.contains('hidden')) { const c = document.getElementById('exp-cancel'); if (c) c.click(); else xd.classList.add('hidden'); } } catch (e) {}
     try { if (FM.notepad && FM.notepad.isOpen()) FM.notepad.close(); } catch (e) {}
     try { if (huntfCanvasUp()) { const c = document.getElementById('cv-cancel'); if (c) c.click(); } } catch (e) {}
   }
 
-  test('HUNT-f on the phone a tap outside the help sheet, Notes or Canvas settings also presses whatever is under the finger — over the top bar it deletes the selected layer, and a second tap on the button that opened them opens them straight back up', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 on the phone a tap outside the ? sheet, Notes, Canvas settings or the Before you export card only closes it — it never presses what is under the finger (the bin, Export), and a second tap on the button that opened one closes it', { item: '690', budgetMs: 90000 }, async function () {
     /* The ? sheet (#shortcuts-overlay), the Notes pad (.np-scrim) and Canvas settings (#canvas-dialog) all close on
        POINTERDOWN on their backdrop and are gone at once. A real tap then goes on: its click is hit-tested AFTER the
        backdrop has left, so it lands on whatever was under the finger. js/ask.js says exactly this about its own scrim
@@ -92137,7 +92146,9 @@
        the backdrop (popFrom / cv-anchored) so the double-tap case works there — on the phone nothing is lifted.
        Two things he sees: (1) tapping the top bar to get rid of the ? sheet presses the bin under that spot and the
        layer is gone; (2) his #762 — "tap it again it should close it not open it again" — Notes, ? and the cog each
-       flash shut and pop straight back open. */
+       flash shut and pop straight back open. The Before you export card (js/notepad.js confirmExport) had the same
+       pointerdown close: a tap outside it over the phone's Export button pressed Export again and the card came back.
+       FIXED (queue 690): all four close on the CLICK, and only when the press began on the backdrop — ask.js's rule. */
     const saved = FM.scene, wasHome = FM.home.isOpen();
     const probs = [];
     try {
@@ -92186,6 +92197,23 @@
             await sleep(600);
             if (d.up()) probs.push('a second tap on ' + d.name + ' did not close it — it closed on the finger going down and the same tap opened it again');
           }
+          /* ── 3: the Before you export card — a tap outside it, over the phone's Export button ── */
+          huntfShutAll(); await sleep(250);
+          FM.scene.project.notes = [{ id: 'hf3', text: 'Swap the logo', remind: true }];
+          const xb = document.getElementById('m-export');
+          if (!xb) throw new Error('setup: #m-export is missing from the phone bar');
+          const px = huntfCenter(xb);
+          if (!(px.w > 0)) throw new Error('setup: the phone Export button is not on screen with nothing selected');
+          await realInput924(huntfTap(px), 'a tap on Export with a ticked reminder');
+          await sleep(500);
+          if (!document.querySelector('.np-remind')) throw new Error('setup: a real tap on Export with a ticked reminder did not bring up the Before you export card');
+          const ux = document.elementFromPoint(px.x, px.y);
+          if (!ux || !ux.classList.contains('np-remind')) throw new Error('setup: the spot over Export is not the reminder card backdrop (it is ' + (ux ? (ux.id || ux.className) : 'nothing') + ')');
+          await realInput924(huntfTap(px), 'a tap outside the reminder card, over Export');
+          await sleep(600);
+          if (document.querySelector('.np-remind')) probs.push('a tap outside the Before you export card, over the Export button, closed it and pressed Export again — the card came straight back');
+          huntfShutAll();
+          FM.scene.project.notes = [];
         }, 380);
       });
       if (probs.length) throw new Error('On the phone: ' + probs.join('; ') + '.');
@@ -92197,12 +92225,13 @@
     }
   });
 
-  test('HUNT-f the Notes reminder dot tells the truth about the project on screen — after he opens a project with a ticked reminder it is lit, and in a project with none it is off', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 the Notes reminder dot tells the truth about the project on screen — lit when he opens a project with a ticked reminder, off in a project with none', { item: '690', budgetMs: 60000 }, async function () {
     /* The dot on the Notes button (queue 139: a ticked note is a reminder that stops an export) is only ever repainted
        from inside notepad.js — opening or closing the pad, ticking, typing. Nothing repaints it when a project is
        OPENED, and FM.notepad.sync is exported but called by nobody. So after the app is reopened the dot is dark over a
        project whose reminder is waiting (the only moment it matters), and after moving to another project it keeps the
-       LAST project's dot. Measured on the phone bar: tick a reminder, reload — pending 1, dot off. */
+       LAST project's dot. Measured on the phone bar: tick a reminder, reload — pending 1, dot off.
+       FIXED (queue 690): refreshAll repaints the dot — every project load, boot restore and undo lands there. */
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
     const made = [];
     const lit = () => ['m-notes-dot', 'btn-notes-dot'].map(id => document.getElementById(id)).filter(Boolean).some(d => d.classList.contains('on'));
@@ -92232,12 +92261,14 @@
     }
   });
 
-  test('HUNT-f turning on Demo mode hides his clip names in the Add menu already on screen on PC — not only after he changes tab', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 turning on Demo mode hides his clip names and pictures in the Add menu already on screen on PC — not only after he changes tab', { item: '690', budgetMs: 60000 }, async function () {
     /* Settings says Demo mode hides your photo and video previews and their filenames in the Add menu, so a screen
        recording never shows your camera roll. The Add menu reads the switch only when it draws a tab, and nothing
        redraws it when the switch changes (only Home subscribes to FM.settings.onChange). On PC the Add panel is always
        on screen with nothing selected: with Add, Media open, Canvas settings, App settings, Demo mode on, close —
-       and his clip, its filename and its picture, are still there until he happens to change tab. */
+       and his clip, its filename and its picture, are still there until he happens to change tab.
+       FIXED (queue 690): js/addmenu.js subscribes once to FM.settings.onChange and redraws a live menu whose tiles
+       were drawn under the other Demo-mode value. */
     const wasHome = FM.home.isOpen(), savedSel = FM.scene.selectedId;
     let lib0 = null; try { lib0 = localStorage.getItem('fm.medialib'); } catch (e) {}
     const demo0 = !!FM.settings.get('demoMode');
@@ -92274,12 +92305,14 @@
     }
   });
 
-  test('HUNT-f on PC the keys that close help and Notes work — a second ? hides the shortcuts sheet it says it toggles, and Esc while writing a note closes Notes', { item: '690', budgetMs: 45000 }, async function () {
+  test('690 on PC the keys that close help and Notes work — a second ? hides the shortcuts sheet it says it toggles, and Esc while writing a note closes Notes', { item: '690', budgetMs: 45000 }, async function () {
     /* The sheet lists ? as Show / hide this help. The first ? opens it; the second is thrown away by the
        overlay-owns-the-screen guard at the top of the editor key handler (the open sheet IS a full-screen overlay), so
        the sheet cannot be closed with the key that opened it. And Esc, which #690 taught to close Notes, never gets
        there while he is typing: + Add a note focuses the new line, and the handler returns for any key in a text field
-       before it reaches the Escape branch — so Esc after writing a note does nothing. */
+       before it reaches the Escape branch — so Esc after writing a note does nothing.
+       FIXED (queue 690): the key handler hides an open sheet on ? before the overlay guard, and answers Escape from
+       inside the pad's own fields before the in-a-field return. */
     const wasHome = FM.home.isOpen(), P = FM.scene.project, notes0 = P.notes;
     const probs = [];
     const key = (target, k, code, shift) => target.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: code, shiftKey: !!shift, bubbles: true, cancelable: true }));
