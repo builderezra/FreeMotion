@@ -4276,18 +4276,27 @@ window.FM = window.FM || {};
     }
     return true;
   });
+  /* RETURNS A PROMISE THAT SETTLES WHEN THE SWAP HAS LANDED (queue 690, HUNT-e) — true once the new file is in
+     the layer, false if he cancelled or it would not load. The layer ⋯ menu ignores it, as it always has. The
+     Insert your Media screen needs it: it used to guess when to redraw (on window focus, and on a 1.2 s timer),
+     and both guesses land BEFORE the swap does — the focus comes back while his photo is still decoding and the
+     timer fires while he is still choosing — so the slot kept the template's picture and the swap looked like
+     it had done nothing. A picker that is dismissed in a browser without the `cancel` event never settles; a
+     caller that waits on it simply never hears back, which is exactly what happened before. */
   FM.replaceMedia = function (id) {
     const layer = FM.layerById(FM.scene, id);
-    if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return;
+    if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return Promise.resolve(false);
+    let settle = null;
+    const landed = new Promise(res => { settle = res; });
     const input = document.createElement('input');
     input.type = 'file'; input.accept = 'video/*,image/*'; input.style.display = 'none';
-    input.addEventListener('change', async () => {
+    const swap = async () => {
       const file = input.files && input.files[0]; input.remove();
-      if (!file) return;
+      if (!file) return false;
       const isVideo = /^video\//.test(file.type) || /\.(mp4|mov|webm|mkv|m4v)$/i.test(file.name);
       let nrec = null;
       try { nrec = isVideo ? await FM.loadVideoFile(file) : await FM.loadImageFile(file); } catch (e) { nrec = null; }
-      if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return; }
+      if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return false; }
       /* queue 829: keep the outgoing file BEFORE anything replaces it. The next save writes the new blob
          over the same key, so without this the original is gone from the registry, from IndexedDB and
          from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
@@ -4323,9 +4332,14 @@ window.FM = window.FM || {};
         FM.mediaLib.list().filter(e => e.key === id).forEach(e => FM.mediaLib.remove(e.mid));
         FM.mediaLib.add(nrec, id);
       }
-    });
+      return true;
+    };
+    input.addEventListener('cancel', () => { input.remove(); settle(false); });
+    // a throw still surfaces as the unhandled rejection it always was — the caller just hears "no swap" first
+    input.addEventListener('change', () => { swap().then(settle, e => { settle(false); throw e; }); });
     document.body.appendChild(input);
     input.click();
+    return landed;
   };
 
   // ===== Playhead-is-outside-the-clip actions (Alight Motion parity) =====
