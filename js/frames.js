@@ -23,23 +23,46 @@ window.FM = window.FM || {};
   // backgrounded tabs clamp setTimeout to ~1s, which would make decoding crawl.)
   function seekAndPaint(el, t) {
     return new Promise(res => {
-      let tries = 0;
+      let tries = 0, emptied = false;
       const attempt = () => {
         let done = false;
         const fin = () => {
           if (done) return;
           done = true;
           el.removeEventListener('seeked', fin);
+          el.removeEventListener('emptied', onEmptied);
           // A stale 'seeked' (another consumer's seek landing) or the 500ms cap can leave the
           // element on the WRONG frame — verify we actually arrived, one re-seek per miss.
-          if (Math.abs((el.currentTime || 0) - t) > 0.2 && tries < 2) { tries++; attempt(); return; }
+          // Not on an element that was just EMPTIED: there is no frame left to arrive at.
+          if (!emptied && Math.abs((el.currentTime || 0) - t) > 0.2 && tries < 2) { tries++; attempt(); return; }
           res();
         };
+        /* The clip was released under this seek (queue 690, hunt f) — its project was left and its src taken
+           away. 'seeked' will never come, so stop now rather than sit out the 500 ms cap (and its re-seeks). */
+        const onEmptied = () => { emptied = true; fin(); };
         el.addEventListener('seeked', fin);
+        el.addEventListener('emptied', onEmptied);
         try { el.currentTime = t; } catch (e) { fin(); }
         setTimeout(fin, 500); // fallback cap if 'seeked' never fires
       };
       attempt();
+    });
+  }
+
+  /* Wait for an element to become decodable — but never for one that has been RELEASED (queue 690, hunt f).
+   * Both builders below waited up to 3 s for 'loadeddata'. When he leaves a project, js/media.js release()
+   * takes the src away and marks the record `_released`; 'loadeddata' can then never fire, and every strip
+   * build still queued for that project's clips sat out the full 3 s, one after another, in the app's ONE
+   * strip queue — so the clips of the project he had just opened stayed blank bars behind them (measured
+   * 0.6 s to a filmstrip opened directly, 9 s after looking into three other projects on the way). Taking
+   * the src away fires 'emptied', so a wait already in progress ends then too. */
+  function waitDecodable(el) {
+    return new Promise(r => {
+      let t = 0;
+      const on = () => { el.removeEventListener('loadeddata', on); el.removeEventListener('emptied', on); clearTimeout(t); r(); };
+      el.addEventListener('loadeddata', on);
+      el.addEventListener('emptied', on);
+      t = setTimeout(on, 3000);
     });
   }
 
@@ -83,7 +106,7 @@ window.FM = window.FM || {};
       try {
       const el = rec.el, dur = rec.duration || 0;
       // metadata alone isn't decodable frames — on a fresh reload the blob may still be warming up
-      if (el && el.readyState < 2) await new Promise(r => { const on = () => { el.removeEventListener('loadeddata', on); r(); }; el.addEventListener('loadeddata', on); setTimeout(r, 3000); });
+      if (el && el.readyState < 2 && !rec._released) await waitDecodable(el);
       // A full 1080x1920 bitmap is ~8MB; a reversed/slow clip can need hundreds of frames → multiple GB,
       // which OOM-kills mobile Safari. On the preview path, downscale the longest side to maxDim and cap
       // the frame COUNT by a byte budget. The compositor draws frames scaled to display size anyway, so a
@@ -124,7 +147,8 @@ window.FM = window.FM || {};
         return null;
       };
       for (let i = 0; i < count; i++) {
-        if (shouldAbort && shouldAbort()) return giveUp();
+        // A released clip (its project was left — see waitDecodable) is abandoned like a cancelled one.
+        if ((shouldAbort && shouldAbort()) || rec._released) return giveUp();
         await seekAndPaint(el, Math.min((i * dur) / count, Math.max(0, dur - 0.001)));
         try {
           frames[i] = useResize
@@ -193,6 +217,8 @@ window.FM = window.FM || {};
 
   async function _extractStrip(m, count) {
     if (!m || !m.el || m._stripBuilding || m.stripFrames !== undefined) return m && m.stripFrames;
+    // Released while it waited in the queue — nobody can draw it now, so hand the queue straight on (queue 690).
+    if (m._released) return undefined;
     count = count || 8;
     m._stripBuilding = true;
     try {
@@ -201,20 +227,23 @@ window.FM = window.FM || {};
         try { m.stripFrames = [opt ? await createImageBitmap(m.el, opt) : await createImageBitmap(m.el)]; } catch (e) { m.stripFrames = []; }
       } else {
         const el = m.el;
-        if (el.readyState < 2) {   // wait for it to become decodable (don't spin / retry forever)
-          await new Promise(res => { const on = () => { el.removeEventListener('loadeddata', on); res(); }; el.addEventListener('loadeddata', on); setTimeout(res, 3000); });
-        }
+        if (el.readyState < 2) await waitDecodable(el);   // wait for it to become decodable (don't spin / retry forever)
         const frames = [];
-        if (el.readyState >= 2) {
+        if (el.readyState >= 2 && !m._released) {
           const dur = (isFinite(m.duration) && m.duration > 0) ? m.duration : (el.duration || 1);
           const wasTime = el.currentTime, wasMuted = el.muted; el.muted = true;
           const opt = stripSize(el, m);
           for (let i = 0; i < count; i++) {
+            if (m._released) break;   // released mid-strip (queue 690): every seek left would wait on nothing
             await seekAndPaint(el, Math.min((i + 0.5) * dur / count, Math.max(0, dur - 0.001)));
             try { frames.push(opt ? await createImageBitmap(el, opt) : await createImageBitmap(el)); } catch (e) {}
           }
-          try { el.currentTime = wasTime; } catch (e) {}
+          if (!m._released) { try { el.currentTime = wasTime; } catch (e) {} }
           el.muted = wasMuted;
+        }
+        if (m._released) {   // a strip of a clip nobody can see any more — give its bitmaps straight back
+          frames.forEach(f => { if (f && f.close) try { f.close(); } catch (e) {} });
+          return undefined;
         }
         m.stripFrames = frames;   // ALWAYS set (even [] on failure) so the timeline never retries forever
       }
