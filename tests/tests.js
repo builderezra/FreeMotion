@@ -95894,4 +95894,253 @@
     }
   });
 
+  /* ═══ HUNT-d (queue 690, fifth hunt) — A PROJECT ACROSS RELOADS, WINDOWS AND SWITCHES ══════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Four findings in what happens to a project
+   * between the moments he is editing it: the app closed straight after a big import, a second window on the same
+   * project, a rename on Home followed by an Undo, and a song still opening when he switches project. Each test FAILS on
+   * v16.98 because of the bug it names, and each carries a control that proves its flow works when nothing goes wrong.
+   * The reload and second-window tests run whole app instances on their own origins through the tier-3 rig (rig921), so
+   * the reload is a real page reload and the second window really shares his storage; the Home tests use a real finger. */
+  function hd5Sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function hd5Say(o) { let t; try { t = JSON.stringify(o); } catch (e) { t = String(o); } return String(t).replace(/"/g, "'"); }
+  async function hd5Until(what, fn, ms) {
+    const end = Date.now() + (ms || 5000);
+    for (;;) { const v = fn(); if (v) return v; if (Date.now() > end) throw new Error('timed out waiting for ' + what); await hd5Sleep(40); }
+  }
+  // A real finger on `el`. atPhoneWidth(…, 360) + onScreen924 put the frame where the driver's touches land.
+  async function hd5Tap(el, what) {
+    if (!el) throw new Error('setup: nothing to tap for ' + what);
+    const r = el.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+    if (!(r.width > 0) || x < 0 || y < 0 || x > 350 || y > 740) throw new Error('setup: ' + what + ' is at ' + x + ',' + y + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
+    await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+  }
+  function hd5Card(pid) { return document.querySelector('#home-screen .hm-card[data-pid="' + pid + '"]'); }
+  async function hd5Cleanup(made, orig, wasOpen) {
+    try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    try { if (wasOpen) FM.home.open(); else FM.home.close(); } catch (e) {}
+    await hd5Sleep(200);
+  }
+
+  test('HUNT-d a big clip imported just before the app is closed comes back as an empty clip, and nothing says it was never saved', { item: '690', budgetMs: 180000 }, async function () {
+    /* addMediaLayer writes the project document at once (the clip is ON the timeline in storage) and only then starts
+       writing the clip's FILE — for a phone video that takes seconds. If the app is closed in those seconds (iOS throws a
+       PWA out of memory after a big import, or he swipes it away) the file never lands. Reopened, the clip is still on
+       the timeline, draws nothing, plays nothing, and nothing tells him it has to be added again — the tile in Add → Media
+       is dead too. Real page reload of a whole app on its own origin, at phone size. */
+    const R = rig921();
+    const tag = 'hd5k';
+    const src = 'http://hd5k.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag;
+    try {
+      await R.bootSrc(tag, src, 390, 844);
+      await R.rpc(tag, 'setScene', { names: ['Title'], name: 'Holiday' });
+      /* CONTROL: the same import, given time to finish saving, comes back from a reload with its file */
+      const c = await R.rpc(tag, 'addMedia', { kind: 'video', name: 'IMG_4409.MOV' });
+      await R.sleep(2500);
+      await R.reboot(tag);
+      const rc = await R.rpc(tag, 'record', { id: c.id });
+      const sc = await R.rpc(tag, 'state');
+      if (sc.layers.indexOf(c.id) < 0 || !rc.disk) throw new Error('CONTROL: a clip left to finish saving did not come back from a reload with its file (' + hd5Say({ layers: sc.names, record: rc }) + ') — this fixture cannot see the bug');
+      /* the big one, and the app is closed while its file is still being written */
+      const was = R.upCount(tag);
+      const big = await R.rpc(tag, 'importThenClose', { mb: 96, name: 'IMG_4410.MOV' });
+      if (!big || !big.id) throw new Error('setup: the big clip was not imported (' + hd5Say(big) + ')');
+      await R.waitUp(tag, was + 1);
+      await R.rpc(tag, 'ready');
+      /* everything the app says in the first seconds back */
+      const said = [];
+      for (let i = 0; i < 30; i++) {
+        const d = await R.rpc(tag, 'dom', { sel: '#toast' });
+        if (d && d.text && d.w > 0 && !/\bhidden\b/.test(d.cls || '') && said.indexOf(d.text) < 0) said.push(d.text);
+        await R.sleep(200);
+      }
+      const st = await R.rpc(tag, 'state');
+      const rec = await R.rpc(tag, 'record', { id: big.id });
+      const onTimeline = st.layers.indexOf(big.id) >= 0;
+      const told = said.some(function (t) { return t.indexOf(big.name) >= 0 || /not (been )?saved|did ?n.t (finish|save)|add it again|import it again|re-?import/i.test(t); });
+      if (onTimeline && !rec.disk && !told) {
+        throw new Error('he imported a big clip (' + big.name + ') and the app was closed while it was still saving — reopened, ' + big.name + ' is on his timeline but its file was never stored (' +
+          hd5Say(rec) + '), so it is an empty clip that draws and plays nothing, and nothing told him to add it again (the app said: ' + (said.length ? hd5Say(said) : 'nothing') + ')');
+      }
+    } finally { R.drop(tag); }
+  });
+
+  test('HUNT-d opening the app in a second window, only to look, stops the first window saving — what he adds there afterwards is gone on reload', { item: '690', budgetMs: 180000 }, async function () {
+    /* The stale-tab guard (#306) stops a window writing over a NEWER copy saved elsewhere. But a second window that only
+       OPENS the project writes it too — its boot autosave, and its flush when it is closed — with a higher rev and not
+       one change. The first window then reads itself as stale and refuses every save after, while he carries on working
+       in it; the only sign is one toast claiming newer changes were saved elsewhere, when there were none. On his PC:
+       FreeMotion open in a tab, opened again from the installed app or a bookmark, that one closed — and everything he
+       does next in the first window is lost at the next reload. Two whole app instances sharing one origin's storage. */
+    const R = rig921();
+    const tag = 'hd5w';
+    const at = function (t, wipe) { return 'http://hd5w.localhost:' + location.port + '/index.html?fmtest=collab' + (wipe ? '&fmwipe=1' : '') + '&tag=' + t; };
+    const names = async function (t) { return (await R.rpc(t, 'state')).names || []; };
+    try {
+      await R.bootSrc(tag, at(tag, true), 900, 760);
+      await R.rpc(tag, 'setScene', { names: ['Title'], name: 'Two windows' });
+      /* CONTROL: with one window, what he adds survives a reload */
+      await R.rpc(tag, 'addLayer', { name: 'Before' });
+      await R.sleep(1500);
+      await R.reboot(tag);
+      const n0 = await names(tag);
+      if (n0.indexOf('Before') < 0) throw new Error('CONTROL: with one window open, a layer he added did not survive a reload (' + hd5Say(n0) + ') — this fixture cannot see the bug');
+      await R.sleep(2500);   // the first window has been open a while — its own opening save is long done, as it is on his PC
+      /* a second window opens the app on the same device — his project — and is closed again without a single edit */
+      await R.bootSrc(tag + 'b', at(tag + 'b', false), 900, 760);
+      await R.sleep(2000);
+      const nb = await names(tag + 'b');
+      if (nb.indexOf('Before') < 0) throw new Error('setup: the second window did not open his project (' + hd5Say(nb) + ')');
+      R.drop(tag + 'b');
+      await R.sleep(600);
+      /* back in the first window he carries on */
+      await R.rpc(tag, 'addLayer', { name: 'After' });
+      await R.sleep(1500);
+      const toast = await R.rpc(tag, 'dom', { sel: '#toast' });
+      await R.rpc(tag, 'flush');
+      await R.reboot(tag);
+      const n1 = await names(tag);
+      if (n1.indexOf('After') < 0) {
+        throw new Error('he opened FreeMotion in a second window only to look at his project and closed it again, then added a layer (After) in the first window — after a reload it is gone: the project has ' +
+          hd5Say(n1) + '. The first window stopped saving the moment the other one opened, although nothing was changed there' + (toast && toast.text ? ' (the one sign: ' + hd5Say(toast.text) + ')' : ''));
+      }
+    } finally { R.drop(tag); R.drop(tag + 'b'); }
+  });
+
+  test('HUNT-d a project renamed on Home gets its old name back the moment he presses Undo inside it', { item: '690', budgetMs: 120000 }, async function () {
+    /* ⋯ → Rename… on Home writes the new name into the open project's scene without a history step, and going back into
+       the SAME project keeps its undo stack — whose every snapshot still carries the OLD name. So the first Undo he
+       presses inside (meaning to take back a move) restores the old name with it, the next save writes it to the card,
+       and Redo cannot bring the new one back. Real finger at 360: ⋯, Rename…, the card, the Undo button. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await hd5Sleep(100);
+      const a = await FM.projects.create({ name: 'HUNT-d Beach', width: 320, height: 240 }); made.push(a);
+      const L = FM.makeLayer('shape', { name: 'HUNT-d sun', shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 60, fill: '#f4a261' });
+      L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+      L.transform.x = 60; FM.refreshAll(); FM.history.commit();   // the move he will take back
+      if (!FM.storage.flushSync()) throw new Error('setup: HUNT-d Beach could not be saved');
+      let seen = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.home.open(); await hd5Sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await hd5Sleep(150);
+          const card = await hd5Until('the HUNT-d Beach card', function () { return hd5Card(a); }, 3000);
+          await hd5Tap(card.querySelector('.hm-card-more'), 'the ⋯ on HUNT-d Beach');
+          const item = await hd5Until('Rename… in the ⋯ menu', function () {
+            const m = document.getElementById('ctx-menu');
+            if (!m || m.classList.contains('hidden')) return null;
+            return Array.prototype.filter.call(m.querySelectorAll('.ctx-item'), function (x) { return /^Rename/.test(x.textContent.trim()); })[0] || null;
+          }, 3000);
+          await hd5Sleep(500);   // the menu hinges open — tap it once it has landed
+          await hd5Tap(item, 'Rename…');
+          const inp = await hd5Until('the Rename box', function () { const i = document.querySelector('.fm-ask-input:not(.hidden)'); return i && i.getBoundingClientRect().width > 0 ? i : null; }, 3000);
+          inp.value = 'HUNT-d Beach trip'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+          await hd5Sleep(150);
+          await hd5Tap(document.querySelector('.fm-ask-ok'), 'Rename (the dialog button)');
+          await hd5Until('the card to read the new name', function () { const c = hd5Card(a), n = c && c.querySelector('.hm-name'); return n && n.textContent === 'HUNT-d Beach trip'; }, 3000);
+          await hd5Sleep(300);
+          await hd5Tap(hd5Card(a).querySelector('.hm-name'), 'the HUNT-d Beach trip card');
+          await hd5Until('the project to be open again', function () { return FM.projects.currentId() === a && !FM.home.isOpen(); }, 6000);
+          await hd5Sleep(700);
+          if (FM.scene.project.name !== 'HUNT-d Beach trip') throw new Error('setup: back inside, the project is called ' + FM.scene.project.name + ', not the name he just gave it');
+          await hd5Tap(document.getElementById('btn-undo'), 'the Undo button');
+          await hd5Sleep(1000);
+          const back = FM.layerById(FM.scene, L.id);
+          if (!back || Math.round(back.transform.x) !== 160) throw new Error('CONTROL: the Undo did not take back his move (the sun is at ' + (back ? Math.round(back.transform.x) : 'nowhere') + ', not 160) — the tap never reached Undo');
+          FM.storage.flushSync();
+          FM.home.open(); await hd5Sleep(900);
+          const c2 = hd5Card(a), n2 = c2 && c2.querySelector('.hm-name');
+          let doc = null; try { doc = JSON.parse(localStorage.getItem('fm.proj.' + a)); } catch (e) {}
+          seen = { inside: FM.scene.project.name, card: n2 ? n2.textContent : null, list: (FM.projects.list().filter(function (p) { return p.id === a; })[0] || {}).name, saved: doc && doc.project && doc.project.name };
+        });
+      }, 360);
+      if (seen.inside !== 'HUNT-d Beach trip' || seen.card !== 'HUNT-d Beach trip' || seen.saved !== 'HUNT-d Beach trip') {
+        throw new Error('he renamed HUNT-d Beach to HUNT-d Beach trip on Home, went back into it and pressed Undo to take back a move — the move went and so did the new name: the project is called ' +
+          seen.inside + ' again, the Home card reads ' + seen.card + ' and the saved project says ' + seen.saved + '. Redo cannot bring the new name back');
+      }
+    } finally {
+      await hd5Cleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-d a song still opening when he goes Home and opens another project lands in that other project', { item: '690', budgetMs: 120000 }, async function () {
+    /* handleFiles (js/app.js) awaits the file's loader and then calls addMediaLayer on whatever project is open BY THEN.
+       A song is decoded end to end for its true length before it can be added (js/media.js), and a phone takes seconds
+       over a long one — seconds in which he can go back Home and open another project. The song then lands in THAT
+       project, which he never added it to, and the one he picked it in does not get it. Media library tiles already
+       refuse this (915.5B: "a reused clip never lands in a project he did not tap in"); the picker does not. The loader
+       is held open here as the phone's slow read; the picker is the app's own file input; Home and the card are real
+       taps at 360. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], said = [];
+    const realLoad = FM.loadVideoFile, realToast = FM.toast;
+    let release = null;
+    const held = new Promise(function (r) { release = r; });
+    let entered = false;
+    const songIn = function (layers) { return (layers || []).filter(function (l) { return l && /^HUNT-d song/.test(l.name || '') && l.type !== 'text'; }).length; };
+    const docLayers = function (pid) { try { return (JSON.parse(localStorage.getItem('fm.proj.' + pid)) || {}).layers || []; } catch (e) { return []; } };
+    try {
+      if (wasOpen) FM.home.close();
+      await hd5Sleep(100);
+      const other = await FM.projects.create({ name: 'HUNT-d other project', width: 320, height: 240 }); made.push(other);
+      const mine = await FM.projects.create({ name: 'HUNT-d song goes here', width: 320, height: 240 }); made.push(mine);
+      if (FM.projects.currentId() !== mine) throw new Error('setup: HUNT-d song goes here is not the open project');
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      FM.loadVideoFile = async function () { entered = true; await held; return realLoad.apply(this, arguments); };
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* CONTROL: the same picker, with nothing held, adds the song to the open project */
+          FM.loadVideoFile = realLoad;
+          const fi = document.getElementById('file-input');
+          if (!fi) throw new Error('setup: there is no #file-input, the picker the Add sheet opens');
+          let dt = new DataTransfer(); dt.items.add(h3aWav(2, 330, 'HUNT-d song check.wav')); fi.files = dt.files;
+          fi.dispatchEvent(new Event('change'));
+          await hd5Until('the control song to land', function () { return songIn(FM.scene.layers) ? true : null; }, 8000);
+          FM.deleteLayer(FM.scene.layers.filter(function (l) { return /^HUNT-d song check/.test(l.name || ''); })[0].id); FM.history.commit();
+          await hd5Sleep(300);
+          /* he picks his song… */
+          FM.loadVideoFile = async function () { entered = true; await held; return realLoad.apply(this, arguments); };
+          dt = new DataTransfer(); dt.items.add(h3aWav(4, 440, 'HUNT-d song.wav')); fi.files = dt.files;
+          fi.dispatchEvent(new Event('change'));
+          await hd5Until('the song to start opening', function () { return entered; }, 5000);
+          /* …and while it is still opening, goes back Home and opens his other project */
+          FM.selectLayer(null); await hd5Sleep(300);
+          const backBtn = document.getElementById('m-back');
+          await hd5Tap(backBtn, 'the back arrow');
+          await hd5Until('Home to open', function () { return FM.home.isOpen(); }, 4000);
+          await hd5Sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await hd5Sleep(150);
+          const card = await hd5Until('the HUNT-d other project card', function () { return hd5Card(other); }, 3000);
+          await hd5Tap(card.querySelector('.hm-name'), 'the HUNT-d other project card');
+          await hd5Until('the other project to open', function () { return FM.projects.currentId() === other && !FM.home.isOpen(); }, 6000);
+          await hd5Sleep(400);
+          /* the phone finishes reading the song */
+          release();
+          await hd5Sleep(2000);
+        });
+      }, 360);
+      FM.loadVideoFile = realLoad; FM.toast = realToast;
+      FM.storage.flushSync();
+      const inOther = songIn(FM.scene.layers) + songIn(docLayers(other)) > 0;
+      const inMine = songIn(docLayers(mine)) > 0;
+      if (inOther) {
+        throw new Error('he picked a song in HUNT-d song goes here and, while it was still opening, went back Home and opened HUNT-d other project — the song landed in HUNT-d other project, a project he never added it to' +
+          (inMine ? '' : ', and HUNT-d song goes here, where he picked it, does not have it'));
+      }
+      if (!inMine && !said.some(function (m) { return /not added|was not added|did ?n.t add/i.test(m); })) {
+        throw new Error('the song he picked in HUNT-d song goes here went nowhere and nothing told him (toasts: ' + (said.join(' | ').replace(/"/g, "'") || 'none') + ')');
+      }
+    } finally {
+      FM.loadVideoFile = realLoad; FM.toast = realToast;
+      if (release) release();
+      await hd5Cleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
