@@ -95894,4 +95894,268 @@
     }
   });
 
+  /* ═══ HUNT-a (queue 690, fifth hunt, 26 Sep) — PLAYBACK AND THE PREVIEW ═════════════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four faults in the one thing every edit goes
+   * through — stopping on a moment and looking at it. Each is measured on the preview canvas itself, with the frame
+   * index the fixture clip carries in its own pixels (hunt2dDrawIndex: frame k is eight black/white bars), so what is
+   * asserted is the picture he would see, not the time the app meant to show.
+   *   1. pausing a clip with sound leaves the picture 2-6 frames BEFORE the playhead;
+   *   2. tapping the play pill to stop runs on a quarter of a second past the tap;
+   *   3. stepping a 30 fps clip frame by frame never shows every third frame and shows the one before it twice;
+   *   4. leaving the app mid-play and coming back finds the playhead seconds further on, the clip still sounding. */
+  function hunt5aReadPreview() {
+    const cv = document.getElementById('preview');
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    return hunt2dReadIndex(g, cv.width, cv.height);
+  }
+  async function hunt5aSettle(rec) {
+    const t0 = Date.now();
+    while ((rec.el.seeking || rec.el.readyState < 2) && Date.now() - t0 < 3000) await new Promise(r => setTimeout(r, 10));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await new Promise(r => setTimeout(r, 40));
+  }
+  // The indexed clip WITH a sound track (a 440 Hz tone), because an element that makes sound runs behind the transport
+  // by its output latency, and that is the condition fault 1 lives in. AAC where the browser can encode it, else Opus.
+  async function hunt5aIndexedClipWithSound(n, fps) {
+    const w = 128, h = 32, sr = 48000;
+    let ac = null;
+    for (const c of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
+      try { const r = await AudioEncoder.isConfigSupported({ codec: c[0], sampleRate: sr, numberOfChannels: 1, bitrate: 96000 }); if (r.supported) { ac = c; break; } } catch (e) {}
+    }
+    if (!ac) throw new Error('setup: this browser can encode neither AAC nor Opus, so there is no clip with sound to play');
+    const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: w, height: h }, audio: { codec: ac[1], sampleRate: sr, numberOfChannels: 1 }, fastStart: 'in-memory' });
+    let encErr = null;
+    const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { encErr = e; } });
+    enc.configure({ codec: 'avc1.42e01e', width: w, height: h, bitrate: 2e6, framerate: fps });
+    const aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: e => { encErr = e; } });
+    aenc.configure({ codec: ac[0], sampleRate: sr, numberOfChannels: 1, bitrate: 96000 });
+    const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d');
+    for (let k = 0; k < n; k++) {
+      hunt2dDrawIndex(g, k + 1, w, h);
+      const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / fps), duration: Math.round(1e6 / fps) });
+      enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
+    }
+    const total = Math.round(sr * n / fps), chunk = 960;
+    for (let s0 = 0; s0 < total; s0 += chunk) {
+      const len = Math.min(chunk, total - s0), d = new Float32Array(len);
+      for (let i = 0; i < len; i++) d[i] = 0.2 * Math.sin(2 * Math.PI * 440 * (s0 + i) / sr);
+      const ad = new AudioData({ format: 'f32', sampleRate: sr, numberOfFrames: len, numberOfChannels: 1, timestamp: Math.round(s0 * 1e6 / sr), data: d });
+      aenc.encode(ad); ad.close();
+    }
+    await enc.flush(); enc.close(); await aenc.flush(); aenc.close();
+    if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
+    muxer.finalize();
+    return new File([muxer.target.buffer], 'hunt5a-av.mp4', { type: 'video/mp4' });
+  }
+  // Put the clip in a fresh 128x32 project through the import path he uses (addMediaLayer wires the seeked repaint).
+  async function hunt5aClipProject(file, dur) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const rec = await hunt2dLoadWarm(file);
+    rec.stripFrames = [];   // no filmstrip seeks on this element — that race is HUNT-d's, kept out of these
+    FM.scene = hunt2dScene([], { duration: dur });
+    FM.loop = false;
+    if (FM.viewport) FM.viewport.reset();
+    FM.refreshAll();
+    FM.addMediaLayer(rec);
+    FM.selectLayer(null);
+    FM.refreshAll();
+    await new Promise(r => setTimeout(r, 300));
+    return { V: FM.scene.layers[0], rec: rec };
+  }
+  function hunt5aKey(code, key) { document.body.dispatchEvent(new KeyboardEvent('keydown', { code: code, key: key, bubbles: true, cancelable: true })); }
+
+  /* HUNT-a 1 — PAUSE LEAVES THE PICTURE BEHIND THE PLAYHEAD. A clip with sound runs behind the transport clock by its
+   * output latency, and the sync controller LEARNS that offset and keeps it (js/app.js, _syncBiasStep — queue 148): ~55
+   * ms in this browser, ~87 ms measured on a real import, 217 ms on a first play whose sound started late. FM.pause()
+   * snaps the playhead to a frame and pauses the element WHERE IT IS — it never seeks it to the playhead — so the
+   * picture he stopped on is the element's frame, not the playhead's. Measured before this test was written: paused at
+   * frame 36 the preview showed 30; at 48 it showed 45; at 59, 56. A split, a keyframe or a bookmark made there lands
+   * on the playhead's frame, 2-6 frames after the picture he chose it by. One frame of slack is allowed so this does not
+   * also measure the frame-edge fault (HUNT-a 3). CONTROL: the clip really played (its element moved on). */
+  test('HUNT-a pausing a clip with sound leaves the preview on an earlier frame than the playhead', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to play');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(r));
+    const saved = FM.scene, t0 = FM.time, made = [];
+    try {
+      const { V, rec } = await hunt5aClipProject(await hunt5aIndexedClipWithSound(150, 30), 5);
+      made.push(V.id);
+      const bad = [], seen = [];
+      /* Four stops. The first three play the clip as it comes; how far behind this browser's element runs varies from
+         run to run (0 to 230 ms measured), so the fourth gives it the latency a PHONE has — the element settles 90 ms
+         behind the transport inside its warm-up, which is when the controller learns that offset and from then on
+         keeps it (js/app.js SYNC_WARMUP, _syncBiasStep; #148 measured ~87 ms on a real import). */
+      const runs = [[0, 1300, 0], [0.4, 1450, 0], [1.1, 1250, 0], [2.0, 1300, 0.09]];
+      for (const run of runs) {
+        FM.pause(); FM.setTime(run[0]); await hunt5aSettle(rec);
+        const from = rec.el.currentTime;
+        hunt5aKey('Space', ' ');                    // play, the way he starts it on the PC
+        if (run[2]) {
+          const tw = performance.now();
+          while (!(rec.el.currentTime > from + 0.02 && FM.time > run[0] + 0.01) && performance.now() - tw < 1500) await frame();
+          if (!(rec.el.currentTime < from + 0.2)) throw new Error('setup: the clip had played ' + (rec.el.currentTime - from).toFixed(3) + ' s before the phone latency could be given to it, past its warm-up');
+          rec.el.currentTime = rec.el.currentTime - run[2];
+        }
+        await sleep(run[1]);
+        if (!FM.playing) throw new Error('setup: Space did not start playback');
+        hunt5aKey('Space', ' ');                    // …and stop on a moment
+        await sleep(450);                            // any seek lands, the seeked repaint runs
+        if (FM.playing) throw new Error('setup: Space did not stop playback');
+        if (!(rec.el.currentTime > from + 0.5)) throw new Error('CONTROL: the clip did not play (its element went from ' + from.toFixed(3) + ' s to ' + rec.el.currentTime.toFixed(3) + ' s), so nothing here measures a pause');
+        const want = Math.round(FM.time * 30), got = hunt5aReadPreview();
+        if (got < 0) throw new Error('CONTROL: the paused preview shows no frame of the clip at all (reads ' + got + ')');
+        const tag = run[2] ? ' (with a phone-sized ' + Math.round(run[2] * 1000) + ' ms of sound latency)' : '';
+        seen.push('playhead frame ' + want + ' shows ' + got + tag);
+        if (Math.abs(got - want) >= 2) bad.push('stopped at frame ' + want + ' (' + FM.time.toFixed(3) + ' s)' + tag + ' the preview shows frame ' + got + ' of the clip, ' + Math.abs(want - got) + ' frames (' + Math.round(Math.abs(want - got) / 30 * 1000) + ' ms) ' + (got < want ? 'earlier' : 'later') + ', the clip left at ' + rec.el.currentTime.toFixed(3) + ' s');
+      }
+      if (bad.length) throw new Error('pausing a clip with sound leaves the picture behind the playhead, so he stops on one frame and a split, keyframe or bookmark made there lands on another: ' + bad.join('; ') + '. (all four: ' + seen.join(', ') + ')');
+    } finally {
+      FM.pause(); FM.scene = saved; FM.time = t0;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 2 — TAPPING THE PILL TO STOP RUNS ON A QUARTER OF A SECOND. The timecode pill is the play button (queue 364)
+   * and on the phone the only one. Its click waits 240 ms before toggling (js/app.js init, tcTapTimer) so that a
+   * double-click, which types a time, does not also START playback on its way past. That wait is right for starting and
+   * pointless for stopping — the double-click handler pauses anyway — yet it is applied to both, so every stop lands
+   * ~7 frames after the tap: he taps on the beat and the playhead stops a quarter-second later. Driven by a REAL finger
+   * at 380 and a REAL mouse at 1280; the reference is the transport clock at the moment the trusted click arrives. Two
+   * frames of slack. CONTROL: the tap is trusted and of the right kind, and the first tap really did start playback. */
+  test('HUNT-a tapping the play pill to stop lets playback run on a quarter second past the tap', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, t0 = FM.time, bad = [];
+    async function run(where, touch) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'HUNT-a beat', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#e0245e', start: 0, duration: 8 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 8, background: '#000000' } });
+      FM.refreshAll(); FM.selectLayer(null); FM.loop = false; FM.pause(); FM.setTime(0.5);
+      await sleep(300);
+      const pill = document.getElementById('time-readout');
+      const r = pill.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      if (!(r.width > 0) || document.elementFromPoint(x, y) !== pill) throw new Error('setup: at ' + where + ' the play pill is not the thing under ' + Math.round(x) + ',' + Math.round(y));
+      const clicks = [];
+      const onClick = (e) => { if (e.target === pill || pill.contains(e.target)) clicks.push({ trusted: e.isTrusted, kind: e.pointerType || '', at: FM.clockNow ? FM.clockNow() : FM.time, playing: FM.playing }); };
+      window.addEventListener('click', onClick, true);
+      const tap = touch ? [{ t: 'touchStart', x: x, y: y, ms: 50 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]
+                        : [{ t: 'mouseMove', x: x, y: y, ms: 20 }, { t: 'mouseDown', x: x, y: y, ms: 50 }, { t: 'mouseUp', x: x, y: y, ms: 0 }];
+      try {
+        await realInput924(tap, where + ' — the tap that starts playback');
+        await sleep(1100);
+        if (!FM.playing) throw new Error('CONTROL: at ' + where + ' a real ' + (touch ? 'tap' : 'click') + ' on the pill did not start playback');
+        await realInput924(tap, where + ' — the tap that stops it');
+        await sleep(700);
+      } finally { window.removeEventListener('click', onClick, true); }
+      const stop = clicks[clicks.length - 1];
+      if (!stop || !stop.trusted || stop.kind !== (touch ? 'touch' : 'mouse')) throw new Error('CONTROL: at ' + where + ' the stopping click was not a trusted ' + (touch ? 'touch' : 'mouse') + ' click (' + JSON.stringify(stop || null) + ')');
+      if (!stop.playing) throw new Error('CONTROL: at ' + where + ' playback had already stopped when the second tap landed');
+      if (FM.playing) throw new Error('at ' + where + ' the second tap on the pill did not stop playback at all');
+      const over = FM.time - stop.at;
+      if (over > 2.5 / 30) bad.push('at ' + where + ' he ' + (touch ? 'tapped' : 'clicked') + ' at ' + stop.at.toFixed(3) + ' s and playback stopped at ' + FM.time.toFixed(3) + ' s, ' + Math.round(over * 1000) + ' ms (' + Math.round(over * 30) + ' frames) later');
+    }
+    try {
+      await atPhoneWidth(async function () { await onScreen924(async function () { await run('380 px', true); }); }, 380);
+      // the 380 pass's driver window cannot reach a pill that sits at x 640 of a 1280 frame; the finger half runs in both
+      if (hunt4aWide()) await atWideWidth(async function () { await onScreen924(async function () { await run('1280 px', false); }); }, 1280);
+      if (bad.length) throw new Error('stopping playback with the play pill overshoots the moment he taps, so he cannot stop on a beat: ' + bad.join('; '));
+    } finally {
+      FM.pause(); FM.scene = saved; FM.time = t0; try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 3 — STEPPING A 30 FPS CLIP NEVER SHOWS EVERY THIRD FRAME. HUNT-d found that a seek to exactly k/30 lands on
+   * frame k-1 for every k whose start rounds up (2, 5, 8 …) and fixed it for the EXPORT and the frame cache with
+   * FM.frameSeekTarget (half a millisecond inside the frame). The PREVIEW's own seek, FM.seekVideosToTime — what the
+   * frame-step keys, a timeline scrub and every parked playhead go through — still writes the bare k/30. Measured before
+   * this test was written, pressing . from 0: 1, 1, 3, 4, 4, 6, 7, 7, 9 … So stepping to find a cut shows one frame
+   * twice and never shows the next, a frame he parks on is not the frame that exports, and a cut made where the picture
+   * changes is one frame out. Checked on the key he steps with and on the scrub path his finger drives.
+   * CONTROL: frames 0, 1, 3, 4 … read correctly, so the reader and the clip are right. */
+  test('HUNT-a stepping a 30 fps clip frame by frame skips every third frame and shows the one before it twice', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to step through');
+    const saved = FM.scene, t0 = FM.time, made = [];
+    try {
+      const { V, rec } = await hunt5aClipProject(await hunt2dIndexedClip(90, 30), 3);
+      made.push(V.id);
+      FM.pause(); FM.setTime(0); await hunt5aSettle(rec);
+      const shown = [hunt5aReadPreview()];
+      for (let k = 1; k <= 15; k++) { hunt5aKey('Period', '.'); await hunt5aSettle(rec); shown.push(hunt5aReadPreview()); }
+      const goodOnes = shown.filter((v, k) => k % 3 !== 2 && v === k).length;
+      if (goodOnes < 8) throw new Error('CONTROL: stepping with . from frame 0 read ' + shown.join(',') + ' — even the frames that do not sit on a rounded edge are wrong, so the reader or the clip is broken and nothing here means anything');
+      if (Math.abs(FM.time - 15 / 30) > 1e-6) throw new Error('setup: fifteen presses of . put the playhead at ' + FM.time.toFixed(4) + ' s, not frame 15');
+      const wrong = [];
+      shown.forEach((v, k) => { if (v !== k) wrong.push('frame ' + k + ' shows ' + v); });
+      const never = []; for (let k = 0; k <= 15; k++) if (shown.indexOf(k) < 0) never.push(k);
+      // …and where a finger drag lands: FM.scrubTime is what the timeline scrub calls on every move
+      const scrubbed = [];
+      for (const k of [20, 26, 41, 44]) {
+        FM.scrubTime(k / 30); await new Promise(r => requestAnimationFrame(r)); await hunt5aSettle(rec);
+        const v = hunt5aReadPreview();
+        if (v !== k) scrubbed.push('scrubbed to frame ' + k + ' it shows ' + v);
+      }
+      // …and back the other way with ,
+      FM.setTime(12 / 30); await hunt5aSettle(rec);
+      const back = [];
+      for (let k = 11; k >= 6; k--) { hunt5aKey('Comma', ','); await hunt5aSettle(rec); const v = hunt5aReadPreview(); if (v !== k) back.push('frame ' + k + ' shows ' + v); }
+      if (wrong.length || scrubbed.length || back.length) throw new Error('stepping a plain 30 fps clip shows the wrong frame at a third of the stops — pressing . from 0 the preview reads ' + shown.join(',') + ', so source frame(s) ' + never.join(', ') + ' never appear and the one before each shows twice' + (scrubbed.length ? '; on the scrub path ' + scrubbed.join(', ') : '') + (back.length ? '; stepping back with , ' + back.join(', ') : '') + ' — the export (fixed by HUNT-d) shows the right frame there, so the frame he parks on and cuts at is not the frame that comes out');
+    } finally {
+      FM.pause(); FM.scene = saved; FM.time = t0;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 4 — LEAVING THE APP MID-PLAY. Nothing in the app listens for the page going to the background during
+   * playback: FM.playing stays true, the transport clock (wall time, or the audio clock demoted to it) keeps counting,
+   * and the browser simply stops calling requestAnimationFrame. So he checks a message and comes back to a playhead
+   * that has leapt forward by however long he was away — or run off the end and stopped there — with his place gone.
+   * On the PC the other half is audible: a background tab keeps playing the CLIP's element with no tick to stop it at
+   * its cut, so the sound runs on past the end of the clip for as long as he is away. js/audio-health.js already
+   * assumes the opposite ("Playback is torn down without the stop button ever being pressed").
+   * The browser is simulated exactly where it matters: document.hidden and visibilitychange as it reports them, and
+   * requestAnimationFrame held while hidden, which is what a real hidden page does. CONTROL: it was playing and the
+   * clip was sounding before he left. */
+  test('HUNT-a leaving the app mid-play and coming back finds the playhead seconds further on with the clip still sounding', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to play');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, t0 = FM.time, made = [];
+    const realRaf = window.requestAnimationFrame;
+    let hidden = false; const held = [];
+    try {
+      const { V, rec } = await hunt5aClipProject(await hunt5aIndexedClipWithSound(150, 30), 5);
+      made.push(V.id);
+      V.duration = 1.5;                               // the clip is cut at 1.5 s of its 5 s source …
+      const L = FM.makeLayer('shape', { name: 'HUNT-a title', shape: 'rect', x: 64, y: 16, shapeW: 20, shapeH: 20, fill: '#e0245e', start: 0, duration: 5 });
+      FM.scene.layers.push(L);                        // … and the project runs on to 5 s under a title
+      FM.refreshAll();
+      FM.pause(); FM.setTime(0.3); await hunt5aSettle(rec);
+      hunt5aKey('Space', ' ');
+      await sleep(700);
+      if (!FM.playing || rec.el.paused) throw new Error('CONTROL: playback was not running with the clip sounding before he left (playing ' + FM.playing + ', clip paused ' + rec.el.paused + ')');
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+      window.requestAnimationFrame = function (cb) { if (hidden) { held.push(cb); return 0; } return realRaf.call(window, cb); };
+      const left = FM.clockNow ? FM.clockNow() : FM.time;
+      hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+      await sleep(2500);                              // two and a half seconds in another app
+      const clipWhileAway = { paused: rec.el.paused, at: rec.el.currentTime };
+      hidden = false; document.dispatchEvent(new Event('visibilitychange'));
+      window.requestAnimationFrame = realRaf;
+      held.splice(0).forEach(cb => realRaf.call(window, cb));
+      await sleep(250);
+      const bad = [];
+      if (Math.abs(FM.time - left) > 0.15) bad.push('he left at ' + left.toFixed(2) + ' s and came back 2.5 s later to the playhead at ' + FM.time.toFixed(2) + ' s' + (FM.playing ? ', still playing' : ', stopped there') + ' - it ran on while the app was not even on screen');
+      if (!clipWhileAway.paused) bad.push('while he was away the clip kept sounding (its element at ' + clipWhileAway.at.toFixed(2) + ' s' + (clipWhileAway.at > (V.trimStart || 0) + V.duration + 0.05 ? ', past its cut at ' + ((V.trimStart || 0) + V.duration).toFixed(2) + ' s' : '') + ') with nothing to stop it at its end');
+      if (bad.length) throw new Error('going to the background does not stop playback: ' + bad.join('; '));
+    } finally {
+      window.requestAnimationFrame = realRaf;
+      try { delete document.hidden; delete document.visibilityState; } catch (e) {}
+      held.length = 0;
+      FM.pause(); FM.scene = saved; FM.time = t0;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 })();
