@@ -350,6 +350,8 @@ window.FM = window.FM || {};
   FM._foreignPointer = foreignPointer;   // suite seam
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   let rebuildPending = false;      // a rebuild requested mid-gesture — deferred to the gesture's end
+  /* The layer-name box a double-click opened, while it holds the caret (queue 690, sixth hunt) — see rebuild(). */
+  let nameEditing = null;
   /* ⚠️ queue 815: A LAYER-NAME PAN IS A GESTURE TOO. It scrolls the layer list, its state lives in the
      head's own closure, and its listeners are on the head element — so a rebuild that empties the track
      list (a waveform or a filmstrip arriving, or the 150ms resize rebuild when the Android address bar
@@ -1381,8 +1383,9 @@ window.FM = window.FM || {};
       input.className = 'th-name-edit'; input.value = layer.name;
       input.addEventListener('pointerdown', (ev) => ev.stopPropagation());
       input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') input.blur(); else if (ev.key === 'Escape') { input.value = layer.name; input.blur(); } });
-      input.addEventListener('blur', () => { const v = input.value.trim(); if (v && v !== layer.name) { layer.name = v; if (FM.history) FM.history.commit(); } FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); });
+      input.addEventListener('blur', () => { if (nameEditing === input) nameEditing = null; const v = input.value.trim(); if (v && v !== layer.name) { layer.name = v; if (FM.history) FM.history.commit(); } FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); });
       name.replaceWith(input); input.focus(); input.select();
+      nameEditing = input;   // rebuild() waits for it; the blur above lets go first, so its own rebuild flushes whatever waited
     });
 
     /* THE CHEVRON'S SLOT EXISTS ON EVERY ROW (queue 191). Ezra: "an arrow next to the hide button, idk
@@ -5191,6 +5194,17 @@ window.FM = window.FM || {};
         if (!stale) { rebuildPending = true; return; }   // slipDrag too — a mid-slip rebuild tore down the lane holding the ghost
         recoverStuckGesture();
       }
+      /* ═══ …AND WHILE HE IS TYPING A LAYER'S NEW NAME (queue 690, sixth hunt) ═══════════════════════════════════════
+       * A double-click on a name swaps it for a text box that writes the name on blur or Enter. Rebuilding every row
+       * tears the box out of the page WITHOUT a blur, so what he had typed was simply gone, the layer kept its old name,
+       * and his next keys went to the app's one-key shortcuts (A, D and S nudge clips). Before live collaboration
+       * almost nothing rebuilt the timeline mid-word; in a session every batch from a friend does (collab-bridge.js
+       * afterApply → scheduleRebuild), on ANY layer — measured: he had typed "Intro tit" when Sam nudged a different
+       * layer, and the box vanished. It waits for the box to let go: its blur handler clears `nameEditing` and then
+       * calls rebuild() itself, which is the flush. `isConnected` so a box some other path has already removed can
+       * never hold the timeline for ever. */
+      if (nameEditing && nameEditing.isConnected && document.activeElement === nameEditing) { rebuildPending = true; return; }
+      nameEditing = null;
       rebuildPending = false;
       /* THE SWITCH IS A READOUT OF WHERE THE ADD ROW IS, so it has to be re-read whenever the STACK
          changes — not only when the row MOVES (queue 373 clause 6, reopened by him at v10.20). His
