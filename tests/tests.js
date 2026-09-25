@@ -64750,7 +64750,9 @@
       L.start = 0; L.duration = 3;
       L.effects = [{ type: 'blur', enabled: true, params: { amount: 4 } }];
       L.stroke = { enabled: true, width: 6, color: '#00ff00' };
-      L.transform.rotation = 33;
+      // a turn ANIMATED, not a static tilt: a look carries the transform's animation and leaves a static size / turn /
+      // opacity alone (queue 690 — a static scale carried over resized his photo 4.4×), so a static 33 is no longer captured
+      L.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 33, e: 'linear' }] };
       FM.scene.layers.length = 0; FM.scene.layers.push(L);
 
       if (!FM.layerPresets || !FM.layerPresets.save) throw new Error('FM.layerPresets is missing');
@@ -64844,18 +64846,20 @@
       const src = FM.makeLayer('shape', { name: 'Src', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#ff0000' });
       const dst = FM.makeLayer('shape', { name: 'Dst', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#00ff00' });
       [src, dst].forEach(L => { L.start = 0; L.duration = 3; });
-      src.transform.rotation = 20;
+      // a SPIN, keyframed — a look carries the transform's animation, not a static turn (queue 690)
+      src.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 20, e: 'linear' }] };
       FM.scene.layers.length = 0; FM.scene.layers.push(src, dst);
 
       FM.layerPresets.save('rt-probe', src);
       FM.layerPresets.apply('rt-probe', dst);
       if (dst.fromPreset !== 'rt-probe') throw new Error('applying a preset did not record where the look came from — there is nothing to update');
 
-      dst.transform.rotation = 77;                       // …the edit
+      dst.transform.rotation.kf[1].v = 77;               // …the edit: the spin now ends at 77
       if (!FM.layerPresets.update('rt-probe', dst)) throw new Error('update() refused to write the layer back over its own preset');
       const p = (FM.layerPresets.list() || []).find(x => x.name === 'rt-probe');
       if (!p) throw new Error('the preset vanished on update');
-      const rot = p.data && p.data.transform && p.data.transform.rotation;
+      const rotP = p.data && p.data.transform && p.data.transform.rotation;
+      const rot = rotP && rotP.kf ? rotP.kf[rotP.kf.length - 1].v : rotP;
       if (rot !== 77) throw new Error('the preset still holds ' + JSON.stringify(rot) + ', not the edited 77 — the round trip did not close');
       if (FM.layerPresets.list().filter(x => x.name === 'rt-probe').length !== 1) throw new Error('updating made a SECOND preset of the same name instead of replacing it');
     } finally {
@@ -94433,9 +94437,10 @@
 
   /* ═══ HUNT-d, FOURTH PASS (queue 690, 26 Sep) — KEYFRAMES AND ANIMATION ════════════════════════════════════════════════
    * His standing brief (REQUESTS.md #690): "go re audit, find some bugs coz theres a shit load". Four findings in keyframes,
-   * easing, behaviours and animation presets, each written to FAIL today with what he would see. The phone one is driven
-   * by a REAL finger through tests/_cdp.py (realInput924), with a control that proves the same hold works where it should,
-   * so a red is the app and not a gesture that never started. Nothing is fixed here. */
+   * easing, behaviours and animation presets, each written to FAIL with what he would see, and each fixed on the same
+   * branch (the four tests below were renamed from HUNT-d to 690 when they went green). The phone one is driven by a REAL
+   * finger through tests/_cdp.py (realInput924), with a control that proves the same hold works where it should, so a red
+   * is the app and not a gesture that never started. */
   async function hd4ColourFixture() {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (FM.contextMenu) FM.contextMenu.hide();
@@ -94463,7 +94468,7 @@
   }
   function hd4Centre(d) { const r = d.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
 
-  test('HUNT-d with Colouring open, holding a colour keyframe diamond on the phone opens no menu, and dragging it slides the whole clip instead of the keyframe', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 a colour keyframe is live while Colouring is open: on the phone a hold opens its menu and a hold-and-drag retimes it, not the clip; Outline, Element Properties and an open audio effect arm theirs too', { item: '690', budgetMs: 90000 }, async function () {
     /* A diamond is LIVE (solid, draggable, the hold menu) only while the editor that owns its property is open — the v5.42
        rule in js/timeline.js, and every inert diamond's own title says Open this property's editor to move this keyframe.
        But FM.kfFocusProps (js/inspector.js kfScope) only knows Effects, Position / Scale, Mixing, Volume and Speed. Colouring,
@@ -94535,6 +94540,29 @@
           if (!menu) bad.push('with Colouring open he held the colour keyframe diamond for 0.65 s and no menu opened (the press landed on ' + landedOn + (liveWithPanel ? '' : ', because the diamond stays an inert outline while its own Colouring editor is open') + ') — on the phone that hold is the only way to ease or delete a keyframe, and the same hold works on a Position diamond');
           if (Math.abs(clipStart) > 1e-6) bad.push('he held the colour keyframe at 3 s and dragged it 40px right to retime it, and the WHOLE CLIP slid to start at ' + clipStart.toFixed(2) + ' s, carrying every keyframe with it');
           if (!retimed) bad.push('the colour keyframe did not move to ' + want.toFixed(2) + ' s against the clip — the colour keys now read ' + kfT.map(t => t.toFixed(2)).join(', ') + ' s');
+
+          /* THE SAME RULE IN THE OTHER PANELS THAT OWN KEYFRAMES (the fix, js/inspector.js kfScope): with its editor open,
+             an outline-size keyframe, an Edit Shape stroke keyframe and an open audio effect's keyframe are live — and the
+             outline diamond is still an inert outline with COLOURING open, so the scoping still tells panels apart. */
+          const liveAt = (t) => { const dd = hd4DotAt(t); return dd ? (dd.classList.contains('kf-live') ? 'live' : 'idle') : 'missing'; };
+          const S2 = await hd4ColourFixture();
+          S2.stroke = { enabled: true, width: { kf: [{ t: 1, v: 4, e: 'linear' }, { t: 3.5, v: 20, e: 'linear' }] }, color: '#ffffff' };
+          FM.timeline.rebuild();
+          await hd4OpenAt('color');
+          if (liveAt(3.5) !== 'idle') bad.push('CONTROL: with Colouring open the outline-size keyframe is ' + liveAt(3.5) + ', where it should stay an inert outline — the scoping no longer tells one panel from another');
+          await hd4OpenAt('border');
+          if (liveAt(3.5) !== 'live') bad.push('with Outline and Shadows open, its own outline-size keyframe is ' + liveAt(3.5) + ' on the timeline');
+          await hd4OpenAt('element');
+          if (liveAt(3.5) !== 'live') bad.push('with Element Properties open, the stroke width its Stroke width row edits is ' + liveAt(3.5) + ' on the timeline');
+          const A2 = FM.makeLayer('video', { name: 'HUNT-d song', start: 0, duration: 6 });
+          A2.audioFx = [{ type: 'gain', enabled: true, params: { gain: { kf: [{ t: 1, v: 0, e: 'linear' }, { t: 3.25, v: 6, e: 'linear' }] } }, _expanded: true }];
+          FM.scene = scene([A2], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          FM.media.set(A2.id, { kind: 'video', duration: 6, width: 0, height: 0 });   // no picture: a song, which Effects opens on its Audio tab
+          try {
+            FM.refreshAll(); FM.selectLayer(A2.id); await sleep(200);
+            await hd4OpenAt('audiofx');
+            if (liveAt(3.25) !== 'live') bad.push('with the Gain audio effect open, its own keyframe is ' + liveAt(3.25) + ' on the timeline');
+          } finally { FM.media.remove(A2.id); }
           if (bad.length) throw new Error(bad.join('; AND '));
         });
       }, 380);
@@ -94555,7 +94583,7 @@
     return n / (P.width * P.height);
   }
 
-  test('HUNT-d a behaviour on Scale uses pixel-sized amounts: Oscillate or Wiggle switched to Scale, and Audio Drive as it comes, blow the layer up to thousands of percent and flicker it out', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a behaviour on Scale moves it by a percentage: Oscillate or Wiggle switched to Scale, and Audio Drive as it comes, pulse the layer instead of blowing it up to thousands of percent', { item: '690', budgetMs: 60000 }, async function () {
     /* Behaviours (Position / Scale → + Add behavior) add Amount straight onto the channel they drive (js/behaviors.js
        behaviorValue: base + amp × wave). The defaults are pixel amounts — Wiggle 20, Oscillate 30, Audio Drive 50 — and the
        channel select next to each one offers Scale and Opacity with nothing rescaled. Scale is a multiplier where 1 is 100%,
@@ -94606,6 +94634,14 @@
       const cover = hd4RedShare(FM.scene, peakT), goneShare = hd4RedShare(FM.scene, lowT), rest = hd4RedShare(FM.scene, 0);
       if (!(rest > 0.005)) throw new Error('CONTROL: the square does not render at rest (' + rest + ') — nothing below can be judged');
       if (r1.hi > 4 || r1.lo < 0.1) bad.push('Oscillate on Scale at its default Amount swings the 60px square between ' + pct(r1.lo) + ' and ' + pct(r1.hi) + ': at ' + peakT.toFixed(2) + ' s it covers ' + Math.round(cover * 100) + '% of the frame and at ' + lowT.toFixed(2) + ' s it is ' + (goneShare < 1e-4 ? 'gone' : 'a speck') + ' — a pulse he cannot get without typing a decimal into the box');
+      /* …and the row says what the number means: the Amount reads in percent, the same 30 he saw on Y position, and it
+         goes back to 30 px when he switches back (js/behaviors.js retarget keeps the number he sees). */
+      const ampRow = [].filter.call(rowSelect(0).querySelectorAll('.prop-row--scrub'), r => /Amount/.test(r.textContent))[0];
+      const ampLabel = ampRow ? ampRow.querySelector('label').textContent : 'none', ampBox = ampRow ? parseFloat(ampRow.querySelector('.fx-scrub-val').value) : NaN;
+      if (!/%/.test(ampLabel) || Math.abs(ampBox - 30) > 1e-6) bad.push('on Scale the Oscillate row reads ' + ampLabel + ' = ' + ampBox + ', not Amount in percent at the 30 it showed on Y position');
+      const selBack = rowSelect(0).querySelector('select.be-prop');
+      selBack.value = 'y'; selBack.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      if (osc.prop !== 'y' || Math.abs(osc.params.amp - 30) > 1e-9) bad.push('switched back to Y position the Oscillate Amount is ' + osc.params.amp + ' on ' + osc.prop + ', not the 30 px it started at');
 
       /* 2 — Wiggle, switched to Scale */
       S.behaviors = []; FM.inspector.refresh(); await sleep(150);
@@ -94636,7 +94672,7 @@
     }
   });
 
-  test('HUNT-d applying a look + animations preset to a photo resizes the photo to the size of the layer the preset was saved from', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 a look + animations preset carries the animation and not the size: applied to a fitted photo it keeps the photo at its own size, and a pop-in pops to it', { item: '690', budgetMs: 60000 }, async function () {
     /* Presets → Look + animations. save() stores transform.rotation / scale / opacity through shiftKf, which hands a STATIC
        value back unchanged, and applyTo writes it over the target whenever it is not null — so every look carries the
        source layer's SIZE, turn and opacity, whether or not they were animated (js/inspector.js FM.layerPresets). The code's
@@ -94685,7 +94721,18 @@
           if (!(op0 < 0.05 && op1 > 0.95)) throw new Error('CONTROL: the fade itself did not arrive on the photo (opacity ' + op0 + ' then ' + op1 + ')');
         }
         if (Math.abs(endScale - fit) > 0.01) bad.push('applying the ' + (nm === NAME ? 'Fade in' : 'pop-in') + ' look he saved on a title took his photo from ' + Math.round(fit * 100) + '% to ' + Math.round(endScale * 100) + '% — ' + (endScale / fit).toFixed(1) + ' times bigger' + (top[0] > 180 ? ', filling the whole frame and cropped on every side' : ''));
+        if (nm === NAME2) {   // the pop itself still arrives: nothing at the clip start, the photo's own size by 0.4 s
+          const s0 = FM.evalProp(photo.transform.scale, 0);
+          if (!(s0 < 0.01)) bad.push('the pop-in arrived without its pop: the photo starts at ' + Math.round(s0 * 100) + '% instead of nothing');
+        }
       }
+      /* A preset saved BEFORE the fix holds a static size and an absolute scale animation. The static size is the defect
+         and is left on the preset; its pop-in still pops the photo to the photo's own size. Same applyTo the Presets row runs. */
+      photo.transform.scale = fit; photo.transform.opacity = 1;
+      FM.layerPresets.applyTo({ effects: [], transform: { rotation: 0, scale: 1, opacity: 1 } }, photo);
+      if (Math.abs(FM.evalProp(photo.transform.scale, 1) - fit) > 0.01) bad.push('an old Fade in preset (saved before the fix, with the title size in it) still resized the photo to ' + Math.round(FM.evalProp(photo.transform.scale, 1) * 100) + '%');
+      FM.layerPresets.applyTo({ effects: [], transform: { rotation: 0, scale: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.4, v: 1, e: 'linear' }] }, opacity: 1 } }, photo);
+      if (Math.abs(FM.evalProp(photo.transform.scale, 1) - fit) > 0.01) bad.push('an old pop-in preset popped the photo to ' + Math.round(FM.evalProp(photo.transform.scale, 1) * 100) + '% instead of its own ' + Math.round(fit * 100) + '%');
       if (bad.length) throw new Error(bad.join('; AND '));
     } finally {
       try { FM.layerPresets.remove(NAME); FM.layerPresets.remove(NAME2); } catch (e) {}
@@ -94694,7 +94741,7 @@
     }
   });
 
-  test('HUNT-d splitting a clip in the middle of an eased move makes the layer stop dead at the cut and jump ahead before it', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 splitting a clip in the middle of an eased move keeps the move exactly as he made it: no stop at the cut, nothing running ahead of it', { item: '690', budgetMs: 60000 }, async function () {
     /* Split (the S key, the scissors) divides every keyframe list at the cut and gives each half a SEAM keyframe holding the
        value there (js/app.js splitAnimated). The seam copies the ease of the segment it cut, so ONE ease-in-out over 0–2 s
        becomes TWO: one over 0–1 s and one over 1–2 s. An ease-in-out arrives at rest and leaves from rest, so the layer now
@@ -94731,6 +94778,46 @@
       if (!(across1 > across0 * 0.7)) bad.push('across the cut the square moves ' + (isFinite(across1) ? across1.toFixed(1) : '?') + ' px in two frames where it moved ' + across0.toFixed(1) + ' px before the split — it slows to a dead stop at the cut and starts again, in the preview and the export');
       const worst = T.reduce((m, t, i) => (after[i] == null ? m : Math.max(m, Math.abs(after[i] - before[i]))), 0);
       if (worst > 3) bad.push('at 0.5 s the square is at ' + (after[0] == null ? '?' : Math.round(after[0])) + ' px instead of ' + Math.round(before[0]) + ' px — the half before the cut runs ' + Math.round(worst) + ' px ahead of the move he made');
+
+      /* EVERY CURVE THAT DIVIDES EXACTLY, measured on the numbers rather than the pixels: the keyframe menu's presets
+         (bez), the graph editor's bare Ease In / Ease Out and Overshoot / Anticipate, a colour fade, and cuts off the
+         middle. The two halves together must give the original value at every frame of both halves. Tolerances set from
+         measurement: on an 800 px move the halves came within 0.018 px of the original (the steep hand-drawn curve, where
+         bezierAt's own 1e-5 solve in x is multiplied by the slope; 0.0004–0.008 px on the rest), so 0.1 px; a colour
+         within 1 level (the seam colour is stored as whole levels). The defect this catches was 97 px. */
+      const cases = [
+        ['Ease In-Out from the keyframe menu', { e: 'easeInOut', bez: FM.EASE_PRESETS.easeInOut.slice() }, 1],
+        ['Ease In-Out, cut early', { e: 'easeInOut', bez: FM.EASE_PRESETS.easeInOut.slice() }, 0.3],
+        ['Overshoot', { e: 'overshoot' }, 1.3],
+        ['Anticipate', { e: 'anticipate' }, 0.7],
+        ['Ease In, named', { e: 'easeIn' }, 1.1],
+        ['Ease Out, named', { e: 'easeOut' }, 0.6],
+        ['a hand-drawn curve', { e: 'custom', bez: [0.8, 0.1, 0.2, 0.95] }, 1.5],
+      ];
+      for (const c of cases) {
+        const L2 = FM.makeLayer('shape', { name: 'HUNT-d curve', shape: 'rect', x: 50, y: 100, shapeW: 20, shapeH: 20, fill: '#ff0000', start: 0, duration: 4 });
+        L2.transform.x = { kf: [{ t: 0, v: 50, e: 'linear' }, Object.assign({ t: 2, v: 850 }, c[1])] };
+        L2.fill = { kf: [{ t: 0, v: '#ff0000', e: 'linear' }, Object.assign({ t: 2, v: '#0000ff' }, c[1])] };
+        const orig = JSON.parse(JSON.stringify(L2.transform.x)), origFill = JSON.parse(JSON.stringify(L2.fill));
+        FM.scene = scene([L2], { project: { width: 900, height: 200, fps: 30, duration: 4, background: '#000000' } });
+        FM.refreshAll(); FM.selectLayer(L2.id);
+        FM.setTime(c[2]); await FM.splitLayer(L2.id); await sleep(60);
+        const halves = FM.scene.layers.slice().sort((p, q) => p.start - q.start);
+        if (halves.length !== 2) { bad.push(c[0] + ': the clip did not split in two'); continue; }
+        let off = 0, offAt = 0, offC = 0;
+        for (let f = 0; f <= 60; f++) {
+          const t = f / 30, h = t < c[2] ? halves[0] : halves[1];
+          const d = Math.abs(FM.evalProp(h.transform.x, t) - FM.evalProp(orig, t));
+          if (d > off) { off = d; offAt = t; }
+          const ca = FM.evalProp(h.fill, t), cb = FM.evalProp(origFill, t);
+          for (let i = 1; i < 7; i += 2) offC = Math.max(offC, Math.abs(parseInt(ca.substr(i, 2), 16) - parseInt(cb.substr(i, 2), 16)));
+        }
+        if (off > 0.1) bad.push(c[0] + ', cut at ' + c[2] + ' s: the split move is ' + off.toFixed(2) + ' px off the original at ' + offAt.toFixed(2) + ' s');
+        // A colour clamps to 0–255, so where an Overshoot / Anticipate has carried it past an end at the cut the seam cannot
+        // hold the true value and the split keeps the old path (js/app.js); judged only where the cut lands inside the fade.
+        const atCut = (FM.evalProp(orig, c[2]) - 50) / 800;
+        if (atCut >= 0 && atCut <= 1 && offC > 1) bad.push(c[0] + ', cut at ' + c[2] + ' s: the split colour fade is ' + offC + ' levels off the original');
+      }
       if (bad.length) throw new Error(bad.join('; AND '));
     } finally {
       FM.scene = saved; FM.time = t0; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}

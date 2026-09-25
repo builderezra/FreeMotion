@@ -4618,9 +4618,45 @@ window.FM = window.FM || {};
       layer.captions = orig.filter(c => c.start < into - 0.01).map(c => ({ ...own(c), end: Math.min(c.end, into) }));
     }
     // DIVIDE keyframes at the split (times are absolute): A keeps t ≤ split, B keeps t ≥ split, each
-    // getting a boundary keyframe holding the interpolated value so the ENDPOINT value is seamless
-    // (the interior easing of a split segment is a close approximation, not bit-exact). Without this
-    // both halves owned the FULL set → stray diamonds drawn outside each clip's window.
+    // getting a boundary keyframe holding the interpolated value so the ENDPOINT value is seamless.
+    // Without this both halves owned the FULL set → stray diamonds drawn outside each clip's window.
+    /* ⚠️ queue 690: …AND THE CURVE BETWEEN THEM IS DIVIDED TOO, NOT COPIED. This used to hand BOTH halves the cut
+       segment's whole ease and call the result "a close approximation". It is not one: an Ease In-Out over 0–2 s
+       split at 1 s became two complete Ease In-Outs, each arriving at rest and leaving from rest, so a layer gliding
+       through the cut at full speed (46 px in two frames) slowed to a dead stop there (2 px) and started again, and
+       the head half ran 97 px ahead of the move he made — a hitch at a cut that is meant to be invisible, in the
+       preview and the export alike. A split is meant to be invisible (the fade note above says so).
+       A cubic-bezier timing curve divides EXACTLY (de Casteljau): the part before the cut and the part after it are
+       each a cubic bezier of their own, rescaled to 0..1, so each half plays precisely its own stretch of the
+       original curve. That covers every curve the keyframe menu and the graph editor's handles write (`bez`), the
+       menu's named presets (EASE_PRESETS), and Ease In / Ease Out, which are quadratics and so beziers exactly.
+       NOT covered, and left as they were: a parameterised `ez` (Bounce / Elastic / Steps), the named Ease In-Out,
+       Bounce and Elastic functions (piecewise — no single bezier is them), and a motion-path segment with spatial
+       tangents. Hold needs nothing: copying it is already exact. */
+    const EASE_AS_BEZ = { easeIn: [1 / 3, 0, 2 / 3, 1 / 3], easeOut: [1 / 3, 2 / 3, 2 / 3, 1] };   // t² and 1-(1-t)² as cubics, exactly
+    const easeBezOf = (b) => {   // the cubic-bezier evalProp would ease this segment by, or null if it is not one
+      if (b.ez && FM.easeApply && FM.easeApply(b.ez, 0.5) != null) return null;   // ez resolves first (scene.js)
+      if (Array.isArray(b.bez) && b.bez.length === 4 && b.bez.every(Number.isFinite)) return b.bez;
+      if (b.e && Object.prototype.hasOwnProperty.call(FM.EASES, b.e)) return EASE_AS_BEZ[b.e] || null;   // linear / hold / piecewise → the old path
+      if (b.e && Object.prototype.hasOwnProperty.call(FM.EASE_PRESETS, b.e)) return FM.EASE_PRESETS[b.e];
+      return null;   // no ease at all is linear, which the old path already divides exactly
+    };
+    // Divide the timing curve at time-fraction u. Returns each half's own curve rescaled to 0..1, or null for a half
+    // that cannot be written as one (its value span is zero — an Anticipate cut exactly where it crosses back).
+    const splitBez = (z, u) => {
+      const bx = s => { const m = 1 - s; return 3 * m * m * s * z[0] + 3 * m * s * s * z[2] + s * s * s; };
+      let lo = 0, hi = 1, s = u;
+      for (let i = 0; i < 60; i++) { s = (lo + hi) / 2; if (bx(s) < u) lo = s; else hi = s; }   // x(s) is monotonic for a timing curve
+      const L = (p, q) => [p[0] + (q[0] - p[0]) * s, p[1] + (q[1] - p[1]) * s];
+      const P0 = [0, 0], P1 = [z[0], z[1]], P2 = [z[2], z[3]], P3 = [1, 1];
+      const A = L(P0, P1), Bm = L(P1, P2), C = L(P2, P3), D = L(A, Bm), E = L(Bm, C), M = L(D, E);
+      const ok = n => Math.abs(n) > 1e-6;
+      const head = (ok(M[0]) && ok(M[1])) ? [A[0] / M[0], A[1] / M[1], D[0] / M[0], D[1] / M[1]] : null;
+      const tx = x => (x - M[0]) / (1 - M[0]), ty = y => (y - M[1]) / (1 - M[1]);
+      const tail = (ok(1 - M[0]) && ok(1 - M[1])) ? [tx(E[0]), ty(E[1]), tx(C[0]), ty(C[1])] : null;
+      const fin = q => q && q.every(Number.isFinite) ? q.map(n => Math.round(n * 1e9) / 1e9) : null;
+      return { head: fin(head), tail: fin(tail), my: M[1] };   // my: how far along the value the cut lands (0..1 unless it overshoots)
+    };
     const splitAnimated = (lyr, keepLeft) => {
       FM.animatedProps(lyr).forEach(p => {
         // A looping prop (cycle/ping-pong) intentionally keeps its keyframes in a short span and
@@ -4641,6 +4677,15 @@ window.FM = window.FM || {};
           ? JSON.parse(JSON.stringify((before || p.kf[0]).v))
           : FM.evalProp(p, t);
         const b = p.kf.find(k => k.t >= t - 1e-9);   // segment-END keyframe bracketing the split: its ease governs the segment we're cutting
+        const a = [...p.kf].reverse().find(k => k.t < t - 1e-9);   // …and the one it starts from
+        // queue 690: the cut segment's curve, divided — only for a plain value (a number, or a colour) with no spatial tangents
+        const plain = x => typeof x === 'number' || typeof x === 'string';
+        const z = (a && b && !arrKf && p !== lyr.subs && plain(a.v) && plain(b.v) && b.t - a.t > 1e-9
+                   && !Number.isFinite(a.to) && !Number.isFinite(b.ti)) ? easeBezOf(b) : null;
+        let cut = z ? splitBez(z, (t - a.t) / (b.t - a.t)) : null;
+        // A COLOUR clamps each channel to 0–255, so a cut where an Overshoot has carried it past its end (or an
+        // Anticipate before its start) stores a clamped seam colour the halves cannot rescale from — the old path then.
+        if (cut && typeof a.v === 'string' && !(cut.my >= -1e-9 && cut.my <= 1 + 1e-9)) cut = null;
         p.kf = p.kf.filter(k => keepLeft ? k.t <= t + 1e-4 : k.t >= t - 1e-4);
         if (!p.kf.some(k => Math.abs(k.t - t) < 1e-3)) {
           // `split: 1` marks this as a SEAM keyframe rather than one the user placed. A Bounce behavior
@@ -4652,6 +4697,14 @@ window.FM = window.FM || {};
              Bounce / Elastic / Steps rail lost its curve at the seam while the two fields copied above
              said it had been kept. Cloned rather than shared, so retuning one half cannot reach the other. */
           if (b && b.ez) nk.ez = JSON.parse(JSON.stringify(b.ez));
+          /* queue 690: a curve that divides exactly gets ITS half of the curve. The head's seam ENDS the head's last
+             segment, so its ease is the part before the cut; in the tail the seam is the first key (its ease shapes
+             nothing) and the segment after it is eased by `b` — the tail's own copy — so b takes the part after. */
+          const mine = cut && (keepLeft ? cut.head : cut.tail);
+          if (mine) {
+            nk.bez = mine.slice();
+            if (!keepLeft) b.bez = mine.slice();   // B is a deep clone, so this is the tail's own keyframe; the head never sees it
+          }
           p.kf.push(nk);
         }
         p.kf.sort((k1, k2) => k1.t - k2.t);
