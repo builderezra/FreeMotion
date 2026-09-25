@@ -1816,7 +1816,7 @@ window.FM = window.FM || {};
     if (layer && (layer.type === 'video' || layer.type === 'image') && layer.stroke && layer.stroke.enabled) {
       const mbw = FM.evalProp(layer.stroke.width, t) || 0;
       if (mbw > 0) {
-        base = base.concat([{ type: 'stroke', enabled: true, params: {
+        base = base.concat([{ type: 'stroke', enabled: true, _mediaOutline: true, params: {   // marked: a pen mask runs it AFTER cutting (drawPenMaskLayer, queue 690)
           width: mbw,
           color: FM.evalProp(layer.stroke.color, t) || '#ffffff',
           position: layer.stroke.position === 'inside' ? 2 : (layer.stroke.position === 'center' ? 1 : 0),
@@ -2895,6 +2895,18 @@ window.FM = window.FM || {};
   function maskAlphaAt(layer, t, W, H, d, s, ox, oy) {
     try { return FM.buildMaskAlpha(layer, t, W, H, pmSlot(d).mask, s, ox, oy); } catch (e) { return null; }
   }
+  /* ═══ A MASK CUTS THE LAYER, NOT ITS OUTLINE AND SHADOW (queue 690, fifth hunt) ═══════════════════════════════════
+   * Both mask passes drew the WHOLE layer into their plate — its Shadow (applyShadow, in the base draw) and, on a photo
+   * or video, its Outline (the alpha-outline effect effectiveFx appends LAST) — and then stencilled that plate with the
+   * mask. The shadow falls outside the window and the outline sits on the photo's own rectangle, so the stencil cut
+   * both away: a photo masked to a window with Outline and Shadow on drew 0 outline pixels and 0 shadow pixels, on the
+   * canvas and in the export, while the same window cut with Free Crop kept 3296 and 2175. Both toggles in Outline &
+   * Shadows looked on and did nothing. (A mask added from Effects → Mask carries a marker, so its outline already ran
+   * after the cut; its Shadow was lost all the same. An unmarked mask is every mask drawn before v14.99, and one left
+   * behind when an effects preset or a pasted look replaces the layer's effects.)
+   * So the plate is drawn WITHOUT them, cut, and THEN they are applied to what is left — the shadow cast by the masked
+   * picture, the outline hugging it — in the same order an unmasked layer gets them: the shadow is part of the picture
+   * the outline is grown around. It is what effectiveFx promises the outline does: hug "what you can actually see". */
   function drawPenMaskLayer(ctx, layer, t, scene) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -2902,8 +2914,9 @@ window.FM = window.FM || {};
     // PW/PH project units, W/H the plate's real pixels — see plateScale. Same flat-cost story as the
     // feathered-mask path above: 22.8 ms/frame at full size vs 21.3 ms at 0.35 before this.
     const PW = P.width, PH = P.height;
-    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323). A mask only cuts, so it follows a camera
+    // plate out past the frame too (`wrap`, queue 690).
+    const _np = nestedPlate(ctx, P, true), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _pmDepth++;
     try {
@@ -2915,11 +2928,16 @@ window.FM = window.FM || {};
       if (!maskCanvas) { drawLayer(ctx, Object.assign({}, layer, { masks: marked.length ? marked : null }), t, scene); return; }
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
       off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;   // the nested drawLayer renders through baseT
+      off.__fmCamExt = !!ctx.canvas.__fmCamExt;           // anything nested in it still gets the frame (nestedPlate)
       const octx = off.getContext('2d');
       baseT(octx); octx.clearRect(OX, OY, PWp, PHp);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
+      // The Shadow and a photo's Outline wait until after the cut (see above) — the outline is the effect effectiveFx appended.
+      const outlineFx = (layer.effects || []).filter(function (e) { return e && e._mediaOutline && e.enabled !== false; })[0] || null;
+      const shadowOn = !!(layer.shadow && layer.shadow.enabled);
       // 1) draw the layer content (pen masks off, full opacity, normal blend) into the offscreen
-      const tmp = Object.assign({}, layer, { masks: marked.length ? marked : null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });   // markers inside still find their masks (queue 560)
+      const tmp = Object.assign({}, layer, { masks: marked.length ? marked : null, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) },   // markers inside still find their masks (queue 560)
+        (shadowOn || outlineFx) ? { shadow: null, effects: (layer.effects || []).filter(function (e) { return e !== outlineFx; }) } : {});
       drawLayer(octx, tmp, t, scene);
       // 2) keep only pixels inside the pen-mask alpha (frame space — no layer transform)
       octx.save();
@@ -2928,13 +2946,34 @@ window.FM = window.FM || {};
       try { octx.drawImage(maskCanvas, OX, OY, PWp, PHp); } catch (e) {}
       octx.restore();
       octx.globalCompositeOperation = 'source-over';
-      // 3) blit onto the main canvas with the layer's real opacity + blend
+      // 2b) the Outline, grown around what the mask left — and around its shadow, which an unmasked photo's outline
+      //     is grown around too (its shadow is drawn into the plate the outline effect reads)
+      let src = off;
+      if (outlineFx) {
+        const slot = pmSlot(d);
+        if (shadowOn) {
+          if (!slot.aux) slot.aux = document.createElement('canvas');
+          const aux = slot.aux; if (aux.width !== W || aux.height !== H) { aux.width = W; aux.height = H; }
+          const x2 = aux.getContext('2d');
+          x2.setTransform(1, 0, 0, 1, 0, 0); x2.globalAlpha = 1; x2.globalCompositeOperation = 'source-over'; x2.filter = 'none';
+          x2.clearRect(0, 0, W, H);
+          x2.save(); applyShadow(x2, layer, t, ps); x2.drawImage(off, 0, 0); x2.restore();   // plate px, the same scale the outline's own plate casts it at
+          src = aux;
+        }
+        try {
+          const sx = src.getContext('2d'), img = sx.getImageData(0, 0, W, H), fn = PIXEL_FX.stroke;
+          fn(img.data, W, H, pxToPlate(outlineFx, resolveFxColors(outlineFx.params || {}, t), t, ps, fn), t, ps, null);
+          sx.putImageData(img, 0, 0);
+        } catch (e) {}   // a tainted plate (cross-origin media) keeps the masked picture without an outline rather than losing it
+      }
+      // 3) blit onto the main canvas with the layer's real opacity + blend — and its Shadow, cast by the masked picture
       ctx.save();
       baseT(ctx);
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      try { ctx.drawImage(off, OX, OY, PWp, PHp); } catch (e) {}   // identical to drawImage(off,0,0) at scale 1
+      if (shadowOn && !outlineFx) applyShadow(ctx, layer, t, renderScale(ctx));   // device-space, like the base draw's
+      try { ctx.drawImage(src, OX, OY, PWp, PHp); } catch (e) {}   // identical to drawImage(off,0,0) at scale 1
       ctx.restore();
     } finally { _pmDepth--; }
   }
@@ -2961,15 +3000,19 @@ window.FM = window.FM || {};
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const _np = nestedPlate(ctx, P, true), ps = _np.ps, OX = _np.OX, OY = _np.OY;   // a mask only cuts: it may follow a camera plate out (queue 690)
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _pmDepth++;
     try {
       const maskCanvas = maskAlphaAt(Object.assign({}, layer, { masks: [m] }), t, W, H, d, ps, OX, OY);   // from the plate's origin — Motion Blur's is padded (queue 690)
       if (!maskCanvas) { drawLayer(ctx, inner, t, scene); return; }
-      const tmp = Object.assign({}, inner, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      // The Shadow is cast by what the mask leaves, not cut away with the rest (queue 690, fifth hunt — see drawPenMaskLayer).
+      // The Outline needs nothing here: it is the last effect in the stack, so it already runs outside this marker.
+      const shadowOn = !!(layer.shadow && layer.shadow.enabled);
+      const tmp = Object.assign({}, inner, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }, shadowOn ? { shadow: null } : {});
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
       off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;
+      off.__fmCamExt = !!ctx.canvas.__fmCamExt;
       const octx = off.getContext('2d');
       baseT(octx); octx.clearRect(OX, OY, PWp, PHp);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
@@ -2985,6 +3028,7 @@ window.FM = window.FM || {};
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
+      if (shadowOn) applyShadow(ctx, layer, t, renderScale(ctx));   // device-space, like the base draw's
       try { ctx.drawImage(off, OX, OY, PWp, PHp); } catch (e) {}
       ctx.restore();
     } finally { _pmDepth--; }
@@ -3081,13 +3125,20 @@ window.FM = window.FM || {};
     // No margin on the mover path: nothing is re-projected there, so nothing is pushed past the comp
     // edge and there is no smear to clip. Each slice is rendered complete instead.
     const m = _hasMoverFx ? 0 : Math.min(Math.ceil((_travel == null ? 0 : _travel)) + 2, PW * 0.25);
-    const EW = Math.max(1, Math.round((PW + 2 * m) * ps)), EH = Math.max(1, Math.round((PH + 2 * m) * ps));
+    /* INSIDE A CAMERA PLATE THAT REACHES PAST THE FRAME (queue 690, fifth hunt) the plates cover what that plate covers,
+       not the frame, so a blurred layer is not cut off at the frame edge as the camera pans. The blur has no geometry
+       of its own — it moves the layer's own picture — so it can; the plate is marked, so what is nested in it keeps the
+       frame (nestedPlate). Everywhere else R is the frame at the origin and every number below is what it was. */
+    const R = ctx.canvas.__fmCamExt ? nestedPlate(ctx, P, true) : null;
+    const RX = R ? R.OX : 0, RY = R ? R.OY : 0, RW = R ? R.PWp : PW, RH = R ? R.PHp : PH;
+    const EW = Math.max(1, Math.round((RW + 2 * m) * ps)), EH = Math.max(1, Math.round((RH + 2 * m) * ps));
     const d = _mbDepth++;
     try {
       if (!_mbPool[d]) _mbPool[d] = { plate: document.createElement('canvas'), acc: document.createElement('canvas') };
       const plate = _mbPool[d].plate, acc = _mbPool[d].acc;
       if (plate.width !== EW || plate.height !== EH) { plate.width = EW; plate.height = EH; }
-      plate.__fmRS = ps; plate.__fmOX = -m; plate.__fmOY = -m;   // plate pixel (0,0) IS project (-m,-m)
+      plate.__fmRS = ps; plate.__fmOX = RX - m; plate.__fmOY = RY - m;   // plate pixel (0,0) IS project (RX-m, RY-m) — (-m,-m) outside a camera
+      plate.__fmCamExt = !!R;
       const pctx = plate.getContext('2d');
       pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, EW, EH);
       baseT(pctx);
@@ -3103,9 +3154,9 @@ window.FM = window.FM || {};
       // rasterisation at `t` would only be thrown away.
       if (!_hasMoverFx) drawLayer(pctx, tmp, t, scene);
 
-      const AW = Math.max(1, Math.round(PW * ps)), AH = Math.max(1, Math.round(PH * ps));
+      const AW = R ? R.W : Math.max(1, Math.round(PW * ps)), AH = R ? R.H : Math.max(1, Math.round(PH * ps));
       if (acc.width !== AW || acc.height !== AH) { acc.width = AW; acc.height = AH; }
-      acc.__fmRS = ps; acc.__fmOX = 0; acc.__fmOY = 0;
+      acc.__fmRS = ps; acc.__fmOX = RX; acc.__fmOY = RY;
       const actx = acc.getContext('2d');
       actx.setTransform(1, 0, 0, 1, 0, 0); actx.clearRect(0, 0, AW, AH);
       actx.imageSmoothingEnabled = true; actx.imageSmoothingQuality = 'high';
@@ -3145,7 +3196,7 @@ window.FM = window.FM || {};
           baseT(actx);
           actx.globalAlpha = 1 / N;
           actx.globalCompositeOperation = 'lighter';
-          actx.drawImage(plate, 0, 0, PW, PH);
+          actx.drawImage(plate, RX, RY, RW, RH);
           actx.restore();
           drawn++;
           continue;
@@ -3158,7 +3209,7 @@ window.FM = window.FM || {};
         actx.transform(D.a, D.b, D.c, D.d, D.e, D.f);  // …then where this slice sits
         actx.globalAlpha = 1 / N;
         actx.globalCompositeOperation = 'lighter';     // premultiplied mean; source-over would skew partial-coverage edges opaque
-        actx.drawImage(plate, -m, -m, PW + 2 * m, PH + 2 * m);
+        actx.drawImage(plate, RX - m, RY - m, RW + 2 * m, RH + 2 * m);
         actx.restore();
         drawn++;
       }
@@ -3181,7 +3232,7 @@ window.FM = window.FM || {};
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
-      ctx.drawImage(acc, 0, 0, PW, PH);
+      ctx.drawImage(acc, RX, RY, RW, RH);
       ctx.restore();
     } finally { _mbDepth--; }
     return true;
@@ -3411,9 +3462,29 @@ window.FM = window.FM || {};
    * the plate reaches left or up past the comp). Inheriting them is the whole fix.
    * WHEN NOTHING IS NESTED THIS RETURNS EXACTLY THE OLD NUMBERS — the comp canvas is comp-sized with a
    * zero origin — which is what makes it safe in front of every effect in the app. */
-  function nestedPlate(ctx, proj) {
+  function nestedPlate(ctx, proj, wrap) {
     const ps = plateScale(ctx);
     const OX = ctx.canvas.__fmOX || 0, OY = ctx.canvas.__fmOY || 0;
+    /* ═══ INSIDE A CAMERA PLATE THAT REACHES PAST THE FRAME, A PER-LAYER PASS KEEPS THE FRAME (queue 690, fifth hunt) ═══
+     * renderScene now sizes the camera's plate to what the camera sees, which can start anywhere and run past the frame
+     * on any side (camPlateBox). Many kernels read the plate they are handed as the frame — a Twirl turns about its
+     * centre, a Vignette fits its edges — so inheriting that plate would move them every time the camera moved. Before
+     * the camera plate could grow it WAS the frame, so the frame is exactly what every pass here got, and still gets:
+     * the numbers below are the very ones the frame-sized camera plate produced. The cost is that a layer drawn through
+     * one of these passes is still cut at the frame edge when the camera looks past it — as it always was.
+     * `wrap` is for the passes that only cut, move or mix a layer and have no geometry of their own — the pen masks,
+     * Motion Blur (Object), a group unit: they follow the plate out, and mark their own plate so anything nested inside
+     * them still gets the frame. (Fog and the two blend plates follow it out too, on the target's own grid.) */
+    if (ctx.canvas.__fmCamExt) {
+      if (!wrap) {
+        const W = Math.max(1, Math.round(proj.width * ps)), H = Math.max(1, Math.round(proj.height * ps));
+        return { ps: ps, OX: 0, OY: 0, W: W, H: H, PWp: W / ps, PHp: H / ps };
+      }
+      // …and a `wrap` pass takes the plate's own extent, wherever it starts — it need not contain the frame at all
+      const rs = (ctx.canvas.__fmRS > 0 && isFinite(ctx.canvas.__fmRS)) ? ctx.canvas.__fmRS : 1;
+      const W = Math.max(1, Math.round(ctx.canvas.width / rs * ps)), H = Math.max(1, Math.round(ctx.canvas.height / rs * ps));
+      return { ps: ps, OX: OX, OY: OY, W: W, H: H, PWp: W / ps, PHp: H / ps };
+    }
     /* ═══ ZOOMED IN, AN EFFECT STILL SEES THE WHOLE FRAME (queue 913.5) ═══════════════════════════════════════════════
      * Inheriting the target's extent (below) is right for every plate this file makes, and wrong for two canvases:
      *   · A SLICE. Zoomed in, the preview canvas holds only the part of the comp you can see (app.js resizeCanvas's crop),
@@ -10671,7 +10742,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       wrapCtx.globalAlpha = 1; wrapCtx.globalCompositeOperation = 'source-over';
       wrapCtx.clearRect(0, 0, W, H);
       wrapCtx.filter = soft > 0.05 ? 'blur(' + soft.toFixed(2) + 'px)' : 'none';
-      try { wrapCtx.drawImage(snap, 0, 0, W, H); } catch (e) { return; }
+      try {
+        if (snapRegionDiffers(snap, A)) drawSnapInRegion(wrapCtx, snap, A);   // a camera plate's backdrop, placed by where it came from (queue 690)
+        else wrapCtx.drawImage(snap, 0, 0, W, H);
+      } catch (e) { return; }
       wrapCtx.filter = 'none';
       wrapCtx.globalCompositeOperation = 'destination-in';
       wrapCtx.drawImage(_lwA, 0, 0);
@@ -12099,9 +12173,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height;
+    /* Fog only exists with a camera, so this is the pass a camera plate that reaches past the frame meets most
+       (queue 690, fifth hunt): a frame-sized fog plate cut every fogged layer off at the frame edge as the camera
+       panned. The wash is only a colour, with no geometry of its own, so there the plate takes the target's own grid. */
+    const ext = !!ctx.canvas.__fmCamExt;
+    const FW = ext ? ctx.canvas.width : W, FH = ext ? ctx.canvas.height : H;
     if (!_fogA) _fogA = document.createElement('canvas');
-    if (_fogA.width !== W || _fogA.height !== H) { _fogA.width = W; _fogA.height = H; }
+    if (_fogA.width !== FW || _fogA.height !== FH) { _fogA.width = FW; _fogA.height = FH; }
+    if (ext) { _fogA.__fmRS = ctx.canvas.__fmRS || 1; _fogA.__fmOX = ctx.canvas.__fmOX || 0; _fogA.__fmOY = ctx.canvas.__fmOY || 0; _fogA.__fmCamExt = true; }
+    else { _fogA.__fmRS = undefined; _fogA.__fmOX = undefined; _fogA.__fmOY = undefined; _fogA.__fmCamExt = false; }   // the unstamped frame-sized plate it always was
     const a = _fogA.getContext('2d');
+    if (ext) { a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, FW, FH); }
     baseT(a); a.clearRect(0, 0, W, H);
     a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
@@ -12111,10 +12193,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     a.globalCompositeOperation = 'source-atop';        // the wash clips to the layer's own pixels
     a.globalAlpha = amt;
     a.fillStyle = (_camLens && _camLens.fog && _camLens.fog.color) || '#ffffff';
-    a.fillRect(0, 0, W, H);
+    a.fillRect(0, 0, FW, FH);
     a.restore();
     ctx.save();
-    baseT(ctx);
+    if (ext) ctx.setTransform(1, 0, 0, 1, 0, 0);       // same grid: pixel for pixel
+    else baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
@@ -13453,7 +13536,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *
    * Closed paths are left alone. Trimming one turns a filled shape into a filled crescent, which is not
    * what the control says it does, and every user of this is an open stroke. */
-  FM.trimSubs = function (subs, layer, t) {
+  /* `srcOf` (optional, queue 690 fifth hunt): an array this fills with the index of the subpath each returned run was
+     cut from, so a drawing whose strokes carry their own brush can still find each stroke's brush after a trim has
+     dropped some of them. Left EMPTY when nothing is trimmed, which means "the same index". */
+  FM.trimSubs = function (subs, layer, t, srcOf) {
     if (!layer || layer.closed) return subs;
     /* Held in PERCENT, because that is what the control reads and what a keyframe on it will say. A
        0..1 model with a 0..100 label is two units for one number and the sort of thing that gets
@@ -13495,9 +13581,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // Start of this kept run: the real point if we are past the cut, otherwise the cut itself.
         if (!run.length) run.push(f0 <= 0 ? [p1[0], p1[1], p1[2]] : lerp(p1, p2, f0));
         run.push(f1 >= 1 ? [p2[0], p2[1], p2[2]] : lerp(p1, p2, f1));
-        if (f1 < 1) { if (run.length >= 2) out.push(run); run = []; }
+        if (f1 < 1) { if (run.length >= 2) { out.push(run); if (srcOf) srcOf.push(s); } run = []; }
       }
-      if (run.length >= 2) out.push(run);
+      if (run.length >= 2) { out.push(run); if (srcOf) srcOf.push(s); }
     }
     // Hard ends on the cuts — see the note above.
     out.forEach(run => { if (run[0]) run[0] = [run[0][0], run[0][1]]; const e = run[run.length - 1]; if (e) run[run.length - 1] = [e[0], e[1]]; });
@@ -13614,6 +13700,45 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * small rect still drew inside 400ms here, and tightening the limit would only ask a question about
    * the machine — the mistake that made the vertical-glide test flaky (queue 450). */
   FM._drawShapeSrc = function () { return String(drawLayer); };
+
+  /* ═══ EVERY STROKE OF A DRAWING KEEPS THE BRUSH IT WAS DRAWN WITH (queue 690, fifth hunt) ═══════════════════════
+   * Queue 167 made a sketching session ONE layer — *"it should all be inside the one drawing you just made"* — and a
+   * layer has one colour (layer.fill) and one line width (stroke.width), both taken from the brush when the FIRST
+   * stroke was committed. The swatch and the brush slider stay live on the drawing bar the whole time, and the overlay
+   * draws the stroke under his finger in whatever they say — so he picked blue and a fat brush for his second line,
+   * saw it blue and fat while his finger was down, and the moment he lifted it it turned into the first stroke's red
+   * and 8 px. He could not sketch in two colours without leaving the tool.
+   * `layer.subStyles` sits beside layer.subs, one entry per stroke: null for a stroke drawn with the drawing's own
+   * brush (it follows layer.fill and stroke.width, so the Colouring card still recolours it), or { c, w } for one drawn
+   * with a different colour or size — w in the layer's own units, like stroke.width. A drawing with no entry, which is
+   * every drawing made before this and every one-brush drawing after it, returns null here and draws exactly as it
+   * always has: one traced path, one stroke.
+   * Consecutive strokes with the same brush go down as ONE path, so where two of them cross at a reduced opacity the
+   * crossing does not darken — the same thing the single path always gave. Strokes paint in the order they were
+   * drawn, so a later stroke still sits on top of an earlier one. */
+  FM.pathBrushRuns = function (layer, t) {
+    const st = (layer && layer.shape === 'path' && !layer.closed && Array.isArray(layer.subStyles)) ? layer.subStyles : null;
+    if (!st || !st.some(s => s && typeof s === 'object')) return null;
+    const from = [];
+    const subs = FM.trimSubs(FM.evalShapeSubs(layer, t == null ? (FM.time || 0) : t), layer, t == null ? (FM.time || 0) : t, from);
+    const runs = [];
+    let cur = null;
+    subs.forEach((pts, i) => {
+      const s = st[from.length ? from[i] : i];
+      // Read defensively: a file can say anything, and a bad entry falls back to the drawing's own brush.
+      const c = (s && typeof s.c === 'string' && s.c) ? s.c : null;
+      const w = (s && isFinite(+s.w) && +s.w > 0) ? +s.w : null;
+      if (cur && cur.c === c && cur.w === w) cur.subs.push(pts);
+      else { cur = { c: c, w: w, subs: [pts] }; runs.push(cur); }
+    });
+    return runs;
+  };
+  // One run of FM.pathBrushRuns as the current path, in the same box the whole drawing is traced into.
+  function traceBrushRun(ctx, run, ox, oy, sw, sh) {
+    ctx.beginPath();
+    run.subs.forEach(pts => FM.buildSubPath(ctx, pts, false, p => [ox + p[0] * sw, oy + p[1] * sh]));
+  }
+  FM.traceBrushRun = traceBrushRun;
 
   FM.traceShapePath = function (ctx, layer, ox, oy, sw, sh, t) {
     const kind = layer.shape || 'rect';
@@ -13817,6 +13942,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // The layer's own effects (set on ctx before this runs) then grade/blur that copy = a maskable,
   // shaped adjustment layer over the whole scene.
   let _cbA = null, _cbNorm = null;
+  /* THE BACKDROP SNAPSHOT MAY COVER A DIFFERENT PART OF THE SCENE THAN THE PLATE READING IT (queue 690, fifth hunt).
+   * `_bgSnap` is a copy of the canvas the layer is drawn into, and every reader assumed it covered the same stretch of
+   * the scene as its own plate — which held while every canvas here covered the frame. A camera plate now reaches past
+   * the frame (camPlateBox) while a per-layer pass inside it keeps a frame-sized plate (nestedPlate), and stretching
+   * one over the other would slide the copied backdrop out from under the layer. So the snapshot carries where it
+   * came from, and a reader whose plate covers a different region places it by that, scene point on scene point.
+   * Only a snapshot of such a camera plate is ever read this way; every other one takes the path it always took. */
+  function snapRegionDiffers(snap, cv) {
+    if (!snap || !snap.__fmCamExt || !cv) return false;
+    const e = 1e-6;
+    return Math.abs((snap.__fmOX || 0) - (cv.__fmOX || 0)) > e || Math.abs((snap.__fmOY || 0) - (cv.__fmOY || 0)) > e ||
+           Math.abs((snap.__fmRS || 1) - (cv.__fmRS || 1)) > e || snap.width !== cv.width || snap.height !== cv.height;
+  }
+  function drawSnapInRegion(dctx, snap, cv) {   // dctx at the identity, on cv's pixel grid
+    const sr = snap.__fmRS || 1, cr = cv.__fmRS || 1;
+    dctx.drawImage(snap, ((snap.__fmOX || 0) - (cv.__fmOX || 0)) * cr, ((snap.__fmOY || 0) - (cv.__fmOY || 0)) * cr, snap.width / sr * cr, snap.height / sr * cr);
+  }
   /* Magnify Background's lens plate: `snap` scaled by z about (px,py) on the SAME pixel grid, with
    * the border pixel repeated across anything the scaled copy does not reach. The clamp is not
    * cosmetic — the caller composites this with `source-in`, so a transparent margin is a HOLE
@@ -13874,7 +14016,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (layer.type === 'shape') {
       const sw = layer.shapeW || 400, sh = layer.shapeH || 300, ox = -sw * anchorX(tr), oy = -sh * anchorY(tr);
       const mode = FM.traceShapePath(a, layer, ox, oy, sw, sh, t);
-      if (mode === 'stroke') { a.lineWidth = (layer.stroke && layer.stroke.width) || 8; a.strokeStyle = '#fff'; a.lineCap = 'round'; a.stroke(); }
+      if (mode === 'stroke') {
+        const lw0 = (layer.stroke && layer.stroke.width) || 8, runs = FM.pathBrushRuns(layer, t);   // each stroke at its own width (queue 690)
+        a.strokeStyle = '#fff'; a.lineCap = 'round';
+        if (!runs) { a.lineWidth = lw0; a.stroke(); }
+        else runs.forEach(r => { traceBrushRun(a, r, ox, oy, sw, sh); a.lineWidth = r.w != null ? r.w : lw0; a.stroke(); });
+      }
       else a.fill();
     } else if (layer.type === 'text') {
       a.textAlign = layer.align || 'center'; a.textBaseline = 'middle';
@@ -13944,7 +14091,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * edge-clamp blits read `snap.width - 1`, so Magnify Background was wrong on the same stack for
      * the same reason. Normalising first fixes both with one change. */
     let _snapSrc = layer._bgSnap;
-    if (_snapSrc && (_snapSrc.width !== cw || _snapSrc.height !== ch) && cw > 0 && ch > 0) {
+    if (_snapSrc && snapRegionDiffers(_snapSrc, _cbA) && cw > 0 && ch > 0) {   // a camera plate's snapshot, read from a frame-sized plate (queue 690)
+      if (!_cbNorm) _cbNorm = document.createElement('canvas');
+      if (_cbNorm.width !== cw || _cbNorm.height !== ch) { _cbNorm.width = cw; _cbNorm.height = ch; }
+      const nctx = _cbNorm.getContext('2d');
+      nctx.setTransform(1, 0, 0, 1, 0, 0);
+      nctx.clearRect(0, 0, cw, ch);
+      try { drawSnapInRegion(nctx, _snapSrc, _cbA); } catch (e) {}
+      _snapSrc = _cbNorm;
+    } else if (_snapSrc && (_snapSrc.width !== cw || _snapSrc.height !== ch) && cw > 0 && ch > 0) {
       if (!_cbNorm) _cbNorm = document.createElement('canvas');
       if (_cbNorm.width !== cw || _cbNorm.height !== ch) { _cbNorm.width = cw; _cbNorm.height = ch; }
       const nctx = _cbNorm.getContext('2d');
@@ -14337,6 +14492,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_manualCv.width !== cw || _manualCv.height !== ch) { _manualCv.width = cw; _manualCv.height = ch; }
     _manualCv.__fmRS = ctx.canvas.__fmRS || 1;
     _manualCv.__fmOX = ctx.canvas.__fmOX || 0; _manualCv.__fmOY = ctx.canvas.__fmOY || 0;
+    _manualCv.__fmCamExt = !!ctx.canvas.__fmCamExt;   // a copy of a camera plate that reaches past the frame is one too (see nestedPlate)
     const mc = _manualCv.getContext('2d', { willReadFrequently: true });
     mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, cw, ch);
     baseT(mc);
@@ -14360,6 +14516,68 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // putImageData ignores transform, clip, globalAlpha and composite op — the blend already did
     // all of that, so this is a straight write of the finished pixels.
     ctx.putImageData(bd, x, y);
+  }
+
+  /* ═══ AN OUTLINED TITLE OR SHAPE IS ONE PICTURE, NOT TWO (queue 690, fifth hunt) ═══════════════════════════════════
+   * drawLayer sets the layer's opacity (globalAlpha), its Shadow (applyShadow → ctx.shadow*) and its blend mode on the
+   * context ONCE, and then the text and shape branches draw the OUTLINE and the FILL as separate strokes and fills.
+   * Canvas applies all three to each draw call on its own, so:
+   *   · the fill's Shadow was painted ON TOP of the outline drawn just before it — turning on Outline & Shadows' Shadow
+   *     (the default Soft kind) darkened a yellow text outline all the way round, down to 75 of 255 red, on the canvas
+   *     and in the export; on an outlined shape a dark copy of the outline showed inside the fill;
+   *   · at any opacity under 100% the second pass was blended over the half-transparent first, so the outline showed
+   *     through the letters (86% of a faded white title's fill tinted yellow) and a shape's outline went two-tone —
+   *     every Fade In and Fade Out on an outlined title or shape;
+   *   · a blend mode blended the fill with the layer's own outline as well as with what is underneath.
+   * A single-pass layer never had any of this — text with no outline keeps every pixel of its fill under the same
+   * shadow — and the open-path branch already knew the problem ("the under-stroke already cast the silhouette shadow —
+   * don't double it"). So a layer that draws in more than one pass is drawn ONCE into a plate on the target's own pixel
+   * grid, at full opacity with no shadow and a normal blend, and that plate is then laid down with the layer's opacity,
+   * blend and Shadow — exactly as a flattened group or a masked layer already is. Its effect filter stays inside, on
+   * each pass as before, so nothing but the three things above changes.
+   * THE CAPTION PILL keeps its Shadow INSIDE the plate: the pill is drawn flat on purpose ("so the box itself doesn't
+   * get a halo"), with the words casting their shadow onto it, and a shadow cast by the whole plate would give the box
+   * the halo that code refuses it. A pill layer is still flattened for opacity and blend — the fade let the pill show
+   * through its own words. A layer that draws once, or is fully opaque with no shadow and a normal blend, never gets
+   * here, and draws byte for byte as it did. */
+  const _olPool = []; let _olDepth = 0;
+  function outlinedUnitWanted(layer, t, opacity) {
+    if (!layer || (layer.type !== 'text' && layer.type !== 'shape') || layer._olUnit) return false;
+    const stk = layer.stroke;
+    // text strokes only when the width is above 0; a shape's outline (or an open path's under-stroke) is a second pass whenever it is on
+    const outline = !!(stk && stk.enabled) && (layer.type === 'shape' || (FM.evalProp(stk.width, t) || 0) > 0);
+    const pill = layer.type === 'text' && !!layer.captionBg;
+    if (!outline && !pill) return false;
+    const shadowOn = !!(layer.shadow && layer.shadow.enabled);
+    const blended = (BLEND[layer.blendMode] || 'source-over') !== 'source-over';
+    return opacity < 1 || blended || (shadowOn && !pill);
+  }
+  function drawOutlinedUnit(ctx, layer, t, scene, opacity) {
+    const cw = ctx.canvas.width, ch = ctx.canvas.height;
+    const pill = layer.type === 'text' && !!layer.captionBg;
+    const d = _olDepth++;
+    try {
+      if (!_olPool[d]) _olPool[d] = document.createElement('canvas');
+      const F = _olPool[d];
+      if (F.width !== cw || F.height !== ch) { F.width = cw; F.height = ch; }   // cleared below
+      F.__fmRS = ctx.canvas.__fmRS; F.__fmOX = ctx.canvas.__fmOX; F.__fmOY = ctx.canvas.__fmOY;   // the TARGET's grid, so the layer rasterises exactly as it would have on it
+      F.__fmCamExt = !!ctx.canvas.__fmCamExt;
+      const pc = F.getContext('2d');
+      pc.setTransform(1, 0, 0, 1, 0, 0);
+      pc.globalAlpha = 1; pc.globalCompositeOperation = 'source-over'; pc.filter = 'none';
+      pc.clearRect(0, 0, cw, ch);
+      baseT(pc);
+      const tmp = Object.assign({}, layer, { _olUnit: 1, blendMode: 'normal', shadow: pill ? layer.shadow : null, behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+      drawLayer(pc, tmp, t, scene);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);   // plate and target share the grid
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      if (!pill) applyShadow(ctx, layer, t, renderScale(ctx));   // device-space, the same numbers the single draw used
+      ctx.drawImage(F, 0, 0);
+      ctx.restore();
+    } finally { _olDepth--; }
   }
 
   function drawLayer(ctx, layer, t, scene) {
@@ -14446,27 +14664,35 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * falls through every branch and returns, and the layer then draws zero pixels — see the
      * registry note on Magnify Background. */
 
-    if (scene && tilt3D(layer, t)) { draw3DTiltLayer(ctx, layer, t, scene); return; }
+    if (scene && tilt3D(layer, t)) { draw3DTiltLayer(ctx, layer, t, scene); relayBackground(ctx, BLEND[layer.blendMode]); return; }   // a tilted clipping mask composites its own plate with the cut
     // MASK blend modes composite the layer as ONE plate (destination-in/out) — multi-pass draws
     // (fill+stroke, caption pill, keyed video) would otherwise each re-clip the canvas below.
     const _bop = BLEND[layer.blendMode];
     if ((_bop === 'destination-in' || _bop === 'destination-out') && scene && (!_blendMaskCv || ctx.canvas !== _blendMaskCv)) {
       const P = scene.project;
       if (!_blendMaskCv) _blendMaskCv = document.createElement('canvas');
+      /* A camera plate that reaches past the frame (queue 690, fifth hunt): this plate cuts EVERYTHING under it
+         that it does not cover, so a frame-sized one would wipe out all the camera can see past the frame edge.
+         There it takes the target's own grid instead — the plate is only a stencil, it has no geometry of its own. */
+      const _bext = !!ctx.canvas.__fmCamExt;
       // Target's pixel grid, not the project's — see buildGroupUnit for the measurement behind this.
-      const _bps = plateScale(ctx);
-      const _bw = Math.max(1, Math.round(P.width * _bps)), _bh = Math.max(1, Math.round(P.height * _bps));
+      const _bps = _bext ? (ctx.canvas.__fmRS || 1) : plateScale(ctx);
+      const _bw = _bext ? ctx.canvas.width : Math.max(1, Math.round(P.width * _bps)), _bh = _bext ? ctx.canvas.height : Math.max(1, Math.round(P.height * _bps));
       if (_blendMaskCv.width !== _bw || _blendMaskCv.height !== _bh) { _blendMaskCv.width = _bw; _blendMaskCv.height = _bh; }
-      _blendMaskCv.__fmRS = _bps; _blendMaskCv.__fmOX = 0; _blendMaskCv.__fmOY = 0;
+      _blendMaskCv.__fmRS = _bps; _blendMaskCv.__fmOX = _bext ? (ctx.canvas.__fmOX || 0) : 0; _blendMaskCv.__fmOY = _bext ? (ctx.canvas.__fmOY || 0) : 0;
+      _blendMaskCv.__fmCamExt = _bext;
       const mc = _blendMaskCv.getContext('2d');
+      if (_bext) { mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, _bw, _bh); }
       baseT(mc); mc.clearRect(0, 0, P.width, P.height);
       mc.globalAlpha = 1; mc.globalCompositeOperation = 'source-over'; mc.filter = 'none';
       const saved = layer.blendMode; layer.blendMode = 'normal';
       try { drawLayer(mc, layer, t, scene); } finally { layer.blendMode = saved; }
       ctx.save();
       ctx.globalCompositeOperation = _bop; ctx.globalAlpha = 1; ctx.filter = 'none';
-      ctx.drawImage(_blendMaskCv, 0, 0, P.width, P.height);
+      if (_bext) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(_blendMaskCv, 0, 0); }   // same grid: pixel for pixel
+      else ctx.drawImage(_blendMaskCv, 0, 0, P.width, P.height);
       ctx.restore();
+      relayBackground(ctx, _bop);   // the cut is for the layers below, not the background (queue 690) — see _bgRelay
       return;
     }
     // Pen masks (layer.masks) wrap the layer's whole rasterized plate — outermost of the per-layer
@@ -14538,6 +14764,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(tr.opacity, t)));
     if (opacity <= 0) return;
 
+    // An outline and a fill are TWO draws; opacity, Shadow and blend belong to the pair (queue 690, fifth hunt). Ahead of
+    // fog and the GPU colour path, so each of those works on the whole outlined layer and the Shadow is cast by the result.
+    if (scene && outlinedUnitWanted(layer, t, opacity)) { drawOutlinedUnit(ctx, layer, t, scene, opacity); return; }
+
     // Fog rides its own plate, so it has to precede every other branch below — the wash must land on
     // the finished layer whichever of the eight ways it draws.
     if (!_fogBusy && scene) { const _fa = camFogAmt(layer, t); if (_fa > 0.002) { drawFogLayer(ctx, layer, t, scene, _fa); return; } }
@@ -14584,7 +14814,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (cg && ((cg.lift || 0) !== 0 || (cg.gamma != null && cg.gamma !== 1) || (cg.gain != null && cg.gain !== 1))) {
         src = gradeCanvas(src, src.width, src.height, cg.lift || 0, cg.gamma || 1, cg.gain != null ? cg.gain : 1);   // hue/sat apply via effectFilter above
       }
-      try { ctx.drawImage(src, 0, 0, layer._canvasW || src.width, layer._canvasH || src.height); } catch (e) {}
+      try { ctx.drawImage(src, layer._canvasX || 0, layer._canvasY || 0, layer._canvasW || src.width, layer._canvasH || src.height); } catch (e) {}
     } else if (layer.type === 'text') {
       /* HONOUR THE ANCHOR. Every other layer type offsets its content by it — shapes use
        * `-sw * anchorX(tr)`, media `-w * anchorX(tr)` — but text drew at x=0 governed by textAlign
@@ -14746,24 +14976,47 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         if (mode === 'stroke') {   // open kinds (line / arc / freehand) are stroked, never filled — Color & Fill IS the line colour
           if (skipStroke) return;   // trim window empty → nothing to draw
           const lw = (stk && stk.width != null) ? (FM.evalProp(stk.width, t) || 8) : 8;
+          const lineCol = FM.evalProp(layer.fill, t) || '#ffffff';
+          /* A drawing whose strokes carry their own brush (queue 690, fifth hunt) is stroked RUN BY RUN — see
+             FM.pathBrushRuns. null for every other open shape and for a one-brush drawing, and then this is the
+             single traced path exactly as before. */
+          const runs = FM.pathBrushRuns(layer, t);
+          const eachRun = (paint) => {
+            if (!runs) { paint(lineCol, lw); return; }
+            runs.forEach(r => { traceBrushRun(ctx, r, ox, oy, sw, sh); paint(r.c || lineCol, r.w != null ? r.w : lw); });
+          };
           // Border on an open path = an outline hugging the line from BEHIND: a 2× under-stroke in the
           // border colour, then the drawing's own colour on top (same trick as a filled shape's
           // 'outside' border, where the fill overpaints the inner half). Both strokes share the dash so
           // trim/dash keep the line + its border aligned.
           if (stk && stk.enabled && stk.color != null) {
-            ctx.save();
-            applyDash();
-            ctx.lineWidth = lw * 2; ctx.strokeStyle = FM.evalProp(stk.color, t) || '#fff';
-            ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
-            ctx.restore();
+            const bcol = FM.evalProp(stk.color, t) || '#fff';
+            eachRun((col, w) => {
+              ctx.save();
+              applyDash();
+              ctx.lineWidth = w * 2; ctx.strokeStyle = bcol;
+              ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+              ctx.restore();
+            });
             ctx.shadowColor = 'transparent';   // the under-stroke already cast the silhouette shadow — don't double it
           }
-          ctx.save();
-          applyDash();
-          ctx.lineWidth = lw;
-          ctx.strokeStyle = FM.evalProp(layer.fill, t) || '#ffffff';
-          ctx.lineCap = 'round'; ctx.stroke();
-          ctx.restore();
+          /* THE COLOURING CARD'S OPACITY, ON A LINE (queue 690, fifth hunt). fillPanel gives every open shape — a Line,
+             an Arc, a Spiral, anything the pencil draws — the same Opacity row a rectangle gets, and it writes
+             layer.fillOpacity. Only paintFillInPath read it, and a stroke never goes through there, so the box said 20%
+             and the line stayed at full strength in the preview and the export. On an open shape the line IS the fill
+             colour, so it fades exactly as a filled shape's fill does: as a multiplier on the alpha already there, and
+             never on the border under-stroke above, which has its own colour — the same rule the text got. At 100% the
+             alpha is not touched at all. */
+          const fa = textFillAlpha(layer);
+          eachRun((col, w) => {
+            ctx.save();
+            applyDash();
+            if (fa < 1) ctx.globalAlpha = ctx.globalAlpha * fa;
+            ctx.lineWidth = w;
+            ctx.strokeStyle = col;
+            ctx.lineCap = 'round'; ctx.stroke();
+            ctx.restore();
+          });
         } else {
           // BORDER (keyframeable, positioned). Canvas stroke() is always centre-aligned, so:
           // outside = stroke 2× behind the fill (fill overpaints inner half); inside = clip to the shape
@@ -15219,6 +15472,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // onto the real canvas through the camera's (inverse) transform — so EVERY layer, including
   // post-fx / motion-blur / masked ones, is panned & zoomed uniformly.
   let _camCv = null;
+  let _camAcc = null;   // camera Motion Blur's slices are averaged here, on the frame's pixel grid (queue 690, fifth hunt)
   // Active camera's evaluated pan {x,y} + z-dolly, stashed by renderScene for the duration of its layer
   // loop so applyLayerTransform can add depth parallax; null whenever no camera is active (diff-free).
   let _camParallax = null;
@@ -15226,6 +15480,45 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // plane, and fog. Scoped to the layer loop exactly like _camParallax, so thumbnails, fx previews
   // and any comp rendered without a camera keep the legacy fixed lens and no blur or fog at all.
   let _camLens = null;
+  /* ═══ A CLIPPING MASK CUTS THE LAYERS BELOW IT, NOT THE PROJECT BACKGROUND (queue 690, fifth hunt) ═══════════════
+   * Create Clipping Mask gives a layer the blend 'mask-include' — canvas destination-in on the frame being drawn, and
+   * 'mask-exclude' is destination-out. renderScene paints the project background into that same frame BEFORE the
+   * layers (it has to: a blend mode needs something to blend against and an adjustment layer something to grade), so
+   * the cut took the background with it. He put a circle over a photo on white and chose Create Clipping Mask: the
+   * photo showed inside the circle and everything outside it went BLACK in the preview and the export, where the white
+   * should have been — while the same two layers as a Masking group kept the white. The app's own toast says
+   * "layers below show only inside this layer", and the background is not a layer.
+   * So once a cut has gone down on the scene's own frame, the background goes back in UNDER what is left
+   * (destination-over): the pixels the cut emptied show the background again, the pixels it kept are untouched
+   * (the background was already under them), and a soft edge sits over the background exactly as it would have.
+   * It happens straight after the cut rather than after the whole stack, so a blend-mode layer ABOVE the mask still
+   * has the background to blend against. Scoped to renderScene's layer loop exactly like _camParallax — a group's
+   * plate, a thumbnail or any other canvas never matches `canvas` and is never touched — and a transparent export
+   * (sceneBg null) keeps its hole transparent, which is what an alpha export is for. With a camera the background
+   * is painted into the plate as the same inverse-mapped quad renderScene uses, for the same reason. */
+  let _bgRelay = null;
+  function relayBackground(ctx, op) {
+    const r = _bgRelay;
+    if ((op !== 'destination-in' && op !== 'destination-out') || !r || !ctx || ctx.canvas !== r.canvas) return;
+    const bg = sceneBg(r.P);
+    if (!bg) return;
+    const q = r.cam ? cameraFrameQuad(r.cam, r.t, r.P) : null;
+    if (r.cam && !q) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    baseT(ctx);
+    ctx.globalCompositeOperation = 'destination-over'; ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.shadowColor = 'transparent';
+    ctx.fillStyle = bg;
+    if (!q) ctx.fillRect(0, 0, r.P.width, r.P.height);
+    else {
+      ctx.beginPath();
+      ctx.moveTo(q[0][0], q[0][1]);
+      for (let qi = 1; qi < q.length; qi++) ctx.lineTo(q[qi][0], q[qi][1]);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 
   // ===== CAMERA OPTIONS (Alight Motion parity): Camera View · Focus Blur · Fog =====
   // Resolve a camera's optics for one frame. EVERY field is absent-by-default and every fallback is
@@ -15406,14 +15699,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * previews at about 0.6, so it was ~3x there. Export is unaffected: an export canvas is exactly
      * project-sized, so ps is 1 and every number below is what it always was. */
     const ps = plateScale(ctx);
-    const GW = Math.max(1, Math.round(P.width * ps)), GH = Math.max(1, Math.round(P.height * ps));
+    /* INSIDE A CAMERA PLATE THAT REACHES PAST THE FRAME (queue 690, fifth hunt) the unit covers what that plate covers,
+       so a group with opacity, a blend, a shadow or a mask is not cut off at the frame edge as the camera pans. The plate
+       is marked, so the members' own effects — and the group's, applied to the proxy below — keep the frame
+       (nestedPlate). Everywhere else R is the frame at the origin and every number below is what it was. */
+    const R = ctx.canvas.__fmCamExt ? nestedPlate(ctx, P, true) : null;
+    const RX = R ? R.OX : 0, RY = R ? R.OY : 0, RW = R ? R.PWp : P.width, RH = R ? R.PHp : P.height;
+    const GW = R ? R.W : Math.max(1, Math.round(P.width * ps)), GH = R ? R.H : Math.max(1, Math.round(P.height * ps));
     // Skip the full-frame realloc when the dims are unchanged — this fires per group, per frame. _mgA is
     // cleared just below; _mgB is cleared before its only use (mask branch), so the buffers stay correct.
     if (_mgA.width !== GW || _mgA.height !== GH) { _mgA.width = GW; _mgA.height = GH; }
     if (_mgB.width !== GW || _mgB.height !== GH) { _mgB.width = GW; _mgB.height = GH; }
-    _mgA.__fmRS = ps; _mgA.__fmOX = 0; _mgA.__fmOY = 0;
-    _mgB.__fmRS = ps; _mgB.__fmOX = 0; _mgB.__fmOY = 0;
+    _mgA.__fmRS = ps; _mgA.__fmOX = RX; _mgA.__fmOY = RY;
+    _mgB.__fmRS = ps; _mgB.__fmOX = RX; _mgB.__fmOY = RY;
+    _mgA.__fmCamExt = _mgB.__fmCamExt = !!R;
     const a = _mgA.getContext('2d');
+    if (R) { a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, GW, GH); }
     baseT(a); a.clearRect(0, 0, P.width, P.height);
     a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     /* No Fill Behind is painted onto this plate — not the group's, not a member's. renderScene's
@@ -15447,11 +15748,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const maskLayer = u.maskId ? scene.layers.find(l => l.id === u.maskId) : null;
     if (maskLayer && FM.isLayerVisibleAt(maskLayer, t)) {   // hidden mask → members show unclipped
       const b = _mgB.getContext('2d');
+      if (R) { b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, GW, GH); }
       baseT(b); b.clearRect(0, 0, P.width, P.height);
       b.globalAlpha = 1; b.globalCompositeOperation = 'source-over'; b.filter = 'none';
       drawLayer(b, maskLayer, t, scene);
       a.globalCompositeOperation = 'destination-in';
-      a.drawImage(_mgB, 0, 0, P.width, P.height);   // `a` is in PROJECT units (baseT), the plate is in target px
+      a.drawImage(_mgB, RX, RY, RW, RH);   // `a` is in PROJECT units (baseT), the plate is in target px
       a.globalCompositeOperation = 'source-over';
     }
     // Hand the flattened unit back through drawLayer as a '_flat' proxy carrying the GROUP's own
@@ -15464,7 +15766,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (gFill !== 'none' && !(gFill === 'media' && !g.fillImage)) {
       a.save();
       a.globalCompositeOperation = 'source-atop';   // paintFillInPath handles fillOpacity itself
-      a.beginPath(); a.rect(0, 0, P.width, P.height);
+      a.beginPath(); a.rect(RX, RY, RW, RH);        // the whole plate; the fill itself is still laid out over the frame
       paintFillInPath(a, g, t, 0, 0, P.width, P.height);
       a.restore();
     }
@@ -15481,7 +15783,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        every frame and never saved. */
     tmp._ofGroup = g;
     tmp._canvas = _mgA;
-    tmp._canvasW = P.width; tmp._canvasH = P.height;   // the plate is target-scaled; this is the box it stands for
+    tmp._canvasW = RW; tmp._canvasH = RH;   // the plate is target-scaled; this is the box it stands for
+    if (R) { tmp._canvasX = RX; tmp._canvasY = RY; }   // …and where that box starts, when it is not the frame
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
     tmp._clipStart = g.start || 0;   // real clip start for effect clocks — tl from tmp.start would be a CONSTANT 1, freezing every time-driven effect (spin/wiggle/particles…) on a group
     tmp.effects = g.effects || [];
@@ -15598,6 +15901,53 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   FM._camBlurSlices = camBlurSlices;   // suite seam
 
+  /* ═══ THE CAMERA SEES WHAT IS PAST THE PROJECT EDGE (queue 690, fifth hunt) ═══════════════════════════════════
+   * Every layer is drawn into the camera's plate and the camera is then applied to that plate — and the plate was
+   * exactly the project rectangle. So anything a layer had outside the frame was thrown away BEFORE the camera looked
+   * at it: pan a camera across a photo scaled up past the frame and the side it moved toward filled with the plain
+   * background (a 100 px pan on a 320 px frame showed the photo across 69% of it), zoom it out and the scene was a small
+   * box in the middle of the background (25%), turn it and the corners were background (89%). Nothing asked for that —
+   * the camera is presented as a camera, with pans, shakes and depth parallax — it was only ever the plate's size.
+   * So the plate is now sized to WHAT THE CAMERA SEES: the four frame corners pushed back through the camera (every
+   * shutter slice's pose, when Motion Blur is on, since each slice looks somewhere slightly different), boxed and
+   * snapped out to the plate's pixel grid.
+   * Returns NULL whenever that view already lies inside the project rectangle — a camera at rest, a zoom-in, a small
+   * shake inside a zoom — and the plate is then the project rectangle EXACTLY as before, byte for byte. That is also
+   * why the box is not merged with the frame: a long pan across a panorama would otherwise grow the plate the whole way.
+   * The pixel count is capped at CAM_PLATE_CAP times the frame's, by lowering the plate's scale: a zoom-out never needs
+   * the full scale anyway (the camera shrinks the plate as it draws it, so a plate at half scale zoomed out to 50% still
+   * has a pixel for every screen pixel), and a camera zoomed out to almost nothing must not allocate the world. */
+  const CAM_PLATE_CAP = 2.5, CAM_PLATE_MAXDIM = 8192;
+  function camPlateBox(poses, P, rs) {
+    const W = P.width, H = P.height, cx = W / 2, cy = H / 2;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < poses.length; i++) {
+      const k = poses[i];
+      if (!k || ![k.zoom, k.x, k.y, k.rot].every(isFinite) || !(k.zoom > 0)) return null;   // a pose the composite cannot place: keep the frame-sized plate
+      const c = Math.cos(-k.rot), s = Math.sin(-k.rot);   // the inverse of the composite's rotate(rot), exactly as cameraFrameQuad maps it
+      const q = [[0, 0], [W, 0], [0, H], [W, H]];
+      for (let j = 0; j < 4; j++) {
+        const dx = (q[j][0] - cx) / k.zoom, dy = (q[j][1] - cy) / k.zoom;
+        const X = k.x + dx * c - dy * s, Y = k.y + dx * s + dy * c;
+        if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
+      }
+    }
+    const e = 1e-6;
+    if (x0 >= -e && y0 >= -e && x1 <= W + e && y1 <= H + e) return null;   // the frame already holds everything the camera can see
+    const need = Math.max(1, Math.round(W * rs)) * Math.max(1, Math.round(H * rs));
+    let s2 = rs;
+    const area = (x1 - x0) * (y1 - y0) * rs * rs;
+    if (area > CAM_PLATE_CAP * need) s2 = rs * Math.sqrt(CAM_PLATE_CAP * need / area);
+    const longest = Math.max(x1 - x0, y1 - y0) * s2;
+    if (longest > CAM_PLATE_MAXDIM) s2 = s2 * CAM_PLATE_MAXDIM / longest;
+    // Snapped OUT to whole plate pixels, so a layer lands on the same pixel lattice it always did. The +1 keeps the
+    // size steady through a pan (the box's width does not change, only where it starts), so the plate is not
+    // reallocated every frame.
+    const px0 = Math.floor(x0 * s2), py0 = Math.floor(y0 * s2);
+    const pw = Math.max(1, Math.ceil((x1 - x0) * s2) + 1), ph = Math.max(1, Math.ceil((y1 - y0) * s2) + 1);
+    return { rs: s2, ox: px0 / s2, oy: py0 / s2, pw: pw, ph: ph, w: pw / s2, h: ph / s2 };
+  }
+
   /* ⚠️ THE LAST INSTANT OF A CLIP IS STILL THE CLIP (queue 549). Ezra, with two screenshots one frame
      apart — 00:03:119 fills the canvas, 00:04:00 is BLACK: *"when you go to the end of a layer you can't
      see it anymore… even if it wasn't the last thing it should still be visible when you're at the end
@@ -15667,6 +16017,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     const cam = activeCam(scene, t);   // the one FM.cameraView asks for, so the editor maps through the camera that is drawn
     let target = ctx;
+    // The camera's shutter slices (Motion Blur) and the part of the scene it can see — worked out BEFORE the layers are
+    // drawn now, because the plate has to be big enough to hold every slice's view (queue 690, fifth hunt).
+    let _camSlices = null, _camBox = null;
+    const camAt = cam ? (tt) => camPose(cam, tt) : null;   // ONE pose, shared with FM.cameraView (queue 690, third hunt)
     if (cam) {
       /* The camera's plate lives on the TARGET's pixel grid, not the project's — the same rule
          drawManualBlendLayer, the Copy Background snapshot and (since v5.10) adjustment layers all
@@ -15677,10 +16031,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          in and stopped matching the export. Capped at 2x because beyond that a supersampled plate on
          a 1080x1920 project costs tens of megapixels for detail nobody can see. */
       const _camRs = Math.max(0.1, Math.min(2, ctx.canvas.__fmRS || 1));
-      const _cw = Math.max(1, Math.round(P.width * _camRs)), _ch = Math.max(1, Math.round(P.height * _camRs));
+      _camSlices = camBlurSlices(cam, t, scene, ctx, camAt);
+      _camBox = camPlateBox(_camSlices || [camAt(t)], P, _camRs);   // null = the view is inside the frame: the frame-sized plate, as always
+      const _cw = _camBox ? _camBox.pw : Math.max(1, Math.round(P.width * _camRs)), _ch = _camBox ? _camBox.ph : Math.max(1, Math.round(P.height * _camRs));
       if (!_camCv) _camCv = document.createElement('canvas');
       if (_camCv.width !== _cw || _camCv.height !== _ch) { _camCv.width = _cw; _camCv.height = _ch; }   // cleared below
-      _camCv.__fmRS = _camRs; _camCv.__fmOX = 0; _camCv.__fmOY = 0;
+      if (_camBox) { _camCv.__fmRS = _camBox.rs; _camCv.__fmOX = _camBox.ox; _camCv.__fmOY = _camBox.oy; }
+      else { _camCv.__fmRS = _camRs; _camCv.__fmOX = 0; _camCv.__fmOY = 0; }
+      /* A plate that reaches past the frame is MARKED, and the mark is what keeps every per-layer effect exactly as it was.
+       * Those passes (nestedPlate) size their own plates from the canvas they draw into, and many kernels take that
+       * plate's centre and size as the frame's — a Twirl centres on it, a Vignette fits it. Handed a plate that has
+       * grown past the frame on one side, they would move whenever the camera did. So on a marked plate they keep the
+       * frame-sized plate they always had (see nestedPlate). What reaches past the edge is the ordinary draw — a photo, a
+       * video, text, a shape, a colour or blur effect — and the passes that only cut, move or mix it: a mask, a group, the
+       * fog, Motion Blur (Object), the blend plates. */
+      _camCv.__fmCamExt = !!_camBox;
       target = _camCv.getContext('2d');
       // Stash the camera's evaluated pan (== what the composite below subtracts) + z-dolly, so the layer
       // loop's applyLayerTransform can add per-depth parallax. Cleared right after the loop so a drawLayer
@@ -15710,6 +16075,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       _camLens = null;
     }
     target.save();
+    if (_camBox) { target.setTransform(1, 0, 0, 1, 0, 0); target.clearRect(0, 0, target.canvas.width, target.canvas.height); }   // the plate reaches past the frame: clear ALL of it, not just the frame's part
     baseT(target);
     target.clearRect(0, 0, P.width, P.height);
     if (!cam && sceneBg(P)) {   // no camera: the plate IS the frame, so a plain fill is the background
@@ -15770,6 +16136,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the loop's skips exactly, so a fill only ever exists for a layer that is really about to draw:
      * solo, isolate and visibility all have to agree, or the frame gains a wash from a layer that is
      * not on screen. */
+    const _bgRelayWas = _bgRelay;   // a comp rendered from inside the loop must not take this frame's away
+    _bgRelay = sceneBg(P) ? { canvas: target.canvas, P: P, cam: cam, t: t } : null;
     const _fbUnits = new Set();
     fillBehindPass(target, scene, t, function (L) {
       if (soloActive && !L.solo) return null;
@@ -15812,6 +16180,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const bs = L._bgSnap.getContext('2d');
           bs.setTransform(1, 0, 0, 1, 0, 0); bs.clearRect(0, 0, _tw, _th);
           try { bs.drawImage(target.canvas, 0, 0); } catch (e) {}
+          // …and where in the scene it came from, for a reader whose plate covers somewhere else (snapRegionDiffers)
+          L._bgSnap.__fmRS = target.canvas.__fmRS || 1; L._bgSnap.__fmOX = target.canvas.__fmOX || 0; L._bgSnap.__fmOY = target.canvas.__fmOY || 0;
+          L._bgSnap.__fmCamExt = !!target.canvas.__fmCamExt;
         }
         drawLayer(target, L, t, scene);
       }
@@ -15825,12 +16196,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     target.restore();
     _camParallax = null;   // parallax is scoped to the layer loop above only
     _camLens = null;
+    _bgRelay = _bgRelayWas;
     if (cam) {
       const cx = P.width / 2, cy = P.height / 2;
       /* Behavior-resolved (same as the parallax stash above — the two MUST agree or depth layers shear
-         off the shake): camera behaviors = whole-scene shake/drift with one tap. */
-      const camAt = (tt) => camPose(cam, tt);   // ONE pose, shared with FM.cameraView (queue 690, third hunt)
-      const putCam = (k) => { ctx.translate(cx, cy); ctx.scale(k.zoom, k.zoom); ctx.rotate(k.rot); ctx.translate(-k.x, -k.y); };
+         off the shake): camera behaviors = whole-scene shake/drift with one tap. `camAt` is the one
+         declared above the layer loop — the plate was sized from the same poses. */
+      const putCam = (c, k) => { c.translate(cx, cy); c.scale(k.zoom, k.zoom); c.rotate(k.rot); c.translate(-k.x, -k.y); };
+      // Where the plate sits in the scene: the frame, or the part of the scene the camera can see (camPlateBox).
+      const bx = _camBox ? _camBox.ox : 0, by = _camBox ? _camBox.oy : 0;
+      const bw = _camBox ? _camBox.w : P.width, bh = _camBox ? _camBox.h : P.height;
       ctx.save();
       baseT(ctx);
       ctx.clearRect(0, 0, P.width, P.height);
@@ -15850,18 +16225,47 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * blur makes: this smears camera movement, not movement inside the picture.
        * Shutter and sample conventions are drawMotionBlur's, deliberately, so the number means the
        * same thing in both places. */
-      const slices = camBlurSlices(cam, t, scene, ctx, camAt);
+      /* ⚠️ THE SLICES ARE AVERAGED, NOT STACKED (queue 690, fifth hunt). Each slice used to be drawn straight onto the
+       * frame — already filled with the background — at 1/N opacity, source-over. That is not an average: after N
+       * slices the picture only reaches 1 - (1 - 1/N)^N of full strength and the BACKGROUND keeps the rest — 75% at two
+       * slices, 66% at eight, 64% at 32. So the moment the camera moved with Motion Blur on, the whole shot washed a
+       * third of the way toward the background colour (the middle of a white card that never left the shot measured 167
+       * of 255 on black, on the canvas and in the export; a transparent export came out 65% opaque), and it pumped
+       * brighter and darker through an eased pan, because the slice count follows the camera's speed. He asked twice
+       * for this blur to be stronger (queue 379, 695), so it is one he uses.
+       * Now the slices are ADDED at 1/N into a scratch canvas on the frame's own pixel grid with 'lighter' — a true
+       * premultiplied mean, in colour and in alpha — and that is laid over the background ONCE. It is exactly what the
+       * per-layer blur (drawMotionBlur) has always done, for the reason its own comment gives. A camera that is not
+       * moving draws no slices at all, so a still frame is untouched. */
+      const slices = _camSlices;
       if (slices) {
-        ctx.globalAlpha = 1 / slices.length;
+        const aw = ctx.canvas.width, ah = ctx.canvas.height;
+        if (!_camAcc) _camAcc = document.createElement('canvas');
+        if (_camAcc.width !== aw || _camAcc.height !== ah) { _camAcc.width = aw; _camAcc.height = ah; }
+        _camAcc.__fmRS = ctx.canvas.__fmRS || 1; _camAcc.__fmOX = ctx.canvas.__fmOX || 0; _camAcc.__fmOY = ctx.canvas.__fmOY || 0;
+        const ac = _camAcc.getContext('2d');
+        ac.setTransform(1, 0, 0, 1, 0, 0); ac.globalAlpha = 1; ac.globalCompositeOperation = 'source-over'; ac.filter = 'none';
+        ac.clearRect(0, 0, aw, ah);
+        ac.imageSmoothingEnabled = ctx.imageSmoothingEnabled; ac.imageSmoothingQuality = ctx.imageSmoothingQuality;   // sample the plate exactly as the single draw below does
         for (let i = 0; i < slices.length; i++) {
-          ctx.save(); putCam(slices[i]); ctx.drawImage(_camCv, 0, 0, P.width, P.height); ctx.restore();
+          ac.save();
+          baseT(ac);
+          ac.globalCompositeOperation = 'lighter';
+          ac.globalAlpha = 1 / slices.length;
+          putCam(ac, slices[i]);
+          ac.drawImage(_camCv, bx, by, bw, bh);
+          ac.restore();
         }
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);   // the scratch canvas IS the frame's pixel grid
         ctx.globalAlpha = 1;
+        ctx.drawImage(_camAcc, 0, 0);
+        ctx.restore();
       } else {
-        putCam(camAt(t));
+        putCam(ctx, camAt(t));
         // The plate is in its own device pixels now, so it is blitted back at PROJECT size — the
         // surrounding baseT + camera transform then map that to the screen exactly as before.
-        ctx.drawImage(_camCv, 0, 0, P.width, P.height);   // camX,camY (scene point) lands at screen centre, scaled by zoom
+        ctx.drawImage(_camCv, bx, by, bw, bh);   // camX,camY (scene point) lands at screen centre, scaled by zoom
       }
       ctx.restore();
     }
@@ -16291,7 +16695,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const iw = aw * fk, ih = ah * fk;
       const ox = pad + (bw - iw) / 2, oy = pad + (bh - ih) / 2;   // centred in what is left over
       const mode = FM.traceShapePath(ctx, layer, ox, oy, iw, ih, FM.time || 0);
-      if (mode === 'stroke') { ctx.strokeStyle = FM.evalProp(layer.fill, FM.time || 0) || '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); return; }
+      if (mode === 'stroke') {
+        const col0 = FM.evalProp(layer.fill, FM.time || 0) || '#fff', runs = FM.pathBrushRuns(layer, FM.time || 0);   // each stroke in its own colour (queue 690)
+        ctx.lineWidth = 3; ctx.lineCap = 'round';
+        if (!runs) { ctx.strokeStyle = col0; ctx.stroke(); }
+        else runs.forEach(r => { traceBrushRun(ctx, r, ox, oy, iw, ih); ctx.strokeStyle = r.c || col0; ctx.stroke(); });
+        return;
+      }
       const fmode = FM.fillModeOf(layer);
       // Outline-only: the CANVAS strokes this with layer.stroke.color, so the thumb has to as well —
       // it was using the (invisible) fill, which showed a colour the shape never actually renders.

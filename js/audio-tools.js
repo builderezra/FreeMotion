@@ -148,6 +148,10 @@ window.FM = window.FM || {};
     const km = FM.media && FM.media.get(layer.id);
     if (km && km._karaokeBusy) { if (FM.toast) FM.toast('Still removing the vocals…', 1800); return; }
     if (km) km._karaokeBusy = 1;
+    /* queue 690 (hunt 5): the project he pressed it in. The decode and render below take seconds on a long track,
+       and the track must not land in a project he opened meanwhile — see FM.stillIn (js/app.js). */
+    const pressedIn = FM.startedIn ? FM.startedIn() : null;
+    const left = () => !!FM.stillIn && !FM.stillIn(pressedIn);
     try {
     if (FM.toast) FM.toast('Removing vocals…', 0);
     const ab = await layerAudioBuffer(layer);
@@ -160,6 +164,12 @@ window.FM = window.FM || {};
     let rec = null;
     try { rec = await FM.loadVideoFile(file); } catch (e) { rec = null; }
     if (!rec) { if (FM.hideToast) FM.hideToast(); if (FM.toast) FM.toast('Could not add the karaoke track'); return; }
+    if (left()) {   // queue 690 (hunt 5): its source clip is in the project he left — nothing to add it to here
+      if (FM.letGoMedia) FM.letGoMedia(rec);
+      if (FM.hideToast) FM.hideToast();
+      if (FM.toast) FM.toast('Not added — you switched projects while the vocals were being removed', 4000);
+      return;
+    }
     FM.addMediaLayer(rec);   // selects the new layer + commits
     const nl = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     if (nl) {

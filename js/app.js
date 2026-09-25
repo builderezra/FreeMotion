@@ -1189,7 +1189,12 @@ window.FM = window.FM || {};
   };
   FM.pastSourceEnd = function (m, local) { return local != null && local >= FM.sourceEnd(m); };
 
-  FM.seekVideosToTime = function () {
+  /* `opts.exact` (queue 690, fifth hunt) is for the ONE caller whose element can sit anywhere inside a frame:
+     FM.pause, stopping a clip that was PLAYING. Every other caller moves between frames on the grid, where
+     the half-frame guard below is exact; a playing element stops wherever its own clock was, so an element
+     10 ms short of the target would pass that guard while still showing the frame before it. */
+  FM.seekVideosToTime = function (opts) {
+    const exact = !!(opts && opts.exact);
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
@@ -1205,7 +1210,15 @@ window.FM = window.FM || {};
       if (layer.reversed && m.frameCache) return; // the cache renders this synchronously
       const local = FM.layerLocalTime(layer, FM.time);
       if (local == null) return;
-      const target = Math.min(Math.max(local, 0), Math.max(0, (m.duration || 0) - 0.001));
+      /* INSIDE THE FRAME, NOT ONTO ITS EDGE (queue 690, fifth hunt). HUNT-d gave the export and the frame
+       * cache FM.frameSeekTarget (js/frames.js) because a seek to exactly k/30 is held as one microsecond
+       * BEFORE frame k starts, so the element shows frame k-1 at every k whose start rounds up — 2, 5, 8 …
+       * This seek, which every paused frame he looks at goes through (the . and , keys, a timeline scrub,
+       * every parked playhead), was never changed: stepping with . read 0,1,1,3,4,4,6,7,7 …, frames 2, 5,
+       * 8 … never appeared and the one before each showed twice, and the frame he parked on and cut at
+       * was not the frame that exports there. Same target as the export now, so the two agree. */
+      const target = FM.frameSeekTarget ? FM.frameSeekTarget(local, m.duration)
+                                        : Math.min(Math.max(local, 0), Math.max(0, (m.duration || 0) - 0.001));
       /* DON'T RE-SEEK TO WHERE WE ALREADY ARE (queue 125). This write was unconditional, and writing
        * currentTime restarts the element's seek algorithm — which means CANCELLING a decode that was
        * already in flight. It matters because scrubTime snaps to the frame grid first, so a slow
@@ -1216,7 +1229,7 @@ window.FM = window.FM || {};
        * The exporter has had exactly this guard since #15 (js/exporter.js) — the preview never did.
        * Half a frame at 30fps, so a genuine step to the next frame always passes. */
       const cur = m.el.currentTime || 0;
-      if (Math.abs(cur - target) < (0.5 / (FM.scene.project.fps || 30))) return;
+      if (Math.abs(cur - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
       try { m.el.currentTime = target; } catch (e) {}
     });
   };
@@ -2427,6 +2440,7 @@ window.FM = window.FM || {};
   };
 
   FM.pause = function () {
+    const wasPlaying = FM.playing;   // read before it is cleared: only a stop from PLAYBACK has to move the picture (below)
     _lastPlayPaint = 0;   // a resume must not read the pause as a frame interval (queue 202)
     _startWait = null;            // never let a stale wait outlive the pass that created it
     FM.playing = false;
@@ -2454,10 +2468,42 @@ window.FM = window.FM || {};
       const back = FM._reviewFrom; FM._reviewFrom = null;
       if (back != null && FM.setTime) FM.setTime(back);
     }
+    /* ═══ THE PICTURE STOPS WHERE THE PLAYHEAD STOPS (queue 690, fifth hunt) ═══════════════════════════════
+     * His brief: "go re audit, find some bugs coz theres a shit load". A clip with sound runs BEHIND the
+     * transport while it plays, and on purpose: the sync controller learns that offset as the element's
+     * output latency and keeps it (_syncBiasStep, SYNC_WARMUP — queue 148 measured ~87 ms on a real import,
+     * his phone a 158 ms median). Pausing snapped the playhead to a frame above and then paused every
+     * element WHERE IT WAS, with no seek — so the picture he stopped on was 2 to 9 frames before the
+     * playhead (measured: stopped at frame 39, the preview showed 30). Shapes, text, the timecode, a split,
+     * a keyframe, a bookmark and the export all use the playhead, so what he chose a cut by was not where
+     * the cut went, and the next press of . jumped several frames at once.
+     * So a stop from playback seeks every clip onto the playhead's frame; the 'seeked' listener repaints
+     * it. EXACT, because the element stops anywhere inside a frame and the ordinary half-frame guard would
+     * let one 10 ms short of the target keep showing the frame before it. What he sees: on pause the video
+     * catches up the few frames it was trailing by, onto the frame the timecode already says.
+     * Not while exporting — the exporter owns every element's seeks then (#47). Only after playing: a
+     * pause on a paused transport is how a dozen callers say "make sure it is stopped", and their elements
+     * are already where setTime put them. */
+    if (wasPlaying && !FM._exporting && FM.seekVideosToTime) FM.seekVideosToTime({ exact: true });
     if (FM.syncReviewButton) FM.syncReviewButton();   // revert the far-right button from ■ Stop back to the view icon
   };
 
   FM.togglePlay = function () { FM.playing ? FM.pause() : FM.requestPlay(); };
+
+  /* ═══ LEAVING THE APP STOPS PLAYBACK (queue 690, fifth hunt) ═══════════════════════════════════════════════
+   * Nothing listened for the page going to the background while playing. The browser stops calling
+   * requestAnimationFrame, so tick() stopped — but FM.playing stayed true and FM.clockNow() kept counting
+   * wall time, so he checked a message and came back to a playhead that had leapt on by however long he
+   * was away (or run off the end and stopped), his place gone. On the PC the other half was audible: the
+   * rule that stops a clip at its cut lives in syncMediaToClock, which only tick() calls, so a background
+   * tab played a trimmed clip's sound on past its cut until its source ran out (measured: cut at 1.50 s,
+   * still sounding at 3.40 s). js/audio-health.js already assumed the opposite — "Playback is torn down
+   * without the stop button ever being pressed" — and voice recording stops on the same two events
+   * (js/voice-rec.js bgStop). A hidden visibilitychange and pagehide are the two iOS Safari actually
+   * delivers on the way out. An ordinary stop, so review play returns to where it started, as it does for
+   * every other stop. */
+  document.addEventListener('visibilitychange', () => { if (document.hidden && FM.playing) FM.pause(); });
+  window.addEventListener('pagehide', () => { if (FM.playing) FM.pause(); });
 
   /* ⚠️ TAP THE CANVAS WHILE THE EFFECTS MENU IS OPEN → PAUSE (queue 538). Ezra: *"Make it so if you tap
      the canvas when in the effects menu it pauses the playback, make it have a nice pause animation and
@@ -2974,6 +3020,55 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  /* ═══ WHERE A DRAWING'S BOX IS ON THE CANVAS HE IS DRAWING ON (queue 690, fifth hunt) ═══════════════════════════
+   * The pencil works in the frame he sees — `toProject` in js/draw-tool.js turns his finger into project pixels of the
+   * preview — and a drawing is stored as points in [0,1] of its own box, placed by its whole transform: its x/y, scale,
+   * rotation, skew, flip and anchor, every parent above it, and the camera. The old arithmetic (`x - shapeW/2 +
+   * u * shapeW`) is only true of a drawing at 100%, unturned, anchored in the middle, with no parent and no camera.
+   * Draw more on a drawing he had pinched to 1.6x put its strokes back with that arithmetic and re-fitted the box
+   * without the scale, so the scale was applied a second time about a new centre: the moment his new stroke landed,
+   * the whole sketch jumped (0% of his first line stayed where it was) and the new line was nowhere near his finger.
+   * A new sketch started while editing inside a moved or scaled group was placed the same wrong way.
+   * This is the map between the two, read off FM.layerUVToCanvas — the one placement map every on-canvas editor
+   * already shares with the compositor, camera included — at three corners, which is exact because the whole
+   * chain is affine. `box` px are the drawing's own unscaled pixels, measured from its box's top-left.
+   *   toBox([x, y])   a point on the canvas → box px        toFrame([bx, by])   and back
+   *   unit            canvas px per box px (so a brush of 16 on a drawing at 1.6x is 10 of its own)
+   *   plain           the old arithmetic is exactly right; then it IS the old arithmetic, to the last bit, so every
+   *                   drawing that was never resized, turned, parented or filmed behaves exactly as it always has
+   *                   (and so does one squashed to nothing, which has no inside to map a finger into). */
+  const anchorOf = v => ((typeof v === 'number' && isFinite(v)) ? v : 0.5);   // the compositor's own reading of an anchor
+  FM.pathLayerSpace = function (layer) {
+    const t = FM.time || 0, tr = layer.transform || {};
+    const w = layer.shapeW || 1, h = layer.shapeH || 1;
+    const xv = FM.evalProp(tr.x, t) || 0, yv = FM.evalProp(tr.y, t) || 0;
+    const plainO = { x: xv - w / 2, y: yv - h / 2 };
+    const at = (u, v) => (FM.layerUVToCanvas ? FM.layerUVToCanvas(layer, u, v, w, h) : { x: plainO.x + u * w, y: plainO.y + v * h });
+    const o = at(0, 0), ex = at(1, 0), ey = at(0, 1);
+    const A = { a: (ex.x - o.x) / w, b: (ex.y - o.y) / w, c: (ey.x - o.x) / h, d: (ey.y - o.y) / h };
+    const det = A.a * A.d - A.b * A.c;
+    const plain = !(Math.abs(det) > 1e-12) || (Math.abs(A.a - 1) < 1e-9 && Math.abs(A.b) < 1e-9 && Math.abs(A.c) < 1e-9 && Math.abs(A.d - 1) < 1e-9
+      && Math.abs(o.x - plainO.x) < 1e-6 && Math.abs(o.y - plainO.y) < 1e-6);
+    if (plain) return { plain: true, unit: 1, w: w, h: h,
+      toBox: P => [P[0] - plainO.x, P[1] - plainO.y], toFrame: B => [plainO.x + B[0], plainO.y + B[1]] };
+    return { plain: false, unit: Math.sqrt(Math.abs(det)), w: w, h: h,
+      toBox: P => { const dx = P[0] - o.x, dy = P[1] - o.y; return [(A.d * dx - A.c * dy) / det, (-A.b * dx + A.a * dy) / det]; },
+      toFrame: B => [o.x + A.a * B[0] + A.c * B[1], o.y + A.b * B[0] + A.d * B[1]],
+      // Where the layer's own x/y must go for its anchor to land on canvas point Q — the one thing a re-fit changes.
+      // Probed rather than derived, so a parent, depth or a camera zoom is in the answer by construction.
+      posFor: Q => {
+        const ax = anchorOf(tr.anchorX), ay = anchorOf(tr.anchorY);
+        const F = at(ax, ay);
+        const moved = (dx, dy) => { const L2 = Object.assign({}, layer, { transform: Object.assign({}, tr, { x: xv + dx, y: yv + dy }) }); return FM.layerUVToCanvas(L2, ax, ay, w, h); };
+        const Fx = moved(1, 0), Fy = moved(0, 1);
+        const j = { a: Fx.x - F.x, b: Fx.y - F.y, c: Fy.x - F.x, d: Fy.y - F.y }, jd = j.a * j.d - j.b * j.c;
+        if (!(Math.abs(jd) > 1e-12)) return null;
+        const dx = Q[0] - F.x, dy = Q[1] - F.y;
+        return [xv + (j.d * dx - j.c * dy) / jd, yv + (-j.b * dx + j.a * dy) / jd];
+      } };
+  };
+
+
   // Path shape layer from drawn points (freehand brush stroke / vector polygon). projPts are in
   // project pixels; stored normalized [0,1] inside a box fitted to their bounds so they scale/rotate
   // like any shape. opt: { closed, name, color, fill, stroke }.
@@ -2985,9 +3080,17 @@ window.FM = window.FM || {};
    * re-fits it: the box grows to the union of every stroke, and all of them are re-normalised into
    * that box, because subs are stored in [0,1] of the layer's own box and a stroke drawn outside the
    * old box would otherwise land outside the drawing.
-   * The layer keeps its id, its place in the stack and its selection — this only moves geometry. */
-  FM.refitPathLayer = function (layer, projSubs) {
+   * The layer keeps its id, its place in the stack and its selection — this only moves geometry.
+   * `styles` (queue 690, fifth hunt): one entry per stroke for layer.subStyles — see FM.pathBrushRuns. Left alone
+   * when not given. */
+  FM.refitPathLayer = function (layer, projSubs, styles) {
     if (!layer || !projSubs || !projSubs.length) return layer;
+    if (styles !== undefined) {
+      if (Array.isArray(styles) && styles.some(Boolean)) layer.subStyles = styles.map(s => (s ? { c: s.c, w: s.w } : null));
+      else delete layer.subStyles;
+    }
+    const sp = FM.pathLayerSpace ? FM.pathLayerSpace(layer) : { plain: true };
+    if (!sp.plain) return refitPlaced(layer, projSubs, sp);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     projSubs.forEach(sub => sub.forEach(p => {
       if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0];
@@ -3006,6 +3109,50 @@ window.FM = window.FM || {};
        A keyframed path takes the new shape at the PLAYHEAD, where he is drawing, and the other keyframes
        are left alone; a keyframed position is SHIFTED by the same delta the flat assignment would have
        applied, which is what FM.shiftTransform exists for and what every other mover on the canvas does. */
+    writePathSubs(layer, flat);
+    layer.points = null;                       // subs win in traceShapePath; don't leave a stale single path
+    layer.shapeW = Math.round(w); layer.shapeH = Math.round(h);
+    const nx = minX + w / 2, ny = minY + h / 2;
+    if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', nx, FM.time); FM.shiftTransform(layer, 'y', ny, FM.time); }
+    else { layer.transform.x = nx; layer.transform.y = ny; }
+    return layer;
+  };
+  /* The re-fit for a drawing that is NOT at 100%, unturned and unparented (queue 690, fifth hunt — see
+     FM.pathLayerSpace). Every stroke is taken into the drawing's own box px through the placement it has right now,
+     the box is re-fitted THERE, and then only the layer's x/y moves — by exactly what keeps the old strokes where they
+     were on the canvas. Its scale, rotation, skew, flip, anchor and parent are never touched: he resized it, and it
+     stays resized. Keyframed paths and positions take the same care as the plain re-fit above (#833). */
+  function refitPlaced(layer, projSubs, sp) {
+    const boxSubs = projSubs.map(sub => sub.map(p => { const b = sp.toBox(p); return p.length > 2 ? [b[0], b[1], p[2]] : b; }));
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    boxSubs.forEach(sub => sub.forEach(p => {
+      if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0];
+      if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1];
+    }));
+    if (!isFinite(minX)) return layer;
+    const w = Math.max(4, maxX - minX), h = Math.max(4, maxY - minY);
+    const W = Math.round(w), H = Math.round(h);
+    // Where the new box's middle is on the canvas now — it must still be there afterwards.
+    const Q = sp.toFrame([minX + w / 2, minY + h / 2]);
+    const tr = layer.transform || {};
+    const ax = anchorOf(tr.anchorX), ay = anchorOf(tr.anchorY);
+    // …and the anchor sits (anchor - 0.5) of the NEW box away from that middle, along the drawing's own axes. The map
+    // is affine, so the difference of two of its points is that offset turned and scaled exactly as the drawing is.
+    const mid = sp.toFrame([W / 2, H / 2]), anc = sp.toFrame([ax * W, ay * H]);
+    const pos = sp.posFor ? sp.posFor([Q[0] + anc[0] - mid[0], Q[1] + anc[1] - mid[1]]) : null;
+    if (!pos) return layer;   // a drawing squashed to nothing has no inside to draw into — leave it exactly as it was
+    const flat = boxSubs.map(sub => sub.map(p => (p.length > 2
+      ? [(p[0] - minX) / w, (p[1] - minY) / h, p[2]]
+      : [(p[0] - minX) / w, (p[1] - minY) / h])));
+    writePathSubs(layer, flat);
+    layer.points = null;
+    layer.shapeW = W; layer.shapeH = H;
+    if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', pos[0], FM.time); FM.shiftTransform(layer, 'y', pos[1], FM.time); }
+    else { layer.transform.x = pos[0]; layer.transform.y = pos[1]; }
+    return layer;
+  }
+  // The new point set goes in at the PLAYHEAD on a keyframed path and replaces a still one — queue 833, above.
+  function writePathSubs(layer, flat) {
     if (layer.subs && !Array.isArray(layer.subs) && Array.isArray(layer.subs.kf) && layer.subs.kf.length) {
       const t = FM.time || 0;
       let hit = null, best = Infinity;
@@ -3015,13 +3162,7 @@ window.FM = window.FM || {};
     } else {
       layer.subs = flat;
     }
-    layer.points = null;                       // subs win in traceShapePath; don't leave a stale single path
-    layer.shapeW = Math.round(w); layer.shapeH = Math.round(h);
-    const nx = minX + w / 2, ny = minY + h / 2;
-    if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', nx, FM.time); FM.shiftTransform(layer, 'y', ny, FM.time); }
-    else { layer.transform.x = nx; layer.transform.y = ny; }
-    return layer;
-  };
+  }
 
   FM.addPathLayer = function (projPts, opt) {
     opt = opt || {};
@@ -3060,6 +3201,16 @@ window.FM = window.FM || {};
       layer.stroke = { enabled: false, width: opt.stroke || 6, color: opt.color || '#ffffff' };
     }
     FM.insertLayer(layer);
+    /* The points are where his finger was ON THE CANVAS, and the box above assumed that is where the layer's own x/y
+       live. Inside a group he is editing (insertLayer hangs the layer under it) or under a moved camera they do not,
+       and the drawing landed wherever the group's or the camera's transform threw it (queue 690, fifth hunt — see
+       FM.pathLayerSpace). Re-placed through the same map, before anything is drawn or saved. A drawing on the plain
+       canvas is untouched. */
+    const sp = FM.pathLayerSpace ? FM.pathLayerSpace(layer) : { plain: true };
+    if (!sp.plain) {
+      refitPlaced(layer, [projPts], sp);
+      if (!opt.closed && sp.unit > 0) layer.stroke.width = (opt.stroke || 6) / sp.unit;   // the brush he saw, not the brush times the group's scale
+    }
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
     refreshAll();
@@ -5118,35 +5269,60 @@ window.FM = window.FM || {};
   FM._handleFiles = function (files) { return handleFiles(files); };
   FM._audioFromVideo = function (file) { return audioFromVideo(file); };
 
+  /* ═══ A SLOW ADD LANDS IN THE PROJECT IT WAS STARTED IN, OR NOWHERE (queue 690, hunt 5) ════════════════
+   * Every add below awaits a loader first, and a loader can take seconds: a song is decoded end to end for its
+   * true length (js/media.js), a GIF frame by frame, and Add ▸ Audio takes the sound out of a whole video. The
+   * add then went into whatever project was open BY THEN — so a song picked in one project, with him gone
+   * back Home and into another while the phone read it, landed in the other one, which he never added it to,
+   * and the project he picked it in never got it. Add ▸ Media tiles already refuse exactly this (915.5B: "a
+   * reused clip never lands in a project he did not tap in"); the picker, the drop and Remove vocals did not.
+   * The project is taken when the work STARTS and asked again when it is done; left → the file is let go
+   * (its decoded element and blob URL, which nothing else will ever free) and he is told, in 915.5B's words. */
+  FM.stillIn = function (pid) { return !(FM.storage && FM.storage.openProjectId) || FM.storage.openProjectId() === pid; };
+  FM.startedIn = function () { return FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null; };
+  FM.letGoMedia = function (rec) { if (rec && FM._releaseMediaRecord) { try { FM._releaseMediaRecord(rec); } catch (e) {} } };
+
   async function handleFiles(files) {
     // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
     const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
+    const pickedIn = FM.startedIn(), notAdded = [];   // queue 690 (hunt 5): see FM.stillIn above
+    const add = function (rec, file) {
+      if (!FM.stillIn(pickedIn)) { FM.letGoMedia(rec); notAdded.push(file); return false; }
+      FM.addMediaLayer(rec);
+      return true;
+    };
     for (const file of files) {
+      if (!FM.stillIn(pickedIn)) { notAdded.push(file); continue; }   // the rest of the batch was picked for that project too
       try {
         const kind = mediaKind(file);
         if (wantAudio && kind === 'video') {
           if (FM.loadingDot) FM.loadingDot.check();
           if (FM.toast) FM.toast('Taking the audio out of “' + (file.name || 'that clip') + '”…', 2200);
           const wav = await audioFromVideo(file);
+          if (!FM.stillIn(pickedIn)) { notAdded.push(file); continue; }
           if (wav) {
-            FM.addMediaLayer(await FM.loadVideoFile(wav));
-            if (FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”');
+            if (add(await FM.loadVideoFile(wav), file) && FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”');
           } else {
             // Say what happened and still do the useful thing, rather than importing nothing.
             if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — added it as a video instead', 5200);
-            FM.addMediaLayer(await FM.loadVideoFile(file));
+            add(await FM.loadVideoFile(file), file);
           }
           continue;
         }
-        if (kind === 'video') FM.addMediaLayer(await FM.loadVideoFile(file));
-        else if (kind === 'image') FM.addMediaLayer(await FM.loadImageFile(file));
+        if (kind === 'video') add(await FM.loadVideoFile(file), file);
+        else if (kind === 'image') add(await FM.loadImageFile(file), file);
         // Audio rides the pictureless-video path: a <video> element plays mp3/m4a/wav fine, and a
         // 0×0-picture clip already gets the waveform lane, live mix, keyframed volume and export mix.
-        else if (kind === 'audio') FM.addMediaLayer(await FM.loadVideoFile(file));
+        else if (kind === 'audio') add(await FM.loadVideoFile(file), file);
         // Never fail silently: an unusable file used to vanish without a word, which reads as the
         // importer being broken rather than the file being unsupported.
         else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
       } catch (e) { FM.reportError('importing “' + (file && file.name || 'a file') + '”', e, 'FreeMotion could not open “' + (file && file.name || 'that file') + '”.\n\nIf it plays elsewhere on this device it is usually the format — try exporting it as MP4 (video) or WAV/M4A (audio) and importing that.'); }
+    }
+    if (notAdded.length && FM.toast) {
+      FM.toast(notAdded.length === 1
+        ? 'Not added — you switched projects while “' + (notAdded[0] && notAdded[0].name || 'that file') + '” was opening'
+        : 'Not added — you switched projects while ' + notAdded.length + ' files were opening', 5000);
     }
   }
 
@@ -6335,7 +6511,18 @@ window.FM = window.FM || {};
     readoutEl.addEventListener('click', () => {
       if (tcLpFired) { tcLpFired = false; return; }   // the hold already handled this press
       if (tcTapTimer) return;                       // second click of a double-tap → ignore here
-      // …and the 240ms wait stays, because a double-click must not also toggle playback on its way past.
+      /* A STOP LANDS ON THE TAP (queue 690, fifth hunt). The wait below applied to stopping as well, so every
+         tap that stopped playback let it run on 240 ms — about 7 frames — past the moment he tapped: on the
+         phone this pill is the only play button, so he could never stop on a beat. The wait is only there so
+         a double-click cannot START playback; a double-click that pauses is what the dblclick handler does
+         anyway. So a stop happens now, and the same 240 ms window is still held open, doing nothing, so the
+         second tap of a double-tap is ignored exactly as before rather than starting it again. */
+      if (FM.playing) {
+        FM.pause();
+        tcTapTimer = setTimeout(() => { tcTapTimer = null; }, 240);
+        return;
+      }
+      // …and the 240ms wait stays for STARTING, because a double-click must not also start playback on its way past.
       tcTapTimer = setTimeout(() => { tcTapTimer = null; if (FM.togglePlay) FM.togglePlay(); }, 240);
     });
     /* THE PLAYHEAD'S TOP IS WHERE BOOKMARKS LIVE NOW (queue 364 clause 3). Its own element, because

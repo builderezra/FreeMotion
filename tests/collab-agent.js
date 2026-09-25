@@ -306,6 +306,26 @@
       const L = FM.scene.layers[FM.scene.selectedId ? FM.scene.layers.findIndex(function (x) { return x.id === FM.scene.selectedId; }) : FM.scene.layers.length - 1] || FM.scene.layers[FM.scene.layers.length - 1];
       return { id: L.id, size: file.size, name: file.name, type: L.type };
     },
+    /* HUNT-d (queue 690): a BIG phone clip imported through the app's own path (FM.loadVideoFile, FM.addMediaLayer), and
+       the app closed the moment it lands — while its file is still being written to the store. That is what an iPhone
+       does when it throws the app out of memory after a large import, or when he swipes it away. The file is splash.mp4
+       with a `free` box of padding after it (a box every MP4 reader skips), so it opens as the real clip does but is big
+       enough that writing it takes longer than the close. */
+    importThenClose: async function (a) {
+      const r = await fetch('splash.mp4');
+      const head = new Uint8Array(await r.arrayBuffer());
+      const pad = Math.max(8, Math.round(((a && a.mb) || 96) * 1024 * 1024));
+      const box = new Uint8Array(8);
+      new DataView(box.buffer).setUint32(0, pad);
+      box.set([0x66, 0x72, 0x65, 0x65], 4);
+      const file = new File([head, box, new Uint8Array(pad - 8)], (a && a.name) || 'IMG_4410.MOV', { type: 'video/mp4', lastModified: 1600000003000 });
+      const rec = await FM.loadVideoFile(file);
+      FM.addMediaLayer(rec);
+      FM.history.commit();
+      const L = FM.scene.layers.filter(function (x) { return x.id === FM.scene.selectedId; })[0];
+      ACTS.reload();
+      return { id: L ? L.id : null, name: L ? L.name : null, size: file.size };
+    },
     mediaState: function () {
       const S = C.session;
       if (!S || !C.media) return null;

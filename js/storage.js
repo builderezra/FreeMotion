@@ -63,14 +63,26 @@ window.FM = window.FM || {};
    * write that silently does nothing (a full or restricted store) is otherwise indistinguishable
    * from success, and that is the OTHER way a reload serves an older version. */
   let lastRev = 0, _stale = false, _staleWarned = false;
-  function diskRev() {
+  /* ⚠️ queue 690 (hunt 5): THE DOC TEXT THIS TAB LAST WROTE OR LOADED — so "disk is ahead" can be asked of
+     what he MADE and not only of a number. See writeScene. */
+  let lastDoc = null;
+  function diskRaw() {
     try {
-      const k = curKey(); if (!k) return 0;   // no project open (queue 936)
-      const raw = localStorage.getItem(k);
-      if (!raw) return 0;
-      const m = /^\{"rev":(\d+)/.exec(raw);   // rev is written first, so this never parses the whole doc
-      return m ? +m[1] : 0;
-    } catch (e) { return 0; }
+      const k = curKey(); if (!k) return null;   // no project open (queue 936)
+      return localStorage.getItem(k);
+    } catch (e) { return null; }
+  }
+  function revOf(raw) {
+    if (!raw) return 0;
+    const m = /^\{"rev":(\d+)/.exec(raw);   // rev is written first, so this never parses the whole doc
+    return m ? +m[1] : 0;
+  }
+  function diskRev() { return revOf(diskRaw()); }
+  /* What he MADE in a stored doc — the project and its layers. The selection is not compared, for the reason
+     unsavedOnScreen gives below: it is not work, and a window that only clicked a layer has saved nothing of his. */
+  function workOf(raw) {
+    if (typeof raw !== 'string') return null;
+    try { const d = JSON.parse(raw); return d && d.project ? JSON.stringify([d.project, d.layers || []]) : null; } catch (e) { return null; }
   }
   function warnStale() {
     if (_staleWarned) return; _staleWarned = true;
@@ -81,20 +93,42 @@ window.FM = window.FM || {};
      local edits are meant to be dropped), while 'refused' means the store said no — a full phone — and
      what he did since the last save exists only on this screen. Only the second may hold a switch up. */
   let _writeFail = null;
+  /* ═══ A WINDOW THAT ONLY LOOKED HAS SAVED NOTHING NEWER (queue 690, hunt 5) ═══════════════════════════
+   * The rev said "disk is ahead" whenever ANY other window had written — and every window writes on the way
+   * in and on the way out even when nothing changed: the boot's history.reset() commits, the commit
+   * autosaves, and a closing window's pagehide flushes. So FreeMotion open on his PC, opened again from the
+   * installed app or a bookmark, looked at and closed, left the FIRST window stale: it refused every save
+   * after that while he carried on working in it, all of it gone at the next reload, and the one sign was a
+   * toast saying newer changes had been saved elsewhere when there were none. Two halves:
+   *  · a write that would change nothing is not made, so opening and closing a window no longer moves the
+   *    rev at all (the doc on disk already IS this scene — the read-back had nothing to check);
+   *  · when disk IS ahead, the question is whether it is ahead in what he MADE. If the project and its layers
+   *    on disk are exactly what this tab last wrote or loaded, the other window moved the number and nothing
+   *    else — this tab adopts it and keeps saving. Anything else is newer work, and the #306 guard stands. */
   // The ONE place a scene doc is written. Returns true only if the bytes actually landed.
   function writeScene() {
     if (!curKey()) { _writeFail = null; return true; }   // queue 936: no project open — nothing to save, and nothing lost
     if (_stale) { _writeFail = 'stale'; return false; }
-    const dr = diskRev();
-    if (dr > lastRev) { _stale = true; warnStale(); _writeFail = 'stale'; return false; }
+    const raw = diskRaw(), dr = revOf(raw);
+    if (dr > lastRev) {
+      const mine = workOf(lastDoc);   // parsed only here — a rare moment, never on an ordinary save
+      if (mine === null || mine !== workOf(raw)) { _stale = true; warnStale(); _writeFail = 'stale'; return false; }
+      lastRev = dr;   // the same work under a higher number: nothing of his is on disk that is not on this screen
+    }
+    /* rev FIRST in the serialised doc, so diskRev()'s anchored regex can find it without a parse. Built from the
+       doc's own JSON — byte for byte what stringifying { rev, ...doc } wrote — so "would this change anything"
+       is one string compare against disk rather than a second serialisation. */
+    const body = JSON.stringify(sceneDoc(), FM.jsonReplacer);
+    const tail = body === '{}' ? '}' : ',' + body.slice(1), head = '{"rev":' + dr;
+    if (raw && dr === lastRev && raw.length === head.length + tail.length && raw.startsWith(head) && raw.endsWith(tail)) {
+      lastDoc = raw; _writeFail = null; return true;   // disk already holds exactly this — no write, no new rev
+    }
     const rev = dr + 1;
-    const doc = sceneDoc(); doc.rev = rev;
-    // rev FIRST in the serialised object, so diskRev()'s anchored regex can find it without a parse
-    const ordered = { rev: rev }; for (const k in doc) if (k !== 'rev') ordered[k] = doc[k];
-    try { localStorage.setItem(curKey(), JSON.stringify(ordered, FM.jsonReplacer)); }
+    const str = '{"rev":' + rev + tail;
+    try { localStorage.setItem(curKey(), str); }
     catch (e) { warnQuota(e); _writeFail = 'refused'; return false; }
     if (diskRev() !== rev) { warnQuota({ name: 'QuotaExceededError' }); _writeFail = 'refused'; return false; }   // the write silently did nothing
-    lastRev = rev; _writeFail = null;
+    lastRev = rev; lastDoc = str; _writeFail = null;
     return true;
   }
   /* ⚠️ queue 690: IS THERE WORK ON THIS SCREEN THAT THE DISK DOES NOT HAVE? Asked only after a write was
@@ -113,7 +147,7 @@ window.FM = window.FM || {};
     } catch (e) { return true; }   // cannot tell — say there is, the question is cheaper than the loss
   }
   // load()/open() call this so a fresh document resets the guard for the new project.
-  function adoptRev(r) { lastRev = (typeof r === 'number' && isFinite(r)) ? r : 0; _stale = false; _staleWarned = false; }
+  function adoptRev(r, raw) { lastRev = (typeof r === 'number' && isFinite(r)) ? r : 0; lastDoc = typeof raw === 'string' ? raw : null; _stale = false; _staleWarned = false; }
   FM._sceneRevState = function () { return { lastRev, stale: _stale, disk: diskRev() }; };   // suite hook
 
   // The autosaved scene document. selectedIds is persisted too so a multi-layer selection survives a
@@ -300,6 +334,7 @@ window.FM = window.FM || {};
   function idbDel(db, key) {
     if (isLibKey(key)) return Promise.resolve();   // queue 915: no deleter may take a shared copy — clips in any project point at it (phase B still never collects one)
     if (heldByAnother(key)) return Promise.resolve();   // queue 915 phase B: another copy in memory still plays from this record's file — it goes at a later sweep, when nothing holds it
+    _stored.delete(key);   // queue 690 (hunt 5): no longer known to be on disk — a clip brought back by undo is noted again on its next save
     return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
 
@@ -339,11 +374,17 @@ window.FM = window.FM || {};
     const msg = fixed.length === 1
       ? 'Repaired this project: “' + fixed[0] + '” was parented in a loop'
       : 'Repaired this project: ' + fixed.length + ' layers were parented in a loop';
+    sayOnceSeen(msg, 7000, whenLoading);
+    try { console.warn('FreeMotion: broke a circular parent link on ' + fixed.join(', ') + ' — this project could not have opened otherwise.'); } catch (e) {}
+    return fixed;
+  }
+  /* A notice raised while a project LOADS. On a cold launch the splash covers the screen for ~3s and would eat
+     it, so wait for the dismiss the home intro already waits for — same idiom, same 6s backstop for a splash
+     torn down some other way. No splash (import, project switch, repeat load) → show it right away.
+     Shared by the parent-loop repair and the never-saved clips (queue 690, hunt 5), which both speak at load. */
+  function sayOnceSeen(msg, ms, whenLoading) {
     let done = false;
-    const go = () => { if (done) return; done = true; if (FM.toast) FM.toast(msg, 7000); };
-    // On a cold launch the splash covers the screen for ~3s and would eat the notice, so wait for the
-    // dismiss the home intro already waits for — same idiom, same 6s backstop for a splash torn down
-    // some other way. No splash (import, project switch, repeat load) → show it right away.
+    const go = () => { if (done) return; done = true; if (FM.toast) FM.toast(msg, ms); };
     const sp = whenLoading ? document.getElementById('splash') : null;
     if (sp && !sp.classList.contains('hidden') && !sp.classList.contains('splash-out')) {
       document.addEventListener('fm:splash-dismiss', () => setTimeout(go, 600), { once: true });
@@ -351,8 +392,6 @@ window.FM = window.FM || {};
     } else {
       setTimeout(go, 400);
     }
-    try { console.warn('FreeMotion: broke a circular parent link on ' + fixed.join(', ') + ' — this project could not have opened otherwise.'); } catch (e) {}
-    return fixed;
   }
 
   /* ---- LEAVING A PROJECT SHOULD COST NOTHING TO STAY LEFT (queue 385) --------------------------
@@ -411,6 +450,8 @@ window.FM = window.FM || {};
   async function _hydrateSceneMedia(opts) {
     const onlyMissing = !!(opts && opts.onlyMissing);
     let n = 0;
+    const found = [], lacking = [];   // queue 690 (hunt 5): for reportPending — which clips have a file, which came back with none
+    const forProject = tabId();
     try {
       const db = await openDB();
       for (const layer of FM.scene.layers) {
@@ -418,6 +459,8 @@ window.FM = window.FM || {};
         if (onlyMissing && FM.media.get(layer.id)) continue;   // still resident — a fresh load, or never released
         try {   // per-layer: ONE corrupt/undecodable blob must not abort the restore of every later layer
           const rec = await idbGetMedia(db, layer.id);   // queue 915 phase A: a reused clip's pointer reads as its file
+          if (rec && rec.file) { found.push(layer.id); _stored.set(layer.id, rec.rev || 0); }
+          else lacking.push(layer);
           if (rec && rec.file) {
             const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
             /* queue 915 phase B: …and STAYS a pointer — a split, duplicate or paste of it writes a few bytes, not
@@ -437,6 +480,9 @@ window.FM = window.FM || {};
       }
       db.close();
     } catch (e) { /* media restore failed — scene structure still loads */ }
+    /* queue 690 (hunt 5): …and a clip whose file never landed says so. Only for the project this run was FOR — if
+       he has opened another one meanwhile, its own load does the telling. */
+    if (tabId() === forProject) { try { reportPending(found, lacking); } catch (e) {} }
     return n;
   }
 
@@ -510,6 +556,95 @@ window.FM = window.FM || {};
       if (m && m.file) jobs.push({ id: layer.id, file: m.file, kind: m.kind, rev: (m.rev != null ? m.rev : layer.mediaRev) || 0, ref: isLibKey(m.ref) ? m.ref : null });   // queue 915 phase B: a reused clip is saved as a pointer
     });
     return jobs;
+  }
+
+  /* ═══ A CLIP WHOSE FILE NEVER LANDED MUST SAY SO (queue 690, hunt 5) ═══════════════════════════════════
+   * save() writes the project document FIRST — synchronously, so the clip is on the timeline on disk at once —
+   * and only then the clip's file, which for a phone video takes seconds. If the app was closed in those
+   * seconds (iOS throws a PWA out of memory after a big import, or he swipes it away) the file never landed,
+   * and the reopened project had a clip that drew nothing and played nothing, for good, with not a word — and
+   * nothing told him to add it again. A big write cannot be made instant, so it is made visible: every file on
+   * its way is NOTED here in the same tick as the document that lists it, the note is struck once the file
+   * lands, and a load that finds a layer with a note and no file says so by name. A layer with no file and NO
+   * note — a backup whose big clips were left out (#888 said so at the time), a template placeholder — stays
+   * exactly as quiet as it was, which is the point of the note: it tells an interrupted save from an empty
+   * layer on purpose. Notes live in localStorage because the document does, and the two must land together. */
+  const PENDING_KEY = 'fm.mediaPending';
+  const _stored = new Map();       // layer id → the file revision this session KNOWS is on disk (a hydrate read it, a save wrote it)
+  const _toldMissing = new Set();  // said once per launch per clip — not again every time he comes back from Home
+  /* Files a save in THIS session is still writing, counted per layer. Leaving a project and coming straight back
+     loads it while its import may still be on its way to disk: that clip is late, not lost, and "add it again"
+     would have him make a second copy of something that is about to land. */
+  const _writing = new Map();
+  function writingBegin(jobs) { jobs.forEach(j => _writing.set(j.id, (_writing.get(j.id) || 0) + 1)); }
+  function writingEnd(jobs) { jobs.forEach(j => { const c = (_writing.get(j.id) || 1) - 1; if (c > 0) _writing.set(j.id, c); else _writing.delete(j.id); }); }
+  function readPending() { const p = readJSON(PENDING_KEY, null); return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {}; }
+  // Before the document that lists these clips is written. A clip already known to be on disk costs nothing.
+  function notePending(jobs) {
+    const todo = jobs.filter(j => _stored.get(j.id) !== j.rev);
+    if (!todo.length) return;
+    const pend = readPending(), pid = tabId();
+    let changed = false;
+    todo.forEach(j => {
+      const had = pend[j.id];
+      if (had && had.r === j.rev) return;
+      const L = FM.layerById ? FM.layerById(FM.scene, j.id) : null;
+      pend[j.id] = { p: pid, n: String((L && L.name) || 'A clip').slice(0, 80), r: j.rev };
+      changed = true;
+    });
+    if (changed) writePending(pend);
+  }
+  // An empty index is no index: the key goes, so a device with nothing in flight carries nothing.
+  function writePending(pend) {
+    /* QUIETLY (queue 690 hunt-5 review): this is bookkeeping, not his project. Through writeJSON a refused note raised
+       "Storage full — autosave paused" and re-armed it every save (the #748 repeat-toast pattern) although the document
+       itself saved. A note that cannot be written only means the next launch cannot name an interrupted clip. */
+    if (Object.keys(pend).length) { try { localStorage.setItem(PENDING_KEY, JSON.stringify(pend)); return true; } catch (e) { return false; } }
+    try { localStorage.removeItem(PENDING_KEY); } catch (e) {}
+    return true;
+  }
+  // The file for revision `rev` of each layer is on disk now. A later note for a NEWER revision is left alone.
+  function strikePending(landed) {
+    if (!landed.length) return;
+    const pend = readPending();
+    let changed = false;
+    landed.forEach(x => { _stored.set(x.id, x.rev); if (pend[x.id] && pend[x.id].r === x.rev) { delete pend[x.id]; changed = true; } });
+    if (changed) writePending(pend);
+  }
+  /* The load's half. `found` = ids whose file IS stored, `lacking` = layers read with nothing stored. Says which
+     noted clips came back empty, and tidies notes this project no longer needs: the file turned up after all
+     (it landed after the note's last check), the layer is gone, or so is its project. A clip that is still
+     empty keeps its note, so the next launch says so again until he deletes or replaces it. */
+  function reportPending(found, lacking) {
+    const pend = readPending();
+    let changed = false;
+    found.forEach(id => { if (pend[id]) { delete pend[id]; changed = true; } });
+    const pid = tabId(), live = new Set((FM.scene.layers || []).map(l => l && l.id));
+    /* …and the layers of the doc ON DISK count too (queue 690 hunt-5 review): another window may have moved the doc ahead
+       of this tab — imported a big clip whose file is still landing — and this tab's in-memory scene has never heard of
+       it. Pruning by `live` alone deleted that window's note, and a clip killed mid-save came back empty and silent,
+       the very thing the note exists to say. A note goes only when NEITHER this tab nor the stored doc has the layer. */
+    try { const d = JSON.parse(diskRaw() || 'null'); if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l && l.id) live.add(l.id); }); } catch (e) {}
+    let known = null;
+    try { known = new Set(((FM.projects && FM.projects.list && FM.projects.list()) || []).map(p => p.id)); } catch (e) { known = null; }
+    for (const id in pend) {
+      const n = pend[id];
+      if (!n || typeof n !== 'object' || (n.p === pid && !live.has(id)) || (known && known.size && !known.has(n.p))) { delete pend[id]; changed = true; }
+    }
+    if (changed) writePending(pend);
+    const empty = lacking.filter(L => pend[L.id] && !_toldMissing.has(L.id) && !_writing.has(L.id));
+    if (!empty.length) return [];
+    empty.forEach(L => _toldMissing.add(L.id));
+    const names = empty.map(L => L.name || pend[L.id].n || 'A clip');
+    /* Short, for the reason repairAndAnnounce gives: #toast has ~190px to wrap into at 380px. "Never finished
+       saving" is true however it happened — the app closed, or a full phone refused the file — and "add it
+       again" is the one thing he can do about it. The full list goes to the console. */
+    const msg = names.length === 1
+      ? '“' + names[0] + '” never finished saving, so that clip is empty — add it again'
+      : names.length + ' clips never finished saving, so they are empty — add them again';
+    sayOnceSeen(msg, 8000, true);
+    try { console.warn('FreeMotion: these clips were on the timeline but their files never finished saving: ' + names.join(', ')); } catch (e) {}
+    return names;
   }
   /* ═══ THE DISK CAN BE BEHIND THE EDITOR (queue 915 phase B, review round 3) ═══════════════════════════════
    * Replace media and every import start a save they do not wait for, and give the file a library tile at
@@ -586,7 +721,13 @@ window.FM = window.FM || {};
       let saved = null;
       const running = new Promise(r => { saved = r; });
       _saving.add(running);   // queue 915 phase B, review round 3: see _saving above
+      /* queue 830: which files this save is for, taken before the first await (see below). queue 690 (hunt 5): and
+         NOTED before the document that lists them is written — the two land in the same tick, so a close at any
+         moment after leaves a note for every file that had not landed yet (see notePending). */
+      let jobs = []; try { jobs = planBlobWrites(); } catch (e) {}
       try {
+      try { notePending(jobs); } catch (e) {}
+      writingBegin(jobs);
       let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
       const warnedBefore = _quotaWarned;
       /* queue 748 (hunt MEDIUM #31): `warnedBefore` can only see a flag raised THIS tick, and the index write's result was
@@ -604,9 +745,10 @@ window.FM = window.FM || {};
            and go Home while the first big file is still being written, and the remaining clips were never
            written at all. The scene doc was already flushed and lists them, so that project reopens with
            permanently blank clips — and no toast, because idbPut was never reached, so nothing failed.
-           A snapshot taken before any await belongs to the scene this save is FOR. */
-        const jobs = planBlobWrites();
+           A snapshot taken before any await belongs to the scene this save is FOR. (Taken at the top now, before
+           the document is written — queue 690, hunt 5 — which is still before any await.) */
         const db = await openDB();
+        const landed = [];   // queue 690 (hunt 5): each file now on disk at the revision it was saved for
         for (const job of jobs) {
           {
             /* ═══ A REPLACED FILE MUST OVERWRITE THE OLD BLOB (queue 668) ═══════════════════════
@@ -635,16 +777,18 @@ window.FM = window.FM || {};
                  the same transaction). If it is not, the whole file is written exactly as before: a pointer at
                  nothing would be a blank clip, and the file is in memory to write. */
               const asPtr = job.ref ? await idbPutPointer(db, job.id, { ref: job.ref, kind: job.kind, rev: job.rev }) : false;
-              if (!asPtr) await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
-            }
+              const wrote = asPtr || await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
+              if (wrote) landed.push({ id: job.id, rev: job.rev });
+            } else landed.push({ id: job.id, rev: job.rev });   // already there at this revision
           }
         }
+        strikePending(landed);
         // NOTE: no blanket prune here any more — media blobs are shared across ALL projects (plus
         // template/element packs), so "not in the current scene" ≠ orphaned. deleteLayer/removeMedia
         // handle explicit deletions; FM.projects.pruneOrphans() sweeps true orphans once at boot.
         db.close();
       } catch (e) { /* storage unavailable — ignore */ }
-      } finally { _saving.delete(running); saved(); }
+      } finally { writingEnd(jobs); _saving.delete(running); saved(); }
     },
 
     /* Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
@@ -716,9 +860,10 @@ window.FM = window.FM || {};
       adoptRev(0);                              // a project with no doc yet must not inherit the previous one's rev (#306)
       if (FM.fonts) FM.fonts.rehydrateAll();     // register imported custom fonts (idempotent; re-renders when ready)
       if (!boundId) return false;                // queue 936: no project open — a fresh start, or the last one deleted
-      let scene = readJSON(curKey(), null);
+      const raw = diskRaw();      // the text as well as the doc: writeScene compares against it (queue 690, hunt 5)
+      let scene = null; try { scene = raw ? JSON.parse(raw) : null; } catch (e) { scene = null; }
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
-      adoptRev(scene.rev);        // this tab is now level with what is on disk (#306)
+      adoptRev(scene.rev, raw);   // this tab is now level with what is on disk (#306)
       /* RE-CLAMP ON EVERY OPEN (queue 470). This is the door EVERY project comes through, every time, and
          until now it trusted whatever was in storage — the note just below says as much about layers.
          Dimensions are different from layers in one decisive way: a bad one is not a wrong picture, it is
@@ -2547,8 +2692,28 @@ window.FM = window.FM || {};
       const idx = this.list(); const e = idx.find(p => p.id === id); if (!e) return;
       e.name = name; e.modified = Date.now(); this.saveIndex(idx);   // renaming is a real change → bumps list order
       const doc = readJSON('fm.proj.' + id, null);
-      if (doc && doc.project) { doc.project.name = name; writeJSON('fm.proj.' + id, doc); }
-      if (id === curId()) { FM.scene.project.name = name; if (FM.refreshAll) FM.refreshAll(); }
+      if (doc && doc.project) {
+        /* ⚠️ A RENAME IS A DOC WRITE LIKE ANY OTHER, SO IT TAKES A NEW REV (queue 690 hunt-5 review). It rewrote the doc in
+           place at the OLD rev — harmless while every save bumped the rev anyway, because this tab's next flush published
+           the name at rev+1 and the #306 guard stopped a second window writing over it. Since hunt 5 a flush that would
+           write the same bytes writes nothing, so that bump never came: a second window on the same project (opened only
+           to look) then wrote the OLD name back at rev+1, and this window — the one he is working in — went stale.
+           So the rename is written at rev+1, rev first as diskRev's regex needs, and a window that was level with the
+           disk adopts it; any other window sees the disk ahead with different work and stands down, as it should. */
+        const old = +doc.rev || 0, nr = old + 1;
+        doc.project.name = name;
+        const str = JSON.stringify(Object.assign({ rev: nr }, doc, { rev: nr }), FM.jsonReplacer);
+        let wrote = false;
+        try { localStorage.setItem('fm.proj.' + id, str); wrote = true; } catch (e) { warnQuota(e); }
+        if (wrote && id === tabId() && !_stale && lastRev === old) { lastRev = nr; lastDoc = str; }
+      }
+      /* THIS tab's open project (queue 936 review's rule), not the shared pointer another window can move — and
+         queue 690 (hunt 5): into its undo history as well, or the next Undo inside puts the old name back. */
+      if (id === tabId()) {
+        FM.scene.project.name = name;
+        if (FM.history && FM.history.renameProject) FM.history.renameProject(name);
+        if (FM.refreshAll) FM.refreshAll();
+      }
     },
     /* ═══ DISCARD A DRAFT WITHOUT EVER MINTING A PROJECT (queue 505).
        `remove()` below deliberately opens another project — or CREATES an "Untitled" — when you delete

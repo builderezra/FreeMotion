@@ -81155,7 +81155,13 @@
     const src = await (await fetch('../js/draw-tool.js?boot=' + Date.now())).text();
     const i = src.indexOf('function commitStroke');
     if (i < 0) throw new Error('commitStroke is gone');
-    const body = src.slice(i, i + 4000);
+    /* ⚠️ THE WHOLE FUNCTION, not a fixed 4000 characters (queue 690, fifth hunt). The commit this test looks for
+       already sat past character 4600, so the window had been cut INSIDE the 684 comment — unterminated, so the
+       stripper below left it in — and the test passed on that comment's own mention of FM.history.commit(). Two
+       hundred characters of new code earlier in the function moved the cut and it went red with the commit still
+       there. Up to the next function declaration is the honest window. */
+    const nextFn = src.indexOf('\n  function ', i + 10);
+    const body = src.slice(i, nextFn > i ? nextFn : i + 12000);
     /* ⚠️ ANCHORED ON THE MULTI-STROKE BRANCH ITSELF, not on the first mention of refitPathLayer. queue 834
        added an earlier branch to commitStroke (restoring a drawing that was rubbed out to nothing), which
        also calls refitPathLayer — so `indexOf` landed there and the window stopped short of the commit
@@ -91071,7 +91077,7 @@
   }
   // Demux the video track of an MP4 (moov at either end) and decode EVERY sample; returns the bar index of each frame,
   // in presentation order.
-  async function hunt2dDecodeMp4(blob) {
+  async function hunt2dDecodeMp4(blob, read) {   // `read(g, w, h)` records something else of each frame (HUNT-c, 26 Sep); the bar index by default
     const buf = new Uint8Array(await blob.arrayBuffer()), dv = new DataView(buf.buffer);
     const u32 = o => dv.getUint32(o);
     const typ = o => String.fromCharCode(buf[o], buf[o + 1], buf[o + 2], buf[o + 3]);
@@ -91107,7 +91113,7 @@
       }
       const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d', { willReadFrequently: true });
       const got = []; let decErr = null;
-      const dec = new VideoDecoder({ output: f => { g.clearRect(0, 0, w, h); g.drawImage(f, 0, 0); got.push({ ts: f.timestamp, k: hunt2dReadIndex(g, w, h) }); f.close(); }, error: e => { decErr = e; } });
+      const dec = new VideoDecoder({ output: f => { g.clearRect(0, 0, w, h); g.drawImage(f, 0, 0); got.push({ ts: f.timestamp, k: read ? read(g, w, h) : hunt2dReadIndex(g, w, h) }); f.close(); }, error: e => { decErr = e; } });
       dec.configure({ codec: codec, description: desc, codedWidth: w, codedHeight: h });
       for (let i = 0; i < count; i++) {
         dec.decode(new EncodedVideoChunk({ type: (!stss || keys.has(i)) ? 'key' : 'delta', timestamp: Math.round((dts[i] + cto[i]) / ts * 1e6), data: buf.subarray(soff[i], soff[i] + sizes[i]) }));
@@ -95893,5 +95899,1562 @@
       FM.scene = saved; FM.time = t0; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
     }
   });
+
+  /* ═══ HUNT-c (queue 690, 26 Sep, fifth hunt) — SHAPES AND DRAWING ═══════════════════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in shapes and the pencil, each written
+   * as a test that FAILED on v16.98 with a message that says what he would see. Where the finger is the point — drawing a
+   * stroke, pressing Draw more, tapping a number box — it is a REAL touch through tests/_cdp.py (realInput924), at 380.
+   * The pictures are measured through FM.renderScene, which is what the preview and every export draw; the Clipping Mask
+   * one is also measured in a real exported MP4, decoded frame by frame. All four are fixed — each stroke's own brush
+   * (js/draw-tool.js brushOf → layer.subStyles → FM.pathBrushRuns in js/compositor.js), Draw more through the drawing's
+   * whole placement (FM.pathLayerSpace and the placed re-fit in js/app.js), the open-shape Opacity in drawUnit's stroke
+   * branch, the background put back under a clipping mask's cut (relayBackground) and a blit that clears every frame
+   * (js/exporter.js makeBlit) — and each test is now the guard that says so; the 690 tests after them hold the parts
+   * these four do not reach. */
+  const hunt5cSleep = ms => new Promise(r => setTimeout(r, ms));
+  // A finger stroke along `pts` (app-frame CSS px): down, a move every 16 ms, and — unless `hold` — up.
+  function hunt5cStroke(pts, hold) {
+    const st = [{ t: 'touchStart', x: pts[0][0], y: pts[0][1], ms: 40 }];
+    for (let i = 1; i < pts.length; i++) st.push({ t: 'touchMove', x: pts[i][0], y: pts[i][1], ms: 16 });
+    if (!hold) st.push({ t: 'touchEnd', x: pts[pts.length - 1][0], y: pts[pts.length - 1][1], ms: 60 });
+    return st;
+  }
+  // Where a finger on the preview lands in PROJECT pixels: the sum js/draw-tool.js toProject does.
+  function hunt5cToProject(cx, cy) {
+    const c = document.getElementById('preview'), r = c.getBoundingClientRect(), sc = c.__fmRS || 1;
+    return [(c.__fmOX || 0) + ((cx - r.left) / r.width) * (c.width / sc), (c.__fmOY || 0) + ((cy - r.top) / r.height) * (c.height / sc)];
+  }
+  // A straight row of finger points across the drawing overlay, at fraction fy of its height, from fx0 to fx1 of its width.
+  function hunt5cRow(fy, fx0, fx1) {
+    const ov = document.getElementById('draw-overlay');
+    if (!ov || ov.style.display === 'none') throw new Error('setup: the drawing overlay is not up, so there is nothing to draw on');
+    const o = ov.getBoundingClientRect(), pts = [];
+    for (let i = 0; i <= 16; i++) pts.push([o.left + o.width * (fx0 + (fx1 - fx0) * i / 16), o.top + o.height * fy]);
+    const reach = hunt2aReach();
+    if (pts.some(p => p[0] < 2 || p[0] > reach || p[1] < 2 || p[1] > window.innerHeight - 4)) throw new Error('setup: the stroke runs outside what real input can reach (' + pts.map(p => p.map(Math.round).join(',')).join(' ') + ')');
+    return pts;
+  }
+  function hunt5cRender(sc, t) {
+    const c = offscreen(sc.project.width, sc.project.height), x = c.getContext('2d');
+    FM.renderScene(x, sc, t || 0);
+    return { d: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height };
+  }
+  function hunt5cPx(img, x, y) {
+    const xx = Math.max(0, Math.min(img.w - 1, Math.round(x))), yy = Math.max(0, Math.min(img.h - 1, Math.round(y)));
+    const i = (yy * img.w + xx) * 4;
+    return [img.d[i], img.d[i + 1], img.d[i + 2], img.d[i + 3]];
+  }
+  const hunt5cRed = p => p[3] > 128 && p[0] > 150 && p[1] < 90 && p[2] < 90;
+  // Every red pixel on a 2 px grid, and their box — enough to say where a red drawing is.
+  function hunt5cRedInk(img) {
+    const at = new Set(); let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+    for (let y = 0; y < img.h; y += 2) for (let x = 0; x < img.w; x += 2) {
+      const i = (y * img.w + x) * 4;
+      if (img.d[i + 3] > 128 && img.d[i] > 150 && img.d[i + 1] < 90 && img.d[i + 2] < 90) {
+        at.add(y * img.w + x); if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    return { at: at, box: at.size ? [x0, y0, x1, y1] : null };
+  }
+  // The drawing bar's own colour and brush-size controls, answering the way they do: the native colour picker reports
+  // through input/change on its <input type=color>, the brush slider through input on its range.
+  function hunt5cBrush(colour, size) {
+    const bar = document.getElementById('draw-bar');
+    const col = bar && bar.querySelector('.db-color input'), wid = bar && bar.querySelector('.db-width input');
+    if (!col || !wid) throw new Error('setup: the drawing bar has no colour or brush-size control');
+    col.value = colour; col.dispatchEvent(new Event('input', { bubbles: true })); col.dispatchEvent(new Event('change', { bubbles: true }));
+    wid.value = String(size); wid.dispatchEvent(new Event('input', { bubbles: true })); wid.dispatchEvent(new Event('change', { bubbles: true }));
+    if (FM.drawTool.color !== colour || FM.drawTool.stroke !== size) throw new Error('CONTROL: the drawing bar did not take the pick, the brush is ' + FM.drawTool.color + ' at ' + FM.drawTool.stroke);
+  }
+  function hunt5cDrawing() { return FM.scene.layers.filter(l => l.type === 'shape' && l.shape === 'path' && !l.closed); }
+  function hunt5cCleanup(saved, savedT) {
+    try { if (FM.drawTool && FM.drawTool.active && FM.drawTools) FM.drawTools.stop(); } catch (e) {}
+    FM.scene = saved; if (savedT != null) FM.time = savedT;
+    try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+  }
+
+  /* HUNT-c 1 — A DRAWING HAS ONE COLOUR AND ONE BRUSH SIZE, WHATEVER THE BAR SAYS. Queue 167 made a sketching session ONE
+   * layer ("it should all be inside the one drawing you just made"), and the layer carries one colour (layer.fill) and one
+   * line width (stroke.width), both taken from the brush when the FIRST stroke is committed (FM.addPathLayer). Every later
+   * stroke goes through FM.refitPathLayer, which only moves geometry, while the colour swatch and the brush slider stay live
+   * on the bar the whole time. So he picks blue and a fat brush for his second line, sees it blue and fat under his finger
+   * (the overlay strokes with FM.drawTool.color and .stroke), and the moment he lifts it turns into the first stroke's
+   * colour and size. */
+  test('690 a second stroke drawn in a new colour and brush size keeps that colour and size when the finger lifts', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    let got = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => []);
+          FM.startDraw('freehand'); await hunt5cSleep(500);
+          if (!FM.drawTool.active || FM.drawTool.mode !== 'freehand') throw new Error('setup: Sketching did not open');
+          hunt5cBrush('#ff0000', 8);
+          const s1 = hunt5cRow(0.3, 0.2, 0.8), p1 = s1.map(p => hunt5cToProject(p[0], p[1]));
+          await realInput924(hunt5cStroke(s1), 'the first stroke');
+          await hunt5cSleep(350);
+          hunt5cBrush('#0000ff', 30);
+          const s2 = hunt5cRow(0.55, 0.2, 0.8), p2 = s2.map(p => hunt5cToProject(p[0], p[1]));
+          // the second stroke with the finger still DOWN, so what is under it can be read before he lifts
+          await realInput924(hunt5cStroke(s2, true), 'the second stroke, finger still down');
+          await hunt5cSleep(150);
+          const ov = document.getElementById('draw-overlay'), orr = ov.getBoundingClientRect(), mid = s2[8];
+          const live = ov.getContext('2d').getImageData(Math.round((mid[0] - orr.left) * ov.width / orr.width), Math.round((mid[1] - orr.top) * ov.height / orr.height), 1, 1).data;
+          const last = s2[s2.length - 1];
+          await realInput924([{ t: 'touchEnd', x: last[0], y: last[1], ms: 60 }], 'lifting the finger off the second stroke');
+          await hunt5cSleep(400);
+          await hunt2aPress(document.querySelector('#draw-bar .db-done'), 'Done button');
+          await hunt5cSleep(400);
+          let n = 0; hunt5cDrawing().forEach(l => { n += FM.evalShapeSubs(l, FM.time || 0).length; });
+          got = { p1: p1[8], p2: p2[8], live: [].slice.call(live), n: n };
+        });
+      }, 380);
+      if (got.n !== 2) throw new Error('CONTROL: two real finger strokes left ' + got.n + ' stroke(s) in the drawing, so the finger did not draw what this test needs');
+      /* Judged on the whole frame, not on one layer: whether a new colour joins the drawing or starts a second one is the
+         fix's choice (#167 wants one drawing per visit); what he sees is the only thing asserted. */
+      if (!(got.live[2] > 150 && got.live[0] < 100)) throw new Error('CONTROL: under his finger the second stroke was rgb ' + got.live.slice(0, 3).join(',') + ', not the blue he picked, so the pick never reached the brush and this test cannot see the bug');
+      const drawings = hunt5cDrawing();
+      if (!drawings.length) throw new Error('setup: the two strokes made no drawing');
+      const img = hunt5cRender(FM.scene, drawings[0].start || 0);
+      const thick = (p) => { let n = 0; for (let y = Math.round(p[1]) - 90; y <= Math.round(p[1]) + 90; y++) { const q = hunt5cPx(img, p[0], y); if (q[3] > 128 && q[0] + q[1] + q[2] > 100) n++; } return n; };
+      const c1 = hunt5cPx(img, got.p1[0], got.p1[1]), c2 = hunt5cPx(img, got.p2[0], got.p2[1]);
+      const t1 = thick(got.p1), t2 = thick(got.p2);
+      if (!hunt5cRed(c1)) throw new Error('CONTROL: the first stroke rendered rgb ' + c1.slice(0, 3).join(',') + ' where his finger drew it, not the red he picked');
+      if (!(t2 > 0)) throw new Error('CONTROL: there is no ink where his finger drew the second stroke, so it is somewhere else and this test cannot judge its colour');
+      const blue = c2[2] > 150 && c2[0] < 100;
+      if (!blue || t2 < 22) throw new Error('he picked red and drew a line, then picked blue and a brush of 30 and drew a second line under it. While his finger was down it showed blue, but the moment he lifted it the second line came out rgb ' + c2.slice(0, 3).join(',') + ' and ' + t2 + ' px thick, which is the red and the ' + t1 + ' px of the first stroke: every stroke of a drawing is repainted in the colour and brush size the drawing started with, so he cannot sketch in two colours or two sizes without leaving the tool');
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* HUNT-c 2 — DRAW MORE IGNORES WHAT HE DID TO THE DRAWING. startDraw (js/draw-tool.js) adopts an existing drawing by
+   * putting its strokes back into project pixels as `transform.x/y - shapeW/2 + u * shapeW`, which is only true of a
+   * drawing at scale 1, no rotation, anchor in the middle and no parent. Then every new stroke re-fits the layer
+   * (FM.refitPathLayer) in plain project pixels and keeps the transform. A drawing he has pinched bigger (the pinch and the
+   * corner handles both write transform.scale) therefore JUMPS the moment the first new stroke lands: the refit box is
+   * measured unscaled and the old scale is applied to it again, so the old lines move and the new one lands away from the
+   * finger. */
+  test('690 Draw more on a sketch he has resized leaves the drawing where it was and puts the new stroke under his finger', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    let r = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => []);
+          FM.startDraw('freehand'); await hunt5cSleep(500);
+          if (!FM.drawTool.active) throw new Error('setup: Sketching did not open');
+          hunt5cBrush('#ff0000', 16);
+          await realInput924(hunt5cStroke(hunt5cRow(0.35, 0.25, 0.75)), 'the first stroke');
+          await hunt5cSleep(350);
+          await hunt2aPress(document.querySelector('#draw-bar .db-done'), 'Done button');
+          await hunt5cSleep(450);
+          const S = hunt5cDrawing()[0];
+          if (!S) throw new Error('setup: the finger stroke made no drawing');
+          /* HE MAKES IT BIGGER. The pinch on a selected drawing and its corner handles both end in transform.scale
+             (canvas-edit.js, FM.shiftTransform(L, 'scale', …)); a pinch is two fingers, which the driver cannot give, so the
+             value it leaves behind is set here. */
+          S.transform.scale = 1.6; FM.refreshAll(); FM.requestRender(); await hunt5cSleep(250);
+          const before = hunt5cRedInk(hunt5cRender(FM.scene, S.start || 0));
+          if (!before.box) throw new Error('setup: the resized drawing renders no red ink');
+          FM.selectLayer(S.id); await hunt5cSleep(300);
+          FM.inspector.openCategory('element'); await hunt5cSleep(550);
+          const more = [].slice.call(document.querySelectorAll('#inspector-panel button')).find(b => /Draw more/.test(b.textContent || ''));
+          if (!more) throw new Error('setup: the drawing Customise card has no Draw more button');
+          const how = await hunt2aPress(more, 'Draw more button');
+          await hunt5cSleep(550);
+          if (!FM.drawTool.active || FM.drawTools.layerId() !== S.id) throw new Error('CONTROL: Draw more (pressed by ' + how + ') did not re-open this drawing, the tool is ' + (FM.drawTool.active ? 'open on ' + FM.drawTools.layerId() : 'closed'));
+          const s2 = hunt5cRow(0.72, 0.3, 0.7), p2 = s2.map(p => hunt5cToProject(p[0], p[1]));
+          await realInput924(hunt5cStroke(s2), 'the new stroke');
+          await hunt5cSleep(350);
+          const subs = FM.drawTool._counts().subs;
+          await hunt2aPress(document.querySelector('#draw-bar .db-done'), 'Done button');
+          await hunt5cSleep(450);
+          const L = FM.layerById(FM.scene, S.id);
+          const after = hunt5cRedInk(hunt5cRender(FM.scene, L.start || 0));
+          /* The first line, judged along its own CENTRE ROW: a fix may keep the scale or bake it into the box (a thinner line,
+             in the same place), and both are right; a line that moved is wrong either way. */
+          const W = FM.scene.project.width, yc = (Math.round((before.box[1] + before.box[3]) / 2)) & ~1;
+          let kept = 0, of = 0;
+          for (let x = (before.box[0] + 12) & ~1; x <= before.box[2] - 12; x += 20) { if (!before.at.has(yc * W + x)) continue; of++; if (after.at.has(yc * W + x)) kept++; }
+          if (of < 10) throw new Error('setup: the first line has only ' + of + ' samples along its centre row');
+          const m = p2[8];
+          let near = false;
+          for (let y = (Math.round(m[1]) - 40) & ~1; y <= Math.round(m[1]) + 40 && !near; y += 2) if (after.at.has(y * W + (Math.round(m[0]) & ~1))) near = true;
+          r = { subs: subs, keptPct: Math.round(100 * kept / of), near: near, before: before.box, after: after.box, finger: m.map(Math.round), drawings: hunt5cDrawing().length };
+        });
+      }, 380);
+      if (r.subs !== 2) throw new Error('CONTROL: after Draw more and one real stroke the drawing holds ' + r.subs + ' stroke(s), not 2, so the finger did not draw into it');
+      if (r.drawings !== 1) throw new Error('setup: Draw more left ' + r.drawings + ' drawings instead of one');
+      const bad = [];
+      if (r.keptPct < 85) bad.push('only ' + r.keptPct + '% of his first line is still where it was (it was the ink from ' + r.before.slice(0, 2).join(',') + ' to ' + r.before.slice(2).join(',') + '; with one more stroke the drawing now spans ' + (r.after ? r.after.slice(0, 2).join(',') + ' to ' + r.after.slice(2).join(',') : 'nothing') + ', project px)');
+      if (!r.near) bad.push('the new line is not under his finger: there is no ink within 40 px of ' + r.finger.join(',') + ', where he drew it');
+      if (bad.length) throw new Error('he drew a line, pinched the drawing to 1.6x, then tapped Draw more and drew a second line lower down. The moment he lifted his finger ' + bad.join(', and ') + '. Draw more treats a resized drawing as if it had never been resized, so the whole sketch jumps');
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* HUNT-c 3 — THE OPACITY ROW OF COLOURING IS DEAD ON EVERY OPEN SHAPE. fillPanel (js/inspector.js) gives an open shape
+   * — a Line, an Arc, a Spiral, and every drawing the pencil makes — one fill mode, 'Colour', and the same Opacity row a
+   * rectangle gets, which writes layer.fillOpacity. The compositor strokes an open shape with its colour in the 'stroke'
+   * branch of drawLayer and never reads fillOpacity there (only paintFillInPath does, and a stroke never goes through it).
+   * The fourth hunt fixed exactly this for TEXT (fillTextA); the line and the sketch were not in it. The number is typed
+   * the way his finger does it: a real tap on the box, then the keyboard's text going in. */
+  test('690 the Colouring Opacity slider fades a sketch and a Line, as it fades a rectangle', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    const rows = [];
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => [FM.makeLayer('shape', { name: 'HuntC box', shape: 'rect', x: 300, y: 420, shapeW: 240, shapeH: 240, fill: '#ff0000', start: 0, duration: 6 })]);
+          const box = FM.scene.layers[0];
+          FM.addShapeLayer('line', { name: 'HuntC line' });                                  // Add → Shape → Line
+          const line = FM.scene.layers.find(l => l.shape === 'line');
+          if (!line) throw new Error('setup: Add → Shape → Line made no line');
+          line.fill = '#ff0000'; line.stroke.width = 30;                                    // his colour, and a line thick enough to sample
+          const sketch = FM.addPathLayer([[200, 1500], [540, 1500], [880, 1500]], { closed: false, name: 'Sketch', color: '#ff0000', stroke: 30 });   // what the pencil makes
+          if (!sketch) throw new Error('setup: no drawing was made');
+          const probes = [[box, 'the rectangle', [300, 420]], [line, 'the Line', [FM.evalProp(line.transform.x, 0), FM.evalProp(line.transform.y, 0)]], [sketch, 'the sketch', [540, 1500]]];
+          for (const pr of probes) {
+            const L = pr[0];
+            FM.selectLayer(L.id); await hunt5cSleep(300);
+            FM.inspector.openCategory('color'); await hunt5cSleep(500);
+            const row = [].slice.call(document.querySelectorAll('#inspector-panel .prop-row')).find(rw => { const lb = rw.querySelector('label'); return lb && lb.textContent.trim() === 'Opacity'; });
+            const val = row && row.querySelector('.fx-scrub-val');
+            if (!val) throw new Error('setup: the Colouring card of ' + pr[1] + ' has no Opacity row');
+            val.scrollIntoView({ block: 'center' }); await hunt5cSleep(250);
+            const vr = val.getBoundingClientRect(), vx = vr.left + vr.width / 2, vy = vr.top + vr.height / 2;
+            const top = document.elementFromPoint(vx, vy);
+            if (vx > 2 && vy > 2 && vx < hunt2aReach() && vy < window.innerHeight - 4 && top === val) await realInput924(huntBTap(vx, vy), 'a tap on the Opacity box of ' + pr[1]);
+            else val.focus();
+            await hunt5cSleep(250);
+            if (document.activeElement !== val) val.focus();
+            val.setSelectionRange(0, val.value.length);
+            if (!document.execCommand('insertText', false, '20')) throw new Error('setup: this browser cannot insert text the way a keyboard does');
+            val.blur(); await hunt5cSleep(250);
+            if (Math.abs((L.fillOpacity == null ? 1 : L.fillOpacity) - 0.2) > 1e-6) throw new Error('CONTROL: typing 20 into the Opacity box of ' + pr[1] + ' left its opacity at ' + L.fillOpacity + ', so the row did not take it');
+            rows.push({ what: pr[1], at: pr[2], L: L });
+          }
+          FM.selectLayer(null);
+        });
+      }, 380);
+      const img = hunt5cRender(FM.scene, 0);
+      const read = rows.map(rw => ({ what: rw.what, px: hunt5cPx(img, rw.at[0], rw.at[1]) }));
+      const box = read[0];
+      if (!(box.px[0] > 25 && box.px[0] < 80)) throw new Error('CONTROL: the rectangle at Opacity 20 renders red ' + box.px[0] + ' over black, not about 51, so the row is not reaching the render for a closed shape either and this test cannot tell the two apart');
+      const dead = read.slice(1).filter(rw => !(rw.px[0] > 25 && rw.px[0] < 80));
+      if (read.slice(1).some(rw => !(rw.px[0] > 25))) throw new Error('setup: a probe missed its shape (' + read.map(rw => rw.what + ' red ' + rw.px[0]).join(', ') + ')');
+      if (dead.length) throw new Error('he set Colouring → Opacity to 20 and the box reads 20: the rectangle fades (red ' + box.px[0] + ' of 255 over black), but ' + dead.map(rw => rw.what + ' stays at red ' + rw.px[0]).join(' and ') + ', full strength, in the preview and the export. On a Line, an Arc, a Spiral or anything drawn with the pencil, the Opacity slider in its own Colouring card does nothing');
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* HUNT-c 4 — CREATE CLIPPING MASK CUTS THE PROJECT BACKGROUND OUT TOO. FM.toggleClippingMask gives the layer the blend
+   * 'mask-include', which is canvas destination-in on the frame being drawn — and renderScene paints the project background
+   * into that same frame before the layers (js/compositor.js, the sceneBg fill), so the mask keeps the background only
+   * inside itself. Outside the shape the frame is left EMPTY: black in the preview, and in the export worse, because
+   * makeBlit draws each rendered frame over the previous one without clearing when there are no letterbox bars, so an
+   * empty pixel keeps whatever an earlier frame put there — a moving mask leaves a trail of every place it has been.
+   * (With a camera in the project the background is painted under the camera plate as well, so it survives: the same
+   * mask behaves two ways.) The control is the same two layers as a Masking group, which keeps the background. */
+  test('690 a shape made a Clipping Mask keeps the project background outside it, and a moving one leaves no trail in the export', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, savedT = FM.time;
+    try {
+      const P = { width: 160, height: 96, fps: 30, duration: 1, background: '#ffffff' };
+      const mk = () => {
+        const photo = FM.makeLayer('shape', { name: 'HuntC photo', shape: 'rect', x: 80, y: 48, shapeW: 160, shapeH: 96, fill: '#00a000', start: 0, duration: 1 });
+        const dot = FM.makeLayer('shape', { name: 'HuntC circle', shape: 'ellipse', x: 30, y: 48, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 1 });
+        dot.transform.x = { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 1, v: 130, e: 'linear' }] };
+        return { photo: photo, dot: dot };
+      };
+      /* CONTROL: the same two layers as a Masking group — the other way the app offers to put a picture inside a shape. */
+      const g = FM.makeLayer('group', { name: 'HuntC mask group', x: 0, y: 0, start: 0, duration: 1 });
+      g.maskGroup = true;
+      const a = mk(); a.dot.parent = g.id; a.photo.parent = g.id;
+      const ctl = hunt5cRender(scene([g, a.dot, a.photo], { project: P }), 0.5);
+      const ctlIn = hunt5cPx(ctl, 80, 48), ctlOut = hunt5cPx(ctl, 8, 8);
+      if (!(ctlIn[1] > 120 && ctlIn[0] < 60) || !(ctlOut[0] > 240 && ctlOut[1] > 240 && ctlOut[2] > 240)) throw new Error('CONTROL: the Masking group version does not show the photo inside the circle on white (inside rgb ' + ctlIn.slice(0, 3).join(',') + ', outside rgb ' + ctlOut.slice(0, 3).join(',') + '), so the fixture is wrong');
+      /* HIS WAY: the circle over the photo, then Create Clipping Mask from the circle's own layer menu (the phone ≡ and
+         the PC right-click are both FM.layerMenuItems). */
+      const b = mk();
+      FM.scene = scene([b.dot, b.photo], { project: P });
+      FM.refreshAll(); FM.selectLayer(b.dot.id);
+      const item = (FM.layerMenuItems(b.dot) || []).find(i => i && /Create Clipping Mask/.test(i.label || ''));
+      if (!item) throw new Error('setup: the circle layer menu offers no Create Clipping Mask');
+      item.action();
+      if (b.dot.blendMode !== 'mask-include') throw new Error('CONTROL: Create Clipping Mask did not make the circle a clipping mask (blend ' + b.dot.blendMode + ')');
+      const img = hunt5cRender(FM.scene, 0.5);
+      const inside = hunt5cPx(img, 80, 48), outside = hunt5cPx(img, 8, 8);
+      if (!(inside[1] > 120 && inside[0] < 60)) throw new Error('CONTROL: the photo does not show inside the clipping-mask circle (rgb ' + inside.slice(0, 3).join(',') + '), so the clip itself is broken, which is a different bug');
+      const bad = [];
+      if (!(outside[3] > 240 && outside[0] > 240 && outside[1] > 240 && outside[2] > 240)) bad.push('in the preview the corner of the frame, outside the circle, reads rgba ' + outside.join(',') + ' where the white background should be, so it shows black');
+      /* …and in the file. */
+      const white = q => q[0] > 225 && q[1] > 225 && q[2] > 225;
+      const frames = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }), (gc, w, h) => {
+        const at = (x, y) => [].slice.call(gc.getImageData(Math.round(x * w / P.width), Math.round(y * h / P.height), 1, 1).data);
+        return { corner: at(8, 8), start: at(30, 48) };
+      });
+      if (frames.length < 20) throw new Error('setup: the export has only ' + frames.length + ' frames');
+      const lateF = frames.slice(Math.round(frames.length * 0.8));   // the circle is past x 110 by now, far from where it started
+      const cornerBad = frames.filter(f => !white(f.corner)).length;
+      const smear = lateF.filter(f => f.start[1] > 100 && f.start[0] < 120);
+      if (cornerBad) bad.push('in the exported MP4 the corner is not white in ' + cornerBad + ' of ' + frames.length + ' frames (frame 0 reads rgb ' + frames[0].corner.slice(0, 3).join(',') + ')');
+      if (smear.length) bad.push('the spot the circle started from still shows the photo in ' + smear.length + ' of the last ' + lateF.length + ' frames of the MP4 (rgb ' + smear[0].start.slice(0, 3).join(',') + '), long after the circle has moved on, a smear of every place it has been');
+      if (bad.length) throw new Error('he put a circle over a photo on a white background and chose Create Clipping Mask: inside the circle the photo shows, but ' + bad.join('; and ') + '. The same two layers as a Masking group keep the white');
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (fifth hunt, the blit half of HUNT-c 4) — EVERY FRAME OF AN MP4 STARTS FROM AN EMPTY CANVAS. makeBlit
+   * (js/exporter.js) only cleared the output when there were letterbox bars; without them each frame was drawn OVER the
+   * last, and drawImage leaves whatever is under a transparent pixel. The clipping-mask test above now passes on the
+   * background fix alone, so the blit needs its own guard — and a project whose background is transparent (an element
+   * made from Home is one, js/home.js) shows it with no mask at all: a moving shape left a trail of every place it had
+   * been, in the file only, since the preview clears its canvas every frame. */
+  test('690 an MP4 of a project with a transparent background leaves no trail behind a moving shape', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no file to measure');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, savedT = FM.time;
+    try {
+      const P = { width: 160, height: 96, fps: 30, duration: 1, background: null };
+      const dot = FM.makeLayer('shape', { name: 'HuntC dot', shape: 'ellipse', x: 30, y: 48, shapeW: 40, shapeH: 40, fill: '#00a000', start: 0, duration: 1 });
+      dot.transform.x = { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 1, v: 130, e: 'linear' }] };
+      FM.scene = scene([dot], { project: P });
+      FM.refreshAll();
+      const frames = await hunt2dDecodeMp4(await hunt2dExport({ fps: 30 }), (gc, w, h) => [].slice.call(gc.getImageData(Math.round(30 * w / P.width), Math.round(48 * h / P.height), 1, 1).data));
+      if (frames.length < 20) throw new Error('setup: the export has only ' + frames.length + ' frames');
+      const green = q => q[1] > 100 && q[0] < 90 && q[2] < 90;
+      if (!green(frames[0])) throw new Error('CONTROL: frame 0 of the MP4 does not show the green dot where it starts (rgb ' + frames[0].slice(0, 3).join(',') + '), so the file cannot say whether it stays there');
+      const late = frames.slice(Math.round(frames.length * 0.8));   // the dot is past x 110 by now, far from where it began
+      const trail = late.filter(green);
+      if (trail.length) throw new Error('in an MP4 of a project with a transparent background, the spot a green dot started from still shows it in ' + trail.length + ' of the last ' + late.length + ' frames (rgb ' + trail[0].slice(0, 3).join(',') + '), long after it moved on: each frame was drawn over the one before, so the dot left a trail of everywhere it had been');
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  // Is there red ink (hunt5cRedInk's 2 px grid) within r project px of p?
+  function hunt5cNear(ink, p, r, W) {
+    for (let y = (Math.round(p[1]) - r) & ~1; y <= Math.round(p[1]) + r; y += 2) for (let x = (Math.round(p[0]) - r) & ~1; x <= Math.round(p[0]) + r; x += 2) if (ink.at.has(y * W + x)) return true;
+    return false;
+  }
+  // How thick the ink is straight down through (x, y): pixels within ±90 of y that pass `is`.
+  function hunt5cThick(img, x, y, is) { let n = 0; for (let yy = Math.round(y) - 90; yy <= Math.round(y) + 90; yy++) if (is(hunt5cPx(img, x, yy))) n++; return n; }
+
+  /* 690 (fifth hunt, the rest of HUNT-c 2) — A DRAWING IS PLACED THROUGH EVERYTHING THAT PLACES IT, NOT ONLY ITS SCALE.
+   * The HUNT-c test above pinches a drawing to 1.6x. The old arithmetic, `x - shapeW/2 + u * shapeW`, was just as wrong
+   * for everything else that moves a drawing's box: a turn, an anchor away from the middle, a flip — and a NEW sketch
+   * started while he is editing inside a group, which FM.insertLayer hangs under that group (FM.groupContext) with its
+   * x/y still in canvas pixels, so the group's own move, scale and turn threw it somewhere else (the hunter's probe:
+   * drawn at x 300-700, y 1500, it rendered at x 386-1012, y 1798-1824), at the group's scale times the brush.
+   * Driven through the draw tool's own commit seam in canvas pixels, which is exactly what toProject hands it from a
+   * finger; the finger itself is the HUNT-c test's job. */
+  test('690 a sketch lands under the finger inside a moved and scaled group, and Draw more keeps a turned, flipped, re-anchored drawing still', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time, ctx0 = FM.groupContext;
+    try {
+      const P = { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' };
+      const W = P.width, isRed = q => hunt5cRed(q);
+      /* A — inside a group he has moved, scaled and turned. */
+      const g = FM.makeLayer('group', { name: 'HuntC group', x: 0, y: 0, start: 0, duration: 6 });
+      g.transform.x = 140; g.transform.y = -90; g.transform.scale = 1.4; g.transform.rotation = 12; g.pivot = { x: 540, y: 960 };
+      FM.scene = scene([g], { project: P }); FM.time = 0; FM.selectLayer(null); FM.refreshAll(); await hunt5cSleep(150);
+      FM.groupContext = g.id;
+      FM.startDraw('freehand'); await hunt5cSleep(200);
+      if (!FM.drawTool.active) throw new Error('setup: Sketching did not open');
+      FM.drawTool.color = '#ff0000'; FM.drawTool.stroke = 14;
+      const rowA = []; for (let x = 300; x <= 700; x += 20) rowA.push([x, 1500]);
+      FM.drawTool.points = rowA.map(p => p.slice()); FM.drawTool._commit(); await hunt5cSleep(150);
+      FM.drawTool.finish(); await hunt5cSleep(200);
+      FM.groupContext = ctx0;
+      const SA = hunt5cDrawing()[0];
+      if (!SA) throw new Error('setup: the stroke inside the group made no drawing');
+      if (SA.parent !== g.id) throw new Error('CONTROL: a sketch drawn while editing inside the group did not join it (parent ' + SA.parent + '), so this is not the case being tested');
+      const imgA = hunt5cRender(FM.scene, 0), inkA = hunt5cRedInk(imgA);
+      const probesA = [rowA[1], rowA[5], rowA[10], rowA[15], rowA[19]];
+      const offA = probesA.filter(p => !hunt5cNear(inkA, p, 8, W));
+      const thickA = hunt5cThick(imgA, 500, 1500, isRed);
+      const bad = [];
+      if (offA.length) bad.push('inside a group moved by 140,-90, scaled to 1.4 and turned 12 degrees, a sketch drawn along y 1500 from x 300 to 700 has no ink under ' + offA.length + ' of ' + probesA.length + ' points of his finger (ink spans ' + (inkA.box ? inkA.box.join(',') : 'nothing') + ')');
+      else if (Math.abs(thickA - 14) > 3) bad.push('inside a group scaled to 1.4, a sketch drawn with a brush of 14 comes out ' + thickA + ' px thick, not the 14 he saw under his finger');
+      /* B — an ordinary drawing he then turns, flips, re-anchors and resizes, and draws more on. */
+      FM.scene = scene([], { project: P }); FM.selectLayer(null); FM.refreshAll(); await hunt5cSleep(150);
+      FM.startDraw('freehand'); await hunt5cSleep(200);
+      FM.drawTool.color = '#ff0000'; FM.drawTool.stroke = 16;
+      const rowB0 = []; for (let x = 250; x <= 800; x += 25) rowB0.push([x, 700]);
+      FM.drawTool.points = rowB0.map(p => p.slice()); FM.drawTool._commit(); await hunt5cSleep(150);
+      FM.drawTool.finish(); await hunt5cSleep(200);
+      const D = hunt5cDrawing()[0];
+      if (!D) throw new Error('setup: the first stroke made no drawing');
+      D.transform.rotation = 28; D.transform.scale = 1.3; D.transform.anchorX = 0.1; D.transform.anchorY = 0.8; D.flipH = true;
+      FM.refreshAll(); await hunt5cSleep(120);
+      const before = hunt5cRedInk(hunt5cRender(FM.scene, 0));
+      if (!before.box || before.at.size < 40) throw new Error('setup: the turned drawing renders almost no ink (' + before.at.size + ' samples)');
+      FM.startDraw('freehand', { layerId: D.id }); await hunt5cSleep(200);
+      if (!FM.drawTool.active || FM.drawTools.layerId() !== D.id) throw new Error('CONTROL: Draw more did not re-open this drawing');
+      const rowB = []; for (let x = 300; x <= 800; x += 20) rowB.push([x, 1450]);
+      FM.drawTool.points = rowB.map(p => p.slice()); FM.drawTool._commit(); await hunt5cSleep(150);
+      FM.drawTool.finish(); await hunt5cSleep(200);
+      if (hunt5cDrawing().length !== 1) throw new Error('setup: Draw more left ' + hunt5cDrawing().length + ' drawings');
+      const after = hunt5cRedInk(hunt5cRender(FM.scene, 0));
+      let kept = 0; before.at.forEach(k => { if (after.at.has(k)) kept++; });
+      const keptPct = Math.round(100 * kept / before.at.size);
+      const probesB = [rowB[2], rowB[8], rowB[12], rowB[18], rowB[23]];
+      const offB = probesB.filter(p => !hunt5cNear(after, p, 8, W));
+      if (keptPct < 85) bad.push('on a drawing turned 28 degrees, flipped, anchored at 0.1,0.8 and resized to 1.3, Draw more and one new stroke left only ' + keptPct + '% of the old ink where it was (it spanned ' + before.box.join(',') + ', now ' + (after.box ? after.box.join(',') : 'nothing') + ')');
+      if (offB.length) bad.push('the new stroke on that drawing, drawn along y 1450 from x 300 to 800, has no ink under ' + offB.length + ' of ' + probesB.length + ' points of his finger');
+      if (bad.length) throw new Error(bad.join('; and '));
+    } finally {
+      FM.groupContext = ctx0;
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (fifth hunt, the rest of HUNT-c 1) — EACH STROKE KEEPS ITS BRUSH WHEREVER THE DRAWING GOES NEXT. The HUNT-c
+   * test above draws two strokes in two brushes and lifts the finger. A stroke's brush is also carried by the eraser
+   * (what is left of a blue stroke is still blue), by the draw tool's own undo and redo (they hold the same stroke
+   * arrays), by Draw more (the other strokes are not repainted in the drawing's colour, and the bar's swatch and slider
+   * show the brush the tool has really picked up instead of whatever the last session left there) and by the timeline
+   * thumbnail, which draws each stroke in its own colour like the canvas does. */
+  test('690 each stroke keeps its own brush through the eraser, undo and redo, Draw more and the timeline thumbnail', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    try {
+      const P = { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' };
+      FM.scene = scene([], { project: P }); FM.time = 0; FM.selectLayer(null); FM.refreshAll(); await hunt5cSleep(150);
+      const line = (y, x0, x1) => { const o = []; for (let x = x0; x <= x1; x += 10) o.push([x, y]); return o; };
+      const isBlue = q => q[3] > 128 && q[2] > 150 && q[0] < 90 && q[1] < 90;
+      const look = () => { const img = hunt5cRender(FM.scene, 0); return { red: hunt5cPx(img, 400, 500), bl: hunt5cPx(img, 260, 900), br: hunt5cPx(img, 820, 900), gap: hunt5cPx(img, 540, 900), thick: hunt5cThick(img, 260, 900, isBlue), img: img }; };
+      const bad = [];
+      FM.startDraw('freehand'); await hunt5cSleep(200);
+      if (!FM.drawTool.active) throw new Error('setup: Sketching did not open');
+      FM.drawTool.color = '#ff0000'; FM.drawTool.stroke = 8;
+      FM.drawTool.points = line(500, 200, 880); FM.drawTool._commit(); await hunt5cSleep(120);
+      FM.drawTool.color = '#0000ff'; FM.drawTool.stroke = 30;
+      FM.drawTool.points = line(900, 200, 880); FM.drawTool._commit(); await hunt5cSleep(120);
+      if (!FM.drawTool._eraseAt([540, 900])) throw new Error('setup: the eraser found nothing on the blue line');
+      await hunt5cSleep(120);
+      let v = look();
+      if (isBlue(v.gap)) throw new Error('CONTROL: the eraser left the middle of the blue line in place (rgb ' + v.gap.slice(0, 3).join(',') + '), so nothing was cut');
+      if (!hunt5cRed(v.red)) throw new Error('CONTROL: the first stroke is not red (rgb ' + v.red.slice(0, 3).join(',') + ')');
+      if (!isBlue(v.bl) || !isBlue(v.br) || Math.abs(v.thick - 30) > 4) bad.push('after the eraser cut through the middle of a blue stroke of 30, the two pieces left read rgb ' + v.bl.slice(0, 3).join(',') + ' and rgb ' + v.br.slice(0, 3).join(',') + ' at ' + v.thick + ' px thick');
+      FM.drawTool._undo(); await hunt5cSleep(120);
+      v = look();
+      if (!isBlue(v.gap) || !isBlue(v.bl)) bad.push('undoing the eraser brought the stroke back as rgb ' + v.gap.slice(0, 3).join(',') + ', not the blue it was drawn in');
+      FM.drawTool._redo(); await hunt5cSleep(120);
+      v = look();
+      if (isBlue(v.gap) || !isBlue(v.bl) || !isBlue(v.br)) bad.push('redoing the eraser left rgb ' + v.bl.slice(0, 3).join(',') + ' and rgb ' + v.br.slice(0, 3).join(',') + ' either side of the cut, with rgb ' + v.gap.slice(0, 3).join(',') + ' in it');
+      FM.drawTool.finish(); await hunt5cSleep(200);
+      const D = hunt5cDrawing()[0];
+      if (!D) throw new Error('setup: the session made no drawing');
+      /* Draw more. The bar is left showing another pick first, the way a previous session leaves it. */
+      const bar = document.getElementById('draw-bar'), sw = bar && bar.querySelector('.db-color input'), wd = bar && bar.querySelector('.db-width input');
+      if (!sw || !wd) throw new Error('setup: the drawing bar has no colour or brush-size control');
+      sw.value = '#00ff00'; wd.value = '30';
+      FM.startDraw('freehand', { layerId: D.id }); await hunt5cSleep(200);
+      if (FM.drawTools.layerId() !== D.id) throw new Error('CONTROL: Draw more did not re-open this drawing');
+      if (String(FM.drawTool.color).toLowerCase() !== '#ff0000' || FM.drawTool.stroke !== 8) throw new Error('CONTROL: Draw more did not pick up the drawing brush (' + FM.drawTool.color + ' at ' + FM.drawTool.stroke + ')');
+      if (sw.value !== '#ff0000' || wd.value !== '8') bad.push('Draw more picked up the drawing red brush of 8, but the bar still shows a swatch of ' + sw.value + ' and a brush of ' + wd.value);
+      FM.drawTool.points = line(1300, 200, 880); FM.drawTool._commit(); await hunt5cSleep(120);
+      FM.drawTool.finish(); await hunt5cSleep(200);
+      v = look();
+      const third = hunt5cPx(v.img, 400, 1300);
+      if (!hunt5cRed(v.red) || !hunt5cRed(third)) bad.push('after Draw more the red strokes read rgb ' + v.red.slice(0, 3).join(',') + ' and rgb ' + third.slice(0, 3).join(','));
+      if (!isBlue(v.bl) || !isBlue(v.br) || Math.abs(v.thick - 30) > 4) bad.push('one more stroke with Draw more turned the blue pieces into rgb ' + v.bl.slice(0, 3).join(',') + ' at ' + v.thick + ' px thick');
+      /* …and the timeline row's thumbnail shows both colours, as the canvas does. */
+      const L = FM.layerById(FM.scene, D.id), th = offscreen(96, 60);
+      FM.renderThumb(L, th);
+      const td = th.getContext('2d').getImageData(0, 0, th.width, th.height).data;
+      let tb = 0, tr = 0;
+      for (let i = 0; i < td.length; i += 4) { const q = [td[i], td[i + 1], td[i + 2], td[i + 3]]; if (isBlue(q)) tb++; else if (hunt5cRed(q)) tr++; }
+      if (!tr) throw new Error('CONTROL: the thumbnail shows no red at all, so it drew nothing of the drawing');
+      if (!tb) bad.push('the timeline thumbnail of a red and blue drawing shows ' + tr + ' red pixels and no blue');
+      if (bad.length) throw new Error('he drew one stroke in red at 8 and one in blue at 30: ' + bad.join('; and '));
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+  });
+
+  /* ═══ HUNT-a (queue 690, fifth hunt, 26 Sep) — PLAYBACK AND THE PREVIEW ═════════════════════════════════════════════
+   * Found by the hunt as four failing HUNT-a tests; all four fixed in js/app.js (FM.pause seeks onto the playhead,
+   * FM.seekVideosToTime uses FM.frameSeekTarget, the play pill stops at once, a hidden page pauses) and renamed 690 for
+   * what they now hold.
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four faults in the one thing every edit goes
+   * through — stopping on a moment and looking at it. Each is measured on the preview canvas itself, with the frame
+   * index the fixture clip carries in its own pixels (hunt2dDrawIndex: frame k is eight black/white bars), so what is
+   * asserted is the picture he would see, not the time the app meant to show.
+   *   1. pausing a clip with sound leaves the picture 2-6 frames BEFORE the playhead;
+   *   2. tapping the play pill to stop runs on a quarter of a second past the tap;
+   *   3. stepping a 30 fps clip frame by frame never shows every third frame and shows the one before it twice;
+   *   4. leaving the app mid-play and coming back finds the playhead seconds further on, the clip still sounding. */
+  function hunt5aReadPreview() {
+    const cv = document.getElementById('preview');
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    return hunt2dReadIndex(g, cv.width, cv.height);
+  }
+  async function hunt5aSettle(rec) {
+    const t0 = Date.now();
+    while ((rec.el.seeking || rec.el.readyState < 2) && Date.now() - t0 < 3000) await new Promise(r => setTimeout(r, 10));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await new Promise(r => setTimeout(r, 40));
+  }
+  // The indexed clip WITH a sound track (a 440 Hz tone), because an element that makes sound runs behind the transport
+  // by its output latency, and that is the condition fault 1 lives in. AAC where the browser can encode it, else Opus.
+  async function hunt5aIndexedClipWithSound(n, fps) {
+    const w = 128, h = 32, sr = 48000;
+    let ac = null;
+    for (const c of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
+      try { const r = await AudioEncoder.isConfigSupported({ codec: c[0], sampleRate: sr, numberOfChannels: 1, bitrate: 96000 }); if (r.supported) { ac = c; break; } } catch (e) {}
+    }
+    if (!ac) throw new Error('setup: this browser can encode neither AAC nor Opus, so there is no clip with sound to play');
+    const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: w, height: h }, audio: { codec: ac[1], sampleRate: sr, numberOfChannels: 1 }, fastStart: 'in-memory' });
+    let encErr = null;
+    const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { encErr = e; } });
+    enc.configure({ codec: 'avc1.42e01e', width: w, height: h, bitrate: 2e6, framerate: fps });
+    const aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: e => { encErr = e; } });
+    aenc.configure({ codec: ac[0], sampleRate: sr, numberOfChannels: 1, bitrate: 96000 });
+    const cv = new OffscreenCanvas(w, h), g = cv.getContext('2d');
+    for (let k = 0; k < n; k++) {
+      hunt2dDrawIndex(g, k + 1, w, h);
+      const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / fps), duration: Math.round(1e6 / fps) });
+      enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
+    }
+    const total = Math.round(sr * n / fps), chunk = 960;
+    for (let s0 = 0; s0 < total; s0 += chunk) {
+      const len = Math.min(chunk, total - s0), d = new Float32Array(len);
+      for (let i = 0; i < len; i++) d[i] = 0.2 * Math.sin(2 * Math.PI * 440 * (s0 + i) / sr);
+      const ad = new AudioData({ format: 'f32', sampleRate: sr, numberOfFrames: len, numberOfChannels: 1, timestamp: Math.round(s0 * 1e6 / sr), data: d });
+      aenc.encode(ad); ad.close();
+    }
+    await enc.flush(); enc.close(); await aenc.flush(); aenc.close();
+    if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
+    muxer.finalize();
+    return new File([muxer.target.buffer], 'hunt5a-av.mp4', { type: 'video/mp4' });
+  }
+  // Put the clip in a fresh 128x32 project through the import path he uses (addMediaLayer wires the seeked repaint).
+  async function hunt5aClipProject(file, dur) {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const rec = await hunt2dLoadWarm(file);
+    rec.stripFrames = [];   // no filmstrip seeks on this element — that race is HUNT-d's, kept out of these
+    FM.scene = hunt2dScene([], { duration: dur });
+    FM.loop = false;
+    if (FM.viewport) FM.viewport.reset();
+    FM.refreshAll();
+    FM.addMediaLayer(rec);
+    FM.selectLayer(null);
+    FM.refreshAll();
+    await new Promise(r => setTimeout(r, 300));
+    return { V: FM.scene.layers[0], rec: rec };
+  }
+  function hunt5aKey(code, key) { document.body.dispatchEvent(new KeyboardEvent('keydown', { code: code, key: key, bubbles: true, cancelable: true })); }
+
+  /* HUNT-a 1 — PAUSE LEAVES THE PICTURE BEHIND THE PLAYHEAD. A clip with sound runs behind the transport clock by its
+   * output latency, and the sync controller LEARNS that offset and keeps it (js/app.js, _syncBiasStep — queue 148): ~55
+   * ms in this browser, ~87 ms measured on a real import, 217 ms on a first play whose sound started late. FM.pause()
+   * snaps the playhead to a frame and pauses the element WHERE IT IS — it never seeks it to the playhead — so the
+   * picture he stopped on is the element's frame, not the playhead's. Measured before this test was written: paused at
+   * frame 36 the preview showed 30; at 48 it showed 45; at 59, 56. A split, a keyframe or a bookmark made there lands
+   * on the playhead's frame, 2-6 frames after the picture he chose it by. FIXED: FM.pause seeks every clip onto the
+   * playhead's frame when it stops playback, so the picture is now asserted to BE that frame, with no slack — the
+   * frame-edge fault (HUNT-a 3) is fixed too, so a one-frame miss is a real miss. CONTROL: the clip really played. */
+  test('690 pausing a clip with sound leaves the preview on the frame the playhead stopped on', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to play');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(r));
+    const saved = FM.scene, t0 = FM.time, made = [];
+    try {
+      const { V, rec } = await hunt5aClipProject(await hunt5aIndexedClipWithSound(150, 30), 5);
+      made.push(V.id);
+      const bad = [], seen = [];
+      /* Four stops. The first three play the clip as it comes; how far behind this browser's element runs varies from
+         run to run (0 to 230 ms measured), so the fourth gives it the latency a PHONE has — the element settles 90 ms
+         behind the transport inside its warm-up, which is when the controller learns that offset and from then on
+         keeps it (js/app.js SYNC_WARMUP, _syncBiasStep; #148 measured ~87 ms on a real import). */
+      const runs = [[0, 1300, 0], [0.4, 1450, 0], [1.1, 1250, 0], [2.0, 1300, 0.09]];
+      for (const run of runs) {
+        FM.pause(); FM.setTime(run[0]); await hunt5aSettle(rec);
+        const from = rec.el.currentTime;
+        hunt5aKey('Space', ' ');                    // play, the way he starts it on the PC
+        if (run[2]) {
+          const tw = performance.now();
+          while (!(rec.el.currentTime > from + 0.02 && FM.time > run[0] + 0.01) && performance.now() - tw < 1500) await frame();
+          if (!(rec.el.currentTime < from + 0.2)) throw new Error('setup: the clip had played ' + (rec.el.currentTime - from).toFixed(3) + ' s before the phone latency could be given to it, past its warm-up');
+          rec.el.currentTime = rec.el.currentTime - run[2];
+        }
+        await sleep(run[1]);
+        if (!FM.playing) throw new Error('setup: Space did not start playback');
+        hunt5aKey('Space', ' ');                    // …and stop on a moment
+        await sleep(450);                            // any seek lands, the seeked repaint runs
+        if (FM.playing) throw new Error('setup: Space did not stop playback');
+        if (!(rec.el.currentTime > from + 0.5)) throw new Error('CONTROL: the clip did not play (its element went from ' + from.toFixed(3) + ' s to ' + rec.el.currentTime.toFixed(3) + ' s), so nothing here measures a pause');
+        const want = Math.round(FM.time * 30), got = hunt5aReadPreview();
+        if (got < 0) throw new Error('CONTROL: the paused preview shows no frame of the clip at all (reads ' + got + ')');
+        const tag = run[2] ? ' (with a phone-sized ' + Math.round(run[2] * 1000) + ' ms of sound latency)' : '';
+        seen.push('playhead frame ' + want + ' shows ' + got + tag);
+        if (got !== want) bad.push('stopped at frame ' + want + ' (' + FM.time.toFixed(3) + ' s)' + tag + ' the preview shows frame ' + got + ' of the clip, ' + Math.abs(want - got) + ' frames (' + Math.round(Math.abs(want - got) / 30 * 1000) + ' ms) ' + (got < want ? 'earlier' : 'later') + ', the clip left at ' + rec.el.currentTime.toFixed(3) + ' s');
+      }
+      if (bad.length) throw new Error('pausing a clip with sound leaves the picture behind the playhead, so he stops on one frame and a split, keyframe or bookmark made there lands on another: ' + bad.join('; ') + '. (all four: ' + seen.join(', ') + ')');
+    } finally {
+      FM.pause(); FM.scene = saved; FM.time = t0;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 — …AND EXACTLY, WHEN THE CLIP TRAILED BY LESS THAN HALF A FRAME. The fix for HUNT-a 1 seeks every clip onto the
+   * playhead when playback stops. The ordinary seek skips an element already within half a frame of its target (queue
+   * 125: a slow scrub must not keep restarting the decoder), which is exact on the frame grid a scrub moves along — but a
+   * PLAYING element stops anywhere, and one that stopped 10 ms short of the playhead's frame edge sits inside the frame
+   * BEFORE it while passing that guard. So the pause seek is exact. A stand-in element (as the perf seek-guard test uses)
+   * places the 10 ms rather than hoping for it: a real clip trails by whatever this browser's latency is on the day, which
+   * is why the test above cannot reach this case on its own. CONTROL: a pause on a transport that was not playing — how a
+   * dozen callers say make sure it is stopped — leaves the element where it is. */
+  test('690 pausing puts the picture on the playhead frame even when the clip trailed it by less than half a frame', { item: '690' }, function () {
+    const keep = FM.scene.layers.slice(), keepT = FM.time, keepPlaying = FM.playing, keepReview = FM._reviewing;
+    const fps = FM.scene.project.fps || 30, writes = [];
+    const fake = { duration: 10, readyState: 0, paused: false, muted: false, pause: function () { this.paused = true; } };
+    Object.defineProperty(fake, 'currentTime', { get: function () { return this._t || 0; }, set: function (v) { writes.push(v); this._t = v; }, configurable: true });
+    let L = null;
+    try {
+      L = FM.makeLayer('video', { start: 0, duration: 5 });
+      L.type = 'video'; L.trimStart = 0; L.speed = 1;
+      FM.scene.layers = [L];
+      FM.media.set(L.id, { kind: 'video', el: fake, duration: 10, width: 64, height: 48 });
+      FM._reviewing = false;
+      FM.playing = false; FM.time = 30 / fps; fake._t = 30 / fps - 0.010;
+      FM.pause();
+      if (writes.length) throw new Error('CONTROL: a pause on a transport that was not playing moved the element (to ' + writes.map(v => v.toFixed(4)).join(', ') + ' s)');
+      // playing, the clock 4 ms past frame 30 (so the playhead snaps to 30), the clip 10 ms short of it (inside frame 29)
+      FM.playing = true; FM.time = 30 / fps + 0.004; fake._t = 30 / fps - 0.010; fake.paused = false;
+      FM.pause();
+      if (!fake.paused) throw new Error('setup: FM.pause did not pause the clip element');
+      if (Math.abs(FM.time - 30 / fps) > 1e-9) throw new Error('setup: the playhead did not snap to frame 30 (it is at ' + FM.time.toFixed(4) + ' s)');
+      const at = fake.currentTime, shows = Math.floor(at * fps + 1e-9);
+      if (shows !== 30) throw new Error('stopped with the clip 10 ms short of the playhead, the pause left it at ' + at.toFixed(4) + ' s, which is frame ' + shows + ', not the playhead frame 30 (' + writes.length + ' seek(s): ' + writes.map(v => v.toFixed(4)).join(', ') + ') - within half a frame, so the ordinary guard skipped it');
+    } finally {
+      FM.playing = keepPlaying; FM._reviewing = keepReview;
+      if (L) { try { FM.media.remove(L.id); } catch (e) {} }
+      FM.scene.layers = keep; FM.time = keepT;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 2 — TAPPING THE PILL TO STOP RUNS ON A QUARTER OF A SECOND. The timecode pill is the play button (queue 364)
+   * and on the phone the only one. Its click waits 240 ms before toggling (js/app.js init, tcTapTimer) so that a
+   * double-click, which types a time, does not also START playback on its way past. That wait is right for starting and
+   * pointless for stopping — the double-click handler pauses anyway — yet it is applied to both, so every stop lands
+   * ~7 frames after the tap: he taps on the beat and the playhead stops a quarter-second later. Driven by a REAL finger
+   * at 380 and a REAL mouse at 1280; the reference is the transport clock at the moment the trusted click arrives. Two
+   * frames of slack. CONTROL: the tap is trusted and of the right kind, and the first tap really did start playback.
+   * FIXED: a tap that stops playback pauses at once; the 240 ms wait stays only for starting. */
+  test('690 tapping the play pill to stop stops on the tap, not a quarter second after it', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, t0 = FM.time, bad = [];
+    async function run(where, touch) {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'HUNT-a beat', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#e0245e', start: 0, duration: 8 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 8, background: '#000000' } });
+      FM.refreshAll(); FM.selectLayer(null); FM.loop = false; FM.pause(); FM.setTime(0.5);
+      await sleep(300);
+      const pill = document.getElementById('time-readout');
+      const r = pill.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      if (!(r.width > 0) || document.elementFromPoint(x, y) !== pill) throw new Error('setup: at ' + where + ' the play pill is not the thing under ' + Math.round(x) + ',' + Math.round(y));
+      const clicks = [];
+      const onClick = (e) => { if (e.target === pill || pill.contains(e.target)) clicks.push({ trusted: e.isTrusted, kind: e.pointerType || '', at: FM.clockNow ? FM.clockNow() : FM.time, playing: FM.playing }); };
+      window.addEventListener('click', onClick, true);
+      const tap = touch ? [{ t: 'touchStart', x: x, y: y, ms: 50 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]
+                        : [{ t: 'mouseMove', x: x, y: y, ms: 20 }, { t: 'mouseDown', x: x, y: y, ms: 50 }, { t: 'mouseUp', x: x, y: y, ms: 0 }];
+      try {
+        await realInput924(tap, where + ' — the tap that starts playback');
+        await sleep(1100);
+        if (!FM.playing) throw new Error('CONTROL: at ' + where + ' a real ' + (touch ? 'tap' : 'click') + ' on the pill did not start playback');
+        await realInput924(tap, where + ' — the tap that stops it');
+        await sleep(700);
+      } finally { window.removeEventListener('click', onClick, true); }
+      const stop = clicks[clicks.length - 1];
+      if (!stop || !stop.trusted || stop.kind !== (touch ? 'touch' : 'mouse')) throw new Error('CONTROL: at ' + where + ' the stopping click was not a trusted ' + (touch ? 'touch' : 'mouse') + ' click (' + JSON.stringify(stop || null) + ')');
+      if (!stop.playing) throw new Error('CONTROL: at ' + where + ' playback had already stopped when the second tap landed');
+      if (FM.playing) throw new Error('at ' + where + ' the second tap on the pill did not stop playback at all');
+      const over = FM.time - stop.at;
+      if (over > 2.5 / 30) bad.push('at ' + where + ' he ' + (touch ? 'tapped' : 'clicked') + ' at ' + stop.at.toFixed(3) + ' s and playback stopped at ' + FM.time.toFixed(3) + ' s, ' + Math.round(over * 1000) + ' ms (' + Math.round(over * 30) + ' frames) later');
+    }
+    try {
+      await atPhoneWidth(async function () { await onScreen924(async function () { await run('380 px', true); }); }, 380);
+      // the 380 pass's driver window cannot reach a pill that sits at x 640 of a 1280 frame; the finger half runs in both
+      if (hunt4aWide()) await atWideWidth(async function () { await onScreen924(async function () { await run('1280 px', false); }); }, 1280);
+      /* …and a double tap while playing still stops it ONCE. The stop no longer waits, so the second tap of a double tap
+         finds playback already stopped, and would START it again 240 ms later unless it is ignored, as it always was. A
+         real double tap brings a dblclick with it, which cancels that start anyway and would hide the case — but a
+         phone's double tap can arrive without one, so two bare clicks are sent here, 80 ms apart. */
+      FM.pause(); FM.setTime(0.5); await sleep(300);   // any 240 ms window left by the taps above has closed
+      FM.play();
+      await sleep(300);
+      if (!FM.playing) throw new Error('setup: playback did not start for the double-tap check');
+      const pill2 = document.getElementById('time-readout');
+      pill2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(80);
+      pill2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(500);
+      if (FM.playing) bad.push('a double tap on the pill while playing stopped it and then started it again 240 ms later - the second tap was not ignored');
+      if (bad.length) throw new Error('stopping playback with the play pill overshoots the moment he taps, so he cannot stop on a beat: ' + bad.join('; '));
+    } finally {
+      FM.pause(); FM.scene = saved; FM.time = t0; try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 3 — STEPPING A 30 FPS CLIP NEVER SHOWS EVERY THIRD FRAME. HUNT-d found that a seek to exactly k/30 lands on
+   * frame k-1 for every k whose start rounds up (2, 5, 8 …) and fixed it for the EXPORT and the frame cache with
+   * FM.frameSeekTarget (half a millisecond inside the frame). The PREVIEW's own seek, FM.seekVideosToTime — what the
+   * frame-step keys, a timeline scrub and every parked playhead go through — still writes the bare k/30. Measured before
+   * this test was written, pressing . from 0: 1, 1, 3, 4, 4, 6, 7, 7, 9 … So stepping to find a cut shows one frame
+   * twice and never shows the next, a frame he parks on is not the frame that exports, and a cut made where the picture
+   * changes is one frame out. Checked on the key he steps with and on the scrub path his finger drives.
+   * CONTROL: frames 0, 1, 3, 4 … read correctly, so the reader and the clip are right.
+   * FIXED: FM.seekVideosToTime seeks to FM.frameSeekTarget, the same target the export uses. */
+  test('690 stepping or scrubbing a 30 fps clip frame by frame shows every frame, each once', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to step through');
+    const saved = FM.scene, t0 = FM.time, made = [];
+    try {
+      const { V, rec } = await hunt5aClipProject(await hunt2dIndexedClip(90, 30), 3);
+      made.push(V.id);
+      FM.pause(); FM.setTime(0); await hunt5aSettle(rec);
+      const shown = [hunt5aReadPreview()];
+      for (let k = 1; k <= 15; k++) { hunt5aKey('Period', '.'); await hunt5aSettle(rec); shown.push(hunt5aReadPreview()); }
+      const goodOnes = shown.filter((v, k) => k % 3 !== 2 && v === k).length;
+      if (goodOnes < 8) throw new Error('CONTROL: stepping with . from frame 0 read ' + shown.join(',') + ' — even the frames that do not sit on a rounded edge are wrong, so the reader or the clip is broken and nothing here means anything');
+      if (Math.abs(FM.time - 15 / 30) > 1e-6) throw new Error('setup: fifteen presses of . put the playhead at ' + FM.time.toFixed(4) + ' s, not frame 15');
+      const wrong = [];
+      shown.forEach((v, k) => { if (v !== k) wrong.push('frame ' + k + ' shows ' + v); });
+      const never = []; for (let k = 0; k <= 15; k++) if (shown.indexOf(k) < 0) never.push(k);
+      // …and where a finger drag lands: FM.scrubTime is what the timeline scrub calls on every move
+      const scrubbed = [];
+      for (const k of [20, 26, 41, 44]) {
+        FM.scrubTime(k / 30); await new Promise(r => requestAnimationFrame(r)); await hunt5aSettle(rec);
+        const v = hunt5aReadPreview();
+        if (v !== k) scrubbed.push('scrubbed to frame ' + k + ' it shows ' + v);
+      }
+      // …and back the other way with ,
+      FM.setTime(12 / 30); await hunt5aSettle(rec);
+      const back = [];
+      for (let k = 11; k >= 6; k--) { hunt5aKey('Comma', ','); await hunt5aSettle(rec); const v = hunt5aReadPreview(); if (v !== k) back.push('frame ' + k + ' shows ' + v); }
+      if (wrong.length || scrubbed.length || back.length) throw new Error('stepping a plain 30 fps clip shows the wrong frame at a third of the stops — pressing . from 0 the preview reads ' + shown.join(',') + ', so source frame(s) ' + never.join(', ') + ' never appear and the one before each shows twice' + (scrubbed.length ? '; on the scrub path ' + scrubbed.join(', ') : '') + (back.length ? '; stepping back with , ' + back.join(', ') : '') + ' — the export (fixed by HUNT-d) shows the right frame there, so the frame he parks on and cuts at is not the frame that comes out');
+    } finally {
+      FM.pause(); FM.scene = saved; FM.time = t0;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-a 4 — LEAVING THE APP MID-PLAY. Nothing in the app listens for the page going to the background during
+   * playback: FM.playing stays true, the transport clock (wall time, or the audio clock demoted to it) keeps counting,
+   * and the browser simply stops calling requestAnimationFrame. So he checks a message and comes back to a playhead
+   * that has leapt forward by however long he was away — or run off the end and stopped there — with his place gone.
+   * On the PC the other half is audible: a background tab keeps playing the CLIP's element with no tick to stop it at
+   * its cut, so the sound runs on past the end of the clip for as long as he is away. js/audio-health.js already
+   * assumes the opposite ("Playback is torn down without the stop button ever being pressed").
+   * The browser is simulated exactly where it matters: document.hidden and visibilitychange as it reports them, and
+   * requestAnimationFrame held while hidden, which is what a real hidden page does. CONTROL: it was playing and the
+   * clip was sounding before he left. FIXED: a hidden visibilitychange (and pagehide) pauses playback. */
+  test('690 leaving the app mid-play stops playback where he left, with the clip silent while he is away', { item: '690', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to play');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, t0 = FM.time, made = [];
+    const realRaf = window.requestAnimationFrame;
+    let hidden = false; const held = [];
+    try {
+      const { V, rec } = await hunt5aClipProject(await hunt5aIndexedClipWithSound(150, 30), 5);
+      made.push(V.id);
+      V.duration = 1.5;                               // the clip is cut at 1.5 s of its 5 s source …
+      const L = FM.makeLayer('shape', { name: 'HUNT-a title', shape: 'rect', x: 64, y: 16, shapeW: 20, shapeH: 20, fill: '#e0245e', start: 0, duration: 5 });
+      FM.scene.layers.push(L);                        // … and the project runs on to 5 s under a title
+      FM.refreshAll();
+      FM.pause(); FM.setTime(0.3); await hunt5aSettle(rec);
+      hunt5aKey('Space', ' ');
+      await sleep(700);
+      if (!FM.playing || rec.el.paused) throw new Error('CONTROL: playback was not running with the clip sounding before he left (playing ' + FM.playing + ', clip paused ' + rec.el.paused + ')');
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+      window.requestAnimationFrame = function (cb) { if (hidden) { held.push(cb); return 0; } return realRaf.call(window, cb); };
+      const left = FM.clockNow ? FM.clockNow() : FM.time;
+      hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+      await sleep(2500);                              // two and a half seconds in another app
+      const clipWhileAway = { paused: rec.el.paused, at: rec.el.currentTime };
+      hidden = false; document.dispatchEvent(new Event('visibilitychange'));
+      window.requestAnimationFrame = realRaf;
+      held.splice(0).forEach(cb => realRaf.call(window, cb));
+      await sleep(250);
+      const bad = [];
+      if (Math.abs(FM.time - left) > 0.15) bad.push('he left at ' + left.toFixed(2) + ' s and came back 2.5 s later to the playhead at ' + FM.time.toFixed(2) + ' s' + (FM.playing ? ', still playing' : ', stopped there') + ' - it ran on while the app was not even on screen');
+      if (!clipWhileAway.paused) bad.push('while he was away the clip kept sounding (its element at ' + clipWhileAway.at.toFixed(2) + ' s' + (clipWhileAway.at > (V.trimStart || 0) + V.duration + 0.05 ? ', past its cut at ' + ((V.trimStart || 0) + V.duration).toFixed(2) + ' s' : '') + ') with nothing to stop it at its end');
+      // …and pagehide, the other event iOS Safari delivers on the way out (js/audio-health.js listens for both), stops it too
+      FM.pause(); FM.setTime(0.3); await hunt5aSettle(rec);
+      hunt5aKey('Space', ' ');
+      await sleep(400);
+      if (!FM.playing) throw new Error('setup: Space did not start playback again for the pagehide check');
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+      if (FM.playing) bad.push('a pagehide while playing left it playing');
+      if (bad.length) throw new Error('going to the background does not stop playback: ' + bad.join('; '));
+    } finally {
+      window.requestAnimationFrame = realRaf;
+      try { delete document.hidden; delete document.visibilityState; } catch (e) {}
+      held.length = 0;
+      FM.pause(); FM.scene = saved; FM.time = t0;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* ═══ HUNT-b (queue 690, fifth hunt, 26 Sep) — THE PICTURE MATCHES THE EXPORT: COMPOSITING ══════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". The area: compositing correctness — blend modes, opacity,
+   * adjustment layers, masks with effects, groups, motion blur, the camera and depth, transparent backgrounds. The earlier
+   * HUNT-d parity sweep found the preview and the export agree on the plain paths, because both go through FM.renderScene —
+   * so each bug below is in the PICTURE ITSELF, and lands in the exported file exactly as he sees it on the canvas (the
+   * first test reads it back out of the real PNG-frames export to show that). Each carries a control that proves the
+   * measurement can see the right answer. All four FAIL on v16.98, and are fixed in compositor.js (renamed from HUNT-b to
+   * what each one now guarantees). */
+
+  // One frame of the REAL PNG-frames export of `sc` at time t, read back out of the zip it builds (HUNT-d's stub690 keeps
+  // anything from downloading). The exporter renders through FM.renderScene into a project-sized canvas, so this is the file.
+  async function exportFrameHB(sc, t, transparent) {
+    const saved = FM.scene;
+    let unstub = null;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      FM.scene = sc; FM.refreshAll(); FM.setTime(t);
+      await new Promise(r => setTimeout(r, 30));
+      unstub = stub690();
+      grab690.frames.length = 0;
+      await FM.exporter.runFrames({ scale: 1, fps: 10, from: t, to: t + 0.2, name: 'hunt-b', format: 'png', transparent: !!transparent, onProgress: function () {} });
+      if (!grab690.frames.length) throw new Error('setup: the PNG-frames export produced no frame to read back');
+      const g = await pngCtx690(grab690.frames[0]);
+      return g.getImageData(0, 0, g.canvas.width, g.canvas.height).data;
+    } finally {
+      if (unstub) unstub();
+      FM.scene = saved; FM.selectLayer(null);
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  }
+
+  /* 690 (HUNT-b 1) — CAMERA MOTION BLUR WASHED THE WHOLE PICTURE TOWARD THE BACKGROUND. Fixed: the slices are added at 1/N
+   * with 'lighter' into a scratch canvas on the frame's grid and laid over the background once (compositor.js renderScene).
+   * What was found:  renderScene's camera composite averages the
+   * shutter slices by drawing each one with globalAlpha 1/N over a canvas already filled with the background, source-over
+   * (compositor.js, the `if (slices)` loop). Source-over does not average: after N slices the picture only reaches
+   * 1 - (1 - 1/N)^N of full strength and the background keeps the rest — 25% at two slices, 34% at eight, 36% at 32. So the
+   * moment the camera moves with Motion Blur on, EVERYTHING in the shot fades toward the background colour (a black
+   * background dims the whole frame, a white one bleaches it), and the amount changes with the slice count, which follows
+   * the camera's speed — the frame pumps brighter and darker through an eased pan. In a transparent export the whole frame
+   * turns see-through. The layer version (drawMotionBlur) accumulates with 'lighter' for exactly this reason and says so. */
+  test('690 camera Motion Blur averages its slices — a pan keeps the picture at full brightness, and a transparent export stays solid', { item: '690', budgetMs: 60000 }, async function () {
+    const PW = 320, PH = 240, T = 0.5;
+    function build(blurOn) {
+      const cam = FM.makeLayer('camera', { name: 'HB cam' });
+      cam.start = 0; cam.duration = 3;
+      cam.transform.x = { kf: [{ t: 0, v: -440, e: 'linear' }, { t: 1, v: 760, e: 'linear' }] };   // a brisk pan: 1200 px/s, looking at the frame centre at 0.5 s
+      cam.transform.y = 120;
+      cam.motionBlur = { enabled: blurOn, shutter: 0.5, samples: 8 };   // what Camera Options → Motion Blur writes, switched on
+      const card = FM.makeLayer('shape', { name: 'HB white card', shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 160, fill: '#ffffff' });
+      card.start = 0; card.duration = 3;
+      return scene([cam, card], { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' } });
+    }
+    // the card is 200 px wide and the whole shutter moves it 20 px, so its middle (x 90..230) is white in EVERY slice
+    function middle(d) {   // d: the whole frame's RGBA
+      let s = 0, n = 0, a = 255;
+      for (let y = 70; y < 170; y++) for (let x = 90; x < 230; x++) { const i = (y * PW + x) * 4; s += d[i]; n++; a = Math.min(a, d[i + 3]); }
+      return { lum: s / n, alpha: a };
+    }
+    const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true });
+    // CONTROL 1: blur off, the middle of the card is white
+    FM.renderScene(g, build(false), T);
+    const sharp = middle(g.getImageData(0, 0, PW, PH).data);
+    if (sharp.lum < 250) throw new Error('CONTROL FAILED — with Motion Blur off the middle of the white card is ' + sharp.lum.toFixed(0) + ', not white, so the fixture is wrong');
+    // CONTROL 2: blur on really smears this pan — the card's left edge is soft
+    FM.renderScene(g, build(true), T);
+    const row = g.getImageData(40, 120, 40, 1).data;
+    let soft = 0; for (let i = 0; i < row.length; i += 4) if (row[i] > 12 && row[i] < 243) soft++;
+    if (soft < 6) throw new Error('CONTROL FAILED — Motion Blur did not smear this pan (' + soft + ' soft pixels on the card edge), so nothing below exercises the camera blur');
+    const blurred = middle(g.getImageData(0, 0, PW, PH).data);
+    // the same frame out of the real PNG-frames export, so this is the FILE and not only the canvas — and a transparent one
+    const file = middle(await exportFrameHB(build(true), T)), clear = middle(await exportFrameHB(build(true), T, true));
+    const bad = [];
+    // MEASURED on v16.98: 167 on the canvas and 167 in the file (8 slices), alpha 167 transparent; 255 is right, 250 allows rounding
+    if (blurred.lum < 250) bad.push('on the canvas the middle of a white card that never leaves the shot comes out at ' + blurred.lum.toFixed(0) + ' of 255 — the whole picture is ' + Math.round(100 - blurred.lum / 2.55) + '% washed toward the black background');
+    if (file.lum < 250) bad.push('in the EXPORTED frame it is ' + file.lum.toFixed(0) + ' of 255');
+    if (clear.alpha < 250) bad.push('in a transparent export the solid card is only ' + Math.round(clear.alpha / 2.55) + '% opaque');
+    if (bad.length) throw new Error('with camera Motion Blur on and the camera panning: ' + bad.join('; ') + ' — every frame where the camera moves goes dim, and brighter or darker again as the pan speeds up and slows down');
+  });
+
+  /* 690 (HUNT-b 2) — THE CAMERA NEVER SAW PAST THE PROJECT EDGE. Fixed: the camera plate is sized to what the camera sees
+   * (camPlateBox); a per-layer effect pass inside it keeps the frame-sized plate it always had (nestedPlate), while the
+   * passes that only cut or mix — a pen mask, a group unit, fog, Motion Blur (Object), the blend plates — follow it out.
+   * What was found:  renderScene draws every layer into the camera plate `_camCv`, and
+   * that plate is exactly the project rectangle (P.width x P.height, origin 0,0). So anything a layer has outside the frame
+   * is thrown away BEFORE the camera looks at it. Pan the camera right and the right of the shot is the empty background —
+   * even across a photo scaled up far past the frame, which is exactly how anyone sets up a pan across a picture. Zoom the
+   * camera out and the scene is a small box in the middle of the background; turn it and the corners are background.
+   * Depth parallax slides layers against the camera and gets cut off the same way. CONTROL: the same pan done WITHOUT a
+   * camera — the photo itself moved the other way — fills the frame, so the photo really does reach there. */
+  test('690 the camera sees past the project edge — a pan, zoom-out or turn over a big photo shows the photo, masked, grouped, blurred and fogged too', { item: '690', budgetMs: 60000 }, async function () {
+    const PW = 320, PH = 240, T = 0.5;
+    function photo(x) {   // a picture scaled up well past the frame — four times its width, four times its height
+      const L = FM.makeLayer('shape', { name: 'HB big photo', shape: 'rect', x: x, y: 120, shapeW: 1280, shapeH: 960, fill: '#ff0000' });
+      L.start = 0; L.duration = 3; return L;
+    }
+    function cam(x, zoom, rot) {
+      const C = FM.makeLayer('camera', { name: 'HB cam' });
+      C.start = 0; C.duration = 3;
+      C.transform.x = x; C.transform.y = 120;
+      if (zoom != null) C.transform.scale = zoom;
+      if (rot != null) C.transform.rotation = rot;
+      return C;
+    }
+    const sc = layers => scene(layers, { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' } });
+    function share(d) { let red = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] < 60) red++; return red / (PW * PH); }
+    function covered(layers) {   // share of the frame the red photo covers
+      const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, sc(layers), T);
+      return share(g.getImageData(0, 0, PW, PH).data);
+    }
+    // CONTROLS: no camera, the photo fills the frame — and moved 100 px left (what a 100 px pan right shows) it still does
+    const c0 = covered([photo(160)]), c1 = covered([photo(60)]);
+    if (c0 < 0.99 || c1 < 0.99) throw new Error('CONTROL FAILED — without a camera the big photo covers only ' + Math.round(c0 * 100) + '% / ' + Math.round(c1 * 100) + '% of the frame, so the fixture is wrong');
+    // CONTROL: a camera sitting still at the frame centre changes nothing
+    const still = covered([cam(160), photo(160)]);
+    if (still < 0.99) throw new Error('CONTROL FAILED — a camera at rest in the middle of the frame already shows only ' + Math.round(still * 100) + '% of the photo');
+    const pan = covered([cam(260), photo(160)]);          // pan 100 px right
+    const out = covered([cam(160, 0.5), photo(160)]);     // zoom out to 50%
+    const turn = covered([cam(160, 1, 15), photo(160)]);  // turn 15 degrees
+    const filePan = share(await exportFrameHB(sc([cam(260), photo(160)]), T));   // the pan, out of the real export
+    // …and the passes that only CUT or MIX a layer follow the camera out too, each through its own plate: the photo under a
+    // pen mask bigger than the frame, inside a group with opacity (a flattened unit), and deep enough to sit in the fog
+    function masked() { const L = photo(160), m = FM.masks.make('add'); m.path = [[-600, -500], [900, -500], [900, 700], [-600, 700]]; L.masks = [m]; return L; }
+    function grouped() {
+      const G = FM.makeLayer('group', { name: 'HB group', x: 0, y: 0 }); G.start = 0; G.duration = 3; G.transform.opacity = 0.99;
+      const L = photo(160); L.parent = G.id; return [L, G];
+    }
+    function foggy() {
+      const C = cam(260); C.fog = { enabled: true, near: 0, far: 3000, color: '#ffffff' };   // a light fog: red stays red enough to count
+      const L = photo(160); L.transform.z = 300; return [C, L];
+    }
+    function blurred() {   // Motion Blur (Object) on a photo moving 200 px/s, so it really goes through the blur's own plates
+      const L = photo(160); L.transform.x = { kf: [{ t: 0, v: 60, e: 'linear' }, { t: 1, v: 260, e: 'linear' }] };
+      L.effects = [{ type: 'objectblur', enabled: true, params: { shutter: 0.5, samples: 8 } }]; return L;
+    }
+    function stencil() {   // a Mask-blend layer as big as the photo, on top of it: it keeps the photo wherever it covers
+      const L = FM.makeLayer('shape', { name: 'HB stencil', shape: 'rect', x: 160, y: 120, shapeW: 1280, shapeH: 960, fill: '#ffffff' });
+      L.start = 0; L.duration = 3; L.blendMode = 'mask-include'; return L;
+    }
+    const panMasked = covered([cam(260), masked()]), panGrouped = covered([cam(260)].concat(grouped())), panFog = covered(foggy());
+    const panBlurred = covered([cam(260), blurred()]), panStencil = covered([cam(260), stencil(), photo(160)]);
+    // CONTROL, and the reason an effect pass does NOT follow the plate out: a Twirl turns about the FRAME, so panning the
+    // camera must slide the twirled picture across the screen and change nothing in it. Rendered at rest and panned 100 px,
+    // the two must match pixel for pixel over the part both show.
+    function twirled() {
+      const L = FM.makeLayer('shape', { name: 'HB twirled', shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 160, fill: '#ffcc00' });
+      L.start = 0; L.duration = 3; L.effects = [{ type: 'twirl', enabled: true, params: {} }]; return L;
+    }
+    function frameOf(layers) { const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, sc(layers), T); return g.getImageData(0, 0, PW, PH).data; }
+    const tw0 = frameOf([cam(160), twirled()]), tw1 = frameOf([cam(260), twirled()]);
+    let twN = 0, twOff = 0;
+    for (let y = 0; y < PH; y++) for (let x = 0; x < 215; x++) {
+      const a = (y * PW + x + 100) * 4, b = (y * PW + x) * 4;
+      twN++; if (Math.abs(tw0[a] - tw1[b]) > 8 || Math.abs(tw0[a + 1] - tw1[b + 1]) > 8 || Math.abs(tw0[a + 2] - tw1[b + 2]) > 8) twOff++;
+    }
+    if (twOff > twN * 0.01) throw new Error('a Twirl no longer turns about the frame when the camera pans: ' + twOff + ' of ' + twN + ' pixels changed beyond sliding across — an effect pass took the camera plate instead of the frame');
+    // …and Copy Background read from INSIDE such an effect pass still copies the backdrop from the right place: the backdrop is
+    // red left of scene x 250 and green right of it, and a copy layer with Posterize straddles the line
+    function copier() {
+      const L = FM.makeLayer('shape', { name: 'HB copy', shape: 'rect', x: 250, y: 120, shapeW: 100, shapeH: 120, fill: '#0000ff' });
+      L.start = 0; L.duration = 3; L.effects = [{ type: 'copybg', enabled: true, params: {} }, { type: 'posterize', enabled: true, params: { levels: 8 } }]; return L;
+    }
+    function half(x, w, fill) { const L = FM.makeLayer('shape', { name: 'HB half', shape: 'rect', x: x, y: 120, shapeW: w, shapeH: 960, fill: fill }); L.start = 0; L.duration = 3; return L; }
+    const cb = frameOf([cam(260), copier(), half(-115, 730, '#ff0000'), half(525, 550, '#00ff00')]);
+    const at = (x, y) => { const i = (y * PW + x) * 4; return [cb[i], cb[i + 1], cb[i + 2]]; };
+    const cL = at(125, 120), cR = at(175, 120);   // frame 100..200 is scene 200..300: red to 150, green after
+    const copyOK = cL[0] > 200 && cL[1] < 60 && cR[1] > 200 && cR[0] < 60;
+    const bad = [];
+    // MEASURED on v16.98: 69%, 25%, 89%, and 69% in the exported frame; 99% allows the anti-aliased rim
+    if (pan < 0.99) bad.push('a 100 px pan right shows the photo across only ' + Math.round(pan * 100) + '% of the frame (' + Math.round(filePan * 100) + '% in the exported frame)');
+    if (out < 0.99) bad.push('zooming the camera out to 50% shows it across only ' + Math.round(out * 100) + '%');
+    if (turn < 0.99) bad.push('turning the camera 15 degrees shows it across only ' + Math.round(turn * 100) + '%');
+    if (panMasked < 0.99) bad.push('the same pan over the photo under a mask bigger than the frame shows it across only ' + Math.round(panMasked * 100) + '%');
+    if (panGrouped < 0.99) bad.push('inside a group at 99% opacity ' + Math.round(panGrouped * 100) + '%');
+    if (panFog < 0.99) bad.push('in the camera fog ' + Math.round(panFog * 100) + '%');
+    if (panBlurred < 0.99) bad.push('moving with Motion Blur (Object) on ' + Math.round(panBlurred * 100) + '%');
+    if (panStencil < 0.99) bad.push('under a Mask-blend layer as big as the photo ' + Math.round(panStencil * 100) + '%');
+    if (!copyOK) bad.push('a Copy Background layer with Posterize copied the backdrop from the wrong place (' + cL.join('/') + ' where the backdrop is red, ' + cR.join('/') + ' where it is green)');
+    if (bad.length) throw new Error('with a camera on, a photo scaled up to four times the frame: ' + bad.join(', ') + ' — the rest is the black background, because the camera cannot see past the project edge. A pan across a picture runs off into empty background, in the preview and the export');
+  });
+
+  /* 690 (HUNT-b 3) — AN OUTLINED LAYER WAS COMPOSITED ONE PASS AT A TIME, SO ITS SHADOW AND ITS OPACITY LANDED ON ITS OWN
+   * OUTLINE. Fixed: a layer that draws in more than one pass is drawn once into a plate and laid down with its opacity, blend
+   * and Shadow (compositor.js drawOutlinedUnit). The same fix covers a blend mode and the caption pill, checked at the end.
+   * What was found: 
+   * drawLayer sets the layer's shadow (applyShadow → ctx.shadow*) and its opacity (ctx.globalAlpha) on the context and then
+   * the text / shape branch draws the outline and the fill as SEPARATE strokes and fills. Canvas applies both per draw call:
+   *   · the fill's shadow is painted ON TOP of the outline drawn just before it — Outline & Shadows' default soft shadow turns
+   *     a text outline muddy dark all the way round (a shape's outline shadow lands inside its fill the same way);
+   *   · at any opacity below 100% the fill is laid over the half-transparent outline, so the outline shows through the
+   *     letters and the outline itself goes two-tone — every Fade In / Fade Out on outlined text or an outlined shape.
+   * CONTROLS: the same shadow on text WITHOUT an outline leaves the fill untouched, and the outer half of a faded outline is
+   * the right colour. */
+  test('690 an outlined title or shape is one picture — its Shadow sits behind the outline, and a fade, a blend or a caption pill never shows through', { item: '690', budgetMs: 60000 }, async function () {
+    const PW = 300, PH = 200, T = 0.5;
+    const sc = (L, bg) => scene([L], { project: { width: PW, height: PH, fps: 30, duration: 3, background: bg } });
+    function render(L, bg) {
+      const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, sc(L, bg), T);
+      return g.getImageData(0, 0, PW, PH).data;
+    }
+    function title(outline, shadow, opacity) {
+      const L = FM.makeLayer('text', { name: 'HB title', text: 'H', x: 150, y: 100 });
+      L.start = 0; L.duration = 3; L.fontSize = 140; L.bold = true; L.color = '#ffffff';
+      L.stroke = Object.assign({}, L.stroke, { enabled: outline, width: 8, color: '#ffcc00' });
+      // exactly what the Outline & Shadows Shadow toggle makes (inspector.js: a new shadow is the Soft kind)
+      if (shadow) L.shadow = { enabled: true, blur: 16, dx: 0, dy: 0, color: '#000000', alpha: 100 };
+      if (opacity != null) L.transform.opacity = opacity;
+      return L;
+    }
+    const BG = '#3050ff';
+    const is = (d, i, r, g, b) => Math.abs(d[i] - r) <= 2 && Math.abs(d[i + 1] - g) <= 2 && Math.abs(d[i + 2] - b) <= 2;
+    const bad = [];
+    // (1) the shadow — CONTROL: no outline, the white fill is untouched by its own shadow
+    const f0 = render(title(false, false), BG), f1 = render(title(false, true), BG);
+    let fill = 0, fillHit = 0;
+    for (let i = 0; i < f0.length; i += 4) if (is(f0, i, 255, 255, 255)) { fill++; if (!is(f1, i, 255, 255, 255)) fillHit++; }
+    if (fill < 500 || fillHit > fill * 0.02) throw new Error('CONTROL FAILED — without an outline the shadow changed ' + fillHit + ' of ' + fill + ' fill pixels, so the measurement cannot tell the shadow behind a layer from one on top of it');
+    const o0 = render(title(true, false), BG), o1 = render(title(true, true), BG), oF = await exportFrameHB(sc(title(true, true), BG), T);
+    let ring = 0, ringHit = 0, fileHit = 0, darkest = 255;
+    for (let i = 0; i < o0.length; i += 4) if (is(o0, i, 255, 204, 0)) { ring++; if (!is(oF, i, 255, 204, 0)) fileHit++; if (!is(o1, i, 255, 204, 0)) { ringHit++; darkest = Math.min(darkest, o1[i]); } }
+    if (ring < 500) throw new Error('setup: the outline drew only ' + ring + ' outline-coloured pixels');
+    // MEASURED on v16.98: 3450 of 3450 outline pixels darkened on the canvas and in the exported frame, the worst to red 75 of 255
+    if (ringHit > ring * 0.02 || fileHit > ring * 0.02) bad.push('turning on the Shadow in Outline and Shadows darkens ' + Math.round(ringHit / ring * 100) + '% of a yellow text outline (down to ' + darkest + ' of 255 red; ' + Math.round(fileHit / ring * 100) + '% in the exported frame) — the shadow is painted OVER the outline instead of behind the letter');
+    // (2) the fade, on a shape: every pixel of the outline should be the same colour at 50%
+    function card(opacity) {
+      const L = FM.makeLayer('shape', { name: 'HB card', shape: 'rect', x: 150, y: 100, shapeW: 120, shapeH: 120, fill: '#ff0000' });
+      L.start = 0; L.duration = 3;
+      L.stroke = Object.assign({}, L.stroke, { enabled: true, width: 10, color: '#0000ff' });
+      L.transform.opacity = opacity;
+      return L;
+    }
+    const s1 = render(card(1), '#ffffff'), s5 = render(card(0.5), '#ffffff');
+    let edge = 0, right = 0, twoTone = 0, worst = null;
+    for (let y = 60; y < 140; y++) for (let x = 0; x < PW; x++) {
+      const i = (y * PW + x) * 4;
+      if (!is(s1, i, 0, 0, 255) || !is(s1, i - 4, 0, 0, 255) || !is(s1, i + 4, 0, 0, 255)) continue;   // solid outline, not its rim
+      edge++;
+      if (is(s5, i, 127, 127, 255) || is(s5, i, 128, 128, 255)) right++;
+      else { twoTone++; if (!worst) worst = s5[i] + ',' + s5[i + 1] + ',' + s5[i + 2]; }
+    }
+    if (edge < 100 || right < 20) throw new Error('CONTROL FAILED — at 50% opacity none of the outline is the plain half-blue it should be (' + right + ' of ' + edge + '), so the fixture is wrong');
+    // MEASURED on v16.98: half the outline (its inner half, over the fill) is 127,63,191
+    if (twoTone > edge * 0.05) bad.push('at 50% opacity ' + Math.round(twoTone / edge * 100) + '% of a blue outline on a red shape comes out purple (' + worst + ') instead of half-blue — the fill shows through the inner half of the outline, so a fade turns every outline two-tone');
+    // (3) the fade, on the title: the letter fill must not show its outline through it
+    const t1 = render(title(true, false, 1), BG), t5 = render(title(true, false, 0.5), BG), tn = render(title(false, false, 0.5), BG);
+    let letter = 0, tinted = 0;
+    for (let i = 0; i < t1.length; i += 4) if (is(t1, i, 255, 255, 255)) {   // the letter's own fill, where the outline does not reach
+      letter++;
+      if (Math.abs(t5[i] - tn[i]) > 6 || Math.abs(t5[i + 1] - tn[i + 1]) > 6 || Math.abs(t5[i + 2] - tn[i + 2]) > 6) tinted++;
+    }
+    if (letter > 500 && tinted > letter * 0.05) bad.push('and a white title with a yellow outline, faded to 50%, has ' + Math.round(tinted / letter * 100) + '% of its letter fill tinted by the outline underneath it');
+    // (4) a blend mode belongs to the layer as a whole too: Multiply over white leaves a blue outline blue all the way across,
+    //     where multiplying the outline pass over the layer's own red fill turned its inner half black
+    const m1 = card(1); m1.blendMode = 'multiply';
+    const sm = render(m1, '#ffffff');
+    let mEdge = 0, mBlack = 0;
+    for (let y = 60; y < 140; y++) for (let x = 0; x < PW; x++) {
+      const i = (y * PW + x) * 4;
+      if (!is(s1, i, 0, 0, 255) || !is(s1, i - 4, 0, 0, 255) || !is(s1, i + 4, 0, 0, 255)) continue;
+      mEdge++; if (!is(sm, i, 0, 0, 255)) mBlack++;
+    }
+    if (mEdge < 100) throw new Error('setup: the multiply card drew only ' + mEdge + ' solid outline pixels');
+    if (mBlack > mEdge * 0.05) bad.push('an outlined shape set to Multiply has ' + Math.round(mBlack / mEdge * 100) + '% of its blue outline gone dark — the outline was multiplied over the fill of the shape itself');
+    // (5) the caption pill: faded to 50%, the words must not show the dark pill through them
+    function pillTitle(pill, opacity) { const L = title(false, false, opacity); L.text = 'HI'; if (pill) L.captionBg = true; return L; }
+    const p1 = render(pillTitle(true, 1), BG), p5 = render(pillTitle(true, 0.5), BG), pn = render(pillTitle(false, 0.5), BG);
+    let word = 0, dimmed = 0;
+    for (let i = 0; i < p1.length; i += 4) if (is(p1, i, 255, 255, 255)) {
+      word++;
+      if (Math.abs(p5[i] - pn[i]) > 6 || Math.abs(p5[i + 1] - pn[i + 1]) > 6 || Math.abs(p5[i + 2] - pn[i + 2]) > 6) dimmed++;
+    }
+    if (word < 500) throw new Error('setup: the caption title drew only ' + word + ' white word pixels');
+    if (dimmed > word * 0.05) bad.push('a caption with its pill, faded to 50%, has ' + Math.round(dimmed / word * 100) + '% of its words darkened by the pill showing through them');
+    if (bad.length) throw new Error(bad.join('; ') + '. In the preview and the export.');
+  });
+
+  /* 690 (HUNT-b 4) — A MASK WIPED OUT THE LAYER'S OUTLINE AND SHADOW. Fixed: both mask passes draw the layer without them, cut,
+   * and then cast the Shadow from — and grow the Outline around — what the mask left (compositor.js drawPenMaskLayer,
+   * drawPenMaskAt). The skeptic's correction stands: the Mask tool itself only edits masks now and Effects → Mask adds a
+   * marker, so the UNMARKED case is every mask drawn before v14.99 and one left behind when an effects preset or a pasted look
+   * replaces the effects — while the Shadow was lost on EVERY mask, marker or not; both are asserted below.
+   * What was found:  A mask with no place in the effect stack (every
+   * mask made by the Mask tool or the Masks card — only Effects → Mask adds an ordering marker, queue 560) is applied
+   * OUTERMOST, after everything the layer draws. The photo's Outline is the alpha-outline effect effectiveFx appends to the
+   * stack, and the Shadow is drawn with the layer itself — so the mask cuts both away with the rest of what lies outside it.
+   * The Outline sits on the photo's own rectangle (outside the window) and the shadow falls outside it, so on a masked
+   * photo both toggles in Outline & Shadows draw NOTHING. The code's own promise for that outline is that it "hugs what you
+   * can actually see". CONTROLS: the SAME photo cut down to the SAME window with Free Crop instead keeps both its Outline and
+   * its Shadow — two ways to cut a photo down, and only one of them deletes the border and the shadow; the SAME mask added
+   * from Effects → Mask gives an outline hugging the window, so an outline can follow a mask; the unmasked photo draws both. */
+  test('690 a masked photo keeps its Outline and Shadow — the mask cuts the photo, not its border and shadow, with or without an Effects marker', { item: '690', budgetMs: 60000 }, async function () {
+    const PW = 300, PH = 200, T = 0.5, ids = [];
+    const tex = offscreen(200, 160), tc = tex.getContext('2d');
+    tc.fillStyle = '#ff0000'; tc.fillRect(0, 0, 200, 160);
+    function photo(mask, marker, crop, noOutline) {
+      const L = FM.makeLayer('image', { name: 'HB masked photo', x: 150, y: 100 });
+      L.start = 0; L.duration = 3;
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 160 }); ids.push(L.id);
+      if (crop) L.crop = { x: 60, y: 40, w: 80, h: 80 };   // Free Crop to the same window: source 60..140 x 40..120 is frame 110..190 x 60..140
+      if (mask) {
+        const m = FM.masks.make('add');
+        m.path = [[110, 60], [190, 60], [190, 140], [110, 140]];   // a window in the middle of the photo
+        L.masks = [m];
+        if (marker) L.effects = [{ type: 'penmask', maskId: m.id }];   // what Effects → Mask adds
+      }
+      L.stroke = { enabled: !noOutline, width: 8, color: '#00ff00' };                             // Outline on
+      L.shadow = { enabled: true, blur: 0, dx: 15, dy: 15, color: '#000000', alpha: 100 };       // Shadow on (the Drop kind)
+      return L;
+    }
+    const sc = L => scene([L], { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#ffffff' } });
+    function count(L, d) {
+      if (!d) {
+        const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(g, sc(L), T);
+        d = g.getImageData(0, 0, PW, PH).data;
+      }
+      let outline = 0, shadow = 0, photoPx = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 1] > 200 && d[i] < 60 && d[i + 2] < 60) outline++;
+        if (d[i] < 60 && d[i + 1] < 60 && d[i + 2] < 60) shadow++;
+        if (d[i] > 200 && d[i + 1] < 60 && d[i + 2] < 60) photoPx++;
+      }
+      return { outline: outline, shadow: shadow, photo: photoPx };
+    }
+    try {
+      const plain = count(photo(false)), crop = count(photo(false, false, true)), tool = count(photo(true, false)), fx = count(photo(true, true));
+      const toolL = photo(true, false), file = count(toolL, await exportFrameHB(sc(toolL), T));   // the masked photo, out of the real export
+      if (plain.outline < 1000 || plain.shadow < 1000) throw new Error('CONTROL FAILED — the unmasked photo draws ' + plain.outline + ' outline and ' + plain.shadow + ' shadow pixels, so the fixture is wrong');
+      if (crop.photo < 6000 || crop.photo > 6800 || crop.outline < 1000 || crop.shadow < 1000) throw new Error('CONTROL FAILED — the photo cropped to the window shows ' + crop.photo + ' photo, ' + crop.outline + ' outline and ' + crop.shadow + ' shadow pixels, so the cropped reference is wrong');
+      if (tool.photo < 6000 || tool.photo > 6800) throw new Error('CONTROL FAILED — the Mask tool mask does not show the same 80 x 80 window of the photo (' + tool.photo + ' photo pixels against ' + crop.photo + ' cropped)');
+      if (fx.outline < 1000) throw new Error('CONTROL FAILED — even the Effects mask draws no outline (' + fx.outline + ' pixels), so an outline on a masked photo is not being measured');
+      const bad = [];
+      // MEASURED on v16.98: masked 0 outline and 0 shadow pixels; the same window cropped 3296 and 2175, the Effects mask's outline 2816
+      if (tool.outline < crop.outline * 0.5 || file.outline < crop.outline * 0.5) bad.push('its Outline draws ' + tool.outline + ' pixels (' + file.outline + ' in the exported frame), where the same window cut with Free Crop draws ' + crop.outline + ' (and the same mask added from Effects ' + fx.outline + ')');
+      if (tool.shadow < crop.shadow * 0.5 || file.shadow < crop.shadow * 0.5) bad.push('its Shadow draws ' + tool.shadow + ' pixels (' + file.shadow + ' in the exported frame), where the cropped window casts ' + crop.shadow);
+      // MEASURED on v16.98 by the skeptic: the same mask added from Effects → Mask keeps its outline but casts 0 shadow pixels
+      if (fx.shadow < crop.shadow * 0.5) bad.push('the same mask added from Effects casts ' + fx.shadow + ' shadow pixels');
+      // …and with the Outline off the Shadow alone still comes through (a different path: no outline to grow around it)
+      const shOnly = count(photo(true, false, false, true)), cropSh = count(photo(false, false, true, true));
+      if (cropSh.shadow < 1000) throw new Error('CONTROL FAILED — the cropped window with only its Shadow on casts ' + cropSh.shadow + ' shadow pixels');
+      if (shOnly.shadow < cropSh.shadow * 0.5) bad.push('with only the Shadow on it casts ' + shOnly.shadow + ' shadow pixels where the cropped window casts ' + cropSh.shadow);
+      if (bad.length) throw new Error('a photo masked to a window, Outline and Shadow both on: ' + bad.join(', and ') + ' — both toggles in Outline and Shadows do nothing once a layer is masked, in the preview and in the exported video');
+    } finally {
+      ids.forEach(id => FM.media.remove(id));
+    }
+  });
+
+  /* ═══ HUNT-d (queue 690, fifth hunt) — A PROJECT ACROSS RELOADS, WINDOWS AND SWITCHES ══════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Four findings in what happens to a project
+   * between the moments he is editing it: the app closed straight after a big import, a second window on the same
+   * project, a rename on Home followed by an Undo, and a song still opening when he switches project. Each test FAILED on
+   * v16.98 because of the bug it names (renamed from HUNT-d to 690 when it went green), and each carries a control that
+   * proves its flow works when nothing goes wrong. The fixes: js/storage.js notes every file on its way to disk and names
+   * a clip that came back without one (reportPending); writeScene makes no write when nothing changed and adopts a rev
+   * that moved without the work moving; FM.history.renameProject carries a Home rename into every snapshot; handleFiles
+   * and Remove vocals add only to the project they were started in (FM.stillIn, js/app.js).
+   * The reload and second-window tests run whole app instances on their own origins through the tier-3 rig (rig921), so
+   * the reload is a real page reload and the second window really shares his storage; the Home tests use a real finger. */
+  function hd5Sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function hd5Say(o) { let t; try { t = JSON.stringify(o); } catch (e) { t = String(o); } return String(t).replace(/"/g, "'"); }
+  async function hd5Until(what, fn, ms) {
+    const end = Date.now() + (ms || 5000);
+    for (;;) { const v = fn(); if (v) return v; if (Date.now() > end) throw new Error('timed out waiting for ' + what); await hd5Sleep(40); }
+  }
+  // A real finger on `el`. atPhoneWidth(…, 360) + onScreen924 put the frame where the driver's touches land.
+  async function hd5Tap(el, what) {
+    if (!el) throw new Error('setup: nothing to tap for ' + what);
+    const r = el.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+    if (!(r.width > 0) || x < 0 || y < 0 || x > 350 || y > 740) throw new Error('setup: ' + what + ' is at ' + x + ',' + y + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
+    await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+  }
+  function hd5Card(pid) { return document.querySelector('#home-screen .hm-card[data-pid="' + pid + '"]'); }
+  async function hd5Cleanup(made, orig, wasOpen) {
+    try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    try { if (wasOpen) FM.home.open(); else FM.home.close(); } catch (e) {}
+    await hd5Sleep(200);
+  }
+
+  test('690 a big clip whose file never finished saving before the app closed is named when the project reopens — never a silent empty clip', { item: '690', budgetMs: 180000 }, async function () {
+    /* addMediaLayer writes the project document at once (the clip is ON the timeline in storage) and only then starts
+       writing the clip's FILE — for a phone video that takes seconds. If the app is closed in those seconds (iOS throws a
+       PWA out of memory after a big import, or he swipes it away) the file never lands. Reopened, the clip is still on
+       the timeline, draws nothing, plays nothing, and nothing tells him it has to be added again (its Add → Media tile
+       says "no longer stored" only once he taps it). Real page reload of a whole app on its own origin, at phone size. */
+    const R = rig921();
+    const tag = 'hd5k';
+    const src = 'http://hd5k.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag;
+    try {
+      await R.bootSrc(tag, src, 390, 844);
+      await R.rpc(tag, 'setScene', { names: ['Title'], name: 'Holiday' });
+      /* CONTROL: the same import, given time to finish saving, comes back from a reload with its file */
+      const c = await R.rpc(tag, 'addMedia', { kind: 'video', name: 'IMG_4409.MOV' });
+      await R.sleep(2500);
+      await R.reboot(tag);
+      const rc = await R.rpc(tag, 'record', { id: c.id });
+      const sc = await R.rpc(tag, 'state');
+      if (sc.layers.indexOf(c.id) < 0 || !rc.disk) throw new Error('CONTROL: a clip left to finish saving did not come back from a reload with its file (' + hd5Say({ layers: sc.names, record: rc }) + ') — this fixture cannot see the bug');
+      /* the big one, and the app is closed while its file is still being written */
+      const was = R.upCount(tag);
+      const big = await R.rpc(tag, 'importThenClose', { mb: 96, name: 'IMG_4410.MOV' });
+      if (!big || !big.id) throw new Error('setup: the big clip was not imported (' + hd5Say(big) + ')');
+      await R.waitUp(tag, was + 1);
+      await R.rpc(tag, 'ready');
+      /* everything the app says in the first seconds back */
+      const said = [];
+      for (let i = 0; i < 30; i++) {
+        const d = await R.rpc(tag, 'dom', { sel: '#toast' });
+        if (d && d.text && d.w > 0 && !/\bhidden\b/.test(d.cls || '') && said.indexOf(d.text) < 0) said.push(d.text);
+        await R.sleep(200);
+      }
+      const st = await R.rpc(tag, 'state');
+      const rec = await R.rpc(tag, 'record', { id: big.id });
+      const onTimeline = st.layers.indexOf(big.id) >= 0;
+      const told = said.some(function (t) { return t.indexOf(big.name) >= 0 || /not (been )?saved|did ?n.t (finish|save)|add it again|import it again|re-?import/i.test(t); });
+      if (onTimeline && !rec.disk && !told) {
+        throw new Error('he imported a big clip (' + big.name + ') and the app was closed while it was still saving — reopened, ' + big.name + ' is on his timeline but its file was never stored (' +
+          hd5Say(rec) + '), so it is an empty clip that draws and plays nothing, and nothing told him to add it again (the app said: ' + (said.length ? hd5Say(said) : 'nothing') + ')');
+      }
+    } finally { R.drop(tag); }
+  });
+
+  test('690 opening the app in a second window only to look never stops the first window saving — what he adds there afterwards survives a reload', { item: '690', budgetMs: 180000 }, async function () {
+    /* The stale-tab guard (#306) stops a window writing over a NEWER copy saved elsewhere. But a second window that only
+       OPENS the project writes it too — its boot autosave, and its flush when it is closed — with a higher rev and not
+       one change. The first window then reads itself as stale and refuses every save after, while he carries on working
+       in it; the only sign is one toast claiming newer changes were saved elsewhere, when there were none. On his PC:
+       FreeMotion open in a tab, opened again from the installed app or a bookmark, that one closed — and everything he
+       does next in the first window is lost at the next reload. Two whole app instances sharing one origin's storage. */
+    const R = rig921();
+    const tag = 'hd5w';
+    const at = function (t, wipe) { return 'http://hd5w.localhost:' + location.port + '/index.html?fmtest=collab' + (wipe ? '&fmwipe=1' : '') + '&tag=' + t; };
+    const names = async function (t) { return (await R.rpc(t, 'state')).names || []; };
+    try {
+      await R.bootSrc(tag, at(tag, true), 900, 760);
+      await R.rpc(tag, 'setScene', { names: ['Title'], name: 'Two windows' });
+      /* CONTROL: with one window, what he adds survives a reload */
+      await R.rpc(tag, 'addLayer', { name: 'Before' });
+      await R.sleep(1500);
+      await R.reboot(tag);
+      const n0 = await names(tag);
+      if (n0.indexOf('Before') < 0) throw new Error('CONTROL: with one window open, a layer he added did not survive a reload (' + hd5Say(n0) + ') — this fixture cannot see the bug');
+      await R.sleep(2500);   // the first window has been open a while — its own opening save is long done, as it is on his PC
+      /* a second window opens the app on the same device — his project — and is closed again without a single edit */
+      await R.bootSrc(tag + 'b', at(tag + 'b', false), 900, 760);
+      await R.sleep(2000);
+      const nb = await names(tag + 'b');
+      if (nb.indexOf('Before') < 0) throw new Error('setup: the second window did not open his project (' + hd5Say(nb) + ')');
+      R.drop(tag + 'b');
+      await R.sleep(600);
+      /* back in the first window he carries on */
+      await R.rpc(tag, 'addLayer', { name: 'After' });
+      await R.sleep(1500);
+      const toast = await R.rpc(tag, 'dom', { sel: '#toast' });
+      await R.rpc(tag, 'flush');
+      await R.reboot(tag);
+      const n1 = await names(tag);
+      if (n1.indexOf('After') < 0) {
+        throw new Error('he opened FreeMotion in a second window only to look at his project and closed it again, then added a layer (After) in the first window — after a reload it is gone: the project has ' +
+          hd5Say(n1) + '. The first window stopped saving the moment the other one opened, although nothing was changed there' + (toast && toast.text ? ' (the one sign: ' + hd5Say(toast.text) + ')' : ''));
+      }
+    } finally { R.drop(tag); R.drop(tag + 'b'); }
+  });
+
+  test('690 a project renamed on Home keeps its new name when he presses Undo inside it', { item: '690', budgetMs: 120000 }, async function () {
+    /* ⋯ → Rename… on Home writes the new name into the open project's scene without a history step, and going back into
+       the SAME project keeps its undo stack — whose every snapshot still carries the OLD name. So the first Undo he
+       presses inside (meaning to take back a move) restores the old name with it, the next save writes it to the card,
+       and Redo cannot bring the new one back. Real finger at 360: ⋯, Rename…, the card, the Undo button. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await hd5Sleep(100);
+      const a = await FM.projects.create({ name: 'HUNT-d Beach', width: 320, height: 240 }); made.push(a);
+      const L = FM.makeLayer('shape', { name: 'HUNT-d sun', shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 60, fill: '#f4a261' });
+      L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+      L.transform.x = 60; FM.refreshAll(); FM.history.commit();   // the move he will take back
+      if (!FM.storage.flushSync()) throw new Error('setup: HUNT-d Beach could not be saved');
+      let seen = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.home.open(); await hd5Sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await hd5Sleep(150);
+          const card = await hd5Until('the HUNT-d Beach card', function () { return hd5Card(a); }, 3000);
+          await hd5Tap(card.querySelector('.hm-card-more'), 'the ⋯ on HUNT-d Beach');
+          const item = await hd5Until('Rename… in the ⋯ menu', function () {
+            const m = document.getElementById('ctx-menu');
+            if (!m || m.classList.contains('hidden')) return null;
+            return Array.prototype.filter.call(m.querySelectorAll('.ctx-item'), function (x) { return /^Rename/.test(x.textContent.trim()); })[0] || null;
+          }, 3000);
+          await hd5Sleep(500);   // the menu hinges open — tap it once it has landed
+          await hd5Tap(item, 'Rename…');
+          const inp = await hd5Until('the Rename box', function () { const i = document.querySelector('.fm-ask-input:not(.hidden)'); return i && i.getBoundingClientRect().width > 0 ? i : null; }, 3000);
+          inp.value = 'HUNT-d Beach trip'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+          await hd5Sleep(150);
+          await hd5Tap(document.querySelector('.fm-ask-ok'), 'Rename (the dialog button)');
+          await hd5Until('the card to read the new name', function () { const c = hd5Card(a), n = c && c.querySelector('.hm-name'); return n && n.textContent === 'HUNT-d Beach trip'; }, 3000);
+          await hd5Sleep(300);
+          await hd5Tap(hd5Card(a).querySelector('.hm-name'), 'the HUNT-d Beach trip card');
+          await hd5Until('the project to be open again', function () { return FM.projects.currentId() === a && !FM.home.isOpen(); }, 6000);
+          await hd5Sleep(700);
+          if (FM.scene.project.name !== 'HUNT-d Beach trip') throw new Error('setup: back inside, the project is called ' + FM.scene.project.name + ', not the name he just gave it');
+          await hd5Tap(document.getElementById('btn-undo'), 'the Undo button');
+          await hd5Sleep(1000);
+          const back = FM.layerById(FM.scene, L.id);
+          if (!back || Math.round(back.transform.x) !== 160) throw new Error('CONTROL: the Undo did not take back his move (the sun is at ' + (back ? Math.round(back.transform.x) : 'nowhere') + ', not 160) — the tap never reached Undo');
+          FM.storage.flushSync();
+          FM.home.open(); await hd5Sleep(900);
+          const c2 = hd5Card(a), n2 = c2 && c2.querySelector('.hm-name');
+          let doc = null; try { doc = JSON.parse(localStorage.getItem('fm.proj.' + a)); } catch (e) {}
+          seen = { inside: FM.scene.project.name, card: n2 ? n2.textContent : null, list: (FM.projects.list().filter(function (p) { return p.id === a; })[0] || {}).name, saved: doc && doc.project && doc.project.name };
+        });
+      }, 360);
+      if (seen.inside !== 'HUNT-d Beach trip' || seen.card !== 'HUNT-d Beach trip' || seen.saved !== 'HUNT-d Beach trip') {
+        throw new Error('he renamed HUNT-d Beach to HUNT-d Beach trip on Home, went back into it and pressed Undo to take back a move — the move went and so did the new name: the project is called ' +
+          seen.inside + ' again, the Home card reads ' + seen.card + ' and the saved project says ' + seen.saved + '. Redo cannot bring the new name back');
+      }
+    } finally {
+      await hd5Cleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 a song still opening when he goes Home and opens another project never lands in that other project — he is told it was not added', { item: '690', budgetMs: 120000 }, async function () {
+    /* handleFiles (js/app.js) awaits the file's loader and then calls addMediaLayer on whatever project is open BY THEN.
+       A song is decoded end to end for its true length before it can be added (js/media.js), and a phone takes seconds
+       over a long one — seconds in which he can go back Home and open another project. The song then lands in THAT
+       project, which he never added it to, and the one he picked it in does not get it. Media library tiles already
+       refuse this (915.5B: "a reused clip never lands in a project he did not tap in"); the picker does not. The loader
+       is held open here as the phone's slow read; the picker is the app's own file input; Home and the card are real
+       taps at 360. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], said = [];
+    const realLoad = FM.loadVideoFile, realToast = FM.toast;
+    let release = null;
+    const held = new Promise(function (r) { release = r; });
+    let entered = false;
+    const songIn = function (layers) { return (layers || []).filter(function (l) { return l && /^HUNT-d song/.test(l.name || '') && l.type !== 'text'; }).length; };
+    const docLayers = function (pid) { try { return (JSON.parse(localStorage.getItem('fm.proj.' + pid)) || {}).layers || []; } catch (e) { return []; } };
+    try {
+      if (wasOpen) FM.home.close();
+      await hd5Sleep(100);
+      const other = await FM.projects.create({ name: 'HUNT-d other project', width: 320, height: 240 }); made.push(other);
+      const mine = await FM.projects.create({ name: 'HUNT-d song goes here', width: 320, height: 240 }); made.push(mine);
+      if (FM.projects.currentId() !== mine) throw new Error('setup: HUNT-d song goes here is not the open project');
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      FM.loadVideoFile = async function () { entered = true; await held; return realLoad.apply(this, arguments); };
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* CONTROL: the same picker, with nothing held, adds the song to the open project */
+          FM.loadVideoFile = realLoad;
+          const fi = document.getElementById('file-input');
+          if (!fi) throw new Error('setup: there is no #file-input, the picker the Add sheet opens');
+          let dt = new DataTransfer(); dt.items.add(h3aWav(2, 330, 'HUNT-d song check.wav')); fi.files = dt.files;
+          fi.dispatchEvent(new Event('change'));
+          await hd5Until('the control song to land', function () { return songIn(FM.scene.layers) ? true : null; }, 8000);
+          FM.deleteLayer(FM.scene.layers.filter(function (l) { return /^HUNT-d song check/.test(l.name || ''); })[0].id); FM.history.commit();
+          await hd5Sleep(300);
+          /* he picks his song… */
+          FM.loadVideoFile = async function () { entered = true; await held; return realLoad.apply(this, arguments); };
+          dt = new DataTransfer(); dt.items.add(h3aWav(4, 440, 'HUNT-d song.wav')); fi.files = dt.files;
+          fi.dispatchEvent(new Event('change'));
+          await hd5Until('the song to start opening', function () { return entered; }, 5000);
+          /* …and while it is still opening, goes back Home and opens his other project */
+          FM.selectLayer(null); await hd5Sleep(300);
+          const backBtn = document.getElementById('m-back');
+          await hd5Tap(backBtn, 'the back arrow');
+          await hd5Until('Home to open', function () { return FM.home.isOpen(); }, 4000);
+          await hd5Sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await hd5Sleep(150);
+          const card = await hd5Until('the HUNT-d other project card', function () { return hd5Card(other); }, 3000);
+          await hd5Tap(card.querySelector('.hm-name'), 'the HUNT-d other project card');
+          await hd5Until('the other project to open', function () { return FM.projects.currentId() === other && !FM.home.isOpen(); }, 6000);
+          await hd5Sleep(400);
+          /* the phone finishes reading the song */
+          release();
+          await hd5Sleep(2000);
+        });
+      }, 360);
+      FM.loadVideoFile = realLoad; FM.toast = realToast;
+      FM.storage.flushSync();
+      const inOther = songIn(FM.scene.layers) + songIn(docLayers(other)) > 0;
+      const inMine = songIn(docLayers(mine)) > 0;
+      if (inOther) {
+        throw new Error('he picked a song in HUNT-d song goes here and, while it was still opening, went back Home and opened HUNT-d other project — the song landed in HUNT-d other project, a project he never added it to' +
+          (inMine ? '' : ', and HUNT-d song goes here, where he picked it, does not have it'));
+      }
+      if (!inMine && !said.some(function (m) { return /not added|was not added|did ?n.t add/i.test(m); })) {
+        throw new Error('the song he picked in HUNT-d song goes here went nowhere and nothing told him (toasts: ' + (said.join(' | ').replace(/"/g, "'") || 'none') + ')');
+      }
+    } finally {
+      FM.loadVideoFile = realLoad; FM.toast = realToast;
+      if (release) release();
+      await hd5Cleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* 690 (HUNT-d, the second window's two halves) — the test above runs two whole windows and goes green if EITHER half of
+     the fix is in place, so each half is pinned here on its own, in this frame: a save that changes nothing makes no
+     write and moves no rev (so a window that only looked leaves the number where it was), and a rev that DID move
+     without the work moving (a window that clicked a layer and closed, or a build before this one) is adopted, and this
+     window keeps saving. The #306 test still proves that newer WORK written elsewhere stops this window cold. */
+  test('690 a save that changes nothing moves no rev, and a rev moved elsewhere without the work moving never makes this window stale', { item: '690' }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], bad = [], realToast = FM.toast, said = [];
+    try {
+      if (wasOpen) FM.home.close();
+      const a = await FM.projects.create({ name: 'HUNT-d two windows', width: 320, height: 240 }); made.push(a);
+      const key = 'fm.proj.' + a;
+      const mk = function (name) { return Object.assign(FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 20, shapeH: 20, fill: '#0a0' }), { start: 0, duration: 2, name: name }); };
+      FM.scene.layers.push(mk('HUNT-d Before')); FM.selectLayer(FM.scene.layers[FM.scene.layers.length - 1].id);
+      if (!FM.storage.flushSync()) throw new Error('setup: the first save of HUNT-d two windows was refused');
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      /* half 1: nothing changed → nothing written */
+      const r0 = FM._sceneRevState().disk;
+      FM.storage.flushSync(); FM.storage.flushSync(); await FM.storage.save();
+      const r1 = FM._sceneRevState().disk;
+      if (r1 !== r0) bad.push('three saves with nothing changed moved the rev on disk from ' + r0 + ' to ' + r1 + ' — every window that only opens the project and closes it again does the same, and the first window then reads that as newer work');
+      /* half 2: another window wrote the SAME work under a higher rev (its own selection) */
+      const d = JSON.parse(localStorage.getItem(key));
+      d.rev = r1 + 3; d.selectedId = null; d.selectedIds = [];
+      localStorage.setItem(key, JSON.stringify(d));
+      FM.scene.layers.push(mk('HUNT-d After'));
+      const ok = FM.storage.flushSync();
+      const disk = localStorage.getItem(key) || '';
+      if (!ok || disk.indexOf('HUNT-d After') < 0 || FM._sceneRevState().stale) {
+        bad.push('another window rewrote this project with not one change to its layers, only a higher rev — and this window then refused to save what he added (saved: ' + ok + ', stale: ' + FM._sceneRevState().stale + ', on disk: ' + (disk.indexOf('HUNT-d After') >= 0 ? 'yes' : 'no') + ')');
+      }
+      if (said.some(function (m) { return /older copy of the project/.test(m); })) bad.push('and it told him newer changes were saved elsewhere, when there were none');
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally {
+      FM.toast = realToast;
+      await hd5Cleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* 690 (HUNT-d, the song test's sibling) — Remove vocals decodes the whole track and renders it offline before it adds the
+     instrumental, which takes seconds on a long song. Its twin used to land in whatever project was open by then, pointing
+     at a source clip that is not in it. The decode is held here as the phone's slow one; the switch is the app's own. */
+  test('690 a vocal removal still running when he opens another project never adds its track there — he is told it was not added', { item: '690' }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], said = [];
+    const realDecode = FM.decodeAudio, realLoad = FM.loadVideoFile, realToast = FM.toast;
+    let release = null;
+    const twins = function (layers) { return (layers || []).filter(function (l) { return l && l.karaokeOf; }).length; };
+    const fakeRec = function () { return { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 0.1 }; };   // no file: nothing reaches the library or the store
+    const song = function () {
+      const L = FM.makeLayer('video', { name: 'HUNT-d stereo song' }); L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 4, file: new File([new Uint8Array(8)], 'HUNT-d stereo song.wav', { type: 'audio/wav' }) });
+      FM.refreshAll(); FM.history.commit();
+      return L;
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      const other = await FM.projects.create({ name: 'HUNT-d no vocals elsewhere', width: 320, height: 240 }); made.push(other);
+      const mine = await FM.projects.create({ name: 'HUNT-d no vocals here', width: 320, height: 240 }); made.push(mine);
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      FM.loadVideoFile = async function () { return fakeRec(); };
+      FM.decodeAudio = async function () { const ac = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 4410, 44100); return ac.createBuffer(2, 4410, 44100); };
+      /* CONTROL: left alone, the same removal adds its instrumental to the project he pressed it in */
+      const c = song();
+      await FM.toggleKaraoke(c);
+      if (twins(FM.scene.layers) !== 1) throw new Error('CONTROL: with nothing held and no switch, Remove vocals did not add its track here (' + twins(FM.scene.layers) + ' twins, toasts: ' + said.join(' | ').replace(/"/g, "'") + ') — this fixture cannot see the bug');
+      /* now the slow one, and he opens his other project while it runs */
+      const held = new Promise(function (r) { release = r; });
+      FM.decodeAudio = async function () { await held; const ac = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 4410, 44100); return ac.createBuffer(2, 4410, 44100); };
+      const L = song();
+      said.length = 0;
+      const job = FM.toggleKaraoke(L);
+      await hd5Sleep(50);
+      await FM.projects.open(other, { confirmed: true });
+      if (FM.projects.currentId() !== other) throw new Error('setup: HUNT-d no vocals elsewhere did not open');
+      release();
+      await job;
+      await hd5Sleep(100);
+      FM.storage.flushSync();
+      const there = twins(FM.scene.layers);
+      if (there) throw new Error('he pressed Remove vocals in HUNT-d no vocals here and opened HUNT-d no vocals elsewhere while it ran — its instrumental landed in HUNT-d no vocals elsewhere (' + there + ' karaoke track), pointing at a song that is not in that project');
+      if (!said.some(function (m) { return /not added/i.test(m); })) throw new Error('the instrumental went nowhere and nothing told him (toasts: ' + (said.join(' | ').replace(/"/g, "'") || 'none') + ')');
+    } finally {
+      FM.decodeAudio = realDecode; FM.loadVideoFile = realLoad; FM.toast = realToast;
+      if (release) release();
+      await hd5Cleanup(made, orig, wasOpen);
+    }
+
+  });
+
+
+  /* ═══ HUNT-5 REVIEW — the storage fixes, reviewed before they shipped (queue 690) ═════════════════════════════════════ */
+  test('690 renaming the open project on Home publishes the name at a new rev, and this window stays level with it', { item: '690', budgetMs: 30000 }, async function () {
+    /* Hunt 5 made a flush that would write the same bytes write nothing. A rename rewrote the doc in place at the OLD rev,
+       so the bump that used to publish it never came: a second window on the project then wrote the old name back, and
+       this one went stale. Measured here on the rev: the rename must advance it, and this window must adopt it. */
+    const id = FM.projects.currentId();
+    if (!id) throw new Error('setup: no project open');
+    const key = 'fm.proj.' + id;
+    FM.storage.flushSync();
+    const raw0 = localStorage.getItem(key), name0 = FM.scene.project.name;
+    const rev0 = +(/^\{"rev":(\d+)/.exec(raw0 || '') || [0, 0])[1];
+    const st0 = FM._sceneRevState();
+    if (st0.stale) throw new Error('setup: this window is already stale');
+    if (st0.lastRev !== rev0) throw new Error('setup: this window is not level with the disk (' + st0.lastRev + ' vs ' + rev0 + ')');
+    try {
+      FM.projects.rename(id, 'HUNT5R renamed');
+      const raw1 = localStorage.getItem(key);
+      const rev1 = +(/^\{"rev":(\d+)/.exec(raw1 || '') || [0, 0])[1];
+      if (!/HUNT5R renamed/.test(raw1)) throw new Error('control: the rename did not reach the stored document');
+      if (rev1 !== rev0 + 1) throw new Error('the rename rewrote the project at rev ' + rev1 + ' where it was ' + rev0 + ' — a second window on it can then write the OLD name back over it and this one goes stale');
+      const st1 = FM._sceneRevState();
+      if (st1.lastRev !== rev1 || st1.stale) throw new Error('this window did not adopt its own rename (lastRev ' + st1.lastRev + ', disk ' + rev1 + ', stale ' + st1.stale + ') — its next save is refused as if another window had moved on');
+      FM.storage.flushSync();
+      if (FM._sceneRevState().stale) throw new Error('flushing right after its own rename marked this window stale');
+    } finally {
+      FM.projects.rename(id, name0); FM.storage.flushSync();
+    }
+  });
+
+  test('690 a window that is behind leaves another window s clip-not-landed note alone', { item: '690', budgetMs: 30000 }, async function () {
+    /* The note says "this clip's file never finished saving". Another window may have imported the clip — the doc on disk
+       lists it — while this window's scene has never heard of it. Pruning by this window's layers deleted the note, and the
+       clip came back empty and silent. A note goes only when neither this window nor the stored doc has the layer. */
+    const id = FM.projects.currentId();
+    if (!id) throw new Error('setup: no project open');
+    const key = 'fm.proj.' + id, PK = 'fm.mediaPending';
+    FM.storage.flushSync();
+    const raw0 = localStorage.getItem(key), pend0 = localStorage.getItem(PK);
+    try {
+      const d = JSON.parse(raw0);
+      const ghost = 'Lhunt5ghost';
+      d.layers = (d.layers || []).concat([{ id: ghost, type: 'video', name: 'Big clip from the other window', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }]);
+      localStorage.setItem(key, JSON.stringify(d));            // the other window's import, at the same rev
+      localStorage.setItem(PK, JSON.stringify({ [ghost]: { p: id, n: 'Big clip from the other window', r: 1 }, Lhunt5gone: { p: id, n: 'gone', r: 1 } }));
+      if (FM.scene.layers.some(l => l.id === ghost)) throw new Error('setup: this window already has the ghost layer');
+      await FM.storage.hydrateSceneMedia({ onlyMissing: true });
+      const pend = JSON.parse(localStorage.getItem(PK) || '{}');
+      if (pend.Lhunt5gone) throw new Error('control: a note for a layer that is in NEITHER this window nor the stored doc was kept — the tidy-up did not run, so this proves nothing');
+      if (!pend[ghost]) throw new Error('this window, behind the stored doc, deleted the other window s note for a clip whose file is still landing — killed mid-save, that clip comes back empty and nothing says so');
+    } finally {
+      localStorage.setItem(key, raw0);
+      if (pend0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, pend0);
+    }
+  });
+
 
 })();
