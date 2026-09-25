@@ -562,7 +562,21 @@ window.FM = window.FM || {};
         try { m.audioBuffer = await FM.decodeAudio(m.file); }
         catch (e) { m.audioBuffer = null; dropped.push(nameOf(layer) + ' (its audio would not decode: ' + (e && e.message ? e.message : e) + ')'); continue; }
       }
-      if (!m.audioBuffer) { dropped.push(nameOf(layer) + ' (its audio would not decode)'); continue; }
+      if (!m.audioBuffer) {
+        /* ⚠️ NO SOUND TRACK IS NOT A LOST SOUND TRACK (queue 690). decodeAudio answers null both for a
+         * track that will not decode and for a clip that never had one — an iPhone time-lapse, a screen
+         * recording with the sound off — and this filed the second as the first. With nothing else making
+         * sound that became 'all-unreadable', so every export of a time-lapse ended on "NO SOUND — none of
+         * the audio clips could be read" in the warning colour, on a file that was exactly right; with a
+         * song under it, "1 clip had no usable audio". After four real silent-export reports (#215) a
+         * false alarm sends him hunting a fifth. So the FILE is asked whether it lists a sound track at
+         * all, and only a definite no is skipped in silence — the card then reads "no soundtrack", the
+         * words it already has for a project with no audio in it. Anything the container cannot answer
+         * is still reported exactly as before. Asked on every export rather than cached on the record: it
+         * reads a few kilobytes, and a cache would have to know when the record's file is swapped. */
+        if (FM.soundTrackInFile && (await FM.soundTrackInFile(m.file)) === false) continue;
+        dropped.push(nameOf(layer) + ' (its audio would not decode)'); continue;
+      }
       const geom = clipGeom(m.audioBuffer, layer);
       const clipEnd = layer.start + Math.min(layer.duration, geom.lenSamples / geom.sr);   // = the old buf.duration, without building buf
       const oStart = Math.max(layer.start, from), oEnd = Math.min(clipEnd, to);   // overlap with [from,to]
