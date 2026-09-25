@@ -1072,6 +1072,45 @@ window.FM = window.FM || {};
     return strip;
   }
 
+  /* WHERE AN EFFECT LIVES ON ITS LAYER (queue 690, sixth hunt) — the stacks a row can belong to, as a path the curve
+     editor can follow again once undo has replaced every object: ['fx', i] top level, ['fx', i, j] inside the filter at
+     i, ['cue', k, j] on caption cue k (any cue, not just the one under the playhead — the playhead moves while the
+     editor is open), ['afx', i] an audio effect. null = not on this layer. */
+  function fxPathOf(layer, fx) {
+    if (!layer || !fx) return null;
+    const afx = (layer.audioFx || []).indexOf(fx);
+    if (afx >= 0) return ['afx', afx];
+    let at = null;
+    if (FM.eachFx) FM.eachFx(layer, (f, path) => { if (!at && f === fx) at = ['fx'].concat(path); });
+    if (at) return at;
+    (Array.isArray(layer.captions) ? layer.captions : []).forEach((c, k) => {
+      const j = (c && Array.isArray(c.effects)) ? c.effects.indexOf(fx) : -1;
+      if (!at && j >= 0) at = ['cue', k, j];
+    });
+    return at;
+  }
+  function fxAtPath(layer, at) {
+    if (!layer || !Array.isArray(at)) return null;
+    if (at[0] === 'afx') return (layer.audioFx || [])[at[1]] || null;
+    if (at[0] === 'cue') { const c = (layer.captions || [])[at[1]]; return (c && Array.isArray(c.effects) && c.effects[at[2]]) || null; }
+    const top = (layer.effects || [])[at[1]];
+    if (at.length < 3) return top || null;
+    return (top && FM.isFxContainer(top) && top.effects[at[2]]) || null;
+  }
+  /* Which effect the open curve editor is shaping: the one whose button he tapped while it is still on this layer,
+     else whatever now stands where it stood, if it is the same kind of effect (undo/redo swap in new objects), else
+     none — the editor closes rather than shape something he did not pick. `audio` says which tab is asking: the two
+     stacks share FM._fxEasing, and an audio effect must not open on the visual tab or the other way round. */
+  function fxEasingTarget(layer, info, audio) {
+    if (!layer || !info) return null;
+    if (!info.fx) return ((audio ? layer.audioFx : layer.effects) || [])[info.fxIdx] || null;   // the old shape, before queue 690
+    let fx = fxPathOf(layer, info.fx) ? info.fx : null;
+    if (!fx && info.at) { const f = fxAtPath(layer, info.at); if (f && f.type === info.fx.type) fx = f; }
+    if (!fx) return null;
+    const isAudio = (layer.audioFx || []).indexOf(fx) >= 0;
+    return isAudio === !!audio ? fx : null;
+  }
+
   // AM signature control: the ruler scrubber + an editable value box.
   function fxScrubber(fx, p, layer, fxIdx) {
     const row = el('div', 'fx-scrub-row');
@@ -1097,7 +1136,12 @@ window.FM = window.FM || {};
     if (p.keyframable && fxIdx != null) {
       const eb = el('button', 'fx-ease');
       eb.innerHTML = MT_ICONS.ease; eb.title = 'Easing curve — ' + p.label;
-      eb.addEventListener('click', () => { FM._fxEasing = { fxIdx: fxIdx, key: p.key, label: p.label }; FM.inspector.refresh(); });
+      /* THE EFFECT ITSELF, NOT ITS INDEX (queue 690, sixth hunt). fxIdx is the row's position in ITS OWN list — a
+         filter's children, a caption cue's stack — and the editor used to look it up in the LAYER's list. So the curve
+         button on the Blur inside his filter opened the editor on the Glow at the top of his stack, Ease In changed the
+         Glow's animation, and the Blur he was shaping stayed linear. `at` is where it was, so an undo (which puts new
+         objects in) can still find it — see fxEasingTarget. */
+      eb.addEventListener('click', () => { FM._fxEasing = { fx: fx, at: fxPathOf(layer, fx), fxIdx: fxIdx, key: p.key, label: p.label }; FM.inspector.refresh(); });
       row.appendChild(eb);
     }
     // The NAME selects the row (AM): tap it and this parameter's keyframes become the live ones on
@@ -2543,12 +2587,32 @@ window.FM = window.FM || {};
      measured until the settings have been still for NOOP_SETTLE, and the row is only redrawn when the
      ANSWER changes — otherwise a refresh here would schedule another check and loop forever. */
   const NOOP_SETTLE = 400;
+  /* ONE MOMENT OF THE CLIP PER SLICE (queue 690, sixth hunt). The verdict is now taken across the clip — the playhead
+     and points spread through it (fx-thumbs noopTimes) — because at the playhead alone every moving effect is at rest
+     on its clip's first frame, and a Spin he had just added was told it changed nothing. A dead effect needs every
+     moment, and all of them at once measured 208 ms on the main thread: a freeze, from the man who has reported lag
+     for weeks. So the timer takes one moment per slice, the same cost the single check always had, and lets the page
+     breathe between them; a working effect usually stops the walk at the first or second. */
+  const NOOP_SLICE = 16;
   let noopTimer = 0;
+  /* The effect whose open row is saying "changes nothing" right now, so the playhead can ask again (syncPlayhead). */
+  let noopShown = null;
   function scheduleNoopCheck(layer, fx, idx) {
     if (!FM.fxThumbs || !FM.fxThumbs.effectDoesNothing) return;
+    /* ONLY THE LAYER'S OWN LIST CAN BE MEASURED (queue 690, sixth hunt). The probe switches off `layer.effects[idx]`,
+       and a row inside a filter or on a caption cue passes its index in ITS OWN list — so it would have measured and
+       badged whichever top-level effect sits at that position. Those rows were never answered in practice (the key
+       check in the tick below bailed on the mismatch); now they are not asked. */
+    if (!layer || !layer.effects || layer.effects[idx] !== fx) return;
     const key = layer.id + '#' + idx + '#' + JSON.stringify(fx, FM.jsonReplacer);
-    if (fx._noopKey === key) return;                      // already measured for exactly these settings
+    /* Already measured for exactly these settings — unless the answer was "nothing" and the playhead has moved since.
+       A dead verdict is a claim about the whole clip that the samples can still have missed (a Blink between flashes),
+       so the moment he parks where the effect visibly acts, that moment is asked too and the line goes. */
+    const sameSettings = fx._noopKey === key;
+    if (sameSettings && (fx._noop !== true || fx._noopAt === FM.time)) return;
+    if (sameSettings) noopShown = { layerId: layer.id, idx: idx, fx: fx };
     clearTimeout(noopTimer);
+    let times = null, at = 0, askedAt = 0;
     noopTimer = setTimeout(function tick() {
       /* NEVER WHILE HE IS PLAYING OR EXPORTING (queue 477, found by hunting my own work at v11.81).
          This check is two FULL-RESOLUTION renders. The timer fires 400ms after a settings change, so
@@ -2562,9 +2626,16 @@ window.FM = window.FM || {};
       if (!lfx) return;
       const k2 = live.id + '#' + idx + '#' + JSON.stringify(lfx, FM.jsonReplacer);
       if (k2 !== key) return;                             // it moved again while we waited — let the next one win
+      /* Settings already judged dead: only the playhead is new, so only its moment is asked. Otherwise every moment. */
+      if (!times) { askedAt = FM.time; times = (sameSettings && lfx._noop === true) ? [askedAt] : (FM.fxThumbs.noopTimes ? FM.fxThumbs.noopTimes(live) : [askedAt]); }
+      const v = FM.fxThumbs.effectDoesNothing(live, idx, times[at++]);
+      if (v === true && at < times.length) { noopTimer = setTimeout(tick, NOOP_SLICE); return; }   // unchanged so far — the next moment, next slice
       const was = lfx._noop;
-      lfx._noop = FM.fxThumbs.effectDoesNothing(live, idx);
+      lfx._noop = v;
       lfx._noopKey = key;
+      lfx._noopAt = askedAt;
+      if (lfx._noop === true) noopShown = { layerId: live.id, idx: idx, fx: lfx };
+      else if (noopShown && noopShown.fx === lfx) noopShown = null;
       if (lfx._noop === was) return;
       /* PAINT IT IN PLACE — never `FM.inspector.refresh()` from here. A refresh REBUILDS the row, and
          this timer fires 400ms after a change, which lands squarely inside a press-and-hold: rebuilding
@@ -2587,6 +2658,20 @@ window.FM = window.FM || {};
         }
       } else if (existing) existing.remove();
     }, NOOP_SETTLE);
+  }
+
+  /* THE PLAYHEAD MOVED UNDER A "CHANGES NOTHING" LINE (queue 690, sixth hunt). The panel does not rebuild while he
+     scrubs, so a verdict was never asked again: the line stayed under a Spin while the box on screen turned. Every
+     time change passes through syncPlayhead; when an open row is showing the line and the playhead is somewhere it
+     has not been asked about, the settle timer asks that one moment — one pair of renders, 400 ms after he stops,
+     never while playing — and the line goes the moment the effect shows. Nothing at all while no line is showing. */
+  function noopFollowPlayhead() {
+    const s = noopShown;
+    if (!s || s.fx._noop !== true || s.fx._noopAt === FM.time) return;
+    const live = FM.layerById ? FM.layerById(FM.scene, s.layerId) : null;
+    // Still his open row on the layer he is on — otherwise re-arming the shared timer would cancel the check that row needs.
+    if (view !== 'effects' || !s.fx._expanded || !live || FM.scene.selectedId !== live.id || !live.effects || live.effects[s.idx] !== s.fx) { noopShown = null; return; }
+    scheduleNoopCheck(live, s.fx, s.idx);
   }
 
   function fxTapHint() {
@@ -6499,10 +6584,16 @@ window.FM = window.FM || {};
         if (openAfx && openAfx.params) Object.keys(openAfx.params).forEach(k => out.push({ key: 'afx:' + k, prop: openAfx.params[k] }));
         return out;
       }
+      /* ⚠️ queue 690 (sixth hunt): …BUT ONLY WHILE ITS FILTER IS OPEN. The accordion closes rows at the depth he tapped,
+         so opening Gaussian Blur shuts his filter and leaves the Tint inside it `_expanded` — and this walk visits a
+         filter's children whether the filter is open or not. The hidden Tint won, the Blur he was looking at had hollow
+         keyframes that took no touch, and a hold-and-drag on one went straight through to the clip and slid the whole
+         clip (measured: 0.00 s to 0.48 s). A child he cannot see is not the open effect. Kept rather than cleared, so
+         reopening the filter still shows the Tint the way he left it. */
       let openTop = null, openChild = null;
       if (FM.eachFx) FM.eachFx(layer, (fx, path, parent) => {
         if (!fx || !fx._expanded) return;
-        if (parent) { if (!openChild) openChild = fx; } else if (!openTop) openTop = fx;
+        if (parent) { if (!openChild && parent._expanded) openChild = fx; } else if (!openTop) openTop = fx;
       });
       const openFx = openChild || openTop || (layer.effects || []).find(e => e && e._expanded) || null;
       if (openFx && openFx.params) Object.keys(openFx.params).forEach(k => out.push({ key: 'fx:' + k, prop: openFx.params[k] }));
@@ -6687,6 +6778,7 @@ window.FM = window.FM || {};
     // So watch for the CROSSING and rebuild only then — twice per clip, not twice per frame. Gated on
     // the home view: refreshing while a slider or an easing curve is open would yank it out mid-drag.
     syncPlayhead() {
+      noopFollowPlayhead();
       if (view !== 'home' || !root || quickSideSig == null) return;
       const sig = homeRowSig();
       if (sig != null && sig !== quickSideSig) this.refresh();
@@ -6863,21 +6955,22 @@ window.FM = window.FM || {};
         const bodyEl = el('div', 'cat-body');
         bodyEl.appendChild(FM.buildEasingEditorFor(layer, () => layer.speed, ['speed'], 'speed'));
         root.appendChild(bodyEl);
-      } else if (view === 'effects' && fxTabFor(layer) === 'audio' && FM._fxEasing && FM.buildEasingEditorFor && (layer.audioFx || [])[FM._fxEasing.fxIdx]) {
+      } else if (view === 'effects' && fxTabFor(layer) === 'audio' && FM._fxEasing && FM.buildEasingEditorFor && fxEasingTarget(layer, FM._fxEasing, true)) {
         // Per-parameter easing for an audio effect — inline sub-view of the Effects panel's AUDIO tab.
         // FM._fxEasing is shared with the visual stack: the two sides are mutually exclusive, so the
         // tab is what decides which stack the index refers to. This must be tested BEFORE the visual
         // branch, or an audio index would be read against layer.effects.
-        const info = FM._fxEasing, fx = layer.audioFx[info.fxIdx];
+        const info = FM._fxEasing, fx = fxEasingTarget(layer, info, true);
         const back = el('button', 'cat-back', '‹  Audio Effects');
         back.addEventListener('click', () => { FM._fxEasing = null; FM.inspector.refresh(); });
         root.appendChild(back);
         const bodyEl = el('div', 'cat-body');
         bodyEl.appendChild(FM.buildEasingEditorFor(layer, k => fx.params[k], [info.key], info.label || info.key));
         root.appendChild(bodyEl);
-      } else if (view === 'effects' && FM._fxEasing && FM.buildEasingEditorFor && (layer.effects || [])[FM._fxEasing.fxIdx]) {
-        // Per-parameter easing for ANY effect — inline sub-view of the Effects panel.
-        const info = FM._fxEasing, fx = layer.effects[info.fxIdx];
+      } else if (view === 'effects' && fxTabFor(layer) !== 'audio' && FM._fxEasing && FM.buildEasingEditorFor && fxEasingTarget(layer, FM._fxEasing, false)) {
+        // Per-parameter easing for ANY effect — inline sub-view of the Effects panel. The effect he tapped the curve
+        // on, wherever it lives: the layer's stack, inside a filter, or on a caption cue (queue 690, sixth hunt).
+        const info = FM._fxEasing, fx = fxEasingTarget(layer, info, false);
         const back = el('button', 'cat-back', '‹  Effects');
         back.addEventListener('click', () => { FM._fxEasing = null; FM.inspector.refresh(); });
         root.appendChild(back);

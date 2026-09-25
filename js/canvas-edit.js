@@ -345,8 +345,35 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══ A CLICK ON THE CANVAS TAKES THE KEYBOARD BACK (queue 690, sixth hunt) ═══════════════════════════════════════
+   * Every press on the canvas and its handles is cancelled (preventDefault) — that is what stops the page selecting text
+   * or scrolling under a drag. But cancelling a pointerdown ALSO cancels the browser's own "focus moves to what you
+   * clicked", so a box he had just typed into KEPT the keyboard. On PC that meant: type 50 in Opacity, click the layer
+   * on the canvas to look at it (as anyone does instead of pressing Enter) — the box said 50 and the layer stayed at
+   * 100%, because the box only applies on change, which is on blur. And every key after it went INTO the box: Space
+   * typed a space instead of playing, Delete and Backspace ate its digits instead of deleting the layer, the arrows
+   * moved its caret, Cmd+Z undid his typing. The layer-name box the same: Space after a canvas click renamed S0 to
+   * "S0 ". A click on a timeline clip always moved focus away; the canvas was the one surface that did not.
+   * So a press here does what the browser would have done had we not cancelled it: the box lets go, its change fires
+   * (the value lands, BEFORE the drag reads the layer), and the editor's shortcuts have the keyboard again.
+   * Two things are left alone on purpose:
+   *   · the text editor's own field — #857: tapping the canvas while writing is "move the text", not "I'm finished",
+   *     and app.js keeps the shortcuts off while it is open anyway;
+   *   · touch. The harm needs a physical keyboard, and on a phone letting go of the box drops the on-screen keyboard,
+   *     which re-lays the screen under the finger that is starting a drag. A mouse press is the PC case. */
+  function releaseTypingFocus(e) {
+    if (!e || e.pointerType !== 'mouse') return;
+    const a = document.activeElement;
+    if (!a || a === document.body || typeof a.blur !== 'function') return;
+    const typing = a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable;
+    if (!typing) return;
+    if (a.closest && a.closest('.te-panel, .te-pop')) return;   // the text editor's field keeps the keyboard (#857)
+    a.blur();
+  }
+
   function startMove(e) {
     if (e.button !== 0) return;
+    releaseTypingFocus(e);   // queue 690: the typed value lands and the keyboard comes back — see releaseTypingFocus
     if (e.pointerType === 'touch') {
       if (vpPtrs.size >= 2 && !vpPtrs.has(e.pointerId)) return;   // a THIRD finger must not join (it froze the pinch and made zoom jump on lift)
       vpPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -411,6 +438,7 @@ window.FM = window.FM || {};
          cleared the drag. The body's own move handler has checked `e.button !== 0` since it was written;
          the handles never did. */
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      releaseTypingFocus(e);   // queue 690: a corner or the rotate knob lets go of a box too — before the layer is read
       const layer = FM.selectedLayer(FM.scene);
       if (!layer || layer.locked) return;   // lock means LOCKED — scale/rotate too, not just move
       if (FM.collab && FM.collab.readOnly && FM.collab.readOnly()) return;   // queue 921 S7: a Viewer's handles are a locked layer's
@@ -717,12 +745,19 @@ window.FM = window.FM || {};
   };
   function onWheel(e) {
     const sel = FM.selectedLayer(FM.scene);
+    /* ⚠️ queue 690 (sixth hunt): BY HOW FAR THE WHEEL MOVED, AND NOT AT ALL SIDEWAYS. Both zooms below used a fixed
+       step per event and `deltaY < 0 ? in : out` — so a sideways two-finger swipe on his trackpad (deltaY 0) was a
+       zoom OUT, twelve events of it took the view to 0.40×, and with the camera selected it zoomed his CAMERA out and
+       saved it; and a pinch, which arrives as dozens of tiny events, raced to the limit. FM.wheelZoomFactor
+       (js/timeline.js) sizes each step to the event and caps it at the old step, so a mouse notch is unchanged.
+       The event is still cancelled when nothing zooms: a sideways swipe the page is given is the Mac's back-swipe. */
+    const wf = function (step) { return FM.wheelZoomFactor ? FM.wheelZoomFactor(e, step) : (e.deltaY < 0 ? step : e.deltaY > 0 ? 1 / step : 1); };
     if (!sel) {
       // nothing selected → the wheel zooms the VIEWPORT about the CURSOR (the point under the pointer
       // stays put — same anchored math as the pinch; view-only, no undo)
       e.preventDefault();
       const v = FM.viewport;
-      const s0 = v.scale, s1 = Math.max(0.2, Math.min(8, s0 * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+      const s0 = v.scale, s1 = Math.max(0.2, Math.min(8, s0 * wf(1.08)));
       if (s1 !== s0) {
         const u = vpOriginScreen();
         v.x = e.clientX - u.x - (s1 / s0) * (e.clientX - u.x - v.x);
@@ -736,12 +771,14 @@ window.FM = window.FM || {};
     e.preventDefault();
     const P = FM.scene.project, cx = P.width / 2, cy = P.height / 2, pc = eventToFrame(e);   // a FRAME point: the sums below are about where it shows
     const zoom = FM.evalProp(sel.transform.scale, FM.time) || 1;
-    const nz = Math.max(0.1, Math.min(8, zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+    // rounded HERE rather than only where it is stored, so a step too small to change the saved scale changes
+    // nothing at all — not a keyframe written at the playhead and an undo step for the same number (queue 690)
+    const nz = Math.round(Math.max(0.1, Math.min(8, zoom * wf(1.1))) * 1000) / 1000;
     if (nz === zoom) return;
     const camX = FM.evalProp(sel.transform.x, FM.time), camY = FM.evalProp(sel.transform.y, FM.time), k = 1 / zoom - 1 / nz;
     FM.setTransform(sel, 'x', Math.round(camX + (pc.x - cx) * k), FM.time);
     FM.setTransform(sel, 'y', Math.round(camY + (pc.y - cy) * k), FM.time);
-    FM.setTransform(sel, 'scale', Math.round(nz * 1000) / 1000, FM.time);
+    FM.setTransform(sel, 'scale', nz, FM.time);
     FM.requestRender(); update();
     if (FM.inspector) FM.inspector.refresh();
     if (wheelCommit) clearTimeout(wheelCommit);

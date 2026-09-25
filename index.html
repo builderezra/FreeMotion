@@ -260,7 +260,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v16.99</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.00</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1021,14 +1021,14 @@
   <script src="js/settings.js?v=46"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=9"></script>
+  <script src="js/collab-core.js?v=10"></script>
   <script src="js/statusbar.js?v=3"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=118"></script>
   <script src="js/eases.js?v=3"></script>
   <script src="js/masks.js?v=5"></script>
   <script src="js/behaviors.js?v=6"></script>
-  <script src="js/media.js?v=53"></script>
+  <script src="js/media.js?v=54"></script>
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=4"></script>
   <script src="js/gl-color.js?v=3"></script>
@@ -1036,17 +1036,17 @@
   <script src="js/fx-registry.js?v=25.23"></script>
   <script src="js/filters.js?v=17"></script>
   <script src="js/fx-presets.js?v=11"></script>
-  <script src="js/fx-thumbs.js?v=51"></script>
-  <script src="js/timeline.js?v=256"></script>
+  <script src="js/fx-thumbs.js?v=52"></script>
+  <script src="js/timeline.js?v=257"></script>
   <script src="js/addmenu.js?v=80"></script>
-  <script src="js/inspector.js?v=391"></script>
+  <script src="js/inspector.js?v=392"></script>
   <script src="js/fx-browser.js?v=95"></script>
   <script src="js/elements-browser.js?v=3"></script>
   <script src="js/color-wheel.js?v=53"></script>
-  <script src="js/canvas-edit.js?v=120"></script>
+  <script src="js/canvas-edit.js?v=121"></script>
   <script src="js/notepad.js?v=8"></script>
   <script src="js/popfrom.js?v=10"></script>
-  <script src="js/draw-tool.js?v=36"></script>
+  <script src="js/draw-tool.js?v=37"></script>
   <script src="js/point-edit.js?v=21"></script>
   <script src="js/crop-tool.js?v=12"></script>
   <script src="js/fill-drag.js?v=2"></script>
@@ -1061,7 +1061,7 @@
   <script src="js/audio-play.js?v=65"></script>
   <script src="js/audio-fx-live.js?v=9"></script>
   <script src="js/audio-fx-browser.js?v=12"></script>
-  <script src="js/history.js?v=36"></script>
+  <script src="js/history.js?v=37"></script>
   <script src="js/storage.js?v=56"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
@@ -1070,7 +1070,7 @@
   <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=123"></script>
+  <script src="js/exporter.js?v=124"></script>
   <script src="js/sample.js?v=10"></script>
   <script src="js/contextmenu.js?v=46"></script>
   <script src="js/ask.js?v=2"></script>
@@ -1078,7 +1078,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=56"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=454"></script>
+  <script src="js/app.js?v=455"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
@@ -1106,8 +1106,8 @@
        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
   <script src="js/collab-signal.js?v=4"></script>
   <script src="js/collab-link.js?v=7"></script>
-  <script src="js/collab-session.js?v=9"></script>
-  <script src="js/collab-bridge.js?v=7"></script>
+  <script src="js/collab-session.js?v=10"></script>
+  <script src="js/collab-bridge.js?v=8"></script>
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
        A library like the rest: it does nothing at all until a session installs a controller on it. -->

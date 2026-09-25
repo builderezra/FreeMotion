@@ -189,9 +189,20 @@ window.FM = window.FM || {};
       return D.diffDoc(S.base, view(), opt);
     }
 
-    /* The whole local step. Returns the number of ops sent. */
+    /* The whole local step. Returns the number of ops sent.
+     *
+     * ═══ AFTER THE END, ↶ IS STILL THIS SESSION'S — SO WHAT HE DOES THEN IS RECORDED HERE TOO (queue 690, sixth hunt) ═══
+     * §10.5 keeps undo delegated to a session that has stopped — the owner's after Stop sharing (collab-core.js
+     * `handoverSession`), a guest's after the owner ends it (the session stays attached for the Ended banner) — so a
+     * solo undo can never revert a friend's work with a snapshot. But this returned at once on a stopped session, and
+     * nothing he did afterwards was recorded anywhere: ↶ popped the last SESSION step instead. Measured on v16.99: he
+     * stopped sharing, renamed Gamma, pressed ↶ — Gamma kept its new name and Alpha lost the name he gave it during the
+     * session; the phone the same with Sam's own renames. The newest change could not be undone at all until another
+     * project was opened. So a stopped session goes on RECORDING: the same diff and the same undo step, applied to its
+     * own base so the next diff and every undo check see the document as it now stands — and nothing is sent, held,
+     * refused or queued, because there is nobody left to send it to and the copy is his (§16's roles end with it). */
     function pushLocal(scope) {
-      if (!S.active) return 0;
+      const over = !S.active;
       if (frozen() || busy()) return 0;              // §8.9: ticks and sweeps stand down
       /* ⚠️ NEVER DIFF ONE PROJECT AGAINST ANOTHER (queue 921). `FM.projects.open()` empties the live
          scene and THEN awaits `storage.load()` — IndexedDB plus a media hydrate, hundreds of ms — and
@@ -207,6 +218,12 @@ window.FM = window.FM || {};
       P.stampIds(doc());                             // §5.4 — before every diff
       let res = diffNow(scope);
       if (!res.ops.length) return 0;
+      if (over) {                                    // the session has stopped — see the note above this function
+        if (recording) record(res);
+        for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
+        keepIds = null;
+        return res.ops.length;
+      }
       /* ═══ S7 · §16.3 THE STRUCTURAL BACKSTOP ════════════════════════════════════════════════════════
          Every op this device's role may not send is written back from base into live, here, before it is
          recorded, held or sent — whatever slipped past the UI's courtesies (a shortcut, a context menu, a
@@ -1041,9 +1058,13 @@ window.FM = window.FM || {};
       catch (e) { return null; }
     }
 
+    /* Who to name in a refusal — or null when the last change on record is THIS device's own (queue 690, sixth hunt):
+       it used to answer "someone else" for that too, and told him a friend had changed a layer nobody but he had
+       touched. The callers then say it changed, without blaming anybody. */
     function whoChanged(pathKey) {
       const by = isOwner ? host.lastBy.get(pathKey) : (S.lastBy && S.lastBy.get(pathKey));
-      if (!by || by === S.mid) return 'someone else';
+      if (by && by === S.mid) return null;
+      if (!by) return 'someone else';
       const m = isOwner ? host.members[by] : null;
       return (m && m.name) || 'someone else';
     }
@@ -1088,7 +1109,8 @@ window.FM = window.FM || {};
       if (hardFail) {
         /* All-or-nothing when a structural rec cannot be honoured, so an ungroup is never half-undone.
            The step is consumed either way (§10.2) — offering it again would just fail again. */
-        toast("Can't undo — " + whoChanged(hardFail) + ' changed it since');
+        const who = whoChanged(hardFail);
+        toast(who ? "Can't undo — " + who + ' changed it since' : "Can't undo — it has changed since");
         return false;
       }
       const inv = D.invertStep({ ops: keepOps, recs: keepRecs, orders: st.orders || [] });
@@ -1102,7 +1124,8 @@ window.FM = window.FM || {};
       recording = false;
       let res = diffNow('full');
       recording = true;
-      if (!isOwner && res.ops.length) {
+      const over = !S.active;   // a stopped session: nobody to send it to, and no role to check it against (see pushLocal)
+      if (!isOwner && !over && res.ops.length) {
         res = backstop(res);
         /* Refused whole — nothing was undone, so the step is NOT used up: an Editor made a Viewer who presses
            Undo has it back when he is an Editor again, rather than losing one step per press. */
@@ -1113,7 +1136,11 @@ window.FM = window.FM || {};
         }
       }
       if (res.ops.length) {
-        if (isOwner) {
+        /* Once it has stopped, straight into base — the same way pushLocal now records what he does after the end. The
+           host's rules and lease table belong to the session that is over, and the copy is his (queue 690, sixth hunt). */
+        if (over) {
+          for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
+        } else if (isOwner) {
           const r = host.local(res.ops);
           if (r.b) { broadcast(r.b, null); lastBatchAt = now(); if (r.b.fix && r.b.fix.length) applyIncoming(r.b.fix, { by: S.mid, own: true }); adoptOrder(r.b.ord); }
         } else {
@@ -1130,7 +1157,7 @@ window.FM = window.FM || {};
         while (undoStack.length > LIM.UNDO_STEPS) undoStack.shift();
       }
       if (A.autosave) { try { A.autosave(); } catch (e) {} }
-      if (soft) toast('Part of this was changed by ' + whoChanged(S.lastSoftPath) + ' since, so it was left alone');
+      if (soft) { const who = whoChanged(S.lastSoftPath); toast(who ? 'Part of this was changed by ' + who + ' since, so it was left alone' : 'Part of this has changed since, so it was left alone'); }
       return true;
     }
 

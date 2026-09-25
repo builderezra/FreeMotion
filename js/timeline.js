@@ -350,6 +350,8 @@ window.FM = window.FM || {};
   FM._foreignPointer = foreignPointer;   // suite seam
   let snapping = true;   // magnet toggle: snap clip/trim edges to playhead / clip edges / 0
   let rebuildPending = false;      // a rebuild requested mid-gesture — deferred to the gesture's end
+  /* The layer-name box a double-click opened, while it holds the caret (queue 690, sixth hunt) — see rebuild(). */
+  let nameEditing = null;
   /* ⚠️ queue 815: A LAYER-NAME PAN IS A GESTURE TOO. It scrolls the layer list, its state lives in the
      head's own closure, and its listeners are on the head element — so a rebuild that empties the track
      list (a waveform or a filmstrip arriving, or the 150ms resize rebuild when the Android address bar
@@ -1381,8 +1383,9 @@ window.FM = window.FM || {};
       input.className = 'th-name-edit'; input.value = layer.name;
       input.addEventListener('pointerdown', (ev) => ev.stopPropagation());
       input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') input.blur(); else if (ev.key === 'Escape') { input.value = layer.name; input.blur(); } });
-      input.addEventListener('blur', () => { const v = input.value.trim(); if (v && v !== layer.name) { layer.name = v; if (FM.history) FM.history.commit(); } FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); });
+      input.addEventListener('blur', () => { if (nameEditing === input) nameEditing = null; const v = input.value.trim(); if (v && v !== layer.name) { layer.name = v; if (FM.history) FM.history.commit(); } FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); });
       name.replaceWith(input); input.focus(); input.select();
+      nameEditing = input;   // rebuild() waits for it; the blur above lets go first, so its own rebuild flushes whatever waited
     });
 
     /* THE CHEVRON'S SLOT EXISTS ON EVERY ROW (queue 191). Ezra: "an arrow next to the hide button, idk
@@ -4313,6 +4316,27 @@ window.FM = window.FM || {};
     FM.scrubTime(snapT(Math.max(0, timelineEl.scrollLeft / pxPerSec())));
   }
 
+  /* ═══ HOW FAR ONE WHEEL EVENT ZOOMS (queue 690, sixth hunt) ═════════════════════════════════════════════════════
+   * Both wheel zooms — this timeline's Cmd/Ctrl+wheel and the preview's (js/canvas-edit.js onWheel) — multiplied by a
+   * FIXED step per event and chose the direction with `deltaY < 0 ? in : out`. The size of the event was thrown away,
+   * and that broke two things a Mac trackpad does all the time:
+   *   · a PINCH arrives as a stream of tiny Ctrl+wheel events (Chrome sends deltaY = −100·ln(scale) in all), so a
+   *     gentle pinch-out — a dozen 1.5px events, the fingers spread a fifth — zoomed the timeline 5.35×, while one
+   *     whole 100px notch of a mouse wheel zoomed it 1.15×. He could not zoom a little: it slammed toward the limit;
+   *   · a SIDEWAYS swipe has deltaY 0, and 0 is not < 0, so every event of it was a zoom OUT — twelve took the preview
+   *     to 0.40×, and with the camera selected zoomed his camera out, keyed it at the playhead and saved it.
+   * So the factor follows the event: exp(−deltaY/100) is exactly the scale the fingers made, and it is capped at the
+   * old per-event step, so one notch of a mouse wheel (100px, well past the cap) zooms precisely as far as it always
+   * did. An event with no up-or-down in it, or more sideways than up-or-down, zooms nothing (1). Lines (deltaMode 1,
+   * Firefox's wheel) and pages (2) are brought to pixels first, or a Firefox notch of 3 would barely move. */
+  FM.wheelZoomFactor = function (e, step) {
+    let dy = +e.deltaY || 0, dx = +e.deltaX || 0;
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    dy *= unit; dx *= unit;
+    if (!dy || Math.abs(dx) > Math.abs(dy)) return 1;
+    return Math.max(1 / step, Math.min(step, Math.exp(-dy / 100)));
+  };
+
   FM.timeline = {
     /* End the live ≡ drag WITHOUT its drop (queue 924 review) — for the switch's throw, which is a drop of its own. A
        no-op when nothing is being dragged. */
@@ -4454,8 +4478,14 @@ window.FM = window.FM || {};
         snapping = !snapping; sn.classList.toggle('active', snapping);
         if (FM.toast) FM.toast(snapping ? 'Snapping on — clips and keyframes stick to edges' : 'Snapping off — clips move freely', 1500);
       });
-      // Cmd/Ctrl + wheel zooms the timeline
-      if (timelineEl) timelineEl.addEventListener('wheel', (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, timeFromX(e.clientX)); } }, { passive: false });
+      // Cmd/Ctrl + wheel zooms the timeline — by as much as the wheel moved, so a trackpad pinch zooms as far as the
+      // fingers spread and a mouse notch still steps 1.15× (queue 690, sixth hunt: see FM.wheelZoomFactor above)
+      if (timelineEl) timelineEl.addEventListener('wheel', (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        e.preventDefault();   // held even when nothing zooms: Ctrl+wheel is the BROWSER's page zoom otherwise
+        const f = FM.wheelZoomFactor(e, 1.15);
+        if (f !== 1) this.zoomBy(f, timeFromX(e.clientX));
+      }, { passive: false });
       // FIXED-CENTRE CONTRACT: whatever sits under the centre line IS the current time. A plain horizontal
       // scroll (trackpad / scrollbar / wheel) therefore MOVES the playhead. Without this, scrolling left
       // scrollLeft decoupled from FM.time, so the next render (selecting/deselecting a clip) snapped the
@@ -5164,6 +5194,17 @@ window.FM = window.FM || {};
         if (!stale) { rebuildPending = true; return; }   // slipDrag too — a mid-slip rebuild tore down the lane holding the ghost
         recoverStuckGesture();
       }
+      /* ═══ …AND WHILE HE IS TYPING A LAYER'S NEW NAME (queue 690, sixth hunt) ═══════════════════════════════════════
+       * A double-click on a name swaps it for a text box that writes the name on blur or Enter. Rebuilding every row
+       * tears the box out of the page WITHOUT a blur, so what he had typed was simply gone, the layer kept its old name,
+       * and his next keys went to the app's one-key shortcuts (A, D and S nudge clips). Before live collaboration
+       * almost nothing rebuilt the timeline mid-word; in a session every batch from a friend does (collab-bridge.js
+       * afterApply → scheduleRebuild), on ANY layer — measured: he had typed "Intro tit" when Sam nudged a different
+       * layer, and the box vanished. It waits for the box to let go: its blur handler clears `nameEditing` and then
+       * calls rebuild() itself, which is the flush. `isConnected` so a box some other path has already removed can
+       * never hold the timeline for ever. */
+      if (nameEditing && nameEditing.isConnected && document.activeElement === nameEditing) { rebuildPending = true; return; }
+      nameEditing = null;
       rebuildPending = false;
       /* THE SWITCH IS A READOUT OF WHERE THE ADD ROW IS, so it has to be re-read whenever the STACK
          changes — not only when the row MOVES (queue 373 clause 6, reopened by him at v10.20). His

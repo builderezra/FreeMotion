@@ -5822,6 +5822,42 @@ window.FM = window.FM || {};
   }
   FM._exportSoloPrep = exportSoloPrep;   // suite seam
 
+  /* ⚠️ THE SCREEN STAYS ON WHILE AN EXPORT RENDERS (queue 690). An export renders frame by frame, and on
+   * his iPhone a long one takes minutes. He waits without touching the screen, so iOS auto-lock (30 s in
+   * Low Power Mode) turned the screen off part-way through: the page is suspended, the render stops where
+   * it is until he unlocks, and under memory pressure the page is killed. Nothing in the export path held
+   * a wake lock — the only one in the app was for hosting a live session (js/collab-ui.js), whose comment
+   * names exactly this exposure. His standing answer on export safety: "if there's a thing to make
+   * exporting safer then do it" (21 Aug).
+   * Same shape as the collab lock, on purpose. The OS lets the lock go whenever the page is hidden, so it
+   * is taken again on every return to the screen while a render still wants it; a browser without the
+   * API, or one that refuses, simply renders as it always did.
+   * Let go when the Export ready card comes up, not only at the end: the render is over by then, and a
+   * finished card waiting for his tap must not keep his screen lit for as long as he is away. */
+  let expWake = null;          // the held lock, or a { pending } marker while the request is in flight
+  let expWakeWanted = false;   // true from the render starting until the file is ready
+  function expWakeTake() {
+    if (!expWakeWanted || expWake || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+    let p;
+    try { p = navigator.wakeLock.request('screen'); } catch (e) { return; }
+    const mark = { pending: true };
+    expWake = mark;
+    Promise.resolve(p).then(function (l) {
+      // Let go (or replaced) while the request was in flight — hand this one straight back.
+      if (expWake !== mark || !expWakeWanted) { if (expWake === mark) expWake = null; try { l.release(); } catch (e) {} return; }
+      expWake = l;
+      try { l.addEventListener('release', function () { if (expWake === l) expWake = null; }); } catch (e) {}
+    }, function () { if (expWake === mark) expWake = null; });
+  }
+  function expWakeHold() { expWakeWanted = true; expWakeTake(); }
+  function expWakeDrop() {
+    expWakeWanted = false;
+    const l = expWake;
+    expWake = null;
+    if (l && typeof l.release === 'function') { try { l.release(); } catch (e) {} }
+  }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') expWakeTake(); });
+
   async function runExport() {
     expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
     hideExportDialog();
@@ -5867,8 +5903,9 @@ window.FM = window.FM || {};
        * save, and there is no per-layer control left in the UI to clear it. */
       const _soloT = expSoloId ? FM.layerById(FM.scene, expSoloId) : null;
       const _soloR = _soloT ? exportSoloPrep(_soloT) : null;
+      expWakeHold();   // the mix of a long project is minutes of work on a phone too (queue 690)
       try { await runAudioOnlyExport(); }
-      finally { if (_soloR) { _soloR.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); } }
+      finally { expWakeDrop(); if (_soloR) { _soloR.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); } }
       return;
     }
     /* Custom size hands the exporter explicit dimensions; every other rung is a uniform scale of the
@@ -5900,6 +5937,8 @@ window.FM = window.FM || {};
     const bar = document.getElementById('export-bar');
     const status = document.getElementById('export-status');
     overlay.classList.remove('hidden');
+    // Taken here, still inside the tap on Export, and let go in the finally below (queue 690) — see expWakeTake.
+    expWakeHold();
     if (FM.playing) FM.pause();
     // 'Hide other layers' — temporarily solo the selected clip (solo already isolates picture AND
     // audio at render/export/preview). Restored in finally even on error/cancel; no history commit.
@@ -5972,6 +6011,7 @@ window.FM = window.FM || {};
          blit is not defined" — a variable name he can do nothing with and cannot copy. */
       else FM.reportError('exporting a video', e, 'The export stopped before it finished, and the file was not made.\n\nWorth trying: a shorter range, a lower resolution, or closing other tabs — most export failures are the browser running out of memory.');
     } finally {
+      expWakeDrop();   // on a finished file, a Cancel and a failure alike — a lock that outlived the export would keep his screen on for nothing
       if (soloRestore) { soloRestore.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); }
       bar.style.width = '0%';
       FM.seekVideosToTime();
@@ -6001,6 +6041,7 @@ window.FM = window.FM || {};
       const prog = document.getElementById('export-overlay');
       if (!overlay) { out.save().then(resolve, resolve); return; }   // no card in this document — behave as before
       if (prog) prog.classList.add('hidden');
+      expWakeDrop();   // the render is over — a card waiting for his tap must not hold the screen on (queue 690)
 
       const poster = document.getElementById('xr-poster');
       if (poster && out.poster) {
@@ -6063,7 +6104,18 @@ window.FM = window.FM || {};
         // Disabled while the sheet is up: a second tap would open a second share sheet for the same
         // file, and on iOS that is a sheet that never closes.
         saveBtn.disabled = true;
-        out.save().then(function () { finish(); }, function () { finish(); });
+        /* ⚠️ A DISMISSED SHEET IS NOT A SAVE (queue 690). This used to finish() on ANY answer, so swiping
+           the share sheet away — or tapping outside it, or backing out of Save to Files — closed this card
+           too, and run() took that as delivered: its finally freed the file and cleared the crash-resume
+           parts, and the render he had just waited minutes for was gone with no second Save. deliver()
+           already tells that case apart ('cancelled': "the user saw the sheet and dismissed it"), so the
+           card now stays up with Save live again. Only a real hand-over or Discard puts it away — the
+           two ways #141 part 4 says the file leaves: "Save opens the sheet; Discard throws the file away".
+           A save that THROWS keeps the card too: nothing was handed over, and a second tap costs nothing. */
+        out.save().then(function (how) {
+          if (how === 'cancelled') { saveBtn.disabled = false; return; }
+          finish();
+        }, function () { saveBtn.disabled = false; });
       }
       function onDiscard() { finish(); }
       saveBtn.disabled = false;
@@ -8259,6 +8311,19 @@ window.FM = window.FM || {};
       // outside the field), which is why it survived three rounds of "text editing is fixed".
       // Escape still passes: it is how the editor is closed.
       if (!isEscape && FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) return;
+      /* ⚠️ queue 690 (sixth hunt): THE DRAWING TOOL IS A MODE TOO, and nothing here knew it. Its own keys — Enter,
+         Escape, and now ⌘Z / ⌘⇧Z / ⌘Y for its stroke undo — are answered first by js/draw-tool.js (capture phase),
+         so anything that reaches this line while drawing is a key meant for the editor, aimed at a project he
+         cannot see: the timeline is hidden while he draws (body.drawing). Measured with real keys: Tab selected
+         a layer — the drawing itself — and Delete then deleted it mid-drawing; Right walked the playhead a frame;
+         Space goes to togglePlay by the same road. So they do nothing until Done — but the ones the editor always claims
+         stay claimed, so the browser does not act on them instead: Space would press whichever bar button was
+         clicked last, Tab would walk focus off the drawing, ⌘D would open the bookmark dialog. A text field
+         keeps its keys (`inEdit`, handled below as ever). */
+      if (!inEdit && FM.drawTool && FM.drawTool.active) {
+        if (mod ? /^[dDaA]$/.test(e.key) : /^(Space|Tab|Backspace|Delete|Home|End|Arrow)/.test(e.code || '')) e.preventDefault();
+        return;
+      }
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         if (inEdit) return; // let field text-undo
         e.preventDefault();

@@ -261,8 +261,27 @@ def main():
                                 cdp.send("Input.dispatchTouchEvent", type=typ, touchPoints=pts)
                                 inp["touch_down"] = typ in ("touchStart", "touchMove")
                             elif t == "wheel":
-                                # a real wheel / trackpad scroll (queue 931: the PC half of pausing the New strip)
-                                cdp.send("Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=float(st.get("dx", 0)), deltaY=float(st.get("dy", 0)))
+                                # a real wheel / trackpad scroll (queue 931: the PC half of pausing the New strip).
+                                # `mods` is the CDP modifier mask (1 Alt, 2 Ctrl, 4 Meta, 8 Shift): a trackpad PINCH reaches a page as
+                                # a wheel with Ctrl held and a small deltaY (queue 690, hunt 6c), so a test can send exactly that.
+                                cdp.send("Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=float(st.get("dx", 0)), deltaY=float(st.get("dy", 0)),
+                                         modifiers=int(st.get("mods", 0) or 0))
+                            elif t == "key":
+                                # A REAL KEY (queue 690, hunt 6c). A KeyboardEvent dispatched from page script is untrusted and does
+                                # nothing by default: it types no character into a focused box, moves no focus and presses no focused
+                                # button — so a synthetic Space can never show that the keyboard was still inside a text field. This
+                                # goes through the browser's own key pipeline to whatever has focus, like his keyboard.
+                                # {t:'key', key, code, vk, text?, mods?}: `text` makes it a typing key (keyDown + the character),
+                                # without it a bare shortcut (rawKeyDown). Always followed by its keyUp.
+                                mods = int(st.get("mods", 0) or 0)
+                                kd = {"key": st.get("key", ""), "code": st.get("code", ""), "windowsVirtualKeyCode": int(st.get("vk", 0) or 0),
+                                      "nativeVirtualKeyCode": int(st.get("vk", 0) or 0), "modifiers": mods}
+                                txt = st.get("text")
+                                if txt:
+                                    cdp.send("Input.dispatchKeyEvent", type="keyDown", text=txt, unmodifiedText=txt, **kd)
+                                else:
+                                    cdp.send("Input.dispatchKeyEvent", type="rawKeyDown", **kd)
+                                cdp.send("Input.dispatchKeyEvent", type="keyUp", **kd)
                             elif t.startswith("mouse"):
                                 typ = {"mouseDown": "mousePressed", "mouseMove": "mouseMoved", "mouseUp": "mouseReleased"}[t]
                                 if typ == "mouseMoved":

@@ -35,12 +35,27 @@ window.FM = window.FM || {};
      question is how three of them would silently never be detected — `FM.drawTool` is a plain state
      object with `.active`, `touchupTool` answers `isOpen()`, and the tracker answers `isPicking()`.
      A loop over `isActive` alone reads as thorough and covers two thirds of the list (queue 921 S2). */
-  const TOOLS = ['textEdit', 'maskTool', 'cropTool', 'fillDrag', 'motionPath', 'pointEdit'];
+  /* ⚠️ …MINUS THE TWO THAT START THEMSELVES (queue 690, sixth hunt). `fillDrag` is started by inspector.js every
+     time the Colour view DRAWS a gradient or picture fill, and `pointEdit` embeds itself in the Element view of any
+     drawn shape — both for as long as the panel stays open, with no finger anywhere. Counted as a tool in hand, a Mac
+     left on a gradient's Colour view held every path he had changed on that layer for as long as the panel was open:
+     his friend turned the gradient to 200°, it snapped back to his 45° on both screens, and when he finally closed
+     the panel the friend's change was dropped as "reasserted" — it never landed. collab-presence.js learned exactly
+     this in its S5 review (its PASSIVE list) and the bridge did not. A real drag of their handles is still counted,
+     by the pointer listeners below, like every other drag; a pointEdit he OPENED (Edit Points, not embedded) is still
+     a tool in hand. */
+  const TOOLS = ['textEdit', 'maskTool', 'cropTool', 'motionPath', 'pointEdit'];
 
   function toolActive() {
     for (let i = 0; i < TOOLS.length; i++) {
       const t = FM[TOOLS[i]];
-      if (t && typeof t.isActive === 'function') { try { if (t.isActive()) return true; } catch (e) {} }
+      if (t && typeof t.isActive === 'function') {
+        try {
+          if (!t.isActive()) continue;
+          if (TOOLS[i] === 'pointEdit' && t.isEmbedded && t.isEmbedded()) continue;   // the Element view's own — see above
+          return true;
+        } catch (e) {}
+      }
     }
     if (FM.drawTool && FM.drawTool.active) return true;
     if (FM.touchupTool && FM.touchupTool.isOpen) { try { if (FM.touchupTool.isOpen()) return true; } catch (e) {} }
@@ -48,15 +63,26 @@ window.FM = window.FM || {};
     return false;
   }
 
+  /* TYPING, NOT FOCUS (queue 690, sixth hunt). This used to count every focused <input> but a button, a checkbox or a
+     radio — so a SLIDER counted as typing. Chrome leaves focus on an <input type=range> after the mouse lets go of it
+     (and on a colour swatch after its picker closes), so from the moment he slid Opacity on his Mac until he next
+     clicked somewhere else, every path he had changed on that layer stayed held: his friend set the opacity to 0.9
+     and it snapped back to his 0.5 on both screens. Only a box he types into holds the caret for as long as it has
+     focus. A slider or a swatch is being used while a finger is on it (the pointer listeners count that) or while it
+     is still changing (`adjustable` and `onInput`, below: keyboard arrows on a slider, a drag inside the native colour picker). */
+  const TEXT_TYPES = ['text', 'search', 'number', 'email', 'url', 'tel', 'password'];
   function editableTarget(el) {
     if (!el || el.nodeType !== 1) return false;
     const tag = (el.tagName || '').toLowerCase();
     if (tag === 'textarea') return true;
-    if (tag === 'input') {
-      const t = (el.type || 'text').toLowerCase();
-      return t !== 'button' && t !== 'checkbox' && t !== 'submit' && t !== 'radio';
-    }
+    if (tag === 'input') return TEXT_TYPES.indexOf((el.type || 'text').toLowerCase()) >= 0;
     return !!el.isContentEditable;
+  }
+  /* A slider or a colour swatch — used while it changes, not while it merely has focus (see editableTarget). */
+  function adjustable(el) {
+    if (!el || el.nodeType !== 1 || (el.tagName || '').toLowerCase() !== 'input') return false;
+    const t = (el.type || '').toLowerCase();
+    return t === 'range' || t === 'color';
   }
 
   let pointerInInspector = false;
@@ -73,6 +99,10 @@ window.FM = window.FM || {};
   };
   const onKeyDown = function (e) { if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key && e.key.length === 1) keyHeld = true; lastLocalChangeAt = Date.now(); };
   const onKeyUp = function () { keyHeld = false; lastLocalChangeAt = Date.now(); };
+  /* A slider or swatch that is CHANGING is in use — the native colour picker's drag reaches the page as nothing but
+     `input` events, with no pointer on the document. Each one restarts the §8.8 quiet window, so it is held while it
+     moves and let go 250 ms after it stops, rather than for as long as it keeps focus (queue 690, sixth hunt). */
+  const onInput = function (e) { if (e && adjustable(e.target)) lastLocalChangeAt = Date.now(); };
 
   const bridge = {
     /* ── the document ─────────────────────────────────────────────────────────────────────────── */
@@ -136,6 +166,9 @@ window.FM = window.FM || {};
       if (!panel) return false;
       const a = document.activeElement;
       if (a && panel.contains(a) && editableTarget(a)) return true;
+      /* A slider or swatch in the panel still moving (arrow keys, the colour picker) — not one merely left focused,
+         which would hold back every refresh, and with it the friend's value, until he clicked elsewhere. */
+      if (a && panel.contains(a) && adjustable(a) && (Date.now() - lastLocalChangeAt) < C.LIMITS.QUIET) return true;
       return pointers > 0 && pointerInInspector;
     },
 
@@ -244,6 +277,7 @@ window.FM = window.FM || {};
       document.addEventListener('pointercancel', onPointerUp, true);
       document.addEventListener('keydown', onKeyDown, true);
       document.addEventListener('keyup', onKeyUp, true);
+      document.addEventListener('input', onInput, true);
     },
     uninstall: function () {
       if (!installed) return;
@@ -253,6 +287,7 @@ window.FM = window.FM || {};
       document.removeEventListener('pointercancel', onPointerUp, true);
       document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('keyup', onKeyUp, true);
+      document.removeEventListener('input', onInput, true);
       pointers = 0; keyHeld = false; pointerInInspector = false;
     },
     /* §12.4: the guest's confirmed base, so a reload can work out what it still owes the host instead

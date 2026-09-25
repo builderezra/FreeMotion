@@ -28,6 +28,39 @@ window.FM = window.FM || {};
     return JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds }, FM.jsonReplacer);
   }
 
+  /* ═══ UNDO KEEPS THE EFFECT HE HAS OPEN (queue 690, sixth hunt) ═══════════════════════════════════════════════
+   * Which effect row is open is `fx._expanded`, a runtime flag, and snap() strips every `_` key — so every snapshot
+   * is a scene in which nothing is open, and restore() put exactly that back. He opens Gaussian Blur, drags it from 6
+   * to 11.5 px, taps Undo to compare: the value came back and the controls he was using folded shut under his thumb;
+   * Redo did the same. Every comparison cost him finding the effect and opening it again, on the phone and the PC.
+   * So the open rows are carried from the scene being replaced onto the one coming back, matched by POSITION in the
+   * same list on the same layer, and only where the thing there is the same kind of thing (same `type`, and the same
+   * `id` where it has one) — so an undo that removed or reordered effects cannot open a different one in its place.
+   * Every list with an open/close row: the effect stack, a filter's children, a caption cue's own stack, the audio
+   * effects and the masks. It can only re-open what was open, so the accordion's one-open-row still holds.
+   * The collab path needs none of this — it patches the live objects and keeps `_expanded` (collab-diff.js). */
+  function carryOpen(from, to) {
+    if (!Array.isArray(from) || !Array.isArray(to)) return;
+    for (let i = 0; i < from.length && i < to.length; i++) {
+      const a = from[i], b = to[i];
+      if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || a.type !== b.type || a.id !== b.id) continue;
+      if (a._expanded) b._expanded = true;
+      carryOpen(a.effects, b.effects);   // a filter's children
+    }
+  }
+  function keepOpenRows(oldLayers, newLayers) {
+    const was = new Map();
+    (oldLayers || []).forEach(l => { if (l && l.id) was.set(l.id, l); });
+    (newLayers || []).forEach(l => {
+      const o = l && was.get(l.id);
+      if (!o) return;
+      carryOpen(o.effects, l.effects);
+      carryOpen(o.audioFx, l.audioFx);
+      carryOpen(o.masks, l.masks);
+      if (Array.isArray(o.captions) && Array.isArray(l.captions)) o.captions.forEach((c, k) => { if (c && l.captions[k]) carryOpen(c.effects, l.captions[k].effects); });
+    });
+  }
+
   function restore(str) {
     const s = JSON.parse(str);
     /* Undo restores from a snapshot we wrote ourselves, so this is belt-and-braces rather than a
@@ -42,8 +75,10 @@ window.FM = window.FM || {};
     const wasIds = FM.selectionIds ? FM.selectionIds() : (wasSelected ? [wasSelected] : []);
     const hadIds = new Set(FM.scene.layers.map(l => l.id));
     suppress = true;
+    const outgoing = FM.scene.layers;
     FM.scene.project = s.project;
     FM.scene.layers = s.layers;
+    try { keepOpenRows(outgoing, s.layers); } catch (e) {}   // a UI nicety: it must never be able to stop an undo
     /* ═══ UNDO DOES NOT CHOOSE WHICH LAYER HE IS ON (queue 690) ═══════════════════════════════════════
      * This used to put back the SNAPSHOT's selection, and a snapshot's selection is whatever was
      * selected at the PREVIOUS commit — and selecting never commits (a real click on a clip or its
@@ -247,7 +282,10 @@ window.FM = window.FM || {};
        * ⚠️ PAIRED ON EVERY EXIT, including the identical-snapshot return below: a beforeSnap whose
        * afterCommit never ran leaves an undo step open, and the next action merges into it. Both are
        * no-ops while no session is running, and FM.collab does not exist at all before stage 1. */
-      const cb = FM.collab && FM.collab.active;
+      /* …and while undo is still HANDED to a session that has stopped (§10.5 — after Stop sharing, until another project
+         opens): ↶ goes there, so what he does after the end has to be recorded there too, or ↶ skips it and takes back
+         an edit from the session instead (queue 690, sixth hunt). A stopped session records and sends nothing. */
+      const cb = FM.collab && (FM.collab.active || !!(FM.collab.undoActive && FM.collab.undoActive()));
       if (cb) FM.collab.beforeSnap();
       const s = snap();
       if (index >= 0 && stack[index] === s) { if (cb) FM.collab.afterCommit(); return; }   // identical to the current state → a no-op action can never add a stray undo step
@@ -279,7 +317,12 @@ window.FM = window.FM || {};
        only commits at ✓, so ↶ used to step over it — right after Add text, the layer went with his words and ↷ brought
        back the word Text. flush() makes the typing its own step first; resync() re-reads the field (and the caption it
        is bound to) from the restored scene, because the editor stays open whenever the layer survived. */
-    undo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.undo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
-    redo() { if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) return FM.collab.redo(); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
+    /* ⚠️ …AND IN A SESSION TOO (queue 690, sixth hunt). The session's line used to return BEFORE the flush, so with the
+       card open his typing was still in collab's open step: ↶ popped the step before it — Add text — found the layer
+       no longer read Text and refused with "Can't undo — someone else changed it since" (nobody else had touched it),
+       and that step was used up, so the text he added could never be undone. The flush now runs first either way, and
+       the resync after either way (a session's undo also rewrites the layer under the open field). */
+    undo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.undo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
+    redo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.redo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
   };
 })(window.FM);
