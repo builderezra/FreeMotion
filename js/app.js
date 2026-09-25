@@ -1459,9 +1459,12 @@ window.FM = window.FM || {};
   /* Exposed for the timeline's own "Add marker here" (context menu), which adds to the same array from
      another module and had the identical omission (queue 243). */
   FM.updateReadout = () => updateReadout();
-  FM.toggleMarkerAtPlayhead = function () {
+  /* `at` (queue 690): the moment to mark, when that is not the playhead NOW — the head's tap passes the time
+     the finger touched down while the song plays, because the click that calls this fires on the lift, a tap's
+     length later. Only a number counts, so a stray event object passed by a listener can never become a time. */
+  FM.toggleMarkerAtPlayhead = function (at) {
     const P = FM.scene.project; if (!P.markers) P.markers = [];
-    const t = FM.time;
+    const t = (typeof at === 'number' && isFinite(at)) ? at : FM.time;
     // "already here?" = SAME FRAME only (was 0.12s ≈ 3-4 frames — adding a benchmark on the very
     // next frame used to delete the previous one instead)
     const near = P.markers.find(m => !m.thumb && Math.abs(m.t - t) < 0.5 / (P.fps || 30));   // never let a benchmark tap eat the thumbnail-frame marker (they can share a frame)
@@ -3161,6 +3164,12 @@ window.FM = window.FM || {};
     // for the blue tick (queue 523). Passed the INCOMING id, because selectedId has not been written
     // yet at this point.
     if (FM.textEdit && FM.textEdit.syncToSelection) FM.textEdit.syncToSelection(id);
+    /* WHAT HE WAS WORKING ON A MOMENT AGO (queue 690). A few recent selections, newest first, so a tool
+       opened from one clip can aim at the one he had before it. The case that needed it: Audio →
+       keyframes is only reachable from the SONG's own Volume card, so by the time the sheet opens the
+       song is the selection and the Logo he was just working on is not — and a song has no picture to
+       drive. Ids only, never saved (it lives on FM, not the scene); a stale id simply fails to resolve. */
+    if (id) { const r = FM._recentSel || (FM._recentSel = []); const at = r.indexOf(id); if (at >= 0) r.splice(at, 1); r.unshift(id); if (r.length > 8) r.length = 8; }
     FM.scene.selectedId = id;
     FM.scene.selectedIds = id ? [id] : [];
     FM.syncSelectionChrome();   // BEFORE the rebuild — sel-mode/sel-multi change what it renders
@@ -6197,12 +6206,20 @@ window.FM = window.FM || {};
          button does are about marking the frame you are parked on.
          Same shape as the pill's hold so the two feel identical: 550ms, cancelled by an 8px drag, and it
          suppresses the trailing click so a hold never also drops a bookmark. */
-      let hLp = null, hFired = false, hDown = null;
+      let hLp = null, hFired = false, hDown = null, hPressT = null;
       const hEnd = () => { clearTimeout(hLp); hLp = null; hDown = null; };
       headTap.addEventListener('pointerdown', (e) => {
         e.stopPropagation();   // must not start a scrub, or the line jumps out from under the finger
+        hPressT = null;        // a press that never became a click must not leave its time for the next one
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         hDown = { x: e.clientX, y: e.clientY }; hFired = false;
+        /* A BEAT IS MARKED WHERE THE FINGER LANDS (queue 690). Marking a song is: press play, tap this on
+           every beat. The bookmark is dropped by the CLICK below, which fires when the finger LIFTS — so
+           while the song played every mark landed a tap's length late (the hunt measured 4-5 frames), a cut
+           on it trailed the music, and the same beat marked with M on PC (keydown, the press itself) landed
+           somewhere else. The time is taken here, at the press, and used only while playing: parked, the
+           playhead has not moved between press and lift, so there is nothing to correct. */
+        hPressT = FM.playing ? FM.time : null;
         clearTimeout(hLp);
         hLp = setTimeout(() => { hLp = null; hFired = true; if (FM.setThumbnailFrame) FM.setThumbnailFrame(); }, 550);
       });
@@ -6211,13 +6228,14 @@ window.FM = window.FM || {};
       headTap.addEventListener('pointercancel', hEnd);
       headTap.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();          // never let it fall through to a scrub
+        const pressT = hPressT; hPressT = null;            // one press, one use — a keyboard click has no press and marks NOW
         if (hFired) { hFired = false; return; }            // the hold already handled this press
         /* queue 921 S7 review: parked on a comment, the head IS that comment's mark (it covers it), so the
            tap opens it — it used to drop a bookmark on top of it instead. */
         const CMx = FM.collab && FM.collab.comments;
         const cmAt = CMx && CMx.installed && CMx.installed() && CMx.atHead ? CMx.atHead() : null;
         if (cmAt) { CMx.open({ at: cmAt }); return; }
-        if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead();
+        if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead(pressT);
       });
       headTap.title = 'Tap: add or remove a bookmark here · hold: set this frame as the project thumbnail';
     }

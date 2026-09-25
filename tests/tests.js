@@ -92614,6 +92614,264 @@
       FM.toast = realToast;
       h3aLibRestore(lib0);
       await hcCleanup(made, orig, wasOpen);
+  /* ═══ HUNT-b (queue 690, 25 Sep, third hunt) — THE AUDIO EDITING UI, WITH A REAL FINGER ═══════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four faults in the audio editing UI — the Audio →
+   * keyframes sheet, the audio effect Hear button, the Volume ruler and the bookmarks he taps on the beat — each found by
+   * driving the real control at 380 px with trusted touches (tests/_cdp.py), each written to FAIL first with a message
+   * that says what he would see, then fixed and proven red against the reverted fix. Each carries a CONTROL on the same
+   * run, so a red here cannot be the harness. */
+  function hbAudSay(msg) { return String(msg).replace(/"/g, "'"); }   // runtime names go into these messages; the suite forbids a double quote in one
+  async function hbAudSong(secs, name) {
+    // loud for 2 s, quiet to 4 s, then a pulse on every half second — a song with something to react to
+    const fn = t => (t < 2 ? 0.8 : (t < 4 ? 0.03 : ((t * 2) % 1 < 0.2 ? 0.9 : 0.02))) * Math.sin(2 * Math.PI * 220 * t);
+    return FM.loadVideoFile(huntEWav(secs, fn, name || 'hbaud'));
+  }
+  async function hbAudScene(extra, secs) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+    const dur = secs || 8;
+    const rec = await hbAudSong(dur, 'hbaud-song');
+    const song = FM.makeLayer('video', { name: 'Song', x: 540, y: 960, start: 0, duration: dur });
+    FM.media.set(song.id, rec);
+    FM.scene = scene((extra || []).concat([song]), { project: { width: 1080, height: 1920, fps: 30, duration: dur, background: '#000000' } });
+    FM.selectLayer(song.id); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    await sleep(500);
+    return song;
+  }
+  function hbAudCentre(elm, what) {
+    if (!elm) throw new Error('setup: no ' + what + ' on screen');
+    const r = elm.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0 && r.height > 0) || x < 0 || x > 375 || y < 0 || y > 745) throw new Error('setup: the ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+    return { x: x, y: y, r: r };
+  }
+  const hbAudTap = (x, y, hold) => [{ t: 'touchStart', x: x, y: y, ms: hold || 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }];
+
+  /* 690 (HUNT-b 1) — AUDIO → KEYFRAMES, OPENED FROM A SONG, DROVE THE SONG.
+   * The only door into the sheet is the "Audio → keyframes…" button on the Volume card (js/inspector.js volumePanel), so
+   * the selected layer is always the clip he is looking at. For a song — an mp3 or a wav, a video with a 0x0 picture — the
+   * sheet's own default (js/audio-react.js openSheet: `targetId: (sel && !isAudioOnly(sel)) ? sel.id : layer.id`) falls
+   * through to `layer.id`: the SONG. Apply then bakes Scale keyframes onto a layer that has no picture, the toast says
+   * Baked 77 keyframes onto Song, the song clip fills with diamonds and nothing on the canvas moves. The feature is
+   * music → motion, and with the defaults it does nothing he can see until he finds the Target layer menu.
+   * Driven through the real button and the real Apply with a finger. CONTROL: the sheet lists the Logo as a target, so a
+   * picture layer was there to pick.
+   * FIXED: openSheet's defaultTarget — the selection if it draws, else the picture layer he selected just before
+   * (FM._recentSel, kept by FM.selectLayer), else the topmost layer with its own picture. The second half covers the
+   * verifier's related case: an Extract Audio twin HAS a picture (a copy of the video at opacity 0) and so slipped past
+   * the 0x0 check — it is flagged audioOnly and must not be the default either. */
+  test('690 Audio to keyframes opened from a song aims at a picture layer, so Apply moves something on the canvas', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const q = s => [].slice.call(document.querySelectorAll(s));
+    let twinId = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const logo = FM.makeLayer('shape', { name: 'Logo', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#c05030', start: 0, duration: 8 });
+          const song = await hbAudScene([logo], 8);
+          FM.selectLayer(logo.id); await sleep(200);   // he has been working on the Logo…
+          FM.selectLayer(song.id); await sleep(250);   // …then opens the song to make the Logo pulse to it
+          FM.inspector.openCategory('volume'); await sleep(500);
+          const btn = q('#inspector-panel .vol-tool-btn').filter(b => /keyframes/.test(b.textContent))[0];
+          if (!btn) throw new Error('setup: the Volume card has no Audio → keyframes button');
+          btn.scrollIntoView({ block: 'center' }); await sleep(250);
+          const b = hbAudCentre(btn, 'Audio → keyframes button');
+          await realInput924(hbAudTap(b.x, b.y), 'a tap on Audio → keyframes');
+          await sleep(900);
+          const sheet = document.getElementById('ar-sheet');
+          if (!sheet) throw new Error('a real tap on Audio → keyframes did not open its sheet');
+          const targetSel = sheet.querySelectorAll('select')[0];
+          if (!targetSel) throw new Error('setup: the sheet has no Target layer menu');
+          const offered = [].slice.call(targetSel.options).map(o => o.value);
+          /* CONTROL: the Logo is right there in the target list — a picture layer was there to be the default. */
+          if (offered.indexOf(logo.id) < 0) throw new Error('CONTROL: the Target layer menu does not even list the Logo, so this test cannot say which default was wrong');
+          const picked = targetSel.options[targetSel.selectedIndex] ? targetSel.options[targetSel.selectedIndex].textContent : '(none)';
+          const apply = [].slice.call(sheet.querySelectorAll('button')).filter(x => /Apply/.test(x.textContent))[0];
+          if (!apply) throw new Error('setup: the sheet has no Apply button');
+          apply.scrollIntoView({ block: 'center' }); await sleep(250);
+          const a = hbAudCentre(apply, 'Apply button');
+          await realInput924(hbAudTap(a.x, a.y), 'a tap on Apply');
+          await sleep(1600);
+          const L = FM.layerById(FM.scene, logo.id), S = FM.layerById(FM.scene, song.id);
+          const songKf = FM.isAnimated(S.transform.scale) ? S.transform.scale.kf.length : 0;
+          const logoMoves = FM.isAnimated(L.transform.scale) || FM.isAnimated(L.transform.opacity) || FM.isAnimated(L.transform.rotation);
+          if (songKf || !logoMoves) {
+            throw new Error(hbAudSay('Audio → keyframes opened from his song comes up aimed at the song itself (Target layer: ' + picked + '), so Apply with the defaults baked ' + songKf + ' Scale keyframes onto an audio layer with no picture and the Logo did not move at all — the toast says Baked onto Song, the song clip fills with diamonds, and nothing on the canvas pulses to the music'));
+          }
+          /* The Extract Audio twin: a video WITH a picture, at opacity 0, flagged audioOnly (FM.extractAudio). Opened
+             from the twin with the Logo nowhere in his recent selections, the default must still be the Logo. */
+          const twin = FM.makeLayer('video', { name: 'Clip (audio)', x: 540, y: 960, start: 0, duration: 8 });
+          twinId = twin.id;
+          twin.audioOnly = true; twin.transform.opacity = 0;
+          FM.media.set(twin.id, { kind: 'video', el: document.createElement('video'), width: 1080, height: 1920, duration: 8 });   // its own element: removing it must not release the song's
+          FM.scene.layers.unshift(twin);   // on top of the stack, where a duplicate lands
+          FM._recentSel = [];
+          FM.selectLayer(twin.id); await sleep(200);
+          FM.audioReact.openSheet(twin); await sleep(300);
+          const sheet2 = document.getElementById('ar-sheet');
+          const tsel2 = sheet2 && sheet2.querySelectorAll('select')[0];
+          if (!tsel2) throw new Error('setup: Audio → keyframes did not open from the Extract Audio twin');
+          const aim2 = tsel2.value, aimName2 = tsel2.options[tsel2.selectedIndex] ? tsel2.options[tsel2.selectedIndex].textContent : '(none)';
+          FM.closeAudioReactSheet();
+          if (aim2 !== logo.id) throw new Error(hbAudSay('Audio → keyframes opened from an Extract Audio twin comes up aimed at ' + aimName2 + ' — the twin is a copy of the video at opacity 0, so keyframes baked there move nothing he can see; the Logo was right there'));
+        });
+      }, 380);
+    } finally {
+      try { if (FM.closeAudioReactSheet) FM.closeAudioReactSheet(); } catch (e) {}
+      if (twinId) { try { FM.media.remove(twinId); } catch (e) {} }
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 2) — THE HEAR BUTTON KEPT PLAYING AFTER HE LEFT THE EFFECT.
+   * An audio effect row's ▶ (queue 653) auditions the clip on a 2.5 s loop so he can hear a slider while he drags it. It
+   * is not the transport, so nothing that stops playback stops it; js/audio-fx-live.js audition() stops itself only when
+   * the transport starts, an export starts or the layer is deleted, and js/inspector.js stops it only when that one row is
+   * COLLAPSED. Every other way out of the panel leaves it running: the card's ‹ Effects back button (js/inspector.js
+   * `back.addEventListener('click', () => { view = 'home' …`), tapping away to deselect the clip. The same 2.5 s of his
+   * song then loops forever over a panel that no longer has a stop button on it — the stuck state the audition's own
+   * comments call the worst this app can have, because there is nothing on screen to connect the sound to.
+   * Measured on the element itself (paused, currentTime), through a real ▶ tap and a real tap on ‹ Effects. CONTROL: the
+   * ▶ tap really started the audition and the element really played.
+   * FIXED: the Hear button passes its own selector as the audition's `control`, and the audition's tick stops the moment
+   * no lit Hear button is on screen (js/audio-fx-live.js) — every way out of the panel at once, not one exit at a time. */
+  test('690 an audio effect Hear preview stops when he backs out of the effect or deselects the clip — the song never loops on with no stop on screen', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const q = s => [].slice.call(document.querySelectorAll(s));
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const song = await hbAudScene([], 8);
+          const rv = FM.audioFxRegistry.makeInstance('reverb'); rv._expanded = true;
+          FM.layerById(FM.scene, song.id).audioFx = [rv];
+          FM.refreshAll(); FM.selectLayer(song.id); await sleep(200);
+          FM.inspector.openCategory('audiofx'); await sleep(500);
+          const m = FM.media.get(song.id);
+          const startHear = async function (why) {
+            FM.inspector.openCategory('audiofx'); await sleep(400);
+            const hear = q('#inspector-panel .fx-row.fx-open .fx-hear')[0];
+            const h = hbAudCentre(hear, 'Hear button on the Reverb row');
+            await realInput924(hbAudTap(h.x, h.y), 'a tap on Hear ' + why);
+            await sleep(700);
+            /* CONTROL: the tap really started it, and the song is really coming out of the element. */
+            if (!FM.audioFxLive.auditioning() || m.el.paused) throw new Error('CONTROL: a real tap on the Hear button did not start the preview (auditioning ' + FM.audioFxLive.auditioning() + ', element paused ' + m.el.paused + ')');
+          };
+          const bad = [];
+          /* 1. ‹ Effects, the card's own back button, with a real finger. */
+          await startHear('before backing out');
+          const back = q('#inspector-panel .cat-back')[0];
+          const bk = hbAudCentre(back, '‹ Effects back button');
+          await realInput924(hbAudTap(bk.x, bk.y), 'a tap on ‹ Effects');
+          await sleep(3200);   // longer than one 2.5 s loop
+          if (FM.audioFxLive.auditioning() || !m.el.paused) bad.push('backing out with ‹ Effects: 3 s later the song is still ' + (m.el.paused ? 'held as a preview' : 'playing') + ' (at ' + m.el.currentTime.toFixed(1) + ' s of its 2.5 s loop) and the panel on screen has ' + q('#inspector-panel .fx-hear').length + ' stop buttons');
+          try { FM.audioFxLive.stopAudition(); } catch (e) {}
+          /* 2. Tapping away — the clip is deselected and the whole card goes. */
+          FM.selectLayer(song.id); await sleep(250);
+          await startHear('before deselecting');
+          FM.selectLayer(null); await sleep(1500);
+          if (FM.audioFxLive.auditioning() || !m.el.paused) bad.push('deselecting the clip: the song is still ' + (m.el.paused ? 'held as a preview' : 'looping') + ' with no card open at all');
+          if (bad.length) throw new Error('the Hear preview of an audio effect keeps looping the same 2.5 s of his song after he leaves the effect, with no stop button anywhere on screen — only pressing Play or finding that row again stops it: ' + bad.join('; '));
+        });
+      }, 380);
+    } finally {
+      try { FM.audioFxLive.stopAudition(); } catch (e) {}
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 3) — THE VOLUME RULER, GRABBED ON ITS LINE, MOVED ONE NOTCH AND STOPPED.
+   * The cyan centre line of every scrub ruler is `.fx-scrub-notch` (styles.css), a 2 px element with no
+   * `pointer-events: none` — so a finger that lands on the line is implicitly captured by the LINE, not the ruler. The
+   * ruler (js/inspector.js tickStrip) waits for 6 px of travel, then calls strip.setPointerCapture, which moves the capture
+   * from the line to itself: the browser fires lostpointercapture at the line and it BUBBLES to the ruler, where
+   * `strip.addEventListener('lostpointercapture', end)` takes it for the end of the drag. The first move has already
+   * applied one notch (5 percent on Volume); every move after it is ignored. The line is the obvious thing to grab — it
+   * is the one bright mark on the ruler — so on his phone some drags of Volume, the fades and every effect slider move a
+   * single notch and then go dead under his finger.
+   * The same real drag is made twice, 80 px to the left and held still before lifting (no glide): CONTROL starting 40 px
+   * off the line, which must move the volume the whole way; then starting on the line.
+   * FIXED twice over: `.fx-scrub-notch` is pointer-events: none (styles.css), and tickStrip ends a drag on
+   * lostpointercapture only when the STRIP lost it (e.target === strip), not when a child's loss bubbles up. */
+  test('690 a real finger that grabs a scrub ruler on its centre line drags the whole way, not one notch', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const q = s => [].slice.call(document.querySelectorAll(s));
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const song = await hbAudScene([], 8);
+          const drag = async function (offset, what) {
+            FM.layerById(FM.scene, song.id).volume = 1;
+            FM.inspector.openCategory('volume'); FM.inspector.refresh(); await sleep(400);
+            const strip = q('#inspector-panel .vol-strip')[0];
+            const c = hbAudCentre(strip, 'Volume ruler');
+            const x0 = c.x + offset, y = c.y;
+            const steps = [{ t: 'touchStart', x: x0, y: y, ms: 40 }];
+            for (let k = 1; k <= 8; k++) steps.push({ t: 'touchMove', x: x0 - k * 10, y: y, ms: 30 });
+            steps.push({ t: 'touchMove', x: x0 - 80, y: y, ms: 200 });   // held still before lifting — a placing drag, no glide
+            steps.push({ t: 'touchEnd', x: x0 - 80, y: y, ms: 40 });
+            await realInput924(steps, what);
+            await sleep(400);
+            return Math.round(FM.evalProp(FM.layerById(FM.scene, song.id).volume, FM.time) * 100);
+          };
+          const off = await drag(40, 'a drag starting beside the line');
+          /* CONTROL: 80 px of a real drag started beside the line moves Volume by over 40 percent (a notch is 7 px and 5 percent). */
+          if (!(off >= 140)) throw new Error('CONTROL: an 80 px real drag started beside the centre line only took Volume from 100 to ' + off + ' percent, so the harness is not driving the ruler');
+          const on = await drag(0, 'a drag starting on the line');
+          if (!(on >= 140)) throw new Error('a real finger that lands on the Volume ruler’s bright centre line and drags 80 px moves the volume from 100 to ' + on + ' percent — one notch — and ignores the rest of the drag; the same drag started 40 px to the side reaches ' + off + ' percent. Grabbing the line is the natural way to hold the ruler, and the fades and every effect slider behave the same');
+        });
+      }, 380);
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 4) — A BEAT TAPPED ON THE PLAYHEAD LANDED WHEN THE FINGER LIFTED.
+   * Marking the beats of a song is: press play, tap the bookmark on every beat (the playhead's head, #tl-headtap — his
+   * "benchmarks", queue 364), then cut and keyframe on the marks. On the phone the mark is dropped by the head's CLICK
+   * handler (js/app.js, `headTap.addEventListener('click', …) → FM.toggleMarkerAtPlayhead()`), and toggleMarkerAtPlayhead
+   * stamps `FM.time` as it is at that moment — the moment the finger LIFTS, which is a normal tap's length after the beat
+   * it was aimed at. On PC the M key (keydown) marks the press itself, so the same beat lands in two different places on
+   * his two devices, and every phone mark is late: a cut on it visibly trails the music.
+   * Three real taps on the head while the song plays, each held 110 ms like an ordinary tap; the time is read by a capture
+   * listener at the real pointerdown. CONTROL: all three taps made a mark and playback carried on.
+   * FIXED: the head's pointerdown takes FM.time while playing and the click hands it to FM.toggleMarkerAtPlayhead(at). */
+  test('690 a beat tapped on the playhead while the song plays is marked on the frame the finger touched, not when it lifted', { item: '690', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    let head = null, onDown = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await hbAudScene([], 8);
+          FM.scene.project.markers = [];
+          FM.selectLayer(null); await sleep(300);
+          head = document.getElementById('tl-headtap');
+          const h = hbAudCentre(head, 'playhead head (bookmark button)');
+          const downs = [];
+          onDown = function () { downs.push(FM.time); };
+          head.addEventListener('pointerdown', onDown, true);
+          FM.setTime(0); FM.play(); await sleep(400);
+          for (let k = 0; k < 3; k++) { await realInput924(hbAudTap(h.x, h.y, 110), 'a beat tap on the playhead'); await sleep(450); }
+          const stillPlaying = !!FM.playing;
+          FM.pause();
+          const marks = (FM.scene.project.markers || []).filter(mk => !mk.thumb).map(mk => mk.t).sort((a, b) => a - b);
+          /* CONTROL: every tap was a real press on the head, made a mark, and did not stop the song. */
+          if (downs.length !== 3 || marks.length !== 3 || !stillPlaying) throw new Error('CONTROL: 3 real taps on the playing head gave ' + downs.length + ' presses, ' + marks.length + ' bookmarks, and playback ' + (stillPlaying ? 'running' : 'stopped'));
+          const fps = FM.scene.project.fps || 30;
+          const lates = marks.map((t, i) => (t - downs[i]) * fps);
+          const worst = Math.max.apply(null, lates.map(Math.abs));
+          if (worst > 1.01) throw new Error('beats tapped on the playhead while the song plays are marked ' + lates.map(f => f.toFixed(1)).join(', ') + ' frames after the finger touched — the mark is taken when the finger lifts, so every beat he marks on the phone is late and a cut on it trails the music (on PC the M key marks the press itself)');
+        });
+      }, 380);
+    } finally {
+      if (head && onDown) head.removeEventListener('pointerdown', onDown, true);
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
   });
 
