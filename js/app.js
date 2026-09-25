@@ -5118,35 +5118,60 @@ window.FM = window.FM || {};
   FM._handleFiles = function (files) { return handleFiles(files); };
   FM._audioFromVideo = function (file) { return audioFromVideo(file); };
 
+  /* ═══ A SLOW ADD LANDS IN THE PROJECT IT WAS STARTED IN, OR NOWHERE (queue 690, hunt 5) ════════════════
+   * Every add below awaits a loader first, and a loader can take seconds: a song is decoded end to end for its
+   * true length (js/media.js), a GIF frame by frame, and Add ▸ Audio takes the sound out of a whole video. The
+   * add then went into whatever project was open BY THEN — so a song picked in one project, with him gone
+   * back Home and into another while the phone read it, landed in the other one, which he never added it to,
+   * and the project he picked it in never got it. Add ▸ Media tiles already refuse exactly this (915.5B: "a
+   * reused clip never lands in a project he did not tap in"); the picker, the drop and Remove vocals did not.
+   * The project is taken when the work STARTS and asked again when it is done; left → the file is let go
+   * (its decoded element and blob URL, which nothing else will ever free) and he is told, in 915.5B's words. */
+  FM.stillIn = function (pid) { return !(FM.storage && FM.storage.openProjectId) || FM.storage.openProjectId() === pid; };
+  FM.startedIn = function () { return FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null; };
+  FM.letGoMedia = function (rec) { if (rec && FM._releaseMediaRecord) { try { FM._releaseMediaRecord(rec); } catch (e) {} } };
+
   async function handleFiles(files) {
     // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
     const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
+    const pickedIn = FM.startedIn(), notAdded = [];   // queue 690 (hunt 5): see FM.stillIn above
+    const add = function (rec, file) {
+      if (!FM.stillIn(pickedIn)) { FM.letGoMedia(rec); notAdded.push(file); return false; }
+      FM.addMediaLayer(rec);
+      return true;
+    };
     for (const file of files) {
+      if (!FM.stillIn(pickedIn)) { notAdded.push(file); continue; }   // the rest of the batch was picked for that project too
       try {
         const kind = mediaKind(file);
         if (wantAudio && kind === 'video') {
           if (FM.loadingDot) FM.loadingDot.check();
           if (FM.toast) FM.toast('Taking the audio out of “' + (file.name || 'that clip') + '”…', 2200);
           const wav = await audioFromVideo(file);
+          if (!FM.stillIn(pickedIn)) { notAdded.push(file); continue; }
           if (wav) {
-            FM.addMediaLayer(await FM.loadVideoFile(wav));
-            if (FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”');
+            if (add(await FM.loadVideoFile(wav), file) && FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”');
           } else {
             // Say what happened and still do the useful thing, rather than importing nothing.
             if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — added it as a video instead', 5200);
-            FM.addMediaLayer(await FM.loadVideoFile(file));
+            add(await FM.loadVideoFile(file), file);
           }
           continue;
         }
-        if (kind === 'video') FM.addMediaLayer(await FM.loadVideoFile(file));
-        else if (kind === 'image') FM.addMediaLayer(await FM.loadImageFile(file));
+        if (kind === 'video') add(await FM.loadVideoFile(file), file);
+        else if (kind === 'image') add(await FM.loadImageFile(file), file);
         // Audio rides the pictureless-video path: a <video> element plays mp3/m4a/wav fine, and a
         // 0×0-picture clip already gets the waveform lane, live mix, keyframed volume and export mix.
-        else if (kind === 'audio') FM.addMediaLayer(await FM.loadVideoFile(file));
+        else if (kind === 'audio') add(await FM.loadVideoFile(file), file);
         // Never fail silently: an unusable file used to vanish without a word, which reads as the
         // importer being broken rather than the file being unsupported.
         else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
       } catch (e) { FM.reportError('importing “' + (file && file.name || 'a file') + '”', e, 'FreeMotion could not open “' + (file && file.name || 'that file') + '”.\n\nIf it plays elsewhere on this device it is usually the format — try exporting it as MP4 (video) or WAV/M4A (audio) and importing that.'); }
+    }
+    if (notAdded.length && FM.toast) {
+      FM.toast(notAdded.length === 1
+        ? 'Not added — you switched projects while “' + (notAdded[0] && notAdded[0].name || 'that file') + '” was opening'
+        : 'Not added — you switched projects while ' + notAdded.length + ' files were opening', 5000);
     }
   }
 

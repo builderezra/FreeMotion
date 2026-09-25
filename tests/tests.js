@@ -95897,8 +95897,12 @@
   /* ═══ HUNT-d (queue 690, fifth hunt) — A PROJECT ACROSS RELOADS, WINDOWS AND SWITCHES ══════════════════════════════
    * His standing brief: "go re audit, find some bugs coz theres a shit load". Four findings in what happens to a project
    * between the moments he is editing it: the app closed straight after a big import, a second window on the same
-   * project, a rename on Home followed by an Undo, and a song still opening when he switches project. Each test FAILS on
-   * v16.98 because of the bug it names, and each carries a control that proves its flow works when nothing goes wrong.
+   * project, a rename on Home followed by an Undo, and a song still opening when he switches project. Each test FAILED on
+   * v16.98 because of the bug it names (renamed from HUNT-d to 690 when it went green), and each carries a control that
+   * proves its flow works when nothing goes wrong. The fixes: js/storage.js notes every file on its way to disk and names
+   * a clip that came back without one (reportPending); writeScene makes no write when nothing changed and adopts a rev
+   * that moved without the work moving; FM.history.renameProject carries a Home rename into every snapshot; handleFiles
+   * and Remove vocals add only to the project they were started in (FM.stillIn, js/app.js).
    * The reload and second-window tests run whole app instances on their own origins through the tier-3 rig (rig921), so
    * the reload is a real page reload and the second window really shares his storage; the Home tests use a real finger. */
   function hd5Sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -95923,12 +95927,12 @@
     await hd5Sleep(200);
   }
 
-  test('HUNT-d a big clip imported just before the app is closed comes back as an empty clip, and nothing says it was never saved', { item: '690', budgetMs: 180000 }, async function () {
+  test('690 a big clip whose file never finished saving before the app closed is named when the project reopens — never a silent empty clip', { item: '690', budgetMs: 180000 }, async function () {
     /* addMediaLayer writes the project document at once (the clip is ON the timeline in storage) and only then starts
        writing the clip's FILE — for a phone video that takes seconds. If the app is closed in those seconds (iOS throws a
        PWA out of memory after a big import, or he swipes it away) the file never lands. Reopened, the clip is still on
-       the timeline, draws nothing, plays nothing, and nothing tells him it has to be added again — the tile in Add → Media
-       is dead too. Real page reload of a whole app on its own origin, at phone size. */
+       the timeline, draws nothing, plays nothing, and nothing tells him it has to be added again (its Add → Media tile
+       says "no longer stored" only once he taps it). Real page reload of a whole app on its own origin, at phone size. */
     const R = rig921();
     const tag = 'hd5k';
     const src = 'http://hd5k.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag;
@@ -95966,7 +95970,7 @@
     } finally { R.drop(tag); }
   });
 
-  test('HUNT-d opening the app in a second window, only to look, stops the first window saving — what he adds there afterwards is gone on reload', { item: '690', budgetMs: 180000 }, async function () {
+  test('690 opening the app in a second window only to look never stops the first window saving — what he adds there afterwards survives a reload', { item: '690', budgetMs: 180000 }, async function () {
     /* The stale-tab guard (#306) stops a window writing over a NEWER copy saved elsewhere. But a second window that only
        OPENS the project writes it too — its boot autosave, and its flush when it is closed — with a higher rev and not
        one change. The first window then reads itself as stale and refuses every save after, while he carries on working
@@ -96008,7 +96012,7 @@
     } finally { R.drop(tag); R.drop(tag + 'b'); }
   });
 
-  test('HUNT-d a project renamed on Home gets its old name back the moment he presses Undo inside it', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 a project renamed on Home keeps its new name when he presses Undo inside it', { item: '690', budgetMs: 120000 }, async function () {
     /* ⋯ → Rename… on Home writes the new name into the open project's scene without a history step, and going back into
        the SAME project keeps its undo stack — whose every snapshot still carries the OLD name. So the first Undo he
        presses inside (meaning to take back a move) restores the old name with it, the next save writes it to the card,
@@ -96068,7 +96072,7 @@
     }
   });
 
-  test('HUNT-d a song still opening when he goes Home and opens another project lands in that other project', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 a song still opening when he goes Home and opens another project never lands in that other project — he is told it was not added', { item: '690', budgetMs: 120000 }, async function () {
     /* handleFiles (js/app.js) awaits the file's loader and then calls addMediaLayer on whatever project is open BY THEN.
        A song is decoded end to end for its true length before it can be added (js/media.js), and a phone takes seconds
        over a long one — seconds in which he can go back Home and open another project. The song then lands in THAT
@@ -96138,6 +96142,96 @@
       }
     } finally {
       FM.loadVideoFile = realLoad; FM.toast = realToast;
+      if (release) release();
+      await hd5Cleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* 690 (HUNT-d, the second window's two halves) — the test above runs two whole windows and goes green if EITHER half of
+     the fix is in place, so each half is pinned here on its own, in this frame: a save that changes nothing makes no
+     write and moves no rev (so a window that only looked leaves the number where it was), and a rev that DID move
+     without the work moving (a window that clicked a layer and closed, or a build before this one) is adopted, and this
+     window keeps saving. The #306 test still proves that newer WORK written elsewhere stops this window cold. */
+  test('690 a save that changes nothing moves no rev, and a rev moved elsewhere without the work moving never makes this window stale', { item: '690' }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], bad = [], realToast = FM.toast, said = [];
+    try {
+      if (wasOpen) FM.home.close();
+      const a = await FM.projects.create({ name: 'HUNT-d two windows', width: 320, height: 240 }); made.push(a);
+      const key = 'fm.proj.' + a;
+      const mk = function (name) { return Object.assign(FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 20, shapeH: 20, fill: '#0a0' }), { start: 0, duration: 2, name: name }); };
+      FM.scene.layers.push(mk('HUNT-d Before')); FM.selectLayer(FM.scene.layers[FM.scene.layers.length - 1].id);
+      if (!FM.storage.flushSync()) throw new Error('setup: the first save of HUNT-d two windows was refused');
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      /* half 1: nothing changed → nothing written */
+      const r0 = FM._sceneRevState().disk;
+      FM.storage.flushSync(); FM.storage.flushSync(); await FM.storage.save();
+      const r1 = FM._sceneRevState().disk;
+      if (r1 !== r0) bad.push('three saves with nothing changed moved the rev on disk from ' + r0 + ' to ' + r1 + ' — every window that only opens the project and closes it again does the same, and the first window then reads that as newer work');
+      /* half 2: another window wrote the SAME work under a higher rev (its own selection) */
+      const d = JSON.parse(localStorage.getItem(key));
+      d.rev = r1 + 3; d.selectedId = null; d.selectedIds = [];
+      localStorage.setItem(key, JSON.stringify(d));
+      FM.scene.layers.push(mk('HUNT-d After'));
+      const ok = FM.storage.flushSync();
+      const disk = localStorage.getItem(key) || '';
+      if (!ok || disk.indexOf('HUNT-d After') < 0 || FM._sceneRevState().stale) {
+        bad.push('another window rewrote this project with not one change to its layers, only a higher rev — and this window then refused to save what he added (saved: ' + ok + ', stale: ' + FM._sceneRevState().stale + ', on disk: ' + (disk.indexOf('HUNT-d After') >= 0 ? 'yes' : 'no') + ')');
+      }
+      if (said.some(function (m) { return /older copy of the project/.test(m); })) bad.push('and it told him newer changes were saved elsewhere, when there were none');
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally {
+      FM.toast = realToast;
+      await hd5Cleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* 690 (HUNT-d, the song test's sibling) — Remove vocals decodes the whole track and renders it offline before it adds the
+     instrumental, which takes seconds on a long song. Its twin used to land in whatever project was open by then, pointing
+     at a source clip that is not in it. The decode is held here as the phone's slow one; the switch is the app's own. */
+  test('690 a vocal removal still running when he opens another project never adds its track there — he is told it was not added', { item: '690' }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], said = [];
+    const realDecode = FM.decodeAudio, realLoad = FM.loadVideoFile, realToast = FM.toast;
+    let release = null;
+    const twins = function (layers) { return (layers || []).filter(function (l) { return l && l.karaokeOf; }).length; };
+    const fakeRec = function () { return { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 0.1 }; };   // no file: nothing reaches the library or the store
+    const song = function () {
+      const L = FM.makeLayer('video', { name: 'HUNT-d stereo song' }); L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 4, file: new File([new Uint8Array(8)], 'HUNT-d stereo song.wav', { type: 'audio/wav' }) });
+      FM.refreshAll(); FM.history.commit();
+      return L;
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      const other = await FM.projects.create({ name: 'HUNT-d no vocals elsewhere', width: 320, height: 240 }); made.push(other);
+      const mine = await FM.projects.create({ name: 'HUNT-d no vocals here', width: 320, height: 240 }); made.push(mine);
+      FM.toast = function (m) { said.push(String(m)); return realToast.apply(this, arguments); };
+      FM.loadVideoFile = async function () { return fakeRec(); };
+      FM.decodeAudio = async function () { const ac = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 4410, 44100); return ac.createBuffer(2, 4410, 44100); };
+      /* CONTROL: left alone, the same removal adds its instrumental to the project he pressed it in */
+      const c = song();
+      await FM.toggleKaraoke(c);
+      if (twins(FM.scene.layers) !== 1) throw new Error('CONTROL: with nothing held and no switch, Remove vocals did not add its track here (' + twins(FM.scene.layers) + ' twins, toasts: ' + said.join(' | ').replace(/"/g, "'") + ') — this fixture cannot see the bug');
+      /* now the slow one, and he opens his other project while it runs */
+      const held = new Promise(function (r) { release = r; });
+      FM.decodeAudio = async function () { await held; const ac = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 4410, 44100); return ac.createBuffer(2, 4410, 44100); };
+      const L = song();
+      said.length = 0;
+      const job = FM.toggleKaraoke(L);
+      await hd5Sleep(50);
+      await FM.projects.open(other, { confirmed: true });
+      if (FM.projects.currentId() !== other) throw new Error('setup: HUNT-d no vocals elsewhere did not open');
+      release();
+      await job;
+      await hd5Sleep(100);
+      FM.storage.flushSync();
+      const there = twins(FM.scene.layers);
+      if (there) throw new Error('he pressed Remove vocals in HUNT-d no vocals here and opened HUNT-d no vocals elsewhere while it ran — its instrumental landed in HUNT-d no vocals elsewhere (' + there + ' karaoke track), pointing at a song that is not in that project');
+      if (!said.some(function (m) { return /not added/i.test(m); })) throw new Error('the instrumental went nowhere and nothing told him (toasts: ' + (said.join(' | ').replace(/"/g, "'") || 'none') + ')');
+    } finally {
+      FM.decodeAudio = realDecode; FM.loadVideoFile = realLoad; FM.toast = realToast;
       if (release) release();
       await hd5Cleanup(made, orig, wasOpen);
     }
