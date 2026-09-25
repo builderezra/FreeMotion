@@ -241,7 +241,8 @@ window.FM = window.FM || {};
   function done(info) {
     mode = 'done';
     doneBar.textContent = '';
-    var msg = info && info.cancelled ? 'Stopped — kept what was built.' : (info && info.template ? 'Template ready — edit anything.' : 'Done! ' + ((info && info.layersAdded) || 0) + ' layers — all editable.');
+    var msg = info && info.left ? 'Stopped — you opened another project. What was built is kept in “' + info.left + '”.'   // queue 690 (textContent: his project name prints as typed)
+      : info && info.cancelled ? 'Stopped — kept what was built.' : (info && info.template ? 'Template ready — edit anything.' : 'Done! ' + ((info && info.layersAdded) || 0) + ' layers — all editable.');
     var summary = el('div', 'ai-summary', msg);
     doneBar.appendChild(summary);
 

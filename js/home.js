@@ -1348,7 +1348,7 @@ window.FM = window.FM || {};
           ...((FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn() && FM.collab.ui.share)
             ? [{ label: 'Share live…', action: async () => {
               const ok = await openProject(p.id);
-              if (!ok) { if (FM.toast) FM.toast('Busy opening a project — try again'); return; }
+              if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }
               setTimeout(() => { try { FM.collab.ui.share(); } catch (e) {} }, 260);
             } }] : [])
         ]),
@@ -1400,7 +1400,7 @@ window.FM = window.FM || {};
         // should be standing.
         { label: 'Export video…', action: async () => {
           const ok = await openProject(p.id);
-          if (!ok) { if (FM.toast) FM.toast('Busy opening a project — try again'); return; }
+          if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }   // null = he chose to stay (queue 690): nothing to add
           // let the editor finish laying out before the dialog measures the project for its presets
           setTimeout(() => { if (FM.showExportDialog) FM.showExportDialog(); }, 260);
         } },
@@ -1409,7 +1409,7 @@ window.FM = window.FM || {};
         { label: 'Save project file…', action: async () => {
           const prev = FM.projects.currentId();
           const ok = await openProject(p.id, true);
-          if (!ok) { if (FM.toast) FM.toast('Busy opening a project — try again'); return; }   // switch was skipped (another open in flight): exporting now would serialize the WRONG scene
+          if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }   // switch was skipped (another open in flight): exporting now would serialize the WRONG scene
           await FM.storage.exportFile();
           if (prev && prev !== p.id) { await openProject(prev, true); render(); }
         } },
@@ -1813,6 +1813,7 @@ window.FM = window.FM || {};
       holdPress();
       try {
         const pid = await FM.templates.openForEdit(t.id);
+        if (pid === false) return;   // queue 690: his open project could not be saved and he chose to stay
         if (!pid) { if (FM.toast) FM.toast('That template’s data is missing — save it again'); return; }
         FM.home.close({ push: true, lead: card });
         if (FM.toast) FM.toast('Editing “' + (t.name || 'template') + '” — your changes save back to it when you go Home', 3600);
@@ -1911,6 +1912,7 @@ window.FM = window.FM || {};
       holdPress();
       try {
         const pid = await FM.elements.openForEdit(e.id);
+        if (pid === false) return;   // queue 690: his open project could not be saved and he chose to stay
         if (!pid) { if (FM.toast) FM.toast('That element’s data is missing — save it again'); return; }
         FM.home.close({ push: true, lead: card });
         if (FM.toast) FM.toast('Editing “' + (e.name || 'element') + '” — your changes save back to it when you go Home', 3600);
@@ -2078,7 +2080,7 @@ window.FM = window.FM || {};
        "Select works on EVERY tab now (v5.04)". Two comments disagreeing, and the older one is the one
        this entry's first diagnosis quoted. Fixed below so it cannot mislead a third time. */
     selectify(card, dthumb, p.id, async () => {
-      await FM.projects.open(p.id);
+      if ((await FM.projects.open(p.id)) === false) return;   // queue 690: his project could not be saved and he chose to stay
       FM.home.close({ push: true, lead: card });
     });
     keyActivate(card);
@@ -2133,7 +2135,7 @@ window.FM = window.FM || {};
         { label: 'Build a new one…', action: async () => {
           const name = await FM.ask({ title: 'New element', message: 'Element name', input: { value: 'My element' }, ok: 'Create' }); if (!name || !name.trim()) return;
           const pid = await FM.projects.create({ name: name.trim(), width: 1080, height: 1080, elementDraft: true });   // a workspace, not a project — see storage.js (queue 340)
-          if (!pid) { if (FM.toast) FM.toast('Could not create that'); return; }
+          if (!pid) { if (pid !== false && FM.toast) FM.toast('Could not create that'); return; }   // false = he chose to stay (queue 690)
           FM.scene.project.background = null;   // transparent: an element drops onto whatever is under it
           if (FM.storage) { FM.storage.markDirty(); FM.storage.save(); }
           FM.home.close({ push: true });
@@ -2182,6 +2184,17 @@ window.FM = window.FM || {};
      * when nothing is active, and a condition here is one more thing that can be wrong at a seam whose
      * entire job is to leave no state behind. */
     if (FM.drawTool && FM.drawTool._stop) FM.drawTool._stop();
+    /* ⚠️ queue 690: STORAGE FULL — ASK BEFORE THE PUSH, NOT HALF-WAY THROUGH IT. When the last save of the open
+       project was refused, leaving it throws away what is only on screen, so projects.open() asks first. Asked
+       from inside open() the question would land on a half-pushed Home; asked here, nothing has moved yet, and
+       Stay leaves him on Home with his project still open. A flag read, so an ordinary tap costs nothing and
+       reaches the push in the same task as before. Resolves null (not false) so the ⋯ actions do not report
+       "busy" for a choice he just made. */
+    let confirmed = false;
+    if (id !== FM.projects.currentId() && FM.storage && FM.storage.lastWriteRefused && FM.storage.lastWriteRefused()) {
+      if (!(await FM.projects.confirmLeave())) return null;
+      confirmed = true;
+    }
     _opening = true; _openingAt = Date.now();
     holdPress();   // this open now owns the press — no release timer, and no other card, may take it
     /* THE CARD LEAVES ON THE TAP (queue 128). Everything below used to happen after `await open(id)`,
@@ -2202,7 +2215,14 @@ window.FM = window.FM || {};
       phase1 = !!(_a && _a.classList.contains('fm-push-wait'));
     }
     try {
-      if (needsLoad) await FM.projects.open(id);
+      if (needsLoad) {
+        /* queue 690: false = the project could not be saved and he chose to stay (a save that failed only at the
+           switch itself, so the question above did not fire). Nothing was torn down — put Home back as it was. */
+        if ((await FM.projects.open(id, confirmed ? { confirmed: true } : undefined)) === false) {
+          if (phase1) { try { FM.home.abortPush(); } catch (e2) {} }
+          return null;
+        }
+      }
       /* SAME PROJECT, NO LOAD — SO NOTHING PUTS ITS MEDIA BACK (queue 385).
        * `needsLoad` is false when you re-open the project you were already in, and that path is not
        * only the ordinary "tap the OPEN card": "Save project file…" runs it with keepOpen, so home
@@ -2642,7 +2662,8 @@ window.FM = window.FM || {};
     const s = npCompute(), fps = npFps();
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
-    await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg });
+    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg });
+    if (!pid) return;   // queue 690: his open project could not be saved and he chose to stay — Home stays as it is
     FM.home.close({ push: true });   // same hand-off as tapping a card — every route from home into a project pushes
   }
 

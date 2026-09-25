@@ -4082,27 +4082,51 @@ window.FM = window.FM || {};
      swaps layer JSON — deliberately, so an undo does not re-decode every video — so the media had to be
      asked separately. Called from history.restore; silent and async, because the layer is already correct
      and this only brings the picture back into agreement with it. */
-  FM.restoreReplacedMedia = async function () {
+  /* ⚠️ queue 690 (hunt f): BOTH DIRECTIONS, ONE AT A TIME, AND NEVER ON A LAYER THAT MOVED ON. This only ever
+     handled an undo ("the picture is AHEAD of the layer") and only from one kept file, so: replace twice, undo
+     twice, and the second undo found the slot holding the first replacement at the wrong revision and did
+     nothing — the settings went back, the clip kept his second pick, the next save wrote it over his original.
+     Redo never swapped anything at all. Now every revision has its own kept file (storage.js stashPrevMedia),
+     and a clip whose picture is not the revision its layer names is swapped to the one that is — after the
+     file going away is itself kept under ITS revision, which is what lets the next redo or undo bring it back.
+     Runs are queued: two quick undos used to run side by side, and the slower one could land last with the
+     wrong file. And after every await the layer is looked up again — an undo replaces the layer objects, and a
+     layer that has moved on since (another undo, a replace, a project switch) is left for the run that follows. */
+  let _restoreRun = Promise.resolve(0);
+  FM.restoreReplacedMedia = function () {
+    const run = _restoreRun.then(restoreReplacedOnce, restoreReplacedOnce);
+    _restoreRun = run.catch(() => 0);
+    return run;
+  };
+  async function restoreReplacedOnce() {
     if (!FM.storage || !FM.storage.takePrevMedia) return 0;
+    const carries = l => !!l && l.type !== 'text' && l.type !== 'shape' && l.type !== 'null';
     let back = 0;
-    for (const layer of (FM.scene.layers || [])) {
-      if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
+    for (const id of (FM.scene.layers || []).filter(carries).map(l => l.id)) {
+      const layer = FM.layerById(FM.scene, id);
+      if (!carries(layer)) continue;
       const want = layer.mediaRev || 0;
-      const live = FM.media.get(layer.id);
-      if (!live || (live.rev || 0) <= want) continue;      // the picture is not ahead of the layer
-      const prev = await FM.storage.takePrevMedia(layer.id);
+      const live = FM.media.get(id);
+      if (!live || (live.rev || 0) === want) continue;       // the picture already is the revision the layer names
+      if (FM.storage.hasPrevMedia && !FM.storage.hasPrevMedia(id, want)) continue;   // nothing kept for it — no read on every undo
+      const unchanged = () => { const L = FM.layerById(FM.scene, id); return !!L && (L.mediaRev || 0) === want && FM.media.get(id) === live; };
+      const prev = await FM.storage.takePrevMedia(id, want);
       if (!prev || !prev.file || (prev.rev || 0) !== want) continue;
       let rec = null;
       try { rec = /^video/.test(prev.kind || '') ? await FM.loadVideoFile(prev.file) : await FM.loadImageFile(prev.file); } catch (e) { rec = null; }
       if (!rec) continue;
+      // keep the file going away, under its own revision, BEFORE it leaves — the redo (or the next undo) asks for it
+      if (unchanged() && live.file && FM.storage.stashPrevMedia) { try { await FM.storage.stashPrevMedia(id, live, live.rev || 0); } catch (e) {} }
+      if (!unchanged()) { try { if (rec.url) URL.revokeObjectURL(rec.url); } catch (e) {} continue; }
       rec.rev = want;
-      FM.replaceMediaWith(layer.id, rec);
-      layer.mediaRev = want;
+      FM.replaceMediaWith(id, rec);
       back++;
     }
-    if (back) { FM.refreshAll(); FM.requestRender(); if (FM.storage) FM.storage.markDirty(); }
+    /* autosave, not just markDirty: the undo's own save may already have run while this was fetching, and after
+       it nothing else would write the restored file to disk until his next edit */
+    if (back) { FM.refreshAll(); FM.requestRender(); if (FM.storage) { if (FM.storage.autosave) FM.storage.autosave(); else FM.storage.markDirty(); } }
     return back;
-  };
+  }
 
   FM.replaceMediaWith = FM.jobWrapped('replaceMediaWith', function (id, nrec) {   // queue 921 S0
     const layer = FM.layerById(FM.scene, id);

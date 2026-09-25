@@ -176,6 +176,10 @@ window.FM = window.FM || {};
     content.push({ type: 'text', text: sceneBlock() + '\n\nTHEY SAID: ' + text });
     messages.push({ role: 'user', content: content });
 
+    /* queue 690 (hunt f): the project this sentence was about. The reply takes seconds, the Assistant can be
+       closed while it thinks, and Home → another project in that time used to get this project's edits applied
+       to IT (anything that adds a layer lands; ops naming this project's layers are dropped). */
+    var home = FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null;
     try {
       var r;
       if (FM.ai.DRY_RUN) {
@@ -194,15 +198,17 @@ window.FM = window.FM || {};
 
       var ops = [];
       uses.forEach(function (u) { if (u.input && Array.isArray(u.input.ops)) ops = ops.concat(u.input.ops); });
-      var summary = applyTurn(ops);
+      var moved = home != null && FM.storage.openProjectId() !== home;   // queue 690: he opened another project meanwhile
+      var summary = moved ? null : applyTurn(ops);
 
       // every tool_use must be answered, or the NEXT request is rejected by the API
       uses.forEach(function (u) {
-        pendingResults.push({ type: 'tool_result', tool_use_id: u.id, content: summary || 'applied' });
+        pendingResults.push({ type: 'tool_result', tool_use_id: u.id, content: moved ? 'not applied: the user opened a different project before this arrived' : (summary || 'applied') });
       });
 
       if (said) bubble('ai', said);
-      else if (!summary) bubble('ai', 'Done.');
+      else if (!summary && !moved) bubble('ai', 'Done.');
+      if (moved && ops.length) note('Not applied — you opened another project while I was answering. Ask again here if you want it in this one.', 'aic-warn');
       if (summary) note(summary, 'aic-applied');
 
       trim();
