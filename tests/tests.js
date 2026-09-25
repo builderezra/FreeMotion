@@ -90037,4 +90037,250 @@
   });
 
 
+  /* ═══ HUNT-c (queue 690) — HOME AND PROJECTS, WITH A REAL FINGER AT 380 AND A REAL MOUSE AT 1280 ═══════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Each test below FAILS on v16.94 because of
+   * the bug it names. Shared helpers are prefixed hc so they cannot collide with anything else here. */
+  function hcCard(pid) { return document.querySelector('#home-screen .hm-card[data-pid="' + pid + '"]'); }
+  function hcPt(el, dx) { const r = el.getBoundingClientRect(); return { x: Math.round(dx != null ? r.left + dx : r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: r.width, h: r.height }; }
+  function hcTap(p) { return [{ t: 'touchStart', x: p.x, y: p.y, ms: 70 }, { t: 'touchEnd', x: p.x, y: p.y, ms: 0 }]; }
+  function hcClick(p) { return [{ t: 'mouseMove', x: p.x, y: p.y, ms: 40 }, { t: 'mouseDown', x: p.x, y: p.y, ms: 70 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 0 }]; }
+  /* A real mouse click on `el` at a PC width. The phone pass's browser window is only 380 px wide, so the frame is slid
+     until the element sits inside it (the trick the 690 storage test uses) — a click aimed outside the window lands nowhere. */
+  async function hcMouse(el, what) {
+    const fe = window.frameElement, l0 = fe.style.left, t0 = fe.style.top;
+    const r = el.getBoundingClientRect();
+    fe.style.left = Math.round(Math.min(0, 180 - r.left)) + 'px'; fe.style.top = Math.round(Math.min(0, 300 - r.top)) + 'px';
+    try { await sleep(120); await realInput924(hcClick(hcPt(el)), what); }
+    finally { fe.style.left = l0; fe.style.top = t0; }
+  }
+  async function hcUntil(what, fn, ms) {
+    const end = Date.now() + (ms || 4000);
+    for (;;) { const v = fn(); if (v) return v; if (Date.now() > end) throw new Error('timed out waiting for ' + what); await sleep(40); }
+  }
+  async function hcMenuItem(re) {
+    return hcUntil('the ⋯ menu', function () {
+      const m = document.getElementById('ctx-menu');
+      if (!m || m.classList.contains('hidden')) return null;
+      return Array.prototype.filter.call(m.querySelectorAll('.ctx-item'), function (x) { return re.test(x.textContent); })[0] || null;
+    }, 3000).then(async function (it) { await sleep(500); return it; });   // the menu hinges open — measure it once it has landed
+  }
+  function hcShape(name, fill) {
+    const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 60, fill: fill || '#2a9d8f' });
+    L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+    return L;
+  }
+  async function hcCleanup(made, orig, wasOpen) {
+    try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    try { if (FM.home._selectionState && FM.home._selectionState().selectMode) { const b = document.getElementById('hm-select-btn'); if (b) b.click(); } } catch (e) {}
+    try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    try { if (wasOpen) FM.home.open(); else FM.home.close(); } catch (e) {}
+    await sleep(200);
+  }
+
+  test('HUNT-c a duplicated project is still called X copy after he opens it — it never turns into a second card with the original name', { item: '690', budgetMs: 90000 }, async function () {
+    /* ⋯ → Duplicate (and the bulk Duplicate) make X copy on the CARD, but the copy's document still carries the ORIGINAL
+       project name — and every save stamps the card with the document's name. So the first time he opens the copy the
+       editor calls it X, and when he comes back Home there are two cards both called X: he cannot tell the copy he just
+       changed from the original, which is exactly when he deletes the wrong one. Driven with a real mouse at 1280. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTc Beach', width: 320, height: 240 }); made.push(a);
+      hcShape('HUNTc sun', '#f4a261');
+      if (!FM.storage.flushSync()) throw new Error('setup: HUNTc Beach could not be saved');
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          FM.home.open(); await sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          const more = hcCard(a) && hcCard(a).querySelector('.hm-card-more');
+          if (!more) throw new Error('setup: HUNTc Beach has no card with a ⋯ on Home');
+          await hcMouse(more, 'a click on the ⋯ of HUNTc Beach');
+          const dup = await hcMenuItem(/^Duplicate$/);
+          await hcMouse(dup, 'a click on Duplicate');
+          const copy = await hcUntil('the copy card', function () { return FM.projects.list().filter(function (p) { return p.name === 'HUNTc Beach copy'; })[0]; }, 6000);
+          made.push(copy.id);
+          await sleep(500);
+          if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          const cc = await hcUntil('the copy card on screen', function () { return hcCard(copy.id); }, 3000);
+          const shown0 = (cc.querySelector('.hm-name') || {}).textContent;
+          if (shown0 !== 'HUNTc Beach copy') throw new Error('setup: the new card reads ' + shown0 + ' straight after Duplicate');
+          await hcMouse(cc.querySelector('.hm-name'), 'a click on the HUNTc Beach copy card');
+          await hcUntil('the copy to open', function () { return FM.projects.currentId() === copy.id && !FM.home.isOpen(); }, 6000);
+          await sleep(900);
+          const inside = FM.scene.project.name;
+          FM.home.open(); await sleep(900);
+          const card = FM.projects.list().filter(function (p) { return p.id === copy.id; })[0];
+          const shown = hcCard(copy.id) && hcCard(copy.id).querySelector('.hm-name');
+          const same = FM.projects.list().filter(function (p) { return p.name === 'HUNTc Beach'; }).length;
+          if (!card || card.name !== 'HUNTc Beach copy' || (shown && shown.textContent !== 'HUNTc Beach copy')) {
+            throw new Error('he duplicated HUNTc Beach, opened the copy and came back Home — and the copy card now reads ' + (shown ? shown.textContent : card && card.name) +
+              ', so ' + same + ' cards say HUNTc Beach and he cannot tell which one is the copy he just changed (inside, the editor called the copy ' + inside + ')');
+          }
+          if (inside !== 'HUNTc Beach copy') throw new Error('inside the copy the editor calls the project ' + inside + ', the original name, so nothing tells him he is not in his original');
+        }, 1280);
+      });
+    } finally {
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-c holding a project card until Select comes on, then sliding the same finger down, ticks every card it passes', { item: '690', budgetMs: 90000 }, async function () {
+    /* The Home cards say a hold enters Select and a drag across paints a run of ticks (selectify, v6.17). With a real
+       finger the hold does enter Select — but the card was scrollable when the finger went down (touch-action is only
+       none once Select is on), so the slide that follows is taken by the browser as a SCROLL: pointercancel ends the
+       paint after the first card and the list scrolls instead. Only the card he held is ticked. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let R = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      for (let i = 1; i <= 4; i++) { made.push(await FM.projects.create({ name: 'HUNTc run ' + i, width: 320, height: 240 })); await sleep(20); }
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(200);
+          const order = Array.prototype.map.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'), function (c) { return c.dataset.pid; });
+          const mine = made.slice().reverse();   // newest first, as Home lists them
+          if (order.slice(0, 4).join() !== mine.join()) throw new Error('setup: the four HUNTc cards are not the first four on Home');
+          const p0 = hcPt(hcCard(mine[0]), 70), p2 = hcPt(hcCard(mine[2]), 70);
+          if (p2.y > 730) throw new Error('setup: the third card is at y ' + p2.y + ', off the part of the frame real input can reach');
+          const moves = [];
+          for (let k = 1; k <= 12; k++) moves.push({ t: 'touchMove', x: p0.x, y: Math.round(p0.y + (p2.y - p0.y) * k / 12), ms: 35 });
+          /* Listened for on the held card itself as well as the window: the hold re-renders the grid, so the card under
+             the finger is detached and its events no longer bubble up to the window. */
+          const seen = [];
+          const held = hcCard(mine[0]);
+          const note = function (e) { if (e.isTrusted) seen.push(e.type); };
+          const TY = ['pointermove', 'pointercancel', 'pointerup'];
+          TY.forEach(function (t) { window.addEventListener(t, note, true); held.addEventListener(t, note, true); });
+          R = { stop: function () { TY.forEach(function (t) { window.removeEventListener(t, note, true); held.removeEventListener(t, note, true); }); } };
+          const scroll0 = sc ? sc.scrollTop : 0;
+          await realInput924([{ t: 'touchStart', x: p0.x, y: p0.y, ms: 650 }].concat(moves).concat([{ t: 'touchMove', x: p0.x, y: p2.y, ms: 250 }, { t: 'touchEnd', x: p0.x, y: p2.y, ms: 0 }]), 'a hold on HUNTc run 4 then a slide down over two more cards');
+          await sleep(400);
+          const st = FM.home._selectionState();
+          if (!st.selectMode) throw new Error('holding a card with a real finger for 650 ms did not enter Select at all');
+          const got = mine.slice(0, 3).filter(function (id) { return st.selected.indexOf(id) >= 0; }).length;
+          if (!seen.length) throw new Error('no real touch reached the card — this measures the driver, not the app');
+          if (got !== 3) {
+            const moves = seen.filter(function (t) { return t === 'pointermove'; }).length, cancelled = seen.indexOf('pointercancel') >= 0;
+            throw new Error('he held HUNTc run 4 until Select came on and slid the same finger down over HUNTc run 3 and HUNTc run 2 — only ' + got + ' of those 3 cards are ticked' +
+              (cancelled ? '. The browser cancelled his finger after ' + moves + ' move(s): the card was still a scrollable card when the finger went down, so the slide was handed to scrolling, not to the select' : '') +
+              (sc && sc.scrollTop !== scroll0 ? ' (the list scrolled ' + Math.round(sc.scrollTop - scroll0) + ' px instead)' : ''));
+          }
+        }, 380);
+      });
+    } finally {
+      if (R) R.stop();
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+
+  test('HUNT-c a project he played through to the end still has a picture on its Home card, not a plain black one', { item: '690', budgetMs: 60000 }, async function () {
+    /* Playback without Loop stops with the playhead ON the project's last instant (FM.time = duration), where every
+       clip that runs to the end has already ended — the preview is the bare background. Going Home then captures the
+       card from exactly that frame, so the project he just watched through turns into a solid black card. Element
+       thumbnails learned this in queue 488 (pickThumbTime); project cards never did. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const bright = async function (url) {
+      if (!url) return -1;
+      const img = new Image(); img.src = url;
+      await new Promise(function (r) { img.onload = r; img.onerror = r; });
+      const c = document.createElement('canvas'); c.width = img.naturalWidth || 1; c.height = img.naturalHeight || 1;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let hi = 0; for (let i = 0; i < d.length; i += 4) hi = Math.max(hi, d[i], d[i + 1], d[i + 2]);
+      return hi;
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'HUNTc end', width: 320, height: 240 }); made.push(a);
+      const L = FM.makeLayer('shape', { name: 'HUNTc card', shape: 'rect', x: 160, y: 120, shapeW: 240, shapeH: 160, fill: '#f4a261' });
+      L.start = 0; L.duration = 1; FM.scene.layers.push(L);
+      FM.scene.project.duration = 1; FM.refreshAll(); FM.history.commit();
+      FM.setTime(0.5); FM.requestRender && FM.requestRender(); await sleep(150);
+      if (!FM.projects.pinThumbnail()) throw new Error('setup: no card picture could be taken at all');
+      FM.scene.project.thumbPinned = false;   // an ordinary project — the auto picture, not a pinned one
+      await sleep(300);
+      const ctl = await bright(await FM.projects.getThumb(a));
+      if (!(ctl > 120)) throw new Error('CONTROL: a card taken halfway through does not show the orange card either (brightest ' + ctl + '), so nothing below can be judged');
+      FM.setTime(0); FM.play();
+      await hcUntil('playback to reach the end', function () { return !FM.playing; }, 6000);
+      await sleep(200);
+      const at = FM.time;
+      FM.home.open();
+      await sleep(PUSH_WAIT_HC);
+      const got = await bright(await FM.projects.getThumb(a));
+      if (!(got > 120)) {
+        throw new Error('he played HUNTc end through to the end and went Home — its card is now a plain black picture (brightest pixel ' + got + ' of 255; halfway through it was ' + ctl +
+          '), because the card is taken at the playhead, ' + at.toFixed(2) + ' s, the instant after every clip has ended');
+      }
+    } finally {
+      try { if (FM.playing) FM.pause(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+  const PUSH_WAIT_HC = 3200;   // Home takes the card picture after the pop (380 ms + 80) on an idle callback of at most 1.5 s
+
+  test('HUNT-c saving a new element from its draft card puts the draft away — Elements does not keep a second card still saying save as element', { item: '690', budgetMs: 90000 }, async function () {
+    /* Elements → + → Build a new one… makes a DRAFT workspace; its card says Draft — open it, build it, then ⋯ → Save as
+       element. He does exactly that. The element appears — and the draft stays, still saying Save as element, so the tab
+       now holds two cards for one thing and tells him it is not saved. Saving it again, as the card asks, makes a second
+       copy of the element; tapping the element makes yet another workspace. Nothing ever puts the draft away. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], madeE = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const base = await FM.projects.create({ name: 'HUNTc base', width: 320, height: 240 }); made.push(base);
+      const d = await FM.projects.create({ name: 'HUNTc logo', width: 1080, height: 1080, elementDraft: true }); made.push(d);
+      FM.scene.project.background = null;
+      const S = FM.makeLayer('shape', { name: 'HUNTc mark', shape: 'rect', x: 540, y: 540, shapeW: 400, shapeH: 400, fill: '#e76f51' });
+      S.start = 0; S.duration = 3; FM.scene.layers.push(S); FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the draft could not be saved');
+      await FM.projects.open(base, { confirmed: true });
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(700);
+          FM.home._render('elements'); await sleep(400);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          const card = hcCard(d);
+          if (!card) throw new Error('setup: the HUNTc logo draft has no card under Elements');
+          const sub0 = (card.querySelector('.hm-sub') || {}).textContent || '';
+          if (!/Save as element/.test(sub0)) throw new Error('setup: the draft card does not ask to be saved as an element (' + sub0 + ')');
+          await realInput924(hcTap(hcPt(card.querySelector('.hm-card-more'))), 'a finger on the ⋯ of the draft');
+          const item = await hcMenuItem(/Save as element/);
+          await realInput924(hcTap(hcPt(item)), 'a finger on Save as element…');
+          const s = await hfAskUp('for the element name');
+          await sleep(300);
+          await realInput924(hcTap(hcPt(s.querySelector('.fm-ask-ok'))), 'a finger on Save');
+          const el = await hcUntil('the new element', function () { return FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; })[0]; }, 6000);
+          madeE.push(el.id);
+          await sleep(800);
+          const stillDraft = FM.projects.list().filter(function (p) { return p.id === d && p.elementDraft && !p.ofElement; })[0];
+          const dc = hcCard(d);
+          const sub = dc ? ((dc.querySelector('.hm-sub') || {}).textContent || '') : '';
+          if (stillDraft) {
+            throw new Error('he built HUNTc logo and saved it as an element from its own draft card — the element is there, and so is the draft, still reading ' +
+              (sub || 'Save as element') + '. Two cards for one thing, one saying it is not saved; saving again as it asks makes a second HUNTc logo');
+          }
+        }, 380);
+      });
+    } finally {
+      for (const id of madeE) { try { await FM.elements.remove(id); } catch (e) {} }
+      try { FM.elements.list().filter(function (e) { return e.name === 'HUNTc logo'; }).forEach(function (e) { FM.elements.remove(e.id); }); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
