@@ -254,6 +254,13 @@ window.FM = window.FM || {};
     const wrap = el('div', 'color-field');
     const sw = document.createElement('input'); sw.type = 'color'; sw.value = normHex(getVal());
     const hex = document.createElement('input'); hex.type = 'text'; hex.className = 'hex-input'; hex.spellcheck = false; hex.maxLength = 7; hex.value = normHex(getVal());
+    /* A TAP SELECTS THE OLD COLOUR, SO WHAT HE TYPES REPLACES IT (queue 690, fourth hunt). This box always holds a
+       full 7 of its 7 characters (#ffffff), and a tap on a phone drops a caret into it rather than selecting it — so
+       every key he typed was refused by maxLength: ff0000 went nowhere and the colour stayed white until he had
+       backspaced the old one by hand. Measured with a real tap in Colouring and in the text editor's colour button,
+       which is this same field. It is the number boxes' bug exactly (Opacity 100 + typing 50 read 10500) and gets
+       their cure, typeInBox — no `min`, so no number pad: a hex colour needs the letters a to f. */
+    typeInBox(hex, null);
     const apply = (v) => { const n = normHex(v); setVal(n); sw.value = n; FM.requestRender(); };
     const commitColor = () => { addRecentColor(getVal()); commitH(); };
     sw.addEventListener('input', () => { hex.value = sw.value; apply(sw.value); });
@@ -521,6 +528,32 @@ window.FM = window.FM || {};
     c.kf.forEach(k => { k.t = Math.max(0, (k.t || 0) + dt); });
     return c;
   }
+  /* ⚠️ queue 690: A LOOK CARRIES THE TRANSFORM'S ANIMATION, NOT ITS SIZE. save() stored rotation / scale / opacity
+     whatever they were, and shiftKf hands a STATIC value back unchanged, so every look carried the source layer's
+     resting size, turn and opacity. A photo comes in fitted (0.225 for a landscape photo in a 9:16 project, see
+     addMediaLayer), so a Fade in saved on a title (scale 1) took his photo to 100% — 4.4 times bigger, filling the frame
+     and cropped on every side — and a look saved from a fitted photo shrank a title to a quarter. The table in #406
+     says what the preset carries: the transform's ANIMATION, re-based so the layer "animates from where that layer
+     already is". So a channel travels only when it is keyframed, and SCALE travels as ratios — the way x/y travel as
+     deltas — multiplied back onto the target's own size: a pop-in (0 → 100%) pops the photo to ITS 23%.
+     The reference is the first key that is not zero: a pop-in starts at 0, and a ratio of 0 is no size at all. */
+  function restScale(prop) {
+    if (typeof prop === 'number' && isFinite(prop)) return prop;
+    const k = FM.isAnimated(prop) ? prop.kf.find(q => typeof q.v === 'number' && Math.abs(q.v) > 1e-6) : null;
+    return k ? k.v : 1;
+  }
+  function scaleRel(prop) {
+    if (!FM.isAnimated(prop)) return null;
+    const c = clone(prop), ref = restScale(prop);
+    c.kf.forEach(k => { k.v = (typeof k.v === 'number' ? k.v : ref) / ref; });
+    return c;
+  }
+  function scaleRebase(rel, base) {
+    const c = clone(rel);
+    c.kf.forEach(k => { k.v = (typeof k.v === 'number' ? k.v : 1) * base; });
+    return c;
+  }
+  const animOnly = p => (FM.isAnimated(p) ? p : null);
   FM.layerPresets = {
     _key: 'fm.layerpresets',
     list() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
@@ -540,7 +573,8 @@ window.FM = window.FM || {};
         shadow: clone(layer.shadow), blendMode: layer.blendMode, colorGrade: clone(layer.colorGrade),
         cornerRadius: layer.cornerRadius,
         transform: {
-          rotation: shiftKf(tr.rotation, -(layer.start || 0)), scale: shiftKf(tr.scale, -(layer.start || 0)), opacity: shiftKf(tr.opacity, -(layer.start || 0)),
+          // keyframed channels only, and scale as ratios of the source's own size (queue 690 — see restScale above)
+          rotation: animOnly(shiftKf(tr.rotation, -(layer.start || 0))), scaleRel: scaleRel(shiftKf(tr.scale, -(layer.start || 0))), opacity: animOnly(shiftKf(tr.opacity, -(layer.start || 0))),
           xDelta: xyDelta(shiftKf(tr.x, -(layer.start || 0))), yDelta: xyDelta(shiftKf(tr.y, -(layer.start || 0))),
         },
       };
@@ -611,9 +645,13 @@ window.FM = window.FM || {};
       if (d.colorGrade !== undefined) layer.colorGrade = clone(d.colorGrade);
       if (d.cornerRadius != null && layer.type === 'shape') layer.cornerRadius = d.cornerRadius;
       const tr = layer.transform, dt = d.transform || {}, t0 = layer.start || 0;
-      if (dt.rotation !== undefined && dt.rotation !== null) tr.rotation = shiftKf(dt.rotation, t0);
-      if (dt.scale !== undefined && dt.scale !== null) tr.scale = shiftKf(dt.scale, t0);
-      if (dt.opacity !== undefined && dt.opacity !== null) tr.opacity = shiftKf(dt.opacity, t0);
+      /* Keyframed channels only (queue 690). A preset saved BEFORE the fix still holds a static rotation / scale /
+         opacity and an ABSOLUTE scale animation; the static ones are skipped — they are exactly the defect — and its
+         scale animation is turned into ratios here, by the same rule, so an old pop-in pops to the target's size too. */
+      if (FM.isAnimated(dt.rotation)) tr.rotation = shiftKf(dt.rotation, t0);
+      const sRel = dt.scaleRel || scaleRel(dt.scale);
+      if (sRel) tr.scale = shiftKf(scaleRebase(sRel, restScale(tr.scale)), t0);   // the target's own size, not the source's
+      if (FM.isAnimated(dt.opacity)) tr.opacity = shiftKf(dt.opacity, t0);
       if (dt.xDelta) tr.x = shiftKf(xyRebase(dt.xDelta, FM.evalProp(tr.x, FM.time)), t0);   // relative motion from HERE, timed from the clip's start
       if (dt.yDelta) tr.y = shiftKf(xyRebase(dt.yDelta, FM.evalProp(tr.y, FM.time)), t0);
     },
@@ -2274,6 +2312,7 @@ window.FM = window.FM || {};
       if (row._g && row._g.moved) { row._g.moved = false; return; }
       (layer.audioFx || []).forEach(e => { if (e !== fx) e._expanded = false; });   // accordion: exactly one editor open
       fx._expanded = !expanded;
+      kfNavSync();   // queue 690: a different audio effect's params are the live keyframes now — re-arm the timeline, as the visual rows do
       // Collapsing the row you were auditioning must stop the sound: the control that would stop it is
       // the thing being hidden, and audio playing from a panel you have closed is the worst kind of
       // stuck state — there is nothing on screen to connect it to. (queue 653)
@@ -4763,20 +4802,61 @@ window.FM = window.FM || {};
         for (let i = 0; i < targets.length; i++) { const d = Math.abs(v - targets[i]); if (d < bd) { bd = d; best = targets[i]; } }
         return best;
       };
+      /* ⚠️ SNAP WHERE THE LAYER IS SEEN, NOT THE NUMBER IN ITS X/Y (queue 690, fourth hunt). The targets are FRAME
+         positions (0, the centre, the far edge), and for a plain layer its x/y IS its frame position, so the raw
+         value could be snapped straight. Two kinds of layer are not like that:
+         - A GROUP's x/y is an OFFSET from where its members are (a new group sits at 0,0 on purpose). Snapping
+           the raw number said "Snapped to left edge + top edge" the moment his finger touched a group sitting dead
+           centre, held it still for the first ~9 px of swipe, drew the guides on the frame's left and top edges —
+           and the snap it called centre put the group's centre on the RIGHT edge of the frame (offset 540).
+           canvas-edit.js learned this long ago (drag.boundsOffX: "offset 0 snapping to centre 540 was
+           meaningless"); the half that knew it never came across when the snapping moved to this pad.
+         - A layer INSIDE a group has x/y in the group's space, so a group moved 200 px right shifted every
+           target a member was snapped to by 200 px.
+         So each axis carries a map from the value the pad writes to where the thing is SEEN in the frame,
+         `seen = a + s·value` (the group's bounds centre for a group, through the parent chain for a member).
+         The snap is judged, named and drawn in the frame, and written back through the inverse. A parent that is
+         TURNED has no such per-axis map — a frame edge is a slanted line in its space — so, like the canvas drag,
+         that layer gets no frame targets at all rather than wrong ones. Its own earlier keyframes are still
+         mapped the same way, so "put it back where it was" keeps working wherever the frame map exists. */
+      const padFrame = () => {
+        const t = FM.time;
+        let ax = 0, ay = 0, s = 1;
+        if (layer.parent) {
+          const pt = FM.canvasEdit && FM.canvasEdit._parentXform ? FM.canvasEdit._parentXform(layer, t) : null;
+          const turned = !pt || Math.abs(Math.sin(pt.rot)) > 1e-6 || Math.cos(pt.rot) < 0 || !(pt.s > 1e-6);
+          if (turned) return null;
+          ax = pt.x; ay = pt.y; s = pt.s;
+        }
+        if (layer.type === 'group' && FM.groupBounds) {
+          const gb = FM.groupBounds(layer, FM.scene, t);   // in the group's PARENT space, the same space as its x/y
+          if (gb) { ax += s * (gb.x - mtEval(layer, 'x')); ay += s * (gb.y - mtEval(layer, 'y')); }
+        }
+        return { ax: ax, ay: ay, s: s };
+      };
+      const padTargets = (fr, axis) => {
+        const P = FM.scene.project, out = axis === 'x' ? [P.width / 2, 0, P.width] : [P.height / 2, 0, P.height];
+        const p = layer.transform && layer.transform[axis], a = axis === 'x' ? fr.ax : fr.ay;
+        // this layer's own earlier keyframes, carried into the frame by the same map (de-duped, like FM.alignTargets)
+        if (p && p.kf) p.kf.forEach(k => { const w = a + fr.s * k.v; if (out.indexOf(w) < 0) out.push(w); });
+        return out;
+      };
       let pd = null;
       pad.addEventListener('pointerdown', e => {
+        const fr = padFrame();
         pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y'),
-               tx: FM.alignTargets ? FM.alignTargets(layer, 'x') : [FM.scene.project.width / 2, 0, FM.scene.project.width],
-               ty: FM.alignTargets ? FM.alignTargets(layer, 'y') : [FM.scene.project.height / 2, 0, FM.scene.project.height] };
+               fr: fr || { ax: 0, ay: 0, s: 1 },
+               tx: fr ? padTargets(fr, 'x') : [], ty: fr ? padTargets(fr, 'y') : [] };
         try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault();
       });
       pad.addEventListener('pointermove', e => {
         if (!pd) return;
         if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; }
-        const thr = 9 * sens;   // ~9 finger px of stickiness, expressed in project units
+        const fr = pd.fr, thr = 9 * sens * fr.s;   // ~9 finger px of stickiness, expressed in FRAME units
         const rx = pd.ix + (e.clientX - pd.x) * sens, ry = pd.iy + (e.clientY - pd.y) * sens;
-        const hx = snapT(rx, pd.tx, thr), hy = snapT(ry, pd.ty, thr);
-        mtSet(layer, 'x', Math.round(hx == null ? rx : hx)); mtSet(layer, 'y', Math.round(hy == null ? ry : hy));
+        // judged where the layer is SEEN (see padFrame); hx/hy are frame positions — what the hint names and the guide draws
+        const hx = snapT(fr.ax + fr.s * rx, pd.tx, thr), hy = snapT(fr.ay + fr.s * ry, pd.ty, thr);
+        mtSet(layer, 'x', Math.round(hx == null ? rx : (hx - fr.ax) / fr.s)); mtSet(layer, 'y', Math.round(hy == null ? ry : (hy - fr.ay) / fr.s));
         showPadSnap(hx, hy);
         if (FM.showAlignGuide) FM.showAlignGuide(hx, hy);   // the line on the CANVAS — what did I line up with?
         refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();
@@ -5127,7 +5207,9 @@ window.FM = window.FM || {};
     const psel = document.createElement('select'); psel.className = 'be-prop';
     allowed.forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = BE_PROP_LABEL[k] || k; if (k === beh.prop) o.selected = true; psel.appendChild(o); });
     if (allowed.indexOf(beh.prop) < 0) { const o = document.createElement('option'); o.value = beh.prop; o.textContent = BE_PROP_LABEL[beh.prop] || beh.prop; o.selected = true; psel.appendChild(o); }
-    psel.addEventListener('change', () => { beh.prop = psel.value; afterBehavior(); });
+    // retarget, not a bare `beh.prop =` (queue 690): the amount is re-expressed in the new channel's units, so a 30 px
+    // Oscillate switched to Scale is a 30% pulse and not a 3000% one
+    psel.addEventListener('change', () => { if (reg.retarget) reg.retarget(beh, psel.value); else beh.prop = psel.value; afterBehavior(); });
     head.appendChild(psel);
     head.appendChild(el('span', 'fx-spacer'));
     const del = el('button', 'fx-icon-btn fx-del be-del'); del.title = 'Delete behavior';
@@ -5148,10 +5230,16 @@ window.FM = window.FM || {};
       if (!p || BE_SPECIAL[p.key]) return;
       if (typeof p.def !== 'number' || p.min == null || p.max == null) return;   // only numeric params get a slider
       const dflt = p.def;
-      body.appendChild(rangeRow((p.label || p.key) + (p.unit ? ' (' + p.unit + ')' : ''),
-        () => { const v = beh.params[p.key]; return typeof v === 'number' ? round(v, 3) : dflt; },
-        v => { beh.params[p.key] = v; },
-        p.min, p.max, p.step || 1));
+      /* queue 690: the AMOUNT on Scale or Opacity reads in PERCENT on a percent-sized ruler. The value is stored in the
+         channel's own units (0.3 = 30% of the layer's size — see CHANNEL_UNIT in js/behaviors.js); the row converts.
+         On X / Y / Rotation the unit is 1 and this row is exactly what it was. */
+      const unit = (reg.amountKeyOf && reg.amountKeyOf(beh.type) === p.key && reg.unitOf) ? reg.unitOf(beh.prop) : 1;
+      const pr = unit !== 1 && reg.pctRangeOf ? reg.pctRangeOf(beh.type) : null;
+      const dUnit = pr ? '%' : p.unit;
+      body.appendChild(rangeRow((p.label || p.key) + (dUnit ? ' (' + dUnit + ')' : ''),
+        () => { const v = beh.params[p.key]; return typeof v === 'number' ? round(v / unit, 3) : dflt; },
+        v => { beh.params[p.key] = unit === 1 ? v : Math.round(v * unit * 1e6) / 1e6; },
+        pr ? pr[0] : p.min, pr ? pr[1] : p.max, p.step || 1));
     });
     if (!body.childNodes.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
     row.appendChild(body);
@@ -6066,7 +6154,7 @@ window.FM = window.FM || {};
       // Audio Effects go" is the first thing on screen.
       const tab = fxTabFor(layer);
       const TABS = ['visual', 'filters', 'audio'];
-      body.appendChild(fxModeToggle(layer, tab, k => { clearFilterPreview(); pendingReveal = { after: '.fxmode', left: TABS.indexOf(k) < TABS.indexOf(tab) }; fxTab = k; FM._fxEasing = null; FM.inspector.refresh(); }));   // queue 729; #912 reveal
+      body.appendChild(fxModeToggle(layer, tab, k => { clearFilterPreview(); pendingReveal = { after: '.fxmode', left: TABS.indexOf(k) < TABS.indexOf(tab) }; fxTab = k; FM._fxEasing = null; kfNavSync(); FM.inspector.refresh(); }));   // queue 729; #912 reveal. kfNavSync (queue 690): the audio side arms a different stack's keyframes
       // An unknown audio answer rendered as available; settle it and demote the toggle if it's a no.
       probeAudioSide(layer, id => { const cur = FM.selectedLayer(FM.scene); if (cur && cur.id === id && view === 'effects') FM.inspector.refresh(); });
       if (tab === 'filters') {
@@ -6401,6 +6489,16 @@ window.FM = window.FM || {};
          the tooltip told him to open an editor that was already open. The diamonds themselves have always
          walked children (FM.animatedProps → FM.eachFx); this is the same walk, so the two agree.
          A child wins over its container: opening a child necessarily leaves the container expanded. */
+      /* queue 690: THE AUDIO TAB HAS ITS OWN STACK. Its editors live on layer.audioFx, which the walk below never
+         reaches, so with an audio effect open its keyframes stayed inert outlines — drawn on the clip and impossible
+         to drag, ease or delete from the timeline. Same accordion (exactly one open), same rule: that one's params.
+         'afx:' keys, not 'fx:', so the audio rows' names do not change how they look — nothing in them was made
+         tappable, and this fix is about the diamonds. */
+      if (fxTabFor(layer) === 'audio') {
+        const openAfx = (layer.audioFx || []).find(e => e && e._expanded) || null;
+        if (openAfx && openAfx.params) Object.keys(openAfx.params).forEach(k => out.push({ key: 'afx:' + k, prop: openAfx.params[k] }));
+        return out;
+      }
       let openTop = null, openChild = null;
       if (FM.eachFx) FM.eachFx(layer, (fx, path, parent) => {
         if (!fx || !fx._expanded) return;
@@ -6419,6 +6517,39 @@ window.FM = window.FM || {};
     if (view === 'blend') out.push({ key: 'tf:opacity', prop: layer.transform.opacity });
     else if (view === 'volume') out.push({ key: 'volume', prop: layer.volume });
     else if (view === 'speed') out.push({ key: 'speed', prop: layer.speed });
+    /* ⚠️ queue 690: COLOURING, OUTLINE & SHADOWS AND ELEMENT PROPERTIES OWN KEYFRAMES TOO. They fell through to
+       the line below, so with Colouring open the colour keyframes he set with its ◇ (#928 — his words, the feature
+       that makes a layer change color depending on how you keyframe the colors) stayed inert outlines while
+       their own editor was open. An inert diamond takes no touch, so on the phone his hold landed on the CLIP:
+       no Ease / Delete menu, and a hold-and-drag slid the whole clip (measured: to 0.64 s, every keyframe with
+       it) instead of retiming the one keyframe. The mouse drag bailed on the same check, and the diamond's own
+       title told him to open an editor that was already open — the exact dead end queue 819 fixed for an effect
+       inside a filter. Each list below is what that panel's rows write, read off the panel itself; a property
+       two panels both edit (a line's width: Outline and Edit Shape's Line width) is simply live in both. */
+    else if (view === 'color') {
+      const ck = layer.type === 'text' ? 'color' : 'fill';   // fillColorKey — the ◇ beside the colour writes this
+      out.push({ key: 'color:' + ck, prop: layer[ck] });
+      if (layer.fillGradient) ['ox', 'oy'].forEach(k => out.push({ key: 'color:grad.' + k, prop: layer.fillGradient[k] }));   // the gradient's Position ◆
+      ['fillImgX', 'fillImgY'].forEach(k => out.push({ key: 'color:' + k, prop: layer[k] }));   // the media fill's Position ◆
+    } else if (view === 'border') {
+      const stk = layer.stroke;
+      if (stk) {
+        out.push({ key: 'bd:stroke.color', prop: stk.color }, { key: 'bd:stroke.width', prop: stk.width });
+        if (stk.dash) out.push({ key: 'bd:dash.offset', prop: stk.dash.offset });
+      }
+      if (layer.trimPath) ['start', 'end', 'offset'].forEach(k => out.push({ key: 'bd:trim.' + k, prop: layer.trimPath[k] }));
+      if (layer.shadow) ['color', 'blur', 'alpha', 'dx', 'dy'].forEach(k => out.push({ key: 'bd:shadow.' + k, prop: layer.shadow[k] }));
+      if (layer.repeater) ['copies', 'offsetX', 'offsetY', 'rotation', 'scale', 'opacity'].forEach(k => out.push({ key: 'bd:rep.' + k, prop: layer.repeater[k] }));
+    } else if (view === 'element') {
+      if (layer.crop) ['x', 'y', 'w', 'h'].forEach(k => out.push({ key: 'el:crop.' + k, prop: layer.crop[k] }));   // media: the crop ◆
+      if (layer.type === 'shape') {
+        out.push({ key: 'el:subs', prop: layer.subs });   // Edit Points' ◆ (queue 254)
+        // Draw from / Draw to — an open path's only (on a video trimStart is the source trim in seconds, see animatedProps)
+        if (layer.shape === 'path' && !layer.closed) ['trimStart', 'trimEnd'].forEach(k => out.push({ key: 'el:' + k, prop: layer[k] }));
+        // Edit Shape's Line width / Stroke width / Stroke color rows write these through setProp
+        if (layer.stroke) out.push({ key: 'el:stroke.width', prop: layer.stroke.width }, { key: 'el:stroke.color', prop: layer.stroke.color });
+      }
+    }
     return out;   // home / anything else — nothing is in focus, so nothing is dimmed
   }
   function kfScopeHit(layer) {

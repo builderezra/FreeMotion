@@ -74,6 +74,25 @@ window.FM = window.FM || {};
   const REG = {};
   DEFS.forEach(function (d) { REG[d.type] = d; });
 
+  /* ⚠️ queue 690: AN AMOUNT IS IN THE UNITS OF THE CHANNEL IT DRIVES, AND THE ROW SHOWS SCALE AND OPACITY AS PERCENT.
+   * behaviorValue adds the amount straight onto the channel, and every default above is a PIXEL amount (Wiggle 20,
+   * Oscillate 30, Audio Drive 50). Scale is a multiplier where 1 is 100% and opacity runs 0–1, so Oscillate switched to
+   * Scale swung the layer between -2900% and 3100% — filling the frame, then clamped to nothing, once a second — and
+   * Audio Drive, which the inspector puts on Scale as it comes, grew it to about 5000% on the loud parts of his song.
+   * The ruler could not rescue it: 0–2400 coarsens to a notch of 10, i.e. 1000% a notch.
+   * So the STORED value stays in the channel's own units — every saved project reads exactly as before, including one
+   * where he typed 0.3 to get a pulse — and the three places that choose a number convert through CHANNEL_UNIT:
+   * makeInstance (a default lands as 30% on Scale, not 3000%), retarget (the channel select keeps the NUMBER he sees:
+   * 30 px on Y becomes 30% on Scale, and 30 px again on the way back) and the inspector's row (shows ×100 with a %, on
+   * a percent-sized ruler, AMOUNT_PCT_RANGE). Bounce needs none of it — its size is a fraction of the keyframe jump,
+   * already in the channel's units — and Follow's Multiplier is a ratio; only its Offset is an amount. */
+  const CHANNEL_UNIT = { x: 1, y: 1, rotation: 1, scale: 0.01, opacity: 0.01 };
+  const AMOUNT_KEY = { wiggle: 'amp', oscillate: 'amp', audio: 'amount', follow: 'offset' };
+  // The ruler on a percent channel, in percent: ±200% is a layer tripling or vanishing, which is past anything a pulse wants,
+  // and 400 notches at the params' own step keeps it at 0.5 / 1 per notch instead of 10.
+  const AMOUNT_PCT_RANGE = { wiggle: [0, 200], oscillate: [0, 200], audio: [-200, 200], follow: [-200, 200] };
+  function unitOf(prop) { return hasOwn(CHANNEL_UNIT, prop) ? CHANNEL_UNIT[prop] : 1; }
+
   FM.behaviorRegistry = {
     all: function () { return DEFS.slice(); },
     get: function (type) { return hasOwn(REG, type) ? REG[type] : null; },
@@ -90,7 +109,27 @@ window.FM = window.FM || {};
       // A wiggle needs its own phase so two wiggles on one prop don't move in lockstep; chosen once at
       // creation and stored (deterministic thereafter, like FM.randomFill's create-time colour).
       if (hasOwn(params, 'seed')) params.seed = Math.floor(Math.random() * 1000);
+      // queue 690: the default amount in the TARGET's units — Audio Drive lands on Scale as 50%, not 5000%
+      const ak = hasOwn(AMOUNT_KEY, type) ? AMOUNT_KEY[type] : null;
+      if (ak && typeof params[ak] === 'number') params[ak] = Math.round(params[ak] * unitOf(target) * 1e6) / 1e6;
       return { type: type, prop: target, enabled: true, params: params };
+    },
+    // queue 690 — the amount-per-channel rules above, for the inspector's row
+    unitOf: unitOf,
+    amountKeyOf: function (type) { return hasOwn(AMOUNT_KEY, type) ? AMOUNT_KEY[type] : null; },
+    pctRangeOf: function (type) { return hasOwn(AMOUNT_PCT_RANGE, type) ? AMOUNT_PCT_RANGE[type].slice() : null; },
+    // Move a behaviour onto another channel KEEPING THE NUMBER HE SEES: its amount is re-expressed in the new channel's
+    // units (30 px on Y → 0.3 = 30% on Scale). Assigning prop alone is what made a switch to Scale mean 3000%.
+    retarget: function (beh, prop) {
+      if (!beh) return beh;
+      const ak = hasOwn(AMOUNT_KEY, beh.type) ? AMOUNT_KEY[beh.type] : null;
+      const v = ak && beh.params ? beh.params[ak] : undefined;
+      if (typeof v === 'number' && isFinite(v) && prop !== beh.prop) {
+        const r = v / unitOf(beh.prop) * unitOf(prop);
+        beh.params[ak] = Math.round(r * 1e6) / 1e6;   // 30 × 0.01 is 0.30000000000000004 — keep what gets saved clean
+      }
+      beh.prop = prop;
+      return beh;
     },
   };
 

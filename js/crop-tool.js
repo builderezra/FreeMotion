@@ -89,22 +89,39 @@ window.FM = window.FM || {};
   function insideRect(sp) { return sp.x >= rect.x && sp.x <= rect.x + rect.w && sp.y >= rect.y && sp.y <= rect.y + rect.h; }
   function isFull() { return rect.w >= MW - 1 && rect.h >= MH - 1; }
 
+  /* ⚠️ A TAP IS NOT A DRAG (queue 690, fourth hunt). Every press starts a drag — on a handle it resizes, inside the
+     box it moves it, anywhere else it draws a fresh box — and onMove used to act on the very first move. A real
+     fingertip always trembles a pixel while it is down, and the browser reports that as a move, so a TAP on the
+     dimmed photo outside the box he had set replaced it with a 16 px square at his fingertip (the fresh box's
+     minimum), and a tap just inside a corner's 16 px pad jumped that corner to where the finger landed. Done then
+     kept it. Measured with a trusted touch: a 700 x 1200 crop became 16 x 16, and a tap 10 px in from the
+     bottom-right corner made it 640 x 1135.
+     The same grab the point editors were given in the v16.95 hunt (point-edit, mask-tool, motion-path — this tool
+     was not among them): nothing happens until the finger has travelled GRAB_SLOP px, and a HANDLE then moves its
+     edge by how far the finger has travelled from where it went down, never to where the finger is. A mouse does
+     not tremble, so it keeps every pixel. */
+  const GRAB_SLOP = 6;
   function onDown(e) {
     if (!active) return;
     e.preventDefault(); e.stopPropagation();
     const id = hitHandle(e), sp = evtSrc(e);
+    const grab = { sx: e.clientX, sy: e.clientY, slop: e.pointerType === 'mouse' ? 0 : GRAB_SLOP, moved: false,
+                   startSp: sp, startRect: Object.assign({}, rect) };
     // On a handle → resize. Inside an existing (partial) crop → move it. Otherwise (uncropped frame,
     // or a press outside the box) → DRAW a fresh box from here, iPhone-style.
-    if (id) drag = { mode: id };
-    else if (!isFull() && insideRect(sp)) drag = { mode: 'move', startSp: sp, startRect: Object.assign({}, rect) };
-    else { drag = { mode: 'new', startSp: { x: clamp(sp.x, 0, MW), y: clamp(sp.y, 0, MH) } }; }
+    if (id) drag = Object.assign(grab, { mode: id });
+    else if (!isFull() && insideRect(sp)) drag = Object.assign(grab, { mode: 'move' });
+    else drag = Object.assign(grab, { mode: 'new', startSp: { x: clamp(sp.x, 0, MW), y: clamp(sp.y, 0, MH) } });
     try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
   }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function onMove(e) {
     if (!active || !drag) return;
     e.preventDefault();
-    const sp = { x: clamp(evtSrc(e).x, 0, MW), y: clamp(evtSrc(e).y, 0, MH) };
+    // queue 690: nothing until the finger really travels — see GRAB_SLOP above
+    if (!drag.moved && drag.slop && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+    drag.moved = true;
+    const raw = evtSrc(e), sp = { x: clamp(raw.x, 0, MW), y: clamp(raw.y, 0, MH) };
     const MIN = 16;
     if (drag.mode === 'move') {
       let nx = drag.startRect.x + (sp.x - drag.startSp.x), ny = drag.startRect.y + (sp.y - drag.startSp.y);
@@ -114,11 +131,13 @@ window.FM = window.FM || {};
       rect.x = Math.min(s.x, sp.x); rect.y = Math.min(s.y, sp.y);
       rect.w = Math.max(MIN, Math.abs(sp.x - s.x)); rect.h = Math.max(MIN, Math.abs(sp.y - s.y));
     } else {
-      let l = rect.x, t = rect.y, rgt = rect.x + rect.w, bot = rect.y + rect.h;
-      if (drag.mode.indexOf('w') >= 0) l = Math.min(sp.x, rgt - MIN);
-      if (drag.mode.indexOf('e') >= 0) rgt = Math.max(sp.x, l + MIN);
-      if (drag.mode.indexOf('n') >= 0) t = Math.min(sp.y, bot - MIN);
-      if (drag.mode.indexOf('s') >= 0) bot = Math.max(sp.y, t + MIN);
+      // the edge the handle holds moves BY the finger's travel from where it went down (queue 690), clamped to the photo
+      const R = drag.startRect, dx = raw.x - drag.startSp.x, dy = raw.y - drag.startSp.y;
+      let l = R.x, t = R.y, rgt = R.x + R.w, bot = R.y + R.h;
+      if (drag.mode.indexOf('w') >= 0) l = clamp(R.x + dx, 0, rgt - MIN);
+      if (drag.mode.indexOf('e') >= 0) rgt = clamp(R.x + R.w + dx, l + MIN, MW);
+      if (drag.mode.indexOf('n') >= 0) t = clamp(R.y + dy, 0, bot - MIN);
+      if (drag.mode.indexOf('s') >= 0) bot = clamp(R.y + R.h + dy, t + MIN, MH);
       rect.x = l; rect.y = t; rect.w = rgt - l; rect.h = bot - t;
     }
     redraw();

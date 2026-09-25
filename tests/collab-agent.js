@@ -72,7 +72,7 @@
       cur: FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : 'no FM.storage',   // THIS window's project
       shared: FM.projects ? FM.projects.currentId() : null,
       homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()),
-      emptyTitle: et ? et.textContent : '', openBadges: home ? home.querySelectorAll('.hm-open-badge').length : -1,
+      emptyTitle: et ? et.textContent : '', emptyLine: (function () { const q = home && home.querySelector('.hm-empty p'); return q ? q.textContent : ''; })(), openBadges: home ? home.querySelectorAll('.hm-open-badge').length : -1,
       docKeys: keys, docNames: keys.map(function (k) { try { return (JSON.parse(localStorage.getItem(k)).project || {}).name; } catch (e) { return '?'; } }), sceneName: FM.scene && FM.scene.project && FM.scene.project.name, layers: (FM.scene && FM.scene.layers || []).length
     };
   }

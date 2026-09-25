@@ -1576,9 +1576,11 @@ window.FM = window.FM || {};
     const box = el('div', 'hm-empty');
     box.appendChild(el('div', 'hm-empty-mark', mark));
     box.appendChild(el('div', 'hm-empty-title', title));
-    const p = document.createElement('p');
-    p.textContent = line;
-    box.appendChild(p);
+    if (line) {   // queue 936: the Projects one is a title and nothing else — his words, "just say Lets make something"
+      const p = document.createElement('p');
+      p.textContent = line;
+      box.appendChild(p);
+    }
     return box;
   }
 
@@ -2342,7 +2344,7 @@ window.FM = window.FM || {};
          best MATCH first, and a pinned project outranking a closer one reads as broken search. */
       const list = projectsInGridOrder();
       if (query) {
-        if (!list.length) { grid.appendChild(emptyState('▶', 'No projects yet', 'Tap + to start one.')); renderSelBar(); return; }
+        if (!list.length) { grid.appendChild(emptyState('▶', 'Let’s see what you’re made of')); renderSelBar(); return; }
         const range = parseDateQuery(query);
         const scored = list.map(p => { const r = scoreProject(p, query, range); return { p: p, score: r.score, exact: r.exact, why: r.why }; })
           .sort((a, b) => (b.score - a.score) || ((b.p.modified || 0) - (a.p.modified || 0)));
@@ -2356,7 +2358,7 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(emptyState('▶', 'No projects yet', 'Tap + to start one.'));
+      if (!list.length) grid.appendChild(emptyState('▶', 'Let’s see what you’re made of'));
       // gentle housekeeping nudge on a big library (thumbs are out of the hot path now, so this is
       // informational — never a "you must delete to fix lag" like some other editors)
       const h = FM.projects.health && FM.projects.health();

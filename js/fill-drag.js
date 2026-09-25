@@ -29,41 +29,29 @@ window.FM = window.FM || {};
   function layer() { return active ? FM.scene.layers.find(l => l.id === active.layerId) : null; }
   function cl(v, m) { return v > m ? m : (v < -m ? -m : v); }
 
-  /* Same forward/inverse transform as crop-tool and point-edit (skew → scale → rotate → translate;
-   * parent chain and Z ignored, exactly like the canvas-edit gizmo) — but the content box is the FILL
-   * box, straight from the compositor, so u/v here are the very units the offsets are stored in.
-   * A flattened group's fill is painted over the whole project frame, so it gets identity. */
-  function xform(l) {
-    const t = FM.time, tr = l.transform, b = FM.fillBoxOf(l, t);
-    if (b.world) return { x: 0, y: 0, sx: 1, sy: 1, rot: 0, tanX: 0, tanY: 0, ax: 0, ay: 0, w: b.w || 1, h: b.h || 1 };
-    const sc = FM.evalProp(tr.scale, t) || 1e-6;
-    return {
-      x: FM.evalProp(tr.x, t), y: FM.evalProp(tr.y, t),
-      sx: (sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6,
-      sy: (sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6,
-      rot: FM.evalProp(tr.rotation, t) * Math.PI / 180,
-      tanX: Math.tan((tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0) * Math.PI / 180),
-      tanY: Math.tan((tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) * Math.PI / 180),
-      ax: (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5,
-      ay: (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5,
-      w: b.w || 1, h: b.h || 1,
-    };
-  }
+  /* THE SHARED PLACEMENT MAP, not a hand-built copy (queue 690, fourth hunt). The content box is the FILL box,
+   * straight from the compositor, so u/v here are the very units the offsets are stored in — and the matrix is
+   * FM.layerUVToCanvas / FM.layerCanvasToUV, the pair the point editor and the crop tool already use, which run
+   * the compositor's own transform. This file used to rebuild the matrix by hand (skew → scale → rotate →
+   * translate, "parent chain and Z ignored"), and that copy had no flip and no parent:
+   * - the renderer mirrors the layer LAST (flipH), so on a flipped shape the gradient is drawn mirrored while the
+   *   hand-built inverse was not — dragging the gradient 40 px RIGHT moved it LEFT (core 539 → 273; the same drag
+   *   unflipped took it to 805), and the teal ring went right, so the two parted company under his finger;
+   * - inside a group he had moved 200 px right, the ring was drawn where the shape would be WITHOUT the group,
+   *   200 px from the gradient it marks.
+   * The shared pair also carries the camera, which the old copy did not either (recorded as left as it was under
+   * the third hunt), so under a zoomed or panned camera the ring now sits on the fill as well.
+   * A flattened group's fill is painted over the whole project frame (`world`), so it keeps identity. */
+  function fillBox(l) { const b = FM.fillBoxOf(l, FM.time); return { w: b.w || 1, h: b.h || 1, world: !!b.world }; }
   function toCanvas(l, u, v) {   // box-normalized (u,v) → PROJECT px
-    const m = xform(l);
-    let px = (u - m.ax) * m.w, py = (v - m.ay) * m.h;
-    let qx = px + m.tanX * py, qy = m.tanY * px + py;
-    qx *= m.sx; qy *= m.sy;
-    const c = Math.cos(m.rot), s = Math.sin(m.rot);
-    return { x: m.x + qx * c - qy * s, y: m.y + qx * s + qy * c };
+    const b = fillBox(l);
+    if (b.world) return { x: u * b.w, y: v * b.h };
+    return FM.layerUVToCanvas(l, u, v, b.w, b.h);
   }
   function toLocal(l, cx, cy) {   // PROJECT px → box-normalized (u,v)
-    const m = xform(l);
-    const dx = cx - m.x, dy = cy - m.y, c = Math.cos(-m.rot), s = Math.sin(-m.rot);
-    const sx = (dx * c - dy * s) / m.sx, sy = (dx * s + dy * c) / m.sy;
-    const det = (1 - m.tanX * m.tanY) || 1e-6;
-    const rx = (sx - m.tanX * sy) / det, ry = (sy - m.tanY * sx) / det;
-    return { u: rx / m.w + m.ax, v: ry / m.h + m.ay };
+    const b = fillBox(l);
+    if (b.world) return { u: cx / b.w, v: cy / b.h };
+    return FM.layerCanvasToUV(l, cx, cy, b.w, b.h);
   }
   /* WRAP-local px per PROJECT px. Not previewDispScale() on its own: the overlay is a child of
    * #canvas-wrap, which the viewport CSS-scales, so style/backing coordinates lay out in UNscaled

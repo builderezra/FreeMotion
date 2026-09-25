@@ -4604,8 +4604,15 @@ window.FM = window.FM || {};
      * following the HEAD half — which has just had its keyframes truncated at the cut and therefore
      * stops moving. Both halves are stamped, so `!p.splitOf` stays the cheap gate in FM.parentAt. */
     { const lineage = layer.splitOf || layer.id; layer.splitOf = lineage; B.splitOf = lineage; }
-    if (layer.textAnim) layer.textAnim.durOut = 0;
-    if (B.textAnim) { B.textAnim.durIn = 0; B.textAnim.stagger = 0; }
+    /* A CAPTION TRACK IS THE EXCEPTION (queue 690, fourth hunt). Its animation runs per CUE (FM.captions.animSpan),
+       so clearing the whole layer's durIn / durOut would take the entrance off every caption after the cut and the
+       exit off every caption before it. Only the ONE cue on screen across the cut must not leave or re-enter
+       there — that is marked on the cue itself below, and every other caption keeps its animation. */
+    const capTrack = Array.isArray(layer.captions) && layer.captions.length > 0;
+    if (!capTrack) {
+      if (layer.textAnim) layer.textAnim.durOut = 0;
+      if (B.textAnim) { B.textAnim.durIn = 0; B.textAnim.stagger = 0; }
+    }
     if (Array.isArray(layer.captions)) {
       // captions use LOCAL time (t − layer.start): re-base B's segments to its new start and trim A's to its new length
       const orig = layer.captions;
@@ -4614,13 +4621,63 @@ window.FM = window.FM || {};
          retuning the tail's blur retuned the head's, and "Apply to the whole track" emptied both (#912 audit).
          B is already a deep clone, but its captions are rebuilt from the ORIGINAL cues here, so it needs its own. */
       const own = c => JSON.parse(JSON.stringify(c, FM.jsonReplacer));   // the same copy cloneLayer and undo make
-      B.captions = orig.map(c => ({ ...own(c), start: c.start - into, end: c.end - into })).filter(c => c.end > 0.01).map(c => ({ ...c, start: Math.max(0, c.start) }));
-      layer.captions = orig.filter(c => c.start < into - 0.01).map(c => ({ ...own(c), end: Math.min(c.end, into) }));
+      /* Where each cue's animation REALLY runs, asked of the ORIGINAL clip (origDur — `layer.duration` is already the
+         head half's). Each half then records only what its own edges would get wrong: the cue cut in two gets
+         `animFrom` on the tail half (it began before the cut) and `animTo` on the head half (it ends after it); an
+         older mark is carried across, shifted into the tail half's time; every other cue carries none. */
+      const span = orig.map(c => (FM.captions && FM.captions.animSpan) ? FM.captions.animSpan(c, origDur) : { from: Math.max(0, c.start), to: Math.min(origDur, c.end) });
+      const mark = (o, sp, shift, D) => {
+        delete o.animFrom; delete o.animTo;
+        const f = sp.from - shift, e = sp.to - shift;
+        if (Math.abs(f - Math.max(0, o.start)) > 1e-3) o.animFrom = f;
+        if (Math.abs(e - Math.min(D, o.end)) > 1e-3) o.animTo = e;
+        return o;
+      };
+      B.captions = orig.map((c, i) => ({ c: { ...own(c), start: c.start - into, end: c.end - into }, i: i })).filter(o => o.c.end > 0.01)
+        .map(o => mark({ ...o.c, start: Math.max(0, o.c.start) }, span[o.i], into, B.duration));
+      layer.captions = orig.map((c, i) => ({ c: c, i: i })).filter(o => o.c.start < into - 0.01)
+        .map(o => mark({ ...own(o.c), end: Math.min(o.c.end, into) }, span[o.i], 0, into));
     }
     // DIVIDE keyframes at the split (times are absolute): A keeps t ≤ split, B keeps t ≥ split, each
-    // getting a boundary keyframe holding the interpolated value so the ENDPOINT value is seamless
-    // (the interior easing of a split segment is a close approximation, not bit-exact). Without this
-    // both halves owned the FULL set → stray diamonds drawn outside each clip's window.
+    // getting a boundary keyframe holding the interpolated value so the ENDPOINT value is seamless.
+    // Without this both halves owned the FULL set → stray diamonds drawn outside each clip's window.
+    /* ⚠️ queue 690: …AND THE CURVE BETWEEN THEM IS DIVIDED TOO, NOT COPIED. This used to hand BOTH halves the cut
+       segment's whole ease and call the result "a close approximation". It is not one: an Ease In-Out over 0–2 s
+       split at 1 s became two complete Ease In-Outs, each arriving at rest and leaving from rest, so a layer gliding
+       through the cut at full speed (46 px in two frames) slowed to a dead stop there (2 px) and started again, and
+       the head half ran 97 px ahead of the move he made — a hitch at a cut that is meant to be invisible, in the
+       preview and the export alike. A split is meant to be invisible (the fade note above says so).
+       A cubic-bezier timing curve divides EXACTLY (de Casteljau): the part before the cut and the part after it are
+       each a cubic bezier of their own, rescaled to 0..1, so each half plays precisely its own stretch of the
+       original curve. That covers every curve the keyframe menu and the graph editor's handles write (`bez`), the
+       menu's named presets (EASE_PRESETS), and Ease In / Ease Out, which are quadratics and so beziers exactly.
+       NOT covered, and left as they were: a parameterised `ez` (Bounce / Elastic / Steps), the named Ease In-Out,
+       Bounce and Elastic functions (piecewise — no single bezier is them), and a motion-path segment with spatial
+       tangents. Hold needs nothing: copying it is already exact. */
+    const EASE_AS_BEZ = { easeIn: [1 / 3, 0, 2 / 3, 1 / 3], easeOut: [1 / 3, 2 / 3, 2 / 3, 1] };   // t² and 1-(1-t)² as cubics, exactly
+    const easeBezOf = (b) => {   // the cubic-bezier evalProp would ease this segment by, or null if it is not one
+      if (b.ez && FM.easeApply && FM.easeApply(b.ez, 0.5) != null) return null;   // ez resolves first (scene.js)
+      if (Array.isArray(b.bez) && b.bez.length === 4 && b.bez.every(Number.isFinite)) return b.bez;
+      if (b.e && Object.prototype.hasOwnProperty.call(FM.EASES, b.e)) return EASE_AS_BEZ[b.e] || null;   // linear / hold / piecewise → the old path
+      if (b.e && Object.prototype.hasOwnProperty.call(FM.EASE_PRESETS, b.e)) return FM.EASE_PRESETS[b.e];
+      return null;   // no ease at all is linear, which the old path already divides exactly
+    };
+    // Divide the timing curve at time-fraction u. Returns each half's own curve rescaled to 0..1, or null for a half
+    // that cannot be written as one (its value span is zero — an Anticipate cut exactly where it crosses back).
+    const splitBez = (z, u) => {
+      const bx = s => { const m = 1 - s; return 3 * m * m * s * z[0] + 3 * m * s * s * z[2] + s * s * s; };
+      let lo = 0, hi = 1, s = u;
+      for (let i = 0; i < 60; i++) { s = (lo + hi) / 2; if (bx(s) < u) lo = s; else hi = s; }   // x(s) is monotonic for a timing curve
+      const L = (p, q) => [p[0] + (q[0] - p[0]) * s, p[1] + (q[1] - p[1]) * s];
+      const P0 = [0, 0], P1 = [z[0], z[1]], P2 = [z[2], z[3]], P3 = [1, 1];
+      const A = L(P0, P1), Bm = L(P1, P2), C = L(P2, P3), D = L(A, Bm), E = L(Bm, C), M = L(D, E);
+      const ok = n => Math.abs(n) > 1e-6;
+      const head = (ok(M[0]) && ok(M[1])) ? [A[0] / M[0], A[1] / M[1], D[0] / M[0], D[1] / M[1]] : null;
+      const tx = x => (x - M[0]) / (1 - M[0]), ty = y => (y - M[1]) / (1 - M[1]);
+      const tail = (ok(1 - M[0]) && ok(1 - M[1])) ? [tx(E[0]), ty(E[1]), tx(C[0]), ty(C[1])] : null;
+      const fin = q => q && q.every(Number.isFinite) ? q.map(n => Math.round(n * 1e9) / 1e9) : null;
+      return { head: fin(head), tail: fin(tail), my: M[1] };   // my: how far along the value the cut lands (0..1 unless it overshoots)
+    };
     const splitAnimated = (lyr, keepLeft) => {
       FM.animatedProps(lyr).forEach(p => {
         // A looping prop (cycle/ping-pong) intentionally keeps its keyframes in a short span and
@@ -4641,6 +4698,15 @@ window.FM = window.FM || {};
           ? JSON.parse(JSON.stringify((before || p.kf[0]).v))
           : FM.evalProp(p, t);
         const b = p.kf.find(k => k.t >= t - 1e-9);   // segment-END keyframe bracketing the split: its ease governs the segment we're cutting
+        const a = [...p.kf].reverse().find(k => k.t < t - 1e-9);   // …and the one it starts from
+        // queue 690: the cut segment's curve, divided — only for a plain value (a number, or a colour) with no spatial tangents
+        const plain = x => typeof x === 'number' || typeof x === 'string';
+        const z = (a && b && !arrKf && p !== lyr.subs && plain(a.v) && plain(b.v) && b.t - a.t > 1e-9
+                   && !Number.isFinite(a.to) && !Number.isFinite(b.ti)) ? easeBezOf(b) : null;
+        let cut = z ? splitBez(z, (t - a.t) / (b.t - a.t)) : null;
+        // A COLOUR clamps each channel to 0–255, so a cut where an Overshoot has carried it past its end (or an
+        // Anticipate before its start) stores a clamped seam colour the halves cannot rescale from — the old path then.
+        if (cut && typeof a.v === 'string' && !(cut.my >= -1e-9 && cut.my <= 1 + 1e-9)) cut = null;
         p.kf = p.kf.filter(k => keepLeft ? k.t <= t + 1e-4 : k.t >= t - 1e-4);
         if (!p.kf.some(k => Math.abs(k.t - t) < 1e-3)) {
           // `split: 1` marks this as a SEAM keyframe rather than one the user placed. A Bounce behavior
@@ -4652,6 +4718,14 @@ window.FM = window.FM || {};
              Bounce / Elastic / Steps rail lost its curve at the seam while the two fields copied above
              said it had been kept. Cloned rather than shared, so retuning one half cannot reach the other. */
           if (b && b.ez) nk.ez = JSON.parse(JSON.stringify(b.ez));
+          /* queue 690: a curve that divides exactly gets ITS half of the curve. The head's seam ENDS the head's last
+             segment, so its ease is the part before the cut; in the tail the seam is the first key (its ease shapes
+             nothing) and the segment after it is eased by `b` — the tail's own copy — so b takes the part after. */
+          const mine = cut && (keepLeft ? cut.head : cut.tail);
+          if (mine) {
+            nk.bez = mine.slice();
+            if (!keepLeft) b.bez = mine.slice();   // B is a deep clone, so this is the tail's own keyframe; the head never sees it
+          }
           p.kf.push(nk);
         }
         p.kf.sort((k1, k2) => k1.t - k2.t);
@@ -4838,11 +4912,29 @@ window.FM = window.FM || {};
       } });
       if (FM.isAnimated(layer.speed) || Math.abs((layer.speed || 1) - 1) > 1e-3) {   // ramped speed is an object — offer reset for it too
         items.push({ label: 'Reset speed (1×)', action: () => {
-          const span = FM.isAnimated(layer.speed) ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * (layer.speed || 1);
-          layer.speed = 1; layer.duration = span;
+          /* THE ONE-TAP WAY BACK MUST DO WHAT THE SLIDER DOES (queue 690, fourth hunt). This set speed 1 and the new
+             length and nothing else — older than queue 68 and missed when #68 taught the Speed slider and the two
+             speed-to-playhead buttons to carry the animation with the clip ("changing all the key frames
+             automatically to slow or speed with the layer instead of manually doing it"). So a 2x clip with an
+             ordinary fade in and out doubled in length and kept its keyframes where they were: the fade-out ended
+             halfway through and the clip was invisible for its whole second half. Now the same three steps as the
+             slider (js/inspector.js, the Speed % row): clamp to the source that is really left, scale the
+             keyframes by the durations that actually resulted, and refit any group around it (queue 626).
+             speedAt, not `|| 1` (queue 451): a malformed prop is an object and the span would be NaN. */
+          const durBefore = layer.duration;
+          const span = FM.isAnimated(layer.speed) ? FM.layerSourceAdvance(layer, layer.duration) : layer.duration * FM.speedAt(layer, layer.start);
+          layer.speed = 1; layer.duration = Math.max(0.1, span);
+          const mm = FM.media.get(layer.id);
+          const srcDur = (mm && mm.duration) ? mm.duration : Infinity;
+          if (isFinite(srcDur)) layer.duration = Math.max(0.1, Math.min(layer.duration, srcDur - (layer.trimStart || 0)));
+          // the speed track is gone by now, and scaleLayerKeyframes leaves a speed track alone anyway
+          if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
+          if (FM.refitGroupsFor) FM.refitGroupsFor(layer);
           const end = layer.start + layer.duration;
           if (end > FM.scene.project.duration) FM.scene.project.duration = end;
-          FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit();
+          if (mm && mm.el) { try { mm.el.playbackRate = 1; } catch (e) {} }
+          FM.seekVideosToTime(); FM.timeline.rebuild(); FM.requestRender(); if (FM.inspector) FM.inspector.refresh();
+          if (FM.history) FM.history.commit();
         } });
       }
     }
@@ -8049,10 +8141,16 @@ window.FM = window.FM || {};
           let dx = 0, dy = 0;
           if (e.code === 'ArrowLeft') dx = -step; else if (e.code === 'ArrowRight') dx = step;
           else if (e.code === 'ArrowUp') dy = -step; else if (e.code === 'ArrowDown') dy = step;
+          /* Queue 690 (fourth hunt): WRITE ONLY THE AXIS THAT MOVED. Both axes used to be written on every press,
+             the unmoved one as Math.round(its value + 0) — and FM.setTransform on an ANIMATED prop upserts a
+             keyframe at the playhead, a linear one that takes over the easing of the segment it lands in. So
+             pressing Right on a layer that slides up put a Y diamond at the playhead and bent an eased slide he
+             never touched (125 px off at 1.5 s), and a layer sitting on a half pixel was shifted half a pixel on
+             the axis he did not press. A canvas drag already follows this rule (FM.shiftTransform, "never to add"). */
           nudgeable.forEach(layer => {
             const tr = layer.transform;
-            FM.setTransform(layer, 'x', Math.round(FM.evalProp(tr.x, FM.time) + dx), FM.time);
-            FM.setTransform(layer, 'y', Math.round(FM.evalProp(tr.y, FM.time) + dy), FM.time);
+            if (dx) FM.setTransform(layer, 'x', Math.round(FM.evalProp(tr.x, FM.time) + dx), FM.time);
+            if (dy) FM.setTransform(layer, 'y', Math.round(FM.evalProp(tr.y, FM.time) + dy), FM.time);
           });
           FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update();
           _nudged = true;

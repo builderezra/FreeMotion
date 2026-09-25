@@ -664,6 +664,13 @@ body.text-editing .sb-wrap { display: none !important; }
   width: 1px; height: 16px; background: var(--accent);
   transform: translateX(-50%); z-index: -1;
 }
+/* Where 28 px above the box is off the stage — a layer that reaches the top of a 9:16 frame on the phone, where
+   the top bar sits right on the canvas — canvas-edit moves the knob (queue 690, fourth hunt): to the box's bottom
+   edge if that is on screen, otherwise just INSIDE the box under its top edge. Either way the stem runs from the
+   knob back to the edge it belongs to, so it still reads as the same knob on a stalk. */
+.sb-rot.sb-rot-below { top: auto; bottom: -28px; }
+.sb-rot.sb-rot-in { top: 18px; }
+.sb-rot.sb-rot-below::after, .sb-rot.sb-rot-in::after { top: -15px; }
 #drop-hint {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; gap: 14px;

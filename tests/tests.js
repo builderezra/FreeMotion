@@ -31620,12 +31620,18 @@
         FM.storage.load = function () {
           /* By the time this runs, projects.open() has already emptied FM.scene and is about to await
              IndexedDB. A session still attached here has hundreds of milliseconds in which every tick
-             diffs its armed base against an empty document. */
-          activeAtLoad = C.active;
-          layersAtLoad = (FM.scene.layers || []).length;
+             diffs its armed base against an empty document.
+             ⚠️ THE FIRST CALL ONLY, AND THE WRAPPER COMES OFF THE MOMENT THE SWITCH IS DONE (26 Sep). This recorded the
+             LAST load(): withCollab921's own cleanup reopens a project after ending the session, through the still-installed
+             wrapper, and overwrote the switch's reading with "not attached" — so the test passed with the stand-down
+             deleted outright. Found by a seam-keeping mutation (tools/.weak-proofs.log); it is caught now. */
+          if (activeAtLoad === null) {
+            activeAtLoad = C.active;
+            layersAtLoad = (FM.scene.layers || []).length;
+          }
           return realLoad.apply(FM.storage, arguments);
         };
-        await FM.projects.open(made[0]);
+        try { await FM.projects.open(made[0]); } finally { FM.storage.load = realLoad; }
       });
       if (activeAtLoad === null) throw new Error('CONTROL: storage.load() was never reached, so the switch under test never happened');
       if (layersAtLoad !== 0) throw new Error('CONTROL: the scene still held ' + layersAtLoad + ' layer(s) when load() began, so this is not the window the test is about');
@@ -64750,7 +64756,9 @@
       L.start = 0; L.duration = 3;
       L.effects = [{ type: 'blur', enabled: true, params: { amount: 4 } }];
       L.stroke = { enabled: true, width: 6, color: '#00ff00' };
-      L.transform.rotation = 33;
+      // a turn ANIMATED, not a static tilt: a look carries the transform's animation and leaves a static size / turn /
+      // opacity alone (queue 690 — a static scale carried over resized his photo 4.4×), so a static 33 is no longer captured
+      L.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 33, e: 'linear' }] };
       FM.scene.layers.length = 0; FM.scene.layers.push(L);
 
       if (!FM.layerPresets || !FM.layerPresets.save) throw new Error('FM.layerPresets is missing');
@@ -64844,18 +64852,20 @@
       const src = FM.makeLayer('shape', { name: 'Src', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#ff0000' });
       const dst = FM.makeLayer('shape', { name: 'Dst', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#00ff00' });
       [src, dst].forEach(L => { L.start = 0; L.duration = 3; });
-      src.transform.rotation = 20;
+      // a SPIN, keyframed — a look carries the transform's animation, not a static turn (queue 690)
+      src.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 20, e: 'linear' }] };
       FM.scene.layers.length = 0; FM.scene.layers.push(src, dst);
 
       FM.layerPresets.save('rt-probe', src);
       FM.layerPresets.apply('rt-probe', dst);
       if (dst.fromPreset !== 'rt-probe') throw new Error('applying a preset did not record where the look came from — there is nothing to update');
 
-      dst.transform.rotation = 77;                       // …the edit
+      dst.transform.rotation.kf[1].v = 77;               // …the edit: the spin now ends at 77
       if (!FM.layerPresets.update('rt-probe', dst)) throw new Error('update() refused to write the layer back over its own preset');
       const p = (FM.layerPresets.list() || []).find(x => x.name === 'rt-probe');
       if (!p) throw new Error('the preset vanished on update');
-      const rot = p.data && p.data.transform && p.data.transform.rotation;
+      const rotP = p.data && p.data.transform && p.data.transform.rotation;
+      const rot = rotP && rotP.kf ? rotP.kf[rotP.kf.length - 1].v : rotP;
       if (rot !== 77) throw new Error('the preset still holds ' + JSON.stringify(rot) + ', not the edited 77 — the round trip did not close');
       if (FM.layerPresets.list().filter(x => x.name === 'rt-probe').length !== 1) throw new Error('updating made a SECOND preset of the same name instead of replacing it');
     } finally {
@@ -94389,6 +94399,8 @@
       if (s0.projects !== 0 || s0.cur) throw new Error('a fresh start made a project he never asked for: ' + say(s0));
       if (s0.openBadges) throw new Error('a fresh start shows an OPEN badge: ' + say(s0));
       if (!s0.emptyTitle) throw new Error('a fresh start does not show the Projects empty state: ' + say(s0));
+      /* …and it says what HE chose (25 Sep): *"actually make it say lets see what you're made of"* */
+      if (s0.emptyTitle !== 'Let’s see what you’re made of' || s0.emptyLine) throw new Error('the empty Projects screen says ' + JSON.stringify(s0.emptyTitle + (s0.emptyLine ? ' / ' + s0.emptyLine : '')).replace(/"/g, "'") + ' — he asked for: Let’s see what you’re made of');
       if (s0.docKeys.length) throw new Error('a fresh start wrote a project to storage: ' + say(s0));
 
       /* CONTROL: the + still makes a project on this instance — a boot that could not make one would pass everything above */
@@ -94429,6 +94441,1457 @@
       const b2 = await R.rpc(tag + 'b', 'fresh936');
       if (b2.names.join() !== 'First' || b2.docNames.join() !== 'First') throw new Error('window A (nothing open) wrote over window B\'s project — B now reads ' + JSON.stringify({ names: b2.names, docs: b2.docNames }).replace(/"/g, "'"));
     } finally { R.drop(tag); R.drop(tag + 'b'); }
+  });
+
+  /* ═══ HUNT-a (queue 690, fourth hunt) — TIMELINE EDITING: TRIM, MOVE, SPEED, KEYS ═══════════════════════════════════
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Four findings in trimming, moving and
+   * re-timing clips. The gestures are driven with TRUSTED input through tests/_cdp.py (realInput924) — a real finger at
+   * 380 and, when the driver window is wide enough to reach the PC timeline, a real mouse at 1280 — because clip drags,
+   * trims and their auto-scroll depend on capture and hit-testing that synthetic events never exercise. Each test carries
+   * a control proving its gesture engaged, so a red is the app, not a gesture that never started.
+   * Found as four failing HUNT-a tests; all four fixed (js/timeline.js adoptEdgeScrolledTime and applyTrimAt's ramp
+   * branches, js/app.js Reset speed and the arrow nudge) and renamed 690 for what they now hold. */
+  async function hunt4aScene(defs, dur) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.contextMenu) FM.contextMenu.hide();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const cols = ['#e0245e', '#3b82f6', '#22c55e', '#f59e0b'];
+    const L = defs.map((d, i) => {
+      const l = FM.makeLayer(d.type || 'shape', Object.assign({ name: 'H4A ' + 'ABCD'[i], shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: cols[i % 4] }, d));
+      l.start = d.start; l.duration = d.duration;
+      if (d.trimStart != null) l.trimStart = d.trimStart;
+      if (d.speed != null) l.speed = JSON.parse(JSON.stringify(d.speed));
+      return l;
+    });
+    FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: dur || 10, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.selectMode = false; FM.selectLayer(null); FM.setTime(0);
+    FM.refreshAll(); FM.timeline.rebuild();
+    await sleep(300);
+    return L;
+  }
+  function hunt4aSay(o) { let t; try { t = JSON.stringify(o); } catch (e) { t = String(o); } return String(t).replace(/"/g, "'"); }
+  function hunt4aClip(id) { return document.querySelector('#tl-tracks .clip[data-id="' + id + '"]'); }
+  // The driver's own window: the 380 pass cannot reach the PC timeline, which sits past x 380 at a 1280 frame.
+  function hunt4aWide() { try { return window.top.innerWidth >= 1200; } catch (e) { return false; } }
+  // What was on screen at the instant of release — read in the capture phase, before the app's own pointerup runs.
+  function hunt4aAtRelease(id) {
+    const tl = document.getElementById('timeline');
+    const rec = { sl: null, clip: null };
+    const on = () => { if (rec.sl != null) return; rec.sl = tl.scrollLeft; const c = hunt4aClip(id); rec.clip = c ? c.getBoundingClientRect() : null; };
+    window.addEventListener('pointerup', on, true);
+    return { rec: rec, stop: () => window.removeEventListener('pointerup', on, true) };
+  }
+  function hunt4aCleanup(saved) {
+    try { FM.timeline._abortGestures(); FM.timeline.stopMomentum(); } catch (e) {}
+    if (FM.contextMenu) FM.contextMenu.hide();
+    FM.selectMode = false;
+    FM.scene = saved;
+    try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+  }
+
+  test('690 letting go of a clip or a trim edge he carried to the screen edge leaves the timeline where he carried it — what he just placed stays on screen', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 115: dragging a clip (or a trim handle, which had it first) into the edge of the screen scrolls the timeline
+       so he can keep going — his words, "without needing to let go and then scroll". The scroll handler ignores those
+       scrolls on purpose (`if (trimDrag || clipMove || kfDrag || scrub) return`), so FM.time never follows the view; and
+       on release the rebuild runs updatePlayhead, which writes scrollLeft = FM.time × px-per-second. The view snaps back
+       to where the playhead was before the drag, and the clip he just carried is off the screen — he has to scroll to
+       find it again, which is the very thing 115 was built to save him. Fixed: the release adopts the time under the centre
+       line (js/timeline.js adoptEdgeScrolledTime), which is the fixed-centre rule the scroll handler already keeps. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    try {
+      /* THE PHONE: hold a clip, carry it into the right edge, hold there while the timeline scrolls, let go. */
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await hunt4aScene([{ start: 0, duration: 2 }, { start: 2, duration: 2 }, { start: 0, duration: 8 }], 8);
+          FM.setTime(1); FM.timeline.updatePlayhead(); await sleep(400);
+          const tl = document.getElementById('timeline'), tr = tl.getBoundingClientRect();
+          const cr = hunt4aClip(L[0].id).getBoundingClientRect();
+          const x = cr.left + cr.width / 2, y = cr.top + cr.height / 2;
+          if (x > 370 || y > 740 || x < 10) throw new Error('setup: the clip is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+          const sl0 = tl.scrollLeft, s0 = L[0].start, edgeX = tr.right - 6;
+          const D = huntDowns();
+          const steps = [{ t: 'touchStart', x: x, y: y, ms: 600 }];
+          for (let k = 1; k <= 10; k++) steps.push({ t: 'touchMove', x: x + (edgeX - x) * k / 10, y: y, ms: 40 });
+          steps.push({ t: 'touchMove', x: edgeX, y: y, ms: 700 });
+          try { await realInput924(steps, 'holding the clip and carrying it into the right edge'); } finally { D.stop(); }
+          const R = hunt4aAtRelease(L[0].id);
+          try { await realInput924([{ t: 'touchEnd', x: edgeX, y: y, ms: 0 }], 'letting go at the edge'); await sleep(500); } finally { R.stop(); }
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the hold was not a trusted touch (' + hunt4aSay(D.downs) + ')');
+          if (!(L[0].start > s0 + 1)) throw new Error('CONTROL: the hold and carry did not move the clip (start ' + s0 + ' -> ' + L[0].start.toFixed(2) + ') — no clip drag happened');
+          if (!(R.rec.sl > sl0 + 100)) throw new Error('CONTROL: holding at the right edge did not scroll the timeline (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px), so there was nothing to throw back');
+          const onAt = R.rec.clip && R.rec.clip.right > tr.left + 70 && R.rec.clip.left < tr.right;
+          if (!onAt) throw new Error('CONTROL: at the moment he let go the clip was not on screen either (' + hunt4aSay(R.rec.clip) + ')');
+          const after = hunt4aClip(L[0].id).getBoundingClientRect();
+          const off = after.left >= tr.right - 4 || after.right <= tr.left + 70;
+          if (off || Math.abs(tl.scrollLeft - R.rec.sl) > (tr.width / 3)) {
+            bad.push('on the phone he held a clip and carried it to the right edge; the timeline scrolled with him (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px) and the clip sat under his finger at x ' + Math.round(R.rec.clip.left) + '..' + Math.round(R.rec.clip.right) + '; the moment he let go the timeline jumped back to ' + Math.round(tl.scrollLeft) + ' px and the clip is now at x ' + Math.round(after.left) + '..' + Math.round(after.right) + ', off a ' + Math.round(tr.right) + ' px screen — he has to scroll to find what he just placed');
+          }
+        });
+      }, 380);
+      /* THE PC: drag a clip's right trim handle into the right edge with the mouse, hold while it extends, let go. Only
+         when the driver's window is wide enough to reach the PC timeline (the 1280 pass); the phone half runs in both. */
+      if (hunt4aWide()) {
+        await atWideWidth(async function () {
+          await onScreen924(async function () {
+            const L = await hunt4aScene([{ start: 0, duration: 3 }, { start: 3, duration: 3 }], 12);
+            FM.selectLayer(L[0].id); FM.setTime(1); FM.timeline.updatePlayhead(); await sleep(400);
+            const tl = document.getElementById('timeline'), tr = tl.getBoundingClientRect();
+            const g = hunt4aClip(L[0].id).querySelector('.clip-grip.right');
+            if (!g) throw new Error('setup: the selected clip has no right trim handle');
+            const gr = g.getBoundingClientRect(), x = gr.left + gr.width / 2, y = gr.top + gr.height / 2;
+            if (x > tr.right - 60 || y > 740) throw new Error('setup: the right trim handle is at ' + Math.round(x) + ',' + Math.round(y) + ', too near the edge or out of reach');
+            const sl0 = tl.scrollLeft, d0 = L[0].duration, edgeX = tr.right - 8;
+            const steps = [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }];
+            for (let k = 1; k <= 10; k++) steps.push({ t: 'mouseMove', x: x + (edgeX - x) * k / 10, y: y, ms: 30 });
+            steps.push({ t: 'mouseMove', x: edgeX, y: y, ms: 900 });
+            await realInput924(steps, 'dragging the right trim handle into the right edge');
+            const R = hunt4aAtRelease(L[0].id);
+            try { await realInput924([{ t: 'mouseUp', x: edgeX, y: y, ms: 0 }], 'letting go at the edge'); await sleep(500); } finally { R.stop(); }
+            if (!(L[0].duration > d0 + 2)) throw new Error('CONTROL: the trim did not extend the clip (' + d0 + ' -> ' + L[0].duration.toFixed(2) + ' s) — no trim happened');
+            if (!(R.rec.sl > sl0 + 100)) throw new Error('CONTROL: holding the trim at the right edge did not scroll the timeline (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px)');
+            if (!(R.rec.clip && R.rec.clip.right > tr.left && R.rec.clip.right <= tr.right + 20)) throw new Error('CONTROL: at the moment he let go the trimmed end was not on screen (' + hunt4aSay(R.rec.clip) + ')');
+            const after = hunt4aClip(L[0].id).getBoundingClientRect();
+            if (after.right > tr.right + 20 || after.right < tr.left || Math.abs(tl.scrollLeft - R.rec.sl) > (tr.width / 3)) {
+              bad.push('on PC he dragged a clip end into the right edge and held it there; the timeline scrolled (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px) and the new end sat under the pointer at x ' + Math.round(R.rec.clip.right) + '; when he let go the timeline jumped back to ' + Math.round(tl.scrollLeft) + ' px and the end he just set is at x ' + Math.round(after.right) + ', off a ' + Math.round(tr.right) + ' px timeline');
+            }
+          });
+        }, 1280);
+      }
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally { hunt4aCleanup(saved); }
+  });
+
+  test('690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a reversed ramp', { item: '690', budgetMs: 120000 }, async function () {
+    /* A head trim has to leave the kept picture where it was: trimStart must advance by the source the cut part CONSUMED,
+       which on a ramp is the integral of the speed over the cut (FM.headSourceDelta). The A key, the phone buttons,
+       FM.trimLayerHead and Extend were all moved onto that integral (21 Aug, queue 914.2) — but the trim HANDLE the finger
+       and the mouse actually drag is js/timeline.js applyTrimAt, which still writes trimStart = trim + delta × speedAt(new
+       head): the instantaneous speed at the new head times the whole cut. The #912 audit and test 914.2 both treat
+       FM.trimLayerHead as the grip; it is not the grip. The flat 1.5x clip, same gesture, is the control.
+       The same function's REVERSED TAIL had the matching hole — `extra = (nd - dur) × sp` with sp = 1 for any ramp, the
+       bug FM.extendClipTo was cured of on 21 Aug — so a reversed ramp's right handle dragged 1 s out is checked too, with a
+       reversed flat 1.5x clip as its control. Fixed in js/timeline.js applyTrimAt: both through the curve, measured at the grab. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const made = [];
+    const bad = [];
+    const TIMES = [5, 6, 7];   // all inside the clip before (2..8), after a 2 s head trim (4..8) and after a 1 s tail pull (2..9)
+    const RAMP = { kf: [{ t: 2, v: 0.5, e: 'linear' }, { t: 8, v: 2, e: 'linear' }] };
+    async function trimHead(speed, kind, tail) {
+      // tail: the RIGHT handle of a REVERSED clip, pulled 1 s out — the tail of a reversed clip eats source below trimStart
+      const L = await hunt4aScene([{ type: 'video', name: 'H4A clip', start: 2, duration: 6, trimStart: tail ? 3 : 1, speed: speed }], 10);
+      const v = L[0]; made.push(v.id);
+      if (tail) v.reversed = true;
+      FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      FM.selectLayer(v.id); FM.setTime(tail ? 7.5 : (kind === 'touch' ? 3.5 : 2.5)); FM.timeline.updatePlayhead(); FM.timeline.rebuild(); await sleep(400);   // parked inside, so the handle sits beside centre with room to drag (clear of the PC track heads)
+      const clip = hunt4aClip(v.id), g = clip && clip.querySelector(tail ? '.clip-grip.right' : '.clip-grip.left');
+      if (!g) throw new Error('setup: the selected clip has no ' + (tail ? 'right' : 'left') + ' trim handle');
+      const gr = g.getBoundingClientRect(), x = gr.left + gr.width / 2, y = gr.top + gr.height / 2;
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0), dx = pps * (tail ? 1 : 2);
+      const tlr = document.getElementById('timeline').getBoundingClientRect();
+      if ((kind === 'touch' && x + dx > 345) || x + dx > tlr.right - 50 || y > 740 || x < 70) throw new Error('setup: the ' + (tail ? 'right' : 'left') + ' trim handle is at ' + Math.round(x) + ',' + Math.round(y) + ' and the drag needs ' + Math.round(dx) + ' px, out of reach of real input or into the auto-scroll band');
+      const under = document.elementFromPoint(x, y);
+      if (!under || !under.classList.contains('clip-grip')) throw new Error('setup: the point on the left trim handle (' + Math.round(x) + ',' + Math.round(y) + ') is covered by ' + (under ? under.className : 'nothing'));
+      const before = TIMES.map(t => FM.layerLocalTime(v, t));
+      const steps = kind === 'touch'
+        ? [{ t: 'touchStart', x: x, y: y, ms: 450 }]
+        : [{ t: 'mouseMove', x: x, y: y, ms: 30 }, { t: 'mouseDown', x: x, y: y, ms: 60 }];
+      for (let k = 1; k <= 10; k++) steps.push({ t: kind === 'touch' ? 'touchMove' : 'mouseMove', x: x + dx * k / 10, y: y, ms: 40 });
+      steps.push({ t: kind === 'touch' ? 'touchMove' : 'mouseMove', x: x + dx, y: y, ms: 150 });
+      steps.push({ t: kind === 'touch' ? 'touchEnd' : 'mouseUp', x: x + dx, y: y, ms: 0 });
+      await realInput924(steps, (kind === 'touch' ? 'a real finger' : 'a real mouse') + (tail ? ' dragging the right trim handle 1 s out' : ' dragging the left trim handle 2 s in'));
+      await sleep(400);
+      if (!tail && !(v.start > 3.5 && v.start < 4.5)) throw new Error('CONTROL: the ' + kind + ' drag on the left handle did not trim the head to about 4 s (start ' + v.start.toFixed(3) + ') — no trim happened');
+      if (tail && !(v.start + v.duration > 8.5 && v.start + v.duration < 9.5)) throw new Error('CONTROL: the ' + kind + ' drag on the right handle did not pull the tail out to about 9 s (end ' + (v.start + v.duration).toFixed(3) + ') — no trim happened');
+      const now = TIMES.map(t => FM.layerLocalTime(v, t));
+      let worst = 0, at = null;
+      TIMES.forEach((t, i) => { const d = Math.abs(now[i] - before[i]); if (d > worst) { worst = d; at = i; } });
+      FM.media.remove(v.id);
+      return { worst: worst, t: TIMES[at], was: before[at], now: now[at], start: v.start };
+    }
+    try {
+      for (const kind of ['touch', 'mouse']) {
+        if (kind === 'mouse' && !hunt4aWide()) continue;   // the 380 pass cannot reach the PC timeline; the finger half runs in both
+        const run = async (fn) => kind === 'touch' ? atPhoneWidth(fn, 380) : atWideWidth(fn, 1280);
+        await run(async function () {
+          await onScreen924(async function () {
+            const ctl = await trimHead(1.5, kind);
+            if (ctl.worst > 0.01) throw new Error('CONTROL: trimming the head of a FLAT 1.5x clip by the ' + kind + ' already moved its picture by ' + ctl.worst.toFixed(3) + ' s at ' + ctl.t + ' s, so this probe cannot judge the ramp');
+            const r = await trimHead(RAMP, kind);
+            if (r.worst > 0.01) bad.push((kind === 'touch' ? 'on the phone' : 'on PC') + ' he trimmed the head of a speed-ramped clip (0.5x rising to 2x) by dragging its left handle 2 s in: every frame he kept jumped — at ' + r.t + ' s the picture was source ' + r.was.toFixed(3) + ' s and is now ' + r.now.toFixed(3) + ' s, ' + r.worst.toFixed(2) + ' s of footage skipped (' + Math.round(r.worst * 30) + ' frames), where the same drag on a flat 1.5x clip keeps its picture exactly');
+            const ctlT = await trimHead(1.5, kind, true);
+            if (ctlT.worst > 0.01) throw new Error('CONTROL: pulling out the tail of a REVERSED FLAT 1.5x clip by the ' + kind + ' already moved its picture by ' + ctlT.worst.toFixed(3) + ' s at ' + ctlT.t + ' s, so this probe cannot judge the reversed ramp');
+            const rT = await trimHead(RAMP, kind, true);
+            if (rT.worst > 0.01) bad.push((kind === 'touch' ? 'on the phone' : 'on PC') + ' he pulled the right handle of a REVERSED speed-ramped clip 1 s out: every frame already on screen slid — at ' + rT.t + ' s the picture was source ' + rT.was.toFixed(3) + ' s and is now ' + rT.now.toFixed(3) + ' s (' + Math.round(rT.worst * 30) + ' frames), where the same drag on a reversed flat 1.5x clip keeps its picture exactly');
+          });
+        });
+      }
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally { made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); hunt4aCleanup(saved); }
+  });
+
+  test('690 Reset speed (1x) carries his animation with the clip — a fade at the end of a 2x clip still ends at its end', { item: '690', budgetMs: 90000 }, async function () {
+    /* Queue 68, his words: "changing all the key frames automatically to slow or speed with the layer instead of manually
+       doing it". The Speed slider and the two speed-to-playhead buttons re-time the clip AND scale its keyframes
+       (FM.scaleLayerKeyframes). The clip menu's Reset speed (1x) — the one-tap way back — sets speed 1 and the new
+       duration and nothing else, so every keyframe stays at its old time: a 2x clip that fades out over its last half
+       second doubles in length and goes invisible for its whole second half. Driven the way he reaches it on the phone: a
+       real tap on the top bar's ⋯, then a real tap on Reset speed. Fixed: js/app.js Reset speed now does what the slider
+       does — scales the keyframes by the durations that resulted, clamps to the source, refits the group. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const made = [];
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await hunt4aScene([{ type: 'video', name: 'H4A fast clip', start: 1, duration: 2, trimStart: 0, speed: 2 }], 3);
+          const v = L[0]; made.push(v.id);
+          FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+          // fade in over the first quarter, fade out over the last quarter — the most ordinary animation a clip has
+          v.transform.opacity = { kf: [{ t: 1, v: 0, e: 'linear' }, { t: 1.5, v: 1, e: 'linear' }, { t: 2.5, v: 1, e: 'linear' }, { t: 3, v: 0, e: 'linear' }] };
+          FM.selectLayer(v.id); FM.setTime(2); FM.refreshAll(); await sleep(450);
+          const more = document.getElementById('m-more');
+          const mr = more && more.getBoundingClientRect();
+          if (!mr || !mr.width || mr.left > 370 || mr.top > 740) throw new Error('setup: the phone ⋯ (More clip options) button is not on screen with a clip selected (' + hunt4aSay(mr) + ')');
+          const tap = (x, y) => [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }];
+          await realInput924(tap(mr.left + mr.width / 2, mr.top + mr.height / 2), 'a tap on the ⋯ button');
+          await sleep(500);
+          const item = [].filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), el => /Reset speed/.test(el.textContent))[0];
+          if (!item) throw new Error('setup: the ⋯ menu has no Reset speed item for a 2x clip (menu: ' + ((document.getElementById('ctx-menu') || {}).textContent || 'none') + ')');
+          item.scrollIntoView({ block: 'nearest' }); await sleep(150);
+          const ir = item.getBoundingClientRect();
+          if (ir.left > 370 || ir.top > 740 || ir.top < 0) throw new Error('setup: Reset speed is at ' + Math.round(ir.left) + ',' + Math.round(ir.top) + ', out of reach of real input');
+          await realInput924(tap(Math.min(ir.left + 40, 360), ir.top + ir.height / 2), 'a tap on Reset speed');
+          await sleep(400);
+          if (!(v.speed === 1 && Math.abs(v.duration - 4) < 1e-6)) throw new Error('CONTROL: the tap on Reset speed did not reset the clip (speed ' + hunt4aSay(v.speed) + ', length ' + v.duration + ' s) — nothing under test happened');
+          const end = v.start + v.duration;
+          const kfT = v.transform.opacity.kf.map(k => +k.t.toFixed(3));
+          const midOp = FM.evalProp(v.transform.opacity, v.start + v.duration * 0.625);
+          if (Math.abs(kfT[kfT.length - 1] - end) > 1 / 30 || !(midOp > 0.99)) {
+            throw new Error('his 2x clip faded in over its first half second and out over its last; after ⋯ then Reset speed (1x) the clip runs from ' + v.start + ' s to ' + end + ' s but its keyframes stayed at ' + kfT.join(', ') + ' s — the fade-out now ends at ' + kfT[kfT.length - 1] + ' s and the clip is invisible for its whole second half (opacity ' + midOp.toFixed(2) + ' at ' + (v.start + v.duration * 0.625).toFixed(2) + ' s); the Speed slider would have carried the fades to the new ends');
+          }
+        });
+      }, 380);
+    } finally { made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); hunt4aCleanup(saved); }
+  });
+
+  test('690 pressing Right to nudge a layer sideways leaves its up-down animation alone — no new keyframe, same move', { item: '690', budgetMs: 60000 }, async function () {
+    /* On PC, with a clip selected, the arrow keys nudge its canvas position (js/app.js keydown, the Arrow branch). The
+       branch works out dx and dy and then calls FM.setTransform on BOTH x and y — setting y to Math.round(its current value
+       + 0) at the playhead. On a layer whose Y is animated (a slide up, say) that inserts a new linear keyframe into the
+       slide at the playhead, so pressing Right re-shapes an axis he never touched: the eased slide becomes a straight run
+       into a new diamond and a shorter ease out of it, and the timeline grows a diamond he did not make. A layer whose Y is
+       not animated is still moved when it sits on a half pixel, for the same reason. Fixed: js/app.js writes only the axis
+       that moved. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atWideWidth(async function () {
+        const L = await hunt4aScene([{ start: 0, duration: 6, x: 300 }], 6);
+        const l = L[0];
+        l.transform.x = 300;
+        l.transform.y = { kf: [{ t: 1, v: 1500, e: 'linear' }, { t: 3, v: 500, e: 'easeInOut' }] };   // an eased slide up, 1 s to 3 s
+        FM.selectLayer(l.id); FM.setTime(2); FM.refreshAll(); await sleep(250);
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+        const probe = [1.5, 2, 2.5];
+        const yBefore = probe.map(t => FM.evalProp(l.transform.y, t));
+        const kfBefore = l.transform.y.kf.map(k => k.t).join(', ');
+        window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight', code: 'ArrowRight' }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'ArrowRight', code: 'ArrowRight' }));
+        await sleep(150);
+        if (FM.evalProp(l.transform.x, 2) !== 301) throw new Error('CONTROL: Right did not nudge the layer (x ' + hunt4aSay(l.transform.x) + ') — the key never reached the nudge');
+        const kfAfter = l.transform.y.kf.map(k => +k.t.toFixed(3)).join(', ');
+        const yAfter = probe.map(t => FM.evalProp(l.transform.y, t));
+        const moved = probe.map((t, i) => Math.abs(yAfter[i] - yBefore[i])).reduce((a, b) => Math.max(a, b), 0);
+        if (kfAfter !== kfBefore || moved > 0.5) {
+          throw new Error('he pressed Right once to nudge a layer that slides up (Y keyframes at ' + kfBefore + ' s, eased): it moved 1 px right, and a new Y keyframe appeared at the playhead (Y keyframes now at ' + kfAfter + ' s) — the slide he did not touch changed shape, ' + moved.toFixed(0) + ' px off where it was at ' + probe.join(' / ') + ' s (' + yBefore.map(v => Math.round(v)).join(', ') + ' became ' + yAfter.map(v => Math.round(v)).join(', ') + ')');
+        }
+      }, 1280);
+    } finally { hunt4aCleanup(saved); }
+  });
+
+  /* ═══ HUNT-b (queue 690, 26 Sep, fourth hunt) — CANVAS TOOLS, WITH A REAL FINGER ═════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". The area: the transform handles, the snapping guides,
+   * masks, crop, Edit Points, the motion path, the eyedropper and fill-drag — on a phone-shaped and a landscape project.
+   * Four findings, each written to FAIL first with a message that says what he would see, then fixed and proven red
+   * against the reverted fix (and each later clause by its own mutation). Every gesture is a trusted touch through
+   * tests/_cdp.py (realInput924), so capture, hit-testing and the browser's own touch -> pointer pipeline are the phone's,
+   * and each test carries a control that proves the gesture really reached the tool, so a red is the app. */
+  function hb4Wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function hb4J(o) { return JSON.stringify(o).replace(/"/g, "'"); }
+  function hb4StopTools() {
+    ['pointEdit', 'cropTool', 'fillDrag', 'maskTool', 'motionPath', 'eyedropper'].forEach(k => {
+      const t = FM[k]; try { if (t && t.isActive && t.isActive() && t.stop) t.stop(); } catch (e) {}
+    });
+  }
+  async function hb4Scene(layers, project) {
+    hb4StopTools();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+    if (FM.viewport) FM.viewport.reset();
+    FM.scene = scene(layers, { project: Object.assign({ width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' }, project || {}) });
+    FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0);
+    FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    if (FM.resizeCanvas) FM.resizeCanvas();
+    await hb4Wait(350);
+  }
+  function hb4Restore(saved) {
+    hb4StopTools();
+    FM.scene = saved; FM._mtMode = 'move';
+    try { FM.inspector.openCategory('home'); } catch (e) {}
+    try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+    try { if (FM.viewport) FM.viewport.reset(); if (FM.resizeCanvas) FM.resizeCanvas(); } catch (e) {}
+  }
+  // where a PROJECT point is on screen, through the same pair every overlay uses (crop origin and zoom included)
+  function hb4Screen(px, py) {
+    const cv = document.getElementById('preview'), r = cv.getBoundingClientRect(), k = FM.previewDispScale();
+    return { x: r.left + (px - (cv.__fmOX || 0)) * k, y: r.top + (py - (cv.__fmOY || 0)) * k };
+  }
+  // the x of the brightest pixel on one row of a real render of the scene — where a white-cored radial gradient's core is
+  function hb4CoreX(row) {
+    const P = FM.scene.project, c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, FM.scene, FM.time);
+    const d = g.getImageData(0, row, P.width, 1).data;
+    let best = -1, bx = -1;
+    for (let x = 0; x < P.width; x++) { const v = d[x * 4] + d[x * 4 + 1] + d[x * 4 + 2]; if (v > best) { best = v; bx = x; } }
+    return bx;
+  }
+  // where fill-drag's teal ring is DRAWN, read off its own overlay's pixels and put back into project px
+  function hb4RingX() {
+    const ov = document.getElementById('fd-overlay'); if (!ov) return NaN;
+    const g = ov.getContext('2d', { willReadFrequently: true }), d = g.getImageData(0, 0, ov.width, ov.height).data;
+    let sx = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] > 200 && Math.abs(d[i] - 41) < 30 && Math.abs(d[i + 1] - 217) < 30 && Math.abs(d[i + 2] - 187) < 30) { sx += (i / 4) % ov.width; n++; }
+    }
+    if (!n) return NaN;
+    // backing px -> the overlay's own CSS px (it fills the wrap, whose layout box is the whole comp) -> project px
+    const cssX = (sx / n) / (ov.width / (ov.clientWidth || 1));
+    return cssX / ((ov.clientWidth || 1) / FM.scene.project.width);
+  }
+
+  /* 690 (HUNT-b 1) — THE MOVE PAD SNAPPED A GROUP'S OFFSET, NOT THE GROUP. A group's X and Y are an OFFSET from where its members
+     are (a new group sits at 0,0 on purpose), and canvas-edit.js already knows it: its old snapping moved the group's
+     visible BOUNDS CENTRE onto the targets ("offset 0 snapping to centre 540 was meaningless"). The snapping moved to the
+     Move & Transform pad (his request) and that half never came with it: the pad (js/inspector.js, pd.tx = FM.alignTargets)
+     snaps the raw offset to 0 / 540 / 1080. So on a group sitting dead centre the pad says Snapped to left edge + top edge
+     the moment his finger touches it, holds the group still for the first ~9 px of swipe, and draws the guide lines on the
+     frame's left and top edges; and the snap it names centre puts the group's centre on the RIGHT edge of the frame.
+     FIXED: the pad judges, names and draws the snap where the thing is SEEN — the group's bounds centre, and for a member
+     of a group the parent chain — and writes back through the inverse (js/inspector.js padFrame). */
+  test('690 the Move pad snaps a GROUP by where he sees it — its centre, not its offset — and a member of a moved group by where he sees it too', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene;
+    const P = { width: 1080, height: 1920 };
+    // read what the pad claims, as he reads it: the hint under his finger
+    const claims = (txt) => { const m = /Snapped to (.*)$/.exec(txt || ''); return m ? m[1].split(' + ').map(s => s.trim()) : []; };
+    const wrong = (name, c) => {
+      // the target is where the thing's CENTRE goes — for a plain layer its anchor (x, y), for a group its visible centre
+      const want = { 'centre': ['x', P.width / 2], 'left edge': ['x', 0], 'right edge': ['x', P.width], 'middle': ['y', P.height / 2], 'top edge': ['y', 0], 'bottom edge': ['y', P.height] }[name];
+      if (!want) return null;   // a keyframe — not what this test is about
+      return Math.abs(c[want[0]] - want[1]) > 3 ? name + ' (its centre ' + want[0] + ' is ' + Math.round(c[want[0]]) + ', not ' + want[1] + ')' : null;
+    };
+    async function padSwipes(where, centreOf, swipes) {
+      const pad = document.querySelector('.mt-trackpad');
+      if (!pad) throw new Error('setup (' + where + '): the Move pad is not in Move & Transform');
+      const pr = pad.getBoundingClientRect();
+      const x0 = pr.left + 30, y0 = pr.top + pr.height / 2;
+      if (pr.width < 200 || x0 < 10 || pr.right > 372 || y0 > 740 || y0 < 20) throw new Error('setup (' + where + '): the Move pad is at ' + hb4J([pr.left, pr.top, pr.right, pr.bottom]) + ', out of reach of real input');
+      const samples = [];
+      const on = (e) => { const s = { trusted: e.isTrusted, kind: e.pointerType }; samples.push(s); setTimeout(() => { const h = document.querySelector('.mt-trackpad .mt-trackpad-hint'); s.hint = h ? h.textContent : ''; s.c = centreOf(); s.gv = FM._hb4GuideV(); s.gh = FM._hb4GuideH(); }, 0); };
+      window.addEventListener('pointermove', on);
+      try {
+        for (const sw of swipes) {
+          const steps = [{ t: 'touchStart', x: x0, y: y0, ms: 90 }];
+          sw.forEach(dx => steps.push({ t: 'touchMove', x: x0 + dx, y: y0, ms: 45 }));
+          steps.push({ t: 'touchEnd', x: x0 + sw[sw.length - 1], y: y0, ms: 0 });
+          await realInput924(steps, where + ' — a swipe on the Move pad');
+          await hb4Wait(250);
+        }
+      } finally { window.removeEventListener('pointermove', on); }
+      await hb4Wait(60);
+      const fake = samples.filter(s => !s.trusted || s.kind !== 'touch');
+      if (samples.length < 4 || fake.length) throw new Error('CONTROL (' + where + '): the swipes did not arrive as trusted touches on the pad (' + samples.length + ' moves, ' + fake.length + ' not trusted touch)');
+      return samples;
+    }
+    // the canvas guide lines, back in project px (they are laid out in the wrap's own pixels)
+    FM._hb4GuideV = () => { const g = document.querySelector('.snap-guide.v'), w = document.getElementById('canvas-wrap'); return (g && g.style.display !== 'none') ? Math.round(parseFloat(g.style.left) / (w.offsetWidth / P.width)) : null; };
+    FM._hb4GuideH = () => { const g = document.querySelector('.snap-guide.h'), w = document.getElementById('canvas-wrap'); return (g && g.style.display !== 'none') ? Math.round(parseFloat(g.style.top) / (w.offsetHeight / P.height)) : null; };
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* CONTROL: a plain shape in the middle of the frame. Its X/Y IS its centre, so every claim the pad makes must be
+             true of it — this proves the harness reads the pad the way he does. */
+          const S = FM.makeLayer('shape', { name: 'HB4 plain', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#e0245e', start: 0, duration: 6 });
+          await hb4Scene([S]);
+          FM.selectLayer(S.id); await hb4Wait(200);
+          FM._mtMode = 'move'; FM.inspector.openCategory('transform'); await hb4Wait(400);
+          const cs = await padSwipes('a plain shape', () => ({ x: FM.evalProp(S.transform.x, 0), y: FM.evalProp(S.transform.y, 0) }), [[2, 4, 6, 23, 40, 57, 74, 91]]);
+          const csClaims = cs.filter(s => claims(s.hint).length);
+          if (!csClaims.length) throw new Error('CONTROL: a plain shape at the frame centre never showed a snap on the Move pad, so this harness cannot read the pad');
+          const csBad = [];
+          cs.forEach(s => claims(s.hint).forEach(n => { const w = wrong(n, s.c); if (w) csBad.push(w); }));
+          if (csBad.length) throw new Error('CONTROL: on a plain shape the pad already names a snap it is not at (' + csBad[0] + ') — the harness reads it wrong');
+          if (!(Math.abs(FM.evalProp(S.transform.x, 0) - 540) > 20)) throw new Error('CONTROL: a 40 px swipe on the Move pad did not move the plain shape — the pad is not taking the finger');
+
+          /* THE CASE: two shapes grouped, the group sitting dead centre (its members span 340..740 x 860..1060). */
+          const A = FM.makeLayer('shape', { name: 'HB4 left', shape: 'rect', x: 440, y: 960, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+          const B = FM.makeLayer('shape', { name: 'HB4 right', shape: 'rect', x: 640, y: 960, shapeW: 200, shapeH: 200, fill: '#3b82f6', start: 0, duration: 6 });
+          await hb4Scene([A, B]);
+          FM.scene.selectedIds = [A.id, B.id]; FM.scene.selectedId = A.id;
+          FM.groupSelection(); await hb4Wait(250);
+          const G = FM.scene.layers.find(l => l.type === 'group');
+          if (!G || A.parent !== G.id || B.parent !== G.id) throw new Error('setup: Group Selection did not put the two shapes in a group');
+          FM.selectLayer(G.id); await hb4Wait(200);
+          FM._mtMode = 'move'; FM.inspector.openCategory('transform'); await hb4Wait(400);
+          const gc = () => { const b = FM.groupBounds(G, FM.scene, 0); return { x: b.x, y: b.y }; };
+          const c0 = gc();
+          if (Math.abs(c0.x - 540) > 2 || Math.abs(c0.y - 960) > 2) throw new Error('setup: the group does not start at the centre of the frame (' + hb4J(c0) + ')');
+          // a touch with a tremble, then two long swipes right: across the first the group should simply follow; the
+          // second carries it (by the pad's own gain) to where the pad announces centre
+          const gs = await padSwipes('the group', gc, [[2, 4, 6, 23, 40, 57, 74, 91, 108, 125, 142, 159, 176], [17, 34, 51, 68, 85, 102, 119, 136, 153, 170]]);
+          if (!(gc().x - c0.x > 100)) throw new Error('CONTROL: two long swipes on the Move pad did not carry the group to the right (centre ' + hb4J(gc()) + ') — the pad is not taking the finger');
+          const bad = [];
+          gs.forEach(s => {
+            const cl = claims(s.hint); if (!cl.length) return;
+            const w = cl.map(n => wrong(n, s.c)).filter(Boolean);
+            if (w.length && bad.length < 3 && !bad.some(b => b.hint === s.hint)) bad.push({ hint: s.hint, c: s.c, w: w, gv: s.gv, gh: s.gh });
+          });
+          if (bad.length) {
+            throw new Error('moving a GROUP with the Move pad, the pad names snaps the group is not at: ' + bad.map(b =>
+              'it said ' + b.hint + ' while the group sat with its centre at ' + Math.round(b.c.x) + ', ' + Math.round(b.c.y) +
+              ' (' + b.w.join(', ') + ')' + (b.gv != null || b.gh != null ? ', with the canvas guide drawn at ' + (b.gv != null ? 'x ' + b.gv : '') + (b.gv != null && b.gh != null ? ' and ' : '') + (b.gh != null ? 'y ' + b.gh : '') : '')
+            ).join('; then ') + ' — it snaps the group offset (0 on a new group) as if it were a position, so the group sticks at the start and centre throws it onto the edge of the frame');
+          }
+          // …and it still SNAPS the group (a fix that simply dropped a group's targets would pass the check above)
+          const gNamed = gs.filter(s => claims(s.hint).length);
+          if (!gNamed.length) throw new Error('moving a GROUP with the Move pad it never snapped at all — its centre went from 540 to ' + Math.round(gc().x) + ' across the frame centre and right edge without the pad naming either');
+
+          /* A MEMBER of a group he has moved 200 px LEFT: its X is in the group's space, so what he sees is X - 200.
+             Swiping right carries it across the frame centre; the pad must name centre when he SEES it at the centre. */
+          const A2 = FM.makeLayer('shape', { name: 'HB4 member', shape: 'rect', x: 440, y: 960, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+          const B2 = FM.makeLayer('shape', { name: 'HB4 member mate', shape: 'rect', x: 640, y: 1500, shapeW: 100, shapeH: 100, fill: '#3b82f6', start: 0, duration: 6 });
+          await hb4Scene([A2, B2]);
+          FM.scene.selectedIds = [A2.id, B2.id]; FM.scene.selectedId = A2.id;
+          FM.groupSelection(); await hb4Wait(250);
+          const G2 = FM.scene.layers.find(l => l.type === 'group');
+          if (!G2 || A2.parent !== G2.id) throw new Error('setup: Group Selection did not put the member in a group');
+          G2.transform.x = -200; FM.refreshAll(); await hb4Wait(150);
+          FM.selectLayer(A2.id); await hb4Wait(200);
+          FM._mtMode = 'move'; FM.inspector.openCategory('transform'); await hb4Wait(400);
+          const mc = () => ({ x: FM.evalProp(A2.transform.x, 0) - 200, y: FM.evalProp(A2.transform.y, 0) });   // where he SEES it
+          const ms = await padSwipes('a member of a moved group', mc, [[2, 4, 6, 20, 40, 60, 80, 100, 120, 140, 150, 160, 170, 180]]);   // finer near 178 px, where it crosses the centre
+          const mBad = [];
+          ms.forEach(s => claims(s.hint).forEach(n => { const w = wrong(n, s.c); if (w && mBad.length < 2) mBad.push('it said ' + s.hint + ' while the member sat at ' + Math.round(s.c.x) + ' (' + w + ')'); }));
+          if (mBad.length) throw new Error('moving a MEMBER of a group moved 200 px left with the Move pad, the pad names snaps the member is not at: ' + mBad.join('; then ') + ' — it snaps the X in the group space as if it were a frame position');
+          if (!ms.some(s => claims(s.hint).indexOf('centre') >= 0)) throw new Error('moving a MEMBER of a group moved 200 px left with the Move pad, it crossed the frame centre (from 240 to ' + Math.round(mc().x) + ') and the pad never snapped it there');
+        });
+      }, 380);
+    } finally { delete FM._hb4GuideV; delete FM._hb4GuideH; hb4Restore(saved); }
+  });
+
+  /* 690 (HUNT-b 2) — A TAP IN FREE CROP THREW THE CROP BOX AWAY. crop-tool.js onDown starts a drag on ANY press: on a handle
+     (resize), inside a partial crop (move), anywhere else (draw a fresh box) — and onMove acts on the first move with no
+     slop. A real finger always trembles a pixel while it is down, so a TAP outside the box he has set replaces it with a
+     16 px square at his fingertip (the 'new' box's minimum), and a tap near a corner jumps that corner to where the finger
+     landed (the handle's pad is 16 px). The point editors had exactly this fault and were given a grab slop in the v16.95
+     hunt (HUNT-e); the crop tool was not among them. Done then writes whatever the tap left.
+     FIXED: the same GRAB_SLOP grab (js/crop-tool.js), and a handle moves its edge by the finger's travel, not to it. */
+  test('690 a tap in Free crop leaves the crop box alone, and a corner handle moves by how far the finger travels, never to the fingertip', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene;
+    const tex = document.createElement('canvas'); tex.width = 1080; tex.height = 1920;
+    const tc = tex.getContext('2d'); tc.fillStyle = '#c03030'; tc.fillRect(0, 0, 540, 1920); tc.fillStyle = '#3050c0'; tc.fillRect(540, 0, 540, 1920);
+    const L = FM.makeLayer('image', { name: 'HB4 crop', x: 540, y: 960, start: 0, duration: 6 });
+    L.start = 0; L.duration = 6;
+    const BOX = { x: 100, y: 200, w: 700, h: 1200 };
+    const srcScreen = (sx, sy) => {
+      const q = FM.layerUVToCanvas(L, sx / 1080, sy / 1920, 1080, 1920), ov = document.getElementById('crop-overlay');
+      const o = FM.projectToOverlay(document.getElementById('preview'), q.x, q.y), r = ov.getBoundingClientRect();
+      return { x: r.left + o.x, y: r.top + o.y };
+    };
+    const tapAt = (p, what) => realInput924([
+      { t: 'touchStart', x: p.x, y: p.y, ms: 90 },
+      { t: 'touchMove', x: p.x + 1, y: p.y, ms: 60 },   // the tremble every real fingertip has
+      { t: 'touchEnd', x: p.x + 1, y: p.y, ms: 0 },
+    ], what);
+    const cropNow = () => { const c = L.crop || {}; return { x: Math.round(FM.evalProp(c.x, 0)), y: Math.round(FM.evalProp(c.y, 0)), w: Math.round(FM.evalProp(c.w, 0)), h: Math.round(FM.evalProp(c.h, 0)) }; };
+    const same = (a, b) => ['x', 'y', 'w', 'h'].every(k => Math.abs(a[k] - b[k]) <= 2);
+    async function openCrop(where) {
+      L.crop = Object.assign({}, BOX);
+      FM.selectLayer(L.id); await hb4Wait(150);
+      FM.cropTool.start(L.id); await hb4Wait(250);
+      if (!FM.cropTool.isActive() || !document.getElementById('crop-overlay')) throw new Error('setup (' + where + '): Free crop did not open on the photo');
+    }
+    const done = () => { const b = document.querySelector('#crop-bar .cb-done'); if (!b) throw new Error('no Done on the crop bar'); b.click(); };
+    try {
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 1080, height: 1920 });
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await hb4Scene([L]);
+          /* CONTROL: a deliberate drag inside the box moves it — the tool is taking real touches, and Done writes. */
+          await openCrop('control');
+          const a = srcScreen(450, 800);
+          if (a.x < 10 || a.x > 370 || a.y < 20 || a.y > 740) throw new Error('setup: the crop box is drawn at ' + hb4J(a) + ', out of reach of real input');
+          await realInput924([
+            { t: 'touchStart', x: a.x, y: a.y, ms: 90 },
+            { t: 'touchMove', x: a.x + 10, y: a.y, ms: 45 }, { t: 'touchMove', x: a.x + 20, y: a.y, ms: 45 }, { t: 'touchMove', x: a.x + 30, y: a.y, ms: 80 },
+            { t: 'touchEnd', x: a.x + 30, y: a.y, ms: 0 },
+          ], 'a deliberate drag inside the crop box');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const moved = cropNow();
+          if (!(moved.x - BOX.x > 60) || moved.w !== BOX.w) throw new Error('CONTROL: a 30 px drag inside the crop box did not move it (crop now ' + hb4J(moved) + ') — the tool is not receiving the finger');
+
+          const bad = [];
+          /* 1. A tap on the dimmed part of the photo, outside the box he set */
+          await openCrop('tap outside');
+          const out = srcScreen(50, 1750);
+          await tapAt(out, 'a tap outside the crop box');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const c1 = cropNow();
+          if (!same(c1, BOX)) bad.push('a tap on the photo outside his crop box replaced the box (' + BOX.w + ' x ' + BOX.h + ') with a ' + c1.w + ' x ' + c1.h + ' square at his fingertip, and Done kept it');
+          /* 2. A tap 10 px in from the bottom-right corner handle, well inside the handle's 16 px pad */
+          await openCrop('tap near a corner');
+          const se = srcScreen(BOX.x + BOX.w, BOX.y + BOX.h);
+          await tapAt({ x: se.x - 10, y: se.y - 10 }, 'a tap 10 px in from the corner handle');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const c2 = cropNow();
+          if (!same(c2, BOX)) bad.push('a tap 10 px in from the bottom-right corner moved that corner to his fingertip — the crop went from ' + BOX.w + ' x ' + BOX.h + ' to ' + c2.w + ' x ' + c2.h);
+          /* 3. A real DRAG on that corner, grabbed 10 px in from it: the corner must move by how far the finger went
+                (40 px right, 40 px down), not jump to the fingertip first — that is 10 px of screen, ~64 photo px */
+          await openCrop('drag a corner');
+          const se3 = srcScreen(BOX.x + BOX.w, BOX.y + BOX.h), g3 = { x: se3.x - 10, y: se3.y - 10 };
+          const drag3 = [{ t: 'touchStart', x: g3.x, y: g3.y, ms: 90 }];
+          [10, 20, 30, 40].forEach(d => drag3.push({ t: 'touchMove', x: g3.x + d, y: g3.y + d, ms: 45 }));
+          drag3.push({ t: 'touchEnd', x: g3.x + 40, y: g3.y + 40, ms: 0 });
+          await realInput924(drag3, 'a 40 px drag on the corner handle, grabbed 10 px in');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const c3 = cropNow(), per = 1 / FM.previewDispScale();   // photo px per screen px (the photo is at scale 1)
+          const want3 = { w: Math.round(BOX.w + 40 * per), h: Math.round(BOX.h + 40 * per) };
+          if (c3.x !== BOX.x || c3.y !== BOX.y || Math.abs(c3.w - want3.w) > 2 * per || Math.abs(c3.h - want3.h) > 2 * per)
+            bad.push('a 40 px drag on the bottom-right corner, grabbed 10 px in from it, made the crop ' + c3.w + ' x ' + c3.h + ' at ' + c3.x + ', ' + c3.y + ' — moving the corner by the finger travel makes it ' + want3.w + ' x ' + want3.h);
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { FM.media.remove(L.id); hb4Restore(saved); }
+  });
+
+  /* 690 (HUNT-b 3) — ON A PHONE-SHAPED PROJECT THE ROTATE KNOB WAS UNDER THE TOP BAR. The knob sits 28 px above the selection
+     box (.sb-rot, top: -28px). On the phone a 9:16 project fills the stage from the top bar down, so on any layer that
+     reaches the top of the frame — every photo or video he imports fills it — the knob is drawn at y 38 while the top bar
+     runs to 52: it cannot be seen, and his finger on it lands on the bar. #stage clips everything above its top, so all
+     that is left above the canvas is a 6 px sliver of the knob's invisible touch pad. On a landscape project the same
+     layer's knob sits in the letterbox and works.
+     FIXED: canvas-edit measures the knob against the stage after placing the box; off it, the knob goes under the box if
+     that is on screen, otherwise just inside under the top edge (js/canvas-edit.js placeRotKnob, .sb-rot-below/-in). */
+  test('690 on a 9 by 16 project the rotate knob stays on screen and turns the layer — inside a full-frame layer, under a banner at the top, above everything else as before', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene;
+    async function tryKnob(where, W, H, geo) {
+      geo = geo || { x: W / 2, y: H / 2, w: W, h: H };   // default: a layer that fills the frame, like an import
+      const L = FM.makeLayer('shape', { name: 'HB4 ' + where, shape: 'rect', x: geo.x, y: geo.y, shapeW: geo.w, shapeH: geo.h, fill: '#3050c0', start: 0, duration: 6 });
+      await hb4Scene([L], { width: W, height: H });
+      FM.selectLayer(L.id); await hb4Wait(450);
+      const box = document.getElementById('select-box'), knob = box && box.querySelector('.sb-rot');
+      if (!knob || box.style.display === 'none') throw new Error('setup (' + where + '): the selection box is not showing on the selected layer');
+      const kr = knob.getBoundingClientRect(), k = { x: kr.left + kr.width / 2, y: kr.top + kr.height / 2 };
+      const br = box.getBoundingClientRect(), side = k.y < br.top ? 'above' : k.y > br.bottom ? 'below' : 'inside';
+      if (!(kr.width > 0) || k.x < 20 || k.x > 330 || k.y < 0 || k.y > 740) throw new Error('setup (' + where + '): the knob is at ' + hb4J(k) + ', off the part of the frame real input can reach');
+      const under = document.elementFromPoint(k.x, k.y);
+      const downs = [];
+      const onDown = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, on: t ? (t.id || String(t.className || t.tagName)).slice(0, 30) : '?' }); };
+      window.addEventListener('pointerdown', onDown, true);
+      const r0 = FM.evalProp(L.transform.rotation, 0) || 0;
+      try {
+        const steps = [{ t: 'touchStart', x: k.x, y: k.y, ms: 90 }];
+        [10, 20, 30, 40, 50, 60].forEach(dx => steps.push({ t: 'touchMove', x: k.x + dx, y: k.y, ms: 45 }));
+        steps.push({ t: 'touchEnd', x: k.x + 60, y: k.y, ms: 0 });
+        await realInput924(steps, where + ' — a finger on the rotate knob, dragged right');
+      } finally { window.removeEventListener('pointerdown', onDown, true); }
+      await hb4Wait(200);
+      if (!downs.length || !downs[0].trusted || downs[0].kind !== 'touch') throw new Error('CONTROL (' + where + '): the press on the knob was not a trusted touch (' + hb4J(downs) + ')');
+      const turned = (FM.evalProp(L.transform.rotation, 0) || 0) - r0;
+      const tb = document.getElementById('topbar-m'), tbr = tb ? tb.getBoundingClientRect() : null;
+      return { turned: turned, k: k, side: side, under: under ? (under.id || String(under.className)).slice(0, 30) : '?', down: downs[0].on, barBottom: tbr ? Math.round(tbr.bottom) : null };
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* CONTROL: a landscape project, the same full-frame layer — its knob sits in the letterbox and the drag turns it */
+          const land = await tryKnob('landscape', 1920, 1080);
+          if (!(Math.abs(land.turned) > 5)) throw new Error('CONTROL: on a landscape project a finger dragged 60 px from the rotate knob turned the layer ' + land.turned.toFixed(1) + ' degrees (the press landed on ' + land.down + ') — the gesture is not reaching the knob at all');
+          /* THE CASE: his usual 9:16 project, a layer that fills the frame */
+          const tall = await tryKnob('9x16', 1080, 1920);
+          if (!(Math.abs(tall.turned) > 5)) throw new Error('on a 9:16 project the rotate knob of a layer that fills the frame is under the top bar: it is drawn at y ' + Math.round(tall.k.y) + ' and the bar runs to ' + tall.barBottom + ', so what is there is the ' + tall.under + ' — his finger on the knob landed on the top bar (' + tall.down + ') and dragging it turned the layer ' + tall.turned.toFixed(1) + ' degrees (the same drag on a landscape project turned it ' + land.turned.toFixed(0) + ')');
+          /* A short banner across the top of the 9:16 frame: there IS room under it, so its knob goes there (off the
+             banner's own text) and still turns it */
+          const top = await tryKnob('9x16 banner', 1080, 1920, { x: 540, y: 150, w: 1080, h: 300 });
+          if (!(Math.abs(top.turned) > 5) || top.side !== 'below') throw new Error('on a 9:16 project the rotate knob of a banner across the top of the frame is ' + top.side + ' the box at y ' + Math.round(top.k.y) + ' (the bar runs to ' + top.barBottom + '), and dragging it turned the banner ' + top.turned.toFixed(1) + ' degrees — with room under the banner the knob belongs there, and it has to turn it');
+          /* CONTROL: a layer in the middle of the frame keeps its knob exactly where it always was, above the box */
+          const mid = await tryKnob('9x16 mid-frame', 1080, 1920, { x: 540, y: 960, w: 500, h: 500 });
+          if (mid.side !== 'above' || !(Math.abs(mid.turned) > 5)) throw new Error('CONTROL: on a layer in the middle of a 9:16 frame the rotate knob is ' + mid.side + ' the box, not above it where it has always been (or it did not turn it: ' + mid.turned.toFixed(1) + ' degrees)');
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  /* 690 (HUNT-b 4) — FILL-DRAG DID ITS OWN LAYER MATHS, AND IT HAD NO FLIP AND NO GROUP. js/fill-drag.js builds the layer's
+     matrix by hand (skew, scale, rotate, translate) instead of going through FM.layerUVToCanvas like the point editor and
+     the crop tool — the shared map that carries the flips and the parent chain because it runs the compositor's own
+     transform. applyLayerTransform mirrors the layer LAST (flipH), so the gradient and the picture are drawn mirrored, and
+     the tool's hand-built inverse is not: on a flipped layer, dragging the gradient RIGHT moves it LEFT, while the teal ring
+     that marks it goes right — the two part company under his finger. Inside a group he has moved, the ring is drawn where
+     the shape would be without the group. (The camera case was recorded as left as it was under the third hunt.)
+     FIXED: fill-drag goes through FM.layerUVToCanvas / FM.layerCanvasToUV, which carry the flip, the parent chain and the
+     camera — so the camera case is fixed by the same change, and tested below as clause 3. */
+  test('690 dragging a gradient on the canvas follows the finger on a flipped layer, and its ring sits on the gradient inside a moved group and under a camera', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene;
+    const mk = (name, x, flip) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 960, shapeW: 800, shapeH: 800, fill: '#ffffff', start: 0, duration: 6 });
+      L.fillMode = 'gradient';
+      L.fillGradient = { enabled: true, type: 'radial', angle: 0, c0: '#ffffff', c1: '#000000' };
+      if (flip) L.flipH = true;
+      return L;
+    };
+    async function openFill(L, where) {
+      FM.selectLayer(L.id); await hb4Wait(200);
+      FM.inspector.openCategory('color'); await hb4Wait(400);
+      if (!FM.fillDrag.isActive() || FM.fillDrag.layerId() !== L.id || FM.fillDrag.mode() !== 'gradient') throw new Error('setup (' + where + '): Colouring on a gradient shape did not start dragging the gradient on the canvas');
+    }
+    async function dragRight(L, where) {
+      const s = hb4Screen(FM.evalProp(L.transform.x, 0), 960);
+      if (s.x < 20 || s.x > 300 || s.y < 20 || s.y > 740) throw new Error('setup (' + where + '): the shape is at ' + hb4J(s) + ', out of reach of real input');
+      const downs = [];
+      const onDown = (e) => downs.push({ trusted: e.isTrusted, kind: e.pointerType, id: e.target && e.target.id });
+      window.addEventListener('pointerdown', onDown, true);
+      try {
+        await realInput924([
+          { t: 'touchStart', x: s.x, y: s.y, ms: 90 },
+          { t: 'touchMove', x: s.x + 10, y: s.y, ms: 45 }, { t: 'touchMove', x: s.x + 20, y: s.y, ms: 45 },
+          { t: 'touchMove', x: s.x + 30, y: s.y, ms: 45 }, { t: 'touchMove', x: s.x + 40, y: s.y, ms: 90 },
+          { t: 'touchEnd', x: s.x + 40, y: s.y, ms: 0 },
+        ], where + ' — a finger dragging the gradient 40 px right');
+      } finally { window.removeEventListener('pointerdown', onDown, true); }
+      await hb4Wait(250);
+      if (!downs.length || !downs[0].trusted || downs[0].kind !== 'touch' || downs[0].id !== 'fd-overlay') throw new Error('CONTROL (' + where + '): the press was not a trusted touch on the fill-drag surface (' + hb4J(downs) + ')');
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* CONTROL: the same shape, not flipped — the core follows the finger right, and the ring sits on the core */
+          const U = mk('HB4 plain gradient', 540, false);
+          await hb4Scene([U]);
+          await openFill(U, 'unflipped');
+          const u0 = hb4CoreX(960);
+          if (Math.abs(u0 - 540) > 6) throw new Error('setup: the unflipped gradient core does not start at the shape centre (' + u0 + ')');
+          await dragRight(U, 'unflipped');
+          const u1 = hb4CoreX(960), uRing = hb4RingX();
+          if (!(u1 - u0 > 60)) throw new Error('CONTROL: on an unflipped shape a 40 px drag moved the gradient core from ' + u0 + ' to ' + u1 + ' — the tool is not taking the finger');
+          if (!(Math.abs(uRing - u1) < 25)) throw new Error('CONTROL: on an unflipped shape the ring is drawn at ' + Math.round(uRing) + ' and the core at ' + u1 + ' — this harness cannot find the ring');
+
+          const bad = [];
+          /* 1. The same shape, flipped horizontally (the ⋯ menu's Flip) */
+          const F = mk('HB4 flipped gradient', 540, true);
+          await hb4Scene([F]);
+          await openFill(F, 'flipped');
+          const f0 = hb4CoreX(960);
+          await dragRight(F, 'flipped');
+          const f1 = hb4CoreX(960), fRing = hb4RingX();
+          if (!(f1 - f0 > 60)) bad.push('on a flipped shape a finger dragging the gradient 40 px RIGHT moved it ' + (f1 < f0 ? 'LEFT, from ' : 'from ') + f0 + ' to ' + f1 + ' (the same drag on the unflipped shape took it to ' + u1 + ')');
+          if (Math.abs(fRing - f1) > 25) bad.push('on the flipped shape the teal ring is drawn at x ' + Math.round(fRing) + ' while the gradient it marks is at x ' + f1);
+          /* 2. A shape inside a group he has moved 200 px right — nothing dragged, just where the ring is drawn */
+          const M = mk('HB4 grouped gradient', 540, false);
+          const N = FM.makeLayer('shape', { name: 'HB4 group mate', shape: 'rect', x: 540, y: 300, shapeW: 100, shapeH: 100, fill: '#20a060', start: 0, duration: 6 });
+          await hb4Scene([M, N]);
+          FM.scene.selectedIds = [M.id, N.id]; FM.scene.selectedId = M.id;
+          FM.groupSelection(); await hb4Wait(200);
+          const G = FM.scene.layers.find(l => l.type === 'group');
+          if (!G || M.parent !== G.id || N.parent !== G.id) throw new Error('setup: Group Selection did not put the gradient shape in a group');
+          G.transform.x = 200; FM.refreshAll(); await hb4Wait(150);
+          await openFill(M, 'in a moved group');
+          const m0 = hb4CoreX(960), mRing = hb4RingX();
+          if (Math.abs(m0 - 740) > 6) throw new Error('setup: in the group moved 200 px right the gradient core is at ' + m0 + ', not 740');
+          if (Math.abs(mRing - m0) > 25) bad.push('inside a group moved 200 px right, the ring that marks the gradient is drawn at x ' + Math.round(mRing) + ' — where the shape would be without the group — while the gradient is at x ' + m0);
+          /* 3. Under a camera panned 100 px right (so the whole picture sits 100 px left in the frame): the ring goes
+                through the same map the picture does, so it sits on the gradient (the third hunt left this one as it was) */
+          const K = mk('HB4 gradient under a camera', 540, false);
+          const CAM = FM.makeLayer('camera', { name: 'HB4 camera', x: 640, y: 960, start: 0, duration: 6 });
+          await hb4Scene([K, CAM]);
+          await openFill(K, 'under a camera');
+          const k0 = hb4CoreX(960), kRing = hb4RingX();
+          if (Math.abs(k0 - 440) > 6) throw new Error('setup: under a camera panned 100 px right the gradient core is at ' + k0 + ', not 440');
+          if (Math.abs(kRing - k0) > 25) bad.push('under a camera panned 100 px, the ring that marks the gradient is drawn at x ' + Math.round(kRing) + ' — where the shape would be with no camera — while the gradient is at x ' + k0);
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  /* ═══ HUNT-c (queue 690, 26 Sep, fourth hunt) — TEXT AND COLOUR ═══════════════════════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in text and colour, each written as a
+   * test that FAILED on the code as it stood, with a message that says what he would see. The phone taps go through
+   * tests/_cdp.py as REAL touches (realInput924) where the finger is the point. All four are fixed — the caption
+   * clock and the gradient in js/compositor.js (textClocks, drawAnimatedText), the colour box in js/inspector.js
+   * (colorField → typeInBox), the text fill opacity in js/compositor.js (fillTextA) — and each test is now the guard
+   * that says so; the 690 tests after them hold the parts these four do not reach. */
+  function hunt4cRender(sc, t) {
+    const c = offscreen(sc.project.width, sc.project.height), x = c.getContext('2d');
+    FM.renderScene(x, sc, t);
+    return x.getImageData(0, 0, c.width, c.height).data;
+  }
+  function hunt4cLive(id) { return FM.scene.layers.find(l => l.id === id) || null; }
+  /* The Animate menu of the text editor's Aa sheet, the way he reaches it: the editor, Aa, the menu, then ✓. The select's
+     own picker is native, so the choice itself is made the way that picker reports it — a change event. */
+  async function hunt4cPickAnim(id, preset) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    FM.textEdit.start(id); await sleep(400);
+    if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open');
+    await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button');
+    await sleep(450);
+    const sel = [].slice.call(document.querySelectorAll('.te-pop-extras select')).find(s => [].some.call(s.options, o => o.value === preset));
+    if (!sel) throw new Error('setup: the Aa sheet has no Animate menu offering ' + preset);
+    sel.value = preset; sel.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(350);
+    await hunt2aPress(document.querySelector('.te-bar .te-done'), 'Done tick');
+    await sleep(300);
+    if (FM.textEdit.isActive()) throw new Error('setup: the Done tick did not close the text editor');
+    const L = hunt4cLive(id);
+    if (!L || !L.textAnim || L.textAnim.preset !== preset) throw new Error('setup: picking ' + preset + ' in the Animate menu did not set it on the layer');
+    return L;
+  }
+
+  test('690 an Animate preset plays on EVERY caption of a caption track, not only the first', { item: '690', budgetMs: 90000 }, async function () {
+    /* captions.js promises that every text control, animation included, works on a caption track for free, because the
+       compositor draws the caption at the playhead through the ordinary text path. The animation half is not true:
+       drawAnimatedText (js/compositor.js) times every entrance from `t - layer.start`, the start of the whole TRACK, and
+       never from the caption that is showing. So caption 1 fades (or pops, or types) in, and by the time caption 2
+       starts the entrance finished seconds ago — caption 2, 3 and every one after appear at full strength on their
+       first frame. The same goes for Fade out, which only ever runs at the end of the track. Captions are exactly where
+       he would put Pop or Typewriter. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (wasOpen) FM.home.close();
+      const L0 = FM.makeLayer('text', { name: 'HuntC captions', x: 360, y: 200, fontSize: 70, start: 0, duration: 6 });
+      L0.text = '';
+      L0.captions = [{ start: 0, end: 2, text: 'FIRST WORDS' }, { start: 2, end: 4, text: 'SECOND WORDS' }, { start: 4, end: 6, text: 'THIRD WORDS' }];
+      FM.scene = scene([L0], { project: { width: 720, height: 400, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L0.id); if (FM.pause) FM.pause(); FM.setTime(0.5);
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      await sleep(250);
+      let L = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () { L = await hunt4cPickAnim(L0.id, 'fade'); });
+      }, 380);
+      const ink = t => { const d = hunt4cRender(FM.scene, t); let s = 0; for (let k = 0; k < d.length; k += 4) s += d[k]; return s; };
+      const rows = L.captions.map(c => { const early = ink(c.start + 0.05), full = ink(c.start + 1.5); return { text: c.text, early: early, full: full, pct: full > 0 ? Math.round(100 * early / full) : -1 }; });
+      if (rows.length !== 3 || rows.some(r => !(r.full > 0))) throw new Error('setup: the three captions did not all draw once settled: ' + rows.map(r => r.text + ' ' + r.full).join(', '));
+      /* CONTROL: the preset reaches the render at all — caption 1 is still fading in 0.05 s after it starts. */
+      if (!(rows[0].pct < 35)) throw new Error('CONTROL: caption 1 is already at ' + rows[0].pct + '% of its settled ink 0.05 s after it starts, so Fade in is not reaching the render and this test cannot see the bug');
+      const late = rows.slice(1).filter(r => !(r.pct < 35));
+      if (late.length) throw new Error('he picked Animate → Fade in on a caption track: caption 1 fades in (' + rows[0].pct + '% of its ink 0.05 s after it starts), but ' + late.map(r => r.text + ' is already at ' + r.pct + '%').join(' and ') + ' 0.05 s after it starts — every caption after the first just pops on with no animation, in the preview and in the export');
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
+  test('690 a real tap on a colour box selects the old colour, so a hex colour typed on the phone replaces it', { item: '690', budgetMs: 90000 }, async function () {
+    /* colorField (js/inspector.js) is every colour in the app: Colouring's Custom row, both gradient colours, Outline,
+       Shadow, every effect colour, and the colour button of the text editor. Its hex box is an <input type=text> with
+       maxLength 7 that does nothing on focus. A real tap on a phone drops a CARET into the old #ffffff (at the end, or
+       wherever the finger landed) rather than selecting it, and with 7 of 7 characters already there every key he
+       types is refused — he types ff0000 and nothing appears, the colour does not change. v16.94 fixed exactly this for
+       the number boxes (typeInBox); the colour box never got it. The typing is done the way the keyboard does it,
+       inserted at whatever selection the real tap left, and a positive control types into the same box with its text
+       selected, to prove the harness can type there at all. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const bad = [];
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await huntBScene(() => [FM.makeLayer('text', { name: 'HuntC hex', text: 'Hello', x: 540, y: 700, fontSize: 160, color: '#ffffff', start: 0, duration: 4 })]);
+          const id = L[0].id;
+          const colourNow = () => String(FM.evalProp(hunt4cLive(id).color, FM.time) || '').toLowerCase();
+          FM.selectLayer(id); await sleep(250);
+          async function typeHex(box, what) {
+            box.scrollIntoView({ block: 'center' }); await sleep(250);
+            const r = box.getBoundingClientRect(), x = r.left + r.width * 0.6, y = r.top + r.height / 2;
+            if (x > 370 || y > 740 || y < 0) throw new Error('setup: the ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+            const before = box.value;
+            await realInput924(huntBTap(x, y), 'the tap on the ' + what);
+            await sleep(300);
+            if (document.activeElement !== box) throw new Error('CONTROL: a real tap on the ' + what + ' did not focus it (focus is on ' + (document.activeElement && (document.activeElement.className || document.activeElement.tagName)) + ')');
+            const selAt = box.selectionStart + (box.selectionEnd !== box.selectionStart ? '-' + box.selectionEnd : '');
+            if (!document.execCommand('insertText', false, 'ff0000')) throw new Error('setup: this browser cannot insert text the way a keyboard does');
+            const shown = box.value;
+            await sleep(150);
+            const got = colourNow();
+            /* POSITIVE CONTROL: the very same typing, with the box's text selected, does land. */
+            box.setSelectionRange(0, box.value.length);
+            document.execCommand('insertText', false, '#00ff00');
+            await sleep(150);
+            const ctrl = colourNow();
+            box.blur(); await sleep(250);
+            if (ctrl !== '#00ff00') throw new Error('CONTROL: even with the whole ' + what + ' selected, typing #00ff00 made the colour ' + ctrl + ', so the harness cannot type into this box');
+            if (got !== '#ff0000') bad.push('the ' + what + ' read ' + before + ', his tap left the caret at ' + selAt + ' of ' + before.length + ' characters, he typed ff0000, the box still reads ' + shown + ' and the text stayed ' + got);
+          }
+          FM.inspector.openCategory('color'); await sleep(450);
+          const hx = document.querySelector('#inspector-panel .hex-input');
+          if (!hx) throw new Error('setup: no colour box in the Colouring card');
+          await typeHex(hx, 'Colouring colour box');
+          hunt4cLive(id).color = '#ffffff'; FM.requestRender();
+          /* …and the colour button of the text editor, where he is most likely to want it */
+          FM.textEdit.start(id); await sleep(400);
+          if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open');
+          await hunt2aPress(document.querySelector('.te-bar .te-color'), 'text editor colour button');
+          await sleep(400);
+          const thx = document.querySelector('.te-pop-color .hex-input');
+          if (!thx) throw new Error('setup: the text editor colour button opened no colour box');
+          await typeHex(thx, 'text editor colour box');
+          FM.textEdit.stop(); await sleep(200);
+        });
+      }, 380);
+      if (bad.length) throw new Error('he cannot type a colour on his phone: a real tap on the hex box puts the caret after the old colour instead of selecting it, and the box only holds 7 characters, so every key he types is thrown away until he deletes the old colour by hand. ' + bad.join('; '));
+    } finally {
+      try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 gradient text keeps its gradient when an Animate preset is picked', { item: '690', budgetMs: 90000 }, async function () {
+    /* Colouring → Gradient on a text layer gives it the default gradient, angle 90: top to bottom, from its colour to
+       near-black. The moment any Animate preset is picked the text goes through drawAnimatedText (js/compositor.js),
+       which does not draw the gradient at all — it paints each character (or word, or line) ONE flat colour sampled at
+       that unit's centre. For a top-to-bottom gradient every unit on a line has the same centre height, so the whole
+       line comes out one flat grey: the gradient is simply gone, not only during the entrance but for the layer's whole
+       life, in the preview and the export. (A left-to-right one survives only as a stepped stripe per letter, and the
+       dragged gradient position and the Angular type are ignored the same way.) */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (wasOpen) FM.home.close();
+      const L0 = FM.makeLayer('text', { name: 'HuntC gradient', text: 'GRADIENT', x: 450, y: 200, fontSize: 130, color: '#ffffff', start: 0, duration: 6 });
+      FM.scene = scene([L0], { project: { width: 900, height: 400, fps: 30, duration: 6, background: '#1e40ff' } });
+      FM.selectLayer(L0.id); if (FM.pause) FM.pause(); FM.setTime(3);
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      await sleep(250);
+      FM.inspector.openCategory('color'); await sleep(450);
+      const tab = [].slice.call(document.querySelectorAll('#inspector-panel .fill-tab')).find(b => b.title === 'Gradient');
+      if (!tab) throw new Error('setup: the Colouring card has no Gradient tab for a text layer');
+      tab.click(); await sleep(350);
+      const L1 = hunt4cLive(L0.id);
+      if (!L1 || FM.fillModeOf(L1) !== 'gradient') throw new Error('setup: the Gradient tab did not give the text a gradient');
+      /* The ink is every pixel that is grey (the gradient runs white to near-black) rather than the blue background;
+         its brightness is read in the top and bottom 30% of the letters' own height. */
+      function spread() {
+        const P = FM.scene.project, d = hunt4cRender(FM.scene, 3), W = P.width, H = P.height;
+        const isInk = k => Math.abs(d[k] - d[k + 2]) < 40 && Math.abs(d[k] - d[k + 1]) < 40;
+        let y0 = H, y1 = -1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (isInk((y * W + x) * 4)) { if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        if (y1 < 0) return null;
+        const band = (a, b) => { let s = 0, n = 0; for (let y = a; y <= b; y++) for (let x = 0; x < W; x++) { const k = (y * W + x) * 4; if (isInk(k)) { s += d[k]; n++; } } return n ? Math.round(s / n) : -1; };
+        const h = y1 - y0;
+        return { top: band(y0, y0 + Math.round(h * 0.3)), bottom: band(y1 - Math.round(h * 0.3), y1) };
+      }
+      const still = spread();
+      /* CONTROL: without an animation the letters really are a gradient, bright at the top and dark at the bottom. */
+      if (!still || !(still.top - still.bottom > 60)) throw new Error('CONTROL: with no animation the gradient text is not visibly top-to-bottom (top ' + (still && still.top) + ', bottom ' + (still && still.bottom) + '), so this test cannot judge it');
+      await onScreen924(async function () { await hunt4cPickAnim(L0.id, 'fade'); });
+      const moving = spread();
+      if (!moving) throw new Error('setup: the text drew nothing once animated');
+      if (!(moving.top - moving.bottom > 0.6 * (still.top - still.bottom))) throw new Error('his text had a top-to-bottom gradient (brightness ' + still.top + ' at the top of the letters, ' + still.bottom + ' at the bottom); he picked Animate → Fade in and, long after the fade has finished, the letters are one flat colour top to bottom (' + moving.top + ' at the top, ' + moving.bottom + ' at the bottom) — the gradient is gone for the whole life of the layer, in the preview and the export');
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
+  test('690 the Opacity slider in a text layer’s Colouring fades the text, as it does a shape', { item: '690', budgetMs: 60000 }, async function () {
+    /* fillPanel (js/inspector.js) gives a text layer the same Opacity row as a shape, and its readout follows it
+       (#FFFFFF 30%). But only paintFillInPath — the SHAPE fill — ever reads layer.fillOpacity; the text branch of the
+       compositor sets its fillStyle from layer.color and never looks at it, solid or gradient. So the slider moves, the
+       card says 30%, and the text on the canvas and in the export does not change at all. A shape at the same 30% in
+       the same frame is the control: it proves the field is honoured where it is drawn, and that the measure works. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (wasOpen) FM.home.close();
+      const P = { width: 900, height: 400, fps: 30, duration: 6, background: '#000000' };
+      const L0 = FM.makeLayer('text', { name: 'HuntC opacity', text: 'HELLO', x: 450, y: 200, fontSize: 150, color: '#ffffff', start: 0, duration: 6 });
+      FM.scene = scene([L0], { project: Object.assign({}, P) });
+      FM.selectLayer(L0.id); if (FM.pause) FM.pause(); FM.setTime(1);
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      await sleep(250);
+      FM.inspector.openCategory('color'); await sleep(450);
+      const opRow = [].slice.call(document.querySelectorAll('#inspector-panel .prop-row--scrub')).find(r => /Opacity/i.test((r.querySelector('label') || {}).textContent || ''));
+      if (!opRow) throw new Error('setup: no Opacity row in the text layer’s Colouring card');
+      const box = opRow.querySelector('.fx-scrub-val');
+      box.value = '30'; box.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(250);
+      const L1 = hunt4cLive(L0.id);
+      if (!L1 || Math.abs((L1.fillOpacity != null ? L1.fillOpacity : 1) - 0.3) > 1e-6) throw new Error('setup: typing 30 in the Opacity box did not set the fill opacity (it is ' + (L1 && L1.fillOpacity) + ')');
+      const readout = ((document.querySelector('#inspector-panel .fill-hex') || {}).textContent || '').replace(/\s+/g, ' ').trim();
+      const peak = sc => { const d = hunt4cRender(sc, 1); let m = 0; for (let k = 0; k < d.length; k += 4) if (d[k] > m) m = d[k]; return m; };
+      const textPeak = peak(FM.scene);
+      const S = FM.makeLayer('shape', { name: 'HuntC shape', shape: 'rect', x: 450, y: 200, shapeW: 300, shapeH: 150, fill: '#ffffff', start: 0, duration: 6 });
+      S.fillMode = 'solid'; S.fillOpacity = 0.3;
+      const shapePeak = peak(scene([S], { project: Object.assign({}, P) }));
+      /* CONTROL: the same 30% on a shape draws at about 30% — the field is honoured where it is read, and the measure sees it. */
+      if (!(shapePeak > 40 && shapePeak < 120)) throw new Error('CONTROL: a white shape at 30% fill opacity peaks at ' + shapePeak + ' of 255, not about 77, so this measure cannot judge the text');
+      if (!(textPeak <= 120)) throw new Error('the Colouring card reads ' + (readout || '30%') + ' and the Opacity box says 30, but the text still draws at full strength (its brightest pixel is ' + textPeak + ' of 255, where a white shape at the same 30% peaks at ' + shapePeak + ') — the slider moves and the text does not change, in the preview or the export');
+    } finally {
+      FM.scene = saved; FM.time = savedT;
+      try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (wasOpen) FM.home.open(); } catch (e) {}
+    }
+  });
+
+  /* The caption track the next three read: a black frame, one text layer, cues back to back or stacked. Ink is the sum of
+     the red channel inside a band of rows, so a line of a stacked caption can be read on its own. */
+  function cap690(cues, anim, over) {
+    const L = FM.makeLayer('text', Object.assign({ name: '690 captions', x: 360, y: 200, fontSize: 70, start: 0, duration: 8 }, over || {}));
+    L.text = ''; L.captions = cues; L.textAnim = Object.assign({ preset: 'fade', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 }, anim || {});
+    return L;
+  }
+  function ink690(sc, t, y0, y1) {
+    const d = hunt4cRender(sc, t), W = sc.project.width, H = sc.project.height;
+    let s = 0;
+    for (let y = Math.max(0, y0 || 0); y < Math.min(H, y1 == null ? H : y1); y++) for (let x = 0; x < W; x++) s += d[(y * W + x) * 4];
+    return s;
+  }
+
+  test('690 splitting an animated caption track keeps every caption’s own entrance and Fade out, and the cut stays invisible', { item: '690', budgetMs: 90000 }, async function () {
+    /* Once an Animate preset runs per caption (textClocks), FM.splitLayer's old rule for text — clear the head half's
+       Fade out and the tail half's entrance, so the title does not vanish across the cut — would take the animation off
+       every caption after the cut and the Fade out off every one before it. A caption track keeps its animation and only
+       the ONE cue on screen across the cut is told where it really began and ended (animFrom / animTo). Checked on real
+       pixels: every sample of the frame is the same after the split as before it, and the captions away from the cut
+       still enter and leave. The first stage is also the check that Fade out runs at the end of EACH caption. */
+    const saved = FM.scene, savedT = FM.time;
+    const P = { width: 720, height: 400, fps: 30, duration: 8, background: '#000000' };
+    try {
+      const L0 = cap690([{ start: 0, end: 2, text: 'FIRST WORDS' }, { start: 2, end: 5, text: 'SECOND WORDS' }, { start: 5, end: 8, text: 'THIRD WORDS' }], { durOut: 0.4 });
+      FM.scene = scene([L0], { project: Object.assign({}, P) });
+      const times = [0.05, 1.0, 1.9, 2.05, 3.0, 3.4, 3.5, 3.6, 4.0, 4.8, 5.05, 6.5, 7.9];
+      const at = (arr, t) => arr[times.indexOf(t)];
+      const before = times.map(t => ink690(FM.scene, t));
+      /* Per-caption timing before any split: caption 1 fades out before 2 s, caption 2 before 5 s, caption 3 fades in at 5 s. */
+      if (!(at(before, 1.9) < 0.6 * at(before, 1.0))) throw new Error('Fade out does not run at the end of caption 1: its ink 0.1 s before it ends is ' + at(before, 1.9) + ' against ' + at(before, 1.0) + ' mid-way — Fade out only runs at the end of the whole track');
+      if (!(at(before, 4.8) < 0.8 * at(before, 4.0))) throw new Error('Fade out does not run at the end of caption 2: ink ' + at(before, 4.8) + ' 0.2 s before it ends against ' + at(before, 4.0));
+      if (!(at(before, 5.05) < 0.35 * at(before, 6.5))) throw new Error('caption 3 does not fade in: ' + at(before, 5.05) + ' of ink 0.05 s after it starts against ' + at(before, 6.5) + ' settled');
+      FM.time = 3.5;
+      await FM.splitLayer(L0.id);
+      if (FM.scene.layers.length !== 2) throw new Error('setup: the caption track did not split in two');
+      const after = times.map(t => ink690(FM.scene, t));
+      const off = [];
+      times.forEach((t, i) => { const base = Math.max(before[i], after[i], 1); if (Math.abs(after[i] - before[i]) / base > 0.05) off.push('at ' + t + ' s the ink went from ' + before[i] + ' to ' + after[i]); });
+      if (off.length) throw new Error('splitting the caption track at 3.5 s changed what is on screen: ' + off.join('; ') + ' — a caption either re-entered at the cut, left at it, or lost its animation');
+      const B = FM.scene.layers.filter(l => l.id !== L0.id)[0], A = FM.scene.layers.filter(l => l.id === L0.id)[0];
+      if (!(B.textAnim.durIn > 0) || !(A.textAnim.durOut > 0)) throw new Error('the split cleared the caption track’s animation (tail durIn ' + B.textAnim.durIn + ', head durOut ' + A.textAnim.durOut + ') — every caption after the cut would pop on');
+    } finally {
+      FM.scene = saved; FM.time = savedT;
+      try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('690 a caption stacked under one already showing fades in on its own, and the one showing holds still — wrapped lines too', { item: '690', budgetMs: 60000 }, async function () {
+    /* Stacked captions (queue 574) are several live cues joined by newlines. Each paragraph is one cue's, and each WRAPPED
+       line is its paragraph's (FM.textLines records which), so when a second caption joins at 2 s its line fades in from
+       its own start while the first caption — here wrapped over two lines — stays at full strength. Timed from the whole
+       track, the new line popped on; timed from the newest cue alone, the first caption would blink out and fade back. */
+    const saved = FM.scene;
+    try {
+      const L = cap690([{ start: 0, end: 4, text: 'TOP WORDS' }, { start: 2, end: 4, text: 'UNDER' }], {}, { wrapWidth: 330 });
+      FM.scene = scene([L], { project: { width: 720, height: 400, fps: 30, duration: 8, background: '#000000' } });
+      const c = offscreen(10, 10).getContext('2d');
+      c.font = (L.italic ? 'italic ' : '') + (L.bold ? '700 ' : '') + '70px ' + (L.fontFamily || 'sans-serif');   // the text branch's own font string
+      const lines = FM.textLines(c, L, 'TOP WORDS\nUNDER');
+      if (lines.length !== 3) throw new Error('setup: the first caption was meant to wrap over two lines and the second to sit under it, got ' + lines.length + ' lines: ' + lines.join(' | '));
+      const lh = 70 * 1.15, band = k => [Math.round(200 + (k - 1) * lh - lh / 2), Math.round(200 + (k - 1) * lh + lh / 2)];
+      const read = (t, k) => ink690(FM.scene, t, band(k)[0], band(k)[1]);
+      const rows = [0, 1, 2].map(k => ({ k: k, early: read(2.05, k), settled: read(3.5, k) }));
+      if (rows.some(r => !(r.settled > 0))) throw new Error('setup: a line of the stack drew nothing once settled: ' + rows.map(r => r.settled).join(', '));
+      const held = rows.slice(0, 2).filter(r => Math.abs(r.early - r.settled) / r.settled > 0.05);
+      if (held.length) throw new Error('when the second caption joined at 2 s, the FIRST caption did not hold still: ' + held.map(r => 'its line ' + (r.k + 1) + ' read ' + Math.round(100 * r.early / r.settled) + '% of its settled ink').join(' and ') + ' 0.05 s later — it re-entered with the newcomer');
+      if (!(rows[2].early < 0.35 * rows[2].settled)) throw new Error('the stacked caption did not fade in on its own: 0.05 s after it joined it is already at ' + Math.round(100 * rows[2].early / rows[2].settled) + '% of its ink');
+    } finally {
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 under an Animate preset gradient text looks like the still text once settled — top to bottom, Angular with a moved centre, Radial, and on a Curve', { item: '690', budgetMs: 60000 }, async function () {
+    /* The flat per-letter colour ignored everything but the two colours and the angle — so Angular, a dragged centre,
+       Radial and a curve came out wrong as well. (Left to right on a curve is not asked here: the STILL curve paints
+       each letter with the middle of that gradient, drawArcLine's own way, so there is nothing for the two to differ on.) Each is rendered still and then with Fade in long after
+       it has settled, and compared cell by cell over the letters: the mean brightness of the ink in an 8 × 3 grid must
+       agree to within 22 of 255 (per-letter drawing moves a glyph by a pixel or so; the old flat colours miss by 60+). */
+    const saved = FM.scene;
+    try {
+      function cells(sc) {
+        const P = sc.project, d = hunt4cRender(sc, 3), W = P.width, H = P.height;
+        const isInk = k => Math.abs(d[k] - d[k + 2]) < 40 && Math.abs(d[k] - d[k + 1]) < 40;
+        let x0 = W, x1 = -1, y0 = H, y1 = -1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (isInk((y * W + x) * 4)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        if (x1 < 0) return null;
+        const out = [];
+        for (let r = 0; r < 3; r++) for (let q = 0; q < 8; q++) {
+          const ya = y0 + Math.floor((y1 - y0 + 1) * r / 3), yb = y0 + Math.floor((y1 - y0 + 1) * (r + 1) / 3), xa = x0 + Math.floor((x1 - x0 + 1) * q / 8), xb = x0 + Math.floor((x1 - x0 + 1) * (q + 1) / 8);
+          let s = 0, n = 0;
+          for (let y = ya; y < yb; y++) for (let x = xa; x < xb; x++) { const k = (y * W + x) * 4; if (isInk(k)) { s += d[k]; n++; } }
+          out.push(n > 40 ? s / n : null);
+        }
+        return out;
+      }
+      const cases = [
+        ['top to bottom', { type: 'linear', angle: 90 }, 0],
+        ['Angular with its centre dragged right', { type: 'angular', angle: 30, ox: 0.25, oy: -0.1 }, 0],
+        ['Radial', { type: 'radial' }, 0],
+        ['top to bottom on a 70° Curve', { type: 'linear', angle: 90 }, 70]
+      ];
+      const bad = [];
+      for (const cs of cases) {
+        const mk = preset => {
+          const L = FM.makeLayer('text', { name: '690 gradient', text: 'GRADIENT', x: 450, y: 200, fontSize: 110, color: '#ffffff', start: 0, duration: 6 });
+          L.fillMode = 'gradient'; L.fillGradient = Object.assign({ enabled: true, c0: '#ffffff', c1: '#0a0c10' }, cs[1]);
+          L.textCurve = cs[2];
+          L.textAnim = { preset: preset, unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+          return scene([L], { project: { width: 900, height: 400, fps: 30, duration: 6, background: '#1e40ff' } });
+        };
+        const still = cells(mk('none')), moving = cells(mk('fade'));
+        if (!still || !moving) throw new Error('setup: ' + cs[0] + ' drew no letters');
+        const spread = Math.max.apply(null, still.filter(v => v != null)) - Math.min.apply(null, still.filter(v => v != null));
+        if (!(spread > 50)) throw new Error('CONTROL: the still ' + cs[0] + ' gradient barely varies over the letters (' + Math.round(spread) + '), so this comparison cannot see a flattened one');
+        let worst = 0, where = -1;
+        still.forEach((v, i) => { if (v != null && moving[i] != null && Math.abs(v - moving[i]) > worst) { worst = Math.abs(v - moving[i]); where = i; } });
+        if (worst > 22) bad.push(cs[0] + ': cell ' + where + ' reads ' + Math.round(still[where]) + ' still and ' + Math.round(moving[where]) + ' animated');
+      }
+      if (bad.length) throw new Error('with Fade in picked, long after it has finished, the gradient text is not coloured like the still text — ' + bad.join('; '));
+    } finally {
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('690 the Colouring Opacity holds under an Animate preset and on a Curve, and leaves the Outline solid', { item: '690', budgetMs: 60000 }, async function () {
+    /* The HUNT test reads the still, straight text. The same Opacity has to reach the other three ways text is drawn —
+       animated, curved, and both — and, as on a shape, it fades the FILL only: a red Outline stays red at full strength
+       while the white letters inside it drop to 30%. Green and blue come only from the white fill, so their peak says
+       how strongly the fill is drawn (about 77 at 30%), and a pure red pixel says the Outline is still solid. */
+    const bad = [];
+    const P = { width: 900, height: 400, fps: 30, duration: 6, background: '#000000' };
+    for (const cs of [['still', 'none', 0], ['with Fade in', 'fade', 0], ['on a Curve', 'none', 60], ['with Fade in on a Curve', 'fade', 60]]) {
+      const L = FM.makeLayer('text', { name: '690 opacity', text: 'HELLO', x: 450, y: 200, fontSize: 150, color: '#ffffff', start: 0, duration: 6 });
+      L.fillOpacity = 0.3; L.textCurve = cs[2];
+      L.textAnim = { preset: cs[1], unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      L.stroke = { enabled: true, width: 6, color: '#ff0000', position: 'outside' };
+      const d = hunt4cRender(scene([L], { project: Object.assign({}, P) }), 3);
+      let gPeak = 0, solidRed = 0;
+      for (let k = 0; k < d.length; k += 4) { if (d[k + 1] > gPeak) gPeak = d[k + 1]; if (d[k] > 240 && d[k + 1] < 20) solidRed++; }
+      if (!(solidRed > 200)) bad.push(cs[0] + ': the red Outline is not drawn solid (' + solidRed + ' full-red pixels)');
+      if (!(gPeak > 40 && gPeak < 120)) bad.push(cs[0] + ': the letters peak at ' + gPeak + ' of 255 where 30% of white is about 77');
+    }
+    if (bad.length) throw new Error('text at 30% fill Opacity with a red Outline — ' + bad.join('; '));
+  });
+
+  /* ═══ HUNT-d, FOURTH PASS (queue 690, 26 Sep) — KEYFRAMES AND ANIMATION ════════════════════════════════════════════════
+   * His standing brief (REQUESTS.md #690): "go re audit, find some bugs coz theres a shit load". Four findings in keyframes,
+   * easing, behaviours and animation presets, each written to FAIL with what he would see, and each fixed on the same
+   * branch (the four tests below were renamed from HUNT-d to 690 when they went green). The phone one is driven by a REAL
+   * finger through tests/_cdp.py (realInput924), with a control that proves the same hold works where it should, so a red
+   * is the app and not a gesture that never started. */
+  async function hd4ColourFixture() {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.contextMenu) FM.contextMenu.hide();
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const L = FM.makeLayer('shape', { name: 'HUNT-d colour', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+    // red at 1 s turning blue by 3 s — what the Colouring panel's diamond writes (layer.fill as colour keyframes, #928)
+    L.fill = { kf: [{ t: 1, v: '#ff0000', e: 'linear' }, { t: 3, v: '#0000ff', e: 'linear' }] };
+    // a position move at other times, for the control: the same hold on THIS diamond, with Position / Scale open
+    L.transform.x = { kf: [{ t: 1.5, v: 100, e: 'linear' }, { t: 2.5, v: 500, e: 'linear' }] };
+    FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+    if (FM.pause) FM.pause();
+    FM.refreshAll(); FM.selectLayer(L.id);
+    await sleep(250);
+    return L;
+  }
+  async function hd4OpenAt(cat) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    FM.inspector.openCategory(cat);
+    if (cat === 'transform') FM._mtMode = 'move';
+    FM.setTime(2); FM.timeline.rebuild(); FM.timeline.updatePlayhead();
+    await sleep(300);
+  }
+  function hd4DotAt(t) {
+    return [].filter.call(document.querySelectorAll('#tl-tracks .kf-dot'), d => Math.abs(parseFloat(d.dataset.t) - t) < 1e-3)[0] || null;
+  }
+  function hd4Centre(d) { const r = d.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+
+  test('690 a colour keyframe is live while Colouring is open: on the phone a hold opens its menu and a hold-and-drag retimes it, not the clip; Outline, Element Properties and an open audio effect arm theirs too', { item: '690', budgetMs: 90000 }, async function () {
+    /* A diamond is LIVE (solid, draggable, the hold menu) only while the editor that owns its property is open — the v5.42
+       rule in js/timeline.js, and every inert diamond's own title says Open this property's editor to move this keyframe.
+       But FM.kfFocusProps (js/inspector.js kfScope) only knows Effects, Position / Scale, Mixing, Volume and Speed. Colouring,
+       Outline and Shadows and Element Properties return nothing, so with Colouring open the colour keyframes stay inert
+       outlines — their editor IS open, and nothing he can do on the timeline reaches them. An inert diamond takes no touch
+       at all, so his finger lands on the CLIP underneath: the hold is a clip hold, and a drag moves the clip.
+       On the phone that hold is the only way to ease or delete a keyframe (a finger never double-clicks or right-clicks),
+       and a drag is the only way to retime one — on PC as well: the mouse drag bails on the same live check.
+       He uses colour keyframes (#928, his words: the feature that makes a layer change color depending on how you
+       keyframe the colors). */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          // CONTROL: with Position / Scale open, the same still hold on the position diamond opens the keyframe menu.
+          let L = await hd4ColourFixture();
+          await hd4OpenAt('transform');
+          let d = hd4DotAt(2.5);
+          if (!d || !d.classList.contains('kf-live')) throw new Error('setup: the position diamond at 2.5 s is not live with Position / Scale open (' + (d ? d.className : 'no diamond') + ')');
+          let c = hd4Centre(d);
+          if (c.x < 10 || c.x > 370 || c.y > 740) throw new Error('setup: the position diamond is at ' + Math.round(c.x) + ',' + Math.round(c.y) + ', out of reach of real input');
+          const D0 = huntDowns();
+          try { await realInput924([{ t: 'touchStart', x: c.x, y: c.y, ms: 650 }, { t: 'touchEnd', x: c.x, y: c.y, ms: 0 }], 'the control hold on a position diamond'); } finally { D0.stop(); }
+          await sleep(300);
+          if (!D0.downs.length || !D0.downs[0].trusted || D0.downs[0].kind !== 'touch') throw new Error('CONTROL: the hold was not a trusted touch (' + JSON.stringify(D0.downs).replace(/"/g, "'") + ')');
+          if (!huntCtxUp()) throw new Error('CONTROL: a still 0.65 s hold on a live position diamond did not open the keyframe menu, so this test cannot judge the colour diamond');
+          if (FM.contextMenu) FM.contextMenu.hide();
+
+          // THE CASE, part 1: Colouring open, the same still hold on the colour keyframe at 3 s.
+          L = await hd4ColourFixture();
+          await hd4OpenAt('color');
+          d = hd4DotAt(3);
+          if (!d) throw new Error('setup: no diamond is drawn for the colour keyframe at 3 s');
+          c = hd4Centre(d);
+          if (c.x < 10 || c.x > 370 || c.y > 740) throw new Error('setup: the colour diamond is at ' + Math.round(c.x) + ',' + Math.round(c.y) + ', out of reach of real input');
+          const liveWithPanel = d.classList.contains('kf-live');
+          const D1 = huntDowns();
+          try { await realInput924([{ t: 'touchStart', x: c.x, y: c.y, ms: 650 }, { t: 'touchEnd', x: c.x, y: c.y, ms: 0 }], 'a still hold on the colour diamond'); } finally { D1.stop(); }
+          await sleep(300);
+          if (!D1.downs.length || !D1.downs[0].trusted) throw new Error('CONTROL: the hold on the colour diamond was not a trusted touch');
+          const menu = huntCtxUp();
+          const landedOn = D1.downs[0].cls;
+          if (FM.contextMenu) FM.contextMenu.hide();
+          try { FM.timeline._abortGestures(); } catch (e) {}
+
+          // THE CASE, part 2: Colouring open, hold the colour keyframe at 3 s and drag it 40px right to retime it.
+          L = await hd4ColourFixture();
+          await hd4OpenAt('color');
+          const d1 = hd4DotAt(1), d3 = hd4DotAt(3);
+          const pps = (hd4Centre(d3).x - hd4Centre(d1).x) / 2;
+          if (!(pps > 20)) throw new Error('setup: the lane is drawn at ' + pps.toFixed(1) + ' px a second, too tight to read a 40px drag');
+          c = hd4Centre(d3);
+          await realInput924([
+            { t: 'touchStart', x: c.x, y: c.y, ms: 650 },
+            { t: 'touchMove', x: c.x + 10, y: c.y, ms: 40 },
+            { t: 'touchMove', x: c.x + 20, y: c.y, ms: 40 },
+            { t: 'touchMove', x: c.x + 30, y: c.y, ms: 40 },
+            { t: 'touchMove', x: c.x + 40, y: c.y, ms: 120 },
+            { t: 'touchEnd', x: c.x + 40, y: c.y, ms: 0 },
+          ], 'a hold then a 40px drag on the colour diamond');
+          await sleep(350);
+          const want = Math.round((3 + 40 / pps) * 30) / 30;
+          const kfT = (FM.isAnimated(L.fill) ? L.fill.kf : []).map(k => k.t).sort((a, b) => a - b);
+          const clipStart = L.start || 0;
+          const retimed = kfT.length === 2 && Math.abs(kfT[0] - 1) < 1e-6 && Math.abs(kfT[1] - want) <= 0.5 / 30;
+
+          const bad = [];
+          if (!menu) bad.push('with Colouring open he held the colour keyframe diamond for 0.65 s and no menu opened (the press landed on ' + landedOn + (liveWithPanel ? '' : ', because the diamond stays an inert outline while its own Colouring editor is open') + ') — on the phone that hold is the only way to ease or delete a keyframe, and the same hold works on a Position diamond');
+          if (Math.abs(clipStart) > 1e-6) bad.push('he held the colour keyframe at 3 s and dragged it 40px right to retime it, and the WHOLE CLIP slid to start at ' + clipStart.toFixed(2) + ' s, carrying every keyframe with it');
+          if (!retimed) bad.push('the colour keyframe did not move to ' + want.toFixed(2) + ' s against the clip — the colour keys now read ' + kfT.map(t => t.toFixed(2)).join(', ') + ' s');
+
+          /* THE SAME RULE IN THE OTHER PANELS THAT OWN KEYFRAMES (the fix, js/inspector.js kfScope): with its editor open,
+             an outline-size keyframe, an Edit Shape stroke keyframe and an open audio effect's keyframe are live — and the
+             outline diamond is still an inert outline with COLOURING open, so the scoping still tells panels apart. */
+          const liveAt = (t) => { const dd = hd4DotAt(t); return dd ? (dd.classList.contains('kf-live') ? 'live' : 'idle') : 'missing'; };
+          const S2 = await hd4ColourFixture();
+          S2.stroke = { enabled: true, width: { kf: [{ t: 1, v: 4, e: 'linear' }, { t: 3.5, v: 20, e: 'linear' }] }, color: '#ffffff' };
+          FM.timeline.rebuild();
+          await hd4OpenAt('color');
+          if (liveAt(3.5) !== 'idle') bad.push('CONTROL: with Colouring open the outline-size keyframe is ' + liveAt(3.5) + ', where it should stay an inert outline — the scoping no longer tells one panel from another');
+          await hd4OpenAt('border');
+          if (liveAt(3.5) !== 'live') bad.push('with Outline and Shadows open, its own outline-size keyframe is ' + liveAt(3.5) + ' on the timeline');
+          await hd4OpenAt('element');
+          if (liveAt(3.5) !== 'live') bad.push('with Element Properties open, the stroke width its Stroke width row edits is ' + liveAt(3.5) + ' on the timeline');
+          const A2 = FM.makeLayer('video', { name: 'HUNT-d song', start: 0, duration: 6 });
+          A2.audioFx = [{ type: 'gain', enabled: true, params: { gain: { kf: [{ t: 1, v: 0, e: 'linear' }, { t: 3.25, v: 6, e: 'linear' }] } }, _expanded: true }];
+          FM.scene = scene([A2], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+          FM.media.set(A2.id, { kind: 'video', duration: 6, width: 0, height: 0 });   // no picture: a song, which Effects opens on its Audio tab
+          try {
+            FM.refreshAll(); FM.selectLayer(A2.id); await sleep(200);
+            await hd4OpenAt('audiofx');
+            if (liveAt(3.25) !== 'live') bad.push('with the Gain audio effect open, its own keyframe is ' + liveAt(3.25) + ' on the timeline');
+          } finally { FM.media.remove(A2.id); }
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally {
+      if (FM.contextMenu) FM.contextMenu.hide();
+      try { FM.timeline._abortGestures(); FM.timeline.stopMomentum(); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  /* How much of the frame a pure-red layer covers, rendered through the app — the same renderScene the export uses. */
+  function hd4RedShare(sc, t) {
+    const P = sc.project, c = offscreen(P.width, P.height), g = c.getContext('2d');
+    FM.renderScene(g, sc, t);
+    const d = g.getImageData(0, 0, P.width, P.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] > 180 && d[i + 1] < 70 && d[i + 2] < 70) n++;
+    return n / (P.width * P.height);
+  }
+
+  test('690 a behaviour on Scale moves it by a percentage: Oscillate or Wiggle switched to Scale, and Audio Drive as it comes, pulse the layer instead of blowing it up to thousands of percent', { item: '690', budgetMs: 60000 }, async function () {
+    /* Behaviours (Position / Scale → + Add behavior) add Amount straight onto the channel they drive (js/behaviors.js
+       behaviorValue: base + amp × wave). The defaults are pixel amounts — Wiggle 20, Oscillate 30, Audio Drive 50 — and the
+       channel select next to each one offers Scale and Opacity with nothing rescaled. Scale is a multiplier where 1 is 100%,
+       so Oscillate on Scale swings 1 ± 30: the layer goes to 3100% and then below zero, which the compositor clamps to
+       nothing. Audio Drive does not even need the switch: the inspector gives it Scale by default (BE_DEFAULT_PROP), so the
+       moment he picks a song the layer grows by up to 50× on every loud moment. The Amount ruler cannot rescue it either:
+       its span of 0–2400 is coarsened to a notch of 10 (tickQuantum), i.e. 1000% a notch on Scale. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const ab = await fetch('tests/_fixtures/vad/music-only.wav').then(r => r.arrayBuffer());
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = await ac.decodeAudioData(ab);
+      const M = FM.makeLayer('video', { name: 'HUNT-d song', start: 0, duration: Math.min(8, buf.duration) });
+      M.transform.opacity = 0;   // the song's own picture stays out of the pixel count
+      const S = FM.makeLayer('shape', { name: 'HUNT-d pulse', shape: 'rect', x: 180, y: 320, shapeW: 60, shapeH: 60, fill: '#ff0000', start: 0, duration: M.duration });
+      FM.scene = scene([M, S], { project: { width: 360, height: 640, fps: 30, duration: M.duration, background: '#000000' } });
+      FM.media.set(M.id, { kind: 'video', audioBuffer: buf, duration: buf.duration, width: 2, height: 2 });
+      if (FM.pause) FM.pause();
+      FM.refreshAll(); FM.selectLayer(S.id); await sleep(200);
+      FM.inspector.openCategory('transform'); FM._mtMode = 'move'; FM.inspector.refresh(); await sleep(250);
+
+      const addVia = async (label) => {
+        const add = [].filter.call(document.querySelectorAll('#inspector .fx-add-btn'), b => /Add behavior/.test(b.textContent))[0];
+        if (!add) throw new Error('setup: no + Add behavior button in Position / Scale');
+        add.click(); await sleep(80);
+        const pick = [].filter.call(document.querySelectorAll('#inspector .be-pick-btn'), b => b.textContent === label)[0];
+        if (!pick) throw new Error('setup: the behaviour picker has no ' + label);
+        pick.click(); await sleep(200);
+        return S.behaviors[S.behaviors.length - 1];
+      };
+      const rowSelect = (i) => [].slice.call(document.querySelectorAll('#inspector .be-row'))[i];
+      const scaleOver = (times) => times.map(t => FM.behaviorValue(S, 'scale', FM.evalProp(S.transform.scale, t), t));
+      const times = []; for (let t = 0.05; t < 3; t += 1 / 30) times.push(+t.toFixed(3));
+      const range = (v) => ({ lo: Math.min.apply(null, v), hi: Math.max.apply(null, v) });
+      const pct = (v) => Math.round(v * 100) + '%';
+      const bad = [];
+
+      /* 1 — Oscillate, switched to Scale in its own channel select (a pulse: the obvious thing to make with it) */
+      const osc = await addVia('Oscillate');
+      const sel = rowSelect(0) && rowSelect(0).querySelector('select.be-prop');
+      if (!sel || [].map.call(sel.options, o => o.value).indexOf('scale') < 0) throw new Error('setup: the Oscillate row offers no Scale target');
+      sel.value = 'scale'; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      if (osc.prop !== 'scale') throw new Error('setup: the channel select did not move Oscillate onto Scale (' + osc.prop + ')');
+      const r1 = range(scaleOver(times));
+      const peakT = times[scaleOver(times).indexOf(r1.hi)], lowT = times[scaleOver(times).indexOf(r1.lo)];
+      const cover = hd4RedShare(FM.scene, peakT), goneShare = hd4RedShare(FM.scene, lowT), rest = hd4RedShare(FM.scene, 0);
+      if (!(rest > 0.005)) throw new Error('CONTROL: the square does not render at rest (' + rest + ') — nothing below can be judged');
+      if (r1.hi > 4 || r1.lo < 0.1) bad.push('Oscillate on Scale at its default Amount swings the 60px square between ' + pct(r1.lo) + ' and ' + pct(r1.hi) + ': at ' + peakT.toFixed(2) + ' s it covers ' + Math.round(cover * 100) + '% of the frame and at ' + lowT.toFixed(2) + ' s it is ' + (goneShare < 1e-4 ? 'gone' : 'a speck') + ' — a pulse he cannot get without typing a decimal into the box');
+      /* …and the row says what the number means: the Amount reads in percent, the same 30 he saw on Y position, and it
+         goes back to 30 px when he switches back (js/behaviors.js retarget keeps the number he sees). */
+      const ampRow = [].filter.call(rowSelect(0).querySelectorAll('.prop-row--scrub'), r => /Amount/.test(r.textContent))[0];
+      const ampLabel = ampRow ? ampRow.querySelector('label').textContent : 'none', ampBox = ampRow ? parseFloat(ampRow.querySelector('.fx-scrub-val').value) : NaN;
+      if (!/%/.test(ampLabel) || Math.abs(ampBox - 30) > 1e-6) bad.push('on Scale the Oscillate row reads ' + ampLabel + ' = ' + ampBox + ', not Amount in percent at the 30 it showed on Y position');
+      const selBack = rowSelect(0).querySelector('select.be-prop');
+      selBack.value = 'y'; selBack.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      if (osc.prop !== 'y' || Math.abs(osc.params.amp - 30) > 1e-9) bad.push('switched back to Y position the Oscillate Amount is ' + osc.params.amp + ' on ' + osc.prop + ', not the 30 px it started at');
+
+      /* 2 — Wiggle, switched to Scale */
+      S.behaviors = []; FM.inspector.refresh(); await sleep(150);
+      const wig = await addVia('Wiggle');
+      const sel2 = rowSelect(0) && rowSelect(0).querySelector('select.be-prop');
+      sel2.value = 'scale'; sel2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      if (wig.prop !== 'scale') throw new Error('setup: the channel select did not move Wiggle onto Scale');
+      const r2 = range(scaleOver(times));
+      if (r2.hi > 4 || r2.lo < 0.1) bad.push('Wiggle on Scale at its default Amount jumps between ' + pct(r2.lo) + ' and ' + pct(r2.hi));
+
+      /* 3 — Audio Drive exactly as it comes: the inspector puts it on Scale, and he picks the song */
+      S.behaviors = []; FM.inspector.refresh(); await sleep(150);
+      const aud = await addVia('Audio Drive');
+      const srcSel = [].filter.call(rowSelect(0).querySelectorAll('select'), s => !s.classList.contains('be-prop'))[0];
+      if (!srcSel || [].map.call(srcSel.options, o => o.value).indexOf(M.id) < 0) throw new Error('setup: the Audio Drive row does not offer the song as its source');
+      srcSel.value = M.id; srcSel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      const sm = (aud.params && typeof aud.params.smooth === 'number') ? aud.params.smooth : 0.4;
+      await FM.audioEnvelopePrewarm(M, { band: aud.params.band || 'overall', gain: aud.params.gain || 1, attack: 0.005 + sm * 0.055, release: 0.03 + sm * 0.37 });
+      const r3 = range(scaleOver(times));
+      if (!(r3.hi - r3.lo > 0.01)) throw new Error('CONTROL: Audio Drive did not move the layer at all with the song as its source (' + r3.lo.toFixed(3) + ' to ' + r3.hi.toFixed(3) + '), so its size cannot be judged');
+      const aT = times[scaleOver(times).indexOf(r3.hi)];
+      if (r3.hi > 4) bad.push('Audio Drive, added as it comes (it lands on ' + aud.prop + ' with Amount ' + (aud.params && aud.params.amount) + '), blows the square up to ' + pct(r3.hi) + ' on the music at ' + aT.toFixed(2) + ' s, covering ' + Math.round(hd4RedShare(FM.scene, aT) * 100) + '% of the frame');
+
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally {
+      try { FM.scene.layers.forEach(l => { if (l.type === 'video' && FM.media.get(l.id)) FM.media.remove(l.id); }); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('690 a look + animations preset carries the animation and not the size: applied to a fitted photo it keeps the photo at its own size, and a pop-in pops to it', { item: '690', budgetMs: 60000 }, async function () {
+    /* Presets → Look + animations. save() stores transform.rotation / scale / opacity through shiftKf, which hands a STATIC
+       value back unchanged, and applyTo writes it over the target whenever it is not null — so every look carries the
+       source layer's SIZE, turn and opacity, whether or not they were animated (js/inspector.js FM.layerPresets). The code's
+       own note says what it is meant to carry: the transform's keyframes. Position is already treated properly — it goes
+       over as a delta from where the target already is — and scale is not.
+       A photo is fitted when it comes in (js/app.js addMediaLayer: scale = the fit, 0.225 here for a landscape photo in a
+       9:16 project), so a Fade in saved on a title (scale 1) takes the photo to 100%: 4.4 times bigger, filling the frame
+       and cropped on every side. A pop-in saved on a title (scale 0 → 1) grows the photo to the same wrong size. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene;
+    const NAME = 'HUNT-d fade in', NAME2 = 'HUNT-d pop in';
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const P = { width: 360, height: 640, fps: 30, duration: 4, background: '#000000' };
+      const title = FM.makeLayer('text', { name: 'HUNT-d title', text: 'Hi', x: 180, y: 120, start: 0, duration: 4 });
+      title.transform.opacity = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.5, v: 1, e: 'linear' }] };
+      const popper = FM.makeLayer('text', { name: 'HUNT-d title 2', text: 'Yo', x: 180, y: 120, start: 0, duration: 4 });
+      popper.transform.scale = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.4, v: 1, e: 'linear' }] };
+      const photo = FM.makeLayer('image', { name: 'HUNT-d photo', x: 180, y: 320, start: 0, duration: 4 });
+      const cv = document.createElement('canvas'); cv.width = 1600; cv.height = 1200;
+      const cg = cv.getContext('2d'); cg.fillStyle = '#ff0000'; cg.fillRect(0, 0, 1600, 1200);
+      const fit = Math.min(P.width / 1600, P.height / 1200);   // exactly what addMediaLayer does on import
+      photo.transform.scale = fit;
+      FM.scene = scene([photo], { project: P });
+      FM.media.set(photo.id, { kind: 'image', el: cv, width: 1600, height: 1200 });
+      if (FM.pause) FM.pause();
+      FM.refreshAll();
+      FM.layerPresets.save(NAME, title);      // what Save look + animations stores from the title
+      FM.layerPresets.save(NAME2, popper);
+      const topRow = () => { const c = offscreen(P.width, P.height), g = c.getContext('2d'); FM.renderScene(g, FM.scene, 1); return px(g, 180, 40); };
+      const before = topRow();
+      if (!(before[0] < 40)) throw new Error('setup: the fitted photo already reaches the top of the frame (' + Array.prototype.slice.call(before, 0, 3).join(',') + ')');
+      const bad = [];
+      for (const nm of [NAME, NAME2]) {
+        photo.transform.scale = fit; photo.transform.opacity = 1; delete photo.fromPreset;
+        FM.selectLayer(photo.id); FM.setTime(0); await sleep(120);
+        FM.inspector.openCategory('presets'); await sleep(300);
+        const row = [].filter.call(document.querySelectorAll('#inspector .insp-preset-name'), b => b.textContent === nm)[0];
+        if (!row) throw new Error('setup: the Presets panel has no row for ' + nm);
+        row.click(); await sleep(250);
+        if (photo.fromPreset !== nm) throw new Error('CONTROL: tapping the ' + nm + ' row did not apply it to the photo');
+        const endScale = FM.evalProp(photo.transform.scale, 1);
+        const top = topRow();
+        if (nm === NAME) {
+          const op0 = FM.evalProp(photo.transform.opacity, 0), op1 = FM.evalProp(photo.transform.opacity, 1);
+          if (!(op0 < 0.05 && op1 > 0.95)) throw new Error('CONTROL: the fade itself did not arrive on the photo (opacity ' + op0 + ' then ' + op1 + ')');
+        }
+        if (Math.abs(endScale - fit) > 0.01) bad.push('applying the ' + (nm === NAME ? 'Fade in' : 'pop-in') + ' look he saved on a title took his photo from ' + Math.round(fit * 100) + '% to ' + Math.round(endScale * 100) + '% — ' + (endScale / fit).toFixed(1) + ' times bigger' + (top[0] > 180 ? ', filling the whole frame and cropped on every side' : ''));
+        if (nm === NAME2) {   // the pop itself still arrives: nothing at the clip start, the photo's own size by 0.4 s
+          const s0 = FM.evalProp(photo.transform.scale, 0);
+          if (!(s0 < 0.01)) bad.push('the pop-in arrived without its pop: the photo starts at ' + Math.round(s0 * 100) + '% instead of nothing');
+        }
+      }
+      /* A preset saved BEFORE the fix holds a static size and an absolute scale animation. The static size is the defect
+         and is left on the preset; its pop-in still pops the photo to the photo's own size. Same applyTo the Presets row runs. */
+      photo.transform.scale = fit; photo.transform.opacity = 1;
+      FM.layerPresets.applyTo({ effects: [], transform: { rotation: 0, scale: 1, opacity: 1 } }, photo);
+      if (Math.abs(FM.evalProp(photo.transform.scale, 1) - fit) > 0.01) bad.push('an old Fade in preset (saved before the fix, with the title size in it) still resized the photo to ' + Math.round(FM.evalProp(photo.transform.scale, 1) * 100) + '%');
+      FM.layerPresets.applyTo({ effects: [], transform: { rotation: 0, scale: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.4, v: 1, e: 'linear' }] }, opacity: 1 } }, photo);
+      if (Math.abs(FM.evalProp(photo.transform.scale, 1) - fit) > 0.01) bad.push('an old pop-in preset popped the photo to ' + Math.round(FM.evalProp(photo.transform.scale, 1) * 100) + '% instead of its own ' + Math.round(fit * 100) + '%');
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally {
+      try { FM.layerPresets.remove(NAME); FM.layerPresets.remove(NAME2); } catch (e) {}
+      try { FM.scene.layers.forEach(l => { if (l.type === 'image' && FM.media.get(l.id)) FM.media.remove(l.id); }); } catch (e) {}
+      FM.scene = saved; try { FM.inspector.openCategory('home'); FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  test('690 splitting a clip in the middle of an eased move keeps the move exactly as he made it: no stop at the cut, nothing running ahead of it', { item: '690', budgetMs: 60000 }, async function () {
+    /* Split (the S key, the scissors) divides every keyframe list at the cut and gives each half a SEAM keyframe holding the
+       value there (js/app.js splitAnimated). The seam copies the ease of the segment it cut, so ONE ease-in-out over 0–2 s
+       becomes TWO: one over 0–1 s and one over 1–2 s. An ease-in-out arrives at rest and leaves from rest, so the layer now
+       slows to a stop at the cut and starts again, where before the cut it was moving at full speed — and everything before
+       the cut runs early. The code calls this a close approximation; measured, it is neither close nor invisible, and a
+       split is meant to be invisible. Rendered through renderScene, so it is what the preview and the export both draw. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, t0 = FM.time;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 'HUNT-d glide', shape: 'rect', x: 50, y: 100, shapeW: 20, shapeH: 20, fill: '#ff0000', start: 0, duration: 4 });
+      // 50 → 850 px over 0–2 s, Ease In-Out — what the keyframe diamond's menu writes (bez + e on the keyframe the move arrives at)
+      L.transform.x = { kf: [{ t: 0, v: 50, e: 'linear' }, { t: 2, v: 850, e: 'easeInOut', bez: FM.EASE_PRESETS.easeInOut.slice() }] };
+      FM.scene = scene([L], { project: { width: 900, height: 200, fps: 30, duration: 4, background: '#000000' } });
+      if (FM.pause) FM.pause();
+      FM.refreshAll(); FM.selectLayer(L.id); await sleep(150);
+      const xAt = (t) => {   // the red square's centre column in a rendered frame
+        const c = offscreen(900, 200), g = c.getContext('2d');
+        FM.renderScene(g, FM.scene, t);
+        const row = g.getImageData(0, 100, 900, 1).data;
+        let a = -1, b = -1;
+        for (let i = 0; i < 900; i++) { const r = row[i * 4], gg = row[i * 4 + 1]; if (r > 180 && gg < 70) { if (a < 0) a = i; b = i; } }
+        return a < 0 ? null : (a + b) / 2;
+      };
+      const T = [0.5, 29 / 30, 31 / 30, 1.5];
+      const before = T.map(xAt);
+      if (before.some(v => v == null)) throw new Error('CONTROL: the square is not drawn at every sample before the split (' + JSON.stringify(before) + ')');
+      if (!(before[2] - before[1] > 20)) throw new Error('CONTROL: the square is not moving fast through the middle of the move before the split (' + (before[2] - before[1]).toFixed(1) + ' px over two frames)');
+      FM.setTime(1); await FM.splitLayer(L.id); await sleep(250);
+      if (FM.scene.layers.length !== 2) throw new Error('setup: the clip did not split in two (' + FM.scene.layers.length + ' layers)');
+      const after = T.map(xAt);
+      const bad = [];
+      const across0 = before[2] - before[1], across1 = (after[2] != null && after[1] != null) ? after[2] - after[1] : NaN;
+      if (!(across1 > across0 * 0.7)) bad.push('across the cut the square moves ' + (isFinite(across1) ? across1.toFixed(1) : '?') + ' px in two frames where it moved ' + across0.toFixed(1) + ' px before the split — it slows to a dead stop at the cut and starts again, in the preview and the export');
+      const worst = T.reduce((m, t, i) => (after[i] == null ? m : Math.max(m, Math.abs(after[i] - before[i]))), 0);
+      if (worst > 3) bad.push('at 0.5 s the square is at ' + (after[0] == null ? '?' : Math.round(after[0])) + ' px instead of ' + Math.round(before[0]) + ' px — the half before the cut runs ' + Math.round(worst) + ' px ahead of the move he made');
+
+      /* EVERY CURVE THAT DIVIDES EXACTLY, measured on the numbers rather than the pixels: the keyframe menu's presets
+         (bez), the graph editor's bare Ease In / Ease Out and Overshoot / Anticipate, a colour fade, and cuts off the
+         middle. The two halves together must give the original value at every frame of both halves. Tolerances set from
+         measurement: on an 800 px move the halves came within 0.018 px of the original (the steep hand-drawn curve, where
+         bezierAt's own 1e-5 solve in x is multiplied by the slope; 0.0004–0.008 px on the rest), so 0.1 px; a colour
+         within 1 level (the seam colour is stored as whole levels). The defect this catches was 97 px. */
+      const cases = [
+        ['Ease In-Out from the keyframe menu', { e: 'easeInOut', bez: FM.EASE_PRESETS.easeInOut.slice() }, 1],
+        ['Ease In-Out, cut early', { e: 'easeInOut', bez: FM.EASE_PRESETS.easeInOut.slice() }, 0.3],
+        ['Overshoot', { e: 'overshoot' }, 1.3],
+        ['Anticipate', { e: 'anticipate' }, 0.7],
+        ['Ease In, named', { e: 'easeIn' }, 1.1],
+        ['Ease Out, named', { e: 'easeOut' }, 0.6],
+        ['a hand-drawn curve', { e: 'custom', bez: [0.8, 0.1, 0.2, 0.95] }, 1.5],
+      ];
+      for (const c of cases) {
+        const L2 = FM.makeLayer('shape', { name: 'HUNT-d curve', shape: 'rect', x: 50, y: 100, shapeW: 20, shapeH: 20, fill: '#ff0000', start: 0, duration: 4 });
+        L2.transform.x = { kf: [{ t: 0, v: 50, e: 'linear' }, Object.assign({ t: 2, v: 850 }, c[1])] };
+        L2.fill = { kf: [{ t: 0, v: '#ff0000', e: 'linear' }, Object.assign({ t: 2, v: '#0000ff' }, c[1])] };
+        const orig = JSON.parse(JSON.stringify(L2.transform.x)), origFill = JSON.parse(JSON.stringify(L2.fill));
+        FM.scene = scene([L2], { project: { width: 900, height: 200, fps: 30, duration: 4, background: '#000000' } });
+        FM.refreshAll(); FM.selectLayer(L2.id);
+        FM.setTime(c[2]); await FM.splitLayer(L2.id); await sleep(60);
+        const halves = FM.scene.layers.slice().sort((p, q) => p.start - q.start);
+        if (halves.length !== 2) { bad.push(c[0] + ': the clip did not split in two'); continue; }
+        let off = 0, offAt = 0, offC = 0;
+        for (let f = 0; f <= 60; f++) {
+          const t = f / 30, h = t < c[2] ? halves[0] : halves[1];
+          const d = Math.abs(FM.evalProp(h.transform.x, t) - FM.evalProp(orig, t));
+          if (d > off) { off = d; offAt = t; }
+          const ca = FM.evalProp(h.fill, t), cb = FM.evalProp(origFill, t);
+          for (let i = 1; i < 7; i += 2) offC = Math.max(offC, Math.abs(parseInt(ca.substr(i, 2), 16) - parseInt(cb.substr(i, 2), 16)));
+        }
+        if (off > 0.1) bad.push(c[0] + ', cut at ' + c[2] + ' s: the split move is ' + off.toFixed(2) + ' px off the original at ' + offAt.toFixed(2) + ' s');
+        // A colour clamps to 0–255, so where an Overshoot / Anticipate has carried it past an end at the cut the seam cannot
+        // hold the true value and the split keeps the old path (js/app.js); judged only where the cut lands inside the fade.
+        const atCut = (FM.evalProp(orig, c[2]) - 50) / 800;
+        if (atCut >= 0 && atCut <= 1 && offC > 1) bad.push(c[0] + ', cut at ' + c[2] + ' s: the split colour fade is ' + offC + ' levels off the original');
+      }
+      if (bad.length) throw new Error(bad.join('; AND '));
+    } finally {
+      FM.scene = saved; FM.time = t0; try { FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); } catch (e) {}
+    }
   });
 
 })();
