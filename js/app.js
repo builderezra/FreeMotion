@@ -883,6 +883,12 @@ window.FM = window.FM || {};
     updateReadout();
     render();
     syncTopBar();
+    /* THE NOTES DOT TELLS THE TRUTH ABOUT THE PROJECT ON SCREEN (queue 690). It was only ever repainted from
+       inside notepad.js — ticking, typing, closing the pad — so nothing lit it when a project was OPENED:
+       reopen the app over a project whose reminder is waiting and the dot was dark (the one moment it exists
+       for), move to a project with no notes and it kept the last one's dot. Every project load, boot
+       restore and undo lands here, so repainting here covers all of them. It is two class toggles. */
+    if (FM.notepad && FM.notepad.sync) FM.notepad.sync();
     FM.syncSelectionChrome();
     // PC: build the one-row transport once, then keep its selection-dependent buttons honest (queue 168)
     if (FM.pcTransportLayout) { FM.pcTransportLayout(); FM.pcTransportSync(); }
@@ -7776,12 +7782,21 @@ window.FM = window.FM || {};
          screen out side of it it wil close the menu." It closes WITHOUT applying — the same as Cancel
          — because a stray tap on the backdrop must never silently resize someone's project.
          On the BACKDROP only (`e.target === cvDialog`), so a click that lands on the card itself, or
-         on anything inside it, is untouched. And on pointerdown rather than click: a drag that starts
-         inside the card and releases outside it would otherwise count as an outside click and shut
-         the dialog mid-gesture. The cog itself is excluded — it sits above the scrim now (v8.10), and
-         without this a click on it would close and immediately reopen the dialog. */
-      cvDialog.addEventListener('pointerdown', (e) => {
-        if (e.target !== cvDialog) return;
+         on anything inside it, is untouched. The cog itself is excluded on PC — it sits above the scrim
+         (v8.10), and without that a click on it would close and immediately reopen the dialog.
+         ⚠️ ON CLICK, NOT POINTERDOWN (queue 690), and only when the press BEGAN on the backdrop. This used to
+         close on pointerdown, so that a drag starting inside the card and let go outside it would not count
+         as an outside click — the start-on-the-backdrop check covers that now. Closing on the way down
+         handed the rest of a real tap to whatever was under the backdrop, because its click is hit-tested
+         after the dialog has gone: on the phone, where nothing is lifted above the scrim, a second tap on
+         the cog shut the dialog and opened it again in one tap — "tap it again it should close it not open
+         it again" (#762) — and a tap over the top bar could press the button underneath. js/ask.js wrote
+         this rule down for its own scrim first. */
+      let cvDownOnScrim = false;
+      cvDialog.addEventListener('pointerdown', (e) => { cvDownOnScrim = e.target === cvDialog; });
+      cvDialog.addEventListener('click', (e) => {
+        const began = cvDownOnScrim; cvDownOnScrim = false;
+        if (e.target !== cvDialog || !began) return;
         (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         cvDialog.classList.add('hidden');
       });
@@ -7934,6 +7949,11 @@ window.FM = window.FM || {};
       // Escape is deliberately still allowed through: it is how several of these overlays close.
       // Both key and code are checked — a synthesised event may carry only one of them.
       const isEscape = e.code === 'Escape' || e.key === 'Escape';
+      /* ⚠️ queue 690: THE ? SHEET IS ITSELF A FULL-SCREEN OVERLAY, so the rule below threw away the second ?
+         and the sheet could not be put away with the key that opened it — while its own list says
+         "? — Show / hide this help". So a ? with the sheet up hides it, first. Not in a text field (a ? typed
+         there is a character) and not with ⌘/Ctrl held (that combo is the browser's). */
+      if (e.key === '?' && !inEdit && !e.metaKey && !e.ctrlKey && FM.shortcuts && FM.shortcuts.isOpen()) { e.preventDefault(); FM.shortcuts.hide(); return; }
       if (!isEscape && FM.overlayOwnsScreen()) return;
       /* ⚠️ queue 809: AN OPEN BROWSER OWNS THE KEYBOARD, and unlike the rule above that is not a
          geometry question. On PC the effects browser is docked over the INSPECTOR COLUMN, so
@@ -7997,6 +8017,15 @@ window.FM = window.FM || {};
       // combos above all return, so reaching here with a modifier held means we must NOT hijack the
       // bare-key chain below (⌘S was silently splitting the clip, ⌘M dropping a marker).
       if (mod) return;
+      /* ⚠️ queue 690: ESC WHILE WRITING A NOTE CLOSES NOTES. + Add a note puts the cursor in the new line, so
+         after adding one the Escape always comes from inside a text field — and the line below returns for
+         every key typed in a field, so it never reached the Escape branch that closes Notes. Only the pad's
+         own fields: Escape in any other field is still that field's business. FM.notepad.escape() commits
+         the line being typed before the pad goes (see close() in js/notepad.js). */
+      if (inEdit && isEscape && tgt.closest && tgt.closest('.np-scrim') && FM.notepad && FM.notepad.escape) {
+        if (!e.defaultPrevented && FM.notepad.escape()) e.preventDefault();
+        return;
+      }
       if (inEdit) return;
       if (e.code === 'Space') { e.preventDefault(); FM.togglePlay(); }
       else if (e.key === '?') { e.preventDefault(); if (FM.shortcuts) FM.shortcuts.toggle(); }

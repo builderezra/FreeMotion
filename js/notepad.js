@@ -116,7 +116,13 @@ window.FM = window.FM || {};
     card.append(head, hint, body, add, actions);
     scrim.appendChild(card);
     document.body.appendChild(scrim);
-    scrim.addEventListener('pointerdown', e => { if (e.target === scrim) close(); });
+    /* A tap outside closes it ON CLICK, and only when the press began on the backdrop (queue 690) — see
+       js/ask.js and js/shortcuts.js for the rule. Closing on pointerdown handed the rest of the tap to
+       whatever was under the pad: on the phone a second tap on the Notes button shut it on the way down
+       and opened it again on the way up, replaying the flip — his #762 exactly. */
+    let downOnScrim = false;
+    scrim.addEventListener('pointerdown', e => { downOnScrim = e.target === scrim; });
+    scrim.addEventListener('click', e => { if (e.target === scrim && downOnScrim) close(); downOnScrim = false; });
     render();
     /* POP OUT OF THE 📒 BUTTON, WITH ITS OWN ANIMATION (queue 548 clauses 1-4). The notepad is the one
        clause where he asked for invention rather than consistency: "it would be cool if the note pad one
@@ -130,6 +136,13 @@ window.FM = window.FM || {};
 
   function close() {
     if (popCleanup) { popCleanup(); popCleanup = null; }   // the button stays lifted above the scrim otherwise
+    /* COMMIT THE LINE BEING TYPED FIRST (queue 690). A note is saved on its field's `change`, which fires when
+       the field loses focus — a tap on Done or on the backdrop does that on the way. Esc while typing (the
+       editor's key handler, js/app.js) closes the pad with the cursor still in the field, and removing a
+       focused field does not blur it (measured in Chrome: no blur, no change), so the note was in memory but
+       never committed or marked for saving. With this, a real Esc after typing commits it like Done does. */
+    const f = document.activeElement;
+    if (f && f.closest && f.closest('.np-scrim') && f.blur) f.blur();
     document.querySelectorAll('.np-scrim').forEach(n => n.remove());
     badge();
   }
@@ -202,7 +215,12 @@ window.FM = window.FM || {};
       refresh();
       scrim.appendChild(card);
       document.body.appendChild(scrim);
-      scrim.addEventListener('pointerdown', e => { if (e.target === scrim) finish(false); });
+      /* Same as the pad (queue 690): on click, not pointerdown. Closing on the way down let the tap carry on
+         to what was underneath — on the phone that is the Export button, which pressed Export again and put
+         this card straight back. */
+      let downOnScrim = false;
+      scrim.addEventListener('pointerdown', e => { downOnScrim = e.target === scrim; });
+      scrim.addEventListener('click', e => { if (e.target === scrim && downOnScrim) finish(false); downOnScrim = false; });
     });
   }
 
