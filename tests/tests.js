@@ -95894,4 +95894,258 @@
     }
   });
 
+  /* ═══ HUNT-b (queue 690, fifth hunt, 26 Sep) — THE PICTURE MATCHES THE EXPORT: COMPOSITING ══════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". The area: compositing correctness — blend modes, opacity,
+   * adjustment layers, masks with effects, groups, motion blur, the camera and depth, transparent backgrounds. The earlier
+   * HUNT-d parity sweep found the preview and the export agree on the plain paths, because both go through FM.renderScene —
+   * so each bug below is in the PICTURE ITSELF, and lands in the exported file exactly as he sees it on the canvas (the
+   * first test reads it back out of the real PNG-frames export to show that). Each carries a control that proves the
+   * measurement can see the right answer. All four FAIL on v16.98. */
+
+  // One frame of the REAL PNG-frames export of `sc` at time t, read back out of the zip it builds (HUNT-d's stub690 keeps
+  // anything from downloading). The exporter renders through FM.renderScene into a project-sized canvas, so this is the file.
+  async function exportFrameHB(sc, t, transparent) {
+    const saved = FM.scene;
+    let unstub = null;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      FM.scene = sc; FM.refreshAll(); FM.setTime(t);
+      await new Promise(r => setTimeout(r, 30));
+      unstub = stub690();
+      grab690.frames.length = 0;
+      await FM.exporter.runFrames({ scale: 1, fps: 10, from: t, to: t + 0.2, name: 'hunt-b', format: 'png', transparent: !!transparent, onProgress: function () {} });
+      if (!grab690.frames.length) throw new Error('setup: the PNG-frames export produced no frame to read back');
+      const g = await pngCtx690(grab690.frames[0]);
+      return g.getImageData(0, 0, g.canvas.width, g.canvas.height).data;
+    } finally {
+      if (unstub) unstub();
+      FM.scene = saved; FM.selectLayer(null);
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  }
+
+  /* HUNT-b 1 — CAMERA MOTION BLUR WASHES THE WHOLE PICTURE TOWARD THE BACKGROUND. renderScene's camera composite averages the
+   * shutter slices by drawing each one with globalAlpha 1/N over a canvas already filled with the background, source-over
+   * (compositor.js, the `if (slices)` loop). Source-over does not average: after N slices the picture only reaches
+   * 1 - (1 - 1/N)^N of full strength and the background keeps the rest — 25% at two slices, 34% at eight, 36% at 32. So the
+   * moment the camera moves with Motion Blur on, EVERYTHING in the shot fades toward the background colour (a black
+   * background dims the whole frame, a white one bleaches it), and the amount changes with the slice count, which follows
+   * the camera's speed — the frame pumps brighter and darker through an eased pan. In a transparent export the whole frame
+   * turns see-through. The layer version (drawMotionBlur) accumulates with 'lighter' for exactly this reason and says so. */
+  test('HUNT-b camera motion blur washes the whole picture toward the background while the camera moves', { item: '690', budgetMs: 60000 }, async function () {
+    const PW = 320, PH = 240, T = 0.5;
+    function build(blurOn) {
+      const cam = FM.makeLayer('camera', { name: 'HB cam' });
+      cam.start = 0; cam.duration = 3;
+      cam.transform.x = { kf: [{ t: 0, v: -440, e: 'linear' }, { t: 1, v: 760, e: 'linear' }] };   // a brisk pan: 1200 px/s, looking at the frame centre at 0.5 s
+      cam.transform.y = 120;
+      cam.motionBlur = { enabled: blurOn, shutter: 0.5, samples: 8 };   // what Camera Options → Motion Blur writes, switched on
+      const card = FM.makeLayer('shape', { name: 'HB white card', shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 160, fill: '#ffffff' });
+      card.start = 0; card.duration = 3;
+      return scene([cam, card], { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' } });
+    }
+    // the card is 200 px wide and the whole shutter moves it 20 px, so its middle (x 90..230) is white in EVERY slice
+    function middle(d) {   // d: the whole frame's RGBA
+      let s = 0, n = 0, a = 255;
+      for (let y = 70; y < 170; y++) for (let x = 90; x < 230; x++) { const i = (y * PW + x) * 4; s += d[i]; n++; a = Math.min(a, d[i + 3]); }
+      return { lum: s / n, alpha: a };
+    }
+    const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true });
+    // CONTROL 1: blur off, the middle of the card is white
+    FM.renderScene(g, build(false), T);
+    const sharp = middle(g.getImageData(0, 0, PW, PH).data);
+    if (sharp.lum < 250) throw new Error('CONTROL FAILED — with Motion Blur off the middle of the white card is ' + sharp.lum.toFixed(0) + ', not white, so the fixture is wrong');
+    // CONTROL 2: blur on really smears this pan — the card's left edge is soft
+    FM.renderScene(g, build(true), T);
+    const row = g.getImageData(40, 120, 40, 1).data;
+    let soft = 0; for (let i = 0; i < row.length; i += 4) if (row[i] > 12 && row[i] < 243) soft++;
+    if (soft < 6) throw new Error('CONTROL FAILED — Motion Blur did not smear this pan (' + soft + ' soft pixels on the card edge), so nothing below exercises the camera blur');
+    const blurred = middle(g.getImageData(0, 0, PW, PH).data);
+    // the same frame out of the real PNG-frames export, so this is the FILE and not only the canvas — and a transparent one
+    const file = middle(await exportFrameHB(build(true), T)), clear = middle(await exportFrameHB(build(true), T, true));
+    const bad = [];
+    // MEASURED on v16.98: 167 on the canvas and 167 in the file (8 slices), alpha 167 transparent; 255 is right, 250 allows rounding
+    if (blurred.lum < 250) bad.push('on the canvas the middle of a white card that never leaves the shot comes out at ' + blurred.lum.toFixed(0) + ' of 255 — the whole picture is ' + Math.round(100 - blurred.lum / 2.55) + '% washed toward the black background');
+    if (file.lum < 250) bad.push('in the EXPORTED frame it is ' + file.lum.toFixed(0) + ' of 255');
+    if (clear.alpha < 250) bad.push('in a transparent export the solid card is only ' + Math.round(clear.alpha / 2.55) + '% opaque');
+    if (bad.length) throw new Error('with camera Motion Blur on and the camera panning: ' + bad.join('; ') + ' — every frame where the camera moves goes dim, and brighter or darker again as the pan speeds up and slows down');
+  });
+
+  /* HUNT-b 2 — THE CAMERA NEVER SEES PAST THE PROJECT EDGE. renderScene draws every layer into the camera plate `_camCv`, and
+   * that plate is exactly the project rectangle (P.width x P.height, origin 0,0). So anything a layer has outside the frame
+   * is thrown away BEFORE the camera looks at it. Pan the camera right and the right of the shot is the empty background —
+   * even across a photo scaled up far past the frame, which is exactly how anyone sets up a pan across a picture. Zoom the
+   * camera out and the scene is a small box in the middle of the background; turn it and the corners are background.
+   * Depth parallax slides layers against the camera and gets cut off the same way. CONTROL: the same pan done WITHOUT a
+   * camera — the photo itself moved the other way — fills the frame, so the photo really does reach there. */
+  test('HUNT-b a camera pan, zoom-out or turn cuts every layer off at the project edge and shows the background', { item: '690', budgetMs: 60000 }, async function () {
+    const PW = 320, PH = 240, T = 0.5;
+    function photo(x) {   // a picture scaled up well past the frame — four times its width, four times its height
+      const L = FM.makeLayer('shape', { name: 'HB big photo', shape: 'rect', x: x, y: 120, shapeW: 1280, shapeH: 960, fill: '#ff0000' });
+      L.start = 0; L.duration = 3; return L;
+    }
+    function cam(x, zoom, rot) {
+      const C = FM.makeLayer('camera', { name: 'HB cam' });
+      C.start = 0; C.duration = 3;
+      C.transform.x = x; C.transform.y = 120;
+      if (zoom != null) C.transform.scale = zoom;
+      if (rot != null) C.transform.rotation = rot;
+      return C;
+    }
+    const sc = layers => scene(layers, { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' } });
+    function share(d) { let red = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] < 60) red++; return red / (PW * PH); }
+    function covered(layers) {   // share of the frame the red photo covers
+      const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, sc(layers), T);
+      return share(g.getImageData(0, 0, PW, PH).data);
+    }
+    // CONTROLS: no camera, the photo fills the frame — and moved 100 px left (what a 100 px pan right shows) it still does
+    const c0 = covered([photo(160)]), c1 = covered([photo(60)]);
+    if (c0 < 0.99 || c1 < 0.99) throw new Error('CONTROL FAILED — without a camera the big photo covers only ' + Math.round(c0 * 100) + '% / ' + Math.round(c1 * 100) + '% of the frame, so the fixture is wrong');
+    // CONTROL: a camera sitting still at the frame centre changes nothing
+    const still = covered([cam(160), photo(160)]);
+    if (still < 0.99) throw new Error('CONTROL FAILED — a camera at rest in the middle of the frame already shows only ' + Math.round(still * 100) + '% of the photo');
+    const pan = covered([cam(260), photo(160)]);          // pan 100 px right
+    const out = covered([cam(160, 0.5), photo(160)]);     // zoom out to 50%
+    const turn = covered([cam(160, 1, 15), photo(160)]);  // turn 15 degrees
+    const filePan = share(await exportFrameHB(sc([cam(260), photo(160)]), T));   // the pan, out of the real export
+    const bad = [];
+    // MEASURED on v16.98: 69%, 25%, 89%, and 69% in the exported frame; 99% allows the anti-aliased rim
+    if (pan < 0.99) bad.push('a 100 px pan right shows the photo across only ' + Math.round(pan * 100) + '% of the frame (' + Math.round(filePan * 100) + '% in the exported frame)');
+    if (out < 0.99) bad.push('zooming the camera out to 50% shows it across only ' + Math.round(out * 100) + '%');
+    if (turn < 0.99) bad.push('turning the camera 15 degrees shows it across only ' + Math.round(turn * 100) + '%');
+    if (bad.length) throw new Error('with a camera on, a photo scaled up to four times the frame: ' + bad.join(', ') + ' — the rest is the black background, because the camera cannot see past the project edge. A pan across a picture runs off into empty background, in the preview and the export');
+  });
+
+  /* HUNT-b 3 — AN OUTLINED LAYER IS COMPOSITED ONE PASS AT A TIME, SO ITS SHADOW AND ITS OPACITY LAND ON ITS OWN OUTLINE.
+   * drawLayer sets the layer's shadow (applyShadow → ctx.shadow*) and its opacity (ctx.globalAlpha) on the context and then
+   * the text / shape branch draws the outline and the fill as SEPARATE strokes and fills. Canvas applies both per draw call:
+   *   · the fill's shadow is painted ON TOP of the outline drawn just before it — Outline & Shadows' default soft shadow turns
+   *     a text outline muddy dark all the way round (a shape's outline shadow lands inside its fill the same way);
+   *   · at any opacity below 100% the fill is laid over the half-transparent outline, so the outline shows through the
+   *     letters and the outline itself goes two-tone — every Fade In / Fade Out on outlined text or an outlined shape.
+   * CONTROLS: the same shadow on text WITHOUT an outline leaves the fill untouched, and the outer half of a faded outline is
+   * the right colour. */
+  test('HUNT-b a Shadow darkens the text outline, and a fading outlined layer shows its outline through the fill', { item: '690', budgetMs: 60000 }, async function () {
+    const PW = 300, PH = 200, T = 0.5;
+    const sc = (L, bg) => scene([L], { project: { width: PW, height: PH, fps: 30, duration: 3, background: bg } });
+    function render(L, bg) {
+      const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, sc(L, bg), T);
+      return g.getImageData(0, 0, PW, PH).data;
+    }
+    function title(outline, shadow, opacity) {
+      const L = FM.makeLayer('text', { name: 'HB title', text: 'H', x: 150, y: 100 });
+      L.start = 0; L.duration = 3; L.fontSize = 140; L.bold = true; L.color = '#ffffff';
+      L.stroke = Object.assign({}, L.stroke, { enabled: outline, width: 8, color: '#ffcc00' });
+      // exactly what the Outline & Shadows Shadow toggle makes (inspector.js: a new shadow is the Soft kind)
+      if (shadow) L.shadow = { enabled: true, blur: 16, dx: 0, dy: 0, color: '#000000', alpha: 100 };
+      if (opacity != null) L.transform.opacity = opacity;
+      return L;
+    }
+    const BG = '#3050ff';
+    const is = (d, i, r, g, b) => Math.abs(d[i] - r) <= 2 && Math.abs(d[i + 1] - g) <= 2 && Math.abs(d[i + 2] - b) <= 2;
+    const bad = [];
+    // (1) the shadow — CONTROL: no outline, the white fill is untouched by its own shadow
+    const f0 = render(title(false, false), BG), f1 = render(title(false, true), BG);
+    let fill = 0, fillHit = 0;
+    for (let i = 0; i < f0.length; i += 4) if (is(f0, i, 255, 255, 255)) { fill++; if (!is(f1, i, 255, 255, 255)) fillHit++; }
+    if (fill < 500 || fillHit > fill * 0.02) throw new Error('CONTROL FAILED — without an outline the shadow changed ' + fillHit + ' of ' + fill + ' fill pixels, so the measurement cannot tell the shadow behind a layer from one on top of it');
+    const o0 = render(title(true, false), BG), o1 = render(title(true, true), BG), oF = await exportFrameHB(sc(title(true, true), BG), T);
+    let ring = 0, ringHit = 0, fileHit = 0, darkest = 255;
+    for (let i = 0; i < o0.length; i += 4) if (is(o0, i, 255, 204, 0)) { ring++; if (!is(oF, i, 255, 204, 0)) fileHit++; if (!is(o1, i, 255, 204, 0)) { ringHit++; darkest = Math.min(darkest, o1[i]); } }
+    if (ring < 500) throw new Error('setup: the outline drew only ' + ring + ' outline-coloured pixels');
+    // MEASURED on v16.98: 3450 of 3450 outline pixels darkened on the canvas and in the exported frame, the worst to red 75 of 255
+    if (ringHit > ring * 0.02 || fileHit > ring * 0.02) bad.push('turning on the Shadow in Outline and Shadows darkens ' + Math.round(ringHit / ring * 100) + '% of a yellow text outline (down to ' + darkest + ' of 255 red; ' + Math.round(fileHit / ring * 100) + '% in the exported frame) — the shadow is painted OVER the outline instead of behind the letter');
+    // (2) the fade, on a shape: every pixel of the outline should be the same colour at 50%
+    function card(opacity) {
+      const L = FM.makeLayer('shape', { name: 'HB card', shape: 'rect', x: 150, y: 100, shapeW: 120, shapeH: 120, fill: '#ff0000' });
+      L.start = 0; L.duration = 3;
+      L.stroke = Object.assign({}, L.stroke, { enabled: true, width: 10, color: '#0000ff' });
+      L.transform.opacity = opacity;
+      return L;
+    }
+    const s1 = render(card(1), '#ffffff'), s5 = render(card(0.5), '#ffffff');
+    let edge = 0, right = 0, twoTone = 0, worst = null;
+    for (let y = 60; y < 140; y++) for (let x = 0; x < PW; x++) {
+      const i = (y * PW + x) * 4;
+      if (!is(s1, i, 0, 0, 255) || !is(s1, i - 4, 0, 0, 255) || !is(s1, i + 4, 0, 0, 255)) continue;   // solid outline, not its rim
+      edge++;
+      if (is(s5, i, 127, 127, 255) || is(s5, i, 128, 128, 255)) right++;
+      else { twoTone++; if (!worst) worst = s5[i] + ',' + s5[i + 1] + ',' + s5[i + 2]; }
+    }
+    if (edge < 100 || right < 20) throw new Error('CONTROL FAILED — at 50% opacity none of the outline is the plain half-blue it should be (' + right + ' of ' + edge + '), so the fixture is wrong');
+    // MEASURED on v16.98: half the outline (its inner half, over the fill) is 127,63,191
+    if (twoTone > edge * 0.05) bad.push('at 50% opacity ' + Math.round(twoTone / edge * 100) + '% of a blue outline on a red shape comes out purple (' + worst + ') instead of half-blue — the fill shows through the inner half of the outline, so a fade turns every outline two-tone');
+    // (3) the fade, on the title: the letter fill must not show its outline through it
+    const t1 = render(title(true, false, 1), BG), t5 = render(title(true, false, 0.5), BG), tn = render(title(false, false, 0.5), BG);
+    let letter = 0, tinted = 0;
+    for (let i = 0; i < t1.length; i += 4) if (is(t1, i, 255, 255, 255)) {   // the letter's own fill, where the outline does not reach
+      letter++;
+      if (Math.abs(t5[i] - tn[i]) > 6 || Math.abs(t5[i + 1] - tn[i + 1]) > 6 || Math.abs(t5[i + 2] - tn[i + 2]) > 6) tinted++;
+    }
+    if (letter > 500 && tinted > letter * 0.05) bad.push('and a white title with a yellow outline, faded to 50%, has ' + Math.round(tinted / letter * 100) + '% of its letter fill tinted by the outline underneath it');
+    if (bad.length) throw new Error(bad.join('; ') + '. In the preview and the export.');
+  });
+
+  /* HUNT-b 4 — A MASK FROM THE MASK TOOL WIPES OUT THE LAYER'S OUTLINE AND SHADOW. A mask with no place in the effect stack (every
+   * mask made by the Mask tool or the Masks card — only Effects → Mask adds an ordering marker, queue 560) is applied
+   * OUTERMOST, after everything the layer draws. The photo's Outline is the alpha-outline effect effectiveFx appends to the
+   * stack, and the Shadow is drawn with the layer itself — so the mask cuts both away with the rest of what lies outside it.
+   * The Outline sits on the photo's own rectangle (outside the window) and the shadow falls outside it, so on a masked
+   * photo both toggles in Outline & Shadows draw NOTHING. The code's own promise for that outline is that it "hugs what you
+   * can actually see". CONTROLS: the SAME photo cut down to the SAME window with Free Crop instead keeps both its Outline and
+   * its Shadow — two ways to cut a photo down, and only one of them deletes the border and the shadow; the SAME mask added
+   * from Effects → Mask gives an outline hugging the window, so an outline can follow a mask; the unmasked photo draws both. */
+  test('HUNT-b a mask from the Mask tool wipes out the photo Outline and Shadow entirely', { item: '690', budgetMs: 60000 }, async function () {
+    const PW = 300, PH = 200, T = 0.5, ids = [];
+    const tex = offscreen(200, 160), tc = tex.getContext('2d');
+    tc.fillStyle = '#ff0000'; tc.fillRect(0, 0, 200, 160);
+    function photo(mask, marker, crop) {
+      const L = FM.makeLayer('image', { name: 'HB masked photo', x: 150, y: 100 });
+      L.start = 0; L.duration = 3;
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 160 }); ids.push(L.id);
+      if (crop) L.crop = { x: 60, y: 40, w: 80, h: 80 };   // Free Crop to the same window: source 60..140 x 40..120 is frame 110..190 x 60..140
+      if (mask) {
+        const m = FM.masks.make('add');
+        m.path = [[110, 60], [190, 60], [190, 140], [110, 140]];   // a window in the middle of the photo
+        L.masks = [m];
+        if (marker) L.effects = [{ type: 'penmask', maskId: m.id }];   // what Effects → Mask adds
+      }
+      L.stroke = { enabled: true, width: 8, color: '#00ff00' };                                   // Outline on
+      L.shadow = { enabled: true, blur: 0, dx: 15, dy: 15, color: '#000000', alpha: 100 };       // Shadow on (the Drop kind)
+      return L;
+    }
+    const sc = L => scene([L], { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#ffffff' } });
+    function count(L, d) {
+      if (!d) {
+        const cv = offscreen(PW, PH), g = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(g, sc(L), T);
+        d = g.getImageData(0, 0, PW, PH).data;
+      }
+      let outline = 0, shadow = 0, photoPx = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 1] > 200 && d[i] < 60 && d[i + 2] < 60) outline++;
+        if (d[i] < 60 && d[i + 1] < 60 && d[i + 2] < 60) shadow++;
+        if (d[i] > 200 && d[i + 1] < 60 && d[i + 2] < 60) photoPx++;
+      }
+      return { outline: outline, shadow: shadow, photo: photoPx };
+    }
+    try {
+      const plain = count(photo(false)), crop = count(photo(false, false, true)), tool = count(photo(true, false)), fx = count(photo(true, true));
+      const toolL = photo(true, false), file = count(toolL, await exportFrameHB(sc(toolL), T));   // the masked photo, out of the real export
+      if (plain.outline < 1000 || plain.shadow < 1000) throw new Error('CONTROL FAILED — the unmasked photo draws ' + plain.outline + ' outline and ' + plain.shadow + ' shadow pixels, so the fixture is wrong');
+      if (crop.photo < 6000 || crop.photo > 6800 || crop.outline < 1000 || crop.shadow < 1000) throw new Error('CONTROL FAILED — the photo cropped to the window shows ' + crop.photo + ' photo, ' + crop.outline + ' outline and ' + crop.shadow + ' shadow pixels, so the cropped reference is wrong');
+      if (tool.photo < 6000 || tool.photo > 6800) throw new Error('CONTROL FAILED — the Mask tool mask does not show the same 80 x 80 window of the photo (' + tool.photo + ' photo pixels against ' + crop.photo + ' cropped)');
+      if (fx.outline < 1000) throw new Error('CONTROL FAILED — even the Effects mask draws no outline (' + fx.outline + ' pixels), so an outline on a masked photo is not being measured');
+      const bad = [];
+      // MEASURED on v16.98: masked 0 outline and 0 shadow pixels; the same window cropped 3296 and 2175, the Effects mask's outline 2816
+      if (tool.outline < crop.outline * 0.5 || file.outline < crop.outline * 0.5) bad.push('its Outline draws ' + tool.outline + ' pixels (' + file.outline + ' in the exported frame), where the same window cut with Free Crop draws ' + crop.outline + ' (and the same mask added from Effects ' + fx.outline + ')');
+      if (tool.shadow < crop.shadow * 0.5 || file.shadow < crop.shadow * 0.5) bad.push('its Shadow draws ' + tool.shadow + ' pixels (' + file.shadow + ' in the exported frame), where the cropped window casts ' + crop.shadow);
+      if (bad.length) throw new Error('a photo masked to a window with the Mask tool, Outline and Shadow both on: ' + bad.join(', and ') + ' — both toggles in Outline and Shadows do nothing once a layer is masked, in the preview and in the exported video');
+    } finally {
+      ids.forEach(id => FM.media.remove(id));
+    }
+  });
+
 })();
