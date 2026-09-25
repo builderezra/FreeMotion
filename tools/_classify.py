@@ -47,7 +47,11 @@ BIG     = re.compile(r'wants a session of its own|Not started deliberately|days 
 # the logging that this file's own rules demand. So the header phrases are matched in the HEADER only.
 STANDING_HEAD = re.compile(r'Standing reminder|Standing instruction', re.I)
 # …and these say outright that the entry has no work in it, wherever they appear.
-STANDING_BODY = re.compile(r'Nothing to build|this is the receipt|no longer holds the queue', re.I)
+# ⚠️ "Nothing to build UNTIL …" is a PARK, not a standing note (25 Sep): #202 said "WAITING ON EZRA — one performance readout
+# taken WHILE PLAYING … nothing to build until that reading arrives", matched this pattern, and was filed as a standing note —
+# hidden from next.sh's waiting list, from asks.sh and from the unblock page, with his ask never shown to him. The completeness
+# sweep of 25 Sep found it; the same trap the BUILT_OUT note below records for the capitalised wording.
+STANDING_BODY = re.compile(r'Nothing to build(?! until)|this is the receipt|no longer holds the queue', re.I)
 
 
 def _standing(body):
@@ -170,7 +174,7 @@ JUMPED = re.compile(r'JUMPED:')
 # phrase lifts it (same tail rule as BLOCKED); UNBLOCKED lifts it too.
 # (The first wording was "NOTHING TO BUILD UNTIL HE" — and its own self-test caught it matching STANDING_BODY's
 # "Nothing to build", which would have filed all three entries as standing notes: hidden, the exact failure.)
-BUILT_OUT = re.compile(r'BUILT OUT UNTIL (HE|YOU|EZRA)\b')
+BUILT_OUT = re.compile(r'BUILT OUT UNTIL (HE|YOU|EZRA)\b|[Nn]othing to build until')   # the lowercase park: see STANDING_BODY (25 Sep, #202)
 
 
 # ── WHICH UNTICKED CLAUSES INSIDE A DONE ENTRY ARE ACTUALLY A MISS ─────────────────────────────────
@@ -423,6 +427,15 @@ def stale_asks(md):
 # push when it fails, because every rule in this file was written to cure a specific bug and nothing
 # else would notice if one stopped working. Each case below IS one of those bugs, in its own words.
 _CASES = [
+    # "nothing to build until …" PARKS an entry; it must not hide it as a standing note (25 Sep, #202).
+    ("""- [ ] **202 — one video layer lags**
+      ⏳ **WAITING ON EZRA — one performance readout taken WHILE PLAYING. There is nothing to build until that reading arrives.**""",
+     'built out — waiting on him',
+     "a lowercase 'nothing to build until' is a park with an ask in it — listed as waiting on him, never hidden as a standing note"),
+    ("""- [ ] **999 — standing**
+      Nothing to build here; this is a reminder the loop reads.""",
+     'standing note (no build)',
+     "control: a plain 'Nothing to build' with no 'until' is still a standing note"),
     # ORDINARY PROSE MUST NOT LOOK LIKE A SHOUTED MARKER (10 Sep). #857 is a bug report — "tapping the
     # canvas while editing text should move it" — and one of its clauses said "the edit stays open while
     # you do it". Matched case-insensitively, `STAYS OPEN` filed the whole entry as blocked on Ezra and

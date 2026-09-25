@@ -10287,6 +10287,7 @@ better still, keep working inside the turn rather than parking work for a later 
       His tier-0 reading means the ladder was never consulted, which only happens on a paused sample.
       There is nothing to build until that reading arrives.
       🔧 **25 Sep, v16.95 (#935):** three measured causes of slowdown over a session fixed — every effect/filter thumbnail kept in memory for the whole session; after one heavy stretch of playback the preview stayed blurry for the rest of the session (the quality ladder never climbed back); filmstrips of the open project queued behind clips from projects already left.
+      ⚠️ **25 Sep — this ask was HIDDEN for weeks.** "nothing to build until that reading arrives" matched the standing-note detector, so #202 sat under "standing note" — off next.sh's waiting list and off the unblock page, and he was never shown it. Found by the waiting-on-him sweep; tools/_classify.py now reads "nothing to build until …" as a park (self-tested). ⏸ **BUILT OUT UNTIL HE pastes one What's slow → Measure report taken WHILE PLAYING, or says "still laggy" / "fine now" after v16.95** — put to him in the 25 Sep list (item 39).
 - [x] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** ✅ **CLOSED 23 Aug — it was FIXED, and the fix is in the code with your quote on it.** His words: *"When
       you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
       the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
