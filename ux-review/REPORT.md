@@ -1,6 +1,6 @@
 # FreeMotion UX review (v16.90, 24-25 Sep 2026)
 
-79 findings: 15 high, 48 medium, 15 low, 16 of them bugs found by accident.
+84 findings: 16 high, 51 medium, 16 low, 16 of them bugs found by accident.
 Review bots used the app like a person, mostly on a 390px phone, plus desktop and five other screen sizes. Nobody read the code. Every fix keeps the feature.
 
 ## Start here
@@ -52,6 +52,15 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 12. **Tapping a template opens the template itself for editing, not a new project from it** (medium · Found by 1 bot)
    In every template gallery a tap means "use this". Here it opens the master template for editing, with only a short toast saying so, and every later project made from it inherits the change.
    *Fix:* Tap = new project from this template. Move "Edit template" into its "..." menu, and show a TEMPLATE chip in the editor header while editing one.
+
+## How long everyday jobs take (taps from the home screen)
+
+| Job | Taps | Why |
+|---|---|---|
+| Title card | 18 | Fast, thanks to text's built-in Animate presets. Fade in defaults to letter-by-letter, which costs 2 taps. |
+| Photo slideshow (3 photos, fades) | 43 | The most expensive by far. Photos stack at 0:00, the playhead can't pass the end, and every crossfade is built by hand. |
+| Lower third (bar + name sliding in and out) | 36 | The slide animation is built twice by hand, once for the bar and once for the text, because shapes have no Animate presets. |
+| Music + cut to the music's end | 13 | No wasted taps. Skip to clip edge, then Extend end to playhead: the app's best editing idiom. |
 
 ## Home & projects
 
@@ -217,14 +226,6 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Suggested fix:** Put a real play/pause icon inside the readout pill (triangle on the left, "0:03.2 / 0:10" on the right) so the pill still toggles on tap and still opens the type-a-time box on double-tap (recommended). Show "current / total". Use the same format in the edit box as in the display (either both "10.97 s" or both "0:10.29f"), and consider a Settings choice for frames vs decimals.
 - **Screenshots:** [B-build-03-editor-empty.webp](shots/B-build-03-editor-empty.webp), [B-build-87-playing.webp](shots/B-build-87-playing.webp)
 
-### An audio clip gets the exact same context menu as a video/photo, full of options that make no sense for sound, and no waveform anywhere
-- **Impact:** HIGH · Found by 1 bot
-- **Where:** Selected audio clip ("..." More clip options menu; also the clip's own property tiles)
-- **What happened:** Selected the music-6s clip and opened "More clip options": the menu is identical to a video/photo layer's - Replace media, Sharpen for upscaling, Lock, Onion skin, Reset transform, Reverse, Save whole look as preset, Ask the Assistant, Flip Horizontally/Vertically, Fit/Fill/Stretch to Composition Area, Create Clipping Mask, Extract Audio (on a clip that already IS audio), Media Info, colour tag. None of these apply to sound. Missing: Fade in/out and Loop/repeat to fill duration, which are the two things people actually want to do with a music track, and which I could not find anywhere (not in this menu, not in the clip's own tile panel: Speed / Volume / Effects only). Separately, the audio clip on the timeline is a flat solid-colour pill with just a text label - no waveform, at any zoom level (checked at 1x and after pinch-zooming the timeline in).
-- **Why it matters:** Every item in that menu costs a moment of "wait, does that even do anything to a song?" and a few (Extract Audio from audio, Sharpen for upscaling on a .wav) read as broken. Meanwhile the two things people actually do with a music track when they add it - fade it out before it cuts off, or loop a 6s clip to cover a 15s video - have no visible home. And with no waveform, lining up a beat or a lyric with the video content is guesswork: you only find out where the loud part of the track is by scrubbing and listening.
-- **Suggested fix:** Give audio-type clips their own context menu variant: keep Replace media / Lock / Reverse / Save as preset / Ask the Assistant / Media info / colour tag, drop the ones that only apply to visuals, and add Fade in, Fade out and Loop to fill (recommended). Draw a simple waveform inside the clip's timeline pill (most editors generate this once on import and cache it) so cuts and syncing don't require scrubbing blind.
-- **Screenshots:** [B-build-1b-13-music-selected.webp](shots/B-build-1b-13-music-selected.webp), [B-build-1b-14-music-more-menu.webp](shots/B-build-1b-14-music-more-menu.webp)
-
 ### Moving a clip in time needs a hold nobody tells you about (a quick drag scrubs or trims instead)
 - **Impact:** HIGH · Checked by Claude on phone and desktop
 - **Where:** Timeline, any clip, both the full multi-layer view and the isolated single-clip view (after selecting it)
@@ -264,6 +265,14 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Why it matters:** Adding another layer is one of the most frequent actions in an editing session, and on any project past ~7 layers (easy to reach: photo + video + text + music + a couple of shapes) the button for it disappears until you scroll back up - there's no hint that it's still there, just off-screen. The app already has a "move add-row to top/bottom" toggle (documented in the first findings file) but it's a manual setting, not a fix for the underlying scroll-away problem.
 - **Suggested fix:** Pin the add-row so it never scrolls with the layer list - either fixed at the very top of the scrollable area (sticky), or as a small persistent "+" button in the transport bar itself next to Undo/Redo (recommended, since that row is already fixed and always visible). Keep the existing top/bottom toggle for people who want the full row visible.
 - **Screenshots:** [B-build-1b-30-addmenu-retry2.webp](shots/B-build-1b-30-addmenu-retry2.webp), [B-build-1b-31-scrolled-back.webp](shots/B-build-1b-31-scrolled-back.webp)
+
+### An audio clip gets the same menu as a photo (Flip, Sharpen, Clipping mask...), has no fade in/out, and its waveform is faint
+- **Impact:** MEDIUM · Found by 2 bots (corrected by Claude)
+- **Where:** Selected audio clip ("..." More clip options menu; also the clip's own property tiles)
+- **What happened:** Correction: there IS a waveform, but it's very faint on the full timeline and gone once the clip is selected (compare the two screenshots). Editor bot's report: Selected the music-6s clip and opened "More clip options": the menu is identical to a video/photo layer's - Replace media, Sharpen for upscaling, Lock, Onion skin, Reset transform, Reverse, Save whole look as preset, Ask the Assistant, Flip Horizontally/Vertically, Fit/Fill/Stretch to Composition Area, Create Clipping Mask, Extract Audio (on a clip that already IS audio), Media Info, colour tag. None of these apply to sound. Missing: Fade in/out and Loop/repeat to fill duration, which are the two things people actually want to do with a music track, and which I could not find anywhere (not in this menu, not in the clip's own tile panel: Speed / Volume / Effects only). Separately, the audio clip on the timeline is a flat solid-colour pill with just a text label - no waveform, at any zoom level (checked at 1x and after pinch-zooming the timeline in).
+- **Why it matters:** Every item in that menu costs a moment of "wait, does that even do anything to a song?" and a few (Extract Audio from audio, Sharpen for upscaling on a .wav) read as broken. Meanwhile the two things people actually do with a music track when they add it - fade it out before it cuts off, or loop a 6s clip to cover a 15s video - have no visible home. And with no waveform, lining up a beat or a lyric with the video content is guesswork: you only find out where the loud part of the track is by scrubbing and listening.
+- **Suggested fix:** Give audio-type clips their own context menu variant: keep Replace media / Lock / Reverse / Save as preset / Ask the Assistant / Media info / colour tag, drop the ones that only apply to visuals, and add Fade in, Fade out and Loop to fill (recommended). Draw a simple waveform inside the clip's timeline pill (most editors generate this once on import and cache it) so cuts and syncing don't require scrubbing blind.
+- **Screenshots:** [G-speed-96-audioadded.webp](shots/G-speed-96-audioadded.webp), [B-build-1b-13-music-selected.webp](shots/B-build-1b-13-music-selected.webp)
 
 ### Pinching to scale a layer can zoom the whole browser page instead, and it doesn't clear on reload
 - **Impact:** MEDIUM (BUG) (needs a real-device check) · 1 bot. Probably a side effect of how the test simulates a pinch
@@ -363,12 +372,12 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Suggested fix:** Put a small keyframe glyph on any panel-list tile that has keyframes (recommended), and colour or label the diamonds on the timeline row per property (or split animated properties onto their own sub-rows when the layer is selected and more than one property is keyframed), similar to how After Effects shows a keyframe track per property under an expanded layer.
 - **Screenshots:** [crop-panellist-poscale.webp](shots/crop-panellist-poscale.webp), [crop-timeline-diamonds.webp](shots/crop-timeline-diamonds.webp)
 
-### No built-in "quick animation" presets, Presets starts empty and only saves what you build yourself
+### Built-in animation presets exist only for text: photos, shapes and video get none, and the Presets tile starts empty
 - **Impact:** MEDIUM · Found by 1 bot
 - **Where:** Layer panel list > Presets
-- **What happened:** Opened Presets on a Text layer from the profile that ships with this build: a search box, then "Look + animations > Save look + animations..." and a greyed-out "Save effects only as preset". Searching for anything, including a single generic letter, returns zero results, there is nothing pre-populated to browse or apply. The "Effects" panel's "+ Add Effect" gallery (Squish, Match Grade, etc.) is a separate visual-filter library, not motion presets. So a fade-in, a pop-with-bounce, or a slide-in only exist in this app once a user has hand-built the keyframes once and explicitly saved them, there is no seeded "In / Out / Loop" starter set to apply and then tweak.
+- **What happened:** Correction from the tap-count bot: text layers DO have one-tap presets under Aa > Animate (Fade in, Slide in, Pop, Spin in, with a duration and by character / word / line), and they made a whole title card take 18 taps. What's missing is the same for everything else, plus a findable place for them. Animation bot's report on the Presets tile: Opened Presets on a Text layer from the profile that ships with this build: a search box, then "Look + animations > Save look + animations..." and a greyed-out "Save effects only as preset". Searching for anything, including a single generic letter, returns zero results, there is nothing pre-populated to browse or apply. The "Effects" panel's "+ Add Effect" gallery (Squish, Match Grade, etc.) is a separate visual-filter library, not motion presets. So a fade-in, a pop-with-bounce, or a slide-in only exist in this app once a user has hand-built the keyframes once and explicitly saved them, there is no seeded "In / Out / Loop" starter set to apply and then tweak.
 - **Why it matters:** Quick, named entrance/exit/loop animations are one of the main reasons casual users reach for a motion app like this instead of a plain editor (CapCut, Canva and Alight Motion all ship one). Here, every single project starts from zero: the first fade-in anyone ever makes has to be built keyframe-by-keyframe with no example to start from or learn the easing conventions from.
-- **Suggested fix:** Ship a small built-in set of "Look + animations" presets (Fade In, Fade Out, Slide In, Pop/Bounce, Loop pulse) that appear in this same list above the user's own saved ones, applied and then editable exactly like a hand-made one (recommended). Label the section "Built-in" vs "My presets" so the save/share mechanism that already exists keeps working unchanged.
+- **Suggested fix:** Give photo, video, shape and group layers the same Animate dropdown text already has (Fade, Slide, Pop in and out, with a duration) (recommended). The tap-count bot estimates this alone roughly halves a slideshow or lower-third job. Also list those presets in the Presets tile under a "Built-in" heading so the tile isn't empty on day one.
 - **Screenshots:** [C-anim-1b-27-presets.webp](shots/C-anim-1b-27-presets.webp), [C-anim-1b-29-searcha.webp](shots/C-anim-1b-29-searcha.webp)
 
 ### You can't type an exact number for position, size or rotation (only Opacity takes typing)
@@ -378,14 +387,6 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Why it matters:** The same screen trains the user two different ways to enter a number a few taps apart, and the one place typing works (Opacity, a 0–1 range where precision barely matters) is the least important place to need it, while the fields where exact numbers matter most (centering an X position, hitting a round Width) are the ones you can't type into.
 - **Suggested fix:** Reuse Opacity's existing text-input pattern for every numeric property field (recommended): keep drag-to-scrub for quick changes, but tapping the number itself (or a small pencil icon) opens the same kind of committed text entry Opacity already has. On desktop also support Up/Down arrows and the mouse wheel on a focused or hovered value (Shift = x10), and simple maths like "+100".
 - **Screenshots:** [C-anim-1b-62-opacityfield.webp](shots/C-anim-1b-62-opacityfield.webp), [C-anim-1b-44-dbltapwidth.webp](shots/C-anim-1b-44-dbltapwidth.webp), [F-desk-75-xdrag.webp](shots/F-desk-75-xdrag.webp)
-
-### Tap count: "text fades in and slides up over 0.5s" takes about 18-20 taps across two unrelated panels, with the slide distance impossible to enter precisely
-- **Impact:** MEDIUM · Found by 1 bot
-- **Where:** Mixing (Opacity) + Position/Scale > Move (Y), Text layer
-- **What happened:** Built this exact animation end to end and counted every tap/gesture: (1) open Position/Scale panel list ‹ back (1), (2) tap Mixing (1), (3) tap the add-keyframe diamond next to Opacity at t=0 (1), (4) double-tap the time readout (1) + type "0.5" + Enter (2) to reach 0:00:15, (5) tap the Opacity field + type "1" + Enter (3) to keyframe the fade, 8 actions just for the fade. Then the slide needs a second pass through a different panel: (6) back to panel list (1), (7) tap Position/Scale (1), (8) tap the Move icon to reach X/Y (1), (9) tap the Y add-keyframe diamond at t=0 (1), (10) jump back to 0:00:15 (already at that time if done in sequence, otherwise another double-tap+type+Enter = 3), (11) drag the Y value (or the swipe pad) up by the desired distance (1 drag, but, per the very first finding in this file, imprecise and, per this one, not typable) = at least 5-6 more actions. Total: roughly 18-20 discrete taps/gestures for one of the most common animations in this category of app, spread across two panels that share no common "add an entrance animation" entry point, plus a 21st implicit step (a long-press on one of the new keyframes) if you want anything other than the default Linear/Overshoot ease.
-- **Why it matters:** This is the single most common ask in every motion-graphics tutorial ("make it fade and rise in"), and doing it here means visiting two separately-styled panels, re-finding the timecode field twice, and fighting an imprecise drag for the one value (slide distance) that most benefits from a specific number. A first-time user has no reason to know Mixing (not Position/Scale) is where a fade lives.
-- **Suggested fix:** This is the direct payoff of fixing the "no built-in presets" gap above: a single "Fade + rise" preset would turn this 18-20 step sequence into 2 taps (apply preset, adjust duration) while leaving the manual per-property path exactly as-is for people who want full control (recommended).
-- **Screenshots:** [C-anim-1b-59-mixing.webp](shots/C-anim-1b-59-mixing.webp), [C-anim-1b-63-opkf.webp](shots/C-anim-1b-63-opkf.webp)
 
 ## Styling & effects
 
@@ -678,9 +679,9 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Screenshots:** [J-edge-07-long-text.webp](shots/J-edge-07-long-text.webp), [J-edge-08-long-text-done.webp](shots/J-edge-08-long-text-done.webp)
 
 ### Pressing Backspace right after committing a number field deletes the whole selected layer, no confirmation
-- **Impact:** HIGH (BUG) · Found by 1 bot
+- **Impact:** HIGH (BUG) · Found by 2 bots (desktop keyboard)
 - **Where:** Editor, any layer's numeric field (reproduced on Speed %, in the per-clip "Speed" panel), right after pressing Enter/Return to submit it
-- **What happened:** Selected the photo-landscape clip, opened its Speed panel, tapped the "Speed %" number field (it visibly gets a focus ring), typed a new value, and pressed Enter to commit it. Enter submits the value AND closes the field's focus (the panel drops back to the main editor/layer-list view, though the layer stays selected). At that point I pressed Backspace once, expecting nothing since I had nothing left to delete in a text field. Instead the entire "photo-landscape" layer vanished immediately: no confirmation dialog, no undo toast, the layer count and layer list just silently update. Undo does bring it back. I reproduced this twice in a row with the same steps (commit a numeric field with Enter, then press Backspace once).
+- **What happened:** Selected the photo-landscape clip, opened its Speed panel, tapped the "Speed %" number field (it visibly gets a focus ring), typed a new value, and pressed Enter to commit it. Enter submits the value AND closes the field's focus (the panel drops back to the main editor/layer-list view, though the layer stays selected). At that point I pressed Backspace once, expecting nothing since I had nothing left to delete in a text field. Instead the entire "photo-landscape" layer vanished immediately: no confirmation dialog, no undo toast, the layer count and layer list just silently update. Undo does bring it back. I reproduced this twice in a row with the same steps (commit a numeric field with Enter, then press Backspace once). The tap-count bot hit the same thing independently in Position/Scale: it clicked into the X value (which isn't a real text field), pressed Backspace to fix a digit, and the whole layer was deleted. This is a hardware-keyboard problem (PC, or a phone with a keyboard attached).
 - **Why it matters:** Typing a number then hitting Enter, then hitting Backspace again (out of habit, to clear a residual character, or because a phone's software keyboard leaves a lingering backspace touch) is completely normal behavior, not an edge case. There is nothing on screen after Enter to suggest that keyboard focus has left the field and that Backspace is now a global "delete this layer" shortcut. A user could lose a layer (and not notice for several actions) with a single stray keystroke.
 - **Suggested fix:** A few options, could combine: (1) recommended - don't bind Backspace/Delete to "delete layer" at all when nothing besides the layer itself is targeted right after a text-field commit; require the layer's row/thumbnail (not just "selected in the inspector") to have explicit focus, or require the delete shortcut to be Fn+Delete / a modifier, matching how most editors avoid single-key destructive shortcuts. (2) At minimum, show the same confirmation-less-but-visible toast that other destructive actions could use ("Layer deleted - Undo"), so it's at least noticeable immediately rather than silent. (3) Keep focus inside the numeric field after Enter (many form patterns do) so a stray keypress lands harmlessly back in the field instead of falling through to a global shortcut.
 - **Screenshots:** [J-edge-41-after-enter.webp](shots/J-edge-41-after-enter.webp), [J-edge-42-after-stray-backspace.webp](shots/J-edge-42-after-stray-backspace.webp)
@@ -701,6 +702,56 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Suggested fix:** Guard the node-removal in that blur/done handler with a try/catch or an isConnected/parentNode check before calling .remove(), so a stale reference from a fast re-render can't throw. Since I could not pin an exact repro, worth adding a regression test that fires "duplicate selected" N times back-to-back with minimal delay and asserts no uncaught console error.
 - **Screenshots:** 
 
+## Speed (tap counts)
+
+### You can't move the playhead past the current end, so the trim tools can't make a project longer
+- **Impact:** HIGH · Found by 1 bot (2 repros)
+- **Where:** Timeline, time readout, and a clip's Trim / Extend to playhead buttons
+- **What happened:** Slideshow job: 3 photos at 2 s each needs 6 s, but the project was 5 s long. Typing 6 into the time readout silently snapped to 00:05:00, the current end. So there's no way to park the playhead at 6 s and tap "Extend end to playhead". The only way out was dragging the clip itself, which sometimes scrubbed the playhead and sometimes moved the clip, for the same gesture. The total only reached 0:06 after the drag worked.
+- **Why it matters:** "Make this last clip end at 6 s" is an everyday edit. The app's best editing tool (Skip to edge + Trim/Extend to playhead) stops working exactly when a project needs to grow, and nothing says why.
+- **Suggested fix:** Let the playhead go past the end (show the empty area after it as a darker zone), and let Extend-to-playhead grow the project (recommended). At minimum, when a typed time is past the end, say so: "Project is 5 s long. Extend it to 6 s?" with a one-tap Extend.
+- **Screenshots:** [G-speed-38-dragextend.webp](shots/G-speed-38-dragextend.webp), [G-speed-42-total6.webp](shots/G-speed-42-total6.webp)
+
+### Importing several photos at once stacks them all at 0:00 instead of one after another
+- **Impact:** HIGH · Found by 1 bot
+- **Where:** + > Media > Import, picking several files in one go
+- **What happened:** Picked 3 photos in one file-picker action (a nice shortcut that works). All 3 landed as separate layers starting at 0:00 and fully overlapping, so only the top one is visible. Turning that into a slideshow took 14 steps of trimming and moving.
+- **Why it matters:** When someone picks several photos in order, they almost always want them in order. The multi-pick shortcut currently creates the most work instead of saving it.
+- **Suggested fix:** When several photos or videos come in from one pick, lay them end to end in the order picked (recommended). Offer the other option in a toast: "Added 3 in a row. Stack them instead?"
+- **Screenshots:** [G-speed-24-bulkimport2.webp](shots/G-speed-24-bulkimport2.webp), [G-speed-34-trimmed1.webp](shots/G-speed-34-trimmed1.webp)
+
+### A crossfade between two photos takes about 11 steps, because there are no transitions and opacity hides under "Mixing"
+- **Impact:** MEDIUM · Found by 1 bot
+- **Where:** Layer panel > Mixing; Effects categories; + Add behavior
+- **What happened:** There's no Transitions category in Effects and no Fade behavior, so a crossfade has to be built by hand: two opacity keyframes on each clip at each join, about 11 actions per join and 22 for a 3-photo slideshow. Opacity itself lives under a tile called "Mixing" next to blend modes. The bot only found it after opening Position/Scale and Colouring first.
+- **Why it matters:** Fading between photos is the most common thing anyone wants in a slideshow, and it currently costs more taps than everything else in the job put together.
+- **Suggested fix:** Add a one-tap transition at the seam between two clips on the same row (tap the seam: Cross-fade, Fade to black, Slide, with a duration) (recommended). Rename the tile to "Opacity & blend", or show the opacity value on the tile itself so people can see where it lives.
+- **Screenshots:** [G-speed-57-mixing2.webp](shots/G-speed-57-mixing2.webp), [G-speed-59-kf2.webp](shots/G-speed-59-kf2.webp)
+
+### There's no way to type a clip's length
+- **Impact:** MEDIUM · Found by 1 bot
+- **Where:** Clip panel for photos, video and shapes
+- **What happened:** No field shows or sets how long a clip is. The only way to make a photo exactly 2 s is to type 2 into the time readout, then tap Trim end to playhead. That's 3-4 actions per clip, repeated 7 times in the slideshow job.
+- **Why it matters:** "Each photo 2 seconds" is how people think about a slideshow, and the app makes them translate it into playhead positions.
+- **Suggested fix:** Show the clip's duration in its panel as an editable number ("2.0 s"), and when several clips are selected, let one value set them all (recommended). Keep Trim to playhead as it is.
+- **Screenshots:** [G-speed-34-trimmed1.webp](shots/G-speed-34-trimmed1.webp)
+
+### The Timeline options strip sits over the left edge of the preview, right where slide-in drags start
+- **Impact:** MEDIUM · Found by 1 bot
+- **Where:** Editor, phone layout, with Timeline options open
+- **What happened:** With the Timeline options strip open (speed, loop, magnet, in/out marks), it covers about 38 px of the preview's left edge. Twice, a drag meant to pull a layer in from off-screen left grabbed a strip button instead and did nothing to the layer.
+- **Why it matters:** Sliding something in from the left is one of the most common animations, and the one place it needs a clean drag is covered.
+- **Suggested fix:** Close the strip automatically when a layer drag starts on the preview, or dock it above the preview instead of over it (recommended). While a layer is being dragged, the drag should win over any toolbar underneath.
+- **Screenshots:** [G-speed-96-audioadded.webp](shots/G-speed-96-audioadded.webp)
+
+### Text Fade in defaults to letter-by-letter
+- **Impact:** LOW · Found by 1 bot
+- **Where:** Text > Aa > Animate > Fade in > By
+- **What happened:** Picking Fade in on a title fades it in one character at a time by default. Getting the whole line to fade takes 2 more taps (By > Line).
+- **Why it matters:** For a short title, "fade in" almost always means the whole thing, so every title card pays 2 extra taps.
+- **Suggested fix:** Default By to Line for Fade in, or to Line whenever the text is a single line (recommended). Keep Character and Word one tap away.
+- **Screenshots:** [G-speed-06-fadein-selected.webp](shots/G-speed-06-fadein-selected.webp)
+
 ## What Claude double-checked
 
 - **Confirmed:** Tapping a layer on the preview doesn't select it. Reproduced on a fresh circle with a real touch tap; tapping empty canvas deselects fine.
@@ -710,10 +761,12 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Corrected:** "There's no desktop layout" is wrong. At 1440 and 1920 wide there is a proper desktop layout. Rewritten as an empty-margins issue and downgraded to low.
 - **Softened:** "The first size keyframe divides the value by 100" didn't happen on a fresh shape in 3 tries. Kept as a real bug with an unknown trigger, downgraded to medium.
 - **Narrowed:** "The layer panel's last row is cut off at every height" only happens in the wide layout on shorter screens. Portrait phones and 1440x900 desktops show all 8 tiles.
+- **Corrected:** "There are no built-in animation presets" is wrong for text. Text has Fade, Slide, Pop and Spin under Aa > Animate. Rewritten as "presets exist for text only".
+- **Corrected:** "Audio clips have no waveform anywhere" is half wrong. A faint waveform shows on the full timeline, and it disappears when the clip is selected. Downgraded to medium.
+- **Left out:** The tap-count bot said shapes have no Width/Height fields. They do, behind the Scale toggle in Position / Scale, so that claim isn't in the report.
 
 ## Not covered yet
 
-- Tap counts for 5 everyday jobs (title card, photo slideshow, lower third, logo pop, music cut). The bot doing this was cut off by the usage limit before writing anything. It's queued as the next job.
 - Part of the edge-case pass: Back while a panel is open, the phone back gesture, and undo after reopening a project.
 - A real MP4 export from start to finish. This headless test browser can't encode H.264, so export was judged on GIF and PNG plus the app's own messages.
 - Anything that needs a real finger, such as pinch feel, scroll momentum and haptics. The bots used simulated touch.
@@ -758,3 +811,9 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 **Other screen sizes**
 - Selection, the open panel and the playhead survive a resize.
 - Tablet landscape (1180x820) is the best-looking size tested.
+
+**Speed (tap counts)**
+- Skip to clip edge + Trim / Extend / Move to playhead is fast and exact once found. It's the reason Music + cut took 13 taps.
+- Text's Animate presets (Fade, Slide, Pop, Spin with duration and by character / word / line) turned a title card into an 18-tap job.
+- Imported media shows up as one-tap picks next time.
+- New text and shapes land centred.
