@@ -90037,4 +90037,248 @@
   });
 
 
+  /* ═══ HUNT-a (queue 690, 25 Sep, second hunt) — TEXT: typing, the text sheet, captions, emoji, undo while typing ═════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in the text area, each a failing test
+   * first. The phone taps go through tests/_cdp.py as REAL touches (realInput924) wherever the finger can reach them. */
+  function hunt2aTap(x, y) { return [{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 40 }]; }
+  function hunt2aReach() { return Math.min(window.innerWidth, (window.top && window.top.innerWidth) || window.innerWidth) - 4; }
+  /* A real finger on an element when it is inside the part of the window real input can reach; its own click otherwise
+     (the phone pass runs Chrome 380 wide). Returns how it was pressed, so a failure can say. */
+  async function hunt2aPress(el, what) {
+    if (!el) throw new Error('setup: there is no ' + what + ' to press');
+    if (el.scrollIntoView) { try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {} }
+    await new Promise(r => setTimeout(r, 60));
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) throw new Error('setup: the ' + what + ' has no size on screen');
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x > 2 && y > 2 && x < hunt2aReach() && y < window.innerHeight - 4) {
+      const top = document.elementFromPoint(x, y);
+      if (top && (top === el || el.contains(top))) {
+        await realInput924(hunt2aTap(x, y), 'a finger on the ' + what);
+        await new Promise(r2 => setTimeout(r2, 250));
+        return 'finger';
+      }
+    }
+    el.click();
+    await new Promise(r2 => setTimeout(r2, 250));
+    return 'click';
+  }
+  function hunt2aInk(sc, t) {
+    const c = offscreen(sc.project.width, sc.project.height), x = c.getContext('2d');
+    FM.renderScene(x, sc, t);
+    const d = x.getImageData(0, 0, c.width, c.height).data;
+    let minX = Infinity, maxX = -1, n = 0;
+    for (let y = 0; y < c.height; y++) for (let i = 0; i < c.width; i++) { const k = (y * c.width + i) * 4; if (d[k] + d[k + 1] + d[k + 2] > 60) { n++; if (i < minX) minX = i; if (i > maxX) maxX = i; } }
+    return { w: maxX >= 0 ? maxX - minX + 1 : 0, n: n };
+  }
+
+  test('HUNT-a emoji break apart on animated or curved text — a flag becomes two boxed letters, a skin tone becomes a separate square', { item: '690' }, function () {
+    /* drawAnimatedText (js/compositor.js) lays an animated text out unit by unit, and for the default unit — by
+       Character — it splits each line with Array.from(line). Array.from splits CODE POINTS, not the characters he typed:
+       the Australian flag is two regional-indicator code points, a thumbs-up with a skin tone is the thumb plus a colour
+       swatch, a family is three people joined by invisible joiners. Each piece is then measured and drawn on its own, so
+       the moment a text has ANY Animate preset (Fade in, Pop, Typewriter, Wave…) his emoji fall apart — and not only
+       during the entrance: every frame of the layer, in the preview and burned into the export. drawArcLine (the Curve
+       slider, or the Text Curve effect) splits the same way. The iPhone emoji keyboard hands him exactly these. */
+    const P = { width: 900, height: 360, fps: 30, duration: 5, background: '#000000' };
+    const mk = (s) => FM.makeLayer('text', { name: 'E', text: s, x: 450, y: 180, fontSize: 150, start: 0, duration: 5 });
+    const widthOf = (s, dress) => { const L = mk(s); if (dress) dress(L); return hunt2aInk({ project: P, layers: [L], selectedId: null, selectedIds: [] }, 3).w; };
+    const FLAG = '🇦🇺', THUMB = '👍🏽', FAMILY = '👨‍👩‍👧';
+    // CONTROL 1: this browser draws a flag as ONE picture — otherwise the split below would look the same as the whole.
+    const flagWhole = widthOf(FLAG), flagApart = widthOf('🇦​🇺');
+    if (!(flagWhole > 20)) throw new Error('setup: the flag drew nothing (' + flagWhole + 'px) — this browser has no emoji font, so nothing below can be judged');
+    if (!(flagWhole < flagApart * 0.8)) throw new Error('setup: this browser draws the flag no narrower whole (' + flagWhole + 'px) than as two letters (' + flagApart + 'px), so it cannot see the bug');
+    const anim = (L) => { L.textAnim = { preset: 'fade', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 }; };
+    const curve = (L) => { L.textCurve = 90; };
+    // CONTROL 2: plain letters come out the same width animated (the entrance is long over at 3 s) and curved (one letter).
+    const ab = widthOf('AB'), abAnim = widthOf('AB', anim), w1 = widthOf('W'), w1Curve = widthOf('W', curve);
+    if (Math.abs(abAnim - ab) > ab * 0.1) throw new Error('CONTROL: plain AB is ' + ab + 'px still and ' + abAnim + 'px with Fade in finished — the comparison below measures something else');
+    if (Math.abs(w1Curve - w1) > w1 * 0.15) throw new Error('CONTROL: one plain letter on a curve is ' + w1Curve + 'px against ' + w1 + 'px flat — the comparison below measures something else');
+    const bad = [];
+    [['the Australian flag', FLAG], ['a thumbs-up with a skin tone', THUMB], ['a family emoji', FAMILY]].forEach(function (s) {
+      const still = widthOf(s[1]), a = widthOf(s[1], anim), c = widthOf(s[1], curve);
+      if (a > still * 1.25) bad.push(s[0] + ' is ' + still + 'px wide as plain text but ' + a + 'px with Fade in (finished)');
+      if (c > still * 1.25) bad.push(s[0] + ' is ' + still + 'px wide flat but ' + c + 'px on a Curve');
+    });
+    if (bad.length) throw new Error('emoji fall apart the moment a text is animated or curved — each piece of the emoji is drawn as its own character, in the preview and in the export (the flag turns into two boxed letters A U, the skin tone into a separate square): ' + bad.join('; '));
+  });
+
+  test('HUNT-a deleting or re-timing a caption in the text editor makes Done write his words over a DIFFERENT caption', { item: '690', budgetMs: 90000 }, async function () {
+    /* js/text-edit.js binds the cue being typed by its INDEX (active.cueIndex) into layer.captions, and every read and
+       write goes back through that number — onInput, and commit() on Done, which writes the field into cues[index]
+       whether he typed since or not. The Aa sheet of the SAME editor hosts the caption list (captions.js mount, via
+       inspector buildTextExtras), whose ✕ splices a cue out and whose Start/End fields re-sort the list. Either moves the
+       cue he is typing to a different index, so the number now names a neighbour: Done copies his words over it, and the
+       neighbour's own words are gone. On his phone that is: typing caption 2, open Aa, delete the stray caption 1, tap ✓. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const bad = [];
+    async function session(where, t, typed, act) {
+      const L = FM.makeLayer('text', { name: 'Caps', x: 540, y: 1500, fontSize: 90, start: 0, duration: 6 });
+      L.text = '';
+      L.captions = [{ start: 0, end: 1.5, text: 'Alpha' }, { start: 1.5, end: 3, text: 'Bravo' }, { start: 3, end: 4.5, text: 'Charlie' }];
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      FM.setTime(t); await sleep(200);
+      FM.textEdit.start(L.id); await sleep(400);
+      const ta = document.getElementById('te-input');
+      if (!ta || !FM.textEdit.isActive()) throw new Error(where + ': setup: the text editor did not open on the caption track');
+      const bound = ta.value;
+      ta.focus(); ta.value = typed; ta.dispatchEvent(new Event('input', { bubbles: true }));
+      if (!L.captions.some(c => c.text === typed)) throw new Error(where + ': setup: typing did not reach any caption');
+      const how = await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button');
+      await sleep(450);
+      const pop = document.querySelector('.te-pop-extras');
+      const rows = pop ? [].slice.call(pop.querySelectorAll('.cap-row')) : [];
+      if (rows.length !== 3) throw new Error(where + ': setup: the Aa sheet shows ' + rows.length + ' caption rows, expected 3 (Aa pressed by ' + how + ')');
+      await act(L, rows);
+      if (!FM.textEdit.isActive()) throw new Error(where + ': setup: the editor closed on its own before Done');
+      await hunt2aPress(document.querySelector('.te-bar .te-done'), 'Done tick');
+      await sleep(300);
+      if (FM.textEdit.isActive()) throw new Error(where + ': setup: the Done tick did not close the editor');
+      const live = FM.scene.layers.find(l => l.id === L.id) || L;
+      return { bound: bound, texts: live.captions.map(c => c.text) };
+    }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* 1. typing caption 2 (Bravo), he deletes caption 1 (Alpha) in the Aa sheet, then ✓ */
+          let r = await session('deleting caption 1', 2.2, 'Bravo, edited', async function (L, rows) {
+            await hunt2aPress(rows[0].querySelector('.cap-del'), 'first caption’s ✕');
+            await sleep(250);
+            if (L.captions.length !== 2) throw new Error('deleting caption 1: setup: the ✕ did not remove the caption (' + L.captions.length + ' left)');
+          });
+          if (r.bound !== 'Bravo') throw new Error('setup: the editor opened on ' + r.bound + ', not on Bravo at the playhead');
+          if (r.texts.join(' | ') !== 'Bravo, edited | Charlie') bad.push('he typed caption 2, deleted caption 1 from the Aa sheet and tapped ✓ — the captions are now [' + r.texts.join(' | ') + '] instead of [Bravo, edited | Charlie]: Done wrote his words over Charlie, and Charlie is gone');
+          /* 2. typing caption 1 (Alpha), he moves its Start past the others in the Aa sheet, then ✓ */
+          r = await session('re-timing caption 1', 0.5, 'Alpha, edited', async function (L, rows) {
+            const s = rows[0].querySelector('.cap-time');
+            if (!s) throw new Error('re-timing caption 1: setup: no Start field on the first caption row');
+            s.value = '5'; s.dispatchEvent(new Event('input', { bubbles: true })); s.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(250);
+            if (!(L.captions[L.captions.length - 1].start >= 4.9)) throw new Error('re-timing caption 1: setup: the Start field did not move the caption to the end');
+          });
+          const want = 'Bravo | Charlie | Alpha, edited';
+          if (r.texts.join(' | ') !== want) bad.push('he typed caption 1, moved its Start to 5 s in the Aa sheet and tapped ✓ — the captions are now [' + r.texts.join(' | ') + '] instead of [' + want + ']: his words landed on another caption and that caption’s own words are gone');
+        });
+      });
+      if (bad.length) throw new Error('the caption editor holds the caption he is typing by its POSITION in the list, so a change to the list in its own Aa sheet sends his words to a different caption: ' + bad.join('; '));
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      try { try { if (wasOpen) FM.home.open(); } catch (e) {} } catch (e) {}
+    }
+  });
+
+  test('HUNT-a on PC, Undo with the text card open throws away the words he typed — the layer vanishes and Redo brings back only the placeholder', { item: '690', budgetMs: 90000 }, async function () {
+    /* The PC text editor is a modeless card: the transport's ↶ stays live beside it, and typing is not committed until ✓
+       (js/text-edit.js commit()). So ↶ skips the typing and undoes the step BEFORE it. Right after Add text that step is
+       adding the layer: the layer he is typing into disappears with his words, and ↷ restores the layer as it was
+       committed — the word Text. undo() already knows this shape: it calls FM.flushPendingCommit first so a camera zoom
+       that has not committed yet is not stepped over; the open text editor is not part of it. The ↶ and ↷ are real
+       mouse clicks where the window reaches them. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    async function press(id, what) {
+      const b = document.getElementById(id);
+      const r = b && b.getBoundingClientRect();
+      if (!r || !r.width) throw new Error('setup: the ' + what + ' button is not on screen');
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      if (x > hunt2aReach() || y > window.innerHeight - 4) { b.click(); await sleep(400); return 'click'; }
+      await realInput924([{ t: 'mouseMove', x: x, y: y, ms: 40 }, { t: 'mouseDown', x: x, y: y, ms: 70 }, { t: 'mouseUp', x: x, y: y, ms: 60 }], 'clicking ' + what);
+      await sleep(400);
+      return 'mouse';
+    }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          FM.scene = scene([], { project: { width: 1080, height: 1920, fps: 30, duration: 5, background: '#000000' } });
+          FM.selectLayer(null); FM.setTime(0); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+          FM.history.reset();
+          await sleep(200);
+          FM.addTextLayer();
+          await sleep(400);
+          const id = FM.textEdit.isActive() ? FM.textEdit.layerId() : null;
+          if (!id) throw new Error('setup: Add text did not open the text editor');
+          const ta = document.getElementById('te-input');
+          ta.focus(); ta.value = 'Hello world'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+          const L0 = FM.scene.layers.find(l => l.id === id);
+          if (!L0 || L0.text !== 'Hello world') throw new Error('setup: typing did not reach the new text layer');
+          const how = await press('btn-undo', 'undo');
+          const afterUndo = FM.scene.layers.find(l => l.id === id);
+          const fieldOpen = FM.textEdit.isActive();
+          await press('btn-redo', 'redo');
+          if (FM.textEdit.isActive()) { FM.textEdit.stop(); await sleep(200); }
+          const afterRedo = FM.scene.layers.find(l => l.id === id);
+          const bad = [];
+          if (!afterUndo) bad.push('one ↶ (' + how + ') took away the whole text layer he was typing into' + (fieldOpen ? '' : ', and the editor closed with it'));
+          if (!afterRedo) bad.push('↷ did not bring the layer back at all');
+          else if (afterRedo.text !== 'Hello world') bad.push('↷ brought the layer back reading ' + afterRedo.text + ' — the words he typed, Hello world, are gone for good');
+          if (bad.length) throw new Error('on PC he added a text, typed Hello world and pressed ↶ with the card still open: ' + bad.join('; ') + '. The typing was never committed, so ↶ skipped it and undid the step before it.');
+        });
+      }, 1280);
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      FM.history.reset();
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      try { try { if (wasOpen) FM.home.open(); } catch (e) {} } catch (e) {}
+    }
+  });
+
+  test('HUNT-a the caption editor’s next button skips a caption when it opened between two captions', { item: '690', budgetMs: 60000 }, async function () {
+    /* Open the text editor on a caption track with the playhead in a GAP (the silence between two detected captions, or
+       before the first) and bindCue adds a blank cue there so typing has somewhere to land (js/text-edit.js). Press › and
+       gotoCue(index + 1) runs dropEmptyCreated() FIRST — which splices that blank cue out and shifts every later caption
+       down one — and only THEN uses the index it was handed. So › lands one caption too far: from the gap after Alpha it
+       opens Charlie, and Bravo is skipped. The › is a real finger tap on the phone. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time;
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const bad = [];
+    async function nextFrom(t, want, where) {
+      const L = FM.makeLayer('text', { name: 'Caps', x: 540, y: 1500, fontSize: 90, start: 0, duration: 6 });
+      L.text = '';
+      L.captions = [{ start: 0.5, end: 1.5, text: 'Alpha' }, { start: 2, end: 3, text: 'Bravo' }, { start: 3.5, end: 4.5, text: 'Charlie' }];
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      FM.setTime(t); await sleep(200);
+      FM.textEdit.start(L.id); await sleep(400);
+      const ta = document.getElementById('te-input');
+      if (!ta || !FM.textEdit.isActive()) throw new Error(where + ': setup: the text editor did not open on the caption track');
+      if (ta.value !== '') throw new Error(where + ': setup: with the playhead in a gap the editor should open on a new blank caption, it opened on ' + ta.value);
+      const next = [].slice.call(document.querySelectorAll('.te-cue-nav .te-cue-btn')).find(b => b.title === 'Next cue');
+      const how = await hunt2aPress(next, 'next-caption button');
+      await sleep(200);
+      const got = (document.getElementById('te-input') || {}).value;
+      const lbl = ((document.querySelector('.te-cue-nav .te-cue-lbl') || {}).textContent || '').trim();
+      FM.textEdit.stop(); await sleep(200);
+      if (got !== want) bad.push(where + ', › (' + how + ') opened ' + (got || 'a blank caption') + ' (' + lbl + ') instead of ' + want);
+    }
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await nextFrom(1.75, 'Bravo', 'from the gap between Alpha and Bravo');
+          await nextFrom(0.2, 'Alpha', 'from before the first caption');
+        });
+      });
+      if (bad.length) throw new Error('the next-caption button skips a caption whenever the editor opened in a gap: ' + bad.join('; '));
+    } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene = saved; FM.time = savedT;
+      FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+      try { try { if (wasOpen) FM.home.open(); } catch (e) {} } catch (e) {}
+    }
+  });
+
+
 })();
