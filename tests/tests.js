@@ -95895,6 +95895,9 @@
   });
 
   /* ═══ HUNT-a (queue 690, fifth hunt, 26 Sep) — PLAYBACK AND THE PREVIEW ═════════════════════════════════════════════
+   * Found by the hunt as four failing HUNT-a tests; all four fixed in js/app.js (FM.pause seeks onto the playhead,
+   * FM.seekVideosToTime uses FM.frameSeekTarget, the play pill stops at once, a hidden page pauses) and renamed 690 for
+   * what they now hold.
    * His brief: "go re audit, find some bugs coz theres a shit load". Four faults in the one thing every edit goes
    * through — stopping on a moment and looking at it. Each is measured on the preview canvas itself, with the frame
    * index the fixture clip carries in its own pixels (hunt2dDrawIndex: frame k is eight black/white bars), so what is
@@ -95970,9 +95973,10 @@
    * snaps the playhead to a frame and pauses the element WHERE IT IS — it never seeks it to the playhead — so the
    * picture he stopped on is the element's frame, not the playhead's. Measured before this test was written: paused at
    * frame 36 the preview showed 30; at 48 it showed 45; at 59, 56. A split, a keyframe or a bookmark made there lands
-   * on the playhead's frame, 2-6 frames after the picture he chose it by. One frame of slack is allowed so this does not
-   * also measure the frame-edge fault (HUNT-a 3). CONTROL: the clip really played (its element moved on). */
-  test('HUNT-a pausing a clip with sound leaves the preview on an earlier frame than the playhead', { item: '690', budgetMs: 120000 }, async function () {
+   * on the playhead's frame, 2-6 frames after the picture he chose it by. FIXED: FM.pause seeks every clip onto the
+   * playhead's frame when it stops playback, so the picture is now asserted to BE that frame, with no slack — the
+   * frame-edge fault (HUNT-a 3) is fixed too, so a one-frame miss is a real miss. CONTROL: the clip really played. */
+  test('690 pausing a clip with sound leaves the preview on the frame the playhead stopped on', { item: '690', budgetMs: 120000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to play');
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const frame = () => new Promise(r => requestAnimationFrame(r));
@@ -96006,12 +96010,50 @@
         if (got < 0) throw new Error('CONTROL: the paused preview shows no frame of the clip at all (reads ' + got + ')');
         const tag = run[2] ? ' (with a phone-sized ' + Math.round(run[2] * 1000) + ' ms of sound latency)' : '';
         seen.push('playhead frame ' + want + ' shows ' + got + tag);
-        if (Math.abs(got - want) >= 2) bad.push('stopped at frame ' + want + ' (' + FM.time.toFixed(3) + ' s)' + tag + ' the preview shows frame ' + got + ' of the clip, ' + Math.abs(want - got) + ' frames (' + Math.round(Math.abs(want - got) / 30 * 1000) + ' ms) ' + (got < want ? 'earlier' : 'later') + ', the clip left at ' + rec.el.currentTime.toFixed(3) + ' s');
+        if (got !== want) bad.push('stopped at frame ' + want + ' (' + FM.time.toFixed(3) + ' s)' + tag + ' the preview shows frame ' + got + ' of the clip, ' + Math.abs(want - got) + ' frames (' + Math.round(Math.abs(want - got) / 30 * 1000) + ' ms) ' + (got < want ? 'earlier' : 'later') + ', the clip left at ' + rec.el.currentTime.toFixed(3) + ' s');
       }
       if (bad.length) throw new Error('pausing a clip with sound leaves the picture behind the playhead, so he stops on one frame and a split, keyframe or bookmark made there lands on another: ' + bad.join('; ') + '. (all four: ' + seen.join(', ') + ')');
     } finally {
       FM.pause(); FM.scene = saved; FM.time = t0;
       made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 — …AND EXACTLY, WHEN THE CLIP TRAILED BY LESS THAN HALF A FRAME. The fix for HUNT-a 1 seeks every clip onto the
+   * playhead when playback stops. The ordinary seek skips an element already within half a frame of its target (queue
+   * 125: a slow scrub must not keep restarting the decoder), which is exact on the frame grid a scrub moves along — but a
+   * PLAYING element stops anywhere, and one that stopped 10 ms short of the playhead's frame edge sits inside the frame
+   * BEFORE it while passing that guard. So the pause seek is exact. A stand-in element (as the perf seek-guard test uses)
+   * places the 10 ms rather than hoping for it: a real clip trails by whatever this browser's latency is on the day, which
+   * is why the test above cannot reach this case on its own. CONTROL: a pause on a transport that was not playing — how a
+   * dozen callers say make sure it is stopped — leaves the element where it is. */
+  test('690 pausing puts the picture on the playhead frame even when the clip trailed it by less than half a frame', { item: '690' }, function () {
+    const keep = FM.scene.layers.slice(), keepT = FM.time, keepPlaying = FM.playing, keepReview = FM._reviewing;
+    const fps = FM.scene.project.fps || 30, writes = [];
+    const fake = { duration: 10, readyState: 0, paused: false, muted: false, pause: function () { this.paused = true; } };
+    Object.defineProperty(fake, 'currentTime', { get: function () { return this._t || 0; }, set: function (v) { writes.push(v); this._t = v; }, configurable: true });
+    let L = null;
+    try {
+      L = FM.makeLayer('video', { start: 0, duration: 5 });
+      L.type = 'video'; L.trimStart = 0; L.speed = 1;
+      FM.scene.layers = [L];
+      FM.media.set(L.id, { kind: 'video', el: fake, duration: 10, width: 64, height: 48 });
+      FM._reviewing = false;
+      FM.playing = false; FM.time = 30 / fps; fake._t = 30 / fps - 0.010;
+      FM.pause();
+      if (writes.length) throw new Error('CONTROL: a pause on a transport that was not playing moved the element (to ' + writes.map(v => v.toFixed(4)).join(', ') + ' s)');
+      // playing, the clock 4 ms past frame 30 (so the playhead snaps to 30), the clip 10 ms short of it (inside frame 29)
+      FM.playing = true; FM.time = 30 / fps + 0.004; fake._t = 30 / fps - 0.010; fake.paused = false;
+      FM.pause();
+      if (!fake.paused) throw new Error('setup: FM.pause did not pause the clip element');
+      if (Math.abs(FM.time - 30 / fps) > 1e-9) throw new Error('setup: the playhead did not snap to frame 30 (it is at ' + FM.time.toFixed(4) + ' s)');
+      const at = fake.currentTime, shows = Math.floor(at * fps + 1e-9);
+      if (shows !== 30) throw new Error('stopped with the clip 10 ms short of the playhead, the pause left it at ' + at.toFixed(4) + ' s, which is frame ' + shows + ', not the playhead frame 30 (' + writes.length + ' seek(s): ' + writes.map(v => v.toFixed(4)).join(', ') + ') - within half a frame, so the ordinary guard skipped it');
+    } finally {
+      FM.playing = keepPlaying; FM._reviewing = keepReview;
+      if (L) { try { FM.media.remove(L.id); } catch (e) {} }
+      FM.scene.layers = keep; FM.time = keepT;
       try { FM.refreshAll(); } catch (e) {}
     }
   });
@@ -96022,8 +96064,9 @@
    * pointless for stopping — the double-click handler pauses anyway — yet it is applied to both, so every stop lands
    * ~7 frames after the tap: he taps on the beat and the playhead stops a quarter-second later. Driven by a REAL finger
    * at 380 and a REAL mouse at 1280; the reference is the transport clock at the moment the trusted click arrives. Two
-   * frames of slack. CONTROL: the tap is trusted and of the right kind, and the first tap really did start playback. */
-  test('HUNT-a tapping the play pill to stop lets playback run on a quarter second past the tap', { item: '690', budgetMs: 90000 }, async function () {
+   * frames of slack. CONTROL: the tap is trusted and of the right kind, and the first tap really did start playback.
+   * FIXED: a tap that stops playback pauses at once; the 240 ms wait stays only for starting. */
+  test('690 tapping the play pill to stop stops on the tap, not a quarter second after it', { item: '690', budgetMs: 90000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, t0 = FM.time, bad = [];
     async function run(where, touch) {
@@ -96058,6 +96101,20 @@
       await atPhoneWidth(async function () { await onScreen924(async function () { await run('380 px', true); }); }, 380);
       // the 380 pass's driver window cannot reach a pill that sits at x 640 of a 1280 frame; the finger half runs in both
       if (hunt4aWide()) await atWideWidth(async function () { await onScreen924(async function () { await run('1280 px', false); }); }, 1280);
+      /* …and a double tap while playing still stops it ONCE. The stop no longer waits, so the second tap of a double tap
+         finds playback already stopped, and would START it again 240 ms later unless it is ignored, as it always was. A
+         real double tap brings a dblclick with it, which cancels that start anyway and would hide the case — but a
+         phone's double tap can arrive without one, so two bare clicks are sent here, 80 ms apart. */
+      FM.pause(); FM.setTime(0.5); await sleep(300);   // any 240 ms window left by the taps above has closed
+      FM.play();
+      await sleep(300);
+      if (!FM.playing) throw new Error('setup: playback did not start for the double-tap check');
+      const pill2 = document.getElementById('time-readout');
+      pill2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(80);
+      pill2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(500);
+      if (FM.playing) bad.push('a double tap on the pill while playing stopped it and then started it again 240 ms later - the second tap was not ignored');
       if (bad.length) throw new Error('stopping playback with the play pill overshoots the moment he taps, so he cannot stop on a beat: ' + bad.join('; '));
     } finally {
       FM.pause(); FM.scene = saved; FM.time = t0; try { FM.refreshAll(); } catch (e) {}
@@ -96071,8 +96128,9 @@
    * this test was written, pressing . from 0: 1, 1, 3, 4, 4, 6, 7, 7, 9 … So stepping to find a cut shows one frame
    * twice and never shows the next, a frame he parks on is not the frame that exports, and a cut made where the picture
    * changes is one frame out. Checked on the key he steps with and on the scrub path his finger drives.
-   * CONTROL: frames 0, 1, 3, 4 … read correctly, so the reader and the clip are right. */
-  test('HUNT-a stepping a 30 fps clip frame by frame skips every third frame and shows the one before it twice', { item: '690', budgetMs: 120000 }, async function () {
+   * CONTROL: frames 0, 1, 3, 4 … read correctly, so the reader and the clip are right.
+   * FIXED: FM.seekVideosToTime seeks to FM.frameSeekTarget, the same target the export uses. */
+  test('690 stepping or scrubbing a 30 fps clip frame by frame shows every frame, each once', { item: '690', budgetMs: 120000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to step through');
     const saved = FM.scene, t0 = FM.time, made = [];
     try {
@@ -96115,8 +96173,8 @@
    * assumes the opposite ("Playback is torn down without the stop button ever being pressed").
    * The browser is simulated exactly where it matters: document.hidden and visibilitychange as it reports them, and
    * requestAnimationFrame held while hidden, which is what a real hidden page does. CONTROL: it was playing and the
-   * clip was sounding before he left. */
-  test('HUNT-a leaving the app mid-play and coming back finds the playhead seconds further on with the clip still sounding', { item: '690', budgetMs: 120000 }, async function () {
+   * clip was sounding before he left. FIXED: a hidden visibilitychange (and pagehide) pauses playback. */
+  test('690 leaving the app mid-play stops playback where he left, with the clip silent while he is away', { item: '690', budgetMs: 120000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no clip to play');
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, t0 = FM.time, made = [];
@@ -96147,6 +96205,13 @@
       const bad = [];
       if (Math.abs(FM.time - left) > 0.15) bad.push('he left at ' + left.toFixed(2) + ' s and came back 2.5 s later to the playhead at ' + FM.time.toFixed(2) + ' s' + (FM.playing ? ', still playing' : ', stopped there') + ' - it ran on while the app was not even on screen');
       if (!clipWhileAway.paused) bad.push('while he was away the clip kept sounding (its element at ' + clipWhileAway.at.toFixed(2) + ' s' + (clipWhileAway.at > (V.trimStart || 0) + V.duration + 0.05 ? ', past its cut at ' + ((V.trimStart || 0) + V.duration).toFixed(2) + ' s' : '') + ') with nothing to stop it at its end');
+      // …and pagehide, the other event iOS Safari delivers on the way out (js/audio-health.js listens for both), stops it too
+      FM.pause(); FM.setTime(0.3); await hunt5aSettle(rec);
+      hunt5aKey('Space', ' ');
+      await sleep(400);
+      if (!FM.playing) throw new Error('setup: Space did not start playback again for the pagehide check');
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+      if (FM.playing) bad.push('a pagehide while playing left it playing');
       if (bad.length) throw new Error('going to the background does not stop playback: ' + bad.join('; '));
     } finally {
       window.requestAnimationFrame = realRaf;

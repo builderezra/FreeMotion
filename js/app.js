@@ -1189,7 +1189,12 @@ window.FM = window.FM || {};
   };
   FM.pastSourceEnd = function (m, local) { return local != null && local >= FM.sourceEnd(m); };
 
-  FM.seekVideosToTime = function () {
+  /* `opts.exact` (queue 690, fifth hunt) is for the ONE caller whose element can sit anywhere inside a frame:
+     FM.pause, stopping a clip that was PLAYING. Every other caller moves between frames on the grid, where
+     the half-frame guard below is exact; a playing element stops wherever its own clock was, so an element
+     10 ms short of the target would pass that guard while still showing the frame before it. */
+  FM.seekVideosToTime = function (opts) {
+    const exact = !!(opts && opts.exact);
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
@@ -1205,7 +1210,15 @@ window.FM = window.FM || {};
       if (layer.reversed && m.frameCache) return; // the cache renders this synchronously
       const local = FM.layerLocalTime(layer, FM.time);
       if (local == null) return;
-      const target = Math.min(Math.max(local, 0), Math.max(0, (m.duration || 0) - 0.001));
+      /* INSIDE THE FRAME, NOT ONTO ITS EDGE (queue 690, fifth hunt). HUNT-d gave the export and the frame
+       * cache FM.frameSeekTarget (js/frames.js) because a seek to exactly k/30 is held as one microsecond
+       * BEFORE frame k starts, so the element shows frame k-1 at every k whose start rounds up — 2, 5, 8 …
+       * This seek, which every paused frame he looks at goes through (the . and , keys, a timeline scrub,
+       * every parked playhead), was never changed: stepping with . read 0,1,1,3,4,4,6,7,7 …, frames 2, 5,
+       * 8 … never appeared and the one before each showed twice, and the frame he parked on and cut at
+       * was not the frame that exports there. Same target as the export now, so the two agree. */
+      const target = FM.frameSeekTarget ? FM.frameSeekTarget(local, m.duration)
+                                        : Math.min(Math.max(local, 0), Math.max(0, (m.duration || 0) - 0.001));
       /* DON'T RE-SEEK TO WHERE WE ALREADY ARE (queue 125). This write was unconditional, and writing
        * currentTime restarts the element's seek algorithm — which means CANCELLING a decode that was
        * already in flight. It matters because scrubTime snaps to the frame grid first, so a slow
@@ -1216,7 +1229,7 @@ window.FM = window.FM || {};
        * The exporter has had exactly this guard since #15 (js/exporter.js) — the preview never did.
        * Half a frame at 30fps, so a genuine step to the next frame always passes. */
       const cur = m.el.currentTime || 0;
-      if (Math.abs(cur - target) < (0.5 / (FM.scene.project.fps || 30))) return;
+      if (Math.abs(cur - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
       try { m.el.currentTime = target; } catch (e) {}
     });
   };
@@ -2427,6 +2440,7 @@ window.FM = window.FM || {};
   };
 
   FM.pause = function () {
+    const wasPlaying = FM.playing;   // read before it is cleared: only a stop from PLAYBACK has to move the picture (below)
     _lastPlayPaint = 0;   // a resume must not read the pause as a frame interval (queue 202)
     _startWait = null;            // never let a stale wait outlive the pass that created it
     FM.playing = false;
@@ -2454,10 +2468,42 @@ window.FM = window.FM || {};
       const back = FM._reviewFrom; FM._reviewFrom = null;
       if (back != null && FM.setTime) FM.setTime(back);
     }
+    /* ═══ THE PICTURE STOPS WHERE THE PLAYHEAD STOPS (queue 690, fifth hunt) ═══════════════════════════════
+     * His brief: "go re audit, find some bugs coz theres a shit load". A clip with sound runs BEHIND the
+     * transport while it plays, and on purpose: the sync controller learns that offset as the element's
+     * output latency and keeps it (_syncBiasStep, SYNC_WARMUP — queue 148 measured ~87 ms on a real import,
+     * his phone a 158 ms median). Pausing snapped the playhead to a frame above and then paused every
+     * element WHERE IT WAS, with no seek — so the picture he stopped on was 2 to 9 frames before the
+     * playhead (measured: stopped at frame 39, the preview showed 30). Shapes, text, the timecode, a split,
+     * a keyframe, a bookmark and the export all use the playhead, so what he chose a cut by was not where
+     * the cut went, and the next press of . jumped several frames at once.
+     * So a stop from playback seeks every clip onto the playhead's frame; the 'seeked' listener repaints
+     * it. EXACT, because the element stops anywhere inside a frame and the ordinary half-frame guard would
+     * let one 10 ms short of the target keep showing the frame before it. What he sees: on pause the video
+     * catches up the few frames it was trailing by, onto the frame the timecode already says.
+     * Not while exporting — the exporter owns every element's seeks then (#47). Only after playing: a
+     * pause on a paused transport is how a dozen callers say "make sure it is stopped", and their elements
+     * are already where setTime put them. */
+    if (wasPlaying && !FM._exporting && FM.seekVideosToTime) FM.seekVideosToTime({ exact: true });
     if (FM.syncReviewButton) FM.syncReviewButton();   // revert the far-right button from ■ Stop back to the view icon
   };
 
   FM.togglePlay = function () { FM.playing ? FM.pause() : FM.requestPlay(); };
+
+  /* ═══ LEAVING THE APP STOPS PLAYBACK (queue 690, fifth hunt) ═══════════════════════════════════════════════
+   * Nothing listened for the page going to the background while playing. The browser stops calling
+   * requestAnimationFrame, so tick() stopped — but FM.playing stayed true and FM.clockNow() kept counting
+   * wall time, so he checked a message and came back to a playhead that had leapt on by however long he
+   * was away (or run off the end and stopped), his place gone. On the PC the other half was audible: the
+   * rule that stops a clip at its cut lives in syncMediaToClock, which only tick() calls, so a background
+   * tab played a trimmed clip's sound on past its cut until its source ran out (measured: cut at 1.50 s,
+   * still sounding at 3.40 s). js/audio-health.js already assumed the opposite — "Playback is torn down
+   * without the stop button ever being pressed" — and voice recording stops on the same two events
+   * (js/voice-rec.js bgStop). A hidden visibilitychange and pagehide are the two iOS Safari actually
+   * delivers on the way out. An ordinary stop, so review play returns to where it started, as it does for
+   * every other stop. */
+  document.addEventListener('visibilitychange', () => { if (document.hidden && FM.playing) FM.pause(); });
+  window.addEventListener('pagehide', () => { if (FM.playing) FM.pause(); });
 
   /* ⚠️ TAP THE CANVAS WHILE THE EFFECTS MENU IS OPEN → PAUSE (queue 538). Ezra: *"Make it so if you tap
      the canvas when in the effects menu it pauses the playback, make it have a nice pause animation and
@@ -6335,7 +6381,18 @@ window.FM = window.FM || {};
     readoutEl.addEventListener('click', () => {
       if (tcLpFired) { tcLpFired = false; return; }   // the hold already handled this press
       if (tcTapTimer) return;                       // second click of a double-tap → ignore here
-      // …and the 240ms wait stays, because a double-click must not also toggle playback on its way past.
+      /* A STOP LANDS ON THE TAP (queue 690, fifth hunt). The wait below applied to stopping as well, so every
+         tap that stopped playback let it run on 240 ms — about 7 frames — past the moment he tapped: on the
+         phone this pill is the only play button, so he could never stop on a beat. The wait is only there so
+         a double-click cannot START playback; a double-click that pauses is what the dblclick handler does
+         anyway. So a stop happens now, and the same 240 ms window is still held open, doing nothing, so the
+         second tap of a double-tap is ignored exactly as before rather than starting it again. */
+      if (FM.playing) {
+        FM.pause();
+        tcTapTimer = setTimeout(() => { tcTapTimer = null; }, 240);
+        return;
+      }
+      // …and the 240ms wait stays for STARTING, because a double-click must not also start playback on its way past.
       tcTapTimer = setTimeout(() => { tcTapTimer = null; if (FM.togglePlay) FM.togglePlay(); }, 240);
     });
     /* THE PLAYHEAD'S TOP IS WHERE BOOKMARKS LIVE NOW (queue 364 clause 3). Its own element, because
