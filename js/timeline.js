@@ -317,6 +317,14 @@ window.FM = window.FM || {};
   // in the hand felt like waiting rather than deciding; 320ms still can't be hit by a tap or by the
   // start of a timeline scrub (both move within ~100ms) but stops the deliberate press from dragging.
   const KF_HOLD_MS = 320;
+  /* ⚠️ AN ARMED HOLD IS STILL A HOLD UNTIL THE FINGER REALLY TRAVELS (queue 690). On the phone the hold IS the only way
+     into a keyframe's menu — Delete, easing, loop — because a finger never double-clicks or right-clicks. Once the hold
+     armed, the drag branch used to treat ANY pointermove as a retime, and a real finger resting on glass for half a
+     second always drifts a pixel or two: measured with a trusted touch, a 1px tremor during a 0.65 s hold and the menu
+     never opened. His #625: "sometimes I try to delete them and I can’t". 6px is the trim grip's own "a finger that
+     has not moved 6px since it landed" (queue 707), and under the pre-arm 10px, so a hold that survives arming keeps
+     surviving the same wobble after it. */
+  const KF_DRAG_SLOP = 6;
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
 
@@ -1382,8 +1390,10 @@ window.FM = window.FM || {};
     stripe.style.background = layer.labelColor || 'transparent';
     stripe.style.opacity = layer.labelColor ? '1' : '0';
     head.append(stripe, eye, thumbWrap, name);
+    let headCaught = false;   // queue 690: this press caught a glide — see glideCatch; the click it makes is not a tap
     head.addEventListener('click', (e) => {
       if (Date.now() - lpFiredAt < 800) return;                 // the long-press that just fired isn't a tap (survives the DOM rebuild)
+      if (headCaught) { headCaught = false; return; }           // a touch that stopped a gliding timeline selects nothing (queue 690)
       if (FM.selectMode) { FM.toggleSelect(layer.id); FM.refreshAll(); return; }   // select-mode: taps toggle membership
       if (e.shiftKey || e.metaKey || e.ctrlKey) FM.toggleSelect(layer.id); else FM.selectLayer(layer.id);
     });
@@ -1397,11 +1407,14 @@ window.FM = window.FM || {};
     // movement and no other handler picked the gesture up. On a phone the header column is most of
     // what you can reach, so that read as "the layers don't scroll".
     let lpTimer = null, lpStart = null, panning = false, panFrom = 0, panMoved = false, lpFired = false;
+    let panVY = 0, panLastY = null, panLastT = 0;   // queue 690: the pan's release velocity, px/ms
     head.addEventListener('pointerdown', (e) => {
+      headCaught = caughtGlide(e);   // before any early return, so a stale catch can never eat a later real tap
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (e.target.closest('.th-eye')) return;   // buttons stay buttons (the chevron went in v14.42)
       lpStart = { x: e.clientX, y: e.clientY };
       panning = false; panMoved = false; lpFired = false;
+      panVY = 0; panLastY = null; panLastT = 0;
       panFrom = timelineEl ? timelineEl.scrollTop : 0;
       clearTimeout(lpTimer);
       lpTimer = setTimeout(() => { lpTimer = null; if (!head.isConnected) return; lpFired = true; beginPaintSelect(layer); }, 380);   // a mid-press rebuild detaches the head — its up/cancel can then never clear this timer (phantom select-mode)
@@ -1423,6 +1436,10 @@ window.FM = window.FM || {};
         e.preventDefault();
         touchGesture();                          // queue 815: a live pan, so the stale-gesture healer leaves it alone
         panMoved = true;
+        // queue 690: sample the release velocity, the lane pan's own way, so a flick from a name glides too (see below)
+        const pNow = e.timeStamp || performance.now(), pDt = pNow - (panLastT || pNow);
+        if (pDt > 0) { const pvy = (e.clientY - (panLastY != null ? panLastY : e.clientY)) / pDt; panVY = panVY * 0.35 + (-pvy) * 0.65; }
+        panLastY = e.clientY; panLastT = pNow;
         const max = Math.max(0, timelineEl.scrollHeight - timelineEl.clientHeight);
         timelineEl.scrollTop = Math.max(0, Math.min(max, panFrom - dy));
       }
@@ -1432,7 +1449,18 @@ window.FM = window.FM || {};
     /* queue 815: the flag is cleared on the way out and the deferred rebuild is flushed, exactly like
        every other gesture's release path — otherwise one pan would freeze the timeline for good. */
     const endHeadPan = () => { headPan = false; if (rebuildPending) { rebuildPending = false; FM.timeline.rebuild(); } };
-    head.addEventListener('pointerup', () => { clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; lpFired = false; endHeadPan(); });
+    /* ⚠️ A FLICK FROM A LAYER NAME GLIDES (queue 690). This pan (queue 815) set scrollTop and nothing else, so the list
+       stopped dead the instant his finger lifted — measured with a trusted touch, 132 -> 132px, where the identical flick
+       from bare lane glided on 80px. On the phone the name column is the natural place to scroll a long layer list
+       from, and #415 asked for the glide without any exception for where the finger starts. Same "was the finger still
+       travelling when it lifted" rule as the lane: a deliberate settle (>90ms since the last move) lands where it is. */
+    head.addEventListener('pointerup', (e) => {
+      if (panning && panMoved) {
+        const up = (e && e.timeStamp) || performance.now();
+        startScrollMomentum((up - panLastT) < 90 ? panVY : 0);
+      }
+      clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; lpFired = false; endHeadPan();
+    });
     head.addEventListener('pointercancel', () => { clearTimeout(lpTimer); lpTimer = null; lpStart = null; panning = false; panMoved = false; endHeadPan(); });
     head.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); if (Date.now() - lpFiredAt < 800) return; FM.selectLayer(layer.id); if (FM.contextMenu && FM.layerMenuItems) FM.contextMenu.show(e.clientX, e.clientY, FM.layerMenuItems(layer)); });
     return head;
@@ -2132,7 +2160,7 @@ window.FM = window.FM || {};
       if (isTouch) {
         // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
         // scrubs the playhead; an already-selected clip can be press-held to move it in time.
-        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), baseTime: FM.time, moved: false, holdTimer: null, lastMoveAt: performance.now(), startScrollTop: timelineEl ? timelineEl.scrollTop : 0, axis: null };
+        clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), baseTime: FM.time, moved: false, holdTimer: null, lastMoveAt: performance.now(), startScrollTop: timelineEl ? timelineEl.scrollTop : 0, axis: null, caught: caughtGlide(e) };   // caught: queue 690
         // ANY unlocked clip, selected or not. Ezra: "On mobile you can only drag clips on the timeline
         // if you have them selected, you should be able to drag clips by holding down on them without
         // selecting." Requiring a prior selection made moving a clip a two-gesture job — tap it, wait
@@ -2617,6 +2645,7 @@ window.FM = window.FM || {};
           touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
           kfDrag = { pid: e.pointerId, layer: layer, kfs: kfs, dot: dot, orig: kfs.map(k => k.t), armed: false,
                      downX: e.clientX, downY: e.clientY,   // where the press landed — the arm test measures travel FROM here
+                     finger: e.pointerType !== 'mouse',   // queue 690: a touch/pen swipe that leaves before the arm becomes a scrub
                      // Carry the menu opener WITH the gesture. Release is handled by a window-level
                      // pointerup (it has to be, or letting go off the diamond strands the drag), and
                      // openKfMenu lives in this per-diamond closure — calling it from there threw
@@ -3476,6 +3505,13 @@ window.FM = window.FM || {};
   const momCapTime  = () => MOM_MAX_V_PX / pxPerSec();
   const momStopTime = () => MOM_STOP_PX / pxPerSec();
   let momentumRAF = 0;
+  /* HOW FAST EACH GLIDE IS GOING RIGHT NOW (queue 690), so a touch that lands on a moving timeline can tell a CATCH
+     from a TAP — see glideCatch where the timeline's capture-phase pointerdown reads them. momV is project-seconds per
+     ms (like the fling's own v); scrollMomV is px per ms. Only meaningful while their rAF is armed. */
+  let momV = 0, scrollMomV = 0;
+  const GLIDE_CATCH_PX = 0.05;   // px/ms — a glide faster than this is caught by a touch, not tapped through
+  let glideCatch = null;         // pointerId of the touch that just caught a moving timeline (queue 690)
+  const caughtGlide = (e) => glideCatch != null && e && e.pointerId === glideCatch;
   function stopMomentum() { if (momentumRAF) { cancelAnimationFrame(momentumRAF); momentumRAF = 0; } }
   /* Exposed for the suite (queue 351). Whether a released swipe FLINGS is the whole difference between
      a scrub that feels smooth and one that stops dead, and it cannot be read off the playhead position
@@ -3498,10 +3534,12 @@ window.FM = window.FM || {};
      * being cut off while still visibly moving — which is itself part of "ends too quick". */
     const _cap = momCapTime(), _stop = momStopTime();   // resolved ONCE at release — zoom cannot change mid-glide
     v = Math.max(-_cap, Math.min(_cap, v));
+    momV = v;
     let last = performance.now();
     const step = (now) => {
       const dt = Math.min(48, now - last); last = now;
       v *= Math.pow(MOM_FRICTION, dt / 16.67);          // friction per frame — see the note above
+      momV = v;
       let t = FM.time + v * dt;
       const dur = FM.scene.project.duration;
       if (t <= 0) { t = 0; v = 0; } else if (t >= dur) { t = dur; v = 0; }
@@ -3550,6 +3588,7 @@ window.FM = window.FM || {};
     let v = vPxPerMs;
     if (!timelineEl || !isFinite(v) || Math.abs(v) < 0.02) return;     // too gentle to bother
     v = Math.max(-4.2, Math.min(4.2, v));                             // px/ms cap ≈ a hard flick
+    scrollMomV = v;
     let last = performance.now();
     /* A FLOAT POSITION, because `scrollTop` SNAPS (queue 472). The loop used to read scrollTop back each
        frame and stop when the write did not change it — reading "no movement" as "hit the end of the
@@ -3568,7 +3607,7 @@ window.FM = window.FM || {};
       const dt = Math.min(48, now - last); last = now;
       const maxTop = timelineEl.scrollHeight - timelineEl.clientHeight;
       const s = momentumStep(pos, v, dt, timelineEl.scrollTop, maxTop);
-      timelineEl.scrollTop = s.top; pos = s.pos; v = s.v;
+      timelineEl.scrollTop = s.top; pos = s.pos; v = s.v; scrollMomV = v;
       scrollMomRAF = s.stop ? 0 : requestAnimationFrame(step);
     };
     scrollMomRAF = requestAnimationFrame(step);
@@ -4372,7 +4411,19 @@ window.FM = window.FM || {};
         // finger on a clip or a layer name did not stop the LAYER LIST sliding, and the stab that was meant
         // to stop it landed as a tap on whatever slid under it. Capture phase, so a clip's own
         // stopPropagation cannot hide the grab.
-        timelineEl.addEventListener('pointerdown', () => { stopMomentum(); stopScrollMomentum(); if (FM.playing) FM.pause(); }, true);   // any grab kills a glide + pauses
+        /* ⚠️ …AND A TOUCH THAT CATCHES A GLIDE IS A CATCH, NOT A TAP (queue 690). Stopping the glide was only half of
+           it: the same touch still reached the clip's release as an unmoved tap and selected the clip under it — on the
+           phone that collapses the timeline to that one row and brings up the edit sheet, so every catch of a flick
+           cost him his view and a tap-off (measured with trusted touches). #timeline is touch-action:none, so the
+           browser's own "a touch that stops a moving list is not a tap" never applies here; this is it, by hand. The
+           finger is remembered by pointerId, and the clip tap, the bare-lane / ruler deselect and the layer-name tap
+           each skip their tap for it. Only a glide still visibly moving counts (GLIDE_CATCH_PX, 50px a second): a
+           tap made as the tail creeps to a stop is meant as a tap. Touch and pen only — a mouse click keeps clicking. */
+        timelineEl.addEventListener('pointerdown', (e) => {
+          const fast = (momentumRAF && Math.abs(momV) * pxPerSec() > GLIDE_CATCH_PX) || (scrollMomRAF && Math.abs(scrollMomV) > GLIDE_CATCH_PX);
+          glideCatch = (fast && e.pointerType !== 'mouse') ? e.pointerId : null;
+          stopMomentum(); stopScrollMomentum(); if (FM.playing) FM.pause();
+        }, true);   // any grab kills a glide + pauses
         timelineEl.addEventListener('wheel', (e) => { stopMomentum(); if (!e.ctrlKey && !e.metaKey && FM.playing) FM.pause(); }, { passive: true });
       }
       // two-finger PINCH zoom — tracked on window in CAPTURE phase so clip/ruler stopPropagation can't hide it
@@ -4417,7 +4468,7 @@ window.FM = window.FM || {};
         // baseTime = the playhead time RIGHT NOW. The scrub slides relative to it, so it never depends
         // on timelineEl.scrollLeft (which can decouple from the playhead after a manual horizontal scroll
         // or a resize-clamp — and a tiny tap-jitter then computed (0 - dx)/pps → 0 = jump to START).
-        scrub = { startX: e.clientX, startY: e.clientY, baseTime: FM.time, startScrollTop: timelineEl.scrollTop, axis: null, moved: false, downTime: snapT(timeFromX(e.clientX)), fromLane: !!fromLane };
+        scrub = { startX: e.clientX, startY: e.clientY, baseTime: FM.time, startScrollTop: timelineEl.scrollTop, axis: null, moved: false, downTime: snapT(timeFromX(e.clientX)), fromLane: !!fromLane, caught: caughtGlide(e) };
         beginScrub(e);
       };
       // Grab ANYWHERE the timeline could be — the ruler, the lanes, AND the empty space above/below the
@@ -4618,6 +4669,14 @@ window.FM = window.FM || {};
            * and horizontal needs only to tie because scrubbing is the primary action here. */
           if (!clipTap.axis && (adx > 5 || ady > 5)) clipTap.axis = (ady > adx + 4) ? 'y' : 'x';
           if (clipTap.axis === 'y') {
+            /* …AND SAMPLE ITS VELOCITY, so the release glides (queue 690). Queue 415 gave the vertical pan its glide —
+               "Scrolling up and down on timeline should have some glide to it like dragging left and right" — but only
+               in the empty-lane branch, so the same flick glided from bare lane and stopped dead the instant his finger
+               lifted from a clip (measured with a trusted touch: 147 -> 147px, where bare lane went on 80px). Queue 351
+               was exactly this split for the sideways fling. Same smoothing as the lane branch, on purpose. */
+            const yNow = e.timeStamp || performance.now(), yDt = yNow - (clipTap.lastTY || yNow);
+            if (yDt > 0) { const cvy = (e.clientY - (clipTap.lastY != null ? clipTap.lastY : e.clientY)) / yDt; clipTap.vY = (clipTap.vY || 0) * 0.35 + (-cvy) * 0.65; }
+            clipTap.lastY = e.clientY; clipTap.lastTY = yNow;
             if (timelineEl) timelineEl.scrollTop = clipTap.startScrollTop - dy;
             return;
           }
@@ -4701,27 +4760,47 @@ window.FM = window.FM || {};
           }
           return;
         }
+        // Moving BEFORE the hold arms is a scrub past the diamond, not a retime — abandon the
+        // retime rather than starting one, so brushing a keyframe can never shift it.
+        if (kfDrag && !kfDrag.armed) {
+          // Measure how far the finger has MOVED from where it went down — not how far the press
+          // landed from the diamond's centre. Comparing against the keyframe's own time meant a
+          // press anywhere but dead-centre already exceeded the threshold, and since the diamond
+          // carries a deliberate ~35px touch pad around an 11px shape, most legitimate presses
+          // aborted on the first speck of finger drift: no arm, no colour, no easing menu.
+          const moved = Math.hypot(e.clientX - kfDrag.downX, e.clientY - kfDrag.downY);
+          if (moved <= 10) return;
+          if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);
+          kfDrag.dot.classList.remove('kf-dragging');
+          const k = kfDrag;
+          kfDrag = null;
+          /* ⚠️ …AND THEN THE SWIPE HAS TO GO SOMEWHERE (queue 690). "A scrub past the diamond" was only ever the comment:
+             the diamond's pointerdown stops propagation and captures the finger, so neither the clip's scrub nor the
+             timeline's own grab heard it, and dropping kfDrag here left the finger driving nothing at all. The keyframe
+             he has just set sits under the PLAYHEAD — dead centre of the lane, inside a ~35px touch pad — so the natural
+             next swipe landed on it and did nothing: measured with a trusted touch, an 80px swipe from the diamond moved
+             the playhead 0.00 s where the same swipe on the clip moved it 1.9 s. Queue 699 was the same dead strip on
+             the trim grips. So the finger is handed to the timeline's grab, anchored where it went DOWN, and this same
+             move falls through to the scrub below — sideways scrubs, up/down pans the layer list, release glides.
+             Touch and pen only: a mouse drag on a clip MOVES the clip on PC, so a mouse brushing past a diamond keeps
+             doing nothing, exactly as before. */
+          if (k.finger && !pinch && timelineEl) {
+            scrub = { startX: k.downX, startY: k.downY, baseTime: FM.time, startScrollTop: timelineEl.scrollTop, axis: null, moved: false, downTime: snapT(timeFromX(k.downX)), fromLane: false };
+            beginScrub(e);
+          } else return;
+        }
         if (kfDrag) {
           const fps = FM.scene.project.fps || 30;
-          let nt = Math.round(timeFromX(e.clientX) * fps) / fps;
+          /* RELATIVE, and only past the slop (queue 690). `timeFromX(finger)` put the keyframe wherever the finger WAS,
+             so a press 8px right of the diamond's centre — well inside its 35px touch pad — jumped it 3.000 s -> 3.133 s
+             on the first pixel of drift, and the release wrote that into undo. The keyframe now moves by how far the
+             finger has travelled since it landed, and not at all until that is more than KF_DRAG_SLOP: below it the
+             gesture is still the hold, and the release opens the menu. */
+          if (!kfDrag.moved && Math.hypot(e.clientX - kfDrag.downX, e.clientY - kfDrag.downY) < KF_DRAG_SLOP) return;
+          const orig = kfDrag.orig[0];
+          let nt = Math.round((orig + (e.clientX - kfDrag.downX) / pxPerSec()) * fps) / fps;
           nt = Math.max(0, Math.min(FM.scene.project.duration, nt));
-          // Moving BEFORE the hold arms is a scrub past the diamond, not a retime — abandon the
-          // gesture rather than starting one, so brushing a keyframe can never shift it.
-          if (!kfDrag.armed) {
-            // Measure how far the finger has MOVED from where it went down — not how far the press
-            // landed from the diamond's centre. Comparing against the keyframe's own time meant a
-            // press anywhere but dead-centre already exceeded the threshold, and since the diamond
-            // carries a deliberate ~35px touch pad around an 11px shape, most legitimate presses
-            // aborted on the first speck of finger drift: no arm, no colour, no easing menu.
-            const moved = Math.hypot(e.clientX - kfDrag.downX, e.clientY - kfDrag.downY);
-            if (moved > 10) {
-              if (kfDrag.armTimer) clearTimeout(kfDrag.armTimer);
-              kfDrag.dot.classList.remove('kf-dragging');
-              kfDrag = null;
-            }
-            return;
-          }
-          kfDrag.moved = true;   // armed and tracking — every pixel from here retimes
+          kfDrag.moved = true;   // armed and past the slop — every pixel from here retimes
           kfDrag.kfs.forEach(kf => { kf.t = nt; });
           // …and re-sort NOW, not on release. evalProp depends on ascending t, so carrying a keyframe
           // past its neighbour left the preview evaluating a broken curve for the rest of the drag —
@@ -4777,7 +4856,8 @@ window.FM = window.FM || {};
         if (dragging && scrub && !scrub.moved) {
           // A TAP on the timeline (ruler OR empty lane) NEVER seeks — only a horizontal DRAG scrubs.
           // Tapping off any clip just deselects (revealing the Add menu / dropping the phone sheet).
-          if (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length)) FM.selectLayer(null);
+          // …except a touch that only CAUGHT a glide (queue 690): it stopped the timeline, it did not ask to deselect
+          if (!scrub.caught && (FM.scene.selectedId || (FM.scene.selectedIds && FM.scene.selectedIds.length))) FM.selectLayer(null);
         } else if (dragging && scrub && scrub.axis === 'y' && scrub.moved) {
           // released a vertical pan → keep gliding, on the same "did the finger stop first" rule as the
           // horizontal fling: a deliberate settle (>90ms since the last move) must not throw the list.
@@ -4798,13 +4878,20 @@ window.FM = window.FM || {};
           if (ct.holdTimer) clearTimeout(ct.holdTimer);
           // a deliberate tap selects (opens the property menu); in select-mode it TOGGLES membership
           // like head taps do — the big clip bar collapsing a painted multi-selection was maddening
-          if (!ct.moved) { if (FM.selectMode && FM.toggleSelect) { FM.toggleSelect(ct.layer.id); FM.refreshAll(); } else FM.selectLayer(ct.layer.id); }
+          /* …unless this touch CAUGHT a glide (queue 690, see glideCatch): stopping the timeline is all it asked for, and
+             selecting here collapsed the phone timeline to the one row and raised the edit sheet under his finger. */
+          if (!ct.moved) { if (ct.caught) { /* a catch, not a tap */ } else if (FM.selectMode && FM.toggleSelect) { FM.toggleSelect(ct.layer.id); FM.refreshAll(); } else FM.selectLayer(ct.layer.id); }
           // …and a horizontal one that WAS a scrub keeps gliding, on the same terms as the empty-lane
           // release below: only if the finger was still travelling when it lifted, so a deliberate
           // settle-then-release still lands exactly where you put it. (queue 351)
           else if (ct.axis === 'x' && !FM.playing) {
             const cUp = (e && e.timeStamp) || performance.now();
             startMomentum(((cUp - (ct.lastT || 0)) < 90) ? (ct.vTime || 0) : 0);
+          }
+          // …and a vertical one keeps the layer list gliding, on the lane's own terms (queue 690)
+          else if (ct.axis === 'y') {
+            const yUp = (e && e.timeStamp) || performance.now();
+            startScrollMomentum(((yUp - (ct.lastTY || 0)) < 90) ? (ct.vY || 0) : 0);
           }
           return;
         }

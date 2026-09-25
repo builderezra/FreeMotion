@@ -127,6 +127,17 @@ window.FM = window.FM || {};
       (t._errs ? '\nYour previous attempt had these problems, fix them: ' + JSON.stringify(t._errs) : '');
   }
 
+  /* ═══ A RUN BELONGS TO THE PROJECT IT STARTED IN (queue 690, hunt f) ═══════════════════════════════════
+   * A build is a chain of model calls — most of a minute on a real key — and every step wrote into FM.scene,
+   * which is whatever project is open WHEN THE CALL RETURNS. Close the panel (✕ works mid-run), go Home and
+   * open another project, and the builders landed their layers — a camera among them, which takes over the
+   * whole view — in THAT project, then committed and autosaved them there, while the project he asked for
+   * kept only the scaffold. So each run notes the project it started in, and after every await it asks again
+   * before touching the scene. If he has moved on, the run stops and touches nothing: what it had built
+   * before he left was saved with that project when he left it (projects.open flushes first). */
+  function openId() { return FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null; }
+  function leftSince(pid) { return pid != null && openId() !== pid; }
+
   // ---- the pipeline ----
   async function generateScene(prompt, chips, opts) {
     opts = opts || {};
@@ -141,8 +152,10 @@ window.FM = window.FM || {};
     var refMap = {};
     var beforeLen = FM.scene.layers.length;
     var mctx = { prompt: prompt, chips: chips };
+    var home = openId(), homeName = (FM.scene.project && FM.scene.project.name) || 'Untitled';   // queue 690
 
-    function aborted() { return state.abort; }
+    function left() { return leftSince(home); }
+    function aborted() { return state.abort || left(); }
 
     try {
       var M = FM.aiManifest;
@@ -154,6 +167,7 @@ window.FM = window.FM || {};
         var ir = await call(MODELS.intent, M.systemPrompts.intent, [um(prompt || (chips && chips.subject) || 'a short title card')], M.tools.intent, { maxTokens: 1024, mock: mctx });
         intent = ir.out || deriveIntent(chips);
       } catch (e) { intent = deriveIntent(chips); }
+      if (left()) throw { cancelled: true };   // queue 690: before the first write, not after it
       if (chips) { ['subject', 'style', 'pacing', 'aspect'].forEach(function (k) { if (chips[k]) intent[k] = chips[k]; }); if (chips.duration) intent.durationSec = parseFloat(chips.duration) || intent.durationSec; }
       FM.scene.project.aiIntent = intent;
       P.row('intent', 'Read your brief', 'done', null, 'Interpreter · Haiku');
@@ -164,6 +178,7 @@ window.FM = window.FM || {};
       var plan = (await call(MODELS.plan, M.systemPrompts.plan,
         [um('INTENT:\n' + JSON.stringify(intent) + '\n\nEXISTING MEDIA (reference only, do not recreate):\n' + JSON.stringify(summariseMedia(FM.scene)))],
         M.tools.plan, { maxTokens: 4096, mock: mctx })).out;
+      if (left()) throw { cancelled: true };   // queue 690
       if (!plan || !Array.isArray(plan.scaffoldOps)) throw new Error('Planner returned nothing usable');
       P.row('plan', 'Planned the scene', 'done', null, 'Director · Opus');
 
@@ -185,6 +200,7 @@ window.FM = window.FM || {};
         P.row(t.id, t.label, 'streaming', null, 'Builder · ' + (model === MODELS.esc ? 'Sonnet' : 'Haiku'));
         try {
           var r = await call(model, M.systemPrompts.build, [um(taskTail(t, intent))], M.tools.ops, { maxTokens: 2048, mock: { taskId: t.id }, dryDelay: 300 + i * 220 });
+          if (left()) return;   // queue 690: this builder's layers belong to a project he has left
           var log = FM.aiOps.applyOps((r.out && r.out.ops) || [], refMap);
           FM.refreshAll();
           if (log.dropped.length && model === MODELS.build && !t._retried && (r.out && r.out.ops && r.out.ops.length)) {
@@ -219,6 +235,7 @@ window.FM = window.FM || {};
               ],
             }], M.tools.critique, { maxTokens: 1500, mock: { pass: pass } })).out;
           } catch (e) { P.row('critic', 'Reviewing the look', 'skipped', null, 'scene already stands'); break; }
+          if (left()) break;   // queue 690: the throw below says so
           var fixOps = (crit && Array.isArray(crit.ops)) ? crit.ops.slice(0, 6) : [];
           if (!fixOps.length) { P.row('critic', 'Looks good', 'done', 0, 'Critic · Opus'); break; }
           var fl = FM.aiOps.applyOps(fixOps, refMap); FM.refreshAll();
@@ -226,6 +243,8 @@ window.FM = window.FM || {};
           if (P.criticThumbs) { try { P.criticThumbs(png, renderToBase64(FM.scene, beat)); } catch (e) {} }
         }
       }
+
+      if (left()) throw { cancelled: true };   // queue 690: never commit into a project he opened meanwhile
 
       // 7) COMMIT ONCE — the whole build is a single undo step
       if (plan.heroRef && refMap[plan.heroRef]) { FM.scene.selectedId = refMap[plan.heroRef]; FM.scene.selectedIds = [FM.scene.selectedId]; }
@@ -235,6 +254,14 @@ window.FM = window.FM || {};
       P.done({ layersAdded: FM.scene.layers.length - beforeLen });
       return { refMap: refMap, intent: intent };
     } catch (err) {
+      /* queue 690: he opened another project mid-build. FM.scene is THAT project now, so nothing here may touch it —
+         not a commit, not a layer count. What was built is in the project he left, saved as he left it. The panel
+         may be closed (he closed it to go Home), so the toast is what he actually sees. */
+      if (left()) {
+        P.done({ cancelled: true, left: homeName, layersAdded: 0 });
+        if (FM.toast) FM.toast('The AI Director stopped — you opened another project. What it had built is kept in “' + homeName + '”.', 5200);
+        return { error: err, left: true };
+      }
       // commit whatever applied so the user keeps it (cancel = keep)
       if (FM.scene.layers.length !== beforeLen) { FM.refreshAll(); if (FM.history) FM.history.commit(); }
       if (err && err.cancelled) { P.done({ cancelled: true, layersAdded: FM.scene.layers.length - beforeLen }); }
@@ -264,25 +291,33 @@ window.FM = window.FM || {};
      * network, no model — while the panel still credited the result to Opus. */
     state.running = true; state.dry = !!FM.ai.DRY_RUN || !FM.aiKey.has(); state.abort = false;   // reset the sticky abort (a prior Cancel otherwise disabled retries for every later reroll)
     var P = panel(), M = FM.aiManifest;
-    // SNAPSHOT before removing the task's layers — if the model call fails OR returns no ops, the old
-    // content must come back (it used to be deleted first, then permanently lost while the UI lied "kept").
-    var prevLayers = FM.scene.layers.slice();
-    var prevRefMap = Object.assign({}, lb.refMap);
+    /* ⚠️ queue 690 (hunt f): NOTHING IS TAKEN OUT UNTIL THE REPLACEMENT HAS ARRIVED. The task's layers used to be
+       removed BEFORE the model call, so for the seconds it took the scene was half a scene — and if he opened
+       another project in that window, the project he left was saved without them, and the failure branch below
+       put THIS project's layers into the OTHER one (FM.scene was that project by then). Now the old layers stay
+       on screen until the new ones are ready, then the swap is one synchronous step; and if he has moved on,
+       nothing is touched at all. The snapshot is taken at the swap, so anything he edited while it ran is kept. */
+    var home = openId(), prevLayers = null, prevRefMap = null;
     try {
-      var ids = (task.refs || []).map(function (r) { return lb.refMap[r]; }).filter(Boolean);
-      FM.scene.layers = FM.scene.layers.filter(function (l) { return ids.indexOf(l.id) < 0; });
-      (task.refs || []).forEach(function (r) { delete lb.refMap[r]; });
       delete task._retried; delete task._escalated; delete task._errs;
       P.row(task.id, task.label, 'streaming', null, 'Re-rolling · Haiku', true);
       var r = await call(MODELS.build, M.systemPrompts.build, [um(taskTail(task, lb.intent))], M.tools.ops,
         { maxTokens: 2048, mock: { taskId: task.id, nonce: rerollNonce++ }, dryDelay: 260 });
+      if (leftSince(home)) throw { left: true };
+      // SNAPSHOT before removing the task's layers — if the model returns no ops, the old content must come back
+      // (it used to be deleted first, then permanently lost while the UI lied "kept").
+      prevLayers = FM.scene.layers.slice(); prevRefMap = Object.assign({}, lb.refMap);
+      var ids = (task.refs || []).map(function (r) { return lb.refMap[r]; }).filter(Boolean);
+      FM.scene.layers = FM.scene.layers.filter(function (l) { return ids.indexOf(l.id) < 0; });
+      (task.refs || []).forEach(function (r) { delete lb.refMap[r]; });
       var log = FM.aiOps.applyOps((r.out && r.out.ops) || [], lb.refMap);
       if (!log.appliedCount) throw new Error('empty');   // no replacement built → restore the original rather than wipe the task
       FM.refreshAll();
       if (FM.history) FM.history.commit();
       P.row(task.id, task.label, 'done', log.appliedCount, 'Builder · Haiku', true);
     } catch (e) {
-      FM.scene.layers = prevLayers; lb.refMap = prevRefMap;   // restore — the reroll genuinely kept the content now
+      if (e && e.left) { P.row(task.id, task.label, 'done', null, 'stopped — you opened another project', true); return; }   // queue 690: FM.scene is the other project — touch nothing
+      if (prevLayers) { FM.scene.layers = prevLayers; lb.refMap = prevRefMap; }   // restore — the reroll genuinely kept the content now
       FM.refreshAll();
       P.row(task.id, task.label, 'done', null, 're-roll failed — kept', true);
     } finally {
@@ -308,7 +343,7 @@ window.FM = window.FM || {};
     if (!dry && !FM.aiKey.has()) { if (FM.toast) FM.toast('Add an API key to refine a scene'); return; }   // toast, not P.error — P.error wiped the whole done bar down to a lone Back button
     if (!FM.scene.layers.length) return;
     state.running = true; state.dry = dry; state.abort = false;   // clear a sticky abort from a prior Cancel
-    var M = FM.aiManifest;
+    var M = FM.aiManifest, home = openId();   // queue 690: the project this refine is for
     var refMap = (lb && lb.refMap) || {};
     var intent = (lb && lb.intent) || {};
     try {
@@ -322,6 +357,7 @@ window.FM = window.FM || {};
           { type: 'text', text: 'USER REQUEST: "' + instruction.trim() + '"\nINTENT: ' + JSON.stringify(intent) + '\nLAYERS (id, type, name): ' + JSON.stringify(layerSummary(FM.scene)) + '\nApply the user request via emit_critique fix-ops (target a layer by its id as the ref).' },
         ],
       }], M.tools.critique, { maxTokens: 1500, mock: { refine: true, instruction: instruction.trim() } })).out;
+      if (leftSince(home)) { P.row('refine', 'Refine stopped — you opened another project', 'done', null, 'nothing changed'); return; }   // queue 690: its ops name the project he left
       var ops = (crit && Array.isArray(crit.ops)) ? crit.ops.slice(0, 8) : [];
       var log = FM.aiOps.applyOps(ops, refMap);
       FM.refreshAll(); if (FM.history) FM.history.commit();

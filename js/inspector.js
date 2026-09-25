@@ -176,6 +176,29 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* A TAP ON A VALUE BOX SELECTS THE NUMBER, SO WHAT HE TYPES REPLACES IT (queue 690). The comment in rangeRow
+   * below says what the box is for — "the ruler is for feel, the box is for precision" — and it could not do it:
+   * every one of these is a plain text input, and a tap on a phone drops a CARET into the old number rather than
+   * selecting it, so his digits went INTO it. Measured with a real tap: Twist 140° + typing 90 read 14900° and
+   * landed on the 360° maximum; Opacity 100 + typing 50 read 10500 and stayed at 100%. The Position boxes have
+   * always selected their text when the editor opens (mtVBox's startEdit) — these never did.
+   * The selection is made on focus AND again a tick later, because the tap's own caret placement lands AFTER the
+   * focus event and would undo it; and once more on the click that ends that same tap, which is where iOS puts
+   * its caret. Only that first click — a second tap inside an already-focused box still places the caret where
+   * he touched, so editing one digit of a long number keeps working.
+   * `min` decides the keyboard: a number pad (inputmode=decimal) only where the value cannot go negative,
+   * because the iPhone's decimal pad has no minus key and a negative angle or spacing must stay typeable. */
+  function typeInBox(box, min) {
+    if (min != null && min >= 0) box.setAttribute('inputmode', 'decimal');
+    let fresh = false;
+    const all = () => { if (document.activeElement !== box) return; try { box.setSelectionRange(0, box.value.length); } catch (_) {} };
+    box.addEventListener('focus', () => { fresh = true; all(); setTimeout(all, 0); });
+    box.addEventListener('click', () => { if (fresh) all(); fresh = false; });
+    box.addEventListener('keydown', () => { fresh = false; });
+    box.addEventListener('blur', () => { fresh = false; });
+    return box;
+  }
+
   /* Every numeric property row in the inspector (v6.20). There are 37 call sites — Width, Height and
    * Corner radius in Edit Shape, mask feather, gradient angle, fill opacity, stroke width, text
    * spacing / line height / curve, audio fades, camera FOV / focus / depth of field, and the effects
@@ -197,7 +220,7 @@ window.FM = window.FM || {};
     const wrap = el('div', 'prop-wrap');
     const row = el('div', 'prop-row prop-row--scrub');
     row.appendChild(el('label', null, label));
-    const val = el('input', 'fx-scrub-val'); val.type = 'text'; val.value = (+get()).toFixed(prec);
+    const val = el('input', 'fx-scrub-val'); val.type = 'text'; val.value = (+get()).toFixed(prec); typeInBox(val, min);
     const strip = tickStrip({
       min: min, max: max, step: step, unit: '', dflt: null, q: qForce || 0, read: () => +get(),
       apply: (v) => { set(v); val.value = v.toFixed(prec); FM.requestRender(); },
@@ -1016,7 +1039,7 @@ window.FM = window.FM || {};
     // the timeline. Only offered where it can mean something — kfScope covers the OPEN effect of the
     // Effects panel, so audio-effect rows (which share this builder) render a plain label.
     row.appendChild(paramName('fx-scrub-label', p.label, layer, 'fx:' + p.key));
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || '');
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
     function apply(v, commit) {
       v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
       FM.setProp(fx.params, p.key, v, FM.time);
@@ -1173,7 +1196,7 @@ window.FM = window.FM || {};
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('span', 'fx-scrub-label', label));
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit;
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit; typeInBox(valBox, min);
     function apply(v, commit) {
       v = Math.max(min, Math.min(max, Math.round(v / step) * step));
       FM.setProp(container, key, v, FM.time);
@@ -1205,7 +1228,7 @@ window.FM = window.FM || {};
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt / disp); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('span', 'fx-scrub-label', label));
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit;
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit; typeInBox(valBox, min);
     function apply(v, commit) {
       v = Math.max(min, Math.min(max, Math.round(v / step) * step));
       FM.setProp(container, key, v / disp, FM.time);
@@ -4099,7 +4122,18 @@ window.FM = window.FM || {};
       refresh(); if (opts.onScrub) opts.onScrub();
       return alive;
     };
-    const glide = attachGlide(val, applyDx, () => { gest.end(); commitH(); FM.inspector.refresh(); });
+    /* A TAP MUST NOT SETTLE INTO A REBUILD (queue 690, the #414 promise). This glide's pointerup is
+       registered first, so it runs BEFORE the box's own — and a tap is a zero-velocity release, so it
+       settled at once: commitH() + FM.inspector.refresh(), which threw the whole card away. The box's
+       pointerup then opened the editor on the old, detached element, where focus() does nothing: one tap
+       on X / Y / Z (or any of the 18 boxes built here) and no editor, no keyboard — exactly what #414 was
+       ticked for, and what its own note warned a refresh would do: "it rebuilds the card, which would
+       destroy the very element startEdit is about to focus". `drag` still marks a tap at that moment
+       (the box's pointerup has not run yet), so a gesture that never moved skips the rebuild — and only
+       the rebuild. The commit stays: history drops a snapshot identical to the last, so a tap that changed
+       nothing adds no undo step, and one that interrupted a glide still banks where the glide stopped.
+       A drag that moved, or a glide that runs on after the finger has gone, settles exactly as before. */
+    const glide = attachGlide(val, applyDx, () => { gest.end(); commitH(); if (drag && !drag.moved) return; FM.inspector.refresh(); });
     val.addEventListener('pointerdown', e => { if (val.isContentEditable) { glide.cancelDrag(); return; } drag = { x: e.clientX, moved: false }; gest.begin(); try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
     val.addEventListener('pointermove', e => {
       if (!drag) return;
@@ -4118,10 +4152,14 @@ window.FM = window.FM || {};
     // Scrubbing by dragging the number is untouched either way.
     val.addEventListener('pointerup', e => {
       if (!drag) return;
-      const moved = drag.moved; drag = null;
+      const moved = drag.moved;
+      /* Cancelled while `drag` still says "tap": a wobble of a pixel or two can start a glide, and
+         cancelDrag() settles it — which, with `drag` already cleared, would rebuild the card under the
+         editor this tap is about to open (the settle above keys off `drag`). */
+      if (!moved) glide.cancelDrag();
+      drag = null;
       try { val.releasePointerCapture(e.pointerId); } catch (_) {}
       if (moved) return;
-      glide.cancelDrag();
       /* SWITCHING AXIS AND TYPING ARE THE SAME TAP NOW (queue 414). Ezra: "The buttons that show a number
          for the position should be able to be tapped on and customised, so you can type exactly the number
          you want."
@@ -5122,7 +5160,9 @@ window.FM = window.FM || {};
       if (FM.audioFxLive) {
         const nowBoosted = FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
         if (nowBoosted !== wasBoosted) FM.audioFxLive.sync(layer);
-        else if (nowBoosted && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, f);
+        /* Any gain stage the clip has follows the drag — the boost, and on an iPhone the level stage that
+           stands in for its read-only el.volume (queue 690). setBoost is a no-op on a clip with neither. */
+        else if (FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, f);
       }
       FM.requestRender(); if (FM.reconcileAudio) FM.reconcileAudio();
     };

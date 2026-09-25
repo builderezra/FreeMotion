@@ -163,6 +163,17 @@ window.FM = window.FM || {};
     micPending = md.getUserMedia({ audio: true });
     return micPending;
   }
+  /* Is a microphone track still live — or being asked for? Read from the tracks themselves rather than a
+     flag, so it cannot disagree with what the browser is actually holding (queue 690 — the audio session
+     reads it). A request still waiting on the permission prompt counts: the session must not be turned
+     back to playback between asking for the mic and getting it. */
+  function micLive() {
+    if (arming) return true;
+    var tr = (stream && stream.getTracks) ? stream.getTracks() : [];
+    for (var i = 0; i < tr.length; i++) if (tr[i] && tr[i].readyState === 'live') return true;
+    for (var j = 0; j < micTracks.length; j++) if (micTracks[j] && micTracks[j].readyState === 'live') return true;
+    return false;
+  }
 
   /* EVERY exit path calls this. It is deliberately total and idempotent: stopping a stopped track,
      closing a closed context and cancelling a dead rAF are all no-ops, so calling it twice is safe
@@ -185,6 +196,8 @@ window.FM = window.FM || {};
     stream = null;
     for (var i = 0; i < micTracks.length; i++) if (tr.indexOf(micTracks[i]) < 0) tr.push(micTracks[i]);
     for (var j = 0; j < tr.length; j++) { try { tr[j].stop(); } catch (e) {} }
+    // The mic is gone, so Web Audio goes back to the playback session (queue 690 — see arm).
+    if (FM.playbackSession) FM.playbackSession();
   }
 
   /* ---- level meter ---------------------------------------------------------------------------- */
@@ -509,6 +522,14 @@ window.FM = window.FM || {};
      * can wake before micTracks is set and find nothing, which is the same race one level down. */
     var gen = ++armGen;
     arming = true;
+    /* HAND THE AUDIO SESSION BACK TO WEBKIT BEFORE ASKING FOR THE MIC (queue 690). js/audio-fx.js sets
+       navigator.audioSession to 'playback' so Web Audio is not muted by the silent switch — but on an iPhone
+       that override wins over WebKit's own choice for a capture (play-and-record), and a playback-only
+       session cannot record. 'auto' is exactly what a recording had before the override existed;
+       FM.playbackSession leaves it there while a mic track is live (micLive) and puts 'playback' back
+       from releaseMic. Here rather than inside openMic so the suite's permission-free mic, which replaces
+       openMic, still goes through it. */
+    try { if (navigator.audioSession && navigator.audioSession.type === 'playback') navigator.audioSession.type = 'auto'; } catch (e) {}
     var chain = Promise.resolve().then(FM.voiceRec._openMic).then(function (s) {
       if (gen === armGen) arming = false;
       /* Closed while the permission prompt was up — or a mic is ALREADY held, because a second request
@@ -743,6 +764,7 @@ window.FM = window.FM || {};
 
     /* --- exposed for the suite (and for a future bug report) --- */
     _openMic: openMic,            // replaced by the suite with a real, permission-free MediaStream
+    micLive: micLive,             // queue 690: js/audio-fx.js leaves the audio session to WebKit while this is true
     _pickMime: pickMime,
     _mimeCandidates: MIME_CANDIDATES.slice(),
     _extFor: extFor,

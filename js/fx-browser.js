@@ -385,8 +385,9 @@ window.FM = window.FM || {};
      opens, and a preset's keyframes were anchored at FM.time when its row was tapped — wherever the loop happened to
      be, a different point from the one the row's thumbnail previewed. "Park the playhead on the beat, add Beat Slam,
      the hit lands there" is the promise; this is the time he parked it at, captured before the loop takes the clock. */
-  let _anchorTime = null;
-  function stopPreview() {
+  let _anchorTime = null, _anchorScene = null;
+  /* `backTo` is the parked time to put the playhead back on (queue 690) — see close(). Without one it repaints where it is. */
+  function stopPreview(backTo) {
     if (_loopTimer) { clearInterval(_loopTimer); _loopTimer = 0; }
     FM._fxPreview = null;
     if (_isoHeld) { FM.isolate = _isoWas; _isoWas = null; _isoHeld = false; }
@@ -397,7 +398,8 @@ window.FM = window.FM || {};
        button. Two changes, because either alone would have been enough and both are cheap: the repaint
        is guarded, and `close()` hides the overlay before calling this. */
     try {
-      if (FM.refreshCanvas) FM.refreshCanvas();
+      if (typeof backTo === 'number' && FM.setTime) FM.setTime(backTo);   // one repaint, at the frame he parked on
+      else if (FM.refreshCanvas) FM.refreshCanvas();
       else if (FM.setTime) FM.setTime(FM.time);
     } catch (e) { /* a preview that cannot repaint is a stale frame; a close that throws is a trapped user */ }
   }
@@ -1866,6 +1868,7 @@ window.FM = window.FM || {};
       searchInput.value = ''; searchInput.classList.add('hidden');
       _picked = [];
       _anchorTime = (typeof FM.time === 'number') ? FM.time : null;   // queue 722: BEFORE restartPreview() moves the clock
+      _anchorScene = FM.scene;                                          // queue 690: the parked time belongs to THIS project — see close()
       const sheet = FM.fxSheet(root);      // the sheet (queue 277, and PC too since 303) — geometry defined once, up top
       root.classList.remove('hidden');
       rebuild();
@@ -1883,8 +1886,18 @@ window.FM = window.FM || {};
     close: function () {
       _into = null; if (!root) return;
       root.classList.add('hidden');
-      _picked = []; _anchorTime = null; FM.fxSheet(root, false);
-      stopPreview(); stopAuto();
+      /* THE PLAYHEAD GOES BACK WHERE HE PARKED IT (queue 690). The preview loop took the clock the moment the
+         sheet opened — setTime(layer.start), then 24 frames a second — and this used to throw the parked time
+         away and stop the loop wherever it happened to be. So every trip through + Add Effect, adding one or
+         backing out with the X, came back with the playhead somewhere random inside the clip (measured: parked
+         at 2.5s, back at 1.27s by the X and 0.67s by Add). The canvas showed a different frame from the one he
+         was working on, and the next keyframe he set — often on the effect he had just added — landed at the
+         wrong time. Queue 722 already promised the parked time matters ("park the playhead on the beat, add
+         Beat Slam, the hit lands there"); the hit landed there and he was taken somewhere else to look at it.
+         Only when the project is the one he parked it in: a scene swapped underneath the sheet keeps its own. */
+      const parked = (typeof _anchorTime === 'number' && _anchorScene && _anchorScene === FM.scene) ? _anchorTime : null;
+      _picked = []; _anchorTime = null; _anchorScene = null; FM.fxSheet(root, false);
+      stopPreview(parked); stopAuto();
       if (FM.fxThumbs) FM.fxThumbs.stopAll();
       root.querySelectorAll('.fxb-catview').forEach(v => v.remove());
       _catDepth = 0;   // belt-and-braces: a leaked depth must never survive close/reopen

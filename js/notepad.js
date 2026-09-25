@@ -27,6 +27,7 @@ window.FM = window.FM || {};
   }
   function uid() { return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   let popCleanup = null;   // queue 548 — see the popFrom call in open()
+  let remindBack = null;   // queue 690 — while the "Before you export" card is up, how to press its Back
 
   function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
@@ -192,7 +193,8 @@ window.FM = window.FM || {};
         ul.appendChild(r);
       });
       card.appendChild(ul);
-      const finish = (v) => { scrim.remove(); badge(); resolve(v); };
+      const finish = (v) => { remindBack = null; scrim.remove(); badge(); resolve(v); };
+      remindBack = () => finish(false);   // Escape = Back (queue 690) — see escape() below
       back.addEventListener('click', () => finish(false));
       go.addEventListener('click', () => finish(true));
       actions.append(back, go);
@@ -206,5 +208,15 @@ window.FM = window.FM || {};
 
   function isOpen() { return !!document.querySelector('.np-scrim'); }
   function toggle() { if (isOpen()) close(); else open(); }   // a second tap on the Notes button CLOSES it (queue 762)
-  FM.notepad = { open: open, close: close, isOpen: isOpen, toggle: toggle, pending: pending, confirmExport: confirmExport, sync: badge };
+  /* ESCAPE (queue 690). Neither card listened for it, so on a PC Escape fell through to the editor and
+     deselected the layer behind them. Answered for the app's Escape branch (js/app.js), true when it
+     closed something. The reminder card goes out through its own Back, NEVER through close(): close()
+     removes every .np-scrim, and the export that is awaiting confirmExport's promise would then wait
+     for an answer that can no longer come. */
+  function escape() {
+    if (remindBack) { remindBack(); return true; }
+    if (isOpen()) { close(); return true; }
+    return false;
+  }
+  FM.notepad = { open: open, close: close, isOpen: isOpen, toggle: toggle, escape: escape, pending: pending, confirmExport: confirmExport, sync: badge };
 })(window.FM);

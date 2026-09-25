@@ -56,20 +56,40 @@ window.FM = window.FM || {};
     if (_staleWarned) return; _staleWarned = true;
     if (FM.toast) FM.toast('This tab is showing an older copy of the project — newer changes were saved elsewhere. Reload to catch up; nothing here has been saved over them.', 9000);
   }
+  /* queue 690: WHY the last scene write did not land. The two reasons need opposite answers when he
+     switches project: 'stale' means a newer copy was saved elsewhere and NOT writing is the point (the
+     local edits are meant to be dropped), while 'refused' means the store said no — a full phone — and
+     what he did since the last save exists only on this screen. Only the second may hold a switch up. */
+  let _writeFail = null;
   // The ONE place a scene doc is written. Returns true only if the bytes actually landed.
   function writeScene() {
-    if (_stale) return false;
+    if (_stale) { _writeFail = 'stale'; return false; }
     const dr = diskRev();
-    if (dr > lastRev) { _stale = true; warnStale(); return false; }
+    if (dr > lastRev) { _stale = true; warnStale(); _writeFail = 'stale'; return false; }
     const rev = dr + 1;
     const doc = sceneDoc(); doc.rev = rev;
     // rev FIRST in the serialised object, so diskRev()'s anchored regex can find it without a parse
     const ordered = { rev: rev }; for (const k in doc) if (k !== 'rev') ordered[k] = doc[k];
     try { localStorage.setItem(curKey(), JSON.stringify(ordered, FM.jsonReplacer)); }
-    catch (e) { warnQuota(e); return false; }
-    if (diskRev() !== rev) { warnQuota({ name: 'QuotaExceededError' }); return false; }   // the write silently did nothing
-    lastRev = rev;
+    catch (e) { warnQuota(e); _writeFail = 'refused'; return false; }
+    if (diskRev() !== rev) { warnQuota({ name: 'QuotaExceededError' }); _writeFail = 'refused'; return false; }   // the write silently did nothing
+    lastRev = rev; _writeFail = null;
     return true;
+  }
+  /* ⚠️ queue 690: IS THERE WORK ON THIS SCREEN THAT THE DISK DOES NOT HAVE? Asked only after a write was
+     refused, so the cost (one parse of the doc) is paid on a full phone and never on an ordinary switch.
+     A refused write is not by itself lost work — on a full store, rewriting a doc that has not changed
+     can be refused too — and asking "leave anyway?" over nothing would teach him to tap through the one
+     question that matters. The project and its layers are what he made; the selection is not compared. */
+  function unsavedOnScreen() {
+    if (_writeFail !== 'refused') return false;
+    try {
+      const raw = localStorage.getItem(curKey());
+      if (!raw) return true;
+      const d = JSON.parse(raw);
+      return JSON.stringify(d.project) !== JSON.stringify(FM.scene.project, FM.jsonReplacer) ||
+             JSON.stringify(d.layers || []) !== JSON.stringify(FM.scene.layers || [], FM.jsonReplacer);
+    } catch (e) { return true; }   // cannot tell — say there is, the question is cheaper than the loss
   }
   // load()/open() call this so a fresh document resets the guard for the new project.
   function adoptRev(r) { lastRev = (typeof r === 'number' && isFinite(r)) ? r : 0; _stale = false; _staleWarned = false; }
@@ -183,10 +203,10 @@ window.FM = window.FM || {};
           st.put({ file: val.file, kind: val.kind }, lk);
           out = 'written';
         };
-        tx.oncomplete = () => res(out);
-        tx.onerror = () => { warnStore(tx.error); res(false); };
-        tx.onabort = () => { warnStore(tx.error); res(false); };
-      } catch (e) { warnStore(e); res(false); }
+        tx.oncomplete = () => { if (out === 'written') storeWrote(); res(out); };
+        tx.onerror = () => { warnStore(tx.error, lk); res(false); };
+        tx.onabort = () => { warnStore(tx.error, lk); res(false); };
+      } catch (e) { warnStore(e, lk); res(false); }
     });
   }
   /* A pointer, written only if the shared copy it names is really there — the check and the write are one
@@ -204,10 +224,10 @@ window.FM = window.FM || {};
           st.put({ ref: ptr.ref, kind: ptr.kind, rev: ptr.rev || 0 }, id);
           out = true;
         };
-        tx.oncomplete = () => res(out);
-        tx.onerror = () => { warnStore(tx.error); res(false); };
-        tx.onabort = () => { warnStore(tx.error); res(false); };
-      } catch (e) { warnStore(e); res(false); }
+        tx.oncomplete = () => { if (out) storeWrote(); res(out); };
+        tx.onerror = () => { warnStore(tx.error, id); res(false); };
+        tx.onabort = () => { warnStore(tx.error, id); res(false); };
+      } catch (e) { warnStore(e, id); res(false); }
     });
   }
   // Resolves TRUE only if the write actually landed. This used to resolve the same way on success and
@@ -217,15 +237,30 @@ window.FM = window.FM || {};
   // what "I cannot add long videos, it won't work" looks like from the outside.
   function idbPut(db, key, val) {
     if (isLibKey(key) || isRef(val)) return Promise.resolve(false);   // queue 915: the generic writer never writes a shared copy or a pointer — only idbPutSharedOnce / idbPutPointer do (see above)
-    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => res(true); tx.onerror = () => { warnStore(tx.error); res(false); }; tx.onabort = () => { warnStore(tx.error); res(false); }; } catch (e) { warnStore(e); res(false); } }); }
+    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => { if (!quietKey(key)) storeWrote(); res(true); }; tx.onerror = () => { warnStore(tx.error, key); res(false); }; tx.onabort = () => { warnStore(tx.error, key); res(false); }; } catch (e) { warnStore(e, key); res(false); } }); }
 
   // Say WHY, with the real numbers, instead of failing mutely. Separate latch from warnQuota so a
   // localStorage warning earlier in the session cannot suppress this one.
-  let _storeWarned = false;
-  function warnStore(e) {
+  /* ⚠️ queue 690 (hunt f): A LATCH THAT NEVER LIFTS IS A MUTE BUTTON. This was one boolean, set by the first
+     failure of the session and never cleared — and the project-card thumbnail that autosave refreshes every
+     12 s writes through here too, so on a nearly-full phone the one warning could go on a picture he never
+     asked about. Later, after clips had been saving fine, the phone filled again and he added a photo: the
+     write was refused, the clip played from memory, nothing said a word, and it came back blank the next
+     time the app opened. Now:
+       · each thing that could not be saved is warned about once (autosave retries the same clip on every
+         save, and a toast per retry would be noise), and every name is forgotten the moment a write lands —
+         room came back, so the next refusal is news again;
+       · the caches — card and library thumbnails, export crash-resume parts — never warn and never count:
+         losing one costs a picture or a resume point, and it must not spend the warning a clip needs. */
+  const _storeWarned = new Set();
+  function quietKey(key) { return typeof key === 'string' && (key.indexOf('thumb:') === 0 || key.indexOf('libthumb2:') === 0 || key.indexOf('xr:') === 0); }
+  function storeWrote() { _storeWarned.clear(); }
+  function warnStore(e, key) {
     const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
-    if (_storeWarned || !FM.toast) return;
-    _storeWarned = true;
+    if (quietKey(key)) return;
+    const what = key == null ? '' : String(key);
+    if (_storeWarned.has(what) || !FM.toast) return;
+    _storeWarned.add(what);
     const mb = n => (n / 1048576).toFixed(0) + ' MB';
     const say = extra => FM.toast((quota ? 'Not enough storage to save that media.' : 'Could not save that media.') + (extra || ''), 6000);
     if (quota && navigator.storage && navigator.storage.estimate) {
@@ -368,6 +403,7 @@ window.FM = window.FM || {};
                the file again — and remembers which record its bytes came out of (heldByAnother). */
             if (rec.ref) loaded.ref = rec.ref;
             loaded.fileKey = rec.ref || layer.id;
+            loaded.rev = rec.rev || 0;   // queue 690: which revision these bytes are, so undo can tell whether the picture matches the layer
             FM.media.set(layer.id, loaded);
             if (loaded.kind === 'video') loaded.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); });
             if (FM.wireVideoRepaint) FM.wireVideoRepaint(loaded);   // a reopened project decodes from cold — repaint when the frame lands
@@ -446,7 +482,11 @@ window.FM = window.FM || {};
     (FM.scene.layers || []).forEach(layer => {
       if (!layer || layer.type === 'text') return;
       const m = FM.media.get(layer.id);
-      if (m && m.file) jobs.push({ id: layer.id, file: m.file, kind: m.kind, rev: layer.mediaRev || 0, ref: isLibKey(m.ref) ? m.ref : null });   // queue 915 phase B: a reused clip is saved as a pointer
+      /* queue 690: the revision written is the one the FILE is — its record says so once a replace, an undo or a load
+         has labelled it — and the layer's only for a record that carries none. They differ for exactly as long as an
+         undo is still fetching the file it wants: an autosave landing in that window wrote the outgoing file under
+         the WANTED revision, and every save after it skipped the record as up to date — the wrong clip on disk. */
+      if (m && m.file) jobs.push({ id: layer.id, file: m.file, kind: m.kind, rev: (m.rev != null ? m.rev : layer.mediaRev) || 0, ref: isLibKey(m.ref) ? m.ref : null });   // queue 915 phase B: a reused clip is saved as a pointer
     });
     return jobs;
   }
@@ -459,6 +499,11 @@ window.FM = window.FM || {};
    * Every save is counted while it runs; pendingSaves() says whether one is, and settled() resolves once
    * every save running NOW has finished, so mediaLib.use can let the disk catch up before it decides. */
   const _saving = new Set();
+  /* queue 690: which revisions of which layer have a kept file (see stashPrevMedia), and WHICH File object each
+     one holds. Session-only on purpose: a kept file is only reachable through undo, and undo does not outlive
+     the session — so after a reload nothing is looked up, even while the boot sweep has not yet run. */
+  const _prevFiles = new Map();
+  function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
   FM.storage = {
     _writeJobs: planBlobWrites,   // queue 830 suite seam
     _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
@@ -467,26 +512,53 @@ window.FM = window.FM || {};
        "the outgoing blob is NOT deleted any more", and it is right that nothing deletes it, but the save
        overwrites it a moment later. Together with the registry release and the library entry going, that
        was every copy: pick the wrong file and the original is gone, with undo unable to bring it back
-       because history only ever swaps layer JSON. One slot per layer, so a chain of replaces cannot grow
-       without bound, and it is written before the new file is, not after. */
+       because history only ever swaps layer JSON. It is written before the new file is, not after.
+       ⚠️ queue 690 (hunt f): ONE SLOT PER REVISION, NOT ONE PER LAYER. The single `prev:<id>` slot meant a
+       SECOND replace wrote the first replacement over his original — the one copy of it left anywhere — so
+       two undos put the layer's settings back while the clip kept showing his second pick, and the next save
+       wrote that over the layer's record for good. Redo could never bring a file back either. Now the file
+       that was live at revision r is kept under `prev:<id>:<r>`, and restoreReplacedMedia (app.js) swaps in
+       both directions. The growth is one copy per revision a replace or an undo/redo actually puts away —
+       a file already kept at its revision is not written again — and the boot sweep clears every one of
+       them, as it cleared the single slot (undo history does not outlive the session, so neither need they). */
     async stashPrevMedia(id, rec, rev) {
       if (!id || !rec || !rec.file) return false;
+      rev = rev || 0;
+      const kept = _prevFiles.get(id);
+      if (kept && kept.get(rev) === rec.file) return true;   // this exact file is already kept at this revision
       try {
         const db = await openDB();
-        await idbPut(db, 'prev:' + id, { file: rec.file, kind: rec.kind, rev: rev || 0 });
+        const ok = await idbPut(db, prevKey(id, rev), { file: rec.file, kind: rec.kind, rev: rev, at: Date.now() });
         db.close();
-        return true;
+        if (ok) { if (!kept) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(rev, rec.file); }
+        return ok;
       } catch (e) { return false; }
     },
-    async takePrevMedia(id) {
+    /* The file kept for revision `rev` of layer `id`. Without a rev (the suite, and anything written before the
+       per-revision slots): the one kept most recently. */
+    async takePrevMedia(id, rev) {
       if (!id) return null;
       try {
         const db = await openDB();
-        const got = await idbGet(db, 'prev:' + id);
+        let got = null;
+        if (rev != null) got = await idbGet(db, prevKey(id, rev));
+        else {
+          const pre = 'prev:' + id + ':';
+          for (const k of await idbKeys(db)) {
+            if (typeof k !== 'string' || k.indexOf(pre) !== 0) continue;
+            const v = await idbGet(db, k);
+            if (v && v.file && (!got || (v.at || 0) > (got.at || 0) || ((v.at || 0) === (got.at || 0) && (v.rev || 0) > (got.rev || 0)))) got = v;
+          }
+        }
         db.close();
+        /* the file read back IS what that slot holds, so a later stash of this same object at this revision
+           (the clip it restores, put away again by the next undo or redo) is a no-op rather than a second copy */
+        if (got && got.file) { if (!_prevFiles.has(id)) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(got.rev || 0, got.file); }
         return got || null;
       } catch (e) { return null; }
     },
+    // queue 690: is anything kept for this layer at this revision in THIS session? No read — undo asks it of every clip.
+    hasPrevMedia(id, rev) { const kept = _prevFiles.get(id); return !!kept && kept.has(rev || 0); },
     pendingSaves() { return _saving.size; },
     settled() { return Promise.all(Array.from(_saving)).then(() => true, () => true); },
     async save() {
@@ -559,6 +631,10 @@ window.FM = window.FM || {};
        base, so a phone killed at pagehide comes back knowing what it had already sent. Inert until a
        session is running. */
     flushSync() { if (FM.collab && FM.collab.active) FM.collab.beforeFlush(); clearTimeout(saveTimer); return writeScene(); },
+    /* queue 690: did the last scene write fail because the store refused it (not because the tab went stale)?
+       A flag read and no write, so Home can ask it on every card tap for free. */
+    lastWriteRefused() { return _writeFail === 'refused'; },
+    unsavedOnScreen: unsavedOnScreen,   // queue 690: see the function
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
@@ -1626,6 +1702,11 @@ window.FM = window.FM || {};
        project while Home's OPEN badge still sat on his own, and a restore from inside a project dropped
        him into a different one behind his back. Adding things must not move him. */
     const wasOn = curId();
+    /* queue 690: every entry goes through create(), which leaves the open project — so ask about HIS project
+       once, up front, instead of once per entry; after that the project being left is one this restore made. */
+    if (FM.projects && FM.projects.confirmLeave && !(await FM.projects.confirmLeave())) {
+      return { ok: false, reason: 'Nothing was restored — storage is full and your open project is not saved, so it was kept on screen.' };
+    }
     let restored = 0, drafts = 0; const failed = [];
     for (let i = 0; i < obj.projects.length; i++) {
       const one = obj.projects[i];
@@ -1634,11 +1715,11 @@ window.FM = window.FM || {};
       /* queue 915 clause 8: a workspace comes back as the same KIND of workspace — see buildBackup */
       const draft = one && (one.draft === 'element' || one.draft === 'template') ? one.draft : null;
       let ok = false;
-      try { ok = await FM.storage.importObject(one, null, { quiet: true, draft: draft }); } catch (e) { ok = false; }
+      try { ok = await FM.storage.importObject(one, null, { quiet: true, draft: draft, confirmed: true }); } catch (e) { ok = false; }
       if (ok) { restored++; if (draft) drafts++; } else failed.push(nm);
     }
     if (wasOn && FM.projects && curId() !== wasOn && FM.projects.list().some(p => p.id === wasOn)) {
-      try { await FM.projects.open(wasOn); } catch (e) {}
+      try { await FM.projects.open(wasOn, { confirmed: true }); } catch (e) {}   // queue 690: what is left is a restored copy, not his work
     }
     return { ok: restored > 0, restored: restored, drafts: drafts, failed: failed, total: obj.projects.length };
   };
@@ -1673,8 +1754,13 @@ window.FM = window.FM || {};
     const problem = FM.storage.sceneFileProblem(obj);
     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
     const kind = opts && opts.draft;   // queue 915 clause 8: only restoreBackup passes this, and only these two values
-    if (FM.projects) await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
-      kind === 'element' ? { elementDraft: true } : kind === 'template' ? { templateDraft: true } : {}));
+    if (FM.projects) {
+      const pid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
+        kind === 'element' ? { elementDraft: true } : kind === 'template' ? { templateDraft: true } : {}, opts && opts.confirmed ? { confirmed: true } : {}));
+      /* queue 690: false = his open project could not be saved and he chose to stay. applyScene below writes the
+         file INTO whatever is open, so going on would put the import over the very work he just chose to keep. */
+      if (!pid) return false;
+    }
     const ok = await FM.storage.applyScene(obj);
     if (!ok) {
       /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
@@ -2011,8 +2097,33 @@ window.FM = window.FM || {};
     return freed;
   };
 
+  /* ═══ A FULL PHONE MUST NOT THROW HIS WORK AWAY AT THE SWITCH (queue 690, hunt f) ═══════════════════
+   * When the store refuses the scene, the app says "Storage full — autosave paused" ONCE and lets him
+   * carry on, which is right: the work is safe in memory for as long as he stays. open() and create()
+   * then flushed, ignored the answer and tore the scene down anyway — so the next card he tapped on Home
+   * emptied the project, loaded the other one and reset undo, and everything since that one toast was
+   * gone with nothing said at the moment it happened. The template and element save-backs already refuse
+   * on a failed flush; the ordinary switch was the one door that did not. Now it asks, and Stay (also
+   * what Cancel, Escape and a tap outside give) leaves everything exactly where it was. */
+  function askLeave() {
+    const name = (FM.scene && FM.scene.project && FM.scene.project.name) || 'This project';
+    if (!FM.ask) return Promise.resolve(false);   // no way to ask — never throw it away unasked
+    return FM.ask({
+      title: 'Storage full — “' + name + '” is not saved',
+      message: 'What you changed since it last saved is only on this screen. Opening another project now throws it away. To keep it, stay and use ⚙ → Save project file inside it.',
+      ok: 'Leave anyway', cancel: 'Stay', danger: true,
+    }).then(v => !!v);
+  }
+
   FM.projects = {
     list() { return readJSON(PROJ_INDEX, []); },
+    /* queue 690: save the open project, and if that cannot be done and it matters, ask before leaving it.
+       True = go ahead. For callers that must ask BEFORE they start moving things — Home's card tap asks here,
+       ahead of the push, rather than half-way through it — and then pass { confirmed: true } to open(). */
+    async confirmLeave() {
+      if (FM.storage.flushSync() || !FM.storage.unsavedOnScreen()) return true;
+      return askLeave();
+    },
     // Thumbnail for a card — IDB first, then the legacy inline thumb (pre-migration entries). Async.
     async getThumb(id) {
       if (_thumbCache.has(id)) return _thumbCache.get(id);
@@ -2112,7 +2223,9 @@ window.FM = window.FM || {};
       return true;
     },
     // Switch the editor to another project (stash current first).
-    async open(id) {
+    // Resolves FALSE when the project could not be saved and he chose to stay (queue 690) — nothing changed.
+    // `opts.confirmed`: the caller has already asked (confirmLeave), or what is being left is being thrown away.
+    async open(id, opts) {
       if (id === curId()) return true;
       if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel();   // drop any tracking overlay from the outgoing project
       if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
@@ -2121,7 +2234,11 @@ window.FM = window.FM || {};
       if (FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()) FM.maskTool.stop();   // same — and it caches the path it is editing
       if (FM.pause) FM.pause(); else FM.playing = false;   // stop WebAudio + <video> sound, not just the flag (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // the group view belongs to the outgoing project
-      FM.storage.flushSync(); this.touchCurrent(true);   // queue 915: a no-op picture while its media are released (makeThumb)
+      /* queue 690: the flush's answer is READ now. Refused, with work only on screen → ask, BEFORE anything below
+         is torn down; Stay returns with the project exactly as it was. (A stale tab also fails the flush, and
+         there dropping the local copy is the point, so unsavedOnScreen says no and the switch goes ahead.) */
+      if (!FM.storage.flushSync() && !(opts && opts.confirmed) && FM.storage.unsavedOnScreen() && !(await askLeave())) return false;
+      this.touchCurrent(true);   // queue 915: a no-op picture while its media are released (makeThumb)
       /* ⚠️ THE SESSION STANDS DOWN HERE, NOT AT history.reset() BELOW (queue 921, spec §12.1 `paused`).
          Everything from the next line to `load()` finishing is a document that belongs to NEITHER
          project: the scene is emptied, then `load()` is awaited for as long as IndexedDB and a media
@@ -2152,9 +2269,12 @@ window.FM = window.FM || {};
       if (FM.warnOversizeProject) FM.warnOversizeProject();
       return true;
     },
+    /* Resolves the new id, or FALSE when the open project could not be saved and he chose to stay (queue 690):
+       asked BEFORE anything is written, so Stay leaves no half-made project behind. */
     async create(opts) {
       opts = opts || {};
-      FM.storage.flushSync(); this.touchCurrent(true);
+      if (!FM.storage.flushSync() && !opts.confirmed && FM.storage.unsavedOnScreen() && !(await askLeave())) return false;
+      this.touchCurrent(true);
       const id = newId('p');
       const fresh = FM.newScene();
       fresh.project.name = opts.name || 'Untitled';
@@ -2189,7 +2309,7 @@ window.FM = window.FM || {};
       if (opts.ofTemplate) rec.ofTemplate = opts.ofTemplate;
       idx.unshift(rec);
       this.saveIndex(idx);
-      await this.open(id);
+      await this.open(id, { confirmed: true });   // queue 690: asked (or saved) above, and nothing has changed since
       return id;
     },
     /* ⚠️ queue 915 clause 3: TRUE ONLY WHEN THERE IS A WHOLE COPY. Every write here was unread and the
@@ -2415,7 +2535,7 @@ window.FM = window.FM || {};
       const others = this.list().filter(p => p.id !== id);
       const target = (others.filter(p => !p.elementDraft && !p.templateDraft)[0] || others[0] || {}).id;
       if (!target) return { ok: false, why: 'last' };
-      await this.open(target);
+      await this.open(target, { confirmed: true });   // queue 690: the draft being left is the one being discarded
       const ok = await this.discardDraft(id);
       return { ok: ok, why: ok ? '' : 'refused' };
     },
@@ -2475,8 +2595,9 @@ window.FM = window.FM || {};
            No `|| any draft` fallback on purpose: with no real project left, a NEW one is the honest
            answer, and that branch already exists below. */
         const rest = this.list().filter(p => !p.elementDraft && !p.templateDraft);
-        if (rest.length) await this.open(rest[0].id);
-        else { try { localStorage.removeItem(CUR_KEY); } catch (e) {} await this.create({}); }
+        // confirmed (queue 690): the project being left is the one he just deleted — nothing to ask about
+        if (rest.length) await this.open(rest[0].id, { confirmed: true });
+        else { try { localStorage.removeItem(CUR_KEY); } catch (e) {} await this.create({ confirmed: true }); }
         // open()/create() flushSync'd BEFORE switching CUR_KEY, resurrecting the deleted doc as an
         // unindexed localStorage orphan that leaks quota forever — remove it (again) now. (#r2)
         try { localStorage.removeItem('fm.proj.' + id); localStorage.removeItem('fm.proj.default'); } catch (e) {}
@@ -2728,6 +2849,7 @@ window.FM = window.FM || {};
       const pack = await this.getPack(tid); if (!pack) return false;
       const meta = this.list().find(t => t.id === tid) || {};
       const pid = await FM.projects.create({ name: (meta.name || 'Template') + ' project', width: pack.project.width, height: pack.project.height });
+      if (!pid) return false;   // queue 690: his project could not be saved and he chose to stay — the pack must not land in it
       /* …and again on the way OUT, for templates saved before v8.22. Stripping only at save would
          leave every existing template still handing its notes to new projects. */
       /* REMEMBER WHICH TEMPLATE THIS CAME FROM (queue 408). Ezra: "templates need to be editable as well,
@@ -2779,7 +2901,7 @@ window.FM = window.FM || {};
       const rev = meta.rev || 0;
       const existing = FM.projects.list().find(p => p.templateDraft && p.ofTemplate === tid);
       if (existing) {
-        await FM.projects.open(existing.id);
+        if ((await FM.projects.open(existing.id)) === false) return false;   // queue 690: he chose to stay — never adopt a pack into HIS project
         /* THE TEMPLATE MOVED ON WHILE THIS WORKSPACE SAT (review, 2 Sep): "Update template from project" on some
            other project bumps `rev`; a workspace built from the older pack would, on Home, write the OLD contents
            back over the NEW ones. Re-adopt the current pack instead — the workspace was stale by definition. */
@@ -2793,7 +2915,7 @@ window.FM = window.FM || {};
       }
       const returnTo = curId();
       const pid = await FM.projects.create({ name: meta.name || 'Template', width: pack.project.width, height: pack.project.height, templateDraft: true, ofTemplate: tid });
-      if (!pid) return null;
+      if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       // the pack's project replaces the doc's, so the session's own pointers ride in as `extra`
       await this._adopt(pack, Object.assign({ name: meta.name || 'Template', notes: [], ofTemplate: tid, ofTemplateRev: rev }, returnTo ? { returnTo: returnTo } : {}), 'tpl:' + tid);
       /* ⚠️ ARRIVE WITH NOTHING SELECTED — the element path's lesson ("it's just opening you having every
@@ -2961,10 +3083,10 @@ window.FM = window.FM || {};
       const meta = this.list().find(e => e.id === eid);
       if (!meta) return null;
       const existing = FM.projects.list().find(p => p.elementDraft && p.ofElement === eid);
-      if (existing) { await FM.projects.open(existing.id); return existing.id; }
+      if (existing) { return (await FM.projects.open(existing.id)) === false ? false : existing.id; }   // queue 690: false = he chose to stay
       const returnTo = curId();
       const pid = await FM.projects.create({ name: meta.name || 'Element', width: 1080, height: 1080, elementDraft: true, ofElement: eid });
-      if (!pid) return null;
+      if (!pid) return false;   // queue 690: create() says false only when he chose to stay in an unsaved project
       FM.scene.project.background = null;              // transparent, like the element itself
       if (returnTo) FM.scene.project.returnTo = returnTo;   // where to land when he goes back
       const ok = await this.insert(eid);
@@ -2981,7 +3103,7 @@ window.FM = window.FM || {};
          there is nowhere named to return to; it picks a real project first and refuses only if this is
          the last project in existence. */
       if (!ok) {
-        if (returnTo && returnTo !== pid) { await FM.projects.open(returnTo); await FM.projects.discardDraft(pid); }
+        if (returnTo && returnTo !== pid) { await FM.projects.open(returnTo, { confirmed: true }); await FM.projects.discardDraft(pid); }   // queue 690: the draft left is the one being discarded
         else await FM.projects.discardDraftAnyway(pid);
         return null;
       }

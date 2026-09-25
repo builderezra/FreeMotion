@@ -94,7 +94,7 @@ window.FM = window.FM || {};
 
     // Swipe a bottom sheet DOWN to dismiss it (follows the finger, then snaps closed past a threshold).
     function makeSwipeDown(panel, grabEl, dismiss, getScrollEl) {
-      var startY = 0, startX = 0, lastY = 0, lastT = 0, vy = 0, active = false, claimed = false, pid = null, h = 0;
+      var startY = 0, startX = 0, lastY = 0, lastT = 0, vy = 0, active = false, claimed = false, pid = null, h = 0, hadAnim = false;
       function atTop() { if (!getScrollEl) return true; var s = getScrollEl(); return !s || s.scrollTop <= 0; }
       function onDown(e) {
         if (active) return;   // a swipe is already in progress — ignore a 2nd finger (it would steal pid/startY and stall/misfire the gesture)
@@ -131,7 +131,12 @@ window.FM = window.FM || {};
         var dy = e.clientY - startY, dx = e.clientX - startX;
         if (!claimed) {
           if (dy < -4) { active = false; return; }                 // upward → not a dismiss
-          if (dy > 6 && dy > Math.abs(dx)) { claimed = true; panel.style.transition = 'none'; panel.style.animation = 'none'; try { panel.setPointerCapture(pid); } catch (_) {} }   // queue 773: the hinge keyframe (fill both) still OWNED transform after it ended, so the finger moved nothing — a claimed drag switches it off
+          if (dy > 6 && dy > Math.abs(dx)) {
+            claimed = true; panel.style.transition = 'none';
+            hadAnim = (getComputedStyle(panel).animationName || 'none') !== 'none';   // read BEFORE switching it off — see settle()
+            panel.style.animation = 'none';   // queue 773: the hinge keyframe (fill both) still OWNED transform after it ended, so the finger moved nothing — a claimed drag switches it off
+            try { panel.setPointerCapture(pid); } catch (_) {}
+          }
           else return;
         }
         if (e.cancelable) e.preventDefault();
@@ -143,8 +148,21 @@ window.FM = window.FM || {};
         var wasClaimed = claimed; active = false; claimed = false;
         try { panel.releasePointerCapture(pid); } catch (_) {}
         panel.style.transition = '';
-        panel.style.transform = '';
-        panel.style.animation = '';   // queue 773: and hands transform back once the finger is off
+        panel.style.transform = '';   // queue 773: hands transform back once the finger is off
+        /* …BUT THE HINGE STAYS OFF (queue 690, his #676 / #706: "when you open the add menu it opens twice").
+           This used to hand the animation back as well (`animation = ''`), and taking an animation away and
+           putting the SAME one back does not resume it — it RESTARTS it. The Add sheet's is the opening
+           swing, fm-hinge-up, which starts at translateY(100%): so any short downward drag that did not
+           close the sheet — a tap with a wobble, the start of a scroll through the tiles, a release, or a
+           pointercancel when the browser took the gesture — dropped the whole sheet below the screen and
+           swung it back up. Measured with a real finger, top edge per frame: 356 356 364 364 1011 1011 658
+           558 494 452 405 391 … 356. That is the sheet opening twice, with no second tap.
+           It is not needed back: with the keyframe off, `.open`'s own rule already rests the sheet at
+           translateY(0). openAdd() clears it before the next opening, so every real opening still swings.
+           A panel with no animation running when the drag began (the inspector sheet, or any sheet with
+           reduced motion on) has nothing to replay and is handed back exactly as before. */
+        if (!hadAnim) panel.style.animation = '';
+        hadAnim = false;
         if (!wasClaimed || aborted) return;   // pointercancel = the OS stole the gesture → snap back, NEVER dismiss/deselect
         panel._swiped = true;
         if ((lastY - startY) > 0.33 * h || vy > 0.5) dismiss(Math.max(0, lastY - startY));      // far enough OR fast flick → close — from where the finger left it (queue 773)
@@ -385,6 +403,9 @@ window.FM = window.FM || {};
       close(); redrawAdd(); syncAddSheetTop();
       if (addSheet._closeTimer) { clearTimeout(addSheet._closeTimer); addSheet._closeTimer = 0; }   // reopened mid-close: cancel the release
       addSheet.classList.remove('closing'); addSheet.style.transition = ''; addSheet.style.transform = '';
+      // queue 690: a swipe that snapped back left the hinge switched off (makeSwipeDown settle), so this opening swings
+      // again. Only when it is not ALREADY open — clearing it on an open sheet would replay the swing, the bug itself.
+      if (!addSheet.classList.contains('open')) addSheet.style.animation = '';
       addSheet.classList.add('open'); document.body.classList.add('add-open');
     }
     /* THE CLOSE SLIDES DOWN (queue 773). Ezra: "when you swipe down to swipe it away or just like tap to close it it doesn't

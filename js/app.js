@@ -705,8 +705,10 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (m && m.el && !layer.reversed) {
+        const r = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * FM.previewRate));
         if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);   // queue 916: the pitch rides the rate, like the export
-        try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * FM.previewRate)); } catch (e) {}
+        if (FM.pitchForRate) FM.pitchForRate(m.el, r);          // …except at 1x, where a rate change is only a sync trim (queue 690)
+        try { m.el.playbackRate = r; } catch (e) {}
       }
     });
     /* The <select> is a display like any other, so it is driven from here rather than patched by each
@@ -1823,11 +1825,37 @@ window.FM = window.FM || {};
   };
   FM._SYNC_WARMUP = SYNC_WARMUP;   // suite seam: the test states the number it is asserting about
 
-  FM._syncBiasStep = function (m, rawErr) {
+  /* `learn` (queue 690) says whether this sample may teach the bias at all. Omitted, it always does — the
+     step on its own is only arithmetic. The sync tick passes FM._syncMayLearn, below, and that is where the
+     decision lives. */
+  FM._syncBiasStep = function (m, rawErr, learn) {
     const fresh = (m._errBias == null || !isFinite(m._errBias));
     if (fresh) m._errBias = rawErr;
-    else m._errBias += (rawErr - m._errBias) * ERR_BIAS_ALPHA;
+    else if (learn !== false) m._errBias += (rawErr - m._errBias) * ERR_BIAS_ALPHA;
     return { deBiased: rawErr - m._errBias, fresh: fresh };
+  };
+  /* ═══ A STALL IS NOT LATENCY — DO NOT LEARN IT (queue 690, audio hunt) ═══════════════════════════════
+   * His words for the hunt: "go re audit, find some bugs coz theres a shit load".
+   * The bias above exists to soak up ONE thing: the constant output latency between el.currentTime and
+   * what is actually coming out of the speaker. Its comment argues real drift outruns it because drift
+   * accumulates. That is true of drift and false of a STALL, which is a one-off step: the element falls
+   * 200 ms behind in one go and then plays on normally. While the trim closes that step the EMA was still
+   * learning, so the two met in the middle — the de-biased error read zero with only ~40% of the step
+   * closed, the trim stopped, and the song stayed ~135 ms behind the picture and every other layer until
+   * the next press of play (measured: 132-152 ms left, 4.5 s after a 200 ms stall, 0 seeks). A second
+   * stall added to it rather than triggering the hard seek, because the seek is judged AFTER the bias is
+   * taken off. His phone falls behind often — his 10 Sep report (before queue 848) measured the clock a
+   * median 158 ms out.
+   * The trade, stated: the latency is now taken from the warm-up's seed and what the hold band lets it
+   * learn after that, so an error over 45 ms is always treated as lag. That is what SYNC_WARMUP exists to
+   * make safe — the seed is taken once the element has settled.
+   * So a sample only teaches the bias while it sits inside the dead band, i.e. while the controller is
+   * HOLDING. An error big enough to act on is corrected, not learned; once the trim has pulled it back
+   * inside the band, learning resumes and absorbs what is left, which is at most the band itself. A fresh
+   * bias (play, a wrap, a seek) is still seeded from the first warm sample exactly as before. */
+  FM._syncMayLearn = function (m, rawErr) {
+    if (!m || m._errBias == null || !isFinite(m._errBias)) return true;   // seeding: the step takes it whole anyway
+    return Math.abs(rawErr - m._errBias) <= SYNC_DEAD;
   };
   FM._noteSyncError = function (v, now) {
     const p = FM.playbackStats; if (!p) return;
@@ -1986,6 +2014,10 @@ window.FM = window.FM || {};
           else {
             // speed RAMP: follow the keyframed curve live; the trim rides on top of it.
             const base = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
+            /* A 1x clip keeps its pitch while the trim below nudges its rate; a sped-up one resamples, as queue 916
+               asked. Every frame, because a speed ramp or a preview-rate change can carry a clip across 1x
+               mid-play; it only writes when the answer changes (queue 690 — see FM.pitchForRate). */
+            if (FM.pitchForRate) FM.pitchForRate(m.el, base);
             /* ============ THE SCRATCHY-AUDIO FIX (queue 148) ============
              * Ezra: "the audio i import is making a realy scratchy popping noise that hurts my ears
              * when im trying to play back stuff, this is related to the long on going lag issues."
@@ -2000,9 +2032,10 @@ window.FM = window.FM || {};
              * audible, and what it sounds like is scratchy. No sample is ever dropped, so none of
              * this showed up in the seek counter or as a hole in the waveform — which is why five
              * separate readings of this file found nothing.
-             * (Since queue 916 preservesPitch is OFF — his rule is that a sped-up clip sounds sped up,
-             * as the export always did — so a write is now a plain resample and a trim is a slight
-             * pitch bend rather than a stretcher re-prime. Rate-limiting the writes matters as much.)
+             * (Since queue 916 preservesPitch is OFF on a sped-up clip — his rule is that a sped-up clip
+             * sounds sped up, as the export always did — so there a write is a plain resample and a trim
+             * is a pitch bend. A 1x clip keeps its pitch again since queue 690, because a +10% trim
+             * resampled is 1.65 semitones sharp. Rate-limiting the writes matters as much.)
              *
              * WHY IT NEVER CONVERGED, which is the actual defect. `el.currentTime` is not the
              * instantaneous audible position: it is latched to the last block the element handed the
@@ -2042,7 +2075,7 @@ window.FM = window.FM || {};
                all. That is the very constant v11.70 identified and removed, put straight back into the
                "worst" figure the report prints. Computed once, here, from the bias the controller is
                actually acting on. */
-            const step = FM._syncBiasStep(m, rawErr);
+            const step = FM._syncBiasStep(m, rawErr, FM._syncMayLearn(m, rawErr));   // a stall is corrected, not learned (queue 690)
             const plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
@@ -2065,12 +2098,23 @@ window.FM = window.FM || {};
           }
           // Reconcile volume/mute every tick (fadeMul = 1 when there are no fades) so a volume/fade
           // edit mid-playback takes effect immediately instead of sticking.
-          const vol = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration)
-                    * declickGain(layer, FM.time, m, now);   // keyframed volume animates on forward clips; the last term is the edge de-click (#148)
+          const lvl = FM.layerVolume(layer, FM.time) * FM.fadeMul(layer, FM.time - layer.start, layer.duration);
+          const vol = lvl * declickGain(layer, FM.time, m, now);   // keyframed volume animates on forward clips; the last term is the edge de-click (#148)
           // A soloed layer silences the others' AUDIO too, matching the picture (compositor) and the
           // exported soundtrack (exporter buildAudioMix). Mute rather than pause so un-soloing resumes
           // instantly without a re-seek.
-          if (FM.soloSilenced(layer)) { m.el.muted = true; }
+          /* ⚠️ …AND A LEVEL OF ZERO IS el.muted, NOT el.volume = 0 (queue 690, audio hunt). The mute button,
+             a volume of 0 and a fade at its silent end all used to reach the element as `muted = false;
+             volume = 0` — and on an iPhone a page cannot set el.volume at all (it always reads 1), so the
+             muted clip played at FULL level while he edited. Extract Audio and Remove Vocals both mute the
+             original, so on the phone he heard the sound twice, or the vocals stayed in. el.muted IS
+             settable on iOS. `lvl` leaves out the de-click, whose zero lasts one tick and is not a mute. The
+             level stage, if the element has one, goes to 0 too, in case an engine lets a routed element's
+             audio past el.muted. */
+          if (FM.soloSilenced(layer) || !(lvl > 0)) {
+            m.el.muted = true;
+            if (m._boost && FM.audioFxLive && FM.audioFxLive.setBoost) FM.audioFxLive.setBoost(layer, 0);
+          }
           else {
             m.el.muted = false;
             /* SPLIT AT UNITY (queue 195). `el.volume` cannot go above 1 — assigning 2 throws
@@ -2225,13 +2269,21 @@ window.FM = window.FM || {};
         m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null;
         /* A sped-up clip sounds sped up (queue 916) — set on the element when it is made (js/media.js),
            and asserted again here so an element that reached the scene by any other route still does. */
+        const base0 = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1)));
         if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);
-        try { m.el.playbackRate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, FM.time) || 1) * (FM.previewRate || 1))); } catch (e) {}
-        m.el.muted = FM.soloSilenced(layer);   // solo silences the others' audio, not just their picture
+        if (FM.pitchForRate) FM.pitchForRate(m.el, base0);   // a 1x clip keeps its pitch through the sync trims (queue 690)
+        try { m.el.playbackRate = base0; } catch (e) {}
+        /* Solo silences the others' audio, not just their picture — and a muted layer starts MUTED (queue 690):
+           on an iPhone the el.volume = 0 below is ignored, so a muted clip used to open at full level. Its
+           volume only, not its fade: the start wait below skips a muted element, and a clip fading in from
+           silence must still hold the transport until its sound has begun. */
+        m.el.muted = FM.soloSilenced(layer) || !(FM.layerVolume(layer, FM.time) > 0);
         // Pressing PLAY is the other place a waveform gets opened at an arbitrary sample — and the one
         // you hear most often. Start at zero; the sync tick's declickGain lifts it over 45ms. (#148)
         m._resumedAt = performance.now();
         m.el.volume = 0;
+        // …and where el.volume is read-only (an iPhone) the level stage is what opens silent (queue 690).
+        if (m._boost && FM.audioFxLive && FM.audioFxLive.volumeLocked && FM.audioFxLive.volumeLocked(m)) FM.audioFxLive.setBoost(layer, 0);
         /* A REFUSED play() IS THE REPORT (queue 786). On iOS the likeliest shape of "the song will not play at all" is
            play() rejecting — NotAllowedError without a gesture, NotSupportedError for a codec, AbortError when the
            element was torn down — and this catch used to swallow every one. "Your last playback" can only say what it
@@ -3743,8 +3795,20 @@ window.FM = window.FM || {};
        layer for export", used by both. */
     const soloTarget = o.soloId ? FM.layerById(FM.scene, o.soloId) : null;
     const soloRestore = soloTarget ? exportSoloPrep(soloTarget) : null;
+    /* THE VIEW MENU'S ISOLATE IS THE PREVIEW'S, NOT THE FILE'S (queue 690, HUNT-d). The video exporters are covered by the
+       compositor ignoring FM.isolate under FM._exporting; this still renders without that flag, so it holds the isolate
+       aside for its one render and puts it straight back — the preview he is looking at does not change. The Free-Crop
+       tool's show-the-whole-frame flag is the same kind of view state and is held aside the same way. (Not by setting
+       FM._exporting here: that flag also switches off the preview's hold-frame substitution for video, which is a
+       bigger change to what this still draws than this fix is about.) */
+    const isoWas = FM.isolate; FM.isolate = null;
+    const cropHeld = FM.scene.layers.filter(l => l && l._cropEditing);
+    cropHeld.forEach(l => { l._cropEditing = false; });
     try { FM.renderScene(full.getContext('2d'), FM.scene, t); }
-    finally { if (soloRestore) soloRestore.forEach(([l, v]) => { l.solo = v; }); }
+    finally {
+      FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; });
+      if (soloRestore) soloRestore.forEach(([l, v]) => { l.solo = v; });
+    }
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(P.width * sc));
     c.height = Math.max(1, Math.round(P.height * sc));
@@ -4082,27 +4146,51 @@ window.FM = window.FM || {};
      swaps layer JSON — deliberately, so an undo does not re-decode every video — so the media had to be
      asked separately. Called from history.restore; silent and async, because the layer is already correct
      and this only brings the picture back into agreement with it. */
-  FM.restoreReplacedMedia = async function () {
+  /* ⚠️ queue 690 (hunt f): BOTH DIRECTIONS, ONE AT A TIME, AND NEVER ON A LAYER THAT MOVED ON. This only ever
+     handled an undo ("the picture is AHEAD of the layer") and only from one kept file, so: replace twice, undo
+     twice, and the second undo found the slot holding the first replacement at the wrong revision and did
+     nothing — the settings went back, the clip kept his second pick, the next save wrote it over his original.
+     Redo never swapped anything at all. Now every revision has its own kept file (storage.js stashPrevMedia),
+     and a clip whose picture is not the revision its layer names is swapped to the one that is — after the
+     file going away is itself kept under ITS revision, which is what lets the next redo or undo bring it back.
+     Runs are queued: two quick undos used to run side by side, and the slower one could land last with the
+     wrong file. And after every await the layer is looked up again — an undo replaces the layer objects, and a
+     layer that has moved on since (another undo, a replace, a project switch) is left for the run that follows. */
+  let _restoreRun = Promise.resolve(0);
+  FM.restoreReplacedMedia = function () {
+    const run = _restoreRun.then(restoreReplacedOnce, restoreReplacedOnce);
+    _restoreRun = run.catch(() => 0);
+    return run;
+  };
+  async function restoreReplacedOnce() {
     if (!FM.storage || !FM.storage.takePrevMedia) return 0;
+    const carries = l => !!l && l.type !== 'text' && l.type !== 'shape' && l.type !== 'null';
     let back = 0;
-    for (const layer of (FM.scene.layers || [])) {
-      if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
+    for (const id of (FM.scene.layers || []).filter(carries).map(l => l.id)) {
+      const layer = FM.layerById(FM.scene, id);
+      if (!carries(layer)) continue;
       const want = layer.mediaRev || 0;
-      const live = FM.media.get(layer.id);
-      if (!live || (live.rev || 0) <= want) continue;      // the picture is not ahead of the layer
-      const prev = await FM.storage.takePrevMedia(layer.id);
+      const live = FM.media.get(id);
+      if (!live || (live.rev || 0) === want) continue;       // the picture already is the revision the layer names
+      if (FM.storage.hasPrevMedia && !FM.storage.hasPrevMedia(id, want)) continue;   // nothing kept for it — no read on every undo
+      const unchanged = () => { const L = FM.layerById(FM.scene, id); return !!L && (L.mediaRev || 0) === want && FM.media.get(id) === live; };
+      const prev = await FM.storage.takePrevMedia(id, want);
       if (!prev || !prev.file || (prev.rev || 0) !== want) continue;
       let rec = null;
       try { rec = /^video/.test(prev.kind || '') ? await FM.loadVideoFile(prev.file) : await FM.loadImageFile(prev.file); } catch (e) { rec = null; }
       if (!rec) continue;
+      // keep the file going away, under its own revision, BEFORE it leaves — the redo (or the next undo) asks for it
+      if (unchanged() && live.file && FM.storage.stashPrevMedia) { try { await FM.storage.stashPrevMedia(id, live, live.rev || 0); } catch (e) {} }
+      if (!unchanged()) { try { if (rec.url) URL.revokeObjectURL(rec.url); } catch (e) {} continue; }
       rec.rev = want;
-      FM.replaceMediaWith(layer.id, rec);
-      layer.mediaRev = want;
+      FM.replaceMediaWith(id, rec);
       back++;
     }
-    if (back) { FM.refreshAll(); FM.requestRender(); if (FM.storage) FM.storage.markDirty(); }
+    /* autosave, not just markDirty: the undo's own save may already have run while this was fetching, and after
+       it nothing else would write the restored file to disk until his next edit */
+    if (back) { FM.refreshAll(); FM.requestRender(); if (FM.storage) { if (FM.storage.autosave) FM.storage.autosave(); else FM.storage.markDirty(); } }
     return back;
-  };
+  }
 
   FM.replaceMediaWith = FM.jobWrapped('replaceMediaWith', function (id, nrec) {   // queue 921 S0
     const layer = FM.layerById(FM.scene, id);
@@ -7568,11 +7656,37 @@ window.FM = window.FM || {};
     { const ef = document.getElementById('exp-format'); if (ef) ef.addEventListener('change', syncExportFormat); }
     document.getElementById('export-cancel').addEventListener('click', () => { FM._exportCancel = true; });
 
-    // drag + drop
+    // drag + drop — the canvas lights up while a file is over it (the import itself is the window's, below)
     const stage = document.getElementById('stage');
     ['dragenter', 'dragover'].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); stage.classList.add('dragover'); }));
     ['dragleave', 'drop'].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === stage) stage.classList.remove('dragover'); }));
-    stage.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files)); });
+    /* ═══ A FILE DROPPED ANYWHERE ON THE EDITOR IS IMPORTED — NOT ONLY ON THE CANVAS (queue 690) ═══════════════
+     * The stage above was the ONLY drop target in the app. Everywhere else nothing called preventDefault on
+     * dragover, and a drop nobody takes is the BROWSER's: measured with a real drag at 1280x800, a PNG dropped
+     * on the timeline — where every desktop editor takes a clip, and at that width the biggest thing on screen
+     * after the canvas — imported nothing and Chrome opened file:///…png on its own (Safari replaces the tab).
+     * The Add menu, right next to its own Media tab, did the same.
+     * So the WINDOW takes a file drag: every drop on the editor goes through the one import the stage used,
+     * exactly once (the stage no longer imports by itself, so a drop there cannot be imported twice).
+     * Only a drag that carries FILES — text dragged into a field is still the browser's to insert.
+     * While a full-screen overlay owns the screen (Home, Settings, the Export dialog…) the drop is refused
+     * with the no-entry cursor and nothing imported: the project behind it is loaded, but he cannot see it,
+     * and a clip landing in a project he is not looking at is the same silent surprise the keyboard guard
+     * (FM.overlayOwnsScreen, below) exists to stop. Refused is still TAKEN, so the file never opens in place
+     * of FreeMotion. */
+    const carriesFiles = e => { const t = e.dataTransfer && e.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; };
+    window.addEventListener('dragover', e => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = FM.overlayOwnsScreen() ? 'none' : 'copy';
+    });
+    window.addEventListener('drop', e => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      stage.classList.remove('dragover');
+      if (FM.overlayOwnsScreen()) return;
+      if (e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files));
+    });
 
     /* ---- "does a full-screen overlay own the screen?" -------------------------------------------
      * Asked GEOMETRICALLY, never from a list of ids — the list is precisely what went stale. v5.07
@@ -7759,7 +7873,8 @@ window.FM = window.FM || {};
       else if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1 / 1.5); }
       // Number keys. With a layer SELECTED: 1..N open its category cards (Color & Fill, Border,
       // Blending, Move & Transform, …) — the badge on each card shows its key. With NOTHING selected:
-      // 1-5 open the Add-menu tabs. Shift+1/2/3 always add Text / Freehand / Vector.
+      // 1-5 open the Add-menu tabs (Elements · Shape · Media · Audio · Template). Shift+1..4 always add
+      // Text / Captions / Sketching / Custom shape. The ? sheet reads both lists from js/addmenu.js (queue 690).
       else if (/^Digit[1-9]$/.test(e.code) && !mod) {
         const n = parseInt(e.code.slice(5), 10);
         if (e.shiftKey) { if (n <= 4 && FM.addMenu && FM.addMenu.instant) { e.preventDefault(); FM.addMenu.instant(n - 1); } }   // 4 rail entries now: Text / Captions / Freehand / Vector
@@ -7771,7 +7886,26 @@ window.FM = window.FM || {};
       // Esc: step BACK a page (effects → grid → deselect), not straight to closed. Also bails out of
       // any modal overlay / point-edit / tracking pick first.
       else if (e.code === 'Escape') {
+        /* ═══ ESCAPE GETS HIM OUT OF WHAT IS OPEN — IT NEVER REACHES THROUGH IT TO THE LAYER (queue 690) ═══
+         * On a PC Escape is the key everyone presses to back out of a dialog or a menu. This branch knew the
+         * shortcuts sheet, the canvas tools and (via #809, above) the Effects browser, and nothing else — so
+         * with the Export dialog, Canvas settings, Notes or a right-click menu up, Escape fell all the way
+         * down to inspector.back(), which DESELECTED the layer underneath and left the dialog where it was.
+         * The right-click menu then still offered Delete and Lock for a layer that was no longer selected.
+         * Measured at 1280 and 900, all four (the Export dialog and the right-click menu with a real key too). Two locks:
+         *   · a surface that answers Escape ITSELF (Settings, Home's dialog, a toast) calls preventDefault
+         *     on it, and its document listener runs before this window one — so an Escape already answered
+         *     is not answered AGAIN here. Settings did exactly that: it closed, and then this deselected the
+         *     layer behind it. Any new panel that handles its own Escape the ordinary way is covered free;
+         *   · the four that never listened for it are closed here, each asked whether it is open — the
+         *     same live questions FM.toolOwnsCanvas asks, not a list of ids. The right-click menu first:
+         *     it is always the topmost thing on screen. */
+        if (e.defaultPrevented) return;
         e.preventDefault();
+        if (FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen()) { FM.contextMenu.hide(); return; }
+        if (FM.notepad && FM.notepad.escape && FM.notepad.escape()) return;   // Notes, or its "Before you export" card (= Back)
+        { const xd = document.getElementById('export-dialog'); if (xd && !xd.classList.contains('hidden')) { hideExportDialog(); return; } }
+        { const cd = document.getElementById('canvas-dialog'); if (cd && !cd.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); else cd.classList.add('hidden'); return; } }
         if (FM.shortcuts && FM.shortcuts.isOpen()) { FM.shortcuts.hide(); return; }
         if (FM.eyedropper && FM.eyedropper.isActive && FM.eyedropper.isActive()) { FM.eyedropper.stop(); return; }
         if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) { FM.cropTool.stop(); return; }
