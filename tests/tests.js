@@ -97456,5 +97456,231 @@
     }
   });
 
+  /* ═══ HUNT-d (queue 690, sixth hunt, 26 Sep) — LIVE COLLABORATION, THE FLOWS HE WOULD DO FIRST ═══════════════════════
+   * His brief (#690): "go re audit, find some bugs coz theres a shit load". Share from the Mac, join from the phone, both
+   * edit the same layer, stop sharing and carry on. Four findings, each written to FAIL on v16.99 with what he would see.
+   * The first runs through the tier-3 rig (two real FreeMotions on their own origins, tests/collab-agent.js); the other
+   * three run the owner in this frame against a guest session on the other end of a LoopLink, with a real mouse wherever
+   * the mouse is the point (focus left on a slider, the undo button beside the text card). */
+
+  function hunt6dPoint(el) {
+    const r = el && el.getBoundingClientRect();
+    if (!r || !r.width) return null;
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    return (x > 2 && y > 2 && x < hunt2aReach() && y < window.innerHeight - 4) ? { x: x, y: y, r: r } : null;
+  }
+  /* A real mouse click on a button when real input can reach it, the button's own click otherwise; says which. */
+  async function hunt6dPress(id, what) {
+    const b = document.getElementById(id);
+    if (!b) throw new Error('setup: there is no ' + what + ' button (#' + id + ')');
+    const p = hunt6dPoint(b);
+    if (!p) { b.click(); await new Promise(r => setTimeout(r, 300)); return 'its own click'; }
+    await realInput924([{ t: 'mouseMove', x: p.x, y: p.y, ms: 40 }, { t: 'mouseDown', x: p.x, y: p.y, ms: 70 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 60 }], 'clicking ' + what);
+    await new Promise(r => setTimeout(r, 300));
+    return 'a real mouse';
+  }
+
+  /* HUNT-d 1 — AFTER SHARING STOPS, UNDO TAKES BACK AN EDIT FROM THE SESSION, NOT THE ONE HE JUST MADE.
+   * collab-core.js keeps undo delegated to the stopped session after Stop sharing (C.detach leaves `undoHandover` on, by
+   * design, §10.5), and the guest's session stays attached after the owner ends it. But history.commit only hands a
+   * commit to collab while `C.active` (the owner is detached, so false), and the guest's pushLocal returns at once on an
+   * ended session (`S.active` false) — so nothing either of them does after the end is recorded anywhere. ↶ then pops the
+   * last SESSION step: it reverts an edit made during the session, silently, and the edit he has just made can never be
+   * undone until he opens another project. Measured on v16.99: the owner renamed Gamma after stopping, pressed ↶, and
+   * Alpha lost the name he gave it during the session while Gamma kept its new one; the same on the guest's copy. */
+  test('HUNT-d after he stops sharing, undo takes back an edit from the session instead of the one he just made — on his Mac and on the phone that was in it', { item: '690', budgetMs: 300000 }, async function () {
+    need921('the tier-3 rig');
+    const t = await trio921(), R = t.R;
+    await t3reset921(['h', 'a']);
+    try {
+      const ids = await R.rpc('h', 'setScene', { names: ['Alpha', 'Beta', 'Gamma'] });
+      await R.rpc('h', 'share');
+      await R.rpc('a', 'join', { host: 'h', onConflict: 'replace' });
+      await R.settle();
+      /* During the session: he renames Alpha on the Mac, Sam renames Beta on the phone. */
+      await R.rpc('h', 'setProp', { id: ids[0], key: 'name', value: 'Intro by Ezra' });
+      await R.settle();
+      await R.rpc('a', 'setProp', { id: ids[1], key: 'name', value: 'Chorus by Sam' });
+      await R.until('both renames to reach both devices', async function () {
+        const h = await R.rpc('h', 'state'), a = await R.rpc('a', 'state');
+        return (h.names[0] === 'Intro by Ezra' && h.names[1] === 'Chorus by Sam' && a.hash === h.hash) ? true : null;
+      });
+      /* Stop sharing (the Share panel's button runs C.end), and the phone hears it. */
+      await R.rpc('h', 'end');
+      await R.until('the phone to say the session ended', async function () {
+        const b = await R.rpc('a', 'dom', { sel: '#collab-banner' });
+        return (b && /ended/.test(b.text)) ? b.text : null;
+      });
+      /* Both carry on with their own copy: one more rename each, then ↶ (history.undo is what ↶ and Cmd+Z run). */
+      await R.rpc('h', 'setProp', { id: ids[2], key: 'name', value: 'Outro after' });
+      await R.rpc('a', 'setProp', { id: ids[2], key: 'name', value: 'Outro on the phone' });
+      const hBefore = (await R.rpc('h', 'state')).names, aBefore = (await R.rpc('a', 'state')).names;
+      if (hBefore[2] !== 'Outro after' || aBefore[2] !== 'Outro on the phone') throw new Error('setup: the rename after the end did not land (' + JSON.stringify([hBefore, aBefore]) + ')');
+      await R.rpc('h', 'undo');
+      await R.rpc('a', 'undo');
+      await R.settle(300);
+      const h = (await R.rpc('h', 'state')).names, a = (await R.rpc('a', 'state')).names;
+      const bad = [];
+      if (h[2] !== 'Gamma' || h[0] !== 'Intro by Ezra') bad.push('on his Mac, after Stop sharing he renamed Gamma to Outro after and pressed ↶: the layers now read ' + h.join(' / ') + ' — ' + (h[0] !== 'Intro by Ezra' ? 'the rename he made DURING the session (Intro by Ezra) was taken back instead' : 'nothing was taken back') + (h[2] !== 'Gamma' ? ', and the rename he had just made is still there' : ''));
+      if (a[2] !== 'Gamma' || a[1] !== 'Chorus by Sam') bad.push('on the phone, after the owner ended it, Sam renamed Gamma and pressed ↶: the layers now read ' + a.join(' / ') + ' — ' + (a[1] !== 'Chorus by Sam' ? 'the rename Sam made DURING the session (Chorus by Sam) was taken back instead' : 'nothing was taken back') + (a[2] !== 'Gamma' ? ', and the rename just made is still there' : ''));
+      if (bad.length) throw new Error(bad.join('; ') + '. Undo is still handed to the stopped session, which records nothing done after the end — so ↶ reverts an old session edit and the latest one can never be undone until another project is opened.');
+    } finally { await t3reset921(['h', 'a']); rig921().teardown(); }
+  });
+
+  /* HUNT-d 2 — HIS DEVICE KEEPS OVERRULING A FRIEND ON A LAYER HE HAS STOPPED TOUCHING.
+   * collab-bridge.js `interacting()` is how the engine knows a finger is on the document: while it is true, every path he
+   * changes is HELD, a friend's change to a held path is parked, and the next tick sends his own value again — the last
+   * person to let go wins (§8.2). It answers true in two states where nobody is holding anything:
+   *   · the Colour view of a gradient or a picture fill is OPEN — inspector.js starts FM.fillDrag every time it draws that
+   *     view (and the Element view of a drawn shape starts an embedded Edit Points), and `toolActive()` counts both as a
+   *     tool in hand. collab-presence.js already learned these two are passive (its PASSIVE list, S5 review); the bridge
+   *     did not. Open for as long as the panel is.
+   *   · the mouse has let go of the Opacity slider (or a colour swatch) — Chrome leaves focus on the <input type=range>,
+   *     and `editableTarget` counts every input but buttons, checkboxes and radios as typing. Until he clicks elsewhere.
+   * So Sam's edit to that layer snaps back on both screens, and when the panel does close the parked value is dropped as
+   * "reasserted" — it never lands. Presence meanwhile tells Sam that Ezra is adjusting it. */
+  test('HUNT-d a friend’s edit to a layer he has stopped touching is thrown back — the Colour view left open on a gradient, or the Opacity slider after the mouse lets go', { item: '690', budgetMs: 180000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const grad = { shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 80, fill: '#ff0000', fillMode: 'gradient', fillGradient: { enabled: true, type: 'linear', angle: 90, c0: '#ff0000', c1: '#0000ff' } };
+    await withCollab921([layer921('Card', grad), layer921('Other')], async function (c) {
+      const C = c.C, g = c.addGuest({ name: 'Sam' });
+      const mine = () => FM.scene.layers.filter(l => l.id === c.ids[0])[0];
+      const theirs = () => g.doc.layers.filter(l => l.id === c.ids[0])[0];
+      /* The app's own 100 ms timer is off in this rig (autoTick:false), so its ticks are run here, 110 ms apart. */
+      async function ticks(n) { for (let i = 0; i < n; i++) { await sleep(110); c.S.tick('hot'); g.loop.settle(); } }
+      /* His edit, the way the inspector's controls make one (write, then commit) — then his hands are off for a second. */
+      async function his(fn) { fn(mine()); FM.history.commit(); g.loop.settle(); await ticks(1); await sleep(900); await ticks(1); }
+      /* Sam's edit on the other device, sent, and then this device's next few ticks. */
+      async function sams(fn) { fn(theirs()); g.G.tick('full'); g.loop.settle(); await ticks(5); }
+      FM.selectLayer(c.ids[0]);
+
+      /* CONTROL: the inspector on its category grid, nothing of his open — Sam's angle lands on both devices. */
+      FM.inspector.openCategory('home'); await sleep(300); C.bridge._quiet();
+      await his(function (l) { l.fillGradient.angle = 30; });
+      await sams(function (l) { l.fillGradient.angle = 120; });
+      if (mine().fillGradient.angle !== 120 || theirs().fillGradient.angle !== 120) throw new Error('CONTROL: with no panel open, Sam set the angle to 120 and the devices read ' + mine().fillGradient.angle + ' (his) and ' + theirs().fillGradient.angle + ' (Sam) — the rig is not delivering a friend’s edit, so nothing below means anything');
+
+      /* 1. The Colour view, open and untouched. */
+      FM.inspector.openCategory('color'); await sleep(400);
+      await his(function (l) { l.fillGradient.angle = 45; });
+      if (theirs().fillGradient.angle !== 45) throw new Error('setup: his angle of 45 never reached Sam (' + theirs().fillGradient.angle + ')');
+      await sams(function (l) { l.fillGradient.angle = 200; });
+      const open1 = [mine().fillGradient.angle, theirs().fillGradient.angle], busy1 = C.bridge.interacting();
+      FM.inspector.openCategory('home'); await sleep(300); await ticks(3);
+      const shut1 = [mine().fillGradient.angle, theirs().fillGradient.angle];
+      if (open1[0] !== 200 || open1[1] !== 200 || shut1[0] !== 200 || shut1[1] !== 200) {
+        throw new Error('with the Colour view left open on a gradient shape — his last change a second old, nothing in his hand — Sam turned the gradient to 200° and it snapped back: his screen ' + open1[0] + '°, Sam’s ' + open1[1] + '°' + (busy1 ? ' (his device still counts itself as mid-drag while the panel is open)' : '') + '; after he closed the panel it read ' + shut1[0] + '° and ' + shut1[1] + '° — Sam’s change never landed');
+      }
+
+      /* 2. The Opacity slider, let go with a real mouse (focus stays on the slider). */
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          FM.selectLayer(c.ids[0]);
+          FM.inspector.openCategory('blend'); await sleep(400); C.bridge._quiet();
+          const rg = document.querySelector('#inspector-panel input[type=range]');
+          if (!rg) throw new Error('setup: the Blend view has no Opacity slider');
+          const p = hunt6dPoint(rg);
+          let how = 'a real mouse';
+          if (p) {
+            const x0 = p.r.left + p.r.width * 0.9, x1 = p.r.left + p.r.width * 0.5, y = p.y;
+            await realInput924([{ t: 'mouseMove', x: x0, y: y, ms: 40 }, { t: 'mouseDown', x: x0, y: y, ms: 60 }, { t: 'mouseMove', x: (x0 + x1) / 2, y: y, ms: 60 }, { t: 'mouseMove', x: x1, y: y, ms: 60 }, { t: 'mouseUp', x: x1, y: y, ms: 60 }], 'sliding Opacity');
+          } else {
+            how = 'focus and events (the slider is out of real input’s reach)';
+            rg.focus(); rg.value = '0.5'; rg.dispatchEvent(new Event('input', { bubbles: true })); rg.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          g.loop.settle(); await ticks(1); await sleep(900); await ticks(1);
+          const his2 = mine().transform.opacity;
+          if (!(his2 < 0.95) || Math.abs(theirs().transform.opacity - his2) > 1e-9) throw new Error('setup: sliding Opacity (' + how + ') did not reach Sam (his ' + his2 + ', Sam ' + theirs().transform.opacity + ')');
+          await sams(function (l) { l.transform.opacity = 0.9; });
+          const op = [mine().transform.opacity, theirs().transform.opacity], focus = document.activeElement === rg;
+          if (op[0] !== 0.9 || op[1] !== 0.9) {
+            throw new Error('he slid Opacity to ' + his2 + ' on his Mac (' + how + ') and let go; a second later Sam set it to 0.9 and it snapped back — his screen ' + op[0] + ', Sam’s ' + op[1] + (focus ? ' (the slider still has focus, and his device counts that as typing)' : '') + '. Until he clicks somewhere else, every change a friend makes to that layer’s opacity is overruled.');
+          }
+        });
+      });
+    });
+  });
+
+  /* HUNT-d 3 — RENAMING A LAYER ON THE PC TIMELINE WHILE A FRIEND EDITS: THE NAME BOX VANISHES MID-WORD.
+   * Double-click a clip's name on the PC timeline and it becomes a text box (timeline.js, `th-name-edit`); the name is
+   * written on blur/Enter. In a session every batch from somebody else runs collab-bridge.js afterApply →
+   * scheduleRebuild → FM.timeline.rebuild(), which rebuilds every row — the box is torn out of the page with no blur, so
+   * nothing he typed is kept. rebuild() already defers itself for a live drag and used to for a marker rename (queue 725);
+   * the layer rename was never covered, and before collaboration nothing rebuilt the timeline while he typed. With a
+   * friend actively editing (a batch every 100 ms) the box does not survive long enough to type a word. */
+  test('HUNT-d renaming a layer on the PC timeline while a friend edits — the name box vanishes mid-word and what he typed is lost', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    await atWideWidth(async function () {
+      await withCollab921([layer921('Alpha'), layer921('Beta')], async function (c) {
+        const g = c.addGuest({ name: 'Sam' });
+        FM.selectLayer(c.ids[0]);
+        FM.timeline.rebuild();
+        await sleep(300);
+        const nm = [].slice.call(document.querySelectorAll('#tl-tracks .th-name')).filter(h => h.textContent === 'Alpha')[0];
+        if (!nm) throw new Error('setup: no name on the timeline reads Alpha');
+        nm.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+        await sleep(60);
+        const inp = document.querySelector('#tl-tracks input.th-name-edit');
+        if (!inp || document.activeElement !== inp) throw new Error('setup: a double-click on the name did not open the rename box with the caret in it');
+        inp.value = 'Intro tit';                       // half way through typing Intro title
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        /* CONTROL: on its own, the box stays while he types. */
+        await sleep(300);
+        if (!inp.isConnected || document.activeElement !== inp) throw new Error('CONTROL: the rename box closed by itself with nobody else editing, so the check below measures nothing');
+        /* Sam, on the phone, nudges the OTHER layer. */
+        const other = g.doc.layers.filter(l => l.id === c.ids[1])[0];
+        other.transform.x = 77;
+        g.G.tick('full'); g.loop.settle();
+        await sleep(400);
+        const landed = FM.scene.layers.filter(l => l.id === c.ids[1])[0].transform.x;
+        if (landed !== 77) throw new Error('setup: Sam’s nudge never reached this device (x = ' + landed + '), so nothing was asked of the timeline');
+        const still = inp.isConnected && document.activeElement === inp;
+        const name = FM.scene.layers.filter(l => l.id === c.ids[0])[0].name;
+        if (!still) throw new Error('he double-clicked Alpha on the timeline and had typed Intro tit when Sam nudged a DIFFERENT layer on the phone: the rename box vanished mid-word (' + (inp.isConnected ? 'it lost the caret' : 'it was rebuilt away') + '), the layer is still called ' + name + ', and the next key he presses goes to the app instead');
+      });
+    }, 1280);
+  });
+
+  /* HUNT-d 4 — IN A LIVE SESSION, ↶ WITH THE TEXT CARD OPEN BLAMES A FRIEND AND UNDOES NOTHING.
+   * The solo fix (queue 690, second hunt) made history.undo call FM.textEdit.flush() first, so the typing becomes its own
+   * step and ↶ takes it back. history.undo returns FM.collab.undo() BEFORE that line whenever a session owns undo, so in
+   * a session the typing is still in the open step: collab-session.js runStep pops the step BEFORE it — Add text — finds
+   * the layer no longer reads Text, and refuses with whoChanged(), which answers someone else when the one who changed
+   * it was himself. The step is consumed either way, so the text he added can never be undone. */
+  test('HUNT-d in a live session, undo with the text card open says someone else changed it, undoes nothing, and the new text can never be undone', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const toasts = [], t0 = FM.toast;
+    FM.toast = function (m) { toasts.push(String(m)); return t0.apply(this, arguments); };
+    try {
+      await atWideWidth(async function () {
+        await onScreen924(async function () {
+          await withCollab921([layer921('Backdrop')], async function (c) {
+            const g = c.addGuest({ name: 'Sam' });
+            FM.addTextLayer();
+            await sleep(400);
+            const id = FM.textEdit.isActive() ? FM.textEdit.layerId() : null;
+            if (!id) throw new Error('setup: Add text did not open the text editor');
+            const ta = document.getElementById('te-input');
+            ta.focus(); ta.value = 'Hello world'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+            await sleep(120); c.S.tick('hot'); g.loop.settle();
+            const L0 = FM.scene.layers.find(l => l.id === id);
+            if (!L0 || L0.text !== 'Hello world') throw new Error('setup: typing did not reach the new text layer');
+            if (!(g.doc.layers.find(l => l.id === id) || {}).text) throw new Error('setup: the new text never reached Sam');
+            toasts.length = 0;
+            const how = await hunt6dPress('btn-undo', 'undo');
+            const L1 = FM.scene.layers.find(l => l.id === id);
+            const blame = toasts.filter(m => /someone else/i.test(m))[0];
+            if (FM.textEdit.isActive()) { FM.textEdit.stop(); await sleep(200); }
+            if (!L1 || L1.text !== 'Text' || blame) {
+              throw new Error('on his Mac, sharing with Sam, he added a text, typed Hello world and pressed ↶ (' + how + ') with the card still open: ' +
+                (!L1 ? 'the whole layer went' : 'the layer still reads ' + L1.text + ' instead of taking back the typing (Text)') +
+                (blame ? ', and it said ' + blame + ' — nobody but him had touched it' : '') + '. Alone, the same ↶ takes back the typing.');
+            }
+          });
+        });
+      }, 1280);
+    } finally { FM.toast = t0; }
+  });
+
 
 })();
