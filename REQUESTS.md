@@ -917,7 +917,7 @@ better still, keep working inside the turn rather than parking work for a later 
       ✅ **CLOSED 1 Sep — HE CONFIRMED IT ON HIS OWN DEVICE.** Asked directly which phone complaints
       still feel bad, he did NOT tick the timeline scroll. It measured **136ms a frame before v13.96 and
       17.6ms after**, and the only thing that could ever settle it was his thumb. It is settled.
-      ❓ASK: does the timeline scroll feel better on your phone since v13.96? It measured 136ms a frame before and 17.6ms after.
+      ✅ (25 Sep sweep: answered 1 Sep — he left the timeline scroll off his still-bad list) ~~❓ASK: does the timeline scroll feel better on your phone since v13.96? It measured 136ms a frame before and 17.6ms after.~~
       not fixing it.**
       ═══ 🚨 **28 AUG (v13.89) — THE SCROLL WAS NEVER MEASURED, AND THE NUMBER THAT SAID IT WAS FINE WAS
       MEASURING SOMETHING ELSE. He has been right about this the whole time.** ═══
@@ -2090,7 +2090,7 @@ better still, keep working inside the turn rather than parking work for a later 
       ~~⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** — same paste as #95, same instrument, and the one suspected second bug was closed by measurement on 22 Aug. Re-checked today for strict oldest-first: this line is what is left.~~ ✅ the paste came on 10 Sep (#844).
       ⏸ **24 Sep — BUILT OUT UNTIL HE says whether a song has failed to play with NO effects on it since v13.88** — the 10 Sep paste pointed at effects (#844/#845); a song that fails bare would be a second cause. ✔ reply checked 24 Sep.
 
-- [ ] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
+- [x] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** The audio half now has numbers: one cut-out of 1205ms in 1.2s, 32 of 133 frames dropped, the clock 158ms out, and 94 sync trims in 1.2s. Chased in #845.
       ✅ **THE LAG HALF IS CLOSED 1 Sep — HE CONFIRMED IT.** Asked which phone complaints still feel
@@ -2220,7 +2220,7 @@ better still, keep working inside the turn rather than parking work for a later 
       that way, and the probe now does it that way every run.
       ➡️ **WHAT THIS MEANS FOR YOUR REPORT:** the *"timeline is laggy"* half was never the timeline —
       a rebuild costs 3.7 ms even at 6x. It was the picture, and the picture is now eight times cheaper.
-      ❓ **Still open on the same question, which only you can answer: does it feel better on your phone?**
+      ✅ ~~❓ **Still open on the same question, which only you can answer: does it feel better on your phone?**~~ (superseded — see the close note below)
 
       **v11.83 — SO THE APP NOW ASKS YOU FOR THAT NUMBER, instead of waiting for it.**
       Four entries — this one, 125, 202 and the original unnumbered "editing lags" — have all ended on
@@ -2313,8 +2313,9 @@ better still, keep working inside the turn rather than parking work for a later 
       volume at zero — were each refuted with the surrounding code quoted. **That is a session saved,
       not a session wasted**, and it is exactly why the measurement above is the next step rather than
       another hypothesis.
-      ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (play until the sound cuts out, stop, Settings → Your last playback → Copy). Built v14.13; 34 candidate causes were already checked on 29 Aug. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his recorded answer (line ~2033) was about the FEEL of the lag, not the sound
+      ✅ ~~⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (play until the sound cuts out, stop, Settings → Your last playback → Copy). Built v14.13; 34 candidate causes were already checked on 29 Aug. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his recorded answer (line ~2033) was about the FEEL of the lag, not the sound~~ (superseded — see the close note below)
       🔧 **25 Sep, v16.94 (#934):** the audio half may be affected by two faults fixed in #934 (pitch-bent catch-up after a stall; iPhone ignoring volume/mute in the preview).
+      ✅ **CLOSED 25 Sep (waiting-on-him sweep).** Both halves are accounted for: the lag half he confirmed on 1 Sep, and the audio half has his numbers (the 10 Sep paste, #844) and lives in #845, which carries its own ask. Nothing here waits on him any more.
 - [x] **94 — Film grain in the menu is too jumpy and too obvious.** **DONE v6.62.** His words: *"The film grain in the
       menu is too jumpy and too noticeable, need to make it move smoothly and less noticeable."* Two
       separate dials: AMPLITUDE (how visible each grain is) and TEMPORAL BEHAVIOUR (how it changes frame
@@ -17210,7 +17211,7 @@ wait for them to report back."*
       the app ever did. A function only tests call is not a seam, it is a decoration — and three green
       tests were quietly proving a code path the product never used.
       Both directions mutation-checked. Ezra: worth a quick confirm on the phone.
-- [ ] **454 — PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of the word.** (21 Aug, from his
+- [x] **454 — PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of the word.** (21 Aug, from his
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       🔄 **HE CHANGED HIS MIND, 1 Sep. Verbatim:**
       > Actually u are right to keep both options to save effect presets and full layer preseets i change my mind
@@ -17220,7 +17221,7 @@ wait for them to report back."*
       anything. **Do not act on the original wording later**: it reads as an unambiguous order and it has
       been reversed, which is exactly the kind of thing a future session would otherwise "discover" and
       obey.
-      ❓ASK: "Save look + animations" is the ONLY way to copy a movement onto another layer, and deleting it takes your saved whole-look presets with it — A delete it entirely, as you literally said · B (recommended) keep it, stop calling it a preset: rename to "Copy look & motion…" and move it out of the Presets card, so "preset" means effects only · C cut it to effects only, which just duplicates "Save effects only".
+      ✅ ~~❓ASK: "Save look + animations" is the ONLY way to copy a movement onto another layer, and deleting it takes your saved whole-look presets with it — A delete it entirely, as you literally said · B (recommended) keep it, stop calling it a preset: rename to "Copy look & motion…" and move it out of the Presets card, so "preset" means effects only · C cut it to effects only, which just duplicates "Save effects only".~~ (superseded — see the close note below)
       phone, with a screenshot of the New Project sheet.) His words, verbatim: *"I'm putting my foot
       down, presets are just for effects not anything else, if it says preset remove any other function
       than just saving what effects the layer has"*.
@@ -17280,7 +17281,8 @@ wait for them to report back."*
       Verified at 380px: the New Project sheet now runs Name → Aspect ratio with no gap, fits the
       viewport, and the word "preset" appears nowhere in it. Suite green at 793 — three smaller on
       purpose, because the tests guarding the deleted feature went with it.
-        ⏸ **2 Sep — BUILT OUT UNTIL HE picks A, B or C** on the last clause (A = remove "Save whole look as preset…" — his literal words · B = keep it, rename it "Copy look & motion to…" and move it out of the Presets card — recommended · C = cut it to effects only). Everything else in this entry shipped; nothing is deleted until he picks. Re-checked today for strict oldest-first: this line is what is left.
+        ✅ ~~⏸ **2 Sep — BUILT OUT UNTIL HE picks A, B or C** on the last clause (A = remove "Save whole look as preset…" — his literal words · B = keep it, rename it "Copy look & motion to…" and move it out of the Presets card — recommended · C = cut it to effects only). Everything else in this entry shipped; nothing is deleted until he picks. Re-checked today for strict oldest-first: this line is what is left.~~ (superseded — see the close note below)
+      ✅ **CLOSED 25 Sep (waiting-on-him sweep).** His 1 Sep answer at the top of this entry settles the last clause: *"keep both options to save effect presets and full layer preseets"* — both saves stay as they are. The later A/B/C park (2 Sep) was written after that answer and never re-read against it. Which DUPLICATE save button goes is a separate question, #406.
 
 - [x] **455 — ✅ **DONE v11.35.** The speed slider moves in enormous jumps; slow it right down.** (21 Aug, from his phone.)
       His words, verbatim: *"The speed slider goes WAY too fast, it goes up 10x at a time, slow this way
@@ -26667,7 +26669,7 @@ re-opened #480, which I had marked done and had not fixed.
       only out-of-scope reference in the codebase** — so this is a one-off, not a pattern.
       🔒 **Wants a gate:** a smoke test that exports a few frames in EVERY format listed in
       `#exp-format`. The suite never runs `runGif`/`runFrames` far enough to reach the line.
-      ❓ASK: do you ever actually use GIF or PNG-frames export? It changes how urgent this is — the bug is real either way, but if you only ever export MP4 it can wait behind the data-loss one.
+      ✅ (25 Sep sweep: withdrawn — fixed in v14.47 either way) ~~❓ASK: do you ever actually use GIF or PNG-frames export? It changes how urgent this is — the bug is real either way, but if you only ever export MP4 it can wait behind the data-loss one.~~
 
 
       ═══ ✅ **30 AUG (v14.47) — BOTH FORMATS WORK NOW, AND THE QUESTION IS WITHDRAWN.** ═══
@@ -26766,7 +26768,7 @@ re-opened #480, which I had marked done and had not fixed.
       — it does not crop, it disappears.
       **The phone is fine** (labels render correctly at 414×896), which is why this never showed up in
       the 380px pass every release runs.
-      ❓ASK: what resolution is your PC screen? If it is 1920×1080 you have never seen this, and it only bites you on a laptop — worth knowing before I decide how far up the queue it goes.
+      ✅ (25 Sep sweep: withdrawn — fixed in v14.50 for every screen size) ~~❓ASK: what resolution is your PC screen? If it is 1920×1080 you have never seen this, and it only bites you on a laptop — worth knowing before I decide how far up the queue it goes.~~
 
 
       ═══ ✅ **30 AUG (v14.50) — FIXED, AND THE QUESTION IS WITHDRAWN.** ═══
@@ -26817,7 +26819,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [x] **674 — The QA pass's remaining UI findings, and its own corrections.** ✅ DONE v15.74 — decided and built under rule 16.
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
-      ❓ASK: three questions in here — (a) text at 160pt overflows the comp and never wraps: is that the same thing as #98's A/B/C size question, or do you still want the options drawn? (b) do you want the transport buttons' TAP AREA grown to 44px (icons unchanged)? (c) should Export / Canvas / Help stay reachable while a layer is selected?
+      ✅ (25 Sep sweep: decided under rule 16 at v15.74; (b) repeats #469, which he answered "No, they're fine") ~~❓ASK: three questions in here — (a) text at 160pt overflows the comp and never wraps: is that the same thing as #98's A/B/C size question, or do you still want the options drawn? (b) do you want the transport buttons' TAP AREA grown to 44px (icons unchanged)? (c) should Export / Canvas / Help stay reachable while a layer is selected?~~
       · **Raw error text reaches you in alerts** (`js/app.js:4515`, `:3960`). The specific messages
         around them are genuinely good; the two catch-alls undo that — today a phone shows
         *"Export failed: blit is not defined"*. Wants a human sentence plus copyable details.
@@ -28411,7 +28413,7 @@ re-opened #480, which I had marked done and had not fixed.
       Found because test 333 (which visits every tile) pays this cold when run alone.
       **Waiting on Ezra — this one cannot be decided without his phone** (the 30s was measured in headless software-GL;
       his GPU may make it nothing). Nothing is built until he answers the question below.
-      ❓ASK (only your phone can answer it): open the effects browser fresh after a reload,
+      ✅ (25 Sep sweep: superseded — DONE v15.71 without his phone) ~~❓ASK (only your phone can answer it): open the effects browser fresh after a reload,~~
       scroll into *Distort*, tap Back — does the app stall for more than a moment? If it is instant, this stays a
       suite-only cost; if it stalls, it is the fix described above.
       ➡️ **Fix shape:** render thumbnails off the click — chunk the mounts across frames (rAF, a few per frame) or
@@ -29685,24 +29687,25 @@ re-opened #480, which I had marked done and had not fixed.
       3. [x] Escape inside its search box clears the search rather than being swallowed. — v15.90 (a second Escape, with nothing left to clear, leaves the menu)
       4. [x] A test that FAILS on v15.89 for each of Escape, Tab and Delete. — v15.90 (one test drives all three keys plus Space, and a second covers the search box)
 
-- [ ] **810 — The AUDIO effects browser is not treated as a browser: tapping away or changing the selection leaves it open over a different layer, and the effect lands on the old one (hunt HIGH #72)** (6 Sep, same hunt)
+- [x] **810 — The AUDIO effects browser is not treated as a browser: tapping away or changing the selection leaves it open over a different layer, and the effect lands on the old one (hunt HIGH #72)** (6 Sep, same hunt)
       Everything added for the visual browser names `#fx-browser` literally — the queue-401 tap-away exit
       (js/app.js:6735), the Escape path, the key guard. `#afx-browser` gets none of it, so: open it on layer A,
       click layer B in the timeline, tap an audio effect — it is added to A while the panel shows B's empty audio
       list, and it reads as lost. Also flagged: placeSheet adds `fxb-in-inspector` to `#afx-browser` but the CSS
       only docks `#fx-browser` (styles.css:5276), so on PC it is not sitting where it is told it is sitting.
       1. [x] The tap-away / selection-change / Escape exits treat both browsers the same way. — v15.90. Not by naming the second one: `FM.fxSheet` already keeps the set of open browsers, so `FM.fxSheetOpen()` / `FM.fxSheetExit()` ASK which one is up and each browser hangs its own way out on its root. A browser written tomorrow is covered the day it is written.
-      2. [ ] The audio browser is docked by CSS in the inspector column, or is not told that it is.
-         ❓ASK — **YOUR CALL, and I have measured both sides.** Today the Effects menu sits in the left inspector column (307px)
+      2. [x] ✅ v16.83 via #922 — The audio browser is docked by CSS in the inspector column, or is not told that it is.
+         ✅ ~~❓ASK — **YOUR CALL, and I have measured both sides.** Today the Effects menu sits in the left inspector column (307px)~~ (superseded — see the close note below)
          and the AUDIO menu draws the full window width over the timeline, though the code thinks both are docked. Measured at
          1280x800: audio [0, 560, 1280, 240] vs visual [0, 560, 307, 240]. **A** dock the audio menu in the column like the visual
          one (recommended — it is what the code already believes, but its cards must be re-paged for a 307px column first: I tried the
          one-line version and the cards spilled out) · **B** leave it full-width over the timeline and stop telling it that it is docked.
          I did not ship either, because it changes what you see and you have not seen it.
       3. [x] A test that FAILS on v15.89: a tap outside the audio menu leaves it, instead of stranding it over whatever gets selected next. — v15.90
-      ⏸ **BUILT OUT UNTIL HE picks A or B for clause 2** (7 Sep). Clauses 1 and 3 shipped in v15.90; the only thing
+      ✅ ~~⏸ **BUILT OUT UNTIL HE picks A or B for clause 2** (7 Sep). Clauses 1 and 3 shipped in v15.90; the only thing~~ (superseded — see the close note below)
       left is a change to what he SEES, and his standing rule is that nothing visual ships before he has seen it.
       Both sides are measured and both are on the unblock page.
+      ✅ **CLOSED 25 Sep (waiting-on-him sweep).** Clause 2 was answered by him asking again in #922 (23 Sep, *"audio effects menu still goes too big on pc"*); v16.83 docked the audio menu in the column like the visual one (option A) with its cards re-paged, and he was sent the before/after.
 
 - [x] **811 — Dragging the TIMELINE's divider with the Effects menu open moves the band but not the menu (the other half of the v15.89 fix) (hunt MEDIUM #73)** (6 Sep, same hunt)
       v15.89 stopped a press on `#tl-resizer` from closing the browser, and re-placed the sheet on every write in
@@ -31205,7 +31208,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 
 - [x] **883 — 🔴 A WHITE BAR AT THE TOP WHEN YOU ARE INSIDE A PROJECT. (hunt HIGH #883)** ✅ FIXED v16.18. (20 Sep, in chat. His words, verbatim and in full:)
-      ❓ASK: after v16.18, on the installed app on your phone — is the white bar at the top of a project gone?
+      ✅ (25 Sep sweep: answered by his next report, #903 — the bar had changed colour — and now #920) ~~❓ASK: after v16.18, on the installed app on your phone — is the white bar at the top of a project gone?~~
       > also the most recent hting i noticed is that chatgpt fucked it and made it so now when ur in a project theres a white bar at the top that shouldn't be there. log that.
 
       ⚠️ **NOT ChatGPT.** Codex made no commits and left no edits (#870). Whatever causes this shipped in Claude's own work — and **v16.17 (the most recent release, 12 Sep) is the prime suspect**, because it is the release that added 138 lines of light-surface CSS to `theme-glass.css`.
@@ -31257,7 +31260,7 @@ re-opened #480, which I had marked done and had not fixed.
       1. [x] ~~❓ ASK HIM — three things, and a photo settles all of them.~~ **No longer needed** — the cause
              is isolated and proved by measurement. Kept below for the record only.
       ◦ ~~❓ **ASK HIM — three things, and a photo settles all of them.** A screenshot of the bar; whether it is the **installed app on his phone** or a browser tab; and whether his Home screen is currently **white/light or dark**. If it is the installed app with a light Home, the hypothesis above is almost certainly right.
-      2. [ ] ⏸ **DELIBERATELY LEFT, and it is the one thing still open here: I cannot run an iOS standalone web app.** It did not block the fix — the cause was isolated by MEASUREMENT rather than by reproduction (removing that one class flips the canvas from `rgb(255,255,255)` to `rgb(6,12,15)`, which names the culprit exactly), and the test asserts the removal at the source. But the strip this paints only EXISTS on a web view larger than its layout viewport, so **the only thing that can confirm HIS bar is gone is him opening the installed app.** ❓ **ASK: after v16.18, is the white bar gone?** If it is not, there is a second cause and this entry reopens — do not assume the class was the whole story just because it was demonstrably one cause.
+      2. ~~⏸ **DELIBERATELY LEFT, and it is the one thing still open here: I cannot run an iOS standalone web app.** It did not block the fix — the cause was isolated by MEASUREMENT rather than by reproduction (removing that one class flips the canvas from `rgb(255,255,255)` to `rgb(6,12,15)`, which names the culprit exactly), and the test asserts the removal at the source. But the strip this paints only EXISTS on a web view larger than its layout viewport, so **the only thing that can confirm HIS bar is gone is him opening the installed app.** ❓ **ASK: after v16.18, is the white bar gone?** If it is not, there is a second cause and this entry reopens — do not assume the class was the whole story just because it was demonstrably one cause.~~ — superseded by #920 — his phone is the check there (25 Sep sweep)
       3. [x] ~~The likely fix is not to remove the rule…~~ **MOOT, and recorded as moot rather than as done: the rule was INNOCENT.** Measured inside a project, `html[data-home="light"]:has(#home-screen:not(.hidden))` does not match and the canvas it governs is correct. This clause was written while I still believed my first hypothesis; the real cause was a class that is never removed. The rule stays exactly as it is, and queue 553's black bar is still guarded by its own test — which I re-ran by hand after the fix (page and home both `rgb(244, 246, 250)`) precisely because this fix could have brought it back.
       4. [x] ~~Add the regression test in the direction that can actually fail.~~ ✅ Test `#883`, in two halves so it cannot pass vacuously: the source half asserts `index.html` removes `splash-on-light` **in the same call as `splash-on`** (they are armed together, so they must come off together), and the runtime half is the CONTROL — it adds the class back and fails if that no longer turns the canvas white, because then the source half would be guarding nothing. `ship.sh`'s prove step confirmed it fails without the fix.
 
@@ -31971,8 +31974,8 @@ re-opened #480, which I had marked done and had not fixed.
       be rendered into the reduced plate at all — its cost is per-pixel but its output is meant to be
       resolution-independent. That is a bigger change and a perf trade on the exact device that needs the reduced
       plate in the first place, so it is his call and not mine:
-      1. [ ] **A** — leave it: the preview keeps the right tone, and the fine controls are judged on the export.
-      2. [ ] **B** — render pattern effects at full resolution in the preview so every control is live, and take
+      1. ~~**A** — leave it: the preview keeps the right tone, and the fine controls are judged on the export.~~ — not chosen — C shipped v16.47 under #872 (25 Sep sweep)
+      2. ~~**B** — render pattern effects at full resolution in the preview so every control is live, and take~~ — not chosen — C shipped v16.47 under #872 (25 Sep sweep)
              the frame-time cost on the phone.
       ⤷ Whichever he picks, the numbers above are the test: they are what changes.
 
@@ -32020,13 +32023,13 @@ re-opened #480, which I had marked done and had not fixed.
       **(a)** a strip above the bar is still uncovered and is showing the page colour, or
       **(b)** there is no strip, and what he is seeing is `#topbar-m`'s own gradient
       (`#161a21 → #12151b`), which now reads as a band because the tone around it changed.
-      ❓ASK: in a project, is the dark band ABOVE the row of buttons (a strip of its own), or IS it the row of buttons' own background? One word — "above" or "the bar itself" — picks the fix.
-      1. [ ] If **above**: make the page colour follow the screen and match the bar that sits at the top of it
+      ✅ (25 Sep sweep: overtaken — #920 found the real cause, iOS paints the strip, v16.78–v16.96) ~~❓ASK: in a project, is the dark band ABOVE the row of buttons (a strip of its own), or IS it the row of buttons' own background? One word — "above" or "the bar itself" — picks the fix.~~
+      1. ~~If **above**: make the page colour follow the screen and match the bar that sits at the top of it~~ — superseded by #920 (25 Sep sweep)
              (project → `#161a21`, home → `#f4f6fa`), so no strip can contrast in EITHER direction. The lasting
              fix is that the page colour should never be visible at all.
-      2. [ ] If **the bar itself**: flatten `#topbar-m`'s gradient, and reconsider `.hm-top`'s white veil now
+      2. ~~If **the bar itself**: flatten `#topbar-m`'s gradient, and reconsider `.hm-top`'s white veil now~~ — superseded by #920 (25 Sep sweep)
              that it no longer sits on white.
-      3. [ ] Either way: **the page colour must stop being load-bearing.** This is the sixth entry about this
+      3. ~~Either way: **the page colour must stop being load-bearing.** This is the sixth entry about this~~ — superseded by #920 (v16.96 moved the status colour off the page ground) (25 Sep sweep)
              one strip (135, 143, 162, 553, 883, and now this). A colour that has to be right on every screen,
              in every theme, mid-transition, is a rule with too many members — the strip should be painted by
              the screen that owns it.
