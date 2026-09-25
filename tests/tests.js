@@ -85,6 +85,14 @@
     }
   }
 
+  /* THE COLOUR A SURFACE PAINTS, not the one iOS reads (queue 920). The light Home and the editor's <html> carry their
+     TOP colour in background-color — that is what paints the iPhone status bar — and paint their real ground as a flat
+     `linear-gradient(C, C)` image layer over it. A test asking "what is the ground here" must read the layer. */
+  function paintedGround(el) {
+    var cs = getComputedStyle(el), m = String(cs.backgroundImage).match(/linear-gradient\((rgba?\([^)]*\)), (rgba?\([^)]*\))\)\s*$/);
+    return m && m[1] === m[2] ? m[1] : cs.backgroundColor;
+  }
+
   var T = [];
   function test(name, opts, fn) {
     if (typeof opts === 'function') { fn = opts; opts = {}; }
@@ -74717,6 +74725,55 @@
     }
   });
 
+  /* HIS REINSTALL WAS THE MEASUREMENT (25 Sep): *"it now is like a bar at the top instead of it continuing up like it used to
+     smoothly and then also it still fades down when you're actually in a project"*. In a project the strip was rgb(7,12,15) —
+     <html>'s background-color — over a #161a21 bar; on the light Home #f4f6fa over a #fafdff header. theme-color said neither
+     (Safari 26 ignores it). So the colour iOS paints is the background-COLOR of the fixed full-screen element or the root, and
+     each screen now carries its TOP colour there while its ground moves to a flat image layer. This holds all three screens to
+     it at a phone width, cross-checks the editor against the top bar's own computed colour rather than a literal, and holds
+     the look still: the ground you see must be what it was. */
+  test('920 the status bar takes each screen top colour from the page background-color — light Home, dark Home and a project', { item: '920', budgetMs: 20000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const html = document.documentElement, home = document.getElementById('home-screen');
+    const hex2rgb = h => { const n = parseInt(String(h).slice(1), 16); return 'rgb(' + (n >> 16) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')'; };
+    const C = FM.statusBar && FM.statusBar.colours;
+    if (!C) throw new Error('setup: FM.statusBar.colours is missing');
+    const homeOn = () => !!home && !home.classList.contains('hidden');
+    const wasHome = homeOn(), dh = html.getAttribute('data-home');
+    const col = el => getComputedStyle(el).backgroundColor;
+    await atPhoneWidth(async function () {
+      try {
+        html.classList.remove('splash-on', 'splash-on-light');
+        html.setAttribute('data-home', 'light');
+        if (!homeOn()) FM.home.open();
+        await sleep(300);
+        if (paintedGround(home) !== 'rgb(244, 246, 250)') throw new Error('control: the light Home no longer LOOKS paper white (' + paintedGround(home) + ') — this fix must not change what he sees');
+        if (col(home) !== hex2rgb(C.homeLight)) throw new Error('on the light Home the colour iOS paints the status bar with is ' + col(home) + ' — not the header\'s ' + hex2rgb(C.homeLight) + ', so the strip reads as a bar above it (his reinstall screenshot)');
+        if (col(html) !== hex2rgb(C.homeLight)) throw new Error('on the light Home <html> reads ' + col(html) + ', not ' + hex2rgb(C.homeLight));
+
+        html.setAttribute('data-home', 'dark');
+        await sleep(60);
+        if (col(home) !== hex2rgb(C.homeDark)) throw new Error('on the dark Home the status-bar colour is ' + col(home) + ', not the top glow ' + hex2rgb(C.homeDark));
+        if (col(html) !== hex2rgb(C.homeDark)) throw new Error('on the dark Home <html> reads ' + col(html) + ', not ' + hex2rgb(C.homeDark));
+        if (paintedGround(home) !== 'rgb(6, 12, 15)') throw new Error('control: the dark Home ground changed to ' + paintedGround(home));
+
+        html.setAttribute('data-home', 'light');   // the editor must not care which Home look he picked
+        FM.home.close();
+        await sleep(400);
+        const bar = document.getElementById('topbar-m');
+        if (!bar || !bar.getBoundingClientRect().height) throw new Error('control: no phone top bar in the editor — this is not the layout he uses');
+        if (col(bar) !== hex2rgb(C.editor)) throw new Error('control: the phone top bar is ' + col(bar) + ', not ' + hex2rgb(C.editor) + ' — the value in statusbar.js is stale');
+        if (col(html) !== col(bar)) throw new Error('in a project the page background-color is ' + col(html) + ' while the top bar is ' + col(bar) + ' — iOS paints the status bar with the first and fades it into the second: his "still fades down when you\'re actually in a project"');
+        if (paintedGround(html) !== 'rgb(6, 12, 15)') throw new Error('control: the editor ground under everything changed to ' + paintedGround(html));
+      } finally {
+        html.setAttribute('data-home', dh || 'light');
+        if (wasHome && !homeOn()) FM.home.open();
+        if (!wasHome && homeOn()) FM.home.close();
+        await sleep(200);
+      }
+    });
+  });
+
   test('903: the home screen paints no heavy colour wash behind its own top controls', { item: '903' }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const html = document.documentElement, was = html.getAttribute('data-home');
@@ -76174,21 +76231,21 @@
       html.classList.remove('splash-on-light');
       html.setAttribute('data-home', 'light');
       if (!FM.home.isOpen()) { FM.home.open(); await sleep(200); }
-      const homeBg = bg(home);
+      const homeBg = paintedGround(home);   // the paper white you SEE; background-color is the status bar's (queue 920)
       if (homeBg !== 'rgb(244, 246, 250)') throw new Error('setup: the light home is not the paper white (' + homeBg + ') — the look under test is not applied');
-      if (bg(html) !== homeBg) {
+      if (paintedGround(html) !== homeBg) {
         // say WHICH rule painted the page, so a wrong reading names its cause instead of its symptom
         const who = []; for (const ss of document.styleSheets) { let cr; try { cr = ss.cssRules; } catch (e) { continue; } for (const r of cr) { if (r.selectorText && /^html|^:root/.test(r.selectorText) && r.style && (r.style.backgroundColor || r.style.background)) who.push((ss.href || 'inline').split('/').pop() + '::' + r.selectorText + '->' + (r.style.backgroundColor || r.style.background).slice(0, 40)); } }
-        throw new Error('with the light home up the page behind it is ' + bg(html) + ', not the home\'s ' + homeBg + ' — a strip the panels leave shows as a black bar (his screenshot). html attrs: ' + [].map.call(html.attributes, a => a.name + '=' + a.value).join(' ') + '; inline: ' + html.style.cssText + '; matches: ' + html.matches('html[data-home="light"]:has(#home-screen:not(.hidden))') + '; rules: ' + who.join(' | '));
+        throw new Error('with the light home up the page behind it is ' + paintedGround(html) + ', not the home\'s ' + homeBg + ' — a strip the panels leave shows as a black bar (his screenshot). html attrs: ' + [].map.call(html.attributes, a => a.name + '=' + a.value).join(' ') + '; inline: ' + html.style.cssText + '; matches: ' + html.matches('html[data-home="light"]:has(#home-screen:not(.hidden))') + '; rules: ' + who.join(' | '));
       }
       // his exact picture: the push parked — home slid out, editor not yet across
       if (typeof gate === 'function') FM.home._pushAllowed = () => true;
       FM.home.close({ push: true, wait: true }); await sleep(120);
       if (!body.classList.contains('fm-pushing')) throw new Error('setup: the push did not park (body "' + body.className + '")');
-      if (bg(html) !== homeBg) throw new Error('mid-push the page is ' + bg(html) + ' — the gap between the home sliding out and the editor sliding in is a black bar');
+      if (paintedGround(html) !== homeBg) throw new Error('mid-push the page is ' + paintedGround(html) + ' — the gap between the home sliding out and the editor sliding in is a black bar');
       FM._finishIfStranded('553 test'); await sleep(150);
       if (!home.classList.contains('hidden')) throw new Error('setup: finishing the push did not hide the home');
-      if (bg(html) === homeBg) throw new Error('control: with the home hidden the page still paints the home colour — the rule leaks into the editor');
+      if (paintedGround(html) === homeBg) throw new Error('control: with the home hidden the page still paints the home colour — the rule leaks into the editor');
     } finally {
       FM.home._pushAllowed = gate;
       if (hadSplash) html.classList.add('splash-on-light');
@@ -78514,7 +78571,7 @@
         const opaqueBgOf = function (el) {
           let n = el;
           while (n && n !== document.documentElement) {
-            const c = getComputedStyle(n).backgroundColor;
+            const c = paintedGround(n);   // #home-screen's background-color is the status bar's, not its ground (queue 920)
             const m = c.match(/rgba?\(([^)]+)\)/);
             if (m) { const p = m[1].split(',').map(parseFloat); const a = p.length > 3 ? p[3] : 1; if (a >= 0.5) return c; }
             n = n.parentElement;
@@ -80360,7 +80417,7 @@
          11.5px. His words: "too pale to read". */
       if (hint) {
         const ink = rgb(getComputedStyle(hint).color);
-        const ground = rgb(getComputedStyle(document.getElementById('home-screen')).backgroundColor) || [244, 246, 250];
+        const ground = rgb(paintedGround(document.getElementById('home-screen'))) || [244, 246, 250];   // the ground you see (queue 920)
         if (ink) {
           const a = lum(ink), b = lum(ground);
           const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
@@ -84180,7 +84237,7 @@
     try {
       html.setAttribute('data-home', 'light');
       if (!FM.home.isOpen()) { FM.home.open(); await sleep(220); }
-      const paper = getComputedStyle(home).backgroundColor;
+      const paper = paintedGround(home);   // the ground you see (queue 920)
       if (lum(paper) < 0.6) throw new Error('setup: the home is not the light look (' + paper + ') — the bug under test cannot occur');
 
       FM.contextMenu.show(20, 20, items); await sleep(30);

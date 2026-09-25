@@ -2143,6 +2143,30 @@ html.splash-on, html.splash-on body { background: #000; }
       rgba(0, 0, 0, 0) calc(52px + env(safe-area-inset-top)));
   }
 }
+/* ═══ QUEUE 920 (25 Sep) — THE STATUS BAR IS PAINTED WITH THE PAGE'S background-COLOR, SO THAT IS NOW THE TOP BAR'S.
+   Ezra, after reinstalling: *"it now is like a bar at the top instead of it continuing up like it used to smoothly
+   and then also it still fades down when you're actually in a project"*. His two screenshots are the measurement:
+   in a project the strip was rgb(7,12,15) — this <html>'s background-color (#060c0f), NOT the #161a21 the band
+   above paints, and NOT theme-color (Safari 26 ignores it) — fading into the #161a21 bar below it. On the light
+   Home it was #f4f6fa over a #fafdff header. So iOS reads background-COLOR (a fixed full-screen element's first,
+   else the root's) and never the pixels; the fade is its edge effect blending that colour into the page.
+   🔑 So each screen's background-color is its TOP colour, and what you see is unchanged: the ground moves into a
+   flat image layer that covers the colour everywhere. In a project <html> shows nowhere (measured: painted
+   magenta, 0 px on screen), so the colour costs nothing visible. Light/dark Home: theme-glass.css, same split.
+   ⚠️ Not during the intro — html.splash-on's black canvas is load-bearing (#883), and a full layer would cover it. */
+@media (max-width: 700px) {
+  html:not(.splash-on):has(#home-screen.hidden) {
+    background-color: #161a21;
+    background-image: linear-gradient(180deg,
+      #161a21 0,
+      #161a21 calc(52px + env(safe-area-inset-top)),
+      rgba(0, 0, 0, 0) calc(52px + env(safe-area-inset-top))),
+      linear-gradient(var(--bg), var(--bg));
+  }
+}
+/* the dark Home's top is the glass glow, #091823 at its middle (measured at 390, no inset): the ground stays --bg */
+html:not([data-home="light"]) #home-screen { background-color: #091823; background-image: linear-gradient(var(--bg, #0b0e14), var(--bg, #0b0e14)); }
+html:not([data-home="light"]):not(.splash-on):has(#home-screen:not(.hidden)) { background-color: #091823; }
 /* ⚠️ THE LIGHT GROUND IS NOT DECLARED HERE — theme-glass.css owns it (queue 646). It has carried
    `html.splash-on-light { background: #111; animation: splash-ground 2.05s ease-in forwards; }` all
    along, ramping the page from #111 to white under the film, with a reduced-motion variant beside it.
