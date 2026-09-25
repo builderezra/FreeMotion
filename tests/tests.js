@@ -92169,29 +92169,64 @@
      the driver, not the app, and not what these tests are about, so ONE such hold is let go of the way he would — the
      Select button, now reading Done — and the press is made again. Anything else, or a second hold, fails with the
      state it found, so a real race cannot hide behind the retry. `press` re-finds the card each time: the hold rebuilt it. */
+  /* BRING AN ELEMENT'S (OR TEMPLATE'S) CARD INTO THE LIST'S VIEW, as he would by scrolling to it. Drafts lead the Elements tab and a
+     full suite leaves plenty behind, so after 1800 tests the card can sit below the bottom of the Home list — where a
+     real press lands on nothing (measured: the stub test's click reached no element at all in both full runs, and
+     passed in every run of 6 and of 99 tests). The list scrolls inside the frame, so sliding the frame cannot reveal it. */
+  async function heReveal(el) {
+    const c = heCard(el.id);
+    if (!c) throw new Error('setup: the ' + el.name + ' card is not on Home');
+    const sc = document.querySelector('#home-screen .hm-scroll');
+    const r = c.getBoundingClientRect();
+    if (sc && (r.top < 80 || r.bottom > innerHeight - 40)) {
+      const sr = sc.getBoundingClientRect();
+      sc.scrollTop += (r.top - sr.top) - Math.max(0, (sc.clientHeight - r.height) / 2);
+      await sleep(400);
+    }
+    return heCard(el.id);
+  }
   async function heOpenByPress(el, press, what) {
     let held = 0;
-    for (;;) {
-      const t0 = Date.now();
-      await press();
+    // what the press reached, for the message if it opens nothing: the clicks the document saw, and the open call
+    const seen = [], ofe = FM.elements.openForEdit;
+    const onClick = function (e) { seen.push('click on ' + ((e.target && e.target.className) || (e.target && e.target.tagName) || '?') + (card0 && card0.contains(e.target) ? ' (the card)' : '')); };
+    let card0 = heCard(el.id);
+    FM.elements.openForEdit = function () {
+      seen.push('openForEdit called');
+      const r = ofe.apply(this, arguments);
+      Promise.resolve(r).then(function (v) { seen.push('openForEdit gave ' + v); }, function (e) { seen.push('openForEdit threw ' + (e && e.message)); });
+      return r;
+    };
+    document.addEventListener('click', onClick, true);
+    try {
       for (;;) {
-        if (!FM.home.isOpen() && FM.scene.project.ofElement === el.id) return held;
-        const hold = document.body.classList.contains('hm-selecting');
-        if ((hold && !held) || Date.now() - t0 > 15000) break;
-        await sleep(40);
+        const t0 = Date.now();
+        card0 = heCard(el.id);
+        await press();
+        for (;;) {
+          if (!FM.home.isOpen() && FM.scene.project.ofElement === el.id) return held;
+          const hold = document.body.classList.contains('hm-selecting');
+          if ((hold && !held) || Date.now() - t0 > 15000) break;
+          await sleep(40);
+        }
+        if (document.body.classList.contains('hm-selecting') && !held) {
+          held++;
+          const done = document.getElementById('hm-select-btn');
+          if (done) done.click();
+          await sleep(500);
+          if (document.body.classList.contains('hm-selecting')) throw new Error('setup: the press on the ' + el.name + ' element arrived as a hold and Select would not let go');
+          continue;
+        }
+        const P = FM.scene.project || {};
+        const ask = document.getElementById('fm-ask');
+        throw new Error('timed out waiting for ' + (what || 'the element to open for editing') + ' — ' + (Date.now() - t0) + ' ms after the press Home is ' + (FM.home.isOpen() ? 'open' : 'closed') +
+          (document.body.classList.contains('hm-selecting') ? ' and in Select, so the press arrived as a HOLD (twice)' : '') +
+          ', and the open project is ' + (P.name || '?') + (P.ofElement ? ' (a workspace for ' + (P.ofElement === el.id ? 'this' : 'another') + ' element)' : '') + ' with ' + FM.scene.layers.length + ' layers' +
+          '; the press reached: ' + (seen.join(', ') || 'nothing') + (ask && !ask.classList.contains('hidden') ? '; a question is up: ' + ask.textContent.slice(0, 160) : ''));
       }
-      if (document.body.classList.contains('hm-selecting') && !held) {
-        held++;
-        const done = document.getElementById('hm-select-btn');
-        if (done) done.click();
-        await sleep(500);
-        if (document.body.classList.contains('hm-selecting')) throw new Error('setup: the press on the ' + el.name + ' element arrived as a hold and Select would not let go');
-        continue;
-      }
-      const P = FM.scene.project || {};
-      throw new Error('timed out waiting for ' + (what || 'the element to open for editing') + ' — ' + (Date.now() - t0) + ' ms after the press Home is ' + (FM.home.isOpen() ? 'open' : 'closed') +
-        (document.body.classList.contains('hm-selecting') ? ' and in Select, so the press arrived as a HOLD (twice)' : '') +
-        ', and the open project is ' + (P.name || '?') + (P.ofElement ? ' (a workspace for ' + (P.ofElement === el.id ? 'this' : 'another') + ' element)' : '') + ' with ' + FM.scene.layers.length + ' layers');
+    } finally {
+      document.removeEventListener('click', onClick, true);
+      FM.elements.openForEdit = ofe;
     }
   }
 
@@ -92227,7 +92262,7 @@
       await onScreen924(async function () {
         await atPhoneWidth(async function () {
           await heOpenHome('templates');
-          const card = heCard(tpl.id);
+          const card = await heReveal(tpl);
           if (!card) throw new Error('setup: the HUNTe promo template has no card under Templates');
           await realInput924(hcTap(hcPt(card.querySelector('.hm-card-more'))), 'a finger on the ⋯ of HUNTe promo');
           const item = await hcMenuItem(/New project from template/);
@@ -92298,7 +92333,7 @@
         await atPhoneWidth(async function () {
           await heOpenHome('elements');
           if (!heCard(el.id)) throw new Error('setup: the HUNTe caption element has no card under Elements');
-          await heOpenByPress(el, function () { return realInput924(hcTap(hcPt(heCard(el.id).querySelector('.hm-name'))), 'a finger on the HUNTe caption element'); });
+          await heOpenByPress(el, async function () { return realInput924(hcTap(hcPt((await heReveal(el)).querySelector('.hm-name'))), 'a finger on the HUNTe caption element'); });
           await sleep(700);
         }, 380);
       });
@@ -92342,7 +92377,7 @@
       await onScreen924(async function () {
         await atWideWidth(async function () {
           await heOpenHome('templates');
-          const card = heCard(tpl.id);
+          const card = await heReveal(tpl);
           if (!card) throw new Error('setup: the HUNTe title template has no card under Templates');
           await hcMouse(card.querySelector('.hm-card-more'), 'a click on the ⋯ of HUNTe title');
           const item = await hcMenuItem(/New project from template/);
@@ -92395,7 +92430,7 @@
         await atWideWidth(async function () {
           await heOpenHome('elements');
           if (!heCard(el.id)) throw new Error('setup: the HUNTe badge element has no card under Elements');
-          await heOpenByPress(el, function () { return hcMouse(heCard(el.id).querySelector('.hm-name'), 'a click on the HUNTe badge element'); });
+          await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a click on the HUNTe badge element'); });
           await sleep(800);
           res.opened = FM.scene.layers.length;
           if (res.opened !== 2) throw new Error('setup: the element opened with ' + res.opened + ' layers, not its 2');
@@ -92411,7 +92446,7 @@
             res.keptDraft = FM.projects.list().some(function (p) { return p.elementDraft && p.ofElement === el.id; });
             FM.home._render('elements'); await sleep(450);
             if (heCard(el.id)) {
-              await heOpenByPress(el, function () { return hcMouse(heCard(el.id).querySelector('.hm-name'), 'a second click on the HUNTe badge element'); }, 'the element to reopen');
+              await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a second click on the HUNTe badge element'); }, 'the element to reopen');
               await sleep(800);
               res.reopened = FM.scene.layers.length;
             }
@@ -92532,7 +92567,7 @@
         await atWideWidth(async function () {
           await heOpenHome('elements');
           if (!heCard(el.id)) throw new Error('setup: the HUNTe stub element has no card under Elements');
-          await heOpenByPress(el, function () { return hcMouse(heCard(el.id).querySelector('.hm-name'), 'a click on the HUNTe stub element'); });
+          await heOpenByPress(el, async function () { return hcMouse((await heReveal(el)).querySelector('.hm-name'), 'a click on the HUNTe stub element'); });
           await sleep(800);
           res.pid = FM.projects.currentId();
           res.layers = FM.scene.layers.length;
