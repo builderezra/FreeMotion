@@ -97397,6 +97397,64 @@
       if (release) release();
       await hd5Cleanup(made, orig, wasOpen);
     }
+
   });
+
+
+  /* ═══ HUNT-5 REVIEW — the storage fixes, reviewed before they shipped (queue 690) ═════════════════════════════════════ */
+  test('690 renaming the open project on Home publishes the name at a new rev, and this window stays level with it', { item: '690', budgetMs: 30000 }, async function () {
+    /* Hunt 5 made a flush that would write the same bytes write nothing. A rename rewrote the doc in place at the OLD rev,
+       so the bump that used to publish it never came: a second window on the project then wrote the old name back, and
+       this one went stale. Measured here on the rev: the rename must advance it, and this window must adopt it. */
+    const id = FM.projects.currentId();
+    if (!id) throw new Error('setup: no project open');
+    const key = 'fm.proj.' + id;
+    FM.storage.flushSync();
+    const raw0 = localStorage.getItem(key), name0 = FM.scene.project.name;
+    const rev0 = +(/^\{"rev":(\d+)/.exec(raw0 || '') || [0, 0])[1];
+    const st0 = FM._sceneRevState();
+    if (st0.stale) throw new Error('setup: this window is already stale');
+    if (st0.lastRev !== rev0) throw new Error('setup: this window is not level with the disk (' + st0.lastRev + ' vs ' + rev0 + ')');
+    try {
+      FM.projects.rename(id, 'HUNT5R renamed');
+      const raw1 = localStorage.getItem(key);
+      const rev1 = +(/^\{"rev":(\d+)/.exec(raw1 || '') || [0, 0])[1];
+      if (!/HUNT5R renamed/.test(raw1)) throw new Error('control: the rename did not reach the stored document');
+      if (rev1 !== rev0 + 1) throw new Error('the rename rewrote the project at rev ' + rev1 + ' where it was ' + rev0 + ' — a second window on it can then write the OLD name back over it and this one goes stale');
+      const st1 = FM._sceneRevState();
+      if (st1.lastRev !== rev1 || st1.stale) throw new Error('this window did not adopt its own rename (lastRev ' + st1.lastRev + ', disk ' + rev1 + ', stale ' + st1.stale + ') — its next save is refused as if another window had moved on');
+      FM.storage.flushSync();
+      if (FM._sceneRevState().stale) throw new Error('flushing right after its own rename marked this window stale');
+    } finally {
+      FM.projects.rename(id, name0); FM.storage.flushSync();
+    }
+  });
+
+  test('690 a window that is behind leaves another window s clip-not-landed note alone', { item: '690', budgetMs: 30000 }, async function () {
+    /* The note says "this clip's file never finished saving". Another window may have imported the clip — the doc on disk
+       lists it — while this window's scene has never heard of it. Pruning by this window's layers deleted the note, and the
+       clip came back empty and silent. A note goes only when neither this window nor the stored doc has the layer. */
+    const id = FM.projects.currentId();
+    if (!id) throw new Error('setup: no project open');
+    const key = 'fm.proj.' + id, PK = 'fm.mediaPending';
+    FM.storage.flushSync();
+    const raw0 = localStorage.getItem(key), pend0 = localStorage.getItem(PK);
+    try {
+      const d = JSON.parse(raw0);
+      const ghost = 'Lhunt5ghost';
+      d.layers = (d.layers || []).concat([{ id: ghost, type: 'video', name: 'Big clip from the other window', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }]);
+      localStorage.setItem(key, JSON.stringify(d));            // the other window's import, at the same rev
+      localStorage.setItem(PK, JSON.stringify({ [ghost]: { p: id, n: 'Big clip from the other window', r: 1 }, Lhunt5gone: { p: id, n: 'gone', r: 1 } }));
+      if (FM.scene.layers.some(l => l.id === ghost)) throw new Error('setup: this window already has the ghost layer');
+      await FM.storage.hydrateSceneMedia({ onlyMissing: true });
+      const pend = JSON.parse(localStorage.getItem(PK) || '{}');
+      if (pend.Lhunt5gone) throw new Error('control: a note for a layer that is in NEITHER this window nor the stored doc was kept — the tidy-up did not run, so this proves nothing');
+      if (!pend[ghost]) throw new Error('this window, behind the stored doc, deleted the other window s note for a clip whose file is still landing — killed mid-save, that clip comes back empty and nothing says so');
+    } finally {
+      localStorage.setItem(key, raw0);
+      if (pend0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, pend0);
+    }
+  });
+
 
 })();

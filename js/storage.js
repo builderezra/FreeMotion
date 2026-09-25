@@ -596,7 +596,10 @@ window.FM = window.FM || {};
   }
   // An empty index is no index: the key goes, so a device with nothing in flight carries nothing.
   function writePending(pend) {
-    if (Object.keys(pend).length) return writeJSON(PENDING_KEY, pend);
+    /* QUIETLY (queue 690 hunt-5 review): this is bookkeeping, not his project. Through writeJSON a refused note raised
+       "Storage full — autosave paused" and re-armed it every save (the #748 repeat-toast pattern) although the document
+       itself saved. A note that cannot be written only means the next launch cannot name an interrupted clip. */
+    if (Object.keys(pend).length) { try { localStorage.setItem(PENDING_KEY, JSON.stringify(pend)); return true; } catch (e) { return false; } }
     try { localStorage.removeItem(PENDING_KEY); } catch (e) {}
     return true;
   }
@@ -617,6 +620,11 @@ window.FM = window.FM || {};
     let changed = false;
     found.forEach(id => { if (pend[id]) { delete pend[id]; changed = true; } });
     const pid = tabId(), live = new Set((FM.scene.layers || []).map(l => l && l.id));
+    /* …and the layers of the doc ON DISK count too (queue 690 hunt-5 review): another window may have moved the doc ahead
+       of this tab — imported a big clip whose file is still landing — and this tab's in-memory scene has never heard of
+       it. Pruning by `live` alone deleted that window's note, and a clip killed mid-save came back empty and silent,
+       the very thing the note exists to say. A note goes only when NEITHER this tab nor the stored doc has the layer. */
+    try { const d = JSON.parse(diskRaw() || 'null'); if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l && l.id) live.add(l.id); }); } catch (e) {}
     let known = null;
     try { known = new Set(((FM.projects && FM.projects.list && FM.projects.list()) || []).map(p => p.id)); } catch (e) { known = null; }
     for (const id in pend) {
@@ -2684,7 +2692,21 @@ window.FM = window.FM || {};
       const idx = this.list(); const e = idx.find(p => p.id === id); if (!e) return;
       e.name = name; e.modified = Date.now(); this.saveIndex(idx);   // renaming is a real change → bumps list order
       const doc = readJSON('fm.proj.' + id, null);
-      if (doc && doc.project) { doc.project.name = name; writeJSON('fm.proj.' + id, doc); }
+      if (doc && doc.project) {
+        /* ⚠️ A RENAME IS A DOC WRITE LIKE ANY OTHER, SO IT TAKES A NEW REV (queue 690 hunt-5 review). It rewrote the doc in
+           place at the OLD rev — harmless while every save bumped the rev anyway, because this tab's next flush published
+           the name at rev+1 and the #306 guard stopped a second window writing over it. Since hunt 5 a flush that would
+           write the same bytes writes nothing, so that bump never came: a second window on the same project (opened only
+           to look) then wrote the OLD name back at rev+1, and this window — the one he is working in — went stale.
+           So the rename is written at rev+1, rev first as diskRev's regex needs, and a window that was level with the
+           disk adopts it; any other window sees the disk ahead with different work and stands down, as it should. */
+        const old = +doc.rev || 0, nr = old + 1;
+        doc.project.name = name;
+        const str = JSON.stringify(Object.assign({ rev: nr }, doc, { rev: nr }), FM.jsonReplacer);
+        let wrote = false;
+        try { localStorage.setItem('fm.proj.' + id, str); wrote = true; } catch (e) { warnQuota(e); }
+        if (wrote && id === tabId() && !_stale && lastRev === old) { lastRev = nr; lastDoc = str; }
+      }
       /* THIS tab's open project (queue 936 review's rule), not the shared pointer another window can move — and
          queue 690 (hunt 5): into its undo history as well, or the next Undo inside puts the old name back. */
       if (id === tabId()) {
