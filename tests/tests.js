@@ -98813,14 +98813,19 @@
     });
   });
 
-  /* ═══ HUNT-b — AUDIO MIX, PREVIEW VS EXPORT (queue 690, his words: go re audit, find some bugs coz theres a shit load) ═══
+  /* ═══ 690 — AUDIO MIX, PREVIEW VS EXPORT (sixth hunt, 26 Sep; his words: go re audit, find some bugs coz theres a shit load) ═══
    * Four faults found by MEASURING what comes out — the exporter's own mix (buildAudioMix), the exported MP4 decoded back,
    * and the live preview tapped at the speakers (every connection to the destination is re-routed through a recorder,
-   * the same tap the HUNT-e iPhone test uses). Each test FAILS today and says what he would hear. Not fixed yet. */
+   * the same tap the HUNT-e iPhone test uses). Each was first written to FAIL on v17.00 saying what he would hear, and is
+   * fixed: the edge de-click in the file (js/exporter.js buildAudioMix), the pre-roll at a split (js/app.js
+   * prerollAtSeam), the level stage before the effects (js/audio-fx-live.js sync), and the AAC warm-up cut out of the
+   * file (js/exporter.js aacPriming, encodeAudio). */
 
   // A speaker tap for the live preview: every node that connects to the destination is re-routed through a recorder that
   // logs the RMS of each 512-sample block beside the transport time it was heard at. Returns { log, stop }.
-  async function huntBTap() {
+  // NOT huntBTap: that name is the finger tap far above, and two function declarations with one name in one scope means
+  // the later one wins — every finger-tap test would have been handed this instead.
+  async function speakerTap690() {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const ctx = FM.audioCtx();
     const origConnect = AudioNode.prototype.connect;
@@ -98860,22 +98865,25 @@
     return Math.sqrt(s / Math.max(1, b - a));
   }
 
-  /* HUNT-b 1 — A TRIMMED SONG CLICKS AT EVERY CUT IN THE EXPORTED FILE.
+  /* 690 (HUNT-b 1) — A TRIMMED SONG CLICKED AT EVERY CUT IN THE EXPORTED FILE. Fixed: buildAudioMix builds the preview's
+   * edge envelope — 0 to 1 over the first 45 ms of the clip, 1 to 0 over its last 45 ms — on a gain of its own, skipping
+   * an edge that touches the other half of a split (the seam test below holds the file's side of that) and an edge the
+   * export range cuts through.
    * The preview fades every clip edge in and out over 45 ms (js/app.js declickGain, DECLICK_S) — that is #148, his
-   * scratchy-popping report — so a song trimmed to start or stop mid-waveform never pops while he edits. The exporter's
-   * mix (js/exporter.js buildAudioMix) builds the same clip with no edge envelope at all: the clip's buffer starts on
-   * whatever sample the trim lands on and stops dead at oEnd, so the soundtrack steps from silence to full level in one
-   * sample, and back. That is a click at every trim, every cut between two clips and every clip that ends before the
-   * project does — in the file only. The seam comment in js/app.js already names the gap: the export does not build the
-   * envelope this way, which makes the render sound different from the edit.
-   * CONTROLS: the song is in the mix at its own level, and mid-clip it never steps by more than a 250 Hz sine can. */
-  test('HUNT-b a trimmed song pops where it starts and where it ends in the exported file, while the preview fades each edge', { item: '690', budgetMs: 60000 }, async function () {
+   * scratchy-popping report — so a song trimmed to start or stop mid-waveform never pops while he edits. The file had no
+   * edge envelope at all: the clip's buffer started on whatever sample the trim landed on and stopped dead at its end, so
+   * the soundtrack stepped from silence to full level in one sample, and back. A click at every trim, every cut between
+   * two clips and every clip that ends before the project does — in the file only.
+   * CONTROLS: the song is in the mix at its own level, and mid-clip it never steps by more than a 250 Hz sine can.
+   * AND THE SAME ENVELOPE, not just any fade: halfway through the file's fade-in the song is at the level the preview
+   * plays it at there. */
+  test('690 a trimmed song fades in and out at its edges in the exported file, over the same 45 ms the preview fades them', { item: '690', budgetMs: 60000 }, async function () {
     if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('FM.exporter.buildAudioMix is not reachable');
     if (typeof FM._declickGain !== 'function') throw new Error('FM._declickGain is not exposed - the preview edge envelope cannot be read');
     const saved = FM.scene, made = [];
     const SR = 48000, AMP = 0.5, HZ = 250;
     try {
-      window.__fmStep = 'HUNT-b export edge click';
+      window.__fmStep = '690 export edge click';
       const rec = await FM.loadVideoFile(huntEWav(4, t => AMP * Math.sin(2 * Math.PI * HZ * t), 'huntb-edge'));
       const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 1, duration: 1.5 });
       L.trimStart = 1.001;   // a quarter cycle in: the trim lands on a crest, as a trim of real music lands mid-waveform
@@ -98898,6 +98906,13 @@
           ' times the steepest step of the song itself) - a pop at every cut in the file. The preview never plays these pops: it fades each clip edge over 45 ms (1 ms in, it plays at ' +
           Math.round(pvHead * 100) + ' percent; 1 ms before the end, at ' + Math.round(pvTail * 100) + ' percent). So every trim, every cut between two clips and every song that stops before the video does clicks in the exported video but not while he edits');
       }
+      // …and it is the PREVIEW's envelope: the peak over one 4 ms cycle at a point 22.5 ms into each fade, against the
+      // preview's gain there. Tolerance: the gain moves 9 percent across that cycle, so 0.06 of 0.5 either side.
+      const peakAround = t => { let p = 0; for (let i = Math.round((t - 0.002) * SR); i < Math.round((t + 0.002) * SR); i++) p = Math.max(p, Math.abs(d[i])); return p; };
+      [[1.0225, 'into its fade-in'], [2.4775, 'into its fade-out']].forEach(function (w) {
+        const file = peakAround(w[0]), pv = AMP * FM._declickGain(L, w[0], null, 0);
+        if (Math.abs(file - pv) > 0.06) throw new Error('22.5 ms ' + w[1] + ' the file plays the song at ' + file.toFixed(2) + ' where the preview plays it at ' + pv.toFixed(2) + ' - the file fades its edges, but not the way he hears them while editing');
+      });
     } finally {
       FM.scene = saved;
       made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
@@ -98905,25 +98920,31 @@
     }
   });
 
-  /* HUNT-b 2 — SPLITTING A SONG PUTS A DROP-OUT AT THE CUT IN THE PREVIEW.
+  /* 690 (HUNT-b 2) — SPLITTING A SONG PUT A DROP-OUT AT THE CUT IN THE PREVIEW. Fixed: js/app.js prerollAtSeam starts the
+   * next half's element early and muted, so it is already playing when the playhead reaches the cut, and a playhead that
+   * has just run across a seam no longer arms the resume fade (the sync tick's paused branch).
    * A split is meant to be invisible, and the declick seam exemption (js/app.js seamAt, 21 Aug) was written for exactly
-   * this: the two halves are one continuous recording, so neither edge may fade. But declickGain has a THIRD term that
-   * the exemption does not cover: `m._resumedAt`, which the sync tick sets every time a PAUSED element is started — and
-   * the tail half's element is paused until the playhead reaches it. So at the cut the head half plays to its end at full
-   * level, and the tail half opens at volume 0 and climbs over 45 ms: a notch of near-silence at every split, every time
-   * he plays across it. The 21 Aug test drives declickGain with m = null, so it never sees the term. The export has no
-   * such envelope, so the file plays straight through (asserted below as the second control).
+   * this. But declickGain has a THIRD term the exemption does not cover: `m._resumedAt`, which the sync tick set every
+   * time it started a PAUSED element — and the tail half's element was paused until the playhead reached it. So at the
+   * cut the head half played to its end at full level, and the tail half opened at volume 0 and climbed over 45 ms: a
+   * notch of near-silence at every split, every time he played across it. The 21 Aug test drives declickGain with
+   * m = null, so it never saw the term. The export has no such envelope, so the file plays straight through (asserted
+   * below as the second control).
    * Heard at the speakers: the clip carries a Gain effect at 0 dB, which changes nothing about its level but routes its
-   * element through Web Audio, where the tap can hear it. CONTROL: the same song, unsplit, played over the same second. */
-  test('HUNT-b splitting a song leaves a drop-out at the cut when he plays across it, while the export plays straight through', { item: '690', budgetMs: 120000 }, async function () {
+   * element through Web Audio, where the tap can hear it. CONTROL: the same song, unsplit, played over the same second.
+   * TWO MORE THINGS HELD: the tail half really is running (muted) before the cut — the pre-roll is what covers the time
+   * an element takes to start, which a phone takes longer over — and pressing play with the playhead parked ON the cut,
+   * where a split leaves it, still opens from silence, because nothing was sounding a moment before. */
+  test('690 playing across a split, the second half is already running when the playhead reaches the cut, so the sound does not drop out', { item: '690', budgetMs: 120000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     if (typeof FM.splitLayer !== 'function') throw new Error('FM.splitLayer is missing');
     const saved = FM.scene, made = [];
-    const tap = await huntBTap();
+    const tap = await speakerTap690();
     const median = a => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+    let tailHalf = null;
     async function across(split) {
-      window.__fmStep = 'HUNT-b seam ' + (split ? 'split' : 'whole');
+      window.__fmStep = '690 seam ' + (split ? 'split' : 'whole');
       const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'huntb-seam-' + (split ? 's' : 'w')));
       const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 4 });
       L.audioFx = [{ type: 'gain', enabled: true, params: { gain: 0 } }];
@@ -98935,12 +98956,22 @@
         await FM.splitLayer(L.id);
         FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
         if (FM.scene.layers.length !== 2) throw new Error('setup: the split did not make two halves');
+        tailHalf = FM.scene.layers.filter(l => Math.abs(l.start - 2) < 1e-6)[0] || null;
+        if (!tailHalf || !FM.media.get(tailHalf.id)) throw new Error('setup: the split left no second half with its own media starting at 2.00 s');
       }
       FM.setTime(1.2);
       await sleep(300);
       tap.log.length = 0;
+      let early = 0;   // ticks just before the cut where the second half's element was already playing, muted
       FM.play();
-      await sleep(1600);
+      const t0 = Date.now();
+      while (Date.now() - t0 < 1600) {
+        if (split && FM.time > 1.7 && FM.time < 1.98) {
+          const tm = FM.media.get(tailHalf.id);
+          if (tm && tm.el && !tm.el.paused && tm.el.muted) early++;
+        }
+        await sleep(15);
+      }
       FM.pause();
       await sleep(100);
       const rows = tap.log.filter(r => r.pl);
@@ -98948,7 +98979,7 @@
       const near = rows.filter(r => r.ft > 1.9 && r.ft < 2.25);
       let dip = Infinity, dipAt = null;
       near.forEach(r => { if (r.rms < dip) { dip = r.rms; dipAt = r.ft; } });
-      return { steady: steady, dip: near.length ? dip : NaN, dipAt: dipAt, n: near.length };
+      return { steady: steady, dip: near.length ? dip : NaN, dipAt: dipAt, n: near.length, early: early };
     }
     try {
       const whole = await across(false);
@@ -98966,6 +98997,16 @@
           ' s), a blip of near-silence every time the playhead crosses a split, where the same song unsplit holds ' + Math.round(whole.dip / whole.steady * 100) + ' percent and the exported file holds ' + Math.round(fileMin / fileSteady * 100) +
           ' percent. The tail half opens silent and fades in over 45 ms because its element was paused until the cut (declickGain: the _resumedAt term, which the split seam exemption does not cover)');
       }
+      if (!(cut.early > 0)) throw new Error('the second half of the split was not running before the cut - its element sat paused until the playhead reached 2.00 s, so the sound there waits on however long the element takes to start, which on a phone is longer than here');
+      // Pressing play with the playhead parked ON the cut: nothing was sounding a moment before, so the second half
+      // opens from silence as every press of play does (#148) - the seam rule is for a playhead that runs across a cut.
+      window.__fmStep = '690 seam play parked on the cut';
+      FM.setTime(2);
+      FM.play();
+      const tm = FM.media.get(tailHalf.id);
+      const opened = FM._declickGain(tailHalf, FM.time, tm, performance.now());
+      FM.pause();
+      if (!(opened < 0.2)) throw new Error('pressing play with the playhead parked on the cut opens the second half at ' + Math.round(opened * 100) + ' percent on its first sample - full volume on an arbitrary sample is the click #148 fixed; only a playhead that runs ACROSS a cut may skip the fade');
     } finally {
       tap.stop();
       try { FM.pause(); } catch (e) {}
@@ -98975,26 +99016,98 @@
     }
   });
 
-  /* HUNT-b 3 — ON AN IPHONE THE PREVIEW CUTS OFF THE ECHO AND REVERB TAIL; THE EXPORT LETS IT RING.
+  /* 690 — …AND A CUT WHERE THE OTHER HALF IS SILENT IS A REAL EDGE. The seam rule (js/app.js seamAt) exempts an edge
+   * from the de-click because the sound carries straight on across a cut. When the other half is muted or hidden it does
+   * not: the edge is where the sound really starts or stops. The preview used to hide that for a clip START by always
+   * opening the half after a cut from silence — the very drop-out the test above removes — so without the sounding
+   * check the preview would have gained a click there, and the file (which now builds the same envelope) had one.
+   * CONTROL: with both halves sounding, the cut is flat in the preview, and the next half IS started early. The song is
+   * a cosine, so it sits at full level on the cut and a waveform stopped or started dead there is a full-size step. */
+  test('690 a cut where the other half is muted or hidden fades like any clip edge, in the preview and in the file, and is not started early', { item: '690', budgetMs: 60000 }, async function () {
+    if (typeof FM._declickGain !== 'function' || typeof FM._syncMediaToClock !== 'function') throw new Error('FM._declickGain or FM._syncMediaToClock is not exposed');
+    if (typeof FM.splitLayer !== 'function') throw new Error('FM.splitLayer is missing');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const SR = 48000, AMP = 0.5, HZ = 250;
+    try {
+      window.__fmStep = '690 dead seam setup';
+      const rec = await FM.loadVideoFile(huntEWav(4, t => AMP * Math.cos(2 * Math.PI * HZ * t), 'huntb-deadseam'));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 4 });
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 4);
+      FM.refreshAll();
+      FM.setTime(2);
+      await FM.splitLayer(L.id);
+      FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
+      const A = FM.scene.layers.filter(l => Math.abs(l.start) < 1e-6)[0], B = FM.scene.layers.filter(l => Math.abs(l.start - 2) < 1e-6)[0];
+      if (!A || !B || !FM.media.get(B.id)) throw new Error('setup: the split did not make two halves meeting at 2.00 s, the second with its own media');
+      const pv = () => [FM._declickGain(A, 1.999, null, 0), FM._declickGain(B, 2.001, null, 0)];
+      const stepAtCut = async () => {
+        const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 4);
+        if (!mix) throw new Error('setup: the exporter built no soundtrack');
+        const d = mix.audioBuffer.getChannelData(0), c = Math.round(2 * SR); let w = 0;
+        for (let i = c - 8; i <= c + 8; i++) w = Math.max(w, Math.abs(d[i] - d[i - 1]));
+        return w;
+      };
+      const smooth = AMP * 2 * Math.PI * HZ / SR;
+      // Does the playback tick start the second half early? One tick at 1.80 s with the transport marked as playing.
+      const startedEarly = () => {
+        FM.playing = true; FM.time = 1.8;
+        try { FM._syncMediaToClock(); } finally { FM.playing = false; }
+        const bm = FM.media.get(B.id), on = !!(bm && bm.el && !bm.el.paused);
+        FM.scene.layers.forEach(l => { const mm = FM.media.get(l.id); if (mm && mm.el) { try { mm.el.pause(); mm.el.muted = true; } catch (e) {} } });
+        return on;
+      };
+      let g = pv();
+      if (!(g[0] > 0.99 && g[1] > 0.99)) throw new Error('CONTROL: with both halves sounding the cut already fades in the preview (' + g.map(v => v.toFixed(2)).join(', ') + ') - the seam rule this builds on is not there');
+      if (!startedEarly()) throw new Error('CONTROL: with both halves sounding, the second half was not started before the cut - the pre-roll this test guards is not happening at all');
+      for (const c of [['muted', l => { l.muted = true; }, l => { l.muted = false; }], ['hidden', l => { l.visible = false; }, l => { l.visible = true; }]]) {
+        window.__fmStep = '690 dead seam, first half ' + c[0];
+        c[1](A);
+        g = pv();
+        if (!(g[1] < 0.1)) throw new Error('with the first half ' + c[0] + ', the second half opens at ' + Math.round(g[1] * 100) + ' percent 1 ms after the cut in the preview - nothing was sounding before it, so that is a waveform started dead: a click');
+        let w = await stepAtCut();
+        if (w > smooth * 4) throw new Error('with the first half ' + c[0] + ', the exported file steps by ' + w.toFixed(3) + ' in one sample at the cut (' + Math.round(w / smooth) + ' times the song itself) - the second half starts dead in the file');
+        if (startedEarly()) throw new Error('with the first half ' + c[0] + ', the second half was started early - there is no sound to carry on, so it must open at the cut, from silence, like any clip');
+        c[2](A);
+        window.__fmStep = '690 dead seam, second half ' + c[0];
+        c[1](B);
+        g = pv();
+        if (!(g[0] < 0.1)) throw new Error('with the second half ' + c[0] + ', the first half is still at ' + Math.round(g[0] * 100) + ' percent 1 ms before the cut in the preview - nothing carries the sound on, so it stops dead there: a click');
+        w = await stepAtCut();
+        if (w > smooth * 4) throw new Error('with the second half ' + c[0] + ', the exported file steps by ' + w.toFixed(3) + ' in one sample at the cut (' + Math.round(w / smooth) + ' times the song itself) - the first half stops dead in the file');
+        c[2](B);
+      }
+    } finally {
+      FM.playing = false;
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 3) — ON AN IPHONE THE PREVIEW CUT OFF THE ECHO AND REVERB TAIL; THE EXPORT LETS IT RING. Fixed:
+   * js/audio-fx-live.js sync wires element -> level gain -> effects -> limiter (when boosted) -> speakers, the export's
+   * order, instead of putting the gain after the effects.
    * On an iPhone el.volume cannot be set (the HUNT-e fix, queue 690), so a clip whose level is not a flat 100% — any
-   * volume other than 100%, or any fade — is routed through a Web Audio level stage (js/audio-fx-live.js makeLevelStage).
-   * sync() puts that stage AFTER the audio effects: element -> effects -> level -> speakers. The export does the opposite:
-   * clip -> volume and fade gain -> effects (js/exporter.js buildAudioMix). For an echo or a reverb the order is the whole
-   * difference: in the export the echo of the last notes rings on after the clip ends; on the phone the playback tick
-   * drives the level stage to zero at the clip's end (the fade, and the 45 ms de-click), and because the echo is upstream
-   * of it the echo goes to zero with it. Nonlinear effects (Distortion, Compressor, Limiter) likewise see the clip at full
-   * level on the phone and at its real level in the file.
+   * volume other than 100%, or any fade — is routed through a Web Audio level stage (makeLevelStage), and a clip above
+   * 100% through the boost stage, whose gain there carries the whole level. sync() put that gain AFTER the audio effects;
+   * the export does the opposite: clip -> volume and fade gain -> effects (js/exporter.js buildAudioMix). For an echo or a
+   * reverb the order is the whole difference: in the export the echo of the last notes rings on after the clip ends; on
+   * the phone the playback tick drove the gain to zero at the clip's end (the fade, and the 45 ms de-click), and because
+   * the echo was upstream of it the echo went to zero with it. Nonlinear effects (Distortion, Compressor, Limiter)
+   * likewise saw the clip at full level on the phone and at its real level in the file.
    * The stand-in for WebKit is the one the HUNT-e test uses: the element's volume reads 1 and ignores writes.
    * CONTROLS: the same clip at 100% on the same stand-in (no level stage) rings on at the speakers, which proves the tap
-   * hears a tail; and the exported soundtrack of the 80% clip rings on too. */
-  test('HUNT-b on an iPhone a clip with Echo that is not at 100 percent stops dead at its end in the preview, but the echo rings on in the export', { item: '690', budgetMs: 120000 }, async function () {
+   * hears a tail; and the exported soundtrack of each clip rings on too. */
+  test('690 on an iPhone a clip with Echo at 80 percent, or boosted to 200 percent, rings on after its end in the preview as it does in the export', { item: '690', budgetMs: 150000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, made = [];
-    const tap = await huntBTap();
+    const tap = await speakerTap690();
     const avg = a => a.reduce((x, r) => x + r.rms, 0) / Math.max(1, a.length);
     async function play(label, vol) {
-      window.__fmStep = 'HUNT-b echo tail ' + label;
+      window.__fmStep = '690 echo tail ' + label;
       const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'huntb-echo-' + label));
       // WebKit on iPhone: the volume attribute cannot be set by a page and always reads 1
       Object.defineProperty(rec.el, 'volume', { configurable: true, get: function () { return 1; }, set: function () {} });
@@ -99025,13 +99138,16 @@
       if (!(full.reached > 1.5)) throw new Error('setup: the transport stopped at ' + full.reached.toFixed(2) + ' s, before the echo could be heard');
       if (!(full.on > 0.1)) throw new Error('CONTROL: the tap hears the 100 percent clip at only ' + full.on.toFixed(3) + ' while it plays - the preview is not reaching the speakers here');
       if (!(full.ratio > 0.2)) throw new Error('CONTROL: at 100 percent (no level stage) the echo after the clip ends measured only ' + (full.ratio * 100).toFixed(0) + ' percent of the clip - the tap cannot hear a tail, so the reading below means nothing');
-      const quiet = await play('80', 0.8);
-      if (!quiet.level) throw new Error('setup: the 80 percent clip on the iPhone stand-in got no level stage - the routing this test is about did not happen');
-      if (!(quiet.fileRatio > 0.2)) throw new Error('CONTROL: the EXPORTED 80 percent clip has no echo after it ends either (' + (quiet.fileRatio * 100).toFixed(0) + ' percent) - then preview and file agree');
-      if (!(quiet.ratio > 0.2)) {
-        throw new Error('on his iPhone, a voice clip at 80 percent with Echo goes silent the moment the clip ends in the preview - the echo after it measured ' + Math.round(quiet.ratio * 100) +
-          ' percent of the clip, where the exported file rings on at ' + Math.round(quiet.fileRatio * 100) + ' percent and the same clip at 100 percent rings on at ' + Math.round(full.ratio * 100) +
-          ' percent in the preview. The level stage an iPhone needs sits AFTER the effects, so the end-of-clip fade silences the echo and reverb tails too; the export turns the clip down BEFORE the effects. Any volume but 100 percent, or any fade, does it - so what he hears on the phone is not what the file contains');
+      for (const c of [['80', 0.8, 'a voice clip at 80 percent'], ['200', 2, 'a voice clip boosted to 200 percent']]) {
+        const r = await play(c[0], c[1]);
+        if (!r.level) throw new Error('setup: ' + c[2] + ' on the iPhone stand-in got no level stage - the routing this test is about did not happen');
+        if (!(r.fileRatio > 0.2)) throw new Error('CONTROL: the EXPORTED ' + c[0] + ' percent clip has no echo after it ends either (' + (r.fileRatio * 100).toFixed(0) + ' percent) - then preview and file agree');
+        // 0.85 of the 100 percent clip's own tail: measured 1.00 (80 percent) and 1.06 (200 percent) fixed; 0.16 and 0.72 with the gain after the effects
+        if (!(r.ratio > 0.2) || !(r.ratio > 0.85 * full.ratio)) {
+          throw new Error('on his iPhone, ' + c[2] + ' with Echo is cut off where the clip ends in the preview - the echo after it measured ' + Math.round(r.ratio * 100) +
+            ' percent of the clip, where the exported file rings on at ' + Math.round(r.fileRatio * 100) + ' percent and the same clip at 100 percent rings on at ' + Math.round(full.ratio * 100) +
+            ' percent in the preview. The level stage an iPhone needs sits AFTER the effects, so the end-of-clip fade turns the echo and reverb tails down with it; the export turns the clip down BEFORE the effects. Any volume but 100 percent, or any fade, does it - so what he hears on the phone is not what the file contains');
+        }
       }
     } finally {
       tap.stop();
@@ -99042,21 +99158,25 @@
     }
   });
 
-  /* HUNT-b 4 — THE SOUND IN AN EXPORTED VIDEO IS 44 MS BEHIND THE PICTURE.
-   * js/exporter.js encodeAudio feeds the mix to an AAC AudioEncoder from timestamp 0 and hands every chunk to the muxer.
-   * An AAC encoder starts every stream with a warm-up (priming) of 2112 samples — 44 ms at 48 kHz — that is not part of
-   * the sound, and the file has to say so for a player to skip it (an edit list: an edts/elst box). vendor/mp4-muxer.js
-   * writes none (it has no edts, elst or sgpd box at all), so every player plays the warm-up first and the whole
-   * soundtrack comes out 44 ms late against the video, whose first frame is at 0. The audio track also runs past the end.
-   * Measured in the FILE: a click at exactly 1.000 s, exported through FM.exporter.run and decoded back.
+  /* 690 (HUNT-b 4) — THE SOUND IN AN EXPORTED VIDEO WAS 44 MS BEHIND THE PICTURE. Fixed: js/exporter.js encodeAudio cuts the
+   * encoder's warm-up out of the file — measured once per encoder by aacPriming (a click encoded and decoded back) — with
+   * just enough silence fed first that the first frame kept starts exactly on the mix, and stops the track at the mix's
+   * own length. The audio-only M4A goes through the same encodeAudio.
+   * encodeAudio fed the mix to an AAC AudioEncoder from timestamp 0 and handed every chunk to the muxer. An AAC encoder
+   * starts every stream with a warm-up (priming) of 2112 samples — 44 ms at 48 kHz — that is not part of the sound, and
+   * the file has to say so for a player to skip it (an edit list: an edts/elst box). vendor/mp4-muxer.js writes none (it
+   * has no edts, elst or sgpd box at all), so every player played the warm-up first and the whole soundtrack came out
+   * 44 ms late against the video, whose first frame is at 0. The audio track also ran 72 ms past the end.
+   * Measured in the FILE: a click at exactly 1.000 s, exported through FM.exporter.run and decoded back, and the same
+   * soundtrack as an M4A through FM.exporter.encodeM4A.
    * CONTROL: in the soundtrack the exporter builds before encoding, the click is at 1.000 s. */
-  test('HUNT-b the sound in an exported video comes 44 ms after the picture', { item: '690', budgetMs: 120000 }, async function () {
+  test('690 the sound in an exported video and an exported M4A lines up with the picture, and the audio track ends with the video', { item: '690', budgetMs: 120000 }, async function () {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, made = [];
     const firstLoud = (d, sr) => { for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 0.2) return i / sr; return -1; };
     try {
-      window.__fmStep = 'HUNT-b export offset';
+      window.__fmStep = '690 export offset';
       const rec = await FM.loadVideoFile(huntEWav(3, t => (t >= 1.0 && t < 1.002) ? 0.9 : 0, 'huntb-click'));
       const C = FM.makeLayer('video', { name: 'click', x: 32, y: 32, start: 0, duration: 3 });
       FM.media.set(C.id, rec); made.push(C.id);
@@ -99077,6 +99197,16 @@
         throw new Error('a click at 1.000 s on his timeline is at ' + fileAt.toFixed(3) + ' s in the exported MP4: the whole soundtrack plays ' + Math.round(lateMs) + ' ms behind the picture in every exported video (and the audio track is ' +
           dec.duration.toFixed(3) + ' s long for a 3.000 s video). The AAC encoder starts every stream with a warm-up it does not mean to be heard, and the file carries no edit list telling a player to skip it, so every player plays it. Speech sits at the edge of visible lip-sync error, cuts on the beat land late, and a clip he exports and imports again drifts another ' + Math.round(lateMs) + ' ms each time');
       }
+      // A decoder plays whole 1024-sample frames, so the track may run up to 21 ms past the video - not a warm-up's worth.
+      if (!(dec.duration < 3.022)) throw new Error('the audio track of a 3.000 s video is ' + dec.duration.toFixed(3) + ' s long - it runs on past the picture by more than one AAC frame');
+      // The audio-only M4A is the same soundtrack through the same encoder, and must land in the same place.
+      window.__fmStep = '690 export offset m4a';
+      const m4a = await FM.exporter.encodeM4A(mix);
+      if (m4a.blob) {
+        const dm = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(await m4a.blob.arrayBuffer());
+        const m4aAt = firstLoud(dm.getChannelData(0), dm.sampleRate);
+        if (Math.abs((m4aAt - mixAt) * 1000) > 5) throw new Error('in the exported M4A the click at 1.000 s is at ' + m4aAt.toFixed(3) + ' s - the audio-only export is ' + Math.round((m4aAt - mixAt) * 1000) + ' ms off the timeline');
+      } else if (m4a.reason !== 'aac-unavailable') throw new Error('setup: the M4A export made no file (' + m4a.reason + ') on a browser that just encoded AAC for the video');
     } finally {
       FM.scene = saved;
       made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });

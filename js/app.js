@@ -1829,18 +1829,32 @@ window.FM = window.FM || {};
    * together, so there is no discontinuity to protect against — but each half applied its own 45ms ramp
    * to its own new edge, and the two met as a V-shaped duck to COMPLETE SILENCE about 90ms wide, right at
    * the cut. Measured (tests/_splitdeclick.html): a flat 1.00 across the same window before the split,
-   * and 1.00 → 0.00 → 1.00 after it. Preview only — the export does not build the envelope this way —
-   * which is worse rather than better, because it makes the render sound different from the edit.
+   * and 1.00 → 0.00 → 1.00 after it. (The export builds this same envelope since queue 690 — see
+   * FM.declickSeamAt below — so the file and the edit agree at a seam as well as at every other edge.)
    * Only an edge that actually TOUCHES a sibling half is exempt, so dragging the halves apart brings the
-   * de-click straight back. Gated on `splitOf`: a clip that was never split never scans. */
-  function seamAt(layer, edgeT) {
-    if (!layer.splitOf || !FM.scene) return false;
-    const ls = FM.scene.layers;
+   * de-click straight back. Gated on `splitOf`: a clip that was never split never scans.
+   * `layers` is the list to look in — the exporter passes the scene it is mixing; the preview's is FM.scene.
+   * …AND ONLY WHILE THE OTHER HALF IS SOUNDING THERE (queue 690, audio hunt). The exemption is right because the
+   * sound carries straight on across the cut. If the other half is hidden, muted, at zero, silenced by a solo or
+   * faded to nothing at the cut, the sound does NOT carry on: this edge is where it really starts or stops, and a
+   * waveform cut dead there is the click #148 is about. This used to be masked for a clip START in the preview —
+   * the half after a cut was always opened from silence, which is the drop-out queue 690 removed — so without
+   * this the preview would have gained that click, and the export (which now builds this envelope too) had it. */
+  function soundingAt(l, t, ls) {
+    if (l.visible === false || (FM.groupHidden && FM.groupHidden(l))) return false;
+    if (!l.solo && ls.some(x => x.solo)) return false;
+    const into = Math.min(Math.max(0, t - (l.start || 0)), l.duration || 0);
+    return (FM.layerVolume ? FM.layerVolume(l, t) : 1) * (FM.fadeMul ? FM.fadeMul(l, into, l.duration) : 1) > 0;
+  }
+  function seamAt(layer, edgeT, layers) {
+    const ls = layers || (FM.scene && FM.scene.layers);
+    if (!layer.splitOf || !ls) return false;
     for (let i = 0; i < ls.length; i++) {
       const l = ls[i];
       if (l === layer || l.splitOf !== layer.splitOf) continue;
-      if (Math.abs((l.start || 0) - edgeT) < 1e-3) return true;                        // a sibling starts here
-      if (Math.abs((l.start || 0) + (l.duration || 0) - edgeT) < 1e-3) return true;    // …or ends here
+      const touches = Math.abs((l.start || 0) - edgeT) < 1e-3                          // a sibling starts here
+                   || Math.abs((l.start || 0) + (l.duration || 0) - edgeT) < 1e-3;     // …or ends here
+      if (touches && soundingAt(l, edgeT, ls)) return true;
     }
     return false;
   }
@@ -1861,6 +1875,66 @@ window.FM = window.FM || {};
     return Math.max(0, Math.min(1, k));
   }
   FM._declickGain = declickGain;   // exposed for the suite
+  /* THE EXPORT FADES THE SAME EDGES (queue 690, audio hunt). js/exporter.js buildAudioMix builds this envelope
+     for the file — the same 45 ms, the same seam rule — so a trim that is smooth in the preview is smooth in
+     the file. One number and one rule, read from here, so the two cannot drift apart. */
+  FM.DECLICK_S = DECLICK_S;
+  FM.declickSeamAt = seamAt;
+
+  /* ═══ A SPLIT IS INAUDIBLE WHEN HE PLAYS ACROSS IT, NOT ONLY ON PAPER (queue 690, audio hunt) ═══════════
+   * His words for the hunt: "go re audit, find some bugs coz theres a shit load".
+   * The seam rule above stopped the two halves ramping their OWN edges at a cut — and the 21 Aug test
+   * proved it by calling declickGain with no element. declickGain has a third term, `_resumedAt`, which
+   * the sync tick arms whenever it starts a PAUSED element, and the second half's element is paused until
+   * the playhead reaches it. So at every cut the first half played to its end at full level, and the
+   * second opened at volume 0 and climbed over 45 ms — on top of however long the element took to start
+   * making sound at all. MEASURED at the speakers: playing across a split song, the level fell to 0
+   * percent right at the cut, where the same song unsplit held 98 percent and the exported file 97.
+   * Two parts, because either alone leaves a gap:
+   *   1. PRE-ROLL. For the last PREROLL_S before a split half begins, its element is already playing,
+   *      MUTED, from just far enough before its first sample to arrive there on the cut — the same
+   *      recording runs on before the cut, so there is always something to play. FM.play waits up to
+   *      START_WAIT_MS for an element to start making sound (queue 95, ~200 ms measured); this is that
+   *      wait, taken before the cut instead of at it. At the cut the tick finds it playing and simply
+   *      unmutes it, and the first half stops on the same tick.
+   *   2. NO RESUME FADE ACROSS A SEAM. If the pre-roll could not happen (a refused play(), a tick that
+   *      jumped the whole window) the element is still started at the cut — but at the level the first
+   *      half was playing at, not from silence, when the playhead has just RUN ACROSS the seam. Only
+   *      then: pressing play with the playhead parked on a cut (where a split leaves it) or a loop
+   *      wrapping onto one still opens from silence, because nothing was sounding a moment before. That
+   *      is why this lives in the sync tick, which knows where the playhead was last tick, and not in
+   *      declickGain, which cannot tell those apart. */
+  const PREROLL_S = 0.4;       // = START_WAIT_MS: the start-up FM.play is prepared to wait for
+  const SEAM_CROSS_S = 0.25;   // how far past a cut a tick may land and still be the one that crossed it (ticks have been measured 100 ms apart under load)
+  let _syncPrevT = null;       // FM.time at the previous sync tick of THIS pass — null after play and after a wrap, where nothing was crossed
+  function prerollAtSeam(layer, m, now) {
+    if (!FM.playing || !layer.splitOf || layer.reversed) return false;
+    const lead = (layer.start || 0) - FM.time;
+    if (!(lead > 0 && lead <= PREROLL_S)) return false;
+    if (!seamAt(layer, layer.start)) return false;                 // halves pulled apart: an ordinary clip start, faded as ever
+    const first = FM.layerLocalTime(layer, layer.start);
+    if (first == null) return false;
+    const rate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, layer.start) || 1) * (FM.previewRate || 1)));
+    const from = first - lead * rate;                               // where it has to be NOW to reach its first sample on the cut
+    if (!(from >= 0)) return false;
+    try {
+      m.el.muted = true;                                            // heard from the cut on, never before it
+      /* …and where the level lives in a Web Audio stage (an iPhone), that goes to 0 as well — the same guard the
+         mute path keeps, in case an engine lets a routed element's audio past el.muted. The tick lifts it at the cut. */
+      if (m._boost && FM.audioFxLive && FM.audioFxLive.volumeLocked && FM.audioFxLive.volumeLocked(m)) FM.audioFxLive.setBoost(layer, 0);
+      if (m.el.paused) {
+        if (m._playRefusedAt && now - m._playRefusedAt < 500) return true;
+        if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);
+        if (FM.pitchForRate) FM.pitchForRate(m.el, rate);
+        m.el.playbackRate = rate;
+        m.el.currentTime = from; m._syncAt = now;
+        // a fresh pass for the drift controller, exactly as FM.play starts one — it learns this element from the cut on
+        m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null; m._resumedAt = 0;
+        m.el.play().then(() => { m._playRefusedAt = 0; }, e => { m._playRefusedAt = now; try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });
+      }
+    } catch (e) {}
+    return true;
+  }
 
   /* `rateWrites` and `errs` are what queue 148 turned on, and they are not the same as `trims`.
    * A trim is a DECISION; a write is what the element actually hears, and `preservesPitch` makes a
@@ -1984,6 +2058,7 @@ window.FM = window.FM || {};
         } catch (e) {}
       }
     });
+    _syncPrevT = null;                         // a wrap lands on a time, it does not run across one (queue 690)
     clockAnchor(t);                            // the wrap is a real discontinuity — re-origin the clock…
     if (FM.audioPlay) FM.audioPlay.start();
     clockAdopt();                              // …and adopt the context if that call just created one
@@ -2042,7 +2117,10 @@ window.FM = window.FM || {};
         const hiddenHere = layer.visible === false
           || (FM.groupHidden && FM.groupHidden(layer))
           || (FM.soloSilenced && FM.soloSilenced(layer));
-        if (local == null || hiddenHere) { try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return; }
+        if (local == null || hiddenHere) {
+          if (local == null && !hiddenHere && prerollAtSeam(layer, m, now)) return;   // the next half of a split, starting early and muted (queue 690)
+          try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return;
+        }
         try {
           if (m.el.paused) {
             /* queue 820: a play() the browser just refused is not retried on the very next frame. Without
@@ -2082,8 +2160,14 @@ window.FM = window.FM || {};
             if (FM.pastSourceEnd(m, local)) { try { m.el.muted = true; } catch (e) {} return; }   // see FM.sourceEnd
             // Open SILENT and let declickGain bring it up: play() on an arbitrary sample at full volume
             // is the same click as pausing on one, and this is the path a loop takes every lap. (#148)
-            try { m.el.volume = 0; } catch (e) {}
-            m._resumedAt = now;
+            /* …unless the playhead has just RUN ACROSS a split: the half before this one was sounding right
+               up to the cut, so the sound continues rather than opens (queue 690 — see prerollAtSeam). */
+            const crossedSeam = _syncPrevT != null && _syncPrevT < layer.start && FM.time - layer.start < SEAM_CROSS_S && seamAt(layer, layer.start);
+            if (crossedSeam) m._resumedAt = 0;
+            else {
+              try { m.el.volume = 0; } catch (e) {}
+              m._resumedAt = now;
+            }
             /* THE SOUND STOPPED AND WE ARE STARTING IT AGAIN. This branch runs both when the playhead
                ENTERS a clip (ordinary) and when an element that was already playing has stopped on
                its own (a fault, and on iOS the likeliest shape of "it cuts in and out"). The watcher
@@ -2238,6 +2322,7 @@ window.FM = window.FM || {};
         } catch (e) {}
       }
     });
+    _syncPrevT = FM.time;   // the next tick can tell whether it ran across a seam (queue 690)
   }
 
   /* How long the transport will wait for sound before giving up and starting anyway (queue 95).
@@ -2321,6 +2406,7 @@ window.FM = window.FM || {};
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
     _struggleHits = 0;      // a fresh run of frames — never inherit a count from the last one (queue 492)
+    _syncPrevT = null;      // pressing play crosses no seam: a clip opened here opens from silence (queue 690)
     /* `rateWrites` and `errs` are what queue 148 turned on, and they are not the same as `trims`.
    * A trim is a DECISION; a write is what the element actually hears, and `preservesPitch` makes a
    * write a PITCH change — 85 writes in four seconds is the scratchy warble he reported, and the
