@@ -98813,9 +98813,9 @@
     });
   });
 
-  /* ═══ HUNT-c (queue 690, 26 Sep, seventh hunt) — CAPTIONS AND SPEECH ═══════════════════════════════════════════════════
+  /* ═══ 690 (seventh hunt, HUNT-c) — CAPTIONS AND SPEECH ═══════════════════════════════════════════════════════════════
    * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in captions, each written as a test that
-   * FAILS on v17.00 with a message that says what he would see. Where the finger is the point — the ✓, the Aa sheet's
+   * FAILED on v17.00 with a message that says what he would see, and each fixed. Where the finger is the point — the ✓, the Aa sheet's
    * cross, the + and › of the caption strip — it is a REAL touch through tests/_cdp.py (realInput924) at 380. Pictures are
    * measured through FM.renderScene (what the preview and every export draw) or read off the live #preview canvas. */
   const hunt7cSleep = ms => new Promise(r => setTimeout(r, ms));
@@ -98851,15 +98851,16 @@
   }
   const hunt7cSay = s => String(s == null ? 'nothing' : s).replace(/\n/g, ' + ');
 
-  /* HUNT-c 1 — A CAPTION HE TRIMMED OFF COMES BACK AS A FLASH. Trimming a caption clip's head leaves the cues it cut away at
+  /* 690 (seventh hunt, 1) — A CAPTION HE TRIMMED OFF CAME BACK AS A FLASH. Trimming a caption clip's head leaves the cues it cut away at
    * NEGATIVE local times on purpose (FM.shiftLayerCues, queue 452/817: the words stay where they are heard, and pulling the
    * head back out brings them back). But FM.captions.normalize clamps every cue into [0, duration] with a 0.1 s minimum —
    * and normalize runs on EVERY caption edit: the text editor's ✓ (text-edit.js commit), a cue dragged on the timeline, a
    * Start/End typed in the list. So the moment he types into any other caption, each cue that was trimmed off is squashed to
    * 0:00–0:00.1 of the clip and drawn STACKED on top of the first real caption (queue 574 shows overlapping cues together):
    * a three-frame flash of words he cut away, in the preview and burned into the export. The tail does the same at the end.
-   * And the squash is permanent — dragging the head back out no longer brings the cut captions back where they were said. */
-  test('HUNT-c a caption trimmed off the clip flashes back on top of the first caption after he types into any other caption', { item: '690', budgetMs: 90000 }, async function () {
+   * And the squash is permanent — dragging the head back out no longer brings the cut captions back where they were said.
+   * Fixed in FM.captions.normalize: a cue that pokes out of the clip is trimmed, not broken, and keeps its times. */
+  test('690 a caption he trimmed off the clip stays off when he types into another caption, and comes back where it was said', { item: '690', budgetMs: 90000 }, async function () {
     const saved = FM.scene, savedT = FM.time;
     let got = null;
     try {
@@ -98883,8 +98884,13 @@
           inp.value = 'Delta, edited'; inp.dispatchEvent(new Event('input', { bubbles: true }));
           const how = await hunt2aPress(document.querySelector('.te-bar .te-done'), 'tick (Done)');
           await hunt7cSleep(300);
+          const cue = w => { const c = L.captions.find(x => x.text === w); return c ? [+c.start.toFixed(3), +c.end.toFixed(3)] : null; };
           got = { before: before, how: how, active: FM.textEdit.isActive(), delta: (L.captions.find(c => /Delta/.test(c.text || '')) || {}).text,
-            head: FM.activeCaption(L, head), tail: FM.activeCaption(L, tail), ink: hunt7cInk(FM.scene, head), L: L };
+            head: FM.activeCaption(L, head), tail: FM.activeCaption(L, tail), ink: hunt7cInk(FM.scene, head), L: L,
+            alpha: cue('Alpha'), fox: cue('Foxtrot') };
+          // …and then he pulls both ends back out: the head by the 1.5 s he cut, the tail by the second.
+          FM.trimLayerHead(L, -1.5); L.duration += 1;
+          got.back = { start: L.start, dur: L.duration, at05: FM.activeCaption(L, 0.5), at12: FM.activeCaption(L, 1.2), at55: FM.activeCaption(L, 5.5) };
         });
       }, 380);
       const b = got.before;
@@ -98894,18 +98900,56 @@
       if (got.active || got.delta !== 'Delta, edited') throw new Error('CONTROL: the tick did not close the editor with his words on Delta (Delta reads ' + hunt7cSay(got.delta) + ')');
       if (got.head !== 'Bravo') throw new Error('he trimmed the first 1.5 s off his caption clip, so Alpha was cut away and the clip opens on Bravo. Then he typed a word into Delta and ticked it. Now the first frames of the clip show ' + hunt7cSay(got.head) + ' (' + got.ink.bands + ' lines stacked, ' + got.ink.n + ' px of ink where Bravo alone had ' + b.ink.n + '): the caption he cut away flashes back on top of the first one for 0.1 s, in the preview and burned into the export, and pulling the head back out no longer puts it where it was said');
       if (got.tail !== 'Echo') throw new Error('he trimmed the last second off his caption clip, so Foxtrot was cut away and the clip ends on Echo. After typing into Delta the last frames show ' + hunt7cSay(got.tail) + ': the caption he cut off the end flashes back stacked on Echo for the final 0.1 s, in the preview and the export');
+      if (String(got.alpha) !== '-1.5,-0.5' || String(got.fox) !== '3.5,4.5') throw new Error('after typing into Delta, the captions he trimmed off were moved: Alpha sits at ' + got.alpha + ' and Foxtrot at ' + got.fox + ' (clip time), not where the trims left them (-1.5 to -0.5 and 3.5 to 4.5), so pulling the ends back out cannot put them where they were said');
+      if (Math.abs(got.back.start) > 1e-6 || Math.abs(got.back.dur - 6) > 1e-6) throw new Error('CONTROL: pulling both ends back out left the clip at ' + got.back.start + ' s for ' + got.back.dur + ' s, not 0 s for 6 s');
+      if (got.back.at05 !== 'Alpha' || got.back.at12 !== 'Bravo' || got.back.at55 !== 'Foxtrot') throw new Error('he pulled the head and the tail of his caption clip back out after typing into Delta: 0:00.5 shows ' + hunt7cSay(got.back.at05) + ', 0:01.2 shows ' + hunt7cSay(got.back.at12) + ' and 0:05.5 shows ' + hunt7cSay(got.back.at55) + ', not Alpha, Bravo and Foxtrot where they were said (Bravo straddled the cut)');
     } finally {
       hunt7cCleanup(saved, savedT);
     }
   });
 
-  /* HUNT-c 2 — THE Aa SHEET'S CROSS DELETES A DIFFERENT CAPTION. The caption list in the text editor's Aa sheet
+  /* 690 (seventh hunt, the other half of 1) — A NUMBER HE TYPES PAST THE END OF THE CLIP STILL LANDS INSIDE IT. normalize
+   * now leaves a trimmed-off caption where the trim put it, and that must not swallow the one thing its clamp was for: a
+   * Start or End typed into the caption list past the end of the clip is pulled back in, where he can see it, rather than
+   * left out there invisible. The field hands normalize the caption it set; every caption a trim put outside keeps its time. */
+  test('690 a Start or End he types past the end of a trimmed caption clip lands inside it, and the trimmed-off captions stay put', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    const host = document.createElement('div'); host.className = 'cap-list'; host.style.cssText = 'position:fixed;left:0;top:0;width:360px;z-index:5;background:#000';
+    try {
+      const L = hunt7cTrack([[0, 1, 'Alpha'], [1, 2, 'Bravo'], [2, 3, 'Charlie'], [3, 4, 'Delta']]);
+      await huntBScene(() => [L]);
+      FM.trimLayerHead(L, 1.5);   // Alpha cut away to -1.5 … -0.5, Bravo across the cut; the clip is 1.5 s for 4.5 s
+      document.body.appendChild(host);
+      FM.captionsEditor.mount(host, L);
+      const rowOf = w => [].slice.call(host.querySelectorAll('.cap-row')).find(r => r.querySelector('.cap-text').textContent === w);
+      const type = (w, k, v) => {
+        const r = rowOf(w); if (!r) throw new Error('setup: the caption list has no row reading ' + w);
+        const f = r.querySelectorAll('.cap-time')[k]; f.value = String(v); f.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const at = w => { const c = L.captions.find(x => x.text === w); return c ? [+c.start.toFixed(3), +c.end.toFixed(3)] : null; };
+      if (Math.abs(L.duration - 4.5) > 1e-6 || String(at('Alpha')) !== '-1.5,-0.5') throw new Error('CONTROL: the head trim left the clip ' + L.duration + ' s long with Alpha at ' + at('Alpha') + ', not 4.5 s with Alpha at -1.5 to -0.5');
+      type('Charlie', 0, 100);   // a Start typed far past the end
+      const ch = at('Charlie');
+      type('Delta', 1, 99);      // an End typed past the end
+      const de = at('Delta');
+      if (!ch || !(ch[0] >= 0 && ch[0] < 4.5 && ch[1] <= 4.5 + 1e-6 && ch[1] > ch[0])) throw new Error('he typed a Start of 100 s into Charlie on a 4.5 s caption clip, and Charlie now runs ' + ch + ' (clip time): it is no longer inside the clip, so it silently vanished from the preview and the export instead of landing at the end where he can see it');
+      if (!de || Math.abs(de[1] - 4.5) > 1e-6) throw new Error('he typed an End of 99 s into Delta on a 4.5 s caption clip, and Delta now runs ' + de + ': its end was not pulled back to the end of the clip');
+      if (String(at('Alpha')) !== '-1.5,-0.5' || String(at('Bravo')) !== '-0.5,0.5') throw new Error('typing Start and End into Charlie and Delta moved the captions the trim had put outside the clip: Alpha ' + at('Alpha') + ', Bravo ' + at('Bravo') + ' (were -1.5 to -0.5 and -0.5 to 0.5)');
+    } finally {
+      host.remove();
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, 2) — THE Aa SHEET'S CROSS DELETED A DIFFERENT CAPTION. The caption list in the text editor's Aa sheet
    * (FM.captionsEditor.mount) builds each row's ✕ as `layer.captions.splice(i, 1)` with `i` fixed when the sheet was
    * drawn. The caption strip right above it — + (new caption after this one), and ‹ › leaving a blank caption the editor
    * made in a gap — changes that list and never redraws the sheet (FM.textEdit.cuesChanged only relabels the strip). So
    * after + the sheet still shows three rows over four captions, and the cross on Charlie removes the caption now in
-   * Charlie's old place: Bravo. His words for Bravo are gone, Charlie is still there, and nothing says so. */
-  test('HUNT-c after + in the caption strip, the cross on a caption in the Aa sheet deletes a different caption', { item: '690', budgetMs: 90000 }, async function () {
+   * Charlie's old place: Bravo. His words for Bravo are gone, Charlie is still there, and nothing says so.
+   * Fixed twice over: the strip redraws the sheet's list when it changes it (text-edit.js cueListChanged), and the cross
+   * removes the caption on its own row, found by what it is (captions.js — the next test holds that half on its own). */
+  test('690 after + in the caption strip, the Aa sheet lists the new caption and its cross removes the caption on its own row', { item: '690', budgetMs: 90000 }, async function () {
     const saved = FM.scene, savedT = FM.time;
     let got = null;
     try {
@@ -98923,27 +98967,76 @@
           const plus = await hunt2aPress(document.querySelector('.te-cue-nav .te-cue-add'), '+ (new caption after this one)');
           await hunt7cSleep(300);
           const n1 = L.captions.length;
+          const rows1 = rowsOf().map(r => r.querySelector('.cap-text').textContent);
           const row = rowsOf().find(r => r.querySelector('.cap-text').textContent === 'Charlie');
           if (!row) throw new Error('setup: after + the Aa sheet has no row reading Charlie');
           const cross = await hunt2aPress(row.querySelector('.cap-del'), 'cross on the Charlie row');
           await hunt7cSleep(300);
-          got = { how: [aa, plus, cross], n1: n1, texts: L.captions.map(c => c.text || '(blank)'), rows: rowsOf().map(r => r.querySelector('.cap-text').textContent) };
+          got = { how: [aa, plus, cross], n1: n1, rows1: rows1, texts: L.captions.map(c => c.text || '(blank)'), rows: rowsOf().map(r => r.querySelector('.cap-text').textContent) };
+          // ‹ leaving a blank caption the editor made in a gap drops it again — and the sheet's rows follow that too.
+          FM.textEdit.stop(); await hunt7cSleep(200);
+          FM.scrubTime(3.5); FM.textEdit.start(L.id); await hunt7cSleep(300);
+          const n2 = L.captions.length;   // his three, plus the blank the editor made at 3.5 s
+          await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button (again)');
+          await hunt7cSleep(300);
+          const rows2 = rowsOf().length;
+          const back = await hunt2aPress(document.querySelectorAll('.te-cue-nav .te-cue-btn')[0], '‹ (previous caption)');
+          await hunt7cSleep(300);
+          got.gap = { n2: n2, rows2: rows2, n3: L.captions.length, rows3: rowsOf().length, how: back };
         });
       }, 380);
       if (got.n1 !== 4) throw new Error('CONTROL: + in the caption strip left ' + got.n1 + ' captions, not four');
+      if (got.rows1.length !== 4 || got.rows1[0] !== 'Alpha' || got.rows1[2] !== 'Bravo' || got.rows1[3] !== 'Charlie' || !/^Empty/.test(got.rows1[1])) throw new Error('on his phone with the Aa sheet open he tapped + for a new caption after Alpha: there are four captions now, but the sheet lists ' + got.rows1.join(', ') + ' — not Alpha, the new empty one, Bravo, Charlie. Its rows no longer match his captions (pressed by ' + got.how.slice(0, 2).join(', ') + ')');
+      const g = got.gap;
+      if (g.n2 !== 4 || g.rows2 !== 4) throw new Error('CONTROL: opening the editor in the gap at 3.5 s gave ' + g.n2 + ' captions and ' + g.rows2 + ' rows in the Aa sheet, not four of each (his three and the blank it made)');
+      if (g.n3 !== 3) throw new Error('CONTROL: ‹ from the blank caption the editor made left ' + g.n3 + ' captions, not three');
+      if (g.rows3 !== 3) throw new Error('on his phone with the Aa sheet open, the editor made a blank caption in a gap and he tapped ‹ to go back a caption: the blank was dropped, three captions remain, and the sheet still lists ' + g.rows3 + ' rows — every row after it is one place off its caption (pressed by ' + g.how + ')');
       if (got.texts.indexOf('Charlie') >= 0 || got.texts.indexOf('Bravo') < 0) throw new Error('on his phone, typing captions with the Aa sheet open, he tapped + for a new caption after Alpha and then the cross on the row reading Charlie. Charlie is ' + (got.texts.indexOf('Charlie') >= 0 ? 'still there' : 'gone') + ' and Bravo is ' + (got.texts.indexOf('Bravo') >= 0 ? 'still there' : 'gone') + ' (the captions now read ' + got.texts.join(', ') + '): the sheet never redrew after +, so every cross deletes by its old place in the list and he loses a caption he did not touch, with no warning (pressed by ' + got.how.join(', ') + ')');
     } finally {
       hunt7cCleanup(saved, savedT);
     }
   });
 
-  /* HUNT-c 3 — A CAPTION NEVER WRAPS, SO AN ORDINARY SENTENCE RUNS OFF BOTH SIDES. A caption track is a text layer, and a
+  /* 690 (seventh hunt, the other half of 2) — THE CROSS REMOVES THE CAPTION ON ITS OWN ROW, whatever else changed the list. The
+   * strip now redraws the sheet, but the list has other writers (a drag on the timeline, a trim, the assistant) and the
+   * inspector's copy of the list on PC. So the cross itself must not trust the place its row had when it was drawn. A caption
+   * is slipped into the middle of the list without redrawing it, and the cross on Charlie's row must take Charlie; and a row
+   * whose caption has gone altogether (an undo replaces every cue) must remove nothing. Clicks, not touches: which caption a
+   * handler removes does not depend on the finger — the finger is the test above. */
+  test('690 a caption row’s cross removes the caption on that row, even when the list changed under it', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    const host = document.createElement('div'); host.className = 'cap-list'; host.style.cssText = 'position:fixed;left:0;top:0;width:360px;z-index:5;background:#000';
+    try {
+      const L = hunt7cTrack([[0, 1, 'Alpha'], [2, 3, 'Bravo'], [4, 5, 'Charlie']]);
+      await huntBScene(() => [L]);
+      document.body.appendChild(host);
+      FM.captionsEditor.mount(host, L);
+      const rowOf = w => [].slice.call(host.querySelectorAll('.cap-row')).find(r => r.querySelector('.cap-text').textContent === w);
+      const texts = () => L.captions.map(c => c.text || '(blank)').join(', ');
+      FM.captions.addCue(L, 1.2, 'New');   // sorted in after Alpha; the rows are not redrawn
+      if (texts() !== 'Alpha, New, Bravo, Charlie') throw new Error('CONTROL: adding a caption at 1.2 s gave ' + texts() + ', not Alpha, New, Bravo, Charlie');
+      rowOf('Charlie').querySelector('.cap-del').click();
+      const after1 = texts();
+      // Every caption replaced by a copy, as an undo does; the rows still hold the old ones.
+      L.captions = L.captions.map(c => Object.assign({}, c));
+      rowOf('New').querySelector('.cap-del').click();
+      const after2 = texts();
+      if (after1 !== 'Alpha, New, Bravo') throw new Error('a caption was slipped into the list under the caption rows, and the cross on the row reading Charlie left ' + after1 + ': it removed whatever sat in Charlie’s old place, not Charlie');
+      if (after2 !== 'Alpha, New, Bravo') throw new Error('every caption was replaced by a copy (as an undo does) under the caption rows, and the cross on the row reading New left ' + after2 + ': a row whose caption has gone removed a different one');
+    } finally {
+      host.remove();
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, 3) — A CAPTION NEVER WRAPPED, SO AN ORDINARY SENTENCE RAN OFF BOTH SIDES. A caption track is a text layer, and a
    * text layer only wraps at `wrapWidth`, which is 0 (no wrapping) until someone drags the side handles on the canvas
    * (FM.textLines, v5.40). FM.addCaptionLayer — Add → Captions — makes the track with fontSize = height / 22 (87 px on
    * 9:16) and no wrap width, and Detect speech converts a layer without giving it one. So one spoken sentence typed into a
    * caption is one line far wider than the frame: centred, it loses both ends, and he sees only the middle words — in the
-   * preview and burned into the export. Every caption longer than about twenty characters does this. */
-  test('HUNT-c an ordinary spoken sentence typed into a caption runs off both sides of a 9:16 frame', { item: '690', budgetMs: 60000 }, async function () {
+   * preview and burned into the export. Every caption longer than about twenty characters does this.
+   * Fixed by FM.captions.giveWrap: a layer gets a column 86% of the frame wide the moment it becomes a caption track. */
+  test('690 an ordinary spoken sentence typed into a caption wraps inside a 9:16 frame', { item: '690', budgetMs: 60000 }, async function () {
     const saved = FM.scene, savedT = FM.time;
     const SENT = 'Welcome to this beautiful family home in Perth';
     let got = null;
@@ -98982,13 +99075,53 @@
     }
   });
 
-  /* HUNT-c 4 — WITH AN ANIMATE PRESET ON, THE CAPTION HE IS TYPING IS INVISIBLE. v16.98 made every caption play its own
+  /* 690 (seventh hunt, the rest of 3) — EVERY WAY A LAYER BECOMES A CAPTION TRACK GIVES IT THE COLUMN, and nothing else is
+   * touched. The test above is Add → Captions with his finger. Use as caption track (makeTrack), Detect speech on a plain
+   * layer and the assistant's addCaptionTrack make caption tracks too, and each had the same 0. A column he has dragged is
+   * his; a layer already scaled gets the column in its own px so it wraps at the same width on screen; and a track that
+   * existed before (wrap 0 there may be his double-click turning it off) is left as it is. Detection is stubbed to hand back
+   * one stretch of speech, as the 916.7 test does, so only the conversion is under test. */
+  test('690 every way a layer becomes a caption track wraps it inside the frame, and a column he set is left alone', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time, sv = { decode: FM.decodeAudio, detect: FM.detectSpeech };
+    const ids = [];
+    try {
+      const mk = f => { const l = FM.makeLayer('text', { text: 'Hello there', x: 540, y: 1500 }); l.start = 0; l.duration = 6; if (f) f(l); return l; };
+      const plain = mk(), dragged = mk(l => { l.wrapWidth = 500; }), scaled = mk(l => { l.transform.scale = 2; }), toDetect = mk();
+      const oldTrack = mk(l => { l.text = ''; l.captions = [{ start: 0, end: 1, text: 'Old' }]; l.wrapWidth = 0; });
+      const voice = FM.makeLayer('video', { name: 'hunt7c voice' }); Object.assign(voice, { start: 0, duration: 6, trimStart: 0, speed: 1, reversed: false });
+      FM.media.set(voice.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), duration: 6, width: 0, height: 0 }); ids.push(voice.id);
+      await huntBScene(() => [plain, dragged, scaled, toDetect, oldTrack, voice]);
+      FM.decodeAudio = async function () { return { sampleRate: 8000, length: 48000, duration: 6, numberOfChannels: 1 }; };
+      FM.detectSpeech = async function () { return { segments: [{ start: 1, end: 2 }], stats: {} }; };
+      FM.captions.makeTrack(plain); FM.captions.makeTrack(dragged); FM.captions.makeTrack(scaled);
+      const r1 = await FM.captions.detect(toDetect, voice, null, 'clip');
+      const r2 = await FM.captions.detect(oldTrack, voice, null, 'clip');
+      const refs = {};
+      FM.aiOps.applyOps([{ op: 'addCaptionTrack', ref: 'caps', segments: [{ start: 0, end: 2, text: 'Hi there' }] }], refs);
+      const ai = refs.caps ? FM.layerById(FM.scene, refs.caps) : null;
+      if (!r1.count || !r2.count || !FM.captions.isTrack(toDetect)) throw new Error('CONTROL: the stubbed detection laid down ' + r1.count + ' and ' + r2.count + ' cues, not one each');
+      if (!ai || !FM.captions.isTrack(ai)) throw new Error('CONTROL: the assistant’s addCaptionTrack made no caption track');
+      const W = Math.round(1080 * 0.86), got = 'Use as caption track ' + plain.wrapWidth + ', on a layer at 2x ' + scaled.wrapWidth + ', Detect speech on a plain layer ' + toDetect.wrapWidth + ', the assistant ' + ai.wrapWidth;
+      if (plain.wrapWidth !== W || toDetect.wrapWidth !== W || ai.wrapWidth !== W) throw new Error('a layer that became a caption track has no column inside the 1080 px frame (' + got + ' px; want ' + W + '): its first spoken sentence runs off both sides, in the preview and the export');
+      if (scaled.wrapWidth !== Math.round(1080 * 0.86 / 2)) throw new Error('a text layer at 2x became a caption track with a ' + scaled.wrapWidth + ' px column in its own px, which is ' + scaled.wrapWidth * 2 + ' px on the 1080 px frame');
+      if (dragged.wrapWidth !== 500) throw new Error('a layer whose wrap he had dragged to 500 px became a caption track with ' + dragged.wrapWidth + ': the column he set was thrown away');
+      if (oldTrack.wrapWidth !== 0) throw new Error('re-detecting speech on a caption track that already existed with no wrap set it to ' + oldTrack.wrapWidth + ' px — that wrap may be his own double-click turning it off');
+    } finally {
+      FM.decodeAudio = sv.decode; FM.detectSpeech = sv.detect;
+      ids.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, 4) — WITH AN ANIMATE PRESET ON, THE CAPTION HE WAS TYPING WAS INVISIBLE. v16.98 made every caption play its own
    * entrance (FM.captions.animSpan / textClocks), which is right for the video — and the caption editor parks the playhead
    * 0.05 s into the caption it opens (› and ‹ in gotoCue, the Aa sheet's caption button, a tap on a cue chip, Add →
    * Captions): the first frame of that entrance. With Fade in (0.6 s, the default) or Pop that frame is empty, so on his
    * phone he taps › to type the next caption and the canvas above the keyboard shows NOTHING while he types it; with
-   * Typewriter it shows the first letter. Before v16.98 only caption 1 did this; now every caption does. */
-  test('HUNT-c with Fade in on his captions, the caption he is typing is invisible on the canvas', { item: '690', budgetMs: 90000 }, async function () {
+   * Typewriter it shows the first letter. Before v16.98 only caption 1 did this; now every caption does.
+   * Fixed on the PREVIEW (app.js render → FM._typingCue → textClocks): the caption bound to the editor is drawn settled
+   * while the playhead stands still. The export at that same time, and the preview while playing, still show the fade. */
+  test('690 with Fade in on his captions, the caption he is typing shows on the canvas while he types it', { item: '690', budgetMs: 90000 }, async function () {
     const saved = FM.scene, savedT = FM.time;
     let got = null;
     try {
@@ -99018,6 +99151,14 @@
             let lit = 0; for (let k = 0; k < d.length; k += 4) if (d[k] > 200 && d[k + 1] > 200 && d[k + 2] > 200) lit++;
             const inp = document.getElementById('te-input');
             const r = { how: how, t: FM.time, lit: lit, field: inp ? inp.value : null, anim: (L.textAnim && L.textAnim.preset) || 'none', settled: hunt7cInk(FM.scene, 3.0).n, now: hunt7cInk(FM.scene, FM.time).n };
+            // The same frame while PLAYING: the hold is for typing, so a playing preview shows what the export shows.
+            FM.playing = true;
+            try {
+              FM.requestRender(); await hunt7cFrames(); await hunt7cSleep(60);
+              const d2 = pv.getContext('2d').getImageData(0, 0, pv.width, pv.height).data;
+              let lit2 = 0; for (let k = 0; k < d2.length; k += 4) if (d2[k] > 200 && d2[k + 1] > 200 && d2[k + 2] > 200) lit2++;
+              r.playing = lit2;
+            } finally { FM.playing = false; FM.requestRender(); }
             FM.textEdit.stop(); await hunt7cSleep(200);
             return r;
           };
@@ -99032,6 +99173,8 @@
       if (f.anim !== 'fade') throw new Error('CONTROL: Aa → Animate → Fade in did not reach the caption track (preset ' + f.anim + ')');
       if (!(f.settled > 0.9 * p.settled)) throw new Error('CONTROL: once its fade is over, Bravo two draws ' + f.settled + ' px of ink where it drew ' + p.settled + ' with no preset');
       if (f.lit < 0.5 * p.lit) throw new Error('his captions have Animate → Fade in. On his phone he taps › to type the next caption, Bravo two: the field shows its words, but the canvas above the keyboard shows ' + f.lit + ' lit px of it where the same caption with no preset shows ' + p.lit + ' (' + f.now + ' of its ' + f.settled + ' px of ink at ' + f.t.toFixed(3) + ' s). The editor parks the playhead on the first frame of the caption, where its fade has not started, so he types every caption blind — with Pop it is empty too, and with Typewriter only the first letter shows');
+      if (!(f.now < 0.2 * f.settled)) throw new Error('holding the caption he is typing leaked into the EXPORT: FM.renderScene at ' + f.t.toFixed(3) + ' s — the first frame of Bravo two’s fade — draws ' + f.now + ' of its ' + f.settled + ' px of ink, so the exported video no longer fades that caption in');
+      if (!(f.playing < 0.2 * f.lit)) throw new Error('with the caption editor open and the preview PLAYING, Bravo two still lights ' + f.playing + ' px at the first frame of its fade (' + f.lit + ' held): the hold for typing kept his Fade in from playing in the preview, so he cannot see the animation he picked');
     } finally {
       hunt7cCleanup(saved, savedT);
     }

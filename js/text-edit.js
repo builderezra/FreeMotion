@@ -110,15 +110,17 @@ window.FM = window.FM || {};
        › from after the last) it is gone, and the nearest real caption is used, exactly as before. */
     const target = cues[Math.max(0, Math.min(cues.length - 1, i))];
     // Leaving a cue we invented and never typed into: drop it rather than stranding a blank cue.
+    const n0 = cues.length;
     dropEmptyCreated();
     const cues2 = cueList(l);
+    const dropped = cues2.length !== n0;
     if (!cues2.length) { updateCueNav(); return; }
     let k = cues2.indexOf(target);
     if (k < 0) k = Math.max(0, Math.min(cues2.length - 1, i));
     const c = bindTo(cues2, k);
     if (FM.scrubTime) FM.scrubTime((l.start || 0) + c.start + Math.min(0.05, (c.end - c.start) / 2));
     if (input) { input.value = c.text || ''; try { input.focus(); input.select(); } catch (_) {} }
-    updateCueNav();
+    if (dropped) cueListChanged(); else updateCueNav();   // the Aa sheet's rows follow a dropped blank (queue 690)
     FM.requestRender();
   }
   // ‹ and ›. From a caption that has been deleted under the editor, the one that took its place counts as the next.
@@ -134,6 +136,17 @@ window.FM = window.FM || {};
       if (k >= 0) { cues.splice(k, 1); active.cueGone = true; }
     }
     active.createdCue = false;
+  }
+  /* THE Aa SHEET'S CAPTION LIST FOLLOWS THE STRIP (queue 690, seventh hunt). The strip's + sorts a new caption into
+   * the middle of the list, and ‹ › drop a blank one the editor made in a gap; the sheet's rows stayed as they were
+   * drawn, so after + it showed three rows over four captions — and each row's ✕ removed by its old place, deleting
+   * a caption he never touched (captions.js now removes by the caption itself; this makes the rows true again).
+   * Only the list is redrawn, in place — not the whole sheet (rebuildPop), which would throw away its scroll and
+   * every other control's state for a change that is not theirs. */
+  function cueListChanged() {
+    updateCueNav();
+    const l = layer(), box = (pop && popKind === 'extras') ? pop.querySelector('.cap-list') : null;
+    if (box && l && FM.captionsEditor) FM.captionsEditor.mount(box, l);
   }
   function updateCueNav() {
     if (!cueNav) return;
@@ -754,6 +767,7 @@ window.FM = window.FM || {};
           const i = FM.captions.addCue(ly, at);
           active.createdCue = false;   // deliberately created — keep it even if left blank
           gotoCue(i);
+          cueListChanged();            // …and the Aa sheet lists it, so its rows are the captions (queue 690, seventh hunt)
         });
         cueNav.append(prev, lbl, next, addB);
         // Guard the strip the same way the top bar is guarded, or tapping ‹ › dismisses the keyboard.
@@ -853,6 +867,10 @@ window.FM = window.FM || {};
     },
     // The Aa sheet's caption list changed (✕, a new Start or End, + Add cue, Detect speech): the n / N label follows.
     cuesChanged() { if (active) updateCueNav(); },
+    /* The caption this session is typing into, or null — read by app.js render() so the paused preview draws it
+       settled rather than on the first frame of its entrance (queue 690, seventh hunt). Pure: no rebinding here,
+       it is asked on every frame. */
+    typingCue() { return (active && active.cap && active.cue && !active.cueGone) ? active.cue : null; },
     /* THE EDITOR MUST NOT OUTLIVE ITS SUBJECT (queue 523). Ezra: "as soon as you don't have a layer
        selected that you were editing the text for, that whole screen just goes away."
        He is describing a lifetime bug, not a missing button. The editor is bound to ONE layer and had
