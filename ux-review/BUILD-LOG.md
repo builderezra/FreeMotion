@@ -47,3 +47,7 @@ they are the same on both. 13 failed only on the branch, and the branch was at f
 - The other ten pass alone, and pass run straight after all eight of my tests (18/18 at 1280, 19/19 at
   380 with the Preparing test added). Three different tests failed only on main in the same comparison,
   so these late-suite reds move around between runs; they are not this branch's.
+- **My own `the preview explains its two rules` test failed once in the full run** and passed alone and in
+  a slice. It now resets the preview's zoom / pan and any open group before it taps, and a failure prints
+  what it inherited (viewport, group, preview size, whether localStorage can be written). With that, it
+  passed as the last of the first 926 tests in suite order. If it ever fails again, the message says why.
