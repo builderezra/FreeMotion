@@ -3392,6 +3392,80 @@ body.white-chrome #time-readout:active {
   box-shadow: 0 -12px 16px -8px var(--panel);   /* the rows fade out under it rather than colliding */
 }
 
+/* ---- FRIENDS BESIDE CANVAS SETTINGS, on a phone (queue 945) ------------------------------------------
+   His design, picked from drawn options: opening Canvas settings on a phone shows a Friends bar ABOVE the canvas card; ⤢
+   swaps them — the one you open becomes the big card in the middle and the other shrinks to a bar that always sits on top.
+   ⚠️ NOTHING HERE MAY REACH A PC. The base rules hide both bars; every rule that shows or moves them is inside the phone
+   query AND keyed on #canvas-dialog.cv-pair, which js/app.js sets only when the dialog opens at phone width. A column flex
+   leaking above 700px would swap the axes of the PC popover's cv-anchored placement (the 548/762/16570 tests pin it). */
+#cv-friends { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+#canvas-dialog .export-card > .cv-mini { display: none; }
+@media (max-width: 700px) {
+  /* The top reserve keeps the phone's top bar AND the stage's people chip (#collab-people / the person+, 28px at top 6 of
+     #stage, with 8px of hit slop) as backdrop: a second tap on the cog or on the chip must land on the dialog's own
+     backdrop and close it (queue 762 / 944), not on a bar that swaps. 52 bar + 6 + 28 + 8 + 2 = 96. */
+  #canvas-dialog.cv-pair {
+    flex-direction: column; gap: 10px;
+    padding: calc(96px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
+  }
+  #canvas-dialog.cv-pair > .export-card, #canvas-dialog.cv-pair > #cv-friends { width: min(420px, calc(100vw - 24px)); flex: none; }
+  #canvas-dialog.cv-pair > #cv-friends { display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  /* The small block is always on top: Friends leads while it is the bar. ORDER, not a DOM move — re-inserting the card
+     would replay its hinge and lose its scroll. */
+  #canvas-dialog.cv-pair:not(.cv-fr-big) > #cv-friends { order: -1; }
+  /* The big block's cap leaves room for the bar (64), the gap (10) and the top reserve, so Apply is never pushed off. */
+  #canvas-dialog.cv-pair > .export-card,
+  #canvas-dialog.cv-pair.cv-fr-big > #cv-friends {
+    max-height: calc(100vh - 182px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100svh - 182px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  /* The bars' look. No `display` here: each state below sets its own, so no rule's order decides what shows. */
+  #canvas-dialog.cv-pair .cv-mini { align-items: center; gap: 12px; height: 64px; padding: 11px 12px 11px 14px; cursor: pointer; flex: none; }
+  .cv-mini-ico { width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .cv-mini-ico svg { width: 21px; height: 21px; }
+  .cv-mini-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .cv-mini-t { font-weight: 700; font-size: 15.5px; color: var(--text); }
+  .cv-mini-s { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cv-fr-live { color: #4fd18b; font-weight: 700; }
+  .cv-fr-faces { display: flex; flex: none; padding-left: 8px; }
+  .cv-fr-faces:empty { display: none; }
+  .cv-fr-face { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--panel); margin-left: -8px; display: grid; place-items: center;
+    font-size: 11.5px; font-weight: 800; color: #10151f; background: var(--peer, #888888); }
+  .cv-fr-face.away { opacity: .45; filter: grayscale(1); }
+  .cv-fr-more { font-size: 12px; font-weight: 700; color: var(--text-dim); margin-left: 6px; align-self: center; }
+  .cv-mini-exp { position: relative; width: 38px; height: 38px; flex: none; border-radius: 50%; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text); display: grid; place-items: center; padding: 0; cursor: pointer; }
+  .cv-mini-exp::before { content: ''; position: absolute; inset: -6px; }   /* a 50px catch around a 38px button */
+  .cv-mini-exp svg { width: 17px; height: 17px; }
+
+  /* STATE: Canvas is big (the default). The canvas card's own bar is hidden; Friends shows only its bar. */
+  #canvas-dialog.cv-pair:not(.cv-fr-big):not(.cv-flying) > #cv-friends > #cv-fr-body { display: none; }
+  #canvas-dialog.cv-pair:not(.cv-fr-big) > #cv-friends > #cv-fr-bar { display: flex; }
+  /* STATE: Friends is big. The canvas card becomes its bar — everything else in it is set aside, not destroyed, so
+     what he had chosen is still there when it grows back. */
+  #canvas-dialog.cv-pair.cv-fr-big:not(.cv-flying) > .export-card { padding: 0; }
+  #canvas-dialog.cv-pair.cv-fr-big:not(.cv-flying) > .export-card > :not(.cv-mini) { display: none; }
+  #canvas-dialog.cv-pair.cv-fr-big > .export-card > .cv-mini { display: flex; }
+  #canvas-dialog.cv-pair.cv-fr-big:not(.cv-flying) > #cv-friends > #cv-fr-bar { display: none; }
+  #cv-fr-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; padding: 18px 18px 14px; }
+  /* THE FLIGHT (js/app.js cvPairSwap): both blocks fly from their old box to their new one while each one's bar and its
+     content cross-fade, so for 460 ms BOTH halves of each block are drawn. These selectors out-rank every state rule
+     above (critic's finding: a (3,2,0) hide beat a (1,2,0) show and the growing block flew empty). */
+  #canvas-dialog.cv-pair.cv-flying > .export-card, #canvas-dialog.cv-pair.cv-flying > #cv-friends { overflow: hidden; }
+  #canvas-dialog.cv-pair.cv-flying > .export-card > .cv-mini,
+  #canvas-dialog.cv-pair.cv-flying > #cv-friends > #cv-fr-bar { display: flex; position: absolute; left: 0; right: 0; top: 0; z-index: 2; }
+  #canvas-dialog.cv-pair.cv-flying > #cv-friends > #cv-fr-body { display: flex; }
+  /* The Start sharing door and its promise (collab-ui.js drawFriendsIdle). */
+  #cv-fr-body .cs-start { width: 100%; min-height: 50px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent);
+    color: #0b0e14; font-weight: 800; font-size: 16px; margin: 10px 0 6px; cursor: pointer; }
+  #cv-fr-body .cs-start:disabled { opacity: .6; }
+  #cv-fr-body .cs-fr-hint { font-size: 12.5px; color: var(--text-dim); text-align: center; margin-bottom: 12px; }
+}
+/* A toast raised from the Friends block ("Link copied", the phone host's keep-open line, "Sharing stopped") is painted
+   ABOVE it: #toast is z 60 and this dialog 100. Read off the dialog's own state, so no class can be left on <body>. */
+body:has(> #canvas-dialog.cv-fr-big:not(.hidden)) > #toast { z-index: 225; }
+
 /* ---- "Export ready" (queue 141 part 4) --------------------------------------------------------
  * Same card, same language as the export dialog it follows — it is the last step of the same job, not
  * a new screen. The poster is the point of it: it is the only place in the app that shows you what you
@@ -9494,7 +9568,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   .np-card { animation: pop-flip 340ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: 50% 0%; }
 
   /* Cards opened from the TOP bar hang from their top edge. */
-  #canvas-dialog .export-card, #export-dialog .export-card, #export-overlay .export-card, #export-ready .export-card,
+  #canvas-dialog .export-card, #canvas-dialog #cv-friends, #export-dialog .export-card, #export-overlay .export-card, #export-ready .export-card,
   .shortcuts-card {
     animation: fm-hinge-panel 360ms cubic-bezier(.18, .85, .28, 1.02) backwards; transform-origin: 50% 0%;
   }
@@ -9556,7 +9630,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   #inspector .cat-in, #inspector .cat-in-back, .insp-drop-in, .be-picker,
   .fxb-catview:not(.fxb-favview), #tpl-fill, #tpl-fill > *,
   .np-card, .np-card:not(.pop-card), #canvas-dialog, #export-dialog, #export-overlay, #export-ready, #shortcuts-overlay,
-  #canvas-dialog .export-card, #export-dialog .export-card, #export-overlay .export-card, #export-ready .export-card,
+  #canvas-dialog .export-card, #canvas-dialog #cv-friends, #export-dialog .export-card, #export-overlay .export-card, #export-ready .export-card,
   .shortcuts-card, .shortcuts-card:not(.pop-card), .sfx-scrim, .sfx-card, #vr-overlay, .vr-card, .ps-overlay, .ps-card,
   #ar-sheet, #ar-sheet .ar-card, #el-browser, .te-pop.te-pop-in, .te-pop.te-pop-in.te-pop-up,
   #el-browser > .fxb-top, #el-browser > .fxb-scroll, #el-browser > .fxb-catview-scroll, #el-browser > .fxb-search-input,

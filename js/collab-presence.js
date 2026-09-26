@@ -1145,7 +1145,8 @@ window.FM = window.FM || {};
   }
 
   /* ── who is here (§18.5) ── */
-  function openPanel() { if (C.ui && C.ui.share) C.ui.share(); }
+  /* queue 945: the chip is the phone's people door once somebody is in — the same pair the person+ opens, never an arm. */
+  function openPanel() { if (!C.ui) return; if (C.ui.openPeople) C.ui.openPeople(); else if (C.ui.share) C.ui.share(); }
   function drawChip() {
     const stage = document.getElementById('stage');
     if (!stage) return;
@@ -1369,6 +1370,7 @@ window.FM = window.FM || {};
   };
   PZ.stateOf = function (mid) { return people[mid] ? stateOf(people[mid]) : null; };
   PZ.PALETTE = PALETTE;
+  PZ.initials = initials;   // queue 945: the Friends bar's faces use the chip's own initials rule
 
   /* ═══ ATTACH / DETACH ═════════════════════════════════════════════════════════════════════════ */
   PZ.attach = function (session, opts) {

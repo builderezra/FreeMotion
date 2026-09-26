@@ -7060,7 +7060,8 @@ window.FM = window.FM || {};
     const appSetBtn = document.getElementById('cv-appset');
     if (appSetBtn) appSetBtn.addEventListener('click', () => {
       const dlg = document.getElementById('canvas-dialog');
-      if (dlg) dlg.classList.add('hidden');   // leave this dialog first, or the panel opens behind it
+      // leave this dialog first, or the panel opens behind it — through its one close (queue 945), which also unpins the PC anchor
+      if (FM.closeCanvasDialog) FM.closeCanvasDialog(); else if (dlg) dlg.classList.add('hidden');
       if (FM.settings && FM.settings.open) FM.settings.open();
     });
     // The PC top bar's ⋯ (#btn-more) used to live here, opening FM.projectMoreItems with nothing
@@ -8172,9 +8173,145 @@ window.FM = window.FM || {};
         for (let i = 0; i < fpsSel.options.length; i++) if (fpsSel.options[i].value === v) return true;
         return false;
       };
+      /* ═══ FRIENDS BESIDE CANVAS SETTINGS — the phone pair (queue 945) ═══════════════════════════════════════════
+         His design, picked from drawn options (tools/design/945-options.html, "do everything u recommend"): on a phone the
+         dialog opens with a Friends bar above the canvas card; ⤢ swaps them — the one opened becomes the big card, the other
+         shrinks to a bar, and the SMALL ONE ALWAYS SITS ON TOP (his words: "the canvas settings are small at the top"). The
+         cog comes back to whichever he had open last, per device. PC is untouched: `cv-pair` is only ever set at phone
+         width, and every rule that shows or moves the pair is keyed on it (styles.css).
+         The Friends content is js/collab-ui.js's (U.renderFriends); opening it never starts sharing. */
+      const cvCard = cvDialog.querySelector('.export-card');
+      const cvFr = document.getElementById('cv-friends');
+      const cvFrBody = document.getElementById('cv-fr-body');
+      const cvMini = document.getElementById('cv-mini');
+      const cvFrBar = document.getElementById('cv-fr-bar');
+      const CV_PAIR_KEY = 'fm.cvPair';   // its own key: FM.settings' load() whitelist would drop it, and it is not a project fact
+      const cvPhoneMq = window.matchMedia ? window.matchMedia('(max-width: 700px)') : null;
+      let cvFlight = [];
+      const cvUi = () => (FM.collab && FM.collab.ui) || null;
+      const cvPairLast = () => { try { return localStorage.getItem(CV_PAIR_KEY) === 'friends' ? 'friends' : 'canvas'; } catch (e) { return 'canvas'; } };
+      const cvPairBig = () => (cvDialog.classList.contains('cv-fr-big') ? 'friends' : 'canvas');
+      /* What the Canvas bar says: the PENDING choice, read the way Apply reads it — which is the project's own until he
+         changes something, and his unapplied choice if he swapped to Friends mid-edit. */
+      const cvSummary = () => {
+        const sz = cvCompute();
+        const raw = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : 30) : (fpsSel ? fpsSel.value : 30);
+        const fps = Math.max(1, Math.min(120, parseInt(raw, 10) || 30));
+        return (cvAspect === 'custom' ? 'Custom' : cvAspect) + ' · ' + sz.w + ' × ' + sz.h + ' · ' + fps + ' fps';
+      };
+      const friendsUnmount = () => { const U = cvUi(); if (U && U.friendsClosed) U.friendsClosed(); else if (cvFrBody) cvFrBody.textContent = ''; };
+      /* Put the pair in state `big` ('canvas' | 'friends'). Mounts the Friends content when Friends is big; never unmounts
+         (a shrinking Friends stays drawn for the flight's cross-fade — the settle unmounts it). */
+      const cvPairApply = (big, remember) => {
+        cvDialog.classList.toggle('cv-fr-big', big === 'friends');
+        const sub = document.getElementById('cv-mini-sub'); if (sub) sub.textContent = cvSummary();
+        const fe = document.getElementById('cv-fr-exp'), me = document.getElementById('cv-mini-exp');
+        if (fe) fe.setAttribute('aria-expanded', big === 'friends' ? 'true' : 'false');
+        if (me) me.setAttribute('aria-expanded', big === 'canvas' ? 'true' : 'false');
+        const U = cvUi();
+        if (U && U.friendsBar) { try { U.friendsBar(); } catch (e) {} }
+        if (big === 'friends') {
+          if (U && U.renderFriends) U.renderFriends(cvFrBody);
+          else if (cvFrBody) cvFrBody.textContent = 'Live sharing is not available here';
+        }
+        if (remember !== false) { try { localStorage.setItem(CV_PAIR_KEY, big); } catch (e) {} }
+      };
+      /* Land any flight and take off everything it put inline. Called before every swap, at every open (a test or anything
+         else may have hidden the dialog with a bare class) and at every close. */
+      const cvPairSettle = () => {
+        const f = cvFlight; cvFlight = [];
+        f.forEach(a => { try { a.cancel(); } catch (e) {} });
+        [cvCard, cvFr].forEach(b => { if (b) ['position', 'left', 'top', 'width', 'height', 'margin', 'zIndex'].forEach(k => { b.style[k] = ''; }); });
+        if (cvMini) cvMini.style.top = '';
+        cvDialog.classList.remove('cv-flying');
+        if (!cvDialog.classList.contains('cv-fr-big')) friendsUnmount();
+      };
+      /* THE SWAP, FLIP-style — the motion in the clip he approved (945-A.gif): measure both blocks, change state, measure
+         again, then fly each block from its old box to its new one while its bar and its content cross-fade. Both are lifted
+         out of the flow for the 460 ms (position: fixed — the dialog is inset:0, so its box IS the viewport), or animating
+         one's height would shove the other about mid-air. */
+      const cvPairSwap = (to) => {
+        if (cvDialog.classList.contains('hidden') || !cvDialog.classList.contains('cv-pair') || cvPairBig() === to) return;
+        cvPairSettle();
+        /* Land the entrance first: a card still swinging on its hinge (rotateX) measures foreshortened. */
+        try {
+          cvDialog.getAnimations({ subtree: true }).forEach(a => {
+            const t = a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming() : null;
+            if (t && isFinite(t.endTime)) a.finish();
+          });
+        } catch (e) {}
+        const ae = document.activeElement;
+        const hadExp = !!(ae && cvDialog.contains(ae) && ae.classList && ae.classList.contains('cv-mini-exp'));
+        if (ae && cvDialog.contains(ae) && ae.blur) ae.blur();   // an input left focused keeps iOS's keyboard up under the flight
+        const refocus = () => {
+          if (!hadExp) return;
+          const b = document.getElementById(to === 'friends' ? 'cv-mini-exp' : 'cv-fr-exp');
+          if (b && b.focus) { try { b.focus({ preventScroll: true }); } catch (e) {} }
+        };
+        const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if (reduce || !cvCard || !cvFr || !cvCard.animate) { cvPairApply(to); cvPairSettle(); refocus(); return; }
+        const blocks = [cvCard, cvFr];
+        const cardShrinks = to === 'friends';
+        const st = cardShrinks ? cvCard.scrollTop : 0;
+        const first = blocks.map(b => b.getBoundingClientRect());
+        cvPairApply(to);
+        const last = blocks.map(b => b.getBoundingClientRect());
+        blocks.forEach((b, i) => {
+          b.style.position = 'fixed'; b.style.margin = '0';
+          b.style.left = last[i].left + 'px'; b.style.width = last[i].width + 'px';
+          b.style.top = last[i].top + 'px'; b.style.height = last[i].height + 'px';
+          b.style.zIndex = ((b === cvFr) === (to === 'friends')) ? '2' : '1';   // the one arriving flies above the one leaving
+        });
+        cvDialog.classList.add('cv-flying');
+        /* A card he had scrolled (a short phone, the oversize note) keeps its place while it fades, and its bar is drawn
+           in the visible window rather than at the scrolled-away top of the content (critic's finding). */
+        if (cardShrinks && st) { cvCard.scrollTop = st; if (cvMini) cvMini.style.top = st + 'px'; }
+        const DUR = 460, EASE = 'cubic-bezier(.2,.85,.25,1.06)';
+        const anim = (node, frames, o) => { if (node && node.animate) cvFlight.push(node.animate(frames, Object.assign({ duration: DUR, fill: 'both' }, o || {}))); };
+        blocks.forEach((b, i) => {
+          const growing = (b === cvFr) === (to === 'friends');
+          anim(b, [{ top: first[i].top + 'px', height: first[i].height + 'px' }, { top: last[i].top + 'px', height: last[i].height + 'px' }], { easing: EASE });
+          const bar = b === cvCard ? cvMini : cvFrBar;
+          const content = b === cvCard ? Array.prototype.filter.call(cvCard.children, k => k !== cvMini) : [cvFrBody];
+          /* the bar leaves early and the content arrives late, so the two are never read on top of each other */
+          anim(bar, growing ? [{ opacity: 1 }, { opacity: 0, offset: .18 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 0, offset: .4 }, { opacity: 1, offset: .75 }, { opacity: 1 }]);
+          content.forEach(c => anim(c, growing ? [{ opacity: 0 }, { opacity: 0, offset: .15 }, { opacity: 1, offset: .6 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0, offset: .25 }, { opacity: 0 }]));
+        });
+        const mine = cvFlight.slice();
+        Promise.all(mine.map(a => a.finished)).then(() => { if (cvFlight.length && cvFlight[0] === mine[0]) cvPairSettle(); }, () => {});
+        refocus();
+      };
+      if (cvFrBar) cvFrBar.addEventListener('click', () => cvPairSwap('friends'));
+      if (cvMini) cvMini.addEventListener('click', () => cvPairSwap('canvas'));
+      /* A window that crosses the phone breakpoint while the dialog is up (a phone turned to a landscape wider than 700px is
+         a PC here, by design) leaves the pair: the Friends block vanishes above 700px, so its content must not go on being
+         treated as on screen (critic's finding — redraws would spend the one-shot notes nobody could see). */
+      const cvOnWidth = () => {
+        if (cvDialog.classList.contains('hidden')) return;
+        const phone = !!(cvPhoneMq && cvPhoneMq.matches);
+        if (phone === cvDialog.classList.contains('cv-pair')) return;
+        cvPairSettle();
+        cvDialog.classList.toggle('cv-pair', phone);
+        cvDialog.classList.remove('cv-fr-big');
+        friendsUnmount();
+        if (phone) cvPairApply('canvas', false);
+      };
+      let cvWidthOn = false;
+      const cvWatchWidth = (on) => {
+        if (!cvPhoneMq || on === cvWidthOn) return;
+        cvWidthOn = on;
+        try {
+          if (on) { if (cvPhoneMq.addEventListener) cvPhoneMq.addEventListener('change', cvOnWidth); else if (cvPhoneMq.addListener) cvPhoneMq.addListener(cvOnWidth); }
+          else { if (cvPhoneMq.removeEventListener) cvPhoneMq.removeEventListener('change', cvOnWidth); else if (cvPhoneMq.removeListener) cvPhoneMq.removeListener(cvOnWidth); }
+        } catch (e) {}
+      };
       /* THE OPEN PATH ON ITS OWN (queue 762). The button below toggles; the oversize warning's tap (FM.warnOversizeProject)
          calls this directly so it always OPENS — a toggle there closed a dialog that was already up. */
-      const openCanvasDialog = () => {
+      /* `opts.block`: 'friends' (the person+ / people chip), 'last' (the cog — his last block, queue 945), or nothing
+         (Canvas big: the oversize warning's tap is about the canvas size, and every bare call opens the canvas). */
+      const openCanvasDialog = (opts) => {
+        const o = opts || {};
+        cvPairSettle();
         cvDetect();
         // seed the custom W/H inputs from the live project so switching to Custom starts sensible
         const cw = document.getElementById('cv-cw'), ch = document.getElementById('cv-ch');
@@ -8233,9 +8370,27 @@ window.FM = window.FM || {};
         document.body.classList.remove('cv-up');
           (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         }
+        /* queue 945: the phone pair. Decided at open, like the PC anchor above. */
+        const phone = !!(cvPhoneMq && cvPhoneMq.matches);
+        cvDialog.classList.toggle('cv-pair', phone);
+        if (phone) cvPairApply(o.block === 'friends' ? 'friends' : o.block === 'last' ? cvPairLast() : 'canvas');
+        else cvDialog.classList.remove('cv-fr-big');
+        if (!cvDialog.classList.contains('cv-fr-big')) friendsUnmount();
+        cvWatchWidth(true);
         cvRoleNote();
         cvDialog.classList.remove('hidden');
       };
+      /* ONE CLOSE for every way out (queue 945) — backdrop, Cancel, Apply, App settings…, and through Cancel the cog's second
+         tap, #btn-canvas's and Escape. Each used to do its own three steps; now each also lands a flight, empties the
+         Friends block (which starts the room code's half hour, as closing the Share card does) and stops the width watch. */
+      const cvClose = () => {
+        cvPairSettle();
+        friendsUnmount();
+        cvWatchWidth(false);
+        (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
+        cvDialog.classList.add('hidden');
+      };
+      FM.closeCanvasDialog = cvClose;
       /* queue 921 S7 review: A VIEWER OR COMMENTER IS TOLD IN THE CARD, BEFORE THEY TRY — Apply is off and a
          line says why, in words that fit the role. It was a toast from Apply, and the toast (z 60) sat under
          this dialog's own full-screen backdrop (z 100), which stayed open: pressing Apply did nothing
@@ -8262,7 +8417,7 @@ window.FM = window.FM || {};
       FM.openCanvasDialog = openCanvasDialog;
       canvasBtn.addEventListener('click', () => {
         if (!cvDialog.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); else cvDialog.classList.add('hidden'); return; }   // queue 762: the phone cog forwards here — a second tap closes
-        openCanvasDialog();
+        openCanvasDialog({ block: 'last' });   // queue 945: the cog comes back to whichever block he had open last
       });
       document.querySelectorAll('#canvas-dialog .cv-bg-sw').forEach(b => b.addEventListener('click', () => { cvBg = b.dataset.bg; cvBgSync(); }));
       { const bgInp = document.getElementById('cv-bg'); if (bgInp) bgInp.addEventListener('input', () => { cvBg = bgInp.value; cvBgSync(); }); }
@@ -8289,10 +8444,9 @@ window.FM = window.FM || {};
       cvDialog.addEventListener('click', (e) => {
         const began = cvDownOnScrim; cvDownOnScrim = false;
         if (e.target !== cvDialog || !began) return;
-        (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
-        cvDialog.classList.add('hidden');
+        cvClose();
       });
-      document.getElementById('cv-cancel').addEventListener('click', () => ((FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up')), cvDialog.classList.add('hidden')));
+      document.getElementById('cv-cancel').addEventListener('click', () => cvClose());
       /* queue 921 S7 (D10, §4.2): IN A LIVE SESSION THE CANVAS IS EVERYBODY'S, so a change of size or frame
          rate is asked about first — "Change the canvas for everyone?" — and a Viewer or Commenter is told
          they cannot (the host would refuse it anyway; this says so before anything moves). With no session,
@@ -8318,7 +8472,7 @@ window.FM = window.FM || {};
         FM.scene.project.background = cvBg === 'none' ? null : cvBg;   // null = transparent
         resizeCanvas(); refreshAll();
         if (FM.history) FM.history.commit();
-        ((FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up')), cvDialog.classList.add('hidden'));
+        cvClose();
       };
       document.getElementById('cv-go').addEventListener('click', () => {
         const s = cvCompute();

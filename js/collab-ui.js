@@ -16,6 +16,10 @@
  *   · the S2 inertness test asserts `!document.getElementById('btn-share')` and it stays true unchanged,
  *     which is worth more than saving eight lines of DOM building.
  *
+ * ⚠️ …WITH ONE DRAWING THAT RUNS WITH LABS OFF (queue 945): the Friends block in Canvas settings on a phone is static
+ * markup in index.html, and opening it with Labs off draws — into THAT block, with no collab id, no scrim, no listener and
+ * no timer — one explanation and the one switch that turns live sharing on (U.renderFriends → drawLabsOff).
+ *
  * ⚠️ EVERY PIECE OF TEXT THAT CAME FROM ANOTHER DEVICE GOES IN AS `textContent` (§14.9). Names and
  * colours are chosen on someone else's phone. There is no `innerHTML` in this file with peer data in
  * it — there is no `innerHTML` in this file at all — and the colour is matched against the palette
@@ -157,7 +161,7 @@ window.FM = window.FM || {};
     scrim = null; card = null;
     document.body.classList.remove('collab-card-open');
   }
-  U.close = closeCard;
+  U.close = function () { closeAny(); };   // queue 945: closes the Friends block too (defined below)
   U.openCard = function (id) { return document.getElementById(id); };
   /* ⚠️ S8 review: A CARD'S MIDDLE SCROLLS; ITS BUTTONS DO NOT. The card is capped at 82svh and had no scroller of
      its own (only the Share panel built one), so on a 667 px phone — or in iPhone Safari, where 82svh is about
@@ -475,7 +479,7 @@ window.FM = window.FM || {};
      and did nothing at all — no banner, no word. Returns whether it is now following. */
   function startFollow(mid, name) {
     if (!C.presence) return false;
-    if (C.presence.follow(mid)) { closeCard(); return true; }
+    if (C.presence.follow(mid)) { closeAny(); return true; }
     const why = C.presence.canFollow ? C.presence.canFollow(mid) : 'left';
     const who = cleanName(name) || 'They';
     if (FM.toast) FM.toast(why === 'away' ? who + ' is away right now' : why === 'off' ? who + ' is offline right now'
@@ -574,7 +578,7 @@ window.FM = window.FM || {};
     const r = C.signal.newRoom();
     hostRoom.sid = r.sid; hostRoom.sk = r.sk; hostRoom.code = C.signal.newRoomCode();
     /* The panel he removed them from is on screen, so the new code is being shown now. */
-    hostRoom.codeAt = (card && card.id === 'collab-share') ? Date.now() : 0;
+    hostRoom.codeAt = panelRoot() ? Date.now() : 0;   // queue 945: or the Friends block
     saveRoom(hostRoomPid || currentPid(), hostRoom);
     stopHostRelay();
     startHostRelay();
@@ -691,7 +695,57 @@ window.FM = window.FM || {};
     shareStep = 'main';
   }
 
-  function redrawShare() { if (card && card.id === 'collab-share') U.share({ keepStep: true }); }
+  /* ═══ queue 945 · THE FRIENDS BLOCK (Canvas settings on a phone) ════════════════════════════════════════════
+     The same content as the Share card, drawn into a HOST — #cv-fr-body, inside #canvas-dialog — instead of into the one
+     scrim card. It has its own variable, never `card`: openCard() closes whatever card is up first, so the profile prompt
+     that Start sharing or Change… raises would otherwise tear the block out from under itself.
+     ⚠️ OPENING IT NEVER ARMS. The Share button's U.share() arms a room the moment it is pressed (relays, a wake lock,
+     a checkpoint); the block draws what is TRUE — not shared yet, live, a guest, a shared copy — and only its Start
+     sharing button runs the arm. */
+  let fhost = null;              // #cv-fr-body while Friends is mounted in it
+  let fhostShowedCode = false;   // the room code was drawn there: taking it down starts the code's half hour, as closing the card does
+  let fhostObs = null;           // the backstop: anything that hides the dialog with a bare class unmounts the block
+  let arming = null;             // the one arm in flight — a double tap on Start sharing cannot arm twice
+  let pendingLinkRole = null;    // "New people join as", chosen before there is a room; applied when Start sharing arms
+  function friendsDlg() { return document.getElementById('canvas-dialog'); }
+  /* Visible means VISIBLE: the classes say the block is big, and it has a box — above 700px it is display:none whatever
+     the classes say (critic's finding: a redraw into an unseen block spends the one-shot notes). */
+  function friendsVisible() {
+    const d = friendsDlg();
+    if (!d || d.classList.contains('hidden') || !d.classList.contains('cv-fr-big')) return false;
+    const f = document.getElementById('cv-friends');
+    return !!(f && f.getClientRects().length);
+  }
+  function fhostLive() { return !!fhost && fhost.isConnected && friendsVisible(); }
+  /* Whichever panel is on screen now — the Share card, or the Friends block — for the redraws that update in place. */
+  function panelRoot() { return (card && card.id === 'collab-share') ? card : (fhostLive() ? fhost : null); }
+  function mountHost(host) {
+    if (fhostShowedCode) { fhostShowedCode = false; touchCode(); }   // the host-mode twin of closeCard running _onclose on a redraw
+    host.textContent = '';
+    return host;
+  }
+  function watchFriendsHost() {
+    if (fhostObs || typeof MutationObserver === 'undefined') return;
+    const d = friendsDlg();
+    if (!d) return;
+    /* THE LIVE STATE, NOT THE RECORD (critic's finding): a bare hide followed by a reopen in the same task queues a record
+       that says "hidden" after the dialog is open again — acting on it emptied a block that was on screen. */
+    fhostObs = new MutationObserver(function () { const dd = friendsDlg(); if (!dd || dd.classList.contains('hidden')) U.friendsClosed(); });
+    fhostObs.observe(d, { attributes: true, attributeFilter: ['class'] });
+  }
+  /* Done / Leave / Follow / Comments from either surface: the card closes, and so does the dialog holding the block. */
+  function closeAny() {
+    closeCard();
+    if (fhost) { if (FM.closeCanvasDialog) FM.closeCanvasDialog(); else U.friendsClosed(); }
+  }
+
+  function redrawShare() {
+    if (card && card.id === 'collab-share') { U.share({ keepStep: true }); return; }
+    /* queue 945: a redraw into the block goes through renderFriends, never U.share — which ARMS when there is no session,
+       so a late link close after Stop sharing would have started sharing again by itself. */
+    if (fhostLive()) U.renderFriends(fhost, { keepStep: true });
+    else U.friendsBar();
+  }
 
   /* §12.1 step 2 and §24: A CHECKPOINT BEFORE ANYTHING IS TOUCHED. Arming runs a pre-sanitise tidy-up
      over his document and commits it as an owner step (`C.share`), and from that moment other people can
@@ -870,18 +924,22 @@ window.FM = window.FM || {};
   U.onRole = function () {
     applyRoleClasses();
     const s = C.session;
-    if (card && card.id === 'collab-share' && s && !s.isOwner) drawGuestPanel(s);
+    const root = panelRoot();
+    if (root && s && !s.isOwner) drawGuestPanel(s, root === card ? undefined : root);
+    U.friendsBar();
     if (C.comments && C.comments.onRole) { try { C.comments.onRole(); } catch (e) {} }
     if (s && !s.isOwner && FM.toast) FM.toast((s.hostName || 'The owner') + ' made you ' + roleWords(s.role), 2600);
   };
   U.onSettings = function () {
     const s = C.session;
-    if (card && card.id === 'collab-share' && s && !s.isOwner) drawGuestPanel(s);
+    const root = panelRoot();
+    if (root && s && !s.isOwner) drawGuestPanel(s, root === card ? undefined : root);
   };
   /* A comment was added, answered or resolved: the "Comments" row of whichever panel is open says so. */
   U.onComments = function () {
-    if (!card || card.id !== 'collab-share') return;
-    const row = card.querySelector('.cs-comments');
+    const root = panelRoot();
+    if (!root) return;
+    const row = root.querySelector('.cs-comments');
     if (!row) return;
     const fresh = commentsRow();
     row.parentNode.replaceChild(fresh, row);
@@ -891,7 +949,7 @@ window.FM = window.FM || {};
     /* ⚠️ NOT `.cs-add`: that class is the "Connect with a code" door, and the S3 suite (and anything else)
        finds that door by it — a comments row sharing the class sat first in the card and took its clicks. */
     const b = btn('cs-navrow cs-comments', n ? 'Comments · ' + n + ' open' : 'Comments', function () {
-      closeCard();
+      closeAny();
       if (C.comments) C.comments.open();
     });
     /* By role (S7 review): a Viewer was told to "reply" and "leave a note", and the card behind the row lets
@@ -925,31 +983,47 @@ window.FM = window.FM || {};
          what it is doing, and a Leave that works without a session. */
       const lc = cardOf(currentPid());
       if (lc && lc.collab) return Promise.resolve(drawLinkedPanel(lc));
-      return U.profile().then(function (p) {
-        if (!p) return null;
-        const pid = currentPid();
-        return takeLock(hostLock(pid)).then(function (mine) {
-        if (!mine) {
-          FM.ask({ title: OTHER_TAB, single: true, ok: 'OK', message: 'This project is being shared from another FreeMotion tab or window. Share from there, or stop sharing there first and try again here.' });
-          return null;
-        }
-        if (C.session || currentPid() !== pid) { dropLock(hostLock(pid)); return null; }
-        useRoom(pid, true);
-        showCode();                          // the panel is about to show it: live from the first second
-        return checkpoint(pid, 'arm').then(function () {
-          /* S6: the room's own id keys the media resume parts now that there is one (§15's note). */
-          C.share({ ownerInfo: { name: p.name, color: p.color }, sid: hostRoom.sid, midFloor: hostRoom.midTop || 0 });
-          afterArm();
-          return drawShare();
-        });
-        });
-      });
+      return armShare().then(function (ok) { return ok ? drawShare() : null; });
     }
     useRoom(s.pid || currentPid(), true);
     showCode();
     startHostRelay();                        // an ensure: a Codes-only flip, a lapsed code or a dropped relay comes back here
     return Promise.resolve(drawShare());
   };
+
+  /* §12.1 arming, steps 1–7 — the Share button's, and since queue 945 the Friends block's Start sharing (the ONLY two doors
+     that may arm; opening the block is not one). Resolves true when a room is live. `arming` makes it one arm however many
+     times it is pressed: the race check below runs before the async checkpoint, so two taps could both reach C.share. */
+  function armShare() {
+    if (arming) return arming;
+    if (!U.labsOn() || C.session) return Promise.resolve(false);
+    const lc = cardOf(currentPid());
+    if (lc && lc.collab) return Promise.resolve(false);          // somebody else's copy never arms (S6 review)
+    const a = arming = U.profile().then(function (p) {
+      if (!p) return false;
+      const pid = currentPid();
+      return takeLock(hostLock(pid)).then(function (mine) {
+        if (!mine) {
+          FM.ask({ title: OTHER_TAB, single: true, ok: 'OK', message: 'This project is being shared from another FreeMotion tab or window. Share from there, or stop sharing there first and try again here.' });
+          return false;
+        }
+        if (C.session || currentPid() !== pid) { dropLock(hostLock(pid)); return false; }
+        useRoom(pid, true);
+        /* queue 945: "New people join as" picked in the block before there was a room to write it to. */
+        if (pendingLinkRole && hostRoom && hostRoom.settings) { hostRoom.settings.linkRole = pendingLinkRole; saveRoom(pid, hostRoom); }
+        pendingLinkRole = null;
+        showCode();                          // the panel is about to show it: live from the first second
+        return checkpoint(pid, 'arm').then(function () {
+          /* S6: the room's own id keys the media resume parts now that there is one (§15's note). */
+          C.share({ ownerInfo: { name: p.name, color: p.color }, sid: hostRoom.sid, midFloor: hostRoom.midTop || 0 });
+          afterArm();
+          return true;
+        });
+      });
+    });
+    a.then(function () { if (arming === a) arming = null; }, function () { if (arming === a) arming = null; });
+    return a;
+  }
 
   /* §12.1 arming steps 8 and on, in one place for the Share button and for the resume on reopen. */
   function afterArm() {
@@ -971,16 +1045,157 @@ window.FM = window.FM || {};
     U.syncBanner();
   }
 
-  function drawShare() {
+  /* ═══ queue 945 · WHAT THE FRIENDS BLOCK DRAWS ══════════════════════════════════════════════════════════════
+     Routed by what is TRUE, and not one of the routes arms: Labs off → the switch; a guest → the guest panel; the owner,
+     live → the Share panel itself; a shared copy with no session → its panel; otherwise → not shared yet, with Start sharing. */
+  U.renderFriends = function (host, o) {
+    if (!host) return null;
+    if (fhost !== host) { fhost = host; fhostShowedCode = false; }
+    watchFriendsHost();
+    if (!(o && o.keepStep)) shareStep = 'main';
+    U.friendsBar();
+    if (!U.labsOn()) return drawLabsOff(host);
+    const s = C.session;
+    if (s && !s.isOwner) return drawGuestPanel(s, host);
+    if (s) return drawShare(host);
+    const lc = cardOf(currentPid());
+    if (lc && lc.collab) return drawLinkedPanel(lc, host);
+    return drawFriendsIdle(host);
+  };
+  function drawFriendsIdle(host) {
+    const c = mountHost(host);
+    const head = el('div', 'cs-head');
+    head.appendChild(el('h2', 'fm-ask-title', 'Share “' + projectName() + '”'));
+    head.appendChild(el('div', 'cs-state', stateLine(null)));
+    c.appendChild(head);
+    const body = el('div', 'cs-body');
+    c.appendChild(body);
+    /* Him, as the others will see him — and NOT memberRows(), which also lists a stored room's offline members. The row's
+       second line is said here, not by statusLine(): nothing is shared, so he is nobody's "Owner" yet (critic's finding). */
+    const have = U.getProfile();
+    const me = have || { name: 'You', color: PALETTE[0] };
+    const ul = el('ul', 'cs-people');
+    const li = personRow(me.name, me.color, 'you', null, null);
+    const pr = li.querySelector('.cs-prole');
+    if (pr) pr.textContent = have ? 'You — your name and colour, as others see them' : 'You — pick the name and colour others will see';
+    li.appendChild(btn('cs-role cs-fr-profile', have ? 'Change…' : 'Set up…', function () {
+      U.profile({ force: true }).then(function () { if (fhost === host && host.isConnected) U.renderFriends(host, { keepStep: true }); });
+    }));
+    ul.appendChild(li);
+    body.appendChild(ul);
+    const start = btn('cs-start accent', 'Start sharing', function () {
+      start.disabled = true;
+      armShare().then(function () {
+        if (fhost === host && host.isConnected) U.renderFriends(host); else start.disabled = false;
+      }, function () { start.disabled = false; });
+    });
+    body.appendChild(start);
+    body.appendChild(el('div', 'cs-fr-hint', 'Opening this never shares anything by itself.'));
+    body.appendChild(joinAsRow({ pending: true }));
+    const foot = el('div', 'cs-foot');
+    foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
+    c.appendChild(foot);
+    return c;
+  }
+  /* With Labs off the bar still shows (his pick) — and opened, it says what live sharing is and offers the one switch.
+     The privacy line is the Labs switch's own, because turning it on here is turning on exactly that. */
+  function drawLabsOff(host) {
+    const c = mountHost(host);
+    const head = el('div', 'cs-head');
+    head.appendChild(el('h2', 'fm-ask-title', 'Work on this with friends'));
+    head.appendChild(el('div', 'cs-state', 'Live sharing is still being tested'));
+    c.appendChild(head);
+    const body = el('div', 'cs-body');
+    c.appendChild(body);
+    body.appendChild(el('div', 'collab-sub', 'Share this project live and edit it together from your own phones or computers. It is still being tested, so it stays off until you turn it on — and you can turn it off again in Settings → Labs.'));
+    body.appendChild(switchRow('Live collaboration', 'Being tested', false, function () {
+      if (FM.settings && FM.settings.set) FM.settings.set('collabLabs', true);
+      if (fhost === host && host.isConnected) U.renderFriends(host);
+    }));
+    body.appendChild(el('div', 'cs-privacy', PRIVACY_LINE));
+    const foot = el('div', 'cs-foot');
+    foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
+    c.appendChild(foot);
+    return c;
+  }
+  /* Everything the block holds, let go — at every close of the dialog, and by the observer at a bare hide. */
+  U.friendsClosed = function () {
+    if (fhostObs) { try { fhostObs.disconnect(); } catch (e) {} fhostObs = null; }
+    if (fhostShowedCode) { fhostShowedCode = false; touchCode(); }
+    const b = fhost || document.getElementById('cv-fr-body');
+    if (b) b.textContent = '';
+    fhost = null;
+    pendingLinkRole = null;
+    U.friendsBar();
+  };
+  /* THE BAR: what is true in one line, and who is here. Names and colours came from other devices: textContent, and the
+     colour through the palette check into a custom property, never a raw style string (§14.9). Counts OTHER people, like
+     the card's head and the stage chip, so all three agree. */
+  let friendsSig = '';
+  U.friendsBar = function () {
+    const sub = document.getElementById('cv-fr-sub'), faces = document.getElementById('cv-fr-faces');
+    if (!sub || !faces) return;
+    const s = C.session;
+    let live = false, text;
+    if (!U.labsOn()) text = 'Share it live with friends';
+    else if (s && s.isOwner) {
+      live = true;
+      const n = s.peerIds ? s.peerIds().length : 0;
+      text = n ? n + (n === 1 ? ' person here' : ' people here') : 'waiting for someone';
+    } else if (s) {
+      live = !s.ended && s.online !== false;
+      text = s.ended ? 'Ended — your copy stays here' : s.online === false ? 'Offline — reconnecting' : 'shared with you';
+    } else {
+      const lc = cardOf(currentPid());
+      text = (lc && lc.collab) ? 'Shared by ' + hostNameFor(lc.id) + ' · not connected' : 'Not shared yet · invite people';
+    }
+    const people = (s && U.labsOn() && C.presence && C.presence.people) ? C.presence.people() : [];
+    const sig = JSON.stringify([live, text, people.map(function (p) { return [p.name, p.color, p.st]; })]);
+    if (sig === friendsSig && sub.firstChild) return;
+    friendsSig = sig;
+    sub.textContent = '';
+    if (live) { sub.appendChild(el('span', 'cv-fr-live', '● Live')); sub.appendChild(document.createTextNode(' · ' + text)); }
+    else sub.textContent = text;
+    faces.textContent = '';
+    const ini = (C.presence && C.presence.initials) ? C.presence.initials : function (n) { return (cleanName(n).charAt(0) || '?').toUpperCase(); };
+    people.slice(0, 3).forEach(function (p) {
+      const f = el('span', 'cv-fr-face' + (p.st && p.st !== 'here' ? ' away' : ''), ini(p.name));
+      f.style.setProperty('--peer', cleanColor(p.color) || '#888888');
+      faces.appendChild(f);
+    });
+    if (people.length > 3) faces.appendChild(el('span', 'cv-fr-more', '+' + (people.length - 3)));
+  };
+  /* The people door — the stage's person+ and the faces chip. On a phone: Canvas settings with Friends big (a second press
+     closes it, the 944 rule); it NEVER falls back to U.share() there, which arms (critic's finding). On a PC: the Share card. */
+  U.openPeople = function () {
+    if (isPhoneNow()) {
+      const homeUp = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+      if (homeUp || !FM.openCanvasDialog) return Promise.resolve(null);
+      const d = friendsDlg();
+      if (d && !d.classList.contains('hidden')) { if (FM.closeCanvasDialog) FM.closeCanvasDialog(); return Promise.resolve(null); }
+      FM.openCanvasDialog({ block: 'friends' });
+      return Promise.resolve(null);
+    }
+    return U.share();
+  };
+
+  function drawShare(host) {
     const s = C.session;
     useRoom((s && s.pid) || currentPid(), true);
     if (shareStep === 'main') showCode();                        // the code is on screen, so it stays live
     if (shareStep !== 'code') startHostRelay();
-    const anchor = shareBtn && shareBtn.getBoundingClientRect().width > 0 ? shareBtn : null;
-    const c = openCard('collab-share', { label: 'Share this project', anchor: anchor });
-    /* S8 review: "stops working 30 minutes after you close this" — so the half hour starts at the close, not at
-       the last redraw (a panel left open 25 minutes used to leave the code 5). */
-    if (shareStep === 'main') c._onclose = function () { touchCode(); };
+    let c;
+    if (host) {
+      /* queue 945: into the Friends block. The code's half hour starts when the block lets go of it (mountHost/friendsClosed). */
+      c = mountHost(host);
+      if (shareStep === 'main') fhostShowedCode = true;
+    } else {
+      const anchor = shareBtn && shareBtn.getBoundingClientRect().width > 0 ? shareBtn : null;
+      c = openCard('collab-share', { label: 'Share this project', anchor: anchor });
+      /* S8 review: "stops working 30 minutes after you close this" — so the half hour starts at the close, not at
+         the last redraw (a panel left open 25 minutes used to leave the code 5). */
+      if (shareStep === 'main') c._onclose = function () { touchCode(); };
+    }
     const head = el('div', 'cs-head');
     const drill = shareStep === 'settings' || shareStep === 'versions';
     if (drill) {
@@ -1062,11 +1277,13 @@ window.FM = window.FM || {};
         dropRoom(pid);
         hostRoom = null; hostRoomPid = null;
         U.syncBanner();
-        closeCard();
+        /* queue 945: in the Friends block the block stays, and says it is not shared any more (with Start sharing). */
+        if (host) { if (fhost === host && host.isConnected) U.renderFriends(host); }
+        else closeCard();
         if (FM.toast) FM.toast('Sharing stopped', 2200);
       });
     }));
-    foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));
+    foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
     c.appendChild(foot);
     return c;
   }
@@ -1086,14 +1303,19 @@ window.FM = window.FM || {};
 
   /* "New people join as [Editor ▾]" — the role the link and the short code grant (§19.1). A member he has
      already let in keeps the role he gave them; this is only where a stranger starts. */
-  function joinAsRow() {
+  function joinAsRow(o) {
+    /* queue 945: `pending` — the Friends block before anything is shared. There is no room to write the choice to, and
+       making one would re-arm the project by itself at its next open (resumeOpen: "a record means he never stopped"),
+       so the choice is held here and applied by Start sharing. */
+    const pending = !!(o && o.pending);
     const row = el('div', 'cs-row cs-joinrow');
     row.appendChild(el('div', 'cs-rowlabel', 'New people join as'));
-    const cur = (hostRoom && hostRoom.settings && hostRoom.settings.linkRole) || 'editor';
+    const cur = pending ? (pendingLinkRole || 'editor') : ((hostRoom && hostRoom.settings && hostRoom.settings.linkRole) || 'editor');
     const b = btn('cs-role cs-joinas', labelFor(cur) + ' \u25be', function (e) {
       const r = b.getBoundingClientRect();
       FM.contextMenu.show(r.left, r.bottom + 4, ROLES.map(function (p) {
         return { label: p[1] + (p[0] === cur ? '  \u2713' : ''), action: function () {
+          if (pending) { pendingLinkRole = p[0]; redrawShare(); return; }
           if (!hostRoom) return;
           hostRoom.settings.linkRole = p[0];
           saveRoom(hostRoomPid || currentPid(), hostRoom);
@@ -1159,7 +1381,7 @@ window.FM = window.FM || {};
            which is what makes a change here reach every screen at the next roster, not the next session. */
         const ss = C.session;
         if (p && ss && ss.isOwner && ss.host && ss.host.ownerSelf) { ss.host.ownerSelf.name = p.name; ss.host.ownerSelf.color = p.color; pushSettings(); }
-        if (C.session && C.session.isOwner) { shareStep = 'settings'; U.share({ keepStep: true }); }
+        if (C.session && C.session.isOwner) { shareStep = 'settings'; if (fhostLive()) U.renderFriends(fhost, { keepStep: true }); else U.share({ keepStep: true }); }
       });
     }));
     you.appendChild(yr);
@@ -1542,7 +1764,7 @@ window.FM = window.FM || {};
          has lapsed — and at this moment it always has — so the code went on changing behind a panel that kept
          showing the old one, and the next redraw swapped it for a new one under the eyes of the people who had
          written the old one down. The code on screen is simply kept alive. */
-      if (document.getElementById('collab-room-code')) { touchCode(); armCodeLapse(r); return; }
+      { const n = document.getElementById('collab-room-code'); if (n && n.getClientRects().length) { touchCode(); armCodeLapse(r); return; } }   // queue 945: ON SCREEN, not merely in the page
       startHostRelay();                                    // `code` is no longer fresh, so this restarts without it
     }, left);
   }
@@ -2123,16 +2345,18 @@ window.FM = window.FM || {};
      that list IS presence's, whereas the owner's comes from the member table, which the join and leave
      paths already redraw. */
   U.onPeople = function () {
-    if (!card || card.id !== 'collab-share') return;
+    U.friendsBar();                                  // queue 945: the Friends bar's faces and count follow the room
+    const root = panelRoot();
+    if (!root) return;
     const s = C.session;
     if (!s) return;
     const list = (C.presence && C.presence.people) ? C.presence.people() : [];
     const byMid = Object.create(null);
     list.forEach(function (pz) { byMid[pz.mid] = pz; });
-    const rows = Array.prototype.slice.call(card.querySelectorAll('.cs-person[data-mid]'));
+    const rows = Array.prototype.slice.call(root.querySelectorAll('.cs-person[data-mid]'));
     if (!s.isOwner) {
       const shown = rows.map(function (r) { return r.getAttribute('data-mid'); }).join();
-      if (shown !== list.map(function (pz) { return pz.mid; }).join()) { drawGuestPanel(s); return; }
+      if (shown !== list.map(function (pz) { return pz.mid; }).join()) { drawGuestPanel(s, root === card ? undefined : root); return; }
     }
     rows.forEach(function (li) {
       const pz = byMid[li.getAttribute('data-mid')];
@@ -2150,8 +2374,8 @@ window.FM = window.FM || {};
   };
 
   /* The guest's own view of the same card (§19.1 "Guest panel"). */
-  function drawGuestPanel(s) {
-    const c = openCard('collab-share', { label: 'This shared project' });
+  function drawGuestPanel(s, host) {
+    const c = host ? mountHost(host) : openCard('collab-share', { label: 'This shared project' });
     const head = el('div', 'cs-head');
     head.appendChild(el('h2', 'fm-ask-title', 'Shared with you'));
     head.appendChild(el('div', 'cs-state', s.ended ? 'Ended — your copy stays on this device'
@@ -2231,11 +2455,11 @@ window.FM = window.FM || {};
         + (blank ? ' ' + (blank === 1 ? '1 clip has' : blank + ' clips have') + ' not arrived yet and will be blank in your copy.' : ''), ok: 'Keep my own copy', cancel: 'Cancel' })
         .then(function (yes) {
           if (!yes) return;
-          closeCard();
+          if (host) closeAny(); else closeCard();
           return leaveKeeping(s);
         });
     }));
-    foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));
+    foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
     c.appendChild(foot);
     return c;
   }
@@ -2291,10 +2515,10 @@ window.FM = window.FM || {};
   /* A shared copy that has no session right now — reopened, and finding its owner, or with nothing to
      find it through (S6 review). The same card a guest gets, saying what is true, and a Leave that works
      without a session: the copy becomes his own, exactly as Leave does in a session. */
-  function drawLinkedPanel(pc) {
+  function drawLinkedPanel(pc, host) {
     const pid = pc.id;
     const who = hostNameFor(pid);
-    const c = openCard('collab-share', { label: 'This shared project' });
+    const c = host ? mountHost(host) : openCard('collab-share', { label: 'This shared project' });
     c.appendChild(el('h2', 'fm-ask-title', 'Shared with you'));
     const looking = recon && !recon.stopped && recon.gpid === pid;
     /* ⚠️ S8 review: "SENT WHEN YOU'RE BACK IN TOUCH" IS ONLY TRUE OF A COPY THAT CAN GET BACK IN TOUCH. One that
@@ -2319,7 +2543,7 @@ window.FM = window.FM || {};
         .then(function (yes) {
           if (!yes) return;
           if (recon && recon.gpid === pid) stopRecon();
-          closeCard();
+          if (host) closeAny(); else closeCard();
           if (!FM.projects || !FM.projects.detachLinked) return;
           /* S8 review: marked left FIRST, so a copy that cannot be finished (a full device) is still never dialled
              again — and the result is said either way. */
@@ -2333,7 +2557,7 @@ window.FM = window.FM || {};
           });
         });
     }));
-    foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));
+    foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
     c.appendChild(foot);
     return c;
   }
@@ -3158,6 +3382,7 @@ window.FM = window.FM || {};
   /* Says what the session is, from the session, rather than from a flag somebody remembered to set. */
   U.syncBanner = function () {
     applyRoleClasses();
+    U.friendsBar();                            // queue 945: the Friends bar says live / reconnecting / ended with the banner
     const s = C.session;
     if (!s || !C.active) {
       /* ⚠️ A REOPENED COPY SAID NOTHING WHILE IT LOOKED FOR ITS OWNER (S6 review). No session yet, so
@@ -3475,6 +3700,9 @@ window.FM = window.FM || {};
     if (wakeLock && !wantWake()) dropWake();   // S8 review: a guest's download lock goes with its session too
     versionNote = null;
     unwatchDocIfIdle();
+    /* queue 945: the Friends block redraws to what is true now — never through U.share, which would arm again. */
+    U.friendsBar();
+    if (fhostLive()) U.renderFriends(fhost);
   };
 
   /* ═══ S6 · RESUME ON REOPEN (§12.1 "paused ─reopened─▶ arming", §12.4 guest recovery) ═══════════════
@@ -3704,7 +3932,8 @@ window.FM = window.FM || {};
       b.id = 'btn-share';
       b.type = 'button';
       // a second press on the button that opened the card CLOSES it (queue 944) — wherever the card sits
-      b.addEventListener('click', function (e) { e.stopPropagation(); if (card && card.isConnected) { closeCard(); return; } U.share(); });
+      /* queue 945: on a phone it opens Canvas settings with Friends big (U.openPeople), which never arms; on a PC, the Share card. */
+      b.addEventListener('click', function (e) { e.stopPropagation(); if (card && card.isConnected) { closeCard(); return; } U.openPeople(); });
     }
     const mode = at.stage ? 'stage' : 'bar';
     if (b._mode !== mode) {
@@ -3828,6 +4057,7 @@ window.FM = window.FM || {};
          take effect here, on the next frame, rather than at the next thing somebody else does. */
       if (C.presence && C.presence.refresh) C.presence.refresh();
       syncRelayMode();
+      if (fhostLive()) U.renderFriends(fhost);   // queue 945: the switch in the block turned it on — show Start sharing
       return r;
     }
     /* ⚠️ `C.end()` IS THE OWNER'S DOOR AND A GUEST WAS BEING PUSHED THROUGH IT (queue 921 S3 review).
@@ -3852,7 +4082,10 @@ window.FM = window.FM || {};
         if (pid) { dropRoom(pid); if (hostRoomPid === pid) { hostRoom = null; hostRoomPid = null; } }
       }
     }
-    return U.uninstall();
+    const r = U.uninstall();
+    if (fhost) U.renderFriends(fhost);           // queue 945: the block shows the Labs-off view, never stale live content
+    U.friendsBar();
+    return r;
   };
 
   C.ui = U;

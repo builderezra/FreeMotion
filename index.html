@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=725">
-<link rel="stylesheet" href="theme-glass.css?v=62">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=726">
+<link rel="stylesheet" href="theme-glass.css?v=63">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.03</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.04</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1018,6 +1018,26 @@
         <button id="cv-cancel" class="btn">Cancel</button>
         <button id="cv-go" class="btn btn-accent">Apply</button>
       </div>
+      <!-- queue 945: Canvas settings SHRUNK to a bar, shown only on a phone while Friends is the big block. LAST in the card on
+           purpose: code and tests find this card's first button, and the ⤢ here must never be it. -->
+      <div class="cv-mini" id="cv-mini">
+        <span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a1.5 1.5 0 0 1 1.5 1.5v15A1.5 1.5 0 0 1 16 21H8a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 8 3z"/></svg></span>
+        <span class="cv-mini-txt"><span class="cv-mini-t">Canvas</span><span class="cv-mini-s" id="cv-mini-sub"></span></span>
+        <button type="button" class="cv-mini-exp" id="cv-mini-exp" aria-label="Open Canvas settings" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg></button>
+      </div>
+    </div>
+    <!-- queue 945: FRIENDS — the live-sharing block that opens WITH Canvas settings on a phone (his design: a bar above the
+         card; ⤢ swaps them, and the small one always sits on top). Display:none on a PC, where Share lives beside Export.
+         AFTER the canvas card, so every "the dialog's first .export-card / first button" lookup still finds the canvas.
+         The body is drawn by js/collab-ui.js (U.renderFriends) and never starts sharing by being opened. -->
+    <div id="cv-friends" role="group" aria-label="Friends">
+      <div class="cv-mini" id="cv-fr-bar">
+        <span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.3a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.7.8 2.8 2.5 3.1 5.2"/></svg></span>
+        <span class="cv-mini-txt"><span class="cv-mini-t">Friends</span><span class="cv-mini-s" id="cv-fr-sub">Not shared yet · invite people</span></span>
+        <span class="cv-fr-faces" id="cv-fr-faces" aria-hidden="true"></span>
+        <button type="button" class="cv-mini-exp" id="cv-fr-exp" aria-label="Open Friends" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg></button>
+      </div>
+      <div id="cv-fr-body"></div>
     </div>
   </div>
 
@@ -1085,7 +1105,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=57"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=457"></script>
+  <script src="js/app.js?v=458"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
@@ -1127,11 +1147,11 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=7"></script>
+  <script src="js/collab-ui.js?v=8"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->
-  <script src="js/collab-presence.js?v=2"></script>
+  <script src="js/collab-presence.js?v=3"></script>
   <!-- queue 921 stage S7 — comments: the paper card, replies, resolve, and a mark on the ruler at each
        comment's time. A library like the rest: collab-ui.js installs it only while Labs is on, and a
        comment never stops an export (only a note with a reminder does). -->

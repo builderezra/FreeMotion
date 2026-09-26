@@ -78,6 +78,7 @@ html[data-theme="glass"] #add-sheet,
 html[data-theme="glass"] .hm-dlg-card,
 html[data-theme="glass"] .fm-ask-card,
 html[data-theme="glass"] .export-card,
+html[data-theme="glass"] #cv-friends,   /* queue 945: the Friends block is the canvas card's twin */
 html[data-theme="glass"] .ctx-menu,
 html[data-theme="glass"] .shortcuts-card {
   background: var(--glass-tint-strong);
@@ -509,6 +510,7 @@ html[data-theme="glass"] .shortcuts-card .btn { background: #0c1c25; border-top-
   html[data-theme="glass"] .hm-dlg-card,
   html[data-theme="glass"] .fm-ask-card,
   html[data-theme="glass"] .export-card,
+  html[data-theme="glass"] #cv-friends,
   html[data-theme="glass"] .ctx-menu,
   html[data-theme="glass"] .shortcuts-card { background: #0c1c25; }
 }

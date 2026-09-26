@@ -39004,9 +39004,10 @@
     });
   });
 
-  test('921 S7 with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on the stage, which opens the Share panel, and on a PC it stays beside Export', { item: '921', budgetMs: 120000 }, async function () {
+  test('921 S7 with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on the stage, which opens Canvas settings with Friends big and never starts sharing (queue 945), and on a PC it stays beside Export', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S7('the phone top bar');
     const wasLabs = FM.settings.get('collabLabs');
+    let wasPair = null; try { wasPair = localStorage.getItem('fm.cvPair'); } catch (e) {}
     try { await withCollab921([layer921('A')], async function () {
       C.end();
       await atPhoneWidth(async function () {
@@ -39037,9 +39038,14 @@
             if (FM.setSideBar && vb && vbtn) FM.setSideBar(vb, vbtn, false);
             await settle921(220);
           }
+          /* queue 945: the phone's person+ opens Canvas settings with the Friends block big — and opening it arms nothing. */
           b.click();
-          await until921S6('the Share panel', function () { return document.getElementById('collab-share'); }, 4000);
+          const dlg945 = await until921S6('Canvas settings with Friends big', function () { const d = document.getElementById('canvas-dialog'); return d && !d.classList.contains('hidden') && d.classList.contains('cv-fr-big') ? d : null; }, 4000);
+          if (!document.querySelector('#cv-fr-body .cs-start')) throw new Error('the Friends block the person+ opened has no Start sharing');
+          if (C.session || ui._relay()) throw new Error('the phone person+ started sharing just by being pressed');
+          if (document.getElementById('collab-share')) throw new Error('the phone person+ still opened the old Share card as well');
           ui.close();
+          if (!dlg945.classList.contains('hidden') || document.getElementById('cv-fr-body').children.length) throw new Error('ui.close() left the Friends block up');
           if (C.session) C.end();
         });
       }, 380);
@@ -39051,7 +39057,10 @@
           if (!b || b.nextSibling !== e) throw new Error('CONTROL: at 1280 #btn-share is not immediately before #btn-export');
         }, 1280);
       });
-    }); } finally { FM.settings.set('collabLabs', !!wasLabs); C.ui.syncLabs(); }
+    }); } finally {
+      FM.settings.set('collabLabs', !!wasLabs); C.ui.syncLabs();
+      try { if (wasPair === null) localStorage.removeItem('fm.cvPair'); else localStorage.setItem('fm.cvPair', wasPair); } catch (e) {}
+    }
   });
 
   /* ═══ #921 S7 REVIEW — the findings a skeptic confirmed against the S7 build, one test per door. ═══════════
@@ -100804,6 +100813,366 @@
       if (FM.home._selectionState().selectMode) { document.getElementById('hm-select-btn').click(); await sleep(300); }
       if (!wasOpen && FM.home.isOpen()) FM.home.close();
     }
+  });
+
+
+  /* ═══ queue 945 — FRIENDS BESIDE CANVAS SETTINGS, on a phone ═══════════════════════════════════════════════════════════
+     His words (#944): "when you open up the canvas settings on mobile it shows up in there … a rectangular block above it …
+     When you expand it … the canvas settings will do an animation where it shrinks into like a rectangle. And then basically
+     the roles are reversed … make sure that when you reopen … It will um still be open to whatever you had it on last". His
+     picks (26 Sep): the small block always on top; the bar always shows, with Labs off it offers the switch; the person+
+     stays and opens this with Friends big. And the rule the build rests on: OPENING IT NEVER STARTS SHARING. */
+  async function with945(fn) {
+    let was = null;
+    try { was = localStorage.getItem('fm.cvPair'); localStorage.removeItem('fm.cvPair'); } catch (e) {}
+    try { return await fn(); }
+    finally {
+      try { if (FM.closeCanvasDialog) FM.closeCanvasDialog(); } catch (e) {}
+      try { if (was === null) localStorage.removeItem('fm.cvPair'); else localStorage.setItem('fm.cvPair', was); } catch (e) {}
+    }
+  }
+  function land945() {
+    const d = document.getElementById('canvas-dialog');
+    d.getAnimations({ subtree: true }).forEach(function (a) {
+      try { const t = a.effect.getComputedTiming(); if (isFinite(t.endTime)) a.finish(); } catch (e) {}
+    });
+    return sleep(80);
+  }
+  const open945 = function (dlg) { return !dlg.classList.contains('hidden'); };
+
+  test('945 on a phone the cog opens Canvas settings with a Friends bar above the card — both on screen, Apply reachable, the cog spot still backdrop — and a PC sees none of it', { item: '945', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        await atSize921(390, 760, async function () {
+          const cog = document.getElementById('m-settings');
+          if (!cog || !cog.getBoundingClientRect().width) throw new Error('setup: no phone cog at 390px');
+          cog.click();
+          await entranceDone(dlg); await sleep(60);
+          if (!open945(dlg)) throw new Error('the cog did not open Canvas settings');
+          const fr = document.getElementById('cv-friends');
+          if (!fr) throw new Error('there is no Friends block (#cv-friends) in Canvas settings');
+          const fb = fr.getBoundingClientRect();
+          if (!(fb.width > 0 && fb.height > 0)) throw new Error('the Friends bar has no box on a phone');
+          const card = dlg.querySelector('.export-card').getBoundingClientRect();
+          /* What the bar says depends on Labs (the suite runs with it off): off, it offers live sharing; on, "Not shared yet". */
+          const labs = !!(FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn());
+          const want = labs ? /Not shared yet/ : /Share it live with friends/;
+          if (!/Friends/.test(fr.textContent) || !want.test(document.getElementById('cv-fr-sub').textContent)) throw new Error('the bar does not say Friends / ' + want + ': "' + fr.textContent.trim().slice(0, 80) + '"');
+          if (fb.bottom > card.top + 0.5) throw new Error('the Friends bar is not above the canvas card (bar bottom ' + fb.bottom.toFixed(1) + ', card top ' + card.top.toFixed(1) + ')');
+          const tb = document.getElementById('topbar-m').getBoundingClientRect();
+          if (fb.top < tb.bottom - 0.5) throw new Error('the Friends bar sits over the phone top bar');
+          const exp = document.getElementById('cv-fr-exp'), er = exp.getBoundingClientRect();
+          const at = document.elementFromPoint(er.left + er.width / 2, er.top + er.height / 2);
+          if (!at || !exp.contains(at)) throw new Error('the Friends ⤢ is covered by ' + (at && (at.id || at.className)));
+          const go = document.getElementById('cv-go').getBoundingClientRect();
+          if (!(go.height > 0 && go.bottom <= innerHeight + 0.5)) throw new Error('with the Friends bar above it, Apply is off the screen (bottom ' + go.bottom.toFixed(1) + ' of ' + innerHeight + ')');
+          const cr = cog.getBoundingClientRect();
+          const under = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
+          if (under !== dlg) throw new Error('the cog’s spot is ' + (under && (under.id || under.className)) + ', not the dialog’s own backdrop — a second tap on the cog would not close it (queue 762)');
+          if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content is drawn while Friends is only the bar');
+          if (document.getElementById('cv-mini').getClientRects().length) throw new Error('the Canvas bar shows while the canvas card is the big block');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          if (open945(dlg)) throw new Error('Cancel did not close it');
+        });
+        /* CONTROL: a PC opens the same dialog exactly as before — no pair, no bars. */
+        await atWideWidth(async function () {
+          document.getElementById('btn-canvas').click();
+          await entranceDone(dlg); await sleep(60);
+          if (!open945(dlg)) throw new Error('CONTROL: #btn-canvas did not open Canvas settings at 1280');
+          if (dlg.classList.contains('cv-pair')) throw new Error('on a PC the dialog was put in the phone pair');
+          if (document.getElementById('cv-friends').getClientRects().length) throw new Error('on a PC the Friends block shows — Share lives beside Export there');
+          if (document.getElementById('cv-mini').getClientRects().length) throw new Error('on a PC the Canvas bar shows inside the card');
+          if (dlg.querySelector('.export-card').parentNode !== dlg) throw new Error('the canvas card is no longer a direct child of the dialog — the PC anchor rules need it there');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+        }, 1280);
+      });
+    });
+  });
+
+  test('945 opening Friends never starts sharing — not the cog, not ⤢, not the person+ — and only Start sharing does; Stop leaves the block showing Start sharing and nothing re-arms', { item: '945', budgetMs: 120000 }, async function () {
+    const C = need921S7('the Friends block');
+    await withFakeNet921(async function (net) {
+      await withCollab921([layer921('A')], async function () {
+        C.end();
+        await withLabs921(async function (ui) {
+          await with945(async function () {
+            await atPhoneWidth(async function () {
+              const pid = FM.projects.currentId();
+              const dlg = document.getElementById('canvas-dialog');
+              const c0 = net.constructed;
+              const quiet = function (door) {
+                if (C.session) throw new Error(door + ' started a live session');
+                if (ui._relay()) throw new Error(door + ' started the relay');
+                if (ui._wake()) throw new Error(door + ' took a wake lock');
+                if (net.constructed !== c0) throw new Error(door + ' opened ' + (net.constructed - c0) + ' relay socket(s)');
+                if (hostRec921(pid)) throw new Error(door + ' wrote a host record — the project would start sharing again by itself at its next open');
+                if (ui._locks().indexOf('fm-collab-host-' + pid) >= 0) throw new Error(door + ' took the host lock');
+              };
+              document.getElementById('m-settings').click(); await entranceDone(dlg);
+              document.getElementById('cv-fr-exp').click(); await land945();
+              if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not make Friends the big block');
+              if (!document.querySelector('#cv-fr-body .cs-start')) throw new Error('the not-shared Friends block has no Start sharing');
+              const pr = document.querySelector('#cv-fr-body .cs-prole');
+              if (pr && /Owner/.test(pr.textContent)) throw new Error('before anything is shared his row reads "' + pr.textContent + '"');
+              quiet('the cog and ⤢');
+              document.getElementById('cv-cancel').click(); await settle921(80);
+              const b = document.getElementById('btn-share');
+              if (!b) throw new Error('setup: no phone person+ with Labs on');
+              b.click(); await entranceDone(dlg); await settle921(150);
+              if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('the phone person+ did not open Canvas settings with Friends big');
+              if (document.getElementById('collab-share')) throw new Error('the phone person+ still opened the old Share card');
+              quiet('the phone person+');
+              document.getElementById('cv-cancel').click(); await settle921(80);
+              document.getElementById('m-settings').click(); await entranceDone(dlg); await settle921(100);
+              if (!dlg.classList.contains('cv-fr-big')) throw new Error('the cog did not come back to Friends, the block open last');
+              quiet('the cog reopening on Friends');
+              /* CONTROL: Start sharing is the door, and it works. */
+              document.querySelector('#cv-fr-body .cs-start').click();
+              await until921S6('Start sharing to arm a room', function () { return C.session && C.session.isOwner ? C.session : null; }, 8000);
+              if (!hostRec921(pid)) throw new Error('CONTROL: Start sharing armed a session but wrote no host record');
+              await until921S6('the Share panel in the block', function () { return document.querySelector('#cv-fr-body .cs-stop'); }, 4000);
+              if (!/Live/.test(document.getElementById('cv-fr-sub').textContent)) throw new Error('once shared, the bar reads "' + document.getElementById('cv-fr-sub').textContent + '", not Live');
+              document.querySelector('#cv-fr-body .cs-stop').click();
+              (await askOk921()).click();
+              await until921S6('the block to show Start sharing again', function () { return document.querySelector('#cv-fr-body .cs-start'); }, 4000);
+              if (C.session) throw new Error('Stop sharing left a session');
+              await settle921(500);
+              if (C.session) throw new Error('half a second after Stop sharing, something armed a room again by itself');
+              if (hostRec921(pid)) throw new Error('Stop sharing left the host record');
+            });
+          });
+        });
+      });
+    });
+  });
+
+  test('945 ⤢ swaps them with a flight — Friends becomes the big card and Canvas a bar on top that says its shape, size and frame rate — the Canvas ⤢ swaps back, and with reduced motion the swap is instant', { item: '945', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const P = FM.scene.project, w0 = P.width, h0 = P.height, f0 = P.fps;
+          const mm = window.matchMedia;
+          const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+          const flying = function (el) { return el.getAnimations().some(function (a) { return !(window.CSSAnimation && a instanceof CSSAnimation) && !(window.CSSTransition && a instanceof CSSTransition) && a.playState === 'running'; }); };
+          try {
+            P.width = 1080; P.height = 1920; P.fps = 30;
+            document.getElementById('m-settings').click(); await entranceDone(dlg);
+            document.getElementById('cv-fr-exp').click();
+            if (!dlg.classList.contains('cv-flying')) throw new Error('⤢ swapped with no flight');
+            if (!flying(card) || !flying(fr)) throw new Error('mid-swap the two blocks are not both moving');
+            if (getComputedStyle(document.getElementById('cv-fr-bar')).display === 'none') throw new Error('mid-flight the Friends bar is hidden — the growing block flies empty');
+            if (getComputedStyle(document.getElementById('cv-mini')).display === 'none') throw new Error('mid-flight the Canvas bar is hidden — the shrinking card has nothing to become');
+            await land945();
+            if (!dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-flying')) throw new Error('after the flight the pair is not settled on Friends');
+            const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+            if (cr.bottom > frr.top + 0.5) throw new Error('after the swap the Canvas bar is not on top (his words: "the canvas settings are small at the top")');
+            if (cr.height > 80) throw new Error('the Canvas block did not shrink to a bar (' + cr.height.toFixed(1) + 'px tall)');
+            const sub = document.getElementById('cv-mini-sub').textContent;
+            if (sub !== '9:16 · 1080 × 1920 · 30 fps') throw new Error('the Canvas bar reads "' + sub + '"');
+            if (document.getElementById('cv-go').getClientRects().length) throw new Error('Apply still shows in the Canvas bar');
+            if (card.style.position || fr.style.position || card.style.top || fr.style.height) throw new Error('the flight left inline styles on the blocks');
+            if (localStorage.getItem('fm.cvPair') !== 'friends') throw new Error('the swap was not remembered');
+            document.getElementById('cv-mini-exp').click(); await land945();
+            if (dlg.classList.contains('cv-fr-big')) throw new Error('the Canvas ⤢ did not swap back');
+            if (fr.getBoundingClientRect().bottom > card.getBoundingClientRect().top + 0.5) throw new Error('back on Canvas, Friends is not the bar on top');
+            if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content stayed drawn after it shrank to its bar');
+            if (localStorage.getItem('fm.cvPair') !== 'canvas') throw new Error('swapping back was not remembered');
+            document.getElementById('cv-cancel').click(); await sleep(60);
+            /* CONTROL: the bar reads the project, not a copy of the picture's string. */
+            P.width = 1920; P.height = 1080; P.fps = 25;
+            document.getElementById('m-settings').click(); await entranceDone(dlg);
+            document.getElementById('cv-fr-exp').click(); await land945();
+            const sub2 = document.getElementById('cv-mini-sub').textContent;
+            if (sub2 !== '16:9 · 1920 × 1080 · 25 fps') throw new Error('CONTROL: for a 1920×1080 25 fps project the Canvas bar reads "' + sub2 + '"');
+            document.getElementById('cv-cancel').click(); await sleep(60);
+            /* REDUCED MOTION: the swap lands at once, with no flight. */
+            window.matchMedia = function (q) {
+              if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {}, addListener: function () {}, removeListener: function () {} };
+              return mm.call(window, q);
+            };
+            FM.openCanvasDialog(); await entranceDone(dlg);
+            document.getElementById('cv-fr-exp').click();
+            if (!dlg.classList.contains('cv-fr-big')) throw new Error('with reduced motion the swap did not land at once');
+            if (dlg.classList.contains('cv-flying') || flying(card) || flying(fr)) throw new Error('with reduced motion the blocks still fly');
+          } finally {
+            window.matchMedia = mm;
+            P.width = w0; P.height = h0; P.fps = f0;
+          }
+        });
+      });
+    });
+  });
+
+  test('945 reopening Canvas settings lands on the block he had open last — per device, never in the project — and a bare close leaves nothing behind', { item: '945', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog');
+          const body = document.getElementById('cv-fr-body');
+          const cog = document.getElementById('m-settings');
+          const reopen = async function () { cog.click(); await entranceDone(dlg); await sleep(40); };
+          await reopen();
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('with nothing remembered, Canvas settings opened on Friends');
+          document.getElementById('cv-fr-exp').click(); await land945();
+          cog.click(); await sleep(60);   // the second tap closes (queue 762)
+          if (open945(dlg)) throw new Error('a second tap on the cog did not close it');
+          await reopen();
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('closed on Friends and reopened with the cog — it did not come back to Friends');
+          dlg.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          dlg.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          await sleep(60);
+          if (open945(dlg)) throw new Error('a press that began on the backdrop did not close it');
+          await reopen();
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('after a backdrop close it did not come back to Friends');
+          /* A bare hide — what ~15 older tests do — must not leave the block drawn in a hidden dialog. */
+          dlg.classList.add('hidden');
+          await sleep(30);
+          if (body.children.length) throw new Error('a bare hide left the Friends content drawn');
+          await reopen();
+          if (dlg.classList.contains('cv-flying') || dlg.querySelector('.export-card').style.position) throw new Error('reopening after a bare hide inherited a flight');
+          if (!body.children.length) throw new Error('reopened on Friends with an empty block');
+          /* …and a bare hide immediately followed by a reopen must not empty the reopened block (critic's finding). */
+          dlg.classList.add('hidden'); cog.click();
+          await sleep(40);
+          if (!open945(dlg) || !body.children.length) throw new Error('a hide and an immediate reopen left the reopened Friends block empty');
+          document.getElementById('cv-mini-exp').click(); await land945();
+          if (localStorage.getItem('fm.cvPair') !== 'canvas') throw new Error('swapping to Canvas was not remembered');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          await reopen();
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('closed on Canvas, but it reopened on Friends');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          const pj = JSON.stringify(FM.scene.project);
+          if (/cvPair|fr-big/.test(pj)) throw new Error('the remembered block was written into the project');
+          /* The oversize warning's door is about the canvas: a bare open is always Canvas, whatever is remembered. */
+          localStorage.setItem('fm.cvPair', 'friends');
+          FM.openCanvasDialog(); await entranceDone(dlg);
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('a bare FM.openCanvasDialog() (the oversize warning) opened on Friends');
+        });
+      });
+    });
+  });
+
+  test('945 with Labs off the Friends bar still shows; opened, it offers one switch and no Start sharing, and turning it on connects nothing and shows Start sharing', { item: '945', budgetMs: 90000 }, async function () {
+    const C = need921S7('the Labs-off Friends block');
+    const was = FM.settings.get('collabLabs');
+    await withFakeNet921(async function (net) {
+      await editorWithShape(async function () {
+        await with945(async function () {
+          await atPhoneWidth(async function () {
+            try {
+              FM.settings.set('collabLabs', false); C.ui.syncLabs();
+              const c0 = net.constructed;
+              const dlg = document.getElementById('canvas-dialog');
+              document.getElementById('m-settings').click(); await entranceDone(dlg);
+              if (!document.getElementById('cv-friends').getClientRects().length) throw new Error('with Labs off the Friends bar is gone — his pick was that it always shows');
+              document.getElementById('cv-fr-exp').click(); await land945();
+              const bodyEl = document.getElementById('cv-fr-body');
+              const sws = bodyEl.querySelectorAll('[role=switch]');
+              if (sws.length !== 1) throw new Error('with Labs off the block shows ' + sws.length + ' switch(es), not the one that turns live sharing on');
+              if (!/being tested/i.test(bodyEl.textContent)) throw new Error('with Labs off the block does not say live sharing is being tested');
+              if (bodyEl.querySelector('.cs-start')) throw new Error('with Labs off the block offers Start sharing');
+              ['btn-share', 'hm-join-btn', 'collab-banner', 'collab-knock', 'collab-share', 'collab-join', 'collab-profile'].forEach(function (id) {
+                if (document.getElementById(id)) throw new Error('#' + id + ' is in the page with Labs off (§23)');
+              });
+              if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page with Labs off');
+              if (C.ui.isInstalled()) throw new Error('the collab UI installed itself with Labs off');
+              sws[0].click(); await settle921(200);
+              if (FM.settings.get('collabLabs') !== true) throw new Error('the switch in the block did not turn Labs on');
+              if (!document.getElementById('btn-share')) throw new Error('CONTROL: Labs is on but the phone person+ is not in the page');
+              if (!bodyEl.querySelector('.cs-start')) throw new Error('after turning it on the block does not offer Start sharing');
+              if (C.session) throw new Error('turning Labs on from the block started sharing');
+              if (net.constructed !== c0) throw new Error('turning Labs on from the block opened ' + (net.constructed - c0) + ' relay socket(s)');
+            } finally { FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
+          });
+        });
+      });
+    });
+  });
+
+  test('945 with people in, the Friends bar shows Live, the count and their faces; the faces chip opens the pair with Friends big, the chip stays backdrop to close it, and on a PC the person+ opens its own card', { item: '945', budgetMs: 90000 }, async function () {
+    const C = need921S7('the Friends bar with people in');
+    await withCollab921([layer921('A')], async function (c) {
+      await withLabs921(async function (ui) {
+        await with945(async function () {
+          const k = clock921(C);
+          try {
+            await atPhoneWidth(async function () {
+              const gs = [rawGuest921(c, 'Sam Lee', '#f472b6'), rawGuest921(c, 'Mia', '#a3e635')];
+              gs.forEach(function (g) { g.pr({}); });
+              k.step(100); C.presence.tick(); C.presence._draw();
+              ui.friendsBar();
+              const sub = document.getElementById('cv-fr-sub').textContent;
+              if (!/Live · 2 people here/.test(sub)) throw new Error('with two people in, the bar reads "' + sub + '"');
+              const faces = Array.prototype.map.call(document.querySelectorAll('#cv-fr-faces .cv-fr-face'), function (f) { return f.textContent; });
+              if (faces.join() !== 'SL,M') throw new Error('the bar’s faces are "' + faces.join() + '", not SL,M');
+              const chip = document.getElementById('collab-people');
+              if (!chip || !chip.getBoundingClientRect().width) throw new Error('setup: no people chip on the stage');
+              chip.click();
+              const dlg = await until921S6('the pair with Friends big', function () { const d = document.getElementById('canvas-dialog'); return d && !d.classList.contains('hidden') && d.classList.contains('cv-fr-big') ? d : null; }, 4000);
+              await entranceDone(dlg); await settle921(100);
+              if (document.getElementById('collab-share')) throw new Error('the faces chip opened the old Share card');
+              if (document.querySelectorAll('#cv-fr-body .cs-person').length < 3) throw new Error('the Friends block does not list him and the two people in');
+              /* With the block at its tallest, the chip's own spot is still the dialog's backdrop — so a second tap closes. */
+              const cr = chip.getBoundingClientRect();
+              const under = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
+              if (under !== dlg) throw new Error('with Friends big, the chip’s spot is ' + (under && (under.id || under.className)) + ' — a second tap would swap or press something instead of closing');
+              ui.close();
+              if (!dlg.classList.contains('hidden')) throw new Error('ui.close() left the pair up');
+            });
+            /* CONTROL: a PC is unchanged — the people door opens the Share card and never the canvas dialog. */
+            await atWideWidth(async function () {
+              await ui.openPeople();
+              if (!document.getElementById('collab-share')) throw new Error('CONTROL: on a PC the people door did not open the Share card');
+              if (!document.getElementById('canvas-dialog').classList.contains('hidden')) throw new Error('on a PC the people door opened Canvas settings');
+              ui.close();
+            }, 1280);
+          } finally { C.presence._clock(null); }
+        });
+      });
+    });
+  });
+
+  test('945 on a shared copy the Friends block is the guest panel with Leave — never Start sharing — arms nothing, and prints the owner’s name as text', { item: '945', budgetMs: 120000 }, async function () {
+    const C = need921S6('a shared copy’s Friends block');
+    const S = C.signal;
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await with945(async function () {
+          const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+          if (wasHome) FM.home.close();
+          const before = FM.projects.list().map(function (p) { return p.id; });
+          const inv = S.newRoom();
+          const M = await member921(S);
+          const evil = '<img src=x onerror="window.__pwn945=1">';
+          const lc = linkedCopy921(C, { meta: { hostName: evil, sid: inv.sid, sk: inv.sk, rid: M.RID, tok: M.TOK, hub: M.HUB } });
+          try {
+            await FM.projects.open(lc.gpid);
+            const R = await until921S6('the reconnect', function () { return ui._recon(); });
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog');
+              document.getElementById('m-settings').click(); await entranceDone(dlg);
+              const sub = document.getElementById('cv-fr-sub');
+              if (sub.textContent.indexOf('<img') < 0) throw new Error('the bar does not name the owner as text: "' + sub.textContent + '"');
+              document.getElementById('cv-fr-exp').click(); await land945();
+              const body = document.getElementById('cv-fr-body');
+              if (!/Shared with you/.test(body.textContent) || !body.querySelector('.cs-stop')) throw new Error('the block on a shared copy is not the guest panel with Leave: "' + body.textContent.slice(0, 100) + '"');
+              if (body.querySelector('.cs-start')) throw new Error('a shared copy offers Start sharing');
+              if (document.querySelector('#cv-friends img') || window.__pwn945) throw new Error('the owner’s name was parsed as HTML');
+              if (C.session) throw new Error('opening the block on a shared copy armed it');
+              if (localStorage.getItem('fm.collab.host.' + lc.gpid)) throw new Error('opening the block on a shared copy wrote a host record');
+              if (ui._recon() !== R) throw new Error('opening the block stopped the copy finding its owner');
+              document.getElementById('cv-cancel').click(); await settle921(60);
+            });
+          } finally {
+            delete window.__pwn945;
+            const made = FM.projects.list().map(function (p) { return p.id; }).filter(function (id) { return before.indexOf(id) < 0; });
+            ui.close();
+            await q915aCleanup(made.concat([lc.gpid]), orig, wasHome, [], [], []);
+          }
+        });
+      });
+    });
   });
 
 })();
