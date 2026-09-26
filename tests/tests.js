@@ -98813,4 +98813,291 @@
     });
   });
 
+  /* ═══ HUNT-d (queue 690, seventh hunt, 26 Sep) — RESILIENCE: THE UPDATE CHIP, NO SIGNAL, A FULL PHONE, MEDIA LET GO ═══════
+   * His brief: "go re audit, find some bugs coz theres a shit load". This pass looked at what happens when the world is not
+   * kind to the app — no network after install, a phone with no room left, the service-worker update chip, and the media a
+   * project lets go of when he goes Home. Four findings, each written to FAIL on v17.00 because of the bug it names, each
+   * failure message saying what he would see. Nothing here is fixed yet. The two version-chip tests stop the chip's own
+   * reload with stand-ins that record and never settle, so the suite frame can never navigate away. */
+  const nq7d = s => String(s == null ? '' : s).replace(/"/g, "'");   // failure messages must not carry a double quote
+
+  test('HUNT-d opened with no signal, the app says it looks old and sends him to the version chip, and the chip with no signal deletes the offline copy of the app', { item: '690', budgetMs: 60000 }, async function () {
+    /* sw.js answers a navigation it cannot fetch from its offline copy AND stamps `served-stale-shell` — on EVERY offline
+       launch, not only after a blip, because a launch with no signal is exactly a fetch that throws twice. 1.5 s after load
+       FM.checkStaleShell reads the stamp and toasts: Your connection dropped on refresh, so FreeMotion loaded v17.00 from its
+       offline copy, that is why it looks old, tap the version chip. The copy it names is THIS build — nothing about it is old
+       — and the chip, tapped with no signal, unregisters the worker, deletes every cache and navigates to a never-seen
+       ?fresh= address. With no network that address cannot load, and with the worker and its cache gone neither can the
+       next launch: the installed app is a browser error page until he has signal again. So the app's own advice, given at
+       the one moment it is dangerous, takes the app away.
+       MEASURED END TO END FIRST, in headless Chrome against a real server (scratchpad probe, 26 Sep): installed and cached,
+       server stopped, app relaunched — it opened from the offline copy and toasted exactly that sentence; the chip was
+       tapped; the page became chrome-error://chromewebdata/ and the next launch showed This site can’t be reached. In that
+       run navigator.onLine was still TRUE (the machine had a network, the server did not answer) — which is his phone on
+       Wi-Fi or one bar that does not reach the internet — so both are measured here: onLine false, and onLine true with
+       every fetch failing. Here: the REAL sw.js on an offline launch of this build (runSW), the page's real reader, and a
+       real mouse click on the chip, each with the network down. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const lab = document.querySelector('.brand .ver') || document.querySelector('.ver');
+    if (!lab) throw new Error('setup: no version chip in the page');
+    const ver = String(lab.textContent || '').trim(), label0 = lab.textContent;
+    const bad = [];
+    /* 1. THE WORKER, on an ordinary offline launch of the build that is running now. */
+    const shell = await fetch('index.html', { cache: 'no-store' }).then(r => r.text());
+    const dead = { tries: 0, fetch: function () { dead.tries++; return Promise.reject(new TypeError('Failed to fetch')); } };
+    const sw1 = await runSW(dead, [['index-fallback', new Response(shell, { status: 200 })]]);
+    const served = await sw1.res.clone().text();
+    if (served.indexOf(ver) < 0) throw new Error('CONTROL: offline, the worker did not serve this build (' + ver + ') from its offline copy, so this measured something else');
+    const note = sw1.store.get('served-stale-shell');
+    if (!note) throw new Error('CONTROL: an offline launch left no stale-build note, so the page would say nothing and there is nothing to measure');
+    const stamp = await note.clone().text();
+    if (stamp !== ver) throw new Error('CONTROL: the offline note names ' + nq7d(stamp) + ', not the running build ' + ver + ' that was served');
+    const realFetch = window.fetch, realToast = FM.toast;
+    const swc = navigator.serviceWorker;
+    if (swc && Object.prototype.hasOwnProperty.call(swc, 'getRegistrations')) throw new Error('setup: navigator.serviceWorker.getRegistrations is already stood in for by another test');
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(500); }   // the chip is in the editor's top bar; Home covers it
+    const c = await caches.open('freemotion-v1');
+    try {
+      for (const pass of [{ onLine: false, what: 'no signal at all' }, { onLine: true, what: 'on a network that does not reach the internet (navigator.onLine still true)' }]) {
+        const down = function () {
+          if (!pass.onLine) Object.defineProperty(navigator, 'onLine', { configurable: true, get: function () { return false; } });
+          window.fetch = function () { return Promise.reject(new TypeError('Failed to fetch')); };
+        };
+        const up = function () { try { delete navigator.onLine; } catch (e) {} window.fetch = realFetch; };
+        /* 2. THE PAGE reads that note while the network is still down. */
+        const toasts = [];
+        await c.put('served-stale-shell', new Response(stamp));
+        let said = null;
+        FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+        down();
+        try { said = await FM.checkStaleShell(); await sleep(60); }
+        finally { up(); FM.toast = realToast; try { await c.delete('served-stale-shell'); } catch (e) {} }
+        const told = toasts.concat(said && toasts.indexOf(said) < 0 ? [said] : []).join(' / ');
+        if (/version (chip|label)/i.test(told)) bad.push(pass.what + ', the app told him: ' + nq7d(told) + ' — so he taps the version chip while offline');
+        if (/looks old/i.test(told)) bad.push(pass.what + ', the copy it calls old is ' + ver + ', the build that is running — nothing is old, the network is just down');
+        /* 3. THE CHIP, tapped by a real mouse while the network is down. Its reload is stood in for: recorded, never settles. */
+        const calls = [];
+        if (swc) swc.getRegistrations = function () { calls.push('unregister the offline worker'); return new Promise(function () {}); };
+        caches.keys = function () { calls.push('list the offline caches'); return new Promise(function () {}); };
+        caches.delete = function (k) { calls.push('delete the cache ' + k); return new Promise(function () {}); };
+        const inputs = [];
+        const rec = function (e) { inputs.push(e.isTrusted); };
+        lab.addEventListener('click', rec, true);
+        down();
+        try {
+          await onScreen924(async function () { await hcMouse(lab, 'a click on the version chip'); });
+          await sleep(400);
+        } finally {
+          up();
+          lab.removeEventListener('click', rec, true);
+          if (swc) { try { delete swc.getRegistrations; } catch (e) {} }
+          try { delete caches.keys; } catch (e) {}
+          try { delete caches.delete; } catch (e) {}
+          lab.textContent = label0;
+        }
+        if (!inputs.length || !inputs.every(Boolean)) throw new Error('CONTROL: no trusted click reached the version chip, so this measured nothing');
+        if (calls.length) bad.push(pass.what + ', a tap on the chip went straight on to ' + calls.join(', then ') + ' without finding out whether the new build could be fetched — the page then navigates to an address that cannot load, and with the worker and its cache gone the installed app shows a browser error page on every launch until the network is back');
+        await sleep(200);
+      }
+    } finally {
+      window.fetch = realFetch; FM.toast = realToast;
+      try { delete navigator.onLine; } catch (e) {}
+      lab.textContent = label0;
+      if (wasHome) { try { FM.home.open(); } catch (e) {} }
+    }
+    if (bad.length) throw new Error('offline after install: ' + bad.join('; ') + '.');
+  });
+
+  test('HUNT-d with the phone storage full, a tap on the version label reloads the app and throws away everything since the last save without asking', { item: '690', budgetMs: 60000 }, async function () {
+    /* When the store refuses the project, the app says Storage full — autosave paused ONCE and keeps his work on screen —
+       and every other way out of the project (opening another card, New project, Restore) now stops and asks Stay or
+       Leave anyway (queue 690, hunt f). The version chip is the door that does not: its handler calls flushSync, ignores
+       the answer, unregisters the worker and reloads. A full phone is also exactly when the app starts behaving oddly and
+       he reaches for the chip that says Tap to force-update — and everything he did since the last save that fitted is
+       gone on the reload, with nothing said at the moment it happened. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realSet = Storage.prototype.setItem, realAsk = FM.ask;
+    const lab = document.querySelector('.brand .ver') || document.querySelector('.ver');
+    if (!lab) throw new Error('setup: no version chip in the page');
+    const label0 = lab.textContent;
+    const swc = navigator.serviceWorker;
+    if (swc && Object.prototype.hasOwnProperty.call(swc, 'getRegistrations')) throw new Error('setup: navigator.serviceWorker.getRegistrations is already stood in for by another test');
+    const calls = [];
+    let asked = 0;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(120);
+      const pid = await FM.projects.create({ name: 'HUNT-d full chip', width: 320, height: 240 });
+      made.push(pid);
+      const T = hcShape('HUNT-d title card', '#e0245e');
+      await FM.storage.save();
+      if (!FM.storage.flushSync()) throw new Error('setup: the project could not be saved before the store filled');
+      const key = 'fm.proj.' + pid;
+      /* the phone fills: the project's document is refused from here on, as a full store refuses it */
+      Storage.prototype.setItem = function (k, v) { if (k === key) throw new DOMException('refused by the HUNT-d test', 'QuotaExceededError'); return realSet.call(this, k, v); };
+      T.transform.x += 60; T.name = 'HUNT-d title card, moved after the store filled';
+      FM.refreshAll(); FM.history.commit();
+      await sleep(900);   // the autosave runs, and is refused
+      if (FM.storage.flushSync()) throw new Error('CONTROL: the full store did not refuse the project, so there is nothing unsaved to lose');
+      if (!FM.storage.unsavedOnScreen()) throw new Error('CONTROL: the app does not think anything is unsaved, so this measured nothing');
+      /* the chip's reload is stopped here (recorded, never settles); any question it asks is answered Stay */
+      if (swc) swc.getRegistrations = function () { calls.push('unregister the worker'); return new Promise(function () {}); };
+      FM.ask = function () { asked++; return Promise.resolve(false); };
+      const inputs = [];
+      const rec = function (e) { inputs.push(e.isTrusted); };
+      lab.addEventListener('click', rec, true);
+      try { await onScreen924(async function () { await hcMouse(lab, 'a click on the version label'); }); await sleep(400); }
+      finally { lab.removeEventListener('click', rec, true); }
+      if (!inputs.length || !inputs.every(Boolean)) throw new Error('CONTROL: no trusted click reached the version label, so this measured nothing');
+      if (calls.length && !asked) throw new Error('with the phone storage full and his last change only on screen (the move of HUNT-d title card), a tap on the version label went straight on to reload the app — no Stay or Leave anyway, nothing said. The reload throws away everything he did since the last save that fitted');
+      if (calls.length) throw new Error('with the phone storage full the version label asked first, he chose Stay, and it reloaded anyway — his unsaved work is gone');
+    } finally {
+      Storage.prototype.setItem = realSet; FM.ask = realAsk;
+      if (swc) { try { delete swc.getRegistrations; } catch (e) {} }
+      lab.textContent = label0;
+      try { FM.storage.flushSync(); await FM.storage.save(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-d on a full phone a replaced photo that could not be stored turns back into the old photo after a trip to Home, at the wrong size', { item: '690', budgetMs: 90000 }, async function () {
+    /* Going Home lets a project's media go (queue 385) and coming back reads it again from IndexedDB. The release promises
+       NOTHING IS FREED THAT IDB CANNOT GIVE BACK — and checks that with `keys.has(id)` alone. After a Replace media on a
+       full phone the record under the layer's id is still the OLD file (the new one was refused: Not enough storage to save
+       that media), the key is there, so the NEW file is let go. Back in the project the old photo returns in its place, with
+       the scale Replace media set for the new file, and nothing says so — the replace he did minutes ago is silently undone
+       while the app was open the whole time. Driven with a real finger at 360: ⋯ → Replace media, ← to Home, the card back. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    const realPut = IDBObjectStore.prototype.put, realToast = FM.toast;
+    const toasts = [];
+    const photo = async function (name, col, W, H) {
+      const cv = new OffscreenCanvas(W, H), g = cv.getContext('2d');
+      g.fillStyle = col; g.fillRect(0, 0, W, H);
+      const b = await cv.convertToBlob({ type: 'image/png' });
+      return new File([b], name, { type: 'image/png', lastModified: Date.now() });
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: 'HUNT-d full replace', width: 1080, height: 1920 });
+      made.push(pid);
+      await sleep(250);
+      const red = await photo('IMG_3001.PNG', '#d02020', 1080, 1920), blue = await photo('IMG_3002.PNG', '#2030d0', 2160, 3840);
+      const L = await h3aImport(red);
+      await FM.storage.settled(); await sleep(150);
+      const st0 = await FM.storage.readMedia(L.id);
+      if (!st0 || !st0.file || st0.file.name !== red.name) throw new Error('setup: the first photo never reached storage, so there is no old copy to come back');
+      /* the phone fills: this layer's record is refused from here on */
+      IDBObjectStore.prototype.put = function (val, key) { if (key === L.id) throw new DOMException('refused by the HUNT-d test', 'QuotaExceededError'); return realPut.apply(this, arguments); };
+      FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+      let before = null, after = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const seen = await h3aPicker(blue, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+          if (!seen.n) throw new Error('setup: tapping Replace media… opened no file picker');
+          await hcUntil('the blue photo to replace the red one', () => { const r = FM.media.get(L.id); return r && r.file && r.file.name === blue.name; }, 8000);
+          await FM.storage.settled(); await sleep(300);
+          const disk = await FM.storage.readMedia(L.id);
+          if (!disk || !disk.file || disk.file.name !== red.name) throw new Error('CONTROL: the full store did not refuse the new photo (storage holds ' + nq7d(disk && disk.file && disk.file.name) + '), so nothing was left unsaved');
+          if (!toasts.some(t => /storage/i.test(t))) throw new Error('CONTROL: nothing said the new photo could not be stored');
+          const L1 = FM.layerById(FM.scene, L.id);
+          before = { col: h3aName(h3aPixel(L1.start + 0.02).centre), w: FM.layerSize(L1).w * L1.transform.scale };
+          if (before.col !== 'blue') throw new Error('CONTROL: after Replace media the canvas shows ' + before.col + ', not the blue photo he picked');
+          /* ← to Home, by a real finger, and let Home do what it does with a project's media */
+          const back = document.getElementById('m-back');
+          for (let k = 0; k < 3 && !FM.home.isOpen(); k++) { await h3aTap(back, 'a tap on ← (Home)'); await sleep(600); }   // the first ← only lets go of the selected layer, as on his phone
+          await hcUntil('Home to open', () => FM.home.isOpen(), 4000);
+          const t0 = Date.now();
+          while (Date.now() - t0 < 4000 && FM.media.get(L.id)) await sleep(100);
+          await sleep(300);
+          /* …and back into the project by a real tap on its card */
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(200);
+          const card = hcCard(pid);
+          if (!card) throw new Error('setup: HUNT-d full replace has no card on Home');
+          await h3aTap(card, 'a tap on the project card');
+          await hcUntil('the project to open again', () => !FM.home.isOpen() && FM.projects.currentId() === pid, 6000);
+          const m = await hcUntil('the photo to be back in memory', () => FM.media.get(L.id), 8000);
+          await hcUntil('the photo to decode', () => m.el && m.el.complete && m.el.naturalWidth > 0, 4000);
+          await sleep(400);
+          const L2 = FM.layerById(FM.scene, L.id);
+          after = { col: h3aName(h3aPixel(L2.start + 0.02).centre), w: FM.layerSize(L2).w * L2.transform.scale, name: FM.media.get(L.id).file && FM.media.get(L.id).file.name };
+        });
+      }, 360);
+      if (after.col !== 'blue' || after.name !== blue.name) {
+        throw new Error('on a full phone he replaced his red photo with a blue one — the app said the new one could not be stored and kept showing it — then went Home and tapped the project again: the canvas now shows ' +
+          after.col + ' (' + nq7d(after.name) + '), the OLD photo he replaced, drawn ' + Math.round(after.w) + ' px wide where it was ' + Math.round(before.w) +
+          ' — Home let go of the only copy of the new photo, and the replace he did is silently undone');
+      }
+    } finally {
+      IDBObjectStore.prototype.put = realPut; FM.toast = realToast;
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('HUNT-d with the phone storage full, New project says That project is no longer on this device and drops him into the project he was already in', { item: '690', budgetMs: 90000 }, async function () {
+    /* FM.projects.create writes the new document and the index entry and ignores both answers, then open() finds neither,
+       toasts That project is no longer on this device and returns false — which create() also ignores, returning the new id
+       as if it had worked. Home then pushes into the editor, and the editor is still the project he was in before he tapped
+       +. So on a full phone he names a new project, taps Create, reads a message that is not true (the project was never
+       made — there was no room), and starts building his new idea on top of an old project. The first half of the same
+       story, Storage full — autosave paused, is shown and then written over by the second a moment later. Driven with a
+       real finger at 360: + on Home, then Create. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realSet = Storage.prototype.setItem, realToast = FM.toast;
+    const toasts = [];
+    let remembered = null; try { remembered = localStorage.getItem('fm.newproj'); } catch (e) {}
+    let newName = '', oldName = 'HUNT-d holiday edit', before = null, got = null;
+    try {
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: oldName, width: 1080, height: 1920 });
+      made.push(pid);
+      hcShape('HUNT-d holiday title', '#f4a261');
+      await FM.storage.save();
+      if (!FM.storage.flushSync()) throw new Error('setup: the project could not be saved before the store filled');
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.home.open(); await sleep(900);
+          const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+          if (tab) { tab.click(); await sleep(300); }
+          before = new Set(FM.projects.list().map(p => p.id));
+          /* the phone fills: anything that would make the store bigger is refused, as a full store refuses it */
+          Storage.prototype.setItem = function (k, v) {
+            const had = this.getItem(k);
+            if (had === null || String(v).length > had.length) throw new DOMException('refused by the HUNT-d test', 'QuotaExceededError');
+            return realSet.call(this, k, v);
+          };
+          FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+          await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
+          await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden'); }, 4000);
+          await sleep(350);
+          newName = (document.getElementById('hm-new-name') || {}).value || '';
+          await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
+          await sleep(1500);
+          got = { home: FM.home.isOpen(), open: FM.projects.currentId(), name: FM.scene.project && FM.scene.project.name, cards: FM.projects.list().length };
+        });
+      }, 360);
+      Storage.prototype.setItem = realSet; FM.toast = realToast;
+      FM.projects.list().forEach(p => { if (!before.has(p.id)) made.push(p.id); });
+      if (!newName) throw new Error('setup: the New project dialog had no name in it');
+      const lie = toasts.filter(t => /no longer on this device/i.test(t));
+      const bad = [];
+      if (lie.length) bad.push('the last thing it said was That project is no longer on this device — the project was never made, there was no room for it');
+      if (!got.home && got.name !== newName) bad.push('Home closed into the editor showing ' + nq7d(got.name) + ', the project he was already in, not the ' + nq7d(newName) + ' he just made — whatever he builds next goes into the old project');
+      if (bad.length) throw new Error('with the phone storage full he tapped + on Home and then Create (' + nq7d(newName) + '): ' + bad.join('; ') + '. What it said, in order: ' + nq7d(toasts.join(' / ')));
+    } finally {
+      Storage.prototype.setItem = realSet; FM.toast = realToast;
+      try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
+      try { const d = document.getElementById('hm-dialog'); if (d) d.classList.add('hidden'); } catch (e) {}
+      try { await FM.storage.save(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
