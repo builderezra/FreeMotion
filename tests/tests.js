@@ -99144,4 +99144,1117 @@
     }
   });
 
+
+  /* ═══ 690 — AUDIO MIX, PREVIEW VS EXPORT (sixth hunt, 26 Sep; his words: go re audit, find some bugs coz theres a shit load) ═══
+   * Four faults found by MEASURING what comes out — the exporter's own mix (buildAudioMix), the exported MP4 decoded back,
+   * and the live preview tapped at the speakers (every connection to the destination is re-routed through a recorder,
+   * the same tap the HUNT-e iPhone test uses). Each was first written to FAIL on v17.00 saying what he would hear, and is
+   * fixed: the edge de-click in the file (js/exporter.js buildAudioMix), the pre-roll at a split (js/app.js
+   * prerollAtSeam), the level stage before the effects (js/audio-fx-live.js sync), and the AAC warm-up cut out of the
+   * file (js/exporter.js aacPriming, encodeAudio). */
+
+  // A speaker tap for the live preview: every node that connects to the destination is re-routed through a recorder that
+  // logs the RMS of each 512-sample block beside the transport time it was heard at. Returns { log, stop }.
+  // NOT huntBTap: that name is the finger tap far above, and two function declarations with one name in one scope means
+  // the later one wins — every finger-tap test would have been handed this instead.
+  async function speakerTap690() {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ctx = FM.audioCtx();
+    const origConnect = AudioNode.prototype.connect;
+    const tapIn = ctx.createGain();
+    const rec = ctx.createScriptProcessor(512, 2, 2);
+    origConnect.call(tapIn, rec); origConnect.call(rec, ctx.destination);
+    const log = [];
+    rec.onaudioprocess = function (e) {
+      const d = e.inputBuffer.getChannelData(0); let s = 0;
+      for (let i = 0; i < d.length; i++) s += d[i] * d[i];
+      log.push({ rms: Math.sqrt(s / d.length), ft: FM.time, pl: FM.playing });
+    };
+    try { await ctx.resume(); } catch (e) {}
+    const w0 = Date.now(), c0 = ctx.currentTime;
+    while (!(ctx.state === 'running' && ctx.currentTime > c0 + 0.05)) {
+      if (Date.now() - w0 > 9000) { try { tapIn.disconnect(); rec.disconnect(); } catch (e) {} throw new Error('setup: the audio context never ran (state ' + ctx.state + ') - the environment refuses to run audio at all'); }
+      await sleep(50);
+    }
+    AudioNode.prototype.connect = function () {
+      const a = Array.prototype.slice.call(arguments);
+      if (a[0] === ctx.destination && this !== rec) a[0] = tapIn;
+      return origConnect.apply(this, a);
+    };
+    return {
+      log: log,
+      stop: function () {
+        AudioNode.prototype.connect = origConnect;
+        rec.onaudioprocess = null;
+        try { tapIn.disconnect(); rec.disconnect(); } catch (e) {}
+      },
+    };
+  }
+  function huntBRms(buf, t0, t1) {
+    const d = buf.getChannelData(0), sr = buf.sampleRate;
+    const a = Math.max(0, Math.floor(t0 * sr)), b = Math.min(d.length, Math.floor(t1 * sr));
+    let s = 0; for (let i = a; i < b; i++) s += d[i] * d[i];
+    return Math.sqrt(s / Math.max(1, b - a));
+  }
+
+  /* 690 (HUNT-b 1) — A TRIMMED SONG CLICKED AT EVERY CUT IN THE EXPORTED FILE. Fixed: buildAudioMix builds the preview's
+   * edge envelope — 0 to 1 over the first 45 ms of the clip, 1 to 0 over its last 45 ms — on a gain of its own, skipping
+   * an edge that touches the other half of a split (the seam test below holds the file's side of that) and an edge the
+   * export range cuts through.
+   * The preview fades every clip edge in and out over 45 ms (js/app.js declickGain, DECLICK_S) — that is #148, his
+   * scratchy-popping report — so a song trimmed to start or stop mid-waveform never pops while he edits. The file had no
+   * edge envelope at all: the clip's buffer started on whatever sample the trim landed on and stopped dead at its end, so
+   * the soundtrack stepped from silence to full level in one sample, and back. A click at every trim, every cut between
+   * two clips and every clip that ends before the project does — in the file only.
+   * CONTROLS: the song is in the mix at its own level, and mid-clip it never steps by more than a 250 Hz sine can.
+   * AND THE SAME ENVELOPE, not just any fade: halfway through the file's fade-in the song is at the level the preview
+   * plays it at there. */
+  test('690 a trimmed song fades in and out at its edges in the exported file, over the same 45 ms the preview fades them', { item: '690', budgetMs: 60000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('FM.exporter.buildAudioMix is not reachable');
+    if (typeof FM._declickGain !== 'function') throw new Error('FM._declickGain is not exposed - the preview edge envelope cannot be read');
+    const saved = FM.scene, made = [];
+    const SR = 48000, AMP = 0.5, HZ = 250;
+    try {
+      window.__fmStep = '690 export edge click';
+      const rec = await FM.loadVideoFile(huntEWav(4, t => AMP * Math.sin(2 * Math.PI * HZ * t), 'huntb-edge'));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 1, duration: 1.5 });
+      L.trimStart = 1.001;   // a quarter cycle in: the trim lands on a crest, as a trim of real music lands mid-waveform
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 4);
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 4);
+      if (!mix) throw new Error('setup: the exporter built no soundtrack for a clip that has sound');
+      const d = mix.audioBuffer.getChannelData(0);
+      let level = 0, natural = 0;
+      for (let i = Math.round(1.5 * SR); i < Math.round(2.0 * SR); i++) { level = Math.max(level, Math.abs(d[i])); natural = Math.max(natural, Math.abs(d[i] - d[i - 1])); }
+      if (!(level > 0.45 && level < 0.55)) throw new Error('CONTROL: mid-clip the soundtrack peaks at ' + level.toFixed(3) + ', not the song at 0.5 - the mix is not this clip, so nothing below means anything');
+      const smooth = AMP * 2 * Math.PI * HZ / SR;
+      if (!(natural < smooth * 1.5)) throw new Error('CONTROL: mid-clip the waveform already steps by ' + natural.toFixed(4) + ' per sample where a 250 Hz sine at 0.5 steps at most ' + smooth.toFixed(4) + ' - the step reading is broken');
+      const stepAt = t => { const c = Math.round(t * SR); let w = 0, from = 0, to = 0; for (let i = c - 4; i <= c + 4; i++) { const s = Math.abs(d[i] - d[i - 1]); if (s > w) { w = s; from = d[i - 1]; to = d[i]; } } return { w: w, from: from, to: to }; };
+      const head = stepAt(1.0), tail = stepAt(2.5);
+      const pvHead = FM._declickGain(L, 1.001, null, 0), pvTail = FM._declickGain(L, 2.499, null, 0);
+      if (head.w > natural * 4 || tail.w > natural * 4) {
+        throw new Error('a song trimmed to play from 1.00 s to 2.50 s jumps from ' + head.from.toFixed(2) + ' to ' + head.to.toFixed(2) + ' in a single sample where it starts, and from ' +
+          tail.from.toFixed(2) + ' to ' + tail.to.toFixed(2) + ' where it ends, in the exported soundtrack (' + Math.round(Math.max(head.w, tail.w) / natural) +
+          ' times the steepest step of the song itself) - a pop at every cut in the file. The preview never plays these pops: it fades each clip edge over 45 ms (1 ms in, it plays at ' +
+          Math.round(pvHead * 100) + ' percent; 1 ms before the end, at ' + Math.round(pvTail * 100) + ' percent). So every trim, every cut between two clips and every song that stops before the video does clicks in the exported video but not while he edits');
+      }
+      // …and it is the PREVIEW's envelope: the peak over one 4 ms cycle at a point 22.5 ms into each fade, against the
+      // preview's gain there. Tolerance: the gain moves 9 percent across that cycle, so 0.06 of 0.5 either side.
+      const peakAround = t => { let p = 0; for (let i = Math.round((t - 0.002) * SR); i < Math.round((t + 0.002) * SR); i++) p = Math.max(p, Math.abs(d[i])); return p; };
+      [[1.0225, 'into its fade-in'], [2.4775, 'into its fade-out']].forEach(function (w) {
+        const file = peakAround(w[0]), pv = AMP * FM._declickGain(L, w[0], null, 0);
+        if (Math.abs(file - pv) > 0.06) throw new Error('22.5 ms ' + w[1] + ' the file plays the song at ' + file.toFixed(2) + ' where the preview plays it at ' + pv.toFixed(2) + ' - the file fades its edges, but not the way he hears them while editing');
+      });
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 2) — SPLITTING A SONG PUT A DROP-OUT AT THE CUT IN THE PREVIEW. Fixed: js/app.js prerollAtSeam starts the
+   * next half's element early and muted, so it is already playing when the playhead reaches the cut, and a playhead that
+   * has just run across a seam no longer arms the resume fade (the sync tick's paused branch).
+   * A split is meant to be invisible, and the declick seam exemption (js/app.js seamAt, 21 Aug) was written for exactly
+   * this. But declickGain has a THIRD term the exemption does not cover: `m._resumedAt`, which the sync tick set every
+   * time it started a PAUSED element — and the tail half's element was paused until the playhead reached it. So at the
+   * cut the head half played to its end at full level, and the tail half opened at volume 0 and climbed over 45 ms: a
+   * notch of near-silence at every split, every time he played across it. The 21 Aug test drives declickGain with
+   * m = null, so it never saw the term. The export has no such envelope, so the file plays straight through (asserted
+   * below as the second control).
+   * Heard at the speakers: the clip carries a Gain effect at 0 dB, which changes nothing about its level but routes its
+   * element through Web Audio, where the tap can hear it. CONTROL: the same song, unsplit, played over the same second.
+   * TWO MORE THINGS HELD: the tail half really is running (muted) before the cut — the pre-roll is what covers the time
+   * an element takes to start, which a phone takes longer over — and pressing play with the playhead parked ON the cut,
+   * where a split leaves it, still opens from silence, because nothing was sounding a moment before. */
+  test('690 playing across a split, the second half is already running when the playhead reaches the cut, so the sound does not drop out', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (typeof FM.splitLayer !== 'function') throw new Error('FM.splitLayer is missing');
+    const saved = FM.scene, made = [];
+    const tap = await speakerTap690();
+    const median = a => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+    let tailHalf = null;
+    async function across(split) {
+      window.__fmStep = '690 seam ' + (split ? 'split' : 'whole');
+      const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'huntb-seam-' + (split ? 's' : 'w')));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 4 });
+      L.audioFx = [{ type: 'gain', enabled: true, params: { gain: 0 } }];
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 4);
+      FM.refreshAll();
+      if (split) {
+        FM.setTime(2);
+        await FM.splitLayer(L.id);
+        FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
+        if (FM.scene.layers.length !== 2) throw new Error('setup: the split did not make two halves');
+        tailHalf = FM.scene.layers.filter(l => Math.abs(l.start - 2) < 1e-6)[0] || null;
+        if (!tailHalf || !FM.media.get(tailHalf.id)) throw new Error('setup: the split left no second half with its own media starting at 2.00 s');
+      }
+      FM.setTime(1.2);
+      await sleep(300);
+      tap.log.length = 0;
+      let early = 0;   // ticks just before the cut where the second half's element was already playing, muted
+      FM.play();
+      const t0 = Date.now();
+      while (Date.now() - t0 < 1600) {
+        if (split && FM.time > 1.7 && FM.time < 1.98) {
+          const tm = FM.media.get(tailHalf.id);
+          if (tm && tm.el && !tm.el.paused && tm.el.muted) early++;
+        }
+        await sleep(15);
+      }
+      FM.pause();
+      await sleep(100);
+      const rows = tap.log.filter(r => r.pl);
+      const steady = median(rows.filter(r => r.ft > 1.5 && r.ft < 1.85).map(r => r.rms));
+      const near = rows.filter(r => r.ft > 1.9 && r.ft < 2.25);
+      let dip = Infinity, dipAt = null;
+      near.forEach(r => { if (r.rms < dip) { dip = r.rms; dipAt = r.ft; } });
+      return { steady: steady, dip: near.length ? dip : NaN, dipAt: dipAt, n: near.length, early: early };
+    }
+    try {
+      const whole = await across(false);
+      if (!(whole.steady > 0.15)) throw new Error('CONTROL: the tap hears the playing song at only ' + whole.steady.toFixed(3) + ' - the preview is not reaching the speakers here, so nothing below means anything');
+      if (!(whole.n > 3) || !(whole.dip / whole.steady > 0.8)) throw new Error('CONTROL: the UNSPLIT song already dips to ' + (whole.dip / whole.steady * 100).toFixed(0) + ' percent around 2 s (' + whole.n + ' blocks) - the tap or the timing is off, not the split');
+      const cut = await across(true);
+      // …and the FILE plays straight through the same cut: its soundtrack has no hole there.
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 4);
+      if (!mix) throw new Error('setup: the exporter built no soundtrack for the split song');
+      let fileMin = Infinity; for (let t = 1.95; t < 2.05; t += 0.005) fileMin = Math.min(fileMin, huntBRms(mix.audioBuffer, t, t + 0.005));
+      const fileSteady = huntBRms(mix.audioBuffer, 1.5, 1.85);
+      if (!(fileMin / fileSteady > 0.9)) throw new Error('CONTROL: the exported soundtrack also dips at the cut (' + (fileMin / fileSteady * 100).toFixed(0) + ' percent) - this is not a preview-only fault');
+      if (!(cut.n > 3) || !(cut.dip / cut.steady > 0.6)) {
+        throw new Error('he splits a song at 2.00 s and plays across the cut: the sound drops to ' + Math.round(cut.dip / cut.steady * 100) + ' percent of its level right at the cut (at ' + (cut.dipAt || 0).toFixed(2) +
+          ' s), a blip of near-silence every time the playhead crosses a split, where the same song unsplit holds ' + Math.round(whole.dip / whole.steady * 100) + ' percent and the exported file holds ' + Math.round(fileMin / fileSteady * 100) +
+          ' percent. The tail half opens silent and fades in over 45 ms because its element was paused until the cut (declickGain: the _resumedAt term, which the split seam exemption does not cover)');
+      }
+      if (!(cut.early > 0)) throw new Error('the second half of the split was not running before the cut - its element sat paused until the playhead reached 2.00 s, so the sound there waits on however long the element takes to start, which on a phone is longer than here');
+      // Pressing play with the playhead parked ON the cut: nothing was sounding a moment before, so the second half
+      // opens from silence as every press of play does (#148) - the seam rule is for a playhead that runs across a cut.
+      window.__fmStep = '690 seam play parked on the cut';
+      FM.setTime(2);
+      FM.play();
+      const tm = FM.media.get(tailHalf.id);
+      const opened = FM._declickGain(tailHalf, FM.time, tm, performance.now());
+      FM.pause();
+      if (!(opened < 0.2)) throw new Error('pressing play with the playhead parked on the cut opens the second half at ' + Math.round(opened * 100) + ' percent on its first sample - full volume on an arbitrary sample is the click #148 fixed; only a playhead that runs ACROSS a cut may skip the fade');
+    } finally {
+      tap.stop();
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 — …AND A CUT WHERE THE OTHER HALF IS SILENT IS A REAL EDGE. The seam rule (js/app.js seamAt) exempts an edge
+   * from the de-click because the sound carries straight on across a cut. When the other half is muted or hidden it does
+   * not: the edge is where the sound really starts or stops. The preview used to hide that for a clip START by always
+   * opening the half after a cut from silence — the very drop-out the test above removes — so without the sounding
+   * check the preview would have gained a click there, and the file (which now builds the same envelope) had one.
+   * CONTROL: with both halves sounding, the cut is flat in the preview, and the next half IS started early. The song is
+   * a cosine, so it sits at full level on the cut and a waveform stopped or started dead there is a full-size step. */
+  test('690 a cut where the other half is muted or hidden fades like any clip edge, in the preview and in the file, and is not started early', { item: '690', budgetMs: 60000 }, async function () {
+    if (typeof FM._declickGain !== 'function' || typeof FM._syncMediaToClock !== 'function') throw new Error('FM._declickGain or FM._syncMediaToClock is not exposed');
+    if (typeof FM.splitLayer !== 'function') throw new Error('FM.splitLayer is missing');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const SR = 48000, AMP = 0.5, HZ = 250;
+    try {
+      window.__fmStep = '690 dead seam setup';
+      const rec = await FM.loadVideoFile(huntEWav(4, t => AMP * Math.cos(2 * Math.PI * HZ * t), 'huntb-deadseam'));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 4 });
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 4);
+      FM.refreshAll();
+      FM.setTime(2);
+      await FM.splitLayer(L.id);
+      FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
+      const A = FM.scene.layers.filter(l => Math.abs(l.start) < 1e-6)[0], B = FM.scene.layers.filter(l => Math.abs(l.start - 2) < 1e-6)[0];
+      if (!A || !B || !FM.media.get(B.id)) throw new Error('setup: the split did not make two halves meeting at 2.00 s, the second with its own media');
+      const pv = () => [FM._declickGain(A, 1.999, null, 0), FM._declickGain(B, 2.001, null, 0)];
+      const stepAtCut = async () => {
+        const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 4);
+        if (!mix) throw new Error('setup: the exporter built no soundtrack');
+        const d = mix.audioBuffer.getChannelData(0), c = Math.round(2 * SR); let w = 0;
+        for (let i = c - 8; i <= c + 8; i++) w = Math.max(w, Math.abs(d[i] - d[i - 1]));
+        return w;
+      };
+      const smooth = AMP * 2 * Math.PI * HZ / SR;
+      // Does the playback tick start the second half early? One tick at 1.80 s with the transport marked as playing.
+      const startedEarly = () => {
+        FM.playing = true; FM.time = 1.8;
+        try { FM._syncMediaToClock(); } finally { FM.playing = false; }
+        const bm = FM.media.get(B.id), on = !!(bm && bm.el && !bm.el.paused);
+        FM.scene.layers.forEach(l => { const mm = FM.media.get(l.id); if (mm && mm.el) { try { mm.el.pause(); mm.el.muted = true; } catch (e) {} } });
+        return on;
+      };
+      let g = pv();
+      if (!(g[0] > 0.99 && g[1] > 0.99)) throw new Error('CONTROL: with both halves sounding the cut already fades in the preview (' + g.map(v => v.toFixed(2)).join(', ') + ') - the seam rule this builds on is not there');
+      if (!startedEarly()) throw new Error('CONTROL: with both halves sounding, the second half was not started before the cut - the pre-roll this test guards is not happening at all');
+      for (const c of [['muted', l => { l.muted = true; }, l => { l.muted = false; }], ['hidden', l => { l.visible = false; }, l => { l.visible = true; }]]) {
+        window.__fmStep = '690 dead seam, first half ' + c[0];
+        c[1](A);
+        g = pv();
+        if (!(g[1] < 0.1)) throw new Error('with the first half ' + c[0] + ', the second half opens at ' + Math.round(g[1] * 100) + ' percent 1 ms after the cut in the preview - nothing was sounding before it, so that is a waveform started dead: a click');
+        let w = await stepAtCut();
+        if (w > smooth * 4) throw new Error('with the first half ' + c[0] + ', the exported file steps by ' + w.toFixed(3) + ' in one sample at the cut (' + Math.round(w / smooth) + ' times the song itself) - the second half starts dead in the file');
+        if (startedEarly()) throw new Error('with the first half ' + c[0] + ', the second half was started early - there is no sound to carry on, so it must open at the cut, from silence, like any clip');
+        c[2](A);
+        window.__fmStep = '690 dead seam, second half ' + c[0];
+        c[1](B);
+        g = pv();
+        if (!(g[0] < 0.1)) throw new Error('with the second half ' + c[0] + ', the first half is still at ' + Math.round(g[0] * 100) + ' percent 1 ms before the cut in the preview - nothing carries the sound on, so it stops dead there: a click');
+        w = await stepAtCut();
+        if (w > smooth * 4) throw new Error('with the second half ' + c[0] + ', the exported file steps by ' + w.toFixed(3) + ' in one sample at the cut (' + Math.round(w / smooth) + ' times the song itself) - the first half stops dead in the file');
+        c[2](B);
+      }
+    } finally {
+      FM.playing = false;
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 3) — ON AN IPHONE THE PREVIEW CUT OFF THE ECHO AND REVERB TAIL; THE EXPORT LETS IT RING. Fixed:
+   * js/audio-fx-live.js sync wires element -> level gain -> effects -> limiter (when boosted) -> speakers, the export's
+   * order, instead of putting the gain after the effects.
+   * On an iPhone el.volume cannot be set (the HUNT-e fix, queue 690), so a clip whose level is not a flat 100% — any
+   * volume other than 100%, or any fade — is routed through a Web Audio level stage (makeLevelStage), and a clip above
+   * 100% through the boost stage, whose gain there carries the whole level. sync() put that gain AFTER the audio effects;
+   * the export does the opposite: clip -> volume and fade gain -> effects (js/exporter.js buildAudioMix). For an echo or a
+   * reverb the order is the whole difference: in the export the echo of the last notes rings on after the clip ends; on
+   * the phone the playback tick drove the gain to zero at the clip's end (the fade, and the 45 ms de-click), and because
+   * the echo was upstream of it the echo went to zero with it. Nonlinear effects (Distortion, Compressor, Limiter)
+   * likewise saw the clip at full level on the phone and at its real level in the file.
+   * The stand-in for WebKit is the one the HUNT-e test uses: the element's volume reads 1 and ignores writes.
+   * CONTROLS: the same clip at 100% on the same stand-in (no level stage) rings on at the speakers, which proves the tap
+   * hears a tail; and the exported soundtrack of each clip rings on too. */
+  test('690 on an iPhone a clip with Echo at 80 percent, or boosted to 200 percent, rings on after its end in the preview as it does in the export', { item: '690', budgetMs: 150000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const tap = await speakerTap690();
+    const avg = a => a.reduce((x, r) => x + r.rms, 0) / Math.max(1, a.length);
+    async function play(label, vol) {
+      window.__fmStep = '690 echo tail ' + label;
+      const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'huntb-echo-' + label));
+      // WebKit on iPhone: the volume attribute cannot be set by a page and always reads 1
+      Object.defineProperty(rec.el, 'volume', { configurable: true, get: function () { return 1; }, set: function () {} });
+      const L = FM.makeLayer('video', { name: 'voice ' + label, x: 32, y: 32, start: 0, duration: 1 });
+      L.volume = vol;
+      L.audioFx = [{ type: 'delay', enabled: true, params: { time: 0.3, feedback: 0.5, mix: 0.5 } }];
+      // a title under it keeps the project running past the clip, so the transport plays on while the echo should ring
+      const T = FM.makeLayer('shape', { name: 'title', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 3 });
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L, T], 3);
+      FM.refreshAll(); FM.setTime(0.3);
+      await sleep(250);
+      tap.log.length = 0;
+      FM.play();
+      await sleep(1800);
+      const reached = FM.time;
+      FM.pause();
+      await sleep(150);
+      const rows = tap.log.filter(r => r.pl);
+      const on = avg(rows.filter(r => r.ft > 0.6 && r.ft < 0.9)), tail = avg(rows.filter(r => r.ft > 1.1 && r.ft < 1.45));
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 3);
+      if (!mix) throw new Error('setup: the exporter built no soundtrack for the ' + label + ' clip');
+      return { on: on, tail: tail, ratio: on > 0 ? tail / on : 0, reached: reached, level: !!rec._boost,
+               fileRatio: huntBRms(mix.audioBuffer, 1.1, 1.45) / huntBRms(mix.audioBuffer, 0.6, 0.9) };
+    }
+    try {
+      const full = await play('100', 1);
+      if (!(full.reached > 1.5)) throw new Error('setup: the transport stopped at ' + full.reached.toFixed(2) + ' s, before the echo could be heard');
+      if (!(full.on > 0.1)) throw new Error('CONTROL: the tap hears the 100 percent clip at only ' + full.on.toFixed(3) + ' while it plays - the preview is not reaching the speakers here');
+      if (!(full.ratio > 0.2)) throw new Error('CONTROL: at 100 percent (no level stage) the echo after the clip ends measured only ' + (full.ratio * 100).toFixed(0) + ' percent of the clip - the tap cannot hear a tail, so the reading below means nothing');
+      for (const c of [['80', 0.8, 'a voice clip at 80 percent'], ['200', 2, 'a voice clip boosted to 200 percent']]) {
+        const r = await play(c[0], c[1]);
+        if (!r.level) throw new Error('setup: ' + c[2] + ' on the iPhone stand-in got no level stage - the routing this test is about did not happen');
+        if (!(r.fileRatio > 0.2)) throw new Error('CONTROL: the EXPORTED ' + c[0] + ' percent clip has no echo after it ends either (' + (r.fileRatio * 100).toFixed(0) + ' percent) - then preview and file agree');
+        // 0.85 of the 100 percent clip's own tail: measured 1.00 (80 percent) and 1.06 (200 percent) fixed; 0.16 and 0.72 with the gain after the effects
+        if (!(r.ratio > 0.2) || !(r.ratio > 0.85 * full.ratio)) {
+          throw new Error('on his iPhone, ' + c[2] + ' with Echo is cut off where the clip ends in the preview - the echo after it measured ' + Math.round(r.ratio * 100) +
+            ' percent of the clip, where the exported file rings on at ' + Math.round(r.fileRatio * 100) + ' percent and the same clip at 100 percent rings on at ' + Math.round(full.ratio * 100) +
+            ' percent in the preview. The level stage an iPhone needs sits AFTER the effects, so the end-of-clip fade turns the echo and reverb tails down with it; the export turns the clip down BEFORE the effects. Any volume but 100 percent, or any fade, does it - so what he hears on the phone is not what the file contains');
+        }
+      }
+    } finally {
+      tap.stop();
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* 690 (HUNT-b 4) — THE SOUND IN AN EXPORTED VIDEO WAS 44 MS BEHIND THE PICTURE. Fixed: js/exporter.js encodeAudio cuts the
+   * encoder's warm-up out of the file — measured once per encoder by aacPriming (a click encoded and decoded back) — with
+   * just enough silence fed first that the first frame kept starts exactly on the mix, and stops the track at the mix's
+   * own length. The audio-only M4A goes through the same encodeAudio.
+   * encodeAudio fed the mix to an AAC AudioEncoder from timestamp 0 and handed every chunk to the muxer. An AAC encoder
+   * starts every stream with a warm-up (priming) of 2112 samples — 44 ms at 48 kHz — that is not part of the sound, and
+   * the file has to say so for a player to skip it (an edit list: an edts/elst box). vendor/mp4-muxer.js writes none (it
+   * has no edts, elst or sgpd box at all), so every player played the warm-up first and the whole soundtrack came out
+   * 44 ms late against the video, whose first frame is at 0. The audio track also ran 72 ms past the end.
+   * Measured in the FILE: a click at exactly 1.000 s, exported through FM.exporter.run and decoded back, and the same
+   * soundtrack as an M4A through FM.exporter.encodeM4A.
+   * CONTROL: in the soundtrack the exporter builds before encoding, the click is at 1.000 s. */
+  test('690 the sound in an exported video and an exported M4A lines up with the picture, and the audio track ends with the video', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const firstLoud = (d, sr) => { for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 0.2) return i / sr; return -1; };
+    try {
+      window.__fmStep = '690 export offset';
+      const rec = await FM.loadVideoFile(huntEWav(3, t => (t >= 1.0 && t < 1.002) ? 0.9 : 0, 'huntb-click'));
+      const C = FM.makeLayer('video', { name: 'click', x: 32, y: 32, start: 0, duration: 3 });
+      FM.media.set(C.id, rec); made.push(C.id);
+      FM.scene = huntEScene([C], 3);
+      FM.refreshAll();
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 3);
+      if (!mix) throw new Error('setup: the exporter built no soundtrack');
+      const mixAt = firstLoud(mix.audioBuffer.getChannelData(0), mix.audioBuffer.sampleRate);
+      if (Math.abs(mixAt - 1.0) > 0.001) throw new Error('CONTROL: in the soundtrack the exporter builds, the click is at ' + mixAt.toFixed(4) + ' s, not 1.000 s - the offset is already in the mix, not the file');
+      let blob = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'huntb', onReady: async r => { blob = r.blob; } });
+      if (!blob) throw new Error('setup: the export produced no file');
+      const dec = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(await blob.arrayBuffer());
+      const fileAt = firstLoud(dec.getChannelData(0), dec.sampleRate);
+      if (fileAt < 0) throw new Error('setup: the click is not in the exported file at all');
+      const lateMs = (fileAt - mixAt) * 1000;
+      if (Math.abs(lateMs) > 5) {
+        throw new Error('a click at 1.000 s on his timeline is at ' + fileAt.toFixed(3) + ' s in the exported MP4: the whole soundtrack plays ' + Math.round(lateMs) + ' ms behind the picture in every exported video (and the audio track is ' +
+          dec.duration.toFixed(3) + ' s long for a 3.000 s video). The AAC encoder starts every stream with a warm-up it does not mean to be heard, and the file carries no edit list telling a player to skip it, so every player plays it. Speech sits at the edge of visible lip-sync error, cuts on the beat land late, and a clip he exports and imports again drifts another ' + Math.round(lateMs) + ' ms each time');
+      }
+      // A decoder plays whole 1024-sample frames, so the track may run up to 21 ms past the video - not a warm-up's worth.
+      if (!(dec.duration < 3.022)) throw new Error('the audio track of a 3.000 s video is ' + dec.duration.toFixed(3) + ' s long - it runs on past the picture by more than one AAC frame');
+      // The audio-only M4A is the same soundtrack through the same encoder, and must land in the same place.
+      window.__fmStep = '690 export offset m4a';
+      const m4a = await FM.exporter.encodeM4A(mix);
+      if (m4a.blob) {
+        const dm = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(await m4a.blob.arrayBuffer());
+        const m4aAt = firstLoud(dm.getChannelData(0), dm.sampleRate);
+        if (Math.abs((m4aAt - mixAt) * 1000) > 5) throw new Error('in the exported M4A the click at 1.000 s is at ' + m4aAt.toFixed(3) + ' s - the audio-only export is ' + Math.round((m4aAt - mixAt) * 1000) + ' ms off the timeline');
+      } else if (m4a.reason !== 'aac-unavailable') throw new Error('setup: the M4A export made no file (' + m4a.reason + ') on a browser that just encoded AAC for the video');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
+  /* ═══ 690 (seventh hunt, HUNT-c) — CAPTIONS AND SPEECH ═══════════════════════════════════════════════════════════════
+   * His brief: "go re audit, find some bugs coz theres a shit load". Four findings in captions, each written as a test that
+   * FAILED on v17.00 with a message that says what he would see, and each fixed. Where the finger is the point — the ✓, the Aa sheet's
+   * cross, the + and › of the caption strip — it is a REAL touch through tests/_cdp.py (realInput924) at 380. Pictures are
+   * measured through FM.renderScene (what the preview and every export draw) or read off the live #preview canvas. */
+  const hunt7cSleep = ms => new Promise(r => setTimeout(r, ms));
+  const hunt7cFrames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  // A 6 s caption track on a 1080 x 1920 project, one cue per [start, end, text], no pill so the words are the only ink.
+  function hunt7cTrack(cues, over) {
+    const L = FM.makeLayer('text', Object.assign({ name: 'HUNT-c captions', text: '', x: 540, y: 1500, fontSize: 80, start: 0, duration: 6 }, over || {}));
+    L.start = 0; L.duration = 6; L.text = ''; L.captionBg = false;
+    L.captions = cues.map(c => ({ start: c[0], end: c[1], text: c[2] }));
+    return L;
+  }
+  function hunt7cCleanup(saved, savedT) {
+    try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+    FM.scene = saved; if (savedT != null) FM.time = savedT;
+    try { FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+  }
+  // The frame's white ink: how many pixels, the box they fill, and how many separate bands of rows (one per line of text).
+  function hunt7cInk(sc, t) {
+    const W = sc.project.width, H = sc.project.height, c = offscreen(W, H), x = c.getContext('2d');
+    FM.renderScene(x, sc, t);
+    const d = x.getImageData(0, 0, W, H).data;
+    let n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1, bands = 0, inBand = false;
+    for (let y = 0; y < H; y++) {
+      let row = 0;
+      for (let i = 0; i < W; i++) {
+        const k = (y * W + i) * 4;
+        if (d[k] > 200 && d[k + 1] > 200 && d[k + 2] > 200) { row++; if (i < x0) x0 = i; if (i > x1) x1 = i; }
+      }
+      if (row) { n += row; if (y < y0) y0 = y; if (y > y1) y1 = y; if (!inBand) { bands++; inBand = true; } }
+      else if (inBand && y - y1 > 12) inBand = false;   // a gap of a dozen rows ends a line; the gaps inside one line are smaller
+    }
+    return { n: n, box: n ? [x0, y0, x1, y1] : null, bands: bands, w: W, h: H };
+  }
+  const hunt7cSay = s => String(s == null ? 'nothing' : s).replace(/\n/g, ' + ');
+
+  /* 690 (seventh hunt, 1) — A CAPTION HE TRIMMED OFF CAME BACK AS A FLASH. Trimming a caption clip's head leaves the cues it cut away at
+   * NEGATIVE local times on purpose (FM.shiftLayerCues, queue 452/817: the words stay where they are heard, and pulling the
+   * head back out brings them back). But FM.captions.normalize clamps every cue into [0, duration] with a 0.1 s minimum —
+   * and normalize runs on EVERY caption edit: the text editor's ✓ (text-edit.js commit), a cue dragged on the timeline, a
+   * Start/End typed in the list. So the moment he types into any other caption, each cue that was trimmed off is squashed to
+   * 0:00–0:00.1 of the clip and drawn STACKED on top of the first real caption (queue 574 shows overlapping cues together):
+   * a three-frame flash of words he cut away, in the preview and burned into the export. The tail does the same at the end.
+   * And the squash is permanent — dragging the head back out no longer brings the cut captions back where they were said.
+   * Fixed in FM.captions.normalize: a cue that pokes out of the clip is trimmed, not broken, and keeps its times. */
+  test('690 a caption he trimmed off the clip stays off when he types into another caption, and comes back where it was said', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    let got = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = hunt7cTrack([[0, 1, 'Alpha'], [1, 2, 'Bravo'], [2, 3, 'Charlie'], [3, 4, 'Delta'], [4, 5, 'Echo'], [5, 6, 'Foxtrot']]);
+          await huntBScene(() => [L]);
+          // He cuts the first 1.5 s away (Trim start to playhead — the phone button and the A key are both this) …
+          FM.selectLayer(L.id); FM.setTime(1.5);
+          FM.timeline.clipOp('trimStart');
+          // … and the last second (Trim end to playhead).
+          FM.setTime(L.start + 3.5);
+          FM.timeline.clipOp('trimEnd');
+          const head = L.start + 1 / 60, tail = L.start + L.duration - 1 / 60;
+          const before = { head: FM.activeCaption(L, head), tail: FM.activeCaption(L, tail), start: L.start, dur: L.duration, ink: hunt7cInk(FM.scene, head) };
+          // Then he types into Delta — the playhead on it, the text editor, a word changed, ✓ with his finger.
+          FM.scrubTime(L.start + 2.0);
+          FM.textEdit.start(L.id); await hunt7cSleep(300);
+          const inp = document.getElementById('te-input');
+          if (!inp || inp.value !== 'Delta') throw new Error('setup: the caption editor did not open on Delta (field reads ' + (inp ? inp.value : 'nothing') + ')');
+          inp.value = 'Delta, edited'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+          const how = await hunt2aPress(document.querySelector('.te-bar .te-done'), 'tick (Done)');
+          await hunt7cSleep(300);
+          const cue = w => { const c = L.captions.find(x => x.text === w); return c ? [+c.start.toFixed(3), +c.end.toFixed(3)] : null; };
+          got = { before: before, how: how, active: FM.textEdit.isActive(), delta: (L.captions.find(c => /Delta/.test(c.text || '')) || {}).text,
+            head: FM.activeCaption(L, head), tail: FM.activeCaption(L, tail), ink: hunt7cInk(FM.scene, head), L: L,
+            alpha: cue('Alpha'), fox: cue('Foxtrot') };
+          // …and then he pulls both ends back out: the head by the 1.5 s he cut, the tail by the second.
+          FM.trimLayerHead(L, -1.5); L.duration += 1;
+          got.back = { start: L.start, dur: L.duration, at05: FM.activeCaption(L, 0.5), at12: FM.activeCaption(L, 1.2), at55: FM.activeCaption(L, 5.5) };
+        });
+      }, 380);
+      const b = got.before;
+      if (Math.abs(b.start - 1.5) > 1e-6 || Math.abs(b.dur - 3.5) > 1e-6) throw new Error('CONTROL: the two trims left the clip at ' + b.start + ' s for ' + b.dur + ' s, not 1.5 s for 3.5 s');
+      if (b.head !== 'Bravo' || b.tail !== 'Echo') throw new Error('CONTROL: straight after the trims the clip opens on ' + hunt7cSay(b.head) + ' and closes on ' + hunt7cSay(b.tail) + ', not Bravo and Echo');
+      if (b.ink.bands !== 1) throw new Error('CONTROL: the first frame after the trims draws ' + b.ink.bands + ' lines of caption, not the one line of Bravo');
+      if (got.active || got.delta !== 'Delta, edited') throw new Error('CONTROL: the tick did not close the editor with his words on Delta (Delta reads ' + hunt7cSay(got.delta) + ')');
+      if (got.head !== 'Bravo') throw new Error('he trimmed the first 1.5 s off his caption clip, so Alpha was cut away and the clip opens on Bravo. Then he typed a word into Delta and ticked it. Now the first frames of the clip show ' + hunt7cSay(got.head) + ' (' + got.ink.bands + ' lines stacked, ' + got.ink.n + ' px of ink where Bravo alone had ' + b.ink.n + '): the caption he cut away flashes back on top of the first one for 0.1 s, in the preview and burned into the export, and pulling the head back out no longer puts it where it was said');
+      if (got.tail !== 'Echo') throw new Error('he trimmed the last second off his caption clip, so Foxtrot was cut away and the clip ends on Echo. After typing into Delta the last frames show ' + hunt7cSay(got.tail) + ': the caption he cut off the end flashes back stacked on Echo for the final 0.1 s, in the preview and the export');
+      if (String(got.alpha) !== '-1.5,-0.5' || String(got.fox) !== '3.5,4.5') throw new Error('after typing into Delta, the captions he trimmed off were moved: Alpha sits at ' + got.alpha + ' and Foxtrot at ' + got.fox + ' (clip time), not where the trims left them (-1.5 to -0.5 and 3.5 to 4.5), so pulling the ends back out cannot put them where they were said');
+      if (Math.abs(got.back.start) > 1e-6 || Math.abs(got.back.dur - 6) > 1e-6) throw new Error('CONTROL: pulling both ends back out left the clip at ' + got.back.start + ' s for ' + got.back.dur + ' s, not 0 s for 6 s');
+      if (got.back.at05 !== 'Alpha' || got.back.at12 !== 'Bravo' || got.back.at55 !== 'Foxtrot') throw new Error('he pulled the head and the tail of his caption clip back out after typing into Delta: 0:00.5 shows ' + hunt7cSay(got.back.at05) + ', 0:01.2 shows ' + hunt7cSay(got.back.at12) + ' and 0:05.5 shows ' + hunt7cSay(got.back.at55) + ', not Alpha, Bravo and Foxtrot where they were said (Bravo straddled the cut)');
+    } finally {
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, the other half of 1) — A NUMBER HE TYPES PAST THE END OF THE CLIP STILL LANDS INSIDE IT. normalize
+   * now leaves a trimmed-off caption where the trim put it, and that must not swallow the one thing its clamp was for: a
+   * Start or End typed into the caption list past the end of the clip is pulled back in, where he can see it, rather than
+   * left out there invisible. The field hands normalize the caption it set; every caption a trim put outside keeps its time. */
+  test('690 a Start or End he types past the end of a trimmed caption clip lands inside it, and the trimmed-off captions stay put', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    const host = document.createElement('div'); host.className = 'cap-list'; host.style.cssText = 'position:fixed;left:0;top:0;width:360px;z-index:5;background:#000';
+    try {
+      const L = hunt7cTrack([[0, 1, 'Alpha'], [1, 2, 'Bravo'], [2, 3, 'Charlie'], [3, 4, 'Delta']]);
+      await huntBScene(() => [L]);
+      FM.trimLayerHead(L, 1.5);   // Alpha cut away to -1.5 … -0.5, Bravo across the cut; the clip is 1.5 s for 4.5 s
+      document.body.appendChild(host);
+      FM.captionsEditor.mount(host, L);
+      const rowOf = w => [].slice.call(host.querySelectorAll('.cap-row')).find(r => r.querySelector('.cap-text').textContent === w);
+      const type = (w, k, v) => {
+        const r = rowOf(w); if (!r) throw new Error('setup: the caption list has no row reading ' + w);
+        const f = r.querySelectorAll('.cap-time')[k]; f.value = String(v); f.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const at = w => { const c = L.captions.find(x => x.text === w); return c ? [+c.start.toFixed(3), +c.end.toFixed(3)] : null; };
+      if (Math.abs(L.duration - 4.5) > 1e-6 || String(at('Alpha')) !== '-1.5,-0.5') throw new Error('CONTROL: the head trim left the clip ' + L.duration + ' s long with Alpha at ' + at('Alpha') + ', not 4.5 s with Alpha at -1.5 to -0.5');
+      type('Charlie', 0, 100);   // a Start typed far past the end
+      const ch = at('Charlie');
+      type('Delta', 1, 99);      // an End typed past the end
+      const de = at('Delta');
+      if (!ch || !(ch[0] >= 0 && ch[0] < 4.5 && ch[1] <= 4.5 + 1e-6 && ch[1] > ch[0])) throw new Error('he typed a Start of 100 s into Charlie on a 4.5 s caption clip, and Charlie now runs ' + ch + ' (clip time): it is no longer inside the clip, so it silently vanished from the preview and the export instead of landing at the end where he can see it');
+      if (!de || Math.abs(de[1] - 4.5) > 1e-6) throw new Error('he typed an End of 99 s into Delta on a 4.5 s caption clip, and Delta now runs ' + de + ': its end was not pulled back to the end of the clip');
+      if (String(at('Alpha')) !== '-1.5,-0.5' || String(at('Bravo')) !== '-0.5,0.5') throw new Error('typing Start and End into Charlie and Delta moved the captions the trim had put outside the clip: Alpha ' + at('Alpha') + ', Bravo ' + at('Bravo') + ' (were -1.5 to -0.5 and -0.5 to 0.5)');
+    } finally {
+      host.remove();
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, 2) — THE Aa SHEET'S CROSS DELETED A DIFFERENT CAPTION. The caption list in the text editor's Aa sheet
+   * (FM.captionsEditor.mount) builds each row's ✕ as `layer.captions.splice(i, 1)` with `i` fixed when the sheet was
+   * drawn. The caption strip right above it — + (new caption after this one), and ‹ › leaving a blank caption the editor
+   * made in a gap — changes that list and never redraws the sheet (FM.textEdit.cuesChanged only relabels the strip). So
+   * after + the sheet still shows three rows over four captions, and the cross on Charlie removes the caption now in
+   * Charlie's old place: Bravo. His words for Bravo are gone, Charlie is still there, and nothing says so.
+   * Fixed twice over: the strip redraws the sheet's list when it changes it (text-edit.js cueListChanged), and the cross
+   * removes the caption on its own row, found by what it is (captions.js — the next test holds that half on its own). */
+  test('690 after + in the caption strip, the Aa sheet lists the new caption and its cross removes the caption on its own row', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    let got = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = hunt7cTrack([[0, 1, 'Alpha'], [2, 3, 'Bravo'], [4, 5, 'Charlie']]);
+          await huntBScene(() => [L]);
+          FM.selectLayer(L.id); FM.scrubTime(0.5);
+          FM.textEdit.start(L.id); await hunt7cSleep(300);
+          const aa = await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button');
+          await hunt7cSleep(300);
+          const rowsOf = () => [].slice.call(document.querySelectorAll('.te-pop .cap-row'));
+          const rows0 = rowsOf().map(r => r.querySelector('.cap-text').textContent);
+          if (rows0.join('|') !== 'Alpha|Bravo|Charlie') throw new Error('CONTROL: the Aa sheet lists ' + rows0.join(', ') + ', not the three captions Alpha, Bravo, Charlie');
+          const plus = await hunt2aPress(document.querySelector('.te-cue-nav .te-cue-add'), '+ (new caption after this one)');
+          await hunt7cSleep(300);
+          const n1 = L.captions.length;
+          const rows1 = rowsOf().map(r => r.querySelector('.cap-text').textContent);
+          const row = rowsOf().find(r => r.querySelector('.cap-text').textContent === 'Charlie');
+          if (!row) throw new Error('setup: after + the Aa sheet has no row reading Charlie');
+          const cross = await hunt2aPress(row.querySelector('.cap-del'), 'cross on the Charlie row');
+          await hunt7cSleep(300);
+          got = { how: [aa, plus, cross], n1: n1, rows1: rows1, texts: L.captions.map(c => c.text || '(blank)'), rows: rowsOf().map(r => r.querySelector('.cap-text').textContent) };
+          // ‹ leaving a blank caption the editor made in a gap drops it again — and the sheet's rows follow that too.
+          FM.textEdit.stop(); await hunt7cSleep(200);
+          FM.scrubTime(3.5); FM.textEdit.start(L.id); await hunt7cSleep(300);
+          const n2 = L.captions.length;   // his three, plus the blank the editor made at 3.5 s
+          await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button (again)');
+          await hunt7cSleep(300);
+          const rows2 = rowsOf().length;
+          const back = await hunt2aPress(document.querySelectorAll('.te-cue-nav .te-cue-btn')[0], '‹ (previous caption)');
+          await hunt7cSleep(300);
+          got.gap = { n2: n2, rows2: rows2, n3: L.captions.length, rows3: rowsOf().length, how: back };
+        });
+      }, 380);
+      if (got.n1 !== 4) throw new Error('CONTROL: + in the caption strip left ' + got.n1 + ' captions, not four');
+      if (got.rows1.length !== 4 || got.rows1[0] !== 'Alpha' || got.rows1[2] !== 'Bravo' || got.rows1[3] !== 'Charlie' || !/^Empty/.test(got.rows1[1])) throw new Error('on his phone with the Aa sheet open he tapped + for a new caption after Alpha: there are four captions now, but the sheet lists ' + got.rows1.join(', ') + ' — not Alpha, the new empty one, Bravo, Charlie. Its rows no longer match his captions (pressed by ' + got.how.slice(0, 2).join(', ') + ')');
+      const g = got.gap;
+      if (g.n2 !== 4 || g.rows2 !== 4) throw new Error('CONTROL: opening the editor in the gap at 3.5 s gave ' + g.n2 + ' captions and ' + g.rows2 + ' rows in the Aa sheet, not four of each (his three and the blank it made)');
+      if (g.n3 !== 3) throw new Error('CONTROL: ‹ from the blank caption the editor made left ' + g.n3 + ' captions, not three');
+      if (g.rows3 !== 3) throw new Error('on his phone with the Aa sheet open, the editor made a blank caption in a gap and he tapped ‹ to go back a caption: the blank was dropped, three captions remain, and the sheet still lists ' + g.rows3 + ' rows — every row after it is one place off its caption (pressed by ' + g.how + ')');
+      if (got.texts.indexOf('Charlie') >= 0 || got.texts.indexOf('Bravo') < 0) throw new Error('on his phone, typing captions with the Aa sheet open, he tapped + for a new caption after Alpha and then the cross on the row reading Charlie. Charlie is ' + (got.texts.indexOf('Charlie') >= 0 ? 'still there' : 'gone') + ' and Bravo is ' + (got.texts.indexOf('Bravo') >= 0 ? 'still there' : 'gone') + ' (the captions now read ' + got.texts.join(', ') + '): the sheet never redrew after +, so every cross deletes by its old place in the list and he loses a caption he did not touch, with no warning (pressed by ' + got.how.join(', ') + ')');
+    } finally {
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, the other half of 2) — THE CROSS REMOVES THE CAPTION ON ITS OWN ROW, whatever else changed the list. The
+   * strip now redraws the sheet, but the list has other writers (a drag on the timeline, a trim, the assistant) and the
+   * inspector's copy of the list on PC. So the cross itself must not trust the place its row had when it was drawn. A caption
+   * is slipped into the middle of the list without redrawing it, and the cross on Charlie's row must take Charlie; and a row
+   * whose caption has gone altogether (an undo replaces every cue) must remove nothing. Clicks, not touches: which caption a
+   * handler removes does not depend on the finger — the finger is the test above. */
+  test('690 a caption row’s cross removes the caption on that row, even when the list changed under it', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    const host = document.createElement('div'); host.className = 'cap-list'; host.style.cssText = 'position:fixed;left:0;top:0;width:360px;z-index:5;background:#000';
+    try {
+      const L = hunt7cTrack([[0, 1, 'Alpha'], [2, 3, 'Bravo'], [4, 5, 'Charlie']]);
+      await huntBScene(() => [L]);
+      document.body.appendChild(host);
+      FM.captionsEditor.mount(host, L);
+      const rowOf = w => [].slice.call(host.querySelectorAll('.cap-row')).find(r => r.querySelector('.cap-text').textContent === w);
+      const texts = () => L.captions.map(c => c.text || '(blank)').join(', ');
+      FM.captions.addCue(L, 1.2, 'New');   // sorted in after Alpha; the rows are not redrawn
+      if (texts() !== 'Alpha, New, Bravo, Charlie') throw new Error('CONTROL: adding a caption at 1.2 s gave ' + texts() + ', not Alpha, New, Bravo, Charlie');
+      rowOf('Charlie').querySelector('.cap-del').click();
+      const after1 = texts();
+      // Every caption replaced by a copy, as an undo does; the rows still hold the old ones.
+      L.captions = L.captions.map(c => Object.assign({}, c));
+      rowOf('New').querySelector('.cap-del').click();
+      const after2 = texts();
+      if (after1 !== 'Alpha, New, Bravo') throw new Error('a caption was slipped into the list under the caption rows, and the cross on the row reading Charlie left ' + after1 + ': it removed whatever sat in Charlie’s old place, not Charlie');
+      if (after2 !== 'Alpha, New, Bravo') throw new Error('every caption was replaced by a copy (as an undo does) under the caption rows, and the cross on the row reading New left ' + after2 + ': a row whose caption has gone removed a different one');
+    } finally {
+      host.remove();
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, 3) — A CAPTION NEVER WRAPPED, SO AN ORDINARY SENTENCE RAN OFF BOTH SIDES. A caption track is a text layer, and a
+   * text layer only wraps at `wrapWidth`, which is 0 (no wrapping) until someone drags the side handles on the canvas
+   * (FM.textLines, v5.40). FM.addCaptionLayer — Add → Captions — makes the track with fontSize = height / 22 (87 px on
+   * 9:16) and no wrap width, and Detect speech converts a layer without giving it one. So one spoken sentence typed into a
+   * caption is one line far wider than the frame: centred, it loses both ends, and he sees only the middle words — in the
+   * preview and burned into the export. Every caption longer than about twenty characters does this.
+   * Fixed by FM.captions.giveWrap: a layer gets a column 86% of the frame wide the moment it becomes a caption track. */
+  test('690 an ordinary spoken sentence typed into a caption wraps inside a 9:16 frame', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    const SENT = 'Welcome to this beautiful family home in Perth';
+    let got = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await huntBScene(() => []);
+          FM.addCaptionLayer();   // Add → Captions: a caption track, the editor open on its first caption
+          await hunt7cSleep(300);
+          const L = FM.scene.layers.find(l => Array.isArray(l.captions) && l.captions.length);
+          if (!L) throw new Error('setup: Add → Captions made no caption track');
+          const typeAndTick = async (s) => {
+            const inp = document.getElementById('te-input');
+            if (!inp) throw new Error('setup: the caption editor is not open');
+            inp.value = s; inp.dispatchEvent(new Event('input', { bubbles: true }));
+            return hunt2aPress(document.querySelector('.te-bar .te-done'), 'tick (Done)');
+          };
+          const t = (L.start || 0) + L.captions[0].start + Math.min(1, (L.captions[0].end - L.captions[0].start) / 2);
+          // CONTROL first: two short words sit inside the frame, so the measurement can tell inside from off the edge.
+          const how0 = await typeAndTick('Hello there');
+          await hunt7cSleep(250);
+          const short = hunt7cInk(FM.scene, t);
+          FM.scrubTime(t); FM.textEdit.start(L.id); await hunt7cSleep(300);
+          const how1 = await typeAndTick(SENT);
+          await hunt7cSleep(250);
+          got = { how: [how0, how1], short: short, long: hunt7cInk(FM.scene, t), text: L.captions[0].text, size: FM.layerSize ? FM.layerSize(L) : null, fs: L.fontSize, ww: L.wrapWidth };
+        });
+      }, 380);
+      const W = got.long.w, edge = b => b && (b[0] <= 2 || b[2] >= W - 3);
+      if (!got.short.n || edge(got.short.box)) throw new Error('CONTROL: two short words (Hello there) did not land inside the frame (ink box ' + (got.short.box || 'none') + ')');
+      if (got.text !== SENT) throw new Error('CONTROL: the caption reads ' + hunt7cSay(got.text) + ' after typing, not the sentence');
+      if (!got.long.n) throw new Error('CONTROL: the sentence drew no ink at all');
+      if (edge(got.long.box) || (got.size && got.size.w > W)) throw new Error('he added Captions to his 1080 x 1920 project and typed one ordinary sentence (' + SENT + ', ' + SENT.length + ' characters). The caption is laid out ' + (got.size ? Math.round(got.size.w) : '?') + ' px wide on one line at ' + got.fs + ' px, on a ' + W + ' px frame, with no wrap width (' + got.ww + '): its ink runs from x ' + got.long.box[0] + ' to ' + got.long.box[2] + ', so both ends are cut off and he sees only the middle words, in the preview and burned into the export');
+    } finally {
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, the rest of 3) — EVERY WAY A LAYER BECOMES A CAPTION TRACK GIVES IT THE COLUMN, and nothing else is
+   * touched. The test above is Add → Captions with his finger. Use as caption track (makeTrack), Detect speech on a plain
+   * layer and the assistant's addCaptionTrack make caption tracks too, and each had the same 0. A column he has dragged is
+   * his; a layer already scaled gets the column in its own px so it wraps at the same width on screen; and a track that
+   * existed before (wrap 0 there may be his double-click turning it off) is left as it is. Detection is stubbed to hand back
+   * one stretch of speech, as the 916.7 test does, so only the conversion is under test. */
+  test('690 every way a layer becomes a caption track wraps it inside the frame, and a column he set is left alone', { item: '690', budgetMs: 60000 }, async function () {
+    const saved = FM.scene, savedT = FM.time, sv = { decode: FM.decodeAudio, detect: FM.detectSpeech };
+    const ids = [];
+    try {
+      const mk = f => { const l = FM.makeLayer('text', { text: 'Hello there', x: 540, y: 1500 }); l.start = 0; l.duration = 6; if (f) f(l); return l; };
+      const plain = mk(), dragged = mk(l => { l.wrapWidth = 500; }), scaled = mk(l => { l.transform.scale = 2; }), toDetect = mk();
+      const oldTrack = mk(l => { l.text = ''; l.captions = [{ start: 0, end: 1, text: 'Old' }]; l.wrapWidth = 0; });
+      const voice = FM.makeLayer('video', { name: 'hunt7c voice' }); Object.assign(voice, { start: 0, duration: 6, trimStart: 0, speed: 1, reversed: false });
+      FM.media.set(voice.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), duration: 6, width: 0, height: 0 }); ids.push(voice.id);
+      await huntBScene(() => [plain, dragged, scaled, toDetect, oldTrack, voice]);
+      FM.decodeAudio = async function () { return { sampleRate: 8000, length: 48000, duration: 6, numberOfChannels: 1 }; };
+      FM.detectSpeech = async function () { return { segments: [{ start: 1, end: 2 }], stats: {} }; };
+      FM.captions.makeTrack(plain); FM.captions.makeTrack(dragged); FM.captions.makeTrack(scaled);
+      const r1 = await FM.captions.detect(toDetect, voice, null, 'clip');
+      const r2 = await FM.captions.detect(oldTrack, voice, null, 'clip');
+      const refs = {};
+      FM.aiOps.applyOps([{ op: 'addCaptionTrack', ref: 'caps', segments: [{ start: 0, end: 2, text: 'Hi there' }] }], refs);
+      const ai = refs.caps ? FM.layerById(FM.scene, refs.caps) : null;
+      if (!r1.count || !r2.count || !FM.captions.isTrack(toDetect)) throw new Error('CONTROL: the stubbed detection laid down ' + r1.count + ' and ' + r2.count + ' cues, not one each');
+      if (!ai || !FM.captions.isTrack(ai)) throw new Error('CONTROL: the assistant’s addCaptionTrack made no caption track');
+      const W = Math.round(1080 * 0.86), got = 'Use as caption track ' + plain.wrapWidth + ', on a layer at 2x ' + scaled.wrapWidth + ', Detect speech on a plain layer ' + toDetect.wrapWidth + ', the assistant ' + ai.wrapWidth;
+      if (plain.wrapWidth !== W || toDetect.wrapWidth !== W || ai.wrapWidth !== W) throw new Error('a layer that became a caption track has no column inside the 1080 px frame (' + got + ' px; want ' + W + '): its first spoken sentence runs off both sides, in the preview and the export');
+      if (scaled.wrapWidth !== Math.round(1080 * 0.86 / 2)) throw new Error('a text layer at 2x became a caption track with a ' + scaled.wrapWidth + ' px column in its own px, which is ' + scaled.wrapWidth * 2 + ' px on the 1080 px frame');
+      if (dragged.wrapWidth !== 500) throw new Error('a layer whose wrap he had dragged to 500 px became a caption track with ' + dragged.wrapWidth + ': the column he set was thrown away');
+      if (oldTrack.wrapWidth !== 0) throw new Error('re-detecting speech on a caption track that already existed with no wrap set it to ' + oldTrack.wrapWidth + ' px — that wrap may be his own double-click turning it off');
+    } finally {
+      FM.decodeAudio = sv.decode; FM.detectSpeech = sv.detect;
+      ids.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+  /* 690 (seventh hunt, 4) — WITH AN ANIMATE PRESET ON, THE CAPTION HE WAS TYPING WAS INVISIBLE. v16.98 made every caption play its own
+   * entrance (FM.captions.animSpan / textClocks), which is right for the video — and the caption editor parks the playhead
+   * 0.05 s into the caption it opens (› and ‹ in gotoCue, the Aa sheet's caption button, a tap on a cue chip, Add →
+   * Captions): the first frame of that entrance. With Fade in (0.6 s, the default) or Pop that frame is empty, so on his
+   * phone he taps › to type the next caption and the canvas above the keyboard shows NOTHING while he types it; with
+   * Typewriter it shows the first letter. Before v16.98 only caption 1 did this; now every caption does.
+   * Fixed on the PREVIEW (app.js render → FM._typingCue → textClocks): the caption bound to the editor is drawn settled
+   * while the playhead stands still. The export at that same time, and the preview while playing, still show the fade. */
+  test('690 with Fade in on his captions, the caption he is typing shows on the canvas while he types it', { item: '690', budgetMs: 90000 }, async function () {
+    const saved = FM.scene, savedT = FM.time;
+    let got = null;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = hunt7cTrack([[0, 1.5, 'Alpha one'], [2, 3.5, 'Bravo two'], [4, 5.5, 'Charlie three']]);
+          await huntBScene(() => [L]);
+          const typingNext = async (preset) => {
+            FM.selectLayer(L.id); FM.scrubTime(0.8);
+            FM.textEdit.start(L.id); await hunt7cSleep(300);
+            if (preset) {
+              // Aa → Animate → the preset, the way the sheet's own <select> answers a pick; then Aa again to close it
+              await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button');
+              await hunt7cSleep(300);
+              const sel = [].slice.call(document.querySelectorAll('.te-pop select')).find(s => [].some.call(s.options, o => o.value === preset));
+              if (!sel) throw new Error('setup: the Aa sheet has no Animate picker offering ' + preset);
+              sel.value = preset; sel.dispatchEvent(new Event('change', { bubbles: true }));
+              await hunt7cSleep(250);
+              await hunt2aPress(document.querySelector('.te-bar .te-extras'), 'Aa button (close)');
+              await hunt7cSleep(250);
+            }
+            const next = document.querySelectorAll('.te-cue-nav .te-cue-btn')[1];
+            const how = await hunt2aPress(next, '› (next caption)');
+            await hunt7cSleep(250);
+            FM.requestRender(); await hunt7cFrames(); await hunt7cSleep(60);
+            const pv = document.getElementById('preview'), d = pv.getContext('2d').getImageData(0, 0, pv.width, pv.height).data;
+            let lit = 0; for (let k = 0; k < d.length; k += 4) if (d[k] > 200 && d[k + 1] > 200 && d[k + 2] > 200) lit++;
+            const inp = document.getElementById('te-input');
+            const r = { how: how, t: FM.time, lit: lit, field: inp ? inp.value : null, anim: (L.textAnim && L.textAnim.preset) || 'none', settled: hunt7cInk(FM.scene, 3.0).n, now: hunt7cInk(FM.scene, FM.time).n };
+            // The same frame while PLAYING: the hold is for typing, so a playing preview shows what the export shows.
+            FM.playing = true;
+            try {
+              FM.requestRender(); await hunt7cFrames(); await hunt7cSleep(60);
+              const d2 = pv.getContext('2d').getImageData(0, 0, pv.width, pv.height).data;
+              let lit2 = 0; for (let k = 0; k < d2.length; k += 4) if (d2[k] > 200 && d2[k + 1] > 200 && d2[k + 2] > 200) lit2++;
+              r.playing = lit2;
+            } finally { FM.playing = false; FM.requestRender(); }
+            FM.textEdit.stop(); await hunt7cSleep(200);
+            return r;
+          };
+          const plain = await typingNext(null);
+          const fade = await typingNext('fade');
+          got = { plain: plain, fade: fade };
+        });
+      }, 380);
+      const p = got.plain, f = got.fade;
+      if (p.field !== 'Bravo two' || f.field !== 'Bravo two') throw new Error('CONTROL: › did not open Bravo two for typing (the field read ' + hunt7cSay(p.field) + ' and ' + hunt7cSay(f.field) + ')');
+      if (!(p.lit > 200)) throw new Error('CONTROL: with no Animate preset the caption he is typing lights only ' + p.lit + ' px of the phone preview, so this test cannot see a caption at all');
+      if (f.anim !== 'fade') throw new Error('CONTROL: Aa → Animate → Fade in did not reach the caption track (preset ' + f.anim + ')');
+      if (!(f.settled > 0.9 * p.settled)) throw new Error('CONTROL: once its fade is over, Bravo two draws ' + f.settled + ' px of ink where it drew ' + p.settled + ' with no preset');
+      if (f.lit < 0.5 * p.lit) throw new Error('his captions have Animate → Fade in. On his phone he taps › to type the next caption, Bravo two: the field shows its words, but the canvas above the keyboard shows ' + f.lit + ' lit px of it where the same caption with no preset shows ' + p.lit + ' (' + f.now + ' of its ' + f.settled + ' px of ink at ' + f.t.toFixed(3) + ' s). The editor parks the playhead on the first frame of the caption, where its fade has not started, so he types every caption blind — with Pop it is empty too, and with Typewriter only the first letter shows');
+      if (!(f.now < 0.2 * f.settled)) throw new Error('holding the caption he is typing leaked into the EXPORT: FM.renderScene at ' + f.t.toFixed(3) + ' s — the first frame of Bravo two’s fade — draws ' + f.now + ' of its ' + f.settled + ' px of ink, so the exported video no longer fades that caption in');
+      if (!(f.playing < 0.2 * f.lit)) throw new Error('with the caption editor open and the preview PLAYING, Bravo two still lights ' + f.playing + ' px at the first frame of its fade (' + f.lit + ' held): the hold for typing kept his Fade in from playing in the preview, so he cannot see the animation he picked');
+    } finally {
+      hunt7cCleanup(saved, savedT);
+    }
+  });
+
+
+  /* ═══ HUNT-d (queue 690, seventh hunt, 26 Sep) — RESILIENCE: THE UPDATE CHIP, NO SIGNAL, A FULL PHONE, MEDIA LET GO ═══════
+   * His brief: "go re audit, find some bugs coz theres a shit load". This pass looked at what happens when the world is not
+   * kind to the app — no network after install, a phone with no room left, the service-worker update chip, and the media a
+   * project lets go of when he goes Home. Four findings, each written to FAIL on v17.00 because of the bug it names, each
+   * failure message saying what he would see. All four fixed, each re-proven failing with its fix reverted (index.html
+   * and app.js for the chip and the offline note, storage.js for the release and New project). The two version-chip tests
+   * stop the chip's own reload with stand-ins that record and never settle, so the suite frame can never navigate away. */
+  const nq7d = s => String(s == null ? '' : s).replace(/"/g, "'");   // failure messages must not carry a double quote
+
+  test('690 opened with no signal, the app says it is offline (not that it looks old), and the version chip with no signal keeps the offline copy of the app', { item: '690', budgetMs: 60000 }, async function () {
+    /* sw.js answers a navigation it cannot fetch from its offline copy AND stamps `served-stale-shell` — on EVERY offline
+       launch, not only after a blip, because a launch with no signal is exactly a fetch that throws twice. 1.5 s after load
+       FM.checkStaleShell reads the stamp and toasts: Your connection dropped on refresh, so FreeMotion loaded v17.00 from its
+       offline copy, that is why it looks old, tap the version chip. The copy it names is THIS build — nothing about it is old
+       — and the chip, tapped with no signal, unregisters the worker, deletes every cache and navigates to a never-seen
+       ?fresh= address. With no network that address cannot load, and with the worker and its cache gone neither can the
+       next launch: the installed app is a browser error page until he has signal again. So the app's own advice, given at
+       the one moment it is dangerous, takes the app away.
+       MEASURED END TO END FIRST, in headless Chrome against a real server (scratchpad probe, 26 Sep): installed and cached,
+       server stopped, app relaunched — it opened from the offline copy and toasted exactly that sentence; the chip was
+       tapped; the page became chrome-error://chromewebdata/ and the next launch showed This site can’t be reached. In that
+       run navigator.onLine was still TRUE (the machine had a network, the server did not answer) — which is his phone on
+       Wi-Fi or one bar that does not reach the internet — so both are measured here: onLine false, and onLine true with
+       every fetch failing. Here: the REAL sw.js on an offline launch of this build (runSW), the page's real reader, and a
+       real mouse click on the chip, each with the network down.
+       FIXED: the reader asks the network before it says anything (FM.latestBuild) — no signal says so and nothing more,
+       the build that is running says nothing, and only a server naming a DIFFERENT build gets the #306 wording and the
+       chip; the chip fetches the page it is about to load before it removes anything, and with no answer puts its
+       label back and says there is no signal. The controls at the end hold the other side: with the network up the
+       #306 warning still fires for a copy that really is old, and the chip still goes on to the update. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const lab = document.querySelector('.brand .ver') || document.querySelector('.ver');
+    if (!lab) throw new Error('setup: no version chip in the page');
+    const ver = String(lab.textContent || '').trim(), label0 = lab.textContent;
+    const bad = [];
+    /* 1. THE WORKER, on an ordinary offline launch of the build that is running now. */
+    const shell = await fetch('index.html', { cache: 'no-store' }).then(r => r.text());
+    const dead = { tries: 0, fetch: function () { dead.tries++; return Promise.reject(new TypeError('Failed to fetch')); } };
+    const sw1 = await runSW(dead, [['index-fallback', new Response(shell, { status: 200 })]]);
+    const served = await sw1.res.clone().text();
+    if (served.indexOf(ver) < 0) throw new Error('CONTROL: offline, the worker did not serve this build (' + ver + ') from its offline copy, so this measured something else');
+    const note = sw1.store.get('served-stale-shell');
+    if (!note) throw new Error('CONTROL: an offline launch left no stale-build note, so the page would say nothing and there is nothing to measure');
+    const stamp = await note.clone().text();
+    if (stamp !== ver) throw new Error('CONTROL: the offline note names ' + nq7d(stamp) + ', not the running build ' + ver + ' that was served');
+    const realFetch = window.fetch, realToast = FM.toast;
+    const swc = navigator.serviceWorker;
+    if (swc && Object.prototype.hasOwnProperty.call(swc, 'getRegistrations')) throw new Error('setup: navigator.serviceWorker.getRegistrations is already stood in for by another test');
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(500); }   // the chip is in the editor's top bar; Home covers it
+    const c = await caches.open('freemotion-v1');
+    try {
+      for (const pass of [{ onLine: false, what: 'no signal at all' }, { onLine: true, what: 'on a network that does not reach the internet (navigator.onLine still true)' }]) {
+        const down = function () {
+          if (!pass.onLine) Object.defineProperty(navigator, 'onLine', { configurable: true, get: function () { return false; } });
+          window.fetch = function () { return Promise.reject(new TypeError('Failed to fetch')); };
+        };
+        const up = function () { try { delete navigator.onLine; } catch (e) {} window.fetch = realFetch; };
+        /* 2. THE PAGE reads that note while the network is still down. */
+        const toasts = [];
+        await c.put('served-stale-shell', new Response(stamp));
+        let said = null;
+        FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+        down();
+        try { said = await FM.checkStaleShell(); await sleep(60); }
+        finally { up(); FM.toast = realToast; try { await c.delete('served-stale-shell'); } catch (e) {} }
+        const told = toasts.concat(said && toasts.indexOf(said) < 0 ? [said] : []).join(' / ');
+        if (/version (chip|label)/i.test(told)) bad.push(pass.what + ', the app told him: ' + nq7d(told) + ' — so he taps the version chip while offline');
+        if (/looks old/i.test(told)) bad.push(pass.what + ', the copy it calls old is ' + ver + ', the build that is running — nothing is old, the network is just down');
+        /* 3. THE CHIP, tapped by a real mouse while the network is down. Its reload is stood in for: recorded, never settles. */
+        const calls = [];
+        if (swc) swc.getRegistrations = function () { calls.push('unregister the offline worker'); return new Promise(function () {}); };
+        caches.keys = function () { calls.push('list the offline caches'); return new Promise(function () {}); };
+        caches.delete = function (k) { calls.push('delete the cache ' + k); return new Promise(function () {}); };
+        const inputs = [];
+        const rec = function (e) { inputs.push(e.isTrusted); };
+        lab.addEventListener('click', rec, true);
+        down();
+        try {
+          await onScreen924(async function () { await hcMouse(lab, 'a click on the version chip'); });
+          await sleep(400);
+        } finally {
+          up();
+          lab.removeEventListener('click', rec, true);
+          if (swc) { try { delete swc.getRegistrations; } catch (e) {} }
+          try { delete caches.keys; } catch (e) {}
+          try { delete caches.delete; } catch (e) {}
+          lab.textContent = label0;
+        }
+        if (!inputs.length || !inputs.every(Boolean)) throw new Error('CONTROL: no trusted click reached the version chip, so this measured nothing');
+        if (calls.length) bad.push(pass.what + ', a tap on the chip went straight on to ' + calls.join(', then ') + ' without finding out whether the new build could be fetched — the page then navigates to an address that cannot load, and with the worker and its cache gone the installed app shows a browser error page on every launch until the network is back');
+        await sleep(200);
+      }
+      if (bad.length) throw new Error('offline after install: ' + bad.join('; ') + '.');
+      /* THE OTHER SIDE, with the network up — a fix that went quiet for good would pass everything above. */
+      /* a. the server names a different build → the copy really is old: the #306 warning, pointing at the chip */
+      const serve = function (v) { window.fetch = function () { return Promise.resolve(new Response('<div class=brand><span class=ver>' + v + '</span></div>', { status: 200 })); }; };
+      for (const kase of [{ v: 'v99.99', old: true }, { v: ver, old: false }]) {
+        const told = [];
+        await c.put('served-stale-shell', new Response(stamp));
+        let said = null;
+        FM.toast = function (m) { told.push(String(m)); return realToast.apply(this, arguments); };
+        serve(kase.v);
+        try { said = await FM.checkStaleShell(); await sleep(60); }
+        finally { window.fetch = realFetch; FM.toast = realToast; try { await c.delete('served-stale-shell'); } catch (e) {} }
+        const all = told.concat(said && told.indexOf(said) < 0 ? [said] : []).join(' / ');
+        if (kase.old && !/version chip/i.test(all)) throw new Error('with the network back and the server on ' + kase.v + ', a launch served the offline copy ' + ver + ' and said ' + (nq7d(all) || 'nothing') + ' — the #306 warning no longer fires for a copy that really is old');
+        if (!kase.old && all) throw new Error('with the network back and the server on this same build ' + ver + ', the app still said ' + nq7d(all) + ' — nothing is old');
+      }
+      /* b. the chip, with the network up, still goes on to the update (its reload stood in for, as above) */
+      {
+        const calls = [];
+        if (swc) swc.getRegistrations = function () { calls.push('unregister'); return new Promise(function () {}); };
+        caches.keys = function () { calls.push('keys'); return new Promise(function () {}); };
+        try {
+          await onScreen924(async function () { await hcMouse(lab, 'a click on the version chip, network up'); });
+          await hcUntil('the chip to go on to the update with the network up', () => calls.length, 8000);
+        } finally {
+          if (swc) { try { delete swc.getRegistrations; } catch (e) {} }
+          try { delete caches.keys; } catch (e) {}
+          lab.textContent = label0;
+        }
+      }
+    } finally {
+      window.fetch = realFetch; FM.toast = realToast;
+      try { delete navigator.onLine; } catch (e) {}
+      lab.textContent = label0;
+      if (wasHome) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  test('690 with the phone storage full, a tap on the version label asks first — Stay keeps his unsaved work, Update anyway goes on', { item: '690', budgetMs: 60000 }, async function () {
+    /* When the store refuses the project, the app says Storage full — autosave paused ONCE and keeps his work on screen —
+       and every other way out of the project (opening another card, New project, Restore) now stops and asks Stay or
+       Leave anyway (queue 690, hunt f). The version chip is the door that does not: its handler calls flushSync, ignores
+       the answer, unregisters the worker and reloads. A full phone is also exactly when the app starts behaving oddly and
+       he reaches for the chip that says Tap to force-update — and everything he did since the last save that fitted is
+       gone on the reload, with nothing said at the moment it happened.
+       FIXED: the chip asks FM.projects.confirmLeave, the same question as every other door, worded for an update (Update
+       anyway / Stay). Stay puts the label back and touches nothing; Update anyway goes on — checked here too, so the
+       door is asked, not locked. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realSet = Storage.prototype.setItem, realAsk = FM.ask;
+    const lab = document.querySelector('.brand .ver') || document.querySelector('.ver');
+    if (!lab) throw new Error('setup: no version chip in the page');
+    const label0 = lab.textContent;
+    const swc = navigator.serviceWorker;
+    if (swc && Object.prototype.hasOwnProperty.call(swc, 'getRegistrations')) throw new Error('setup: navigator.serviceWorker.getRegistrations is already stood in for by another test');
+    const calls = [];
+    let asked = 0;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(120);
+      const pid = await FM.projects.create({ name: 'HUNT-d full chip', width: 320, height: 240 });
+      made.push(pid);
+      const T = hcShape('HUNT-d title card', '#e0245e');
+      await FM.storage.save();
+      if (!FM.storage.flushSync()) throw new Error('setup: the project could not be saved before the store filled');
+      const key = 'fm.proj.' + pid;
+      /* the phone fills: the project's document is refused from here on, as a full store refuses it */
+      Storage.prototype.setItem = function (k, v) { if (k === key) throw new DOMException('refused by the HUNT-d test', 'QuotaExceededError'); return realSet.call(this, k, v); };
+      T.transform.x += 60; T.name = 'HUNT-d title card, moved after the store filled';
+      FM.refreshAll(); FM.history.commit();
+      await sleep(900);   // the autosave runs, and is refused
+      if (FM.storage.flushSync()) throw new Error('CONTROL: the full store did not refuse the project, so there is nothing unsaved to lose');
+      if (!FM.storage.unsavedOnScreen()) throw new Error('CONTROL: the app does not think anything is unsaved, so this measured nothing');
+      /* the chip's reload is stopped here (recorded, never settles); any question it asks is answered Stay */
+      if (swc) swc.getRegistrations = function () { calls.push('unregister the worker'); return new Promise(function () {}); };
+      let q = null, answer = false;
+      FM.ask = function (o) { asked++; q = o || {}; return Promise.resolve(answer); };
+      const inputs = [];
+      const rec = function (e) { inputs.push(e.isTrusted); };
+      lab.addEventListener('click', rec, true);
+      try {
+        await onScreen924(async function () { await hcMouse(lab, 'a click on the version label'); });
+        await hcUntil('the tap to ask or to go on', () => asked || calls.length, 8000);
+        await sleep(300);
+      } finally { lab.removeEventListener('click', rec, true); }
+      if (!inputs.length || !inputs.every(Boolean)) throw new Error('CONTROL: no trusted click reached the version label, so this measured nothing');
+      if (calls.length && !asked) throw new Error('with the phone storage full and his last change only on screen (the move of HUNT-d title card), a tap on the version label went straight on to reload the app — no Stay or Leave anyway, nothing said. The reload throws away everything he did since the last save that fitted');
+      if (calls.length) throw new Error('with the phone storage full the version label asked first, he chose Stay, and it reloaded anyway — his unsaved work is gone');
+      if (!/updat|reload/i.test(String(q.message || '') + ' ' + String(q.ok || ''))) throw new Error('the question on the version label talks about something else: ' + nq7d(q.message) + ' [' + nq7d(q.ok) + '] — it is an update he is about to throw his work away for');
+      if (lab.textContent !== label0) throw new Error('after Stay the version label still reads ' + nq7d(lab.textContent) + ', not ' + nq7d(label0));
+      /* …and Update anyway goes on: the door is asked, not locked */
+      answer = true;
+      await onScreen924(async function () { await hcMouse(lab, 'a click on the version label, then Update anyway'); });
+      await hcUntil('Update anyway to go on to the update', () => calls.length, 8000);
+      if (asked < 2) throw new Error('the second tap went on to the update without asking again');
+    } finally {
+      Storage.prototype.setItem = realSet; FM.ask = realAsk;
+      if (swc) { try { delete swc.getRegistrations; } catch (e) {} }
+      lab.textContent = label0;
+      try { FM.storage.flushSync(); await FM.storage.save(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 on a full phone a replaced photo that could not be stored stays the new photo, at its size, after a trip to Home', { item: '690', budgetMs: 90000 }, async function () {
+    /* Going Home lets a project's media go (queue 385) and coming back reads it again from IndexedDB. The release promises
+       NOTHING IS FREED THAT IDB CANNOT GIVE BACK — and checks that with `keys.has(id)` alone. After a Replace media on a
+       full phone the record under the layer's id is still the OLD file (the new one was refused: Not enough storage to save
+       that media), the key is there, so the NEW file is let go. Back in the project the old photo returns in its place, with
+       the scale Replace media set for the new file, and nothing says so — the replace he did minutes ago is silently undone
+       while the app was open the whole time. Driven with a real finger at 360: ⋯ → Replace media, ← to Home, the card back.
+       FIXED: releaseSceneMedia frees a file only when the revision on disk is the one in memory (known from this session,
+       or read off the record) — a file that never landed stays resident and plays from memory, as it did before Home. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], lib0 = h3aLibSnapshot();
+    const realPut = IDBObjectStore.prototype.put, realToast = FM.toast;
+    const toasts = [];
+    const photo = async function (name, col, W, H) {
+      const cv = new OffscreenCanvas(W, H), g = cv.getContext('2d');
+      g.fillStyle = col; g.fillRect(0, 0, W, H);
+      const b = await cv.convertToBlob({ type: 'image/png' });
+      return new File([b], name, { type: 'image/png', lastModified: Date.now() });
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: 'HUNT-d full replace', width: 1080, height: 1920 });
+      made.push(pid);
+      await sleep(250);
+      const red = await photo('IMG_3001.PNG', '#d02020', 1080, 1920), blue = await photo('IMG_3002.PNG', '#2030d0', 2160, 3840);
+      const L = await h3aImport(red);
+      await FM.storage.settled(); await sleep(150);
+      const st0 = await FM.storage.readMedia(L.id);
+      if (!st0 || !st0.file || st0.file.name !== red.name) throw new Error('setup: the first photo never reached storage, so there is no old copy to come back');
+      /* the phone fills: this layer's record is refused from here on */
+      IDBObjectStore.prototype.put = function (val, key) { if (key === L.id) throw new DOMException('refused by the HUNT-d test', 'QuotaExceededError'); return realPut.apply(this, arguments); };
+      FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+      let before = null, after = null;
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const seen = await h3aPicker(blue, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+          if (!seen.n) throw new Error('setup: tapping Replace media… opened no file picker');
+          await hcUntil('the blue photo to replace the red one', () => { const r = FM.media.get(L.id); return r && r.file && r.file.name === blue.name; }, 8000);
+          await FM.storage.settled(); await sleep(300);
+          const disk = await FM.storage.readMedia(L.id);
+          if (!disk || !disk.file || disk.file.name !== red.name) throw new Error('CONTROL: the full store did not refuse the new photo (storage holds ' + nq7d(disk && disk.file && disk.file.name) + '), so nothing was left unsaved');
+          if (!toasts.some(t => /storage/i.test(t))) throw new Error('CONTROL: nothing said the new photo could not be stored');
+          const L1 = FM.layerById(FM.scene, L.id);
+          before = { col: h3aName(h3aPixel(L1.start + 0.02).centre), w: FM.layerSize(L1).w * L1.transform.scale };
+          if (before.col !== 'blue') throw new Error('CONTROL: after Replace media the canvas shows ' + before.col + ', not the blue photo he picked');
+          /* ← to Home, by a real finger, and let Home do what it does with a project's media */
+          const back = document.getElementById('m-back');
+          for (let k = 0; k < 3 && !FM.home.isOpen(); k++) { await h3aTap(back, 'a tap on ← (Home)'); await sleep(600); }   // the first ← only lets go of the selected layer, as on his phone
+          await hcUntil('Home to open', () => FM.home.isOpen(), 4000);
+          const t0 = Date.now();
+          while (Date.now() - t0 < 4000 && FM.media.get(L.id)) await sleep(100);
+          await sleep(300);
+          /* …and back into the project by a real tap on its card */
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep(200);
+          const card = hcCard(pid);
+          if (!card) throw new Error('setup: HUNT-d full replace has no card on Home');
+          await h3aTap(card, 'a tap on the project card');
+          await hcUntil('the project to open again', () => !FM.home.isOpen() && FM.projects.currentId() === pid, 6000);
+          const m = await hcUntil('the photo to be back in memory', () => FM.media.get(L.id), 8000);
+          await hcUntil('the photo to decode', () => m.el && m.el.complete && m.el.naturalWidth > 0, 4000);
+          await sleep(400);
+          const L2 = FM.layerById(FM.scene, L.id);
+          after = { col: h3aName(h3aPixel(L2.start + 0.02).centre), w: FM.layerSize(L2).w * L2.transform.scale, name: FM.media.get(L.id).file && FM.media.get(L.id).file.name };
+        });
+      }, 360);
+      if (after.col !== 'blue' || after.name !== blue.name) {
+        throw new Error('on a full phone he replaced his red photo with a blue one — the app said the new one could not be stored and kept showing it — then went Home and tapped the project again: the canvas now shows ' +
+          after.col + ' (' + nq7d(after.name) + '), the OLD photo he replaced, drawn ' + Math.round(after.w) + ' px wide where it was ' + Math.round(before.w) +
+          ' — Home let go of the only copy of the new photo, and the replace he did is silently undone');
+      }
+    } finally {
+      IDBObjectStore.prototype.put = realPut; FM.toast = realToast;
+      h3aLibRestore(lib0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 with the phone storage full, New project says there is no room and leaves him on Home, not in the project he was already in', { item: '690', budgetMs: 90000 }, async function () {
+    /* FM.projects.create writes the new document and the index entry and ignores both answers, then open() finds neither,
+       toasts That project is no longer on this device and returns false — which create() also ignores, returning the new id
+       as if it had worked. Home then pushes into the editor, and the editor is still the project he was in before he tapped
+       +. So on a full phone he names a new project, taps Create, reads a message that is not true (the project was never
+       made — there was no room), and starts building his new idea on top of an old project. The first half of the same
+       story, Storage full — autosave paused, is shown and then written over by the second a moment later. Driven with a
+       real finger at 360: + on Home, then Create.
+       FIXED: create() reads both writes and open()'s answer. No room → the half that landed is taken back, it says so
+       (Storage full — no room for a new project, so none was made…) and answers false, so Home stays where it is. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const realSet = Storage.prototype.setItem, realToast = FM.toast;
+    const toasts = [];
+    let remembered = null; try { remembered = localStorage.getItem('fm.newproj'); } catch (e) {}
+    let newName = '', oldName = 'HUNT-d holiday edit', before = null, got = null;
+    try {
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: oldName, width: 1080, height: 1920 });
+      made.push(pid);
+      hcShape('HUNT-d holiday title', '#f4a261');
+      await FM.storage.save();
+      if (!FM.storage.flushSync()) throw new Error('setup: the project could not be saved before the store filled');
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          FM.home.open(); await sleep(900);
+          const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+          if (tab) { tab.click(); await sleep(300); }
+          before = new Set(FM.projects.list().map(p => p.id));
+          /* the phone fills: anything that would make the store bigger is refused, as a full store refuses it */
+          Storage.prototype.setItem = function (k, v) {
+            const had = this.getItem(k);
+            if (had === null || String(v).length > had.length) throw new DOMException('refused by the HUNT-d test', 'QuotaExceededError');
+            return realSet.call(this, k, v);
+          };
+          FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+          await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
+          await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden'); }, 4000);
+          await sleep(350);
+          newName = (document.getElementById('hm-new-name') || {}).value || '';
+          await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
+          await sleep(1500);
+          got = { home: FM.home.isOpen(), open: FM.projects.currentId(), name: FM.scene.project && FM.scene.project.name, cards: FM.projects.list().length };
+        });
+      }, 360);
+      Storage.prototype.setItem = realSet; FM.toast = realToast;
+      FM.projects.list().forEach(p => { if (!before.has(p.id)) made.push(p.id); });
+      if (!newName) throw new Error('setup: the New project dialog had no name in it');
+      const lie = toasts.filter(t => /no longer on this device/i.test(t));
+      const bad = [];
+      if (lie.length) bad.push('the last thing it said was That project is no longer on this device — the project was never made, there was no room for it');
+      if (!got.home && got.name !== newName) bad.push('Home closed into the editor showing ' + nq7d(got.name) + ', the project he was already in, not the ' + nq7d(newName) + ' he just made — whatever he builds next goes into the old project');
+      if (!lie.length && !toasts.some(t => /no room/i.test(t) && /new project/i.test(t))) bad.push('nothing told him there was no room for a new project, so the tap on Create just seemed to do nothing');
+      if (got.cards !== before.size) bad.push('a card was left behind for a project that was never made (' + before.size + ' cards before, ' + got.cards + ' after)');
+      if (bad.length) throw new Error('with the phone storage full he tapped + on Home and then Create (' + nq7d(newName) + '): ' + bad.join('; ') + '. What it said, in order: ' + nq7d(toasts.join(' / ')));
+    } finally {
+      Storage.prototype.setItem = realSet; FM.toast = realToast;
+      try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
+      try { const d = document.getElementById('hm-dialog'); if (d) d.classList.add('hidden'); } catch (e) {}
+      try { await FM.storage.save(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
