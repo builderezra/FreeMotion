@@ -21,6 +21,8 @@ from _classify import classify
 LABEL = {
     'ACTIONABLE':               '🟢 READY — nothing is stopping this',
     'blocked on Ezra':          '🟠 NEEDS YOU — waiting on your answer',
+    'built out — waiting on him': '⏸ BUILT OUT — waiting on your answer',   # #953: it was missing, and status.sh died with a KeyError
+    'waiting on the logging chat': '⏳ PLAN PENDING — the logging chat is drawing the plan',
     'held by Ezra':             '⏸️ HELD — you asked to leave this',
     'needs its own session':    '🔵 BIG — wants a session of its own',
     'standing note (no build)': '📌 NOTE — nothing to build',

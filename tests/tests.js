@@ -101175,4 +101175,60 @@
     });
   });
 
+
+  /* ---------------- queue 965: ONE drawn ✕ for the app ----------------
+     Ezra (26 Sep), of the Settings ✕: "Redesign the X for this menu and make it actually look good or just use the same
+     design that you're gonna use for the other ex … the one for when you're searching stuff". His pick: B (the search ✕'s
+     drawn disc at 28px in the same 34px button), and yes to the sweep — every typed ✕ becomes the same drawn one. */
+  test('965 the Settings ✕ is the search ✕ drawn at 28px and dead centre, light and dark — and no button anywhere is a typed ✕ any more', { item: '965', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const look0 = document.documentElement.getAttribute('data-home');
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (!wasHome) { FM.home.open(); await sleep(600); }
+      for (const look of ['light', 'dark']) {
+        document.documentElement.setAttribute('data-home', look);
+        FM.settings.open(); await sleep(450);
+        const b = document.querySelector('.set-close');
+        if (!b) throw new Error('no Settings ✕');
+        if (/✕|×/.test(b.textContent)) throw new Error('the Settings ✕ is still a typed glyph — a font decides where it sits (queue 965)');
+        const disc = b.querySelector('.fm-x-disc'), x = b.querySelector('.fm-x-cross'), svg = b.querySelector('svg');
+        if (!disc || !x || !svg) throw new Error('the Settings ✕ is not the drawn disc and cross');
+        const br = b.getBoundingClientRect(), sr = svg.getBoundingClientRect();
+        if (Math.round(br.width) !== 34 || Math.round(br.height) !== 34) throw new Error('the Settings ✕ button is ' + br.width + '×' + br.height + ' — its tap area must stay 34×34');
+        if (Math.round(sr.width) !== 28) throw new Error('the drawn ✕ is ' + sr.width + 'px — his pick was the 28px one (B)');
+        const cx = br.left + br.width / 2, cy = br.top + br.height / 2, xr = x.getBoundingClientRect();
+        const dx = xr.left + xr.width / 2 - cx, dy = xr.top + xr.height / 2 - cy;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) throw new Error('on the ' + look + ' Home the cross sits ' + dx.toFixed(2) + 'px across, ' + dy.toFixed(2) + 'px down from the button centre');
+        const fill = getComputedStyle(disc).fill, ink = getComputedStyle(x).stroke;
+        if (fill === ink) throw new Error('the cross is the colour of its disc (' + ink + ')');
+        if (look === 'light' && fill !== 'rgb(135, 146, 164)') throw new Error('on the light Home the disc is ' + fill + ', not the search ✕\'s slate (#8792a4)');
+        const bg = getComputedStyle(b);
+        if (bg.backgroundImage !== 'none' || !/rgba\(0, 0, 0, 0\)|transparent/.test(bg.backgroundColor)) throw new Error('the Settings ✕ still wears a ring behind its disc (' + bg.backgroundColor + ' / ' + bg.backgroundImage.slice(0, 40) + ')');
+        FM.settings.close(); await sleep(250);
+      }
+    } finally {
+      if (FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close();
+      if (look0 === null) document.documentElement.removeAttribute('data-home'); else document.documentElement.setAttribute('data-home', look0);
+      if (!wasHome && FM.home.isOpen()) FM.home.close();
+    }
+    /* THE SWEEP, as a scan every future file is held to: a button or span built with a typed ✕ / × must be drawn within
+       the next three lines. Two are not close buttons and are allowed: the "no fill" swatch, whose ✕ MEANS "none", and the
+       connection test's pass/fail marks. */
+    const allowed = /ctx-swatch-none|x\.st === 'no'|el\('span', 'no', '✕'\)/;
+    const typed = /(el|btn)\([^)]*'(✕|×|\\u2715|\\u00d7)'\s*[,)]|textContent = '(✕|×)'/;   // [,)]: btn('cb-x', '×', fn) has a handler after it
+    const srcs = Array.prototype.map.call(document.querySelectorAll('script[src]'), function (sc) { return sc.getAttribute('src'); })
+      .filter(function (u) { return /^js\/[^?]+\.js/.test(u); });
+    if (srcs.length < 40) throw new Error('setup: the scan found only ' + srcs.length + ' app scripts — it cannot see the app');
+    const misses = [];
+    for (const u of srcs) {
+      const lines = (await (await fetch(u)).text()).split('\n');
+      lines.forEach(function (L, i) {
+        if (!typed.test(L) || allowed.test(L) || /^\s*(\/\/|\*|\/\*)/.test(L)) return;
+        if (!lines.slice(i, i + 4).some(function (M) { return /FM\.drawnX\(/.test(M); })) misses.push(u.split('?')[0] + ':' + (i + 1));
+      });
+    }
+    if (misses.length) throw new Error('these buttons are still a typed ✕ (queue 965: one drawn ✕ for the app): ' + misses.join(', '));
+  });
+
 })();

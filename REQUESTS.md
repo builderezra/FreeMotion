@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Sep at v17.04
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Sep at v17.05
 >
-> **State:** v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -284,7 +284,7 @@ better still, keep working inside the turn rather than parking work for a later 
       and *"less janky when leaving"* was 81ms of it on the way out. The animations were smooth all
       along, which is why "it feels janky" kept not matching anything a profiler pointed at.
 - [ ] **129 — A 2-second screen recording adds a clip with NO VIDEO. PARTLY ANSWERED v7.62 — the app now tells you why; whether it FIXES your file is still unknown.** His words: *"Added a screen
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       recording from my camera roll that's very short and it still has the issue of being on the timeline
       but not actually showing any video."* "Still" — this is a repeat. A screen recording is a specific
       case worth chasing: HEVC in an mp4/mov container, often with an odd colour range, and iOS screen
@@ -1937,7 +1937,7 @@ better still, keep working inside the turn rather than parking work for a later 
       Mutation-checked by restoring the flat 96 — caught at the first shape.
       **The taste call in (c) is still yours and still unanswered** — see the question block.
 - [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** No song is named, so the "which file" half is still unanswered — but he says the files are fine until effects are added, which points the same way as #845.
       ❓ASK (still open, and narrowed 10 Sep: he says the files are fine until EFFECTS are added — #844 — so the question is now whether a song still fails with NO effects on it): has a song failed to play since v13.88? If so, WHICH file — the format and rough length is enough. A fourth cause was found and fixed today; this is only open because I cannot prove it was yours. ✔ reply checked 24 Sep — the 10 Sep answer is the paste this narrowed; whether a song fails with NO effects on it is still unanswered.
 
@@ -2091,7 +2091,6 @@ better still, keep working inside the turn rather than parking work for a later 
       ⏸ **24 Sep — BUILT OUT UNTIL HE says whether a song has failed to play with NO effects on it since v13.88** — the 10 Sep paste pointed at effects (#844/#845); a song that fails bare would be a second cause. ✔ reply checked 24 Sep.
 
 - [x] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** The audio half now has numbers: one cut-out of 1205ms in 1.2s, 32 of 133 frames dropped, the clock 158ms out, and 94 sync trims in 1.2s. Chased in #845.
       ✅ **THE LAG HALF IS CLOSED 1 Sep — HE CONFIRMED IT.** Asked which phone complaints still feel
       bad, he did not tick the timeline lag or playback stutter. **The AUDIO half of this entry is NOT
@@ -3532,7 +3531,7 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ Still open rather than closed, because his original report said a RESTART was needed to get it
       back, and nothing measured here needs one. That detail is the part still unexplained.
 - [ ] **Editing lags, and gets bad fast.** *Status (v6.33):* the two measured causes are fixed —
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       playback went 95.09 → 17.43 ms/frame on a 6-layer comp (5.5x, dropped frames 191 → 3) and
       forced layouts per tap are now FLAT with layer count instead of linear (211 → 5 at 80 layers).
       Left open until Ezra confirms it feels better on his own device and projects.
@@ -9257,7 +9256,6 @@ better still, keep working inside the turn rather than parking work for a later 
       no `background-position`, and it is paused with a project open.
 
 - [x] **342 — Opening an element just dumps it into the current project; you cannot edit it. The whole
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       **JUMPED by #392, and legitimately: he gave a DIRECT instruction on 1 Sep — "if it doesnt show up
       at export delete it" — which is the one thing this file says jumps the queue. #342 is authorised
       and next, but it is a feature (an element opening as its own document), not a deletion, and it
@@ -9618,7 +9616,7 @@ better still, keep working inside the turn rather than parking work for a later 
       **ANSWERED BY EZRA, 21 Aug:** *"later"*. Still HELD, by his choice. Do not start it alone —
       his standing words remain *"I know if you just go and do that urself ur gonna ruin every shape."*
 - [ ] **215 — ⚠️ EXPORTED VIDEO CAME OUT WITH NO AUDIO, though the clip had audio.** His words: *"I just
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** His phone's export wrote a real AAC track (peak 0.931, no drops, no suppressions), so this no longer reproduces on his device on this build. What is left is whether that FILE plays with sound for him.
       ═══ 🚨 **28 AUG (v13.92) — THE WARNINGS WERE NEVER INVISIBLE BECAUSE THEY DID NOT FIRE. THEY WERE
       PAINTED BEHIND THE EXPORT.** ═══
@@ -10028,7 +10026,7 @@ better still, keep working inside the turn rather than parking work for a later 
       ↪ **6 Sep (v15.88): the PC export checked here with an audible source carries a real AAC track (see #604's block); the two audio fixtures are silent for their first three seconds, so a check against them reads mix-silent and means nothing. The phone paste is still the missing half.**
 
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
-      **STATUS: 📌 NOTE — nothing to build**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
 
       **★★ HIS THIRD MEASUREMENT, 19 Aug (v10.16) — and this one is NOT the same bug as the other two.**
       Verbatim:
@@ -12804,7 +12802,6 @@ wait for them to report back."*
       Checked by rendering both icons at 380px side by side against the old one before committing.
 
 - [x] **484 — 🚨 Rename the effects whose names are obviously copied from Alight Motion, and add the ones AM has that we lack (under our own names).** (23 Aug.) ✅ DONE v15.73 — every clause; names are his to veto, the ribbon is one word from B, C, effect or skip.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       🔴🔴 **HIS ANSWER, 1 Sep, AND IT IS MUCH BIGGER THAN THE QUESTION I ASKED. Verbatim:**
       > what is a flowing ribbon even? im so confused and also i want every effect to be named different to what it is in alight motion and also have different ordering to avoid getting taken down by aligiht motion for copying and so far this isnt done
       **Three things, and the second is the one that matters.**
@@ -13076,7 +13073,7 @@ wait for them to report back."*
       📐 Measure at a desktop width in the Studio layout (what he uses), and re-check 380px is untouched.
 
 - [ ] **482 — 🔵 THE BIG ONE, IF I WANT IT: go through EVERY effect and improve it.** (23 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       ═══ 🔬 **31 AUG — 29 SLIDERS MEASURABLY STOP SHORT OF WHAT THEIR OWN EFFECT CAN DO.** ═══
       Same shape as queue 540 (Motion Blur (Object), 4 → 12) and queue 578 (Motion Blur (Footage),
       2 → 6, closed at v14.71): the ceiling was the SLIDER, not the algorithm. Each of these still
@@ -15761,7 +15758,7 @@ wait for them to report back."*
       who narrows a desktop window past 700px gets that wrapped row for real.
 
 - [ ] **406 — 🚨 HE IS ASKING A QUESTION AND WANTS AN ANSWER: what is the difference between saving a
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       ➡️ **CLAUSE 1 IS NOT ACTUALLY BLOCKED — his own conditional decides it.** He wrote *"if you realise we just have two buttons for the same thing just get rid of the one isn't just saving as effects"*, and that antecedent is provably true: `js/app.js` (layer ⋯) and `js/inspector.js` (Presets card) call the SAME `FM.savePresetPrompt(layer)`. ⚠️ **And it collides with #454, which this file already says is wrong to ask separately** — clause 1 falls out of whatever #454 settles. **Only clause 3 still rides along: the acknowledgement he asked to be chased for.**
       ❓ASK: two answers — (1) acknowledge you have read the preset answer, which you asked me to chase you for; (2) which preset saver goes: A the layer ⋯ menu (recommended) · B an effect row ⋯ · C the Effects card button.
       preset with just effects and saving a layer as a preset? And drop preset-saving from that menu.**
@@ -16078,7 +16075,6 @@ wait for them to report back."*
       the big centred + from #354, which he asked for and likes.
 
 - [x] **418 — Make the undo/redo buttons look more like [an image he sent], with thinner lines.**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ➡️ **NOT BLOCKED — it is BUILT.** Both clauses are ticked and the glyphs are live in index.html at stroke-width 1.8, matching the transport row. The only thing outstanding is the reference picture, which never arrived. **Act: close it, or re-ask for the picture — not both.**
       ✅ ~~ASK: re-send the undo/redo picture~~ — it arrived 21 Aug and is described below; the ask was stale (struck 2 Sep).
       ✅ **BOTH CLAUSES BUILT (v11.73). The entry REMAINS OPEN for one reason only, stated plainly:
@@ -16334,7 +16330,7 @@ wait for them to report back."*
       proved the assertion dead before that was fixed.
 
 - [ ] **425 — PC: the trash / copy / parent buttons belong on the RIGHT of the row, not the left, and their
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       background is too subtle.** (19 Aug, PC screenshot at v10.31.) His words, verbatim:
 
       > THE three buttons on pc with trash copy and parent need to be on the right side not left and also the background they have is too subtle
@@ -16556,7 +16552,6 @@ wait for them to report back."*
       empty band, since that is what his screenshot shows and what this entry had been holding. If he
       meant something else about those two tabs, it is a fresh report.**
 - [x] **429 — No lines or special colouring past the cut-off, and the little + must not move while you ✅ DONE v15.70 — clause 2 closed by measurement, not by a look.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       swipe the timeline.** (20 Aug, via the phone inbox.) His words, verbatim:
 
       > After this cut off point I don't want the lines or special colouring. And also the little plus button is moving around and stuff when I swipe on the time line, should be stiff
@@ -17212,7 +17207,6 @@ wait for them to report back."*
       tests were quietly proving a code path the product never used.
       Both directions mutation-checked. Ezra: worth a quick confirm on the phone.
 - [x] **454 — PRESETS ARE FOR EFFECTS ONLY. Strip every other meaning of the word.** (21 Aug, from his
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       🔄 **HE CHANGED HIS MIND, 1 Sep. Verbatim:**
       > Actually u are right to keep both options to save effect presets and full layer preseets i change my mind
       **So nothing is stripped and nothing is renamed.** Both savers stay: effect presets AND full-layer
@@ -18508,7 +18502,6 @@ re-opened #480, which I had marked done and had not fixed.
       and it should still play when you open Home.
 
 - [x] **505 — 🚨 ELEMENTS AND TEMPLATES MUST BE EDITABLE IN THEIR OWN SECTIONS, NOT TURNED INTO PROJECTS. He has asked for this repeatedly and is fed up.** (24 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ✅ **HE ANSWERED, 1 Sep: "The element opens as its own document."** So an element or template
       opens like a project — edit it, save it back — rather than being dumped into whatever you have open.
       That is the biggest of the three options and it is the one that makes elements maintainable instead
@@ -18671,7 +18664,7 @@ re-opened #480, which I had marked done and had not fixed.
       from my inference. That one didn't, so it read as his.
 
 - [ ] **508 — Opening a project is janky: the card should glide out left while the project comes in from the right.** (24 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       🔴 **STILL BAD — HE CONFIRMED IT ON HIS DEVICE, 1 Sep.** Asked which phone complaints still feel
       wrong, he ticked this one. It measures smooth here even with sixteen cards on screen, so **the next
       step is a reading from HIS device, not more work on this Mac** — that is what the last three
@@ -19767,7 +19760,6 @@ re-opened #480, which I had marked done and had not fixed.
       state and nothing else.
 
 - [x] **539 — 🔴 Squish must work with EVERY effect (shakes especially), needs a layer picker so shapes interact with each other, and it still fails in corners.** (24 Aug.) ✅ DONE v15.58 — clauses 2 and 3 as an honest first pass (bounding boxes); clause 1 decided under rule 16.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim, across two messages:
       > Shakes and effects still don't work with the squish effect, I want the squish effect to work no matter what, also in the squish effect give it an option to select layers that will effect it, so if you have another shape it will interact with it - this will be very complicated as shapes take many sizes, also have a tick box to affect every layer
       > It still doesn't even work in corners very well so it's got a long way to go
@@ -20107,7 +20099,6 @@ re-opened #480, which I had marked done and had not fixed.
       and turns to mush at 24 is the trap #432 has already hit twice.
 
 - [x] **544 — He wants to pause the loop and use Claude's design tools for some specific things.** (24 Aug.) ✅ DONE 24 Aug (v12.33 / v12.34), recorded 5 Sep.
-      **STATUS: ✅ closed 5 Sep — answered by him on 24 Aug, shipped the same night**
       His words, verbatim:
       > Can we pause after your done and try using claude design for some specifc stuff when you are ready?
       **Answered: yes.** The loop stops after the item in flight (#541, the timeline) ships. What is
@@ -20439,7 +20430,6 @@ re-opened #480, which I had marked done and had not fixed.
       path, keyframed, with the renderer drawing only that span of the stroke.
 
 - [x] **553 — 🔴 Leaving and re-opening a project leaves the app half-drawn: the home screen and the editor are BOTH on screen at once, side by side. Plus a black bar at the bottom.** (25 Aug, phone screenshot at v12.43.) ✅ DONE v15.59 (half-drawn return: v15.06; the black bar: v15.59).
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       🔴 **STILL HAPPENING — HE CONFIRMED IT ON HIS DEVICE, 1 Sep.** Asked which phone complaints still
       feel wrong, he ticked "app comes back half-drawn". So the home screen and the editor really are
       both being drawn at once when he returns to the app, and it is not a stale memory of an old build.
@@ -20952,7 +20942,6 @@ re-opened #480, which I had marked done and had not fixed.
       test now asserts that specifically.
 
 - [x] **564 — 🎨 The Outline & Shadows sub-panel works but looks bad. Make it actually look good.** (25 Aug, phone screenshot at v12.51.) ✅ DONE v15.74 — the delegated fix, built under rule 16; one word reverts it.
-      **STATUS: ✅ built 5 Sep (v15.74) — say LEFT-AS-IS to revert, "cards" if you meant the cards**
       🔄 **HIS ANSWER, 1 Sep, AND IT IS A DIFFERENT PROBLEM FROM THE ONE I ASKED ABOUT. Verbatim:**
       > Right now it's good but the issue is that you can only edit one section at a time, you figure out the best fix for this that isn't cluttering the screen and making it hard to find stuff and figure stuff out. I'll just tell you if what you did is bad after it is done
       **So the LOOK is fine and the three layout options I offered were all answering the wrong question.**
@@ -21539,7 +21528,7 @@ re-opened #480, which I had marked done and had not fixed.
       picked stack at 380px. If it does not, that is the bug and it is the whole complaint.**
       ⚠️ **Do NOT touch the effects, the filters, or their defaults — all measured working, three ways.**
 - [ ] **604 — 🔴 EXPORTED VIDEO STILL HAS NO AUDIO — on PHONE and PC — and a single sound effect cut
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       in and out during playback.** (27 Aug, v13.43, export screenshot.)
       His words, verbatim:
       > still laggy, I added a video and it actually played fine then I tried adding one sound effect and
@@ -22597,7 +22586,7 @@ re-opened #480, which I had marked done and had not fixed.
       the same day, the Elements feature is not landing for him.
 
 - [ ] **619 — 🔴 Pressing a template just forks it into a project. It should offer to SWAP THE MEDIA.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       He says he has asked many times — and he is right: this is #343 clause 1, which was marked DONE.**
       (27 Aug, at v13.51.)
       His words, verbatim:
@@ -22925,7 +22914,6 @@ re-opened #480, which I had marked done and had not fixed.
       this curve as a preset" alongside copy/paste**, but do NOT substitute it for what he asked for.
 
 - [x] **624 — Holding a layer on the left of the timeline to select it, and the edit menu.** ✅ DONE v15.67 — decided under rule 16: reading (a).
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       (27 Aug, phone screenshot at v13.51 — "1 selected" in the top bar, one layer's head highlighted on
       the left, and the 8-tile edit menu open at the bottom.)
       His words, verbatim:
@@ -23798,7 +23786,6 @@ re-opened #480, which I had marked done and had not fixed.
       RE-BOXED.** Both previous bugs were geometry changes dressed as colour changes.
 
 - [x] **642 — The intro has a white box at the start and white bars top and bottom; and experiment ✅ DONE v14.26 (clauses 1-2) + 5 Sep decision (clause 3: A kept).
-      **STATUS: ✅ closed 5 Sep — clause 3 decided under rule 16 (A kept); B/C/D are one word away**
       more with the home background design.** (27 Aug, screen recording at v13.63.)
       His words, verbatim, in full:
       > If you analyse this video you’ll notice that basically at the start there’s like a weird like white box that pops up. It’s a bit glitchy and also there’s like two white bars at the top and bottom when the screen fully zooms in like I feel like you could probably fix that with a little bit of effort just don’t make the video playback loading intro look shit just like try and fix it up a little bit and also you’ve made the background in the hub menu like white not white but like black now like you’ve made a good dark again and Justin said the top buttons are white which isn’t terrible I would just like you to experiment a bit more and see if there’s a nicer design and layout that you can create for the background
@@ -24191,7 +24178,6 @@ re-opened #480, which I had marked done and had not fixed.
       has depth.**
 
 - [x] **592 — The add-layer row's edge overshoots the end of the timeline slightly.** (26 Aug, annotated phone close-up at v12.93.) ✅ DONE v15.67.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > The edge of the add layer slightly goes to far past the end of the timeline
       **His arrow points at the dashed row's RIGHT edge**, which finishes a few pixels beyond where the
@@ -24275,7 +24261,7 @@ re-opened #480, which I had marked done and had not fixed.
       the variables are published — the variables are right, the CSS box was the thing in the wrong place.)
 
 - [ ] **591 — Standing steer: stop waiting on his answers, there is plenty I can already do.** (26 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 📌 NOTE — nothing to build**
       ❓ASK: nothing. This is your standing steer, not a question — it should not be classified as waiting on you.
       His words, verbatim:
       > I’m not in a rush to answer every question coz you still have hours of work in the things that you can do
@@ -24462,7 +24448,6 @@ re-opened #480, which I had marked done and had not fixed.
       **check them together** rather than styling the playhead twice.
 
 - [x] **587 — Benchmark lines still draw through the layer sidebar.** ✅ **FIXED v15.03 — the same defect as #429 clause 1.** (26 Aug, annotated close-up at v12.81.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Benchmarks still show in this side bar
       **His arrows point at the head column** — the eye/thumbnail strip on the left — where the benchmark's
@@ -25402,7 +25387,6 @@ re-opened #480, which I had marked done and had not fixed.
       thing on the list rather than a thing being skipped.
 
 - [x] **570 — Dragging a layer still does not update the toggle switch LIVE.** (26 Aug, phone screenshot at v12.79.) ✅ CLOSED 5 Sep on his own answer ("570 stepped") — record only, no code changed.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       His words, verbatim:
       > Dragging layers still doesn’t update the switch live
       **Asked whether it should slide smoothly or keep stepping a layer at a time. He answered, verbatim:**
@@ -26027,7 +26011,6 @@ re-opened #480, which I had marked done and had not fixed.
       📸 **Picture of both button states sent 29 Aug.**
 
 - [x] **654 — A first-time user could not work out how to LEAVE the audio edit menu.** (27 Aug.) ✅ DONE v15.75 — option A under rule 16; **the Done row it added was removed on his instruction in v16.06 (#835)**.
-      **STATUS: ✅ built 5 Sep (v15.75) as option A; its Done row taken back out 7 Sep (v16.06) — the exit is the labelled top-bar arrow**
       ⤷ 7 Sep: *"Idk why this was even added i never asked for it and it's pointless"* — see #835. The
         way out of the clip panel is now the arrow at the top left, whose label reads "Close clip options".
       His words, verbatim:
@@ -26174,7 +26157,7 @@ re-opened #480, which I had marked done and had not fixed.
       argument years of releases ago; nobody had applied it to the light side.
 
 - [ ] **657 — Performance sample from the PC, 10 s: it reads HEALTHY, which is itself the finding.**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       (27 Aug, pasted from the app's own "what's slow" tool at v13.70.)
       The sample, verbatim:
       > FRAMES 50.7 fps average - median gap 16.7ms - p95 33.4ms - worst 83.4ms - 2 of 507 frames late
@@ -26457,7 +26440,7 @@ re-opened #480, which I had marked done and had not fixed.
              now say whether the probe is the thing that is wrong.
 
 - [ ] **663 — Audio still cuts in and out on mobile (the popping itself seems fixed).** (28 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** "Cuts in and out" is confirmed by his own device: one 1205ms cut-out and one self-restart inside 1.2s of playing. His trigger, verbatim: the files sound fine until he adds EFFECTS. Chased in #845.
       His words, verbatim:
       > Seems fixed for the scratchy popping but audio still doesn’t play consistently on mobile, it cuts in and out
@@ -26818,7 +26801,6 @@ re-opened #480, which I had marked done and had not fixed.
       would have passed every other assertion and looked like a fix.
 
 - [x] **674 — The QA pass's remaining UI findings, and its own corrections.** ✅ DONE v15.74 — decided and built under rule 16.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ✅ (25 Sep sweep: decided under rule 16 at v15.74; (b) repeats #469, which he answered "No, they're fine") ~~❓ASK: three questions in here — (a) text at 160pt overflows the comp and never wraps: is that the same thing as #98's A/B/C size question, or do you still want the options drawn? (b) do you want the transport buttons' TAP AREA grown to 44px (icons unchanged)? (c) should Export / Canvas / Help stay reachable while a layer is selected?~~
       · **Raw error text reaches you in alerts** (`js/app.js:4515`, `:3960`). The specific messages
         around them are genuinely good; the two catch-alls undo that — today a phone shows
@@ -26919,7 +26901,7 @@ re-opened #480, which I had marked done and had not fixed.
       you asked me to avoid**, so they are untouched and this is written down instead.
 
 - [ ] **676 — Opening the add menu opens it TWICE.** (30 Aug.)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       His words, verbatim:
       > also add to the list when you open the add menu it opens twice for some reason
       ⏳ **Logged the moment he said it.** Two shapes this could take and they need different fixes: the
@@ -26953,7 +26935,7 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.08 — the one cheap, safe change is shipped, as an experiment (measured under #706, the same report):** the sheet's base rule transitioned `transform` and `.open` animated it with the hinge keyframe — two motions on one property, which Chrome resolves to one (before and after: one open, one render) and iOS Safari is known to replay. The transition is now off while the keyframe owns the property, and back under reduced motion. Cannot be reproduced here. **If the sheet still opens twice on the phone after v15.08, this was not it,** and the line above is still the one that splits the two remaining candidates.
       🔧 **25 Sep, v16.94 (#934):** one concrete cause found with a REAL finger and fixed — a short downward drag on the Add sheet re-opened it. If he still sees it open twice some other way, that is a second cause; tell him what was fixed and ask.
 - [ ] **677 — 🔴 STILL NO AUDIO IN AN EXPORT — and this time the whole soundtrack was TWO SOUND
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** Same paste: TRACK WRITTEN, peak 0.931, none of the six loss paths fired. The two-sound-effects case he reported is not losing audio on this build.
       EFFECTS.** (30 Aug.)
       His words, verbatim:
@@ -27252,7 +27234,6 @@ re-opened #480, which I had marked done and had not fixed.
       of the source reading alone, the fix would have been inert and would have looked done.
 
 - [x] **688 — Light/dark preference is forgotten on reload, and the old loading animation should go.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ✅ **HE ANSWERED, 1 Sep: "It has colour in it."** So inverting the film for dark mode is out — it
       would mangle the logo's colours. **The plan is therefore: keep the film exactly as it is and fade
       the white ending down to the dark background over the last ~0.6s**, so dark mode gets the same
@@ -27351,7 +27332,7 @@ re-opened #480, which I had marked done and had not fixed.
              that matched nothing would pass forever.
 
 - [ ] **690 — Standing direction, 31 Aug, RESTATED 1 Sep (verbatim):**
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       > raise them and just keep going with whatever you can like bug fixing and stuff. Im sure you can find things to do
       **31 Aug:**
       **JUMPED: #690 is a standing brief, not a task with an end — "keep things going, dont stop,
@@ -27421,7 +27402,7 @@ re-opened #480, which I had marked done and had not fixed.
       take `ps` is skipped by its own declared argument count, or it would scale twice.
 
 - [ ] **692 — 🔴 THE LAG HAS A MEASURED CAUSE: every pixel effect walks the WHOLE FRAME no matter how
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** The playback paste gives the phone number this was missing: 32 of 133 frames dropped with the colour effects on the graphics chip. Feeds #845.
       ✅ **ROUND 3 — v14.82, three more kernels, and the list re-ranked first rather than trusted.**
       Re-measured every one of the 105 pixel kernels at its OWN defaults on a 180x150 subject in a
@@ -28158,7 +28139,7 @@ re-opened #480, which I had marked done and had not fixed.
       Restoring the controls was not enough; the saved preference had to go back too.
 
 - [ ] **706 — PHONE: the Add (layer) menu opens TWICE.** Logged 2 Sep, mid-task, verbatim:
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       > btw the add layer on mobile still has the glitch that opens up twice now
       **"Still"** — he is saying this was reported before and is not fixed. Nothing under "twice" /
       "double" / "opens" in this file describes the Add menu doing that, so either it was logged in other
@@ -28395,7 +28376,6 @@ re-opened #480, which I had marked done and had not fixed.
       suite. Tests only; no shipped source changes.**
 
 - [x] **712 — Returning from a category in the effects browser can freeze the app for 30 seconds while it ✅ DONE v15.71.
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       re-renders thumbnails on the main thread.** Found 2 Sep, MEASURED, not inferred: with the thumbnail cache cold,
       a CDP `Runtime.evaluate` against the app stalled for **6.9s** after Back from *blur* and **30.3s** after Back
       from *distort* (`scratchpad/hang333b.py`, sampling every 2s) — the click itself returned in 0ms, no effects were
@@ -28454,7 +28434,6 @@ re-opened #480, which I had marked done and had not fixed.
       Same head-row the crop toggles use; the test pins row, side, width and thumb height at both suite widths.
 
 - [x] **715 — PC sliders should GLIDE when you let go, like on mobile — and the existing glide is finicky.** 2 Sep,
-      **STATUS: 🟢 READY — nothing is stopping this**
       typed while #714 was being verified. His words, verbatim:
       > Make the sliders on pc glide when you let go like on mobile coz rn its tedious to aadjust. Also rn it does work but not always its kind finicky
       **Clauses:** 1. [ ] on PC, releasing a slider mid-drag keeps it moving with momentum the way the phone does, so a
@@ -28465,7 +28444,6 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v15.09 — DONE, both halves of his sentence.** *"Make the sliders on pc glide when you let go like on mobile"* — the mouse now has its own flick bar (0.25 px/ms; a desk-speed flick runs 0.3–0.5, the touch bar of 0.6 stays). *"rn it does work but not always its kind finicky"* — the release velocity was the LAST pointermove's, smoothed towards it, so the one or two slow samples a hand makes as it lets go of a button took a 1.2 px/ms drag to 0.15 and the glide died; it is now the pointer's travel over the last 100ms, and a pointer held still for 80ms before release is parked, not flung (the old code kept stale velocity across any pause). Also fixed on the way, the audit's item 9 (#726): a drag ended in FINE mode glided anyway because `cancelDrag` never stopped a glide already in flight — it does now. Test `glide (#715)` drives real pointer events at a real slider strip: a stall-at-release flick glides, a parked mouse does not fling, fine mode never glides, a slow touch does not glide; mutation-checked.
 
 - [x] **716 — PC home screen: the background colour that follows the cursor cuts off and looks like a box.** 2 Sep,
-      **STATUS: 🟢 READY — nothing is stopping this**
       with a wide PC screenshot of the home screen (Projects list, v15.02): the cursor-following tint sits in a
       rectangular region — a visibly different band down the left of the projects column, a hard-ish edge where
       the glow should fade. His words, verbatim:
@@ -28476,7 +28454,6 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v15.09 — DONE.** The glow that follows the mouse on the home screen was a pseudo-element of the CENTRED project column with a 40px inset, so on a wide screen it was clipped to a rectangle 40px wider than the list — the box in his screenshot, the light stopping at a straight edge left of the projects. It is a viewport-fixed layer on the whole scroller now: same gradient, same variables, same gating, no edge anywhere; the cards' ring is untouched and the column sits above the wash. Test asks the stylesheet at desktop width: the wash on the scroller's fixed pseudo, none on the column's, cards above; mutation-checked.
 
 - [x] **717 — The copy/paste button is greyed out with nothing selected, but it still works — so make it always white.**
-      **STATUS: 🟢 READY — nothing is stopping this**
       2 Sep, typed while #715/#716 were being read. His words, verbatim:
       > Rn the copy paste button is greyd out when u have nothing selected but it still works when u have nothing selected so make it always white
       **Clauses:** 1. [ ] the button is never drawn greyed/disabled while nothing is selected · 2. [ ] (check) it really
@@ -28485,7 +28462,6 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v15.09 — DONE, his way.** The ⧉ button opens the clipboard menu, and two of its rows — Select all, Paste on timeline — need no selection, so dimming the button said "dead" about a door that works. It stays lit now; the rows that do need a selection (Copy selected, Paste look…) are still greyed inside the menu, one by one, which is where that truth belongs. Test: nothing selected → no `is-off`, full opacity, and the opened menu still greys Copy selected; mutation-checked.
 
 - [x] **718 — js/storage.js:942 — undo wipes an animated Draw-from** (hunt HIGH #1) ✅ DONE v15.11.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28497,7 +28473,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.11 — the guard the two lines below it already had.** `trimStart` is now left alone when it is keyframed, exactly like speed and volume; a broken plain value is still repaired to 0. Test both ways through the sanitiser seam, then the real thing: an animated trimStart, one unrelated edit, one undo — the keyframes survive. Mutation (the guard removed) caught.
 
 - [x] **719 — js/inspector.js:4200 and :4211 — Reset / Crop to canvas delete crop keyframes** (hunt HIGH #2) ✅ DONE v15.12.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28509,7 +28484,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.12 — both buttons write the rect per field through FM.setProp, as the scrubbers always did.** A keyframed x / y / w / h keeps its keyframes and gets one at the playhead holding the button's value; a plain field is simply set. Test drives the real buttons in the real crop section on a keyframed crop (Crop to canvas, then Reset) with a plain crop as the control; two mutations (each button back to the whole-object write) caught.
 
 - [x] **720 — js/masks.js:79-80 — evalMaskPath returns the PREVIOUS keyframe at a hold/topology keyframe, then the editor overwrites it** (hunt HIGH #3) ✅ DONE v15.13.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28521,7 +28495,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.13 — the same off-by-one scene.js fixed for evalProp.** At `t === b.t` the loop returned the EARLIER verts for a hold or vertex-count-changing keyframe; now it returns that keyframe's own. Test: four keyframes, asserted just before and AT each of the hold and the topology change, with an interpolating pair as the control. Mutation (the hold line back) caught.
 
 - [x] **721 — js/fx-presets.js:84 — keyframed colours are dropped from presets; validation also deletes stored presets** (hunt HIGH #4) ✅ DONE v15.14.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28533,7 +28506,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.14 — colour keyframes are accepted on a colour param, and save / remove rewrite the RAW stored list.** saneKf demanded a finite number of every keyframe value, so a cycling glow came back static under a "Saved" toast; and save()/remove() rebuilt the list from the validated view, deleting from disk any entry that merely failed to parse. Test: a colour cycle survives save and is listed; a string keyframe on a numeric param is still refused (control); an unparseable entry on disk survives a save and a remove of other presets. Two mutations caught.
 
 - [x] **722 — js/fx-browser.js:188 vs :383-388 and :1623-1627 — preset keyframes land at a random time, not the parked playhead** (hunt HIGH #5) ✅ DONE v15.15.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28545,7 +28517,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.15 — the playhead he parked is captured when the browser opens, before the preview loop takes the clock, and a preset anchors there.** addEffect read FM.time at the tap, which under the sheet's 24fps loop was wherever the loop happened to be — a different point from what the row's thumbnail previewed. Test: park at 2s, open, move the clock to 4.5s, apply a shipped animated preset through the real path — its first keyframe sits at 2s plus the preset's own. Mutation (back to FM.time) caught.
 
 - [x] **723 — js/inspector.js:4680 — anchor still clamped 0..1 in setAnchor** (hunt HIGH #6) ✅ DONE v15.16.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28557,7 +28528,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.16 — setAnchor clamps to the boxes' −400…500%, not 0…1.** v9.93 widened only the boxes; every route (boxes, pad, Centre) still came through the 0…1 clamp, so 150% snapped back to 100%. Test through the real closure: 150% sticks, −450% clamps to −400%, an in-range value is untouched. Mutation (the 0…1 clamp back) caught.
 
 - [x] **724 — js/timeline.js:263, 266-269 — clipColorStops uses raw absolute keyframe time** (hunt HIGH #7) ✅ DONE v15.17.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28569,7 +28539,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.17 — the stops are placed from the clip's start.** Keyframe times are absolute project seconds; the comment above the line claimed they were local and `k.t / dur` believed it, so a clip starting at 2s drew its arc late and squashed and one starting a duration in drew as a solid colour. Test: clips starting at 2s and 8s give 0 / 50 / 100 %, with the start-0 clip as the control. Mutation (raw time again) caught.
 
 - [x] **725 — js/timeline.js:859, 865-874, 4324-4325, 4333, 3827; styles.css:2538 — marker rename still reachable by double-click** (hunt HIGH #8) ✅ DONE v15.18.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28581,7 +28550,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.18 — the last rename route is gone.** #590 removed renaming "outright, including any other route", and the PC double-click still opened an inline box, the tooltip still said so, rebuild() still special-cased it and the stylesheet still dressed it. All four removed. Test double-clicks a real marker and pins both sources. Mutation (a dblclick that makes the box) caught.
 
 - [x] **726 — js/inspector.js:943-944 vs :725-727 — fine-mode drag still glides at coarse rate** (hunt HIGH #9) ✅ DONE v15.19.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28594,7 +28562,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.19 — closed by #715's rewrite of attachGlide (v15.09), whose cancelDrag now stops an in-flight glide and settles** — exactly the fine-zone release this finding describes — and whose proof 715c ("fine mode glides again": cancelDrag back to only nulling the drag) is this case caught by name. Ticked at its turn in the queue; no further code.
 
 - [x] **727 — js/inspector.js:2098 — audio "Duplicate" is a Reset** (hunt HIGH #10) ✅ DONE v15.20.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28606,7 +28573,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.20 — audio Duplicate deep-copies the effect, as the visual stack's Duplicate has since v-whenever.** It built a fresh default instance — byte-for-byte the Reset item beside it — so a tuned, keyframed effect duplicated as stock. Test through the real ⋯ menu on a real audio row: the copy carries the keyframes and is its own object. Mutation (makeInstance again) caught.
 
 - [x] **728 — js/inspector.js:2746 — swipe-delete and drag-reorder are dead on a mask row that sits in the effect stack** (hunt HIGH #11) **⚠️ A REGRESSION OF MINE, v14.99 — the #560 test spliced the merged list by hand and never drove the gesture; fixture-must-distinguish, again.** ✅ DONE v15.22.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28619,7 +28585,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.22 — inside the stack the row's gestures stand for its MARKER, the entry the merged list actually holds.** Handing them the mask object gave indexOf −1, so a swipe animated away and came back and a drag shuffled the wrong rows — my own regression from v14.99, whose test spliced the list by hand and never drove the gesture. Test drives the real swipe on a mask marked between two effects: mask and marker gone, both effects untouched. Mutation (the mask object again) caught.
 
 - [x] **729 — js/inspector.js:1763-1764 — filter preview outlives the Filters tab, and reaches export** (hunt HIGH #12) ✅ DONE v15.23.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28631,7 +28596,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.23 — one clearFilterPreview() on every way out, and one export-guarded read in the compositor.** Only Add and the tile/Clear paths cleared the preview; openCategory dropped the picks but not the preview, and back(), a layer change, the ‹ button and the mode toggle cleared neither — so a ticked-but-not-added filter kept rendering on the layer and into an export. Test ticks a real tile, leaves by back() and by changing layer, and checks the compositor's read is null while exporting. Two mutations caught.
 
 - [x] **730 — js/compositor.js:8867, 8966 vs 10614/10727/10741 — Wiggle/Drift/Orbit render twice every frame** (hunt MEDIUM #13) ✅ DONE v15.24.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28642,7 +28606,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.24 — wiggle, drift and orbit get a real bbox from the fast alpha scan instead of the full-frame placeholder, so their `near` tests mean something.** With the placeholder every frame paid for a second full plate; a mid-frame wiggling shape now renders one plate, one on the edge still expands (the control). Perf only, pixels unchanged. Mutation (wiggle back in the list) caught.
 
 - [x] **731 — js/scene.js:1023, 1057 — resize scales every layer's z but not the camera's focus/fog planes** (hunt MEDIUM #14) ✅ DONE v15.25.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28653,7 +28616,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.25 — a resize maps the camera's focus distance, DOF width and fog near / far by the same factor as every layer's z.** They are measured against z in the compositor and were the only project-pixel values the resize skipped, so focus and fog landed on the wrong layers afterwards; blur strength stays. Test doubles the project on a camera with a keyframed fog far; mutation (distance unscaled) caught.
 
 - [x] **732 — js/storage.js:2105 — elements.insert has no camera filter** (hunt MEDIUM #15) ✅ DONE v15.26.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28664,7 +28626,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.26 — elements.insert drops the pack's camera when the scene already has one, the guard templates.insertInto has carried since queue 617.** The element path puts its layers first, so its camera was the one the composite found. Test saves an element with a camera, inserts it over a scene with its own, one camera remains and it is the scene's; the element's shape still lands. Mutation (the guard off) caught.
 
 - [x] **733 — AI digest drift — js/ai-manifest.js:74, 78, 43-65; js/ai-ops.js:28, 83-84, 145, 54/236/244** (hunt MEDIUM #16) ✅ DONE v15.27.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28678,7 +28639,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.27 — the digest reads the registry's gates and the ops match the panel.** (a/b) fx-registry.gates() exposes MEDIA_ONLY / TEXT_ONLY / ADJ_OK and the digest's gate sentence is generated from them — no more vignette-is-media-only, all ten text effects, the real adjustment whitelist; (c) fps clamps to 1..120 instead of snapping 24 to 25; (d) setProp start/duration grow the project as the digest promises; (e) the source param is advertised; (f) lineHeight 0.8..2.5, text curve ±180, durOut 0..3 like the panel. Real-digest, real-applyOps test; two mutations caught.
 
 - [x] **734 — js/compositor.js:1365 — Chroma Key Tolerance 0 reads as 0.3** (hunt MEDIUM #17) ✅ DONE v15.28.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28687,7 +28647,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.28 — tolerance 0 is 0.** `(tol || 0.3)` read a real zero as absent, so a keyframe animating the tolerance to 0 snapped back to the default on its last frame; the caller already defaults null. Test keys a two-pixel canvas at 0 (nothing keyed) and 0.5 (keyed, the control) through a seam on the real function. Mutation caught.
 
 - [x] **735 — js/compositor.js:1390/1406/1418 — lumaKey memo never hits at Softness 0** (hunt MEDIUM #18) ✅ DONE v15.29.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28696,7 +28655,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.29 — softness is normalised before the memo compare, so a pass at Softness 0 is a hit on the second redraw.** The compare saw the raw 0 and the store held 0.0001, a full per-pixel pass on every redraw. Test counts computes through a seam on the real function, with a changed softness as the control. Mutation caught.
 
 - [x] **736 — js/inspector.js:4588 — rotate dial reads the magnet once** (hunt MEDIUM #19) ✅ DONE v15.30.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28705,7 +28663,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.30 — the dial's snap tolerance is a function read on every move, not a value read at build.** The timeline's magnet toggle never rebuilds the panel, so a build-time read held the old answer all session; the other three snap sites already read it live. Test builds the dial with the magnet on, toggles it off with no rebuild, drags 43° and gets 43, then back on and gets 45 (control). Mutation (read once again) caught.
 
 - [x] **737 — js/inspector.js:2900 — paste gate ignores trimPath/repeater that 2819 pastes** (hunt MEDIUM #20) ✅ DONE v15.31.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28714,7 +28671,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.31 — the Border gate admits a source with only a trim path or only a repeater, which the paste has carried all along.** Test through a seam on the real gate: trim-path-only and repeater-only pass, stroke-only still passes, an empty source is still refused. Mutation (the two dropped again) caught.
 
 - [x] **738 — js/inspector.js:2365, 2371 — no-op hint painted into non-existent classes, on possibly the wrong row** (hunt MEDIUM #21) ✅ DONE v15.32.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28723,7 +28679,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.32 — the hint finds the measured effect's row by identity and appends to the classes the row actually has.** `.fx-body` / `.fx-wrap` existed nowhere and "the open row" could be an open mask row. Test: a mask row open before an open effect row measured as a no-op — the hint sits in the effect row's editor body, the mask row has none. Mutation ("the open row" again) caught.
 
 - [x] **739 — js/app.js:2973-2974 — ungroup silently drops an animated group transform** (hunt MEDIUM #22) ✅ DONE v15.33.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28732,7 +28687,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.33 — the animated check runs before the identity check, and both losses are said.** identity was judged at t = 0, so a group keyed at rest then moving read as identity and its keyframes vanished silently; the animated toast then hid the effects toast behind an else. Test ungroups a group with x keyed 0 → +200 and an effect of its own: both are named. Mutation (identity first again) caught.
 
 - [x] **740 — js/sfx.js:641 — second live AudioContext, never closed** (hunt MEDIUM #23) ✅ DONE v15.34.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28741,7 +28695,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.34 — sound-effect previews play through FM.audioCtx(), the one context audio-fx.js owns.** The preview built its own live AudioContext and never closed it; iOS caps a page at about four, after which everything goes silent. Test counts constructions during a preview with the shared context alive: zero, with the counter proven on a direct construction. Mutation (its own context again) caught.
 
 - [x] **741 — js/mask-tool.js:280-289 — precision-pad nudges never commit history** (hunt MEDIUM #24) ✅ DONE v15.35.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28749,7 +28702,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.35 — nudgePad has a release hook and the mask tool's pad commits history in it, as a drag does on pointerup.** Before, an undo after a nudge undid the previous edit and the resync threw the nudge away. Test swipes the real pad, undoes (point back) and redoes (nudge returns — impossible without its own entry). Mutation (the hook not called) caught.
 
 - [x] **742 — js/mask-tool.js:323-324 — viewport reset on open, reason gone since queue 561** (hunt MEDIUM #25) ✅ DONE v15.36.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28757,7 +28709,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.36 — the viewport reset on open is gone, with the empty `if` beside it.** Its reason left with queue 561: the overlay is placed and drawn zoom-aware and the hit radius is already 16 / dispScale(); draw-tool dropped the same reset in v8.01. Test zooms to 2x, opens the editor, and the zoom survives. Mutation (the reset back) caught.
 
 - [x] **743 — js/sfx.js:41-48 — 'pink' noise is white** (hunt MEDIUM #26) ✅ DONE v15.37.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28766,7 +28717,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.37 — pink noise is generated (Paul Kellet's −3 dB/octave filter) instead of falling through to white.** Two recipes — Pass by and Vinyl crackle — asked for pink and got static. Test measures spectral tilt through a seam on the generator: pink sits between brown and white. Mutation (pink back to white) caught.
 
 - [x] **744 — js/fx-browser.js:769/835 — Motion Blur (Footage) badge falls back to "does nothing here"** (hunt MEDIUM #27) ✅ DONE v15.38.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28775,7 +28725,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.38 — the badge shortener recognises "nothing moves", so Motion Blur (Footage) on a static layer is badged "layer never moves" instead of the "does nothing here" queue 603 removed.** Test through a seam on the real shortener with an unrelated reason as the control; mutation caught.
 
 - [x] **745 — js/fx-registry.js:183 — the "New" row contains no effect from batches 27-39** (hunt MEDIUM #28) ✅ DONE v15.39.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28783,7 +28732,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.39 — the featured row is derived from the registry's batch order instead of a hand-written list that stopped at batch 26.** Newest first is CATEGORY_OF read backwards; hidden, media-only / text-only, single-layer-type and filter-clashing ids are skipped; twelve lead. squish (batch 39) leads and batch 38 is in. Test; mutation (oldest first) caught.
 
 - [x] **746 — js/fx-browser.js:771-781 — cannotMove ignores layer.parent, anchorX/Y, z** (hunt MEDIUM #29) ✅ DONE v15.40.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28791,7 +28739,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.40 — cannotMove returns false for a parented layer and treats anchorX / anchorY / z as motion channels.** A shape parented to an animated layer was badged "layer never moves". Test through a seam on the real predicate with a static shape as the control; mutation (parent ignored) caught.
 
 - [x] **747 — js/fx-browser.js:888 — second needsInputHint after 885 (double badge, latent)** (hunt MEDIUM #30) ✅ DONE v15.41.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28800,7 +28747,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.41 — the older second needs-input hint on a featured card is gone; queue 572's line at the top of the card is the one.** Latent until queue 745 featured matchgrade, which needs a setting — then two badges. Test opens the real browser and counts one. Mutation (the line back) caught.
 
 - [x] **748 — js/storage.js:271 — "Storage full" re-toasts every other tick when the index write fails** (hunt MEDIUM #31) ✅ DONE v15.42.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28808,7 +28754,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.42 — the index write reports its result and the once-flag only resets when the scene AND the index wrote.** `warnedBefore` could only see a flag raised this tick, so a persistently failing index write re-toasted "Storage full" every other autosave. Test fails the index write on quota for three saves: one toast. Mutation (the index result ignored) caught.
 
 - [x] **749 — js/export-resume.js:142-146 — echo preroll is the time constant, not the memory** (hunt MEDIUM #32) ✅ DONE v15.43.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28816,7 +28761,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.43 — the pre-roll is derived from the echo accumulator's persistence — log(0.05)/log(persist), 74 frames at 0.96 — instead of the fixed 25 that left a third of the trail missing at a resume seam.** Other temporal effects keep 25; none needs none. Test through a seam on the real function with both controls. Mutation (25 again) caught.
 
 - [x] **750 — js/timeline.js:1112-1113 — pan-then-select guard is dead** (hunt MEDIUM #33) ✅ CLOSED 5 Sep — already correct; measured with a real mouse, nothing to build.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28858,7 +28802,6 @@ re-opened #480, which I had marked done and had not fixed.
 
 
 - [x] **751 — js/timeline.js:206-210, 4327-4335 vs 3527-3598, 224-231 — a still finger or edge-hold becomes "wreckage" after 1.2 s** (hunt MEDIUM #34) ✅ DONE v15.44.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28866,7 +28809,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.44 — held pointers are counted and a gesture is stale only when its stamp is old AND no pointer is down (or the stamp is very old, so a never-released pointer still heals); the two autoscroll loops stamp the gesture; a recovery hides the HUD and snap line and un-suppresses the sheet.** A still finger or an edge-hold read as dead after 1.2s and the next rebuild recovered a live drag. Test rests 1.45s on a clip, rebuilds, moves — the clip follows. Mutation (held pointers ignored) caught.
 
 - [x] **752 — js/timeline.js:3584 — trim edge-scroll counter never resets per edge-hold** (hunt MEDIUM #35) ✅ DONE v15.45.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28874,7 +28816,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.45 — the trim edge-scroll counter resets on every edge entry, as the clip path's does.** Once the brake had tripped the edge was dead for the rest of the drag. Test arms a real trim, scrolls at the edge, trips the brake through a seam, leaves and re-enters: it scrolls again. Mutation (no reset) caught.
 
 - [x] **753 — js/timeline.js:3229-3231 — snap-to-edge can land off-frame while the HUD paints a filled notch.** (hunt MEDIUM #36) ✅ DONE v15.46.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28882,7 +28823,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.46 — the notch strip fills the landing notch only when the edge is on a frame, and marks the strip off-grid otherwise.** A snap wins over the frame grid and can land between frames; the strip filled the middle notch regardless — a claim the edge did not meet. Real-trim test: a snap onto a 1.21s edge holds and shows no filled notch; a frame-aligned trim does. Mutation (always filled) caught.
 
 - [x] **754 — Audio/mask rows drift from effect rows (js/inspector.js)** (hunt MEDIUM #37) ✅ DONE v15.49.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28891,7 +28831,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.49 — one eyeButton() renders the eye for effect, audio, mask and behaviour rows, struck through when off; the open audio row keeps its grip.** Mask and audio rows only faded, in the same list as effect rows that struck theirs through; the audio row hid its grip when open, which v5.52 had fixed for visual rows. Test on real rows; mutation caught on the SHARED renderer (put an effect row's plain eye back and the test fires). ⚠️ **Corrected 7 Sep (queue 842): the mutation named here was never the audio row's own eye** — the sentence two clauses along says that claim is deliberately not asserted, and both were in this entry for weeks. ⚠️ **One claim is deliberately NOT asserted:** the audio row's eye. The test passes alone and in a standalone full suite, but inside the mutation harness that eye comes back with empty markup — no glyph at all, which neither the old code nor the new one can produce — while its row is correctly marked off. Re-querying live rows, waiting for content and fixing a self-truncating diagnostic did not shift it, so rather than assert something unobservable or weaken the run until it passes, the claim is left out and written down. Proved: one renderer, the mask row struck through, the grip kept on the open audio row.
 
 - [x] **755 — js/compositor.js — ~50 dead `if (a == null) a = def` fallbacks after evalProp** (hunt MEDIUM #38) ✅ DONE v15.50.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28899,7 +28838,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.50 — all 110 `v = evalProp(p.k, t); if (v == null) v = d` fallbacks (dead: evalProp(undefined) is 0; the audit guessed ~25) and every text-effect `tnum(evalProp(…), d)` now reads through fparam(), which checks the KEY.** A preset or imported effect lacking a key rendered at 0 — Fractal Ridges and Lightning returned early, Vibrance desaturated, Counter counted to 0. Test renders Fractal Ridges bare vs. defaults spelled out (and vs. no effect), Vibrance on a bare pixel, Counter with no `to`. Mutation caught.
 
 - [x] **756 — js/compositor.js — schema `def` ≠ kernel absent-key fallback with no `legacy`** (hunt MEDIUM #39) ✅ DONE v15.51.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28907,7 +28845,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.51 — the four params whose kernel draws an absent key differently from the schema default now carry `legacy:` (glow radius 12, film-grain shape 0 and highlights 0, voronoi motion 0), the contract Edge Glow already followed, so an old instance's controls show what it renders.** Test reads the schemas with Edge Glow as the control; mutation (glow's legacy dropped) caught.
 
 - [x] **757 — js/compositor.js:3154-3161 vs 3283-3292 — fxBoundsScan "dirty plate → runs unbounded" is actually "kernel skipped"** (hunt MEDIUM #40) ✅ DONE v15.52.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28916,7 +28853,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.52 — the scan returns a DIRTY_PLATE sentinel for colour under zero alpha and fxBounds hands the kernel the whole frame; null is only "nothing drawn".** Both returned null before and null meant skip, the opposite of what the scan's own comment promised. Seam test on empty, drawn and dirty plates; mutation (dirty back to null) caught. Latent today, since a premultiplying canvas cannot produce the state.
 
 - [x] **758 — js/compositor.js:7960 — `_curlLegacy` is the hoisted body, so tests.js:49508 compares curl with itself.** (hunt MEDIUM #41) ✅ DONE v15.53.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28924,7 +28860,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.53 — the `_curlLegacy` copy and its reference entry are gone, and the equality test no longer compares curl with itself.** curl was never prepped (v13.29 introduced the alias as a byte-for-byte copy), so the tol-0 row proved nothing; it stays the control in the render-scale sweep. A test now asserts no reference is source-identical to its live kernel. Mutation (curl referenced again) caught.
 
 - [x] **759 — Smaller code fixes** (hunt MEDIUM #42) ✅ DONE v15.54.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by a 15-agent read-only audit of every `js/*.js` file for one pattern — a comment whose claim the
       code beside it contradicts (the pattern that found five shipped bugs by hand earlier the same day). Nothing in
       this list was refuted; the HIGH ones were re-read against the tree twice. Verbatim from the audit:
@@ -28944,7 +28879,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.54 — thirteen small fixes: shadow dx/dy fallback 8 → 0; one isOpenStroke() (line, arc, spiral, open path) for the three sites that kept their own lists; Border offered on open shapes since the renderer draws it; layerHasAudio asks the media; the dead layerHasSource and its stale paragraph removed; pcTransportSync is the one owner of Delete / Parent on PC; the legacy motion-blur samples clamp 32 → 48; the non-existent 'audio' layer type branch gone; the no-op probe renders with the ghost flag; keep-preview seeds paired by id; abandoned pulls unbind their listeners; the anchor hint says quarter points; the swipe comment names 34px as the arm point.** Test covers the observable three; mutation (the probe's ghost flag off) caught.
 
 - [x] **760 — On PC: bigger shape buttons, better colour choices, and the people shapes fixed — for the last time** (2 Sep, PC, with a screenshot of the Shape grid in the Elements panel) ✅ DONE v15.77 — all three clauses; each is one word from being changed.
-      **STATUS: 🟢 READY — nothing is stopping this. Queued behind #715–#717 (his, older).**
       His words: *"on pc make the shape buttons bigger, also the colour choices are bad also fix the people shapes. DO NOT
       FAIL. Ive asked u to make the people shapes look good over 10 times by now so this has to be the last time. Do
       whatever you can to ensure it is good"*
@@ -28970,7 +28904,6 @@ re-opened #480, which I had marked done and had not fixed.
       (c) **Decided under rule 16: B — reshaped inside the suite's own rules.** The first draft (arms flared, V legs) failed five older figures tests that encode what every earlier judge measured: head 1:6–1:7, shoulders the widest point, equal legs with a visible gap, no holes at 24px, an open armpit at 76px. So: rounded shoulders over a 0.20 chest, arms hanging with a 0.07 channel, 0.065 legs with a 0.07 gap, a 0.15 head; her dress flares once below the wrist to a 0.62 hem. Six parts whose union is one silhouette; all eight tests pass. Test 760 reads the construction and renders both. **To change it:** "people A" (the old pair), "people C", "people D".
 
 - [x] **761 — "make sure all these requests are logged"** (2 Sep, standing) ✅ DONE v15.09.
-      **STATUS: ✅ done on arrival, and kept as a standing check like #713**
       His words: *"make sure all these requests are logged"* — sent straight after #760. Every message from this
       session is in this file verbatim: #706, #708, #713, #714, #715, #716, #717, #760, and this one. The structural
       part is already in place: ship.sh refuses a release that drops an entry (the DROPS REQUEST gate, v14.95), and
@@ -28981,7 +28914,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.09 — every request from that message onward is logged verbatim, each in its own numbered entry: #760, #762–#769 (this one is #761).** Ticked in this release because the queue gate is right that it comes before #762: the logging is a fact, not a build.
 
 - [x] **762 — Tapping the Notes or Settings button again should CLOSE it, not open it twice** (2 Sep)
-      **STATUS: 🟢 READY — nothing is stopping this. Queued behind #715–#717 and #760.**
       His words: *"also when u tap on something like the notes button and settings button and tap it again it should
       close it not open it again"*
       "Something like" means the rule is general: every top-bar toggle (Notes, Settings, and whatever else opens a
@@ -28990,7 +28922,6 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v15.09 — DONE, on every door he could mean.** Notes: a second tap closes the notepad (it used to close-and-reopen). The settings cog in a project: a second tap closes the canvas dialog it opened, through the dialog's own Cancel so the anchor and body classes are cleared too; the phone cog forwards to the same button and gets the same toggle. The home cog: a second tap closes the settings panel (it used to rebuild it). Test taps each of the three twice; mutation-checked.
 
 - [x] **763 — The skip buttons on PC are too close to Play; and draft play-button designs for him to choose from** (2 Sep, PC) ✅ DONE v15.74 — both clauses decided under rule 16 from the 3 Sep sheet; one word changes either.
-      **STATUS: 🟢 READY — nothing is stopping this. Queued behind the items above.**
       His words: *"The skip buttons on pc are too close to the play button, also draft up some different designs to the
       play button and ill deside if any of them are good"*
       His clauses, ticked one at a time:
@@ -29004,7 +28935,6 @@ re-opened #480, which I had marked done and had not fixed.
       ~~🎨 **3 Sep — BOTH CLAUSES DRAWN AND SENT (#545)** (`scratchpad/play763.html`, rendered and sent to the chat). What the sheet found first: on PC the play button IS the timecode pill (`#time-readout`, tap to play, 21px), and the skips sit 4px INSIDE its box on purpose (queue 526, negative margins) — so "too close" is that design. Clause 1: three gaps — 6px as shipped, 12px (the negative margins removed; recommended), 18px. Clause 2: four play designs at ship size and 2×, idle and playing — A as shipped (recommended, it is what he said matches the row), B the pill with a ▶/⏸ glyph, C a round play button with the time beside it, D the pill filling blue while playing. **BUILT OUT UNTIL HE picks a gap and a letter, or says "none"** — nothing visual ships before that.~~ struck 5 Sep — both picks were drawn with a recommendation and neither needed him: decided under rule 16, one word changes either.
 
 - [x] **764 — A layer being dragged in the timeline renders BEHIND the other layers; it must show on top** (2 Sep, PC, with a screenshot mid-drag)
-      **STATUS: 🟢 READY — nothing is stopping this. Queued behind the items above.**
       His words: *"Dragging the add layer makes it go behind the other layers and it looks bad, make it visually show on
       top"*
       His screenshot: PC timeline, a pink layer mid-drag sits under the green ones above it — the dragged bar is
@@ -29050,7 +28980,6 @@ re-opened #480, which I had marked done and had not fixed.
 
       ↪ **6 Sep (v15.87): the seam rail this built was rejected in his words (#803) and moved into the left band with icons; the A/S/D behaviour is unchanged.**
 - [x] **766 — "you arent logging stuff and doing it in order like i asked"** (2 Sep, standing correction) ✅ DONE v15.10.
-      **STATUS: ✅ acted on the moment it arrived; kept as the standing rule it restates**
       His words: *"you arent logging stuff and doing it in order like i asked. Make sure everything being done is
       oldest first, log new stuff and do it when it is its turn"*
       What was actually wrong, so it does not recur: every message today WAS logged in the turn it arrived (#706–#717,
@@ -29077,7 +29006,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 
 - [ ] **768 — PHONE: scrubbing with a layer selected is jumpy, not smooth** (2 Sep)
-      **STATUS: 🟢 READY — nothing is stopping this. Queued in order behind #715–#717 and #760–#766.**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       His words: *"Scrubbing when you have a layer selected mobile is jumpy and not smooth"*
       Read as: dragging the playhead / scrubbing the timeline on the phone is smooth with NOTHING selected and stutters
       once a layer is selected — so the cost is in what selection adds per scrub frame (the selection overlay and
@@ -29099,7 +29028,6 @@ re-opened #480, which I had marked done and had not fixed.
 
 
 - [x] **770 — The motion-path and tracker overlays ignore the zoomed preview's crop origin, like the point editor did** (hunt MEDIUM #43) ✅ DONE v15.55.
-      **STATUS: 🟢 READY — nothing is stopping this**
       Found 2 Sep by the adversarial review of v15.04's diff, two refuters each, neither refuted. `js/motion-path.js:87` maps points with
       its own `ox/oy` and writes screen px into the zoomed wrap; `js/tracker.js:186` draws its seed box from origin 0 and sizes itself in
       screen px inside the wrap. Both are the #561 bug in two more places: above 1.35x the preview is a crop whose (0,0) is project
@@ -29109,7 +29037,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.55 — the motion path and the tracker overlays are placed by FM.placeOverlayOnCanvas and mapped through FM.projectToOverlay, v15.04's shared pair, and neither resets the viewport on open any more.** Both drew from origin 0 in a cropped (zoomed-in) preview. Same ink probe as the point editor's, at 3x on a phone: the keyframe dot and the seed box land on the picture. Mutation (the motion path's old mapping) caught.
 
 - [x] **771 — A template draft card whose template was deleted still promises "close it to save your changes back"** (hunt LOW #44) ✅ DONE v15.56.
-      **STATUS: 🟢 READY — nothing is stopping this**
       From the same review. `js/home.js` draft card: when `p.ofTemplate` no longer resolves to a template, the subtitle still promises a
       save-back that cannot happen, and the delete-confirm names the wrong noun. Fix: say "its template was deleted — open it to keep the
       work, or delete this draft", pick the noun from `ofTemplate` / `ofElement`, or have `templates.remove` discard that template's
@@ -29137,7 +29064,6 @@ re-opened #480, which I had marked done and had not fixed.
 
       ↪ **6 Sep (v15.87): the seam rail this built was rejected in his words (#803) and moved into the left band with icons; the A/S/D behaviour is unchanged.**
 - [x] **773 — PHONE: the add menu no longer slides down when you swipe it away or tap to close — it just disappears.** Logged 3 Sep, verbatim: ✅ DONE v15.21.
-      **STATUS: 🟢 READY — nothing is stopping this**
       His words: *"Also on mobile the pop-up ad menu like when you press on the Adelaide and then the menu that pops up to add stuff
       when you swipe down to swipe it away or just like tap to close it it doesn't slide down on the screen anymore. It just disappears
       which is tacky make it actually slide down when you slide your finger down."*
@@ -29151,7 +29077,6 @@ re-opened #480, which I had marked done and had not fixed.
         ✅ **v15.21 — it slides again, and a swipe carries on from where your finger let go.** The suspect written above was the cause: v15.08 took the slide transition off the OPEN sheet so its hinge would not replay on iOS, and removing `.open` on close took the hinge with it — a transition does not start from a value an animation was holding, so the sheet cut to nothing (measured: full height on the first frame). The swipe release also cleared the finger's offset first. Now the close holds the sheet where it is with the motion off, commits that frame, and releases it a frame later under the base slide; a swipe passes its offset in. Test samples the transform mid-close for both paths; two mutations caught (the release made immediate; the swipe offset dropped).
 
 - [x] **774 — "make sure you're logging these New requests and not doing them straight away and you're doing stuff in order from oldest first"** (3 Sep, standing) ✅ done on arrival.
-      **STATUS: ✅ acted on the moment it arrived; kept as the standing rule it restates (#506, #532, #713, #766)**
       His words: *"Also make sure you're logging these New requests and not doing them straight away and you're doing stuff in order
       from oldest first"*
       What happened: #772, #773, this and #775 were written down verbatim before any work on any of them. The order is not remembered,
@@ -29160,7 +29085,7 @@ re-opened #480, which I had marked done and had not fixed.
       had their turn in order — #772 (a picture for him to pick from, then parked on his pick), #773, #775 — and then resumes.
 
 - [ ] **775 — Go through the menus on PC (and the effects / filters switching on PC and phone), open and close them, and fix what behaves weirdly — the timeline-vs-add-menu separation on PC still has issues.** Logged 3 Sep, verbatim:
-      **STATUS: ⏸ BUILT OUT UNTIL HE picks A / B / C for the narrow-window row — clause 1 is done and found the bug; clauses 2–5 continue after the pick**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       His words, in full: *"On PC, you're gonna have to go through a A bunch of the menus and stuff tried tapping on them and closing
       them and opening them and see when they behave weirdly because right now, there is a bunch of things that behave weirdly, like,
       still, like I told you, to fix the timeline being separate to the ad menu on PC and not have any issues, but it actually still
@@ -29223,7 +29148,6 @@ re-opened #480, which I had marked done and had not fixed.
       resume the moment he picks, since the fix touches the same row.
 
 - [x] **776 — 🚨 THE INTRO LOADING SCREEN IS BROKEN — it just flashes black-and-white and white and does nothing.** Logged 4 Sep, verbatim, the moment he said it: ✅ DONE v15.47.
-      **STATUS: ✅ FIXED v15.47 — shipped straight away, ahead of everything else**
       His words: *"You've broken the intro loading screen by the way it does not do anything anymore just like flashing black-and-white and white"*
       🔎 **Prime suspect, mine: v15.08 (queue 688).** That release made ONE film serve both looks, removed the old
       `splash.mp4` and its poster, and added a dark ending — the film dims into black over 0.4s from 1.05s before its end,
@@ -29258,6 +29182,7 @@ re-opened #480, which I had marked done and had not fixed.
         animating on the dark ground.
 
 - [ ] **777 — Keep the unblock list up to date.** (5 Sep, as the session handed over.)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ❓ASK: shall I publish the unblock page to a NEW link? The old one is unreachable from this session, and publishing without your say-so would leave you with two pages and no way to tell which is live.
 
       ↻ **21 Sep, v16.23 — #856 added to the page, and THREE REAL FAULTS FOUND IN IT while doing so.**
@@ -29328,6 +29253,7 @@ re-opened #480, which I had marked done and had not fixed.
 
       🔧 **25 Sep — the source is current again.** `tools/unblock/unblock.html` rebuilt from the waiting-on-him sweep (60 asks + the decisions made for him, in the same numbering as the list he was sent in chat on 25 Sep). The cards are one JSON block rendered with textContent, so a card can no longer drift from the list; the old page's "New today" answer boxes had never been wired to Copy (fixed); saved answers moved to a new key so old picks cannot tick new questions. Verified at 380px: 61 cards, a pick and a typed answer both counted. **Not published** — whether it gets a new link is his call (item 49).
 - [ ] **778 — New chat, 5 Sep: build a system that never stops, never forgets the rules, never assumes a fix worked; then audit the autonomous work for delusion; then bug-hunt, polish effects, add filters.** Logged the moment he said it, verbatim:
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       **JUMPED: his words are "THE FIRST THING I WANT YOU TO DO" — an explicit now, which is the one thing that jumps the queue.**
       > *"Okay starting a new freemotion chat, its been a while. THE FIRST THING I WANT YOU TO DO, is figure out how to
       > achieve a chat where you keep going no matter what, never stopping, never forgetting base rules and instructions,
@@ -29846,7 +29772,6 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [x] **824 — Keep bug hunting.** (6 Sep, his words in full:)
       > *"Feel free to bug hunt and look for any issues"*
-      **STATUS: 🟢 READY — a standing go-ahead, the same shape as #690.**
       Today's two hunts (the effects menus, then the timeline) found twenty real bugs between them and all twenty
       are fixed and proven. This says keep going. Next areas, chosen for what a bug there would COST him rather
       than for how easy they are to sweep: **saving and loading a project** (a defect there loses work he cannot
@@ -29907,6 +29832,7 @@ re-opened #480, which I had marked done and had not fixed.
       2. [x] A test that FAILS without the fix. — v15.99
 
 - [ ] **834 — Twenty more findings from the same hunt, seen by one reader only (hunt MEDIUM #95)** (6 Sep)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       ✅ **ALL NINETEEN CHECKED, 6 Sep** (one of the twenty was a duplicate of #829). Each went to its own reader
       told to argue both sides: **15 confirmed · 1 already cured by today's fixes · 2 refuted.** In his terms:
       **STATUS 7 Sep (v16.07): every confirmed finding is fixed and proven. Two are refuted (clauses 5 and 17)
@@ -29962,7 +29888,6 @@ re-opened #480, which I had marked done and had not fixed.
       > *"Get rid of the row that says clip options and done. Make sure that menu still opens up fully and covers the
       > same area it does now but with the icons adjusted to fit it accordingly. Idk why this was even added i never
       > asked for it and it's pointless"*
-      **STATUS: ✅ DONE v16.06 — the row is gone and the cards took its space.**
       His clauses:
       1. [x] The CLIP OPTIONS label and the Done button go. — `ensureDoneRow()` is deleted from
              `js/mobile.js` and every `#insp-done` rule is out of `styles.css`; `dockSheet()` also removes a
@@ -30073,7 +29998,6 @@ re-opened #480, which I had marked done and had not fixed.
 - [x] **843 — Two chats: this one runs non-stop, another one logs his requests, and he answers questions HERE.** ✅ DONE 10 Sep (v16.10) — the rule is in CLAUDE.md so the other chat reads it itself. (10 Sep, his words in full:)
       > *"Okay so im going to use this chat for you to keep running non stop, then ill start another chat that logs
       > requests and youll see them. but ill ansswer the questions in this chat"*
-      **STATUS: 🟢 SET UP — one change was needed, see below.**
       His clauses:
       1. [x] This chat keeps running non-stop. — the cron loop lives here; unchanged.
       2. [x] A second chat logs his requests and this chat sees them. — ⚠️ **the second chat must append to
@@ -30139,6 +30063,7 @@ re-opened #480, which I had marked done and had not fixed.
         may be honest for a near-static scene; it may also mean the VIDEO track is nearly empty. #845 checks it.
 
 - [ ] **845 — PHONE: audio glitches once EFFECTS are added to a sound (hunt HIGH #103, from HIS report)** (10 Sep)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **This is his own trigger, in his words** (full paste in #844): *"Pretty much all of the files audio files are
       added sounded fine deciding effects to them. They start to glitch out on my phone."*
       **And his device measured it:** in 1.2s of playing, the sound cut out once for 1205ms and the app restarted it
@@ -30162,6 +30087,7 @@ re-opened #480, which I had marked done and had not fixed.
              ❓ASK: play something with audio EFFECTS on it until it glitches, then Settings → Your last playback → Copy.
 
 - [ ] **846 — Standing instruction, 10 Sep (verbatim):**
+      **STATUS: 📌 NOTE — nothing to build**
       > *"When ur done or able to just do some bug hunting and you can also work on effects to improve them and add
       > more filters also"*
       Same three things as #690 and #778 clauses 3–5, said again while the audio work was running, and explicitly
@@ -30180,6 +30106,7 @@ re-opened #480, which I had marked done and had not fixed.
              them on real pictures, show him the sheet, let him drop any by name.
 
 - [ ] **847 — Keep the loop running non-stop, ticking every minute.** (10 Sep, his words in full, two messages:)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       > *"I dont want uu to stop working, keep a loop going non stop"*
       > *"ticking every mminute"*
       ⚠️ **AND IT WAS NOT RUNNING WHEN HE ASKED.** `CronList` returned "No scheduled jobs" — the one-minute cron
@@ -30254,7 +30181,6 @@ re-opened #480, which I had marked done and had not fixed.
       > good coz a lot of buttons in there aren't view options. And it will make that layer in the centre of the screen
       > have an even amount of buttons. While on mobile the bar will pop up above the button on the left, on pc it will
       > also appear above it but on the right side as it should"*
-      **STATUS: 🟢 READY to build the mechanism; the ICON is a design call and he sees options first (his standing rule).**
       **JUMPED: v16.10 (#848 and #849) shipped ahead of this, and here is the reason in full so he can disagree with
       it.** Both were already built and tested when this request arrived, and both came out of HIS OWN pasted reports
       (#844), so they are his words too. #849 is the one that decides it: it repairs the audio report itself, and #845
@@ -30415,6 +30341,7 @@ re-opened #480, which I had marked done and had not fixed.
              row by 48px on his phone, 27 at 390×844, and never less than 4px on the smallest screen tried.
 
 - [ ] **855 — ⚠️ HELD FOR BEFORE LAUNCH, by his own instruction: the "What do you want to do?" tutorial.** (10 Sep, via INBOX. His words, verbatim and in full, are one block covering this AND #856 — he split them himself:)
+      **STATUS: ⏸️ HELD — you asked to leave this**
       > *"Log this request for before launch not right now because if we add this right now there will need to be
       > changes made to it before lunch so might as well save it for the finished product. Okay? So here it is in the
       > tutorials menu. There will be one tutorial that is pretty much just a thing that says what do you want to do?
@@ -30435,7 +30362,6 @@ re-opened #480, which I had marked done and had not fixed.
       > things I can do… but yeah, that tutorials menu we were all saving for the end one we actually have everything
       > flushed out so we can make tutorials that are actually relevant and not have to redo them because it'll be a
       > pain in the butt to move something around and then have to go redo all the tutorials"*
-      **STATUS: ⚠️ HELD UNTIL LAUNCH — his instruction, not a judgement of mine.** It does NOT hold the queue.
       **Why it waits, in his words:** the tutorials menu was always being saved until everything is fleshed out, so the
       tutorials are relevant and do not have to be redone. Building it now means rebuilding it.
       His clauses, for whenever it is time:
@@ -30449,6 +30375,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⤷ Also listed in [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) so the launch checklist carries it.
 
 - [ ] **856 — An AI you can TALK TO that does the edit for you, like CapCut. He explicitly wants this in the current tasks.** (10 Sep, via INBOX, the second half of the same message as #855. His words, verbatim:)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       > *"This also kind of plays into the fact that the AI inside of it because we have a feature where you can get
       > your AI to generate you were seen like we probably should make that more like CapCut one where you can just
       > talk to her and say what you want and then it goes and does it for you inside the edit which would be very
@@ -30457,7 +30384,6 @@ re-opened #480, which I had marked done and had not fixed.
       > was a way for it to just for them to be like an AI that you can talk to and you put your own API key for now
       > but later when you pay for the pro version, it'll unlock an API key for you to use like our own inbuilt but
       > hidden API keys obviously cause we don't we don't want people stealing them"*
-      **STATUS: 🟠 NEEDS A DECISION FROM HIM FIRST — and it is a real one, not a detail.**
       **JUMPED: #857 and #858 go first, and the reason is his own words.** All four of these arrived in ONE inbox
       drain, so their numbers are the order I wrote them down in, not an order he set. Of the four he said this one
       "might actually be worth bringing up with the current tasks" — i.e. put it on the list — while #857 ("as soon as
@@ -30735,6 +30661,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **What this does NOT answer:** whether each effect LOOKS good, which is #482 and is your eye, not a
       number. This covers one failure mode thoroughly rather than the whole question.
 - [ ] **860 — Durability / stress testing, especially on PC: try to break it, and the icons that do not display.** (11 Sep, same message, his words in full:)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       > *"and also you can do some handsome stuff and just durability test the oven and see where you can break things
       > I guess. just going through like mess around with the PCs like how you can drag up and down the two like the
       > timeline ends the ad layer separately and just like Claire and see how you can get it to improved because I
@@ -30826,6 +30753,7 @@ re-opened #480, which I had marked done and had not fixed.
       accounted for (#824, #835, #843–#847, #850–#860).
 
 - [ ] **862 — STANDING INSTRUCTION: keep the loop running, take the time to get it right, and miss nothing.** (11 Sep, his words in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > *"Turn on a loop and keep going don't stop. Take your time to perfect everything, make sure you don't miss
       > anything I said, log if you have to"*
       1. [x] The loop is on and ticking every minute (job 1f8cef41, re-armed 10 Sep under #847 — checked again today
@@ -31006,6 +30934,7 @@ re-opened #480, which I had marked done and had not fixed.
       does NOT assert a fixed offset, which would pin today's layout rather than his complaint.
 
 - [ ] **867 — PC: the Controller and New group tiles look too alike, both look bad, and New group is the same colour as the custom-elements background.** (11 Sep, via INBOX. His words, verbatim and in full:)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       ❓ASK: which of the three drawn options for Controller / New group — 1 (recommended) · 2 · 3?
       > The controller and New group options are both very similar looking while also both looking kind of shit so if you could just work those a bit so they look different and also the problem with the new group button is that like the exact same colour as the custom elements background so change colour as well. It’s just on PC. I noticed it more because on PC the buttons are bigger and that Connor makes them look a lot more shit when they’re bigger.
 
@@ -31117,17 +31046,20 @@ re-opened #480, which I had marked done and had not fixed.
       nowhere in the file and its survival is the assertion. That mutation now fails.
 
 - [ ] **870 — Standing instruction: the ChatGPT/Codex takeover brief.** (12 Sep, via INBOX. Captured by Codex; his words, verbatim and in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > So, I've been using Claude for the past couple of months to build free motion, and now I'm switching over to ChatGPT. And I've— there should be some send-offs in there and some stuff for you to read to figure out how everything works, and there's a bunch of requests, like to do, like a bunch of tasks to do. So just tell me what all of those tasks are in the chat and then start working on them. Usually how this works is on Claude, is that I have a loop going, so you don't ever stop working until everything's done, because usually with AI it finishes up and then it's like you have to prompt it to keep going. But I just have a loop on Claude, so it keeps going. So if you could do something like that, where you have a loop, so you don't stop working, and just every time there's a new request, you log it. You log it at the bottom of the list, and then you keep working up from the top, so the oldest stuff first, and then the newest stuff last. And just, yeah, do that. You know, build this thing up. If you're not confident in anything or aren't sure about anything, just let me know and I'll explain it to you. And yep. Also, if you don't know what to do with something, or you have a question, you log the question and then you ask it to me later when I'm actually at my computer and ask you for all the questions you have. Because usually some things will get blocked, but when something's blocked and you can't keep going because you need my input, just move on to the next thing. So yeah, let me know if you have any questions and then get to work, or just give me your questions, but just get to work.
 
       **Nothing here is new — every clause is already a rule in `LOOP.md` / `CLAUDE.md`** (loop that does not stop; log verbatim at the bottom; work oldest-first; blocked moves on, blocked is not done; surface every question). Recorded as a receipt so the instruction is not lost, not as work.
       ⚠️ **THE OUTCOME, for the record: Codex shipped nothing.** Last commit in this repo is `1354e64` (v16.17, 12 Sep 18:33) and it is Claude's. The working tree on 20 Sep was clean apart from `INBOX.md`. So there is no half-finished Codex work to pick up, recover or reconcile — **the queue is exactly where v16.17 left it**, and the ten INBOX entries below are the entire trace of that period.
 
 - [ ] **871 — Standing instruction: do not butt heads with the other session.** (12 Sep, via INBOX. His words, verbatim and in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > good job noticing my claude might be in the middle of something, try not to butt heads
 
       Already structural: `INBOX.md` is append-only with one writer each way, and `tools/next.sh` refuses to hand out work while it is non-empty. See CLAUDE.md, "IF YOU ARE NOT THE LOOP SESSION, LOG TO INBOX.md".
 
 - [ ] **872 — Standing instruction: stop asking permission.** (12 Sep, via INBOX. His words, verbatim and in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > stop asking me for permision and just do everything
 
       **Read it as: do not ask permission to do the WORK.** It does not cancel the rules that exist because he asked for them — logging verbatim, oldest-first, showing design options before they ship (#545), or raising a genuine either/or where guessing wrong wastes a release. Those are things he asked to be involved in; permission-to-proceed is not.
@@ -31137,6 +31069,7 @@ re-opened #480, which I had marked done and had not fixed.
 - [x] **874 — "Why do you keep repeating and telling me what you did"** (12 Sep, via INBOX) ✅ ANSWERED IN CHAT by Codex. Carried forward as a standing preference: report once, briefly, and do not re-announce finished work on later ticks.
 
 - [ ] **875 — Standing instruction: BUILD more, test proportionately.** (12 Sep, via INBOX. His words, verbatim and in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > I'm worried that you might be doing too much testing and not enough actual building. Like 2,000 different tests is quite a lot. I think you just need to more focus on just getting stuff done. Like if you test it a couple times and there's no issues, I don't see why you need to keep testing. And just, like, do, like one or two tests, not hundreds. I mean, if it's something that desperately needs testing, then do it. But I was talking to my dad because he uses you as well, and he finds that you, like ChatGPT, often does way too much testing and doesn't actually make any progress and it's just, like, wasting time doing nothing. So just make sure you're actually building stuff and getting stuff done and being productive and not just over-testing for no reason. I'm always there to test as well. Like I'm testing stuff. Like if something's wrong, I'll find it and I'll tell you. So there's always that backup scenario. You don't have to have everything 100% tested every single possible minute outcome. Like just look at all the requests and do them.
 
       ⚠️ **This is in direct tension with `LOOP.md` rule 5 and `tools/ship.sh`, which runs the full 964-test suite TWICE on every shipped source change** (desktop + 380px) and takes ~8 minutes of quota per release. He is not asking for zero tests — he names the exception himself ("if it's something that desperately needs testing, then do it") and he names his own role ("I'm always there to test as well").
@@ -31144,11 +31077,13 @@ re-opened #480, which I had marked done and had not fixed.
       2. [ ] ❓ **ASK HIM:** this one is his call, because the trade is his: a shorter suite ships faster and burns less quota, and the cost is that regressions reach his phone instead of being caught here. His own words cut both ways — "just get stuff done", but also the reason the suite exists at all is the string of regressions that reached him.
 
 - [ ] **876 — Standing instruction: preferences must survive a new chat.** (12 Sep, via INBOX. His words, verbatim and in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > Make sure your solution is, like, something that you remember in your memory and not just something you think of now but you're gonna forget about later or it's gonna get lost if I start a new chat and you're gonna start doing the same mistakes again.
 
       This is his "safeguards must be structural, not remembered" rule applied to preferences. Anything agreed in chat goes into `CLAUDE.md` / `REQUESTS.md` / cross-session memory the same tick, or it did not happen.
 
 - [ ] **877 — Standing instruction: keep the loop running.** (12 Sep, via INBOX. His words, verbatim and in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > Keep going with a loop bruh
 
       Duplicate of **#862** and of `LOOP.md` rule 8b. ⚠️ **But see #879 and #880 — on 19 and 20 Sep he changed this**: an unstoppable loop is what burned a week of quota in one evening, and on 20 Sep he explicitly granted permission to stop ("you can stop the loop if you truely run out of productive things to do"). **The newer instruction wins.** Rule 8b should be amended rather than left contradicting him.
@@ -31156,6 +31091,7 @@ re-opened #480, which I had marked done and had not fixed.
 - [x] **878 — "Explain to me what problem you are currently solving and how you decided it was a good idea to fix and wether I even asked for it"** (12 Sep, via INBOX) ✅ ANSWERED IN CHAT by Codex. No build.
 
 - [ ] **879 — Standing instruction: usage discipline. He burned a week of quota in one evening.** (19 Sep, via INBOX. His words, verbatim and in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > Okay continue with everything that was going on, i ran out of usage in one evening for the whole week so hopefully this time you do a bit better for usage and dont waste it. Ive changed the model down from astra but honestly astra shouldnt be doing all that. make sure you remember all the instructions i gave but also use ur own reasoning and sence to make good choices and not waste any time or effort.whilst having the best output for my software
 
       **This is the single most consequential instruction in the inbox** and it changes how the loop should run, not just how it talks.
@@ -31165,6 +31101,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ Read together with **#877**: he wants the loop to keep going AND to stop wasting quota. Those are only compatible if the loop's *cadence* is tied to whether there is work, rather than to a fixed minute.
 
 - [ ] **880 — Standing instruction: the 20 Sep restart brief (back on Claude from ChatGPT).** (20 Sep, in chat. His words, verbatim and in full:)
+      **STATUS: 📌 NOTE — nothing to build**
       > Hey claude, I was using you on this coding project for ages then switched to chatgpt but that was shit so now im back on claude and i need you to pick up where chatgpt left off coz it ran out of ussage mid run. Basically you need to start a loop with instructions every minute so you dont stop running and just work through the list from oldest first and when you have a question just log it to ask me later. there's still a lot of questions i think i need to answer but there should be a list of things to do and every time i ask something it gets logged in the list and you work on the oldest stuff first. make sure you're pushing the updates as you go. also the most recent hting i noticed is that chatgpt fucked it and made it so now when ur in a project theres a white bar at the top that shouldn't be there. log that.
       >
       > Lmk if you need me to clarify anything before you go or send you chatgpts chat logs. you can stop the loop if you truely run out of productive things to do.
@@ -31190,6 +31127,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⤷ **The clean permanent fix is still one line he can run**, and it is worth doing because this affects his whole Mac, not just FreeMotion: `sudo xcode-select -s /Library/Developer/CommandLineTools`. Logged as a question in #882 rather than left as a silent workaround.
 
 - [ ] **882 — ❓ QUESTIONS FOR HIM — the loop's cadence and cost, and the Xcode fix.** (20 Sep, raised by Claude, not his words.)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       1. [x] ~~❓ ASK — loop cadence.~~ **ANSWERED BY EZRA, 20 Sep:** *"That was on chatgpt, u dont do that. so its fine"*.
              **One minute, as originally asked.** He is clear the quota blowout was Codex's behaviour, not Claude's.
              Asked in the same breath whether to disable the session's multi-agent mode, he said: *"again, i dont usually
@@ -32039,6 +31977,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 
 - [ ] **904 — 54 effects are missing a control, or show one that does nothing. The controls half of #859, which had never been looked at. (hunt HIGH #904)** (21 Sep — found by Claude under his standing brief, NOT his words.)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **JUMPED: #904 is a CONTAINER of 54 independent jobs, not a task with an end, and it must not hold the queue
       behind itself.** Same argument as #690 and #777, and the same shape as the #824 hunt — whose findings were each
       given their OWN number (#830, #831, #832, #833 …) precisely so that none of them blocked the others. Writing
@@ -32378,6 +32317,7 @@ re-opened #480, which I had marked done and had not fixed.
       Also logged the same turn at his word ("Log those asks and keep going"): the two #904 asks (Flash (darken) Darkest; Blink Rate) are written in their clauses and wait on him.
 
 - [ ] **912 — "you have nothing to do?" — more filters, a bug hunt, a visual-issue check, an opening animation on every static menu, and light/dark mode on the main menu doing what it should.** (22 Sep, his words in full, verbatim:)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       > you have nothing to do? If add some more filters. do a bug hunt. check for visual issues. Any static menu that's doesnt have any animation when u open it up give it one. Make sure light mode and dark mode in the main menu actually do what they are supposed to. Like make sure the settings menu stays light in light mode. Any big ideas or changes you think of run by me first
       **Explicit now** ("you have nothing to do?") — this is today's work.
       His clauses:
@@ -32600,6 +32540,7 @@ re-opened #480, which I had marked done and had not fixed.
          *Fix sketch:* Compute scene time with the speed: `start + (currentTime - trimStart) / FM.speedAt(layer, layer.start)` for static speed, or invert FM.layerSourceAdvance for a ramp.
 
 - [ ] **917 — #912 audit: Visual issues — PHONE layout (380 / 320) — 17 findings. (hunt MEDIUM #917)** (22 Sep, found by the #912 audit workflow under his words "do a bug hunt" / "check for visual issues" — NOT his words.)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **JUMPED: a container of independent findings (the #904 lesson) — each closes on its own as `queue 917 (partial)`; it must not hold the queue.** Full detail per finding (repro, evidence, both skeptics' verdicts): `audits/912-audit.json` → `visual-phone`.
       1. [x] ✅ already fixed by v16.76 (re-verified with touch emulation) [high] Home > Settings panel (gear) — In the LIGHT home look the Settings panel is still the dark-glass panel. Measured .set-panel background is rgba(12,28,37 — `380x800 home light (also 320x700 home light)` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* In the LIGHT home look the Settings panel is still the dark-glass panel. Measured .set-panel background is rgba(12,28,37,.82), which renders as muddy slate over the light page. No html[data-home="light"] rule for .set-panel/.set-group/.set-row exists anywhere. The only rules are the dark ones at the
@@ -32639,6 +32580,7 @@ re-opened #480, which I had marked done and had not fixed.
       ❓ Look choices left for him (not bugs; everything is on screen and tappable): 7 — the Export dialog's Resolution / Frame rate values are cut on a phone (labels above the dropdowns, or shorter wording); 11b — the Add sheet is see-through glass, so the timeline shows faintly through it (more solid, or keep the glass); 15b — the custom-colour box starts black and looks like a second Black swatch (a rainbow ring like Settings' shape-colour swatch); 17 — some effect option rows leave one button alone on a second line at 320px (labels above buttons on phones).
       ⏸ **BUILT OUT UNTIL HE picks the four looks** listed just above (7, 11b, 15b, 17) — they are choices, not bugs, and every other finding here is fixed. All four are on the unblock page source.
 - [ ] **918 — #912 audit: Visual issues — PC layout (1280 / 900) — 15 findings. (hunt MEDIUM #918)** (22 Sep, found by the #912 audit workflow under his words "do a bug hunt" / "check for visual issues" — NOT his words.)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **JUMPED: a container of independent findings (the #904 lesson) — each closes on its own as `queue 918 (partial)`; it must not hold the queue.** Full detail per finding (repro, evidence, both skeptics' verdicts): `audits/912-audit.json` → `visual-pc`.
       1. [x] ✅ already fixed by v16.76 (re-verified) [high] Home › Settings panel (light look) — With the light Home look on, the Settings panel still draws in the dark theme: dark teal panel rgba(12,28,37,.82), light — `1280x900 home light; also 900x700 home light` — ✔ both skeptics confirmed
          *What he would see:* With the light Home look on, the Settings panel still draws in the dark theme: dark teal panel rgba(12,28,37,.82), light text rgb(233,244,247), and a dark scrim over the white page. This is the exact thing Ezra asked to check ("make sure the settings menu stays light in light mode"). theme-glass.css
@@ -32681,6 +32623,7 @@ re-opened #480, which I had marked done and had not fixed.
       3. [x] ✅ picture sent 22 Sep (Rename light · Delete light · Delete dark, 380) — Show him a picture before it ships.
 
 - [ ] **920 — THE FADED BAR AT THE TOP IS STILL THERE: a white bar on the light screen / a black bar, fading onto the screen at the top. "Pretty much the same as the screenshots I sent you before."** (22 Sep, his words, from the same message as #921:)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
       > *"And also the faded white bar is still at the top of the screen, all black bar, like it fades onto the screen, like that's still a thing. You haven't fixed that yet. Um, it's pretty much the same as the screenshots I sent you before. So don't ask me to send more screenshots. Just log that and keep going."*
       **Do NOT ask him for screenshots** — his explicit instruction. The screenshots are the ones behind #883 (white bar at the top inside a project), #903 (v16.18 turned his white bar into a black one; the Home top bar's white veil) and #6bb7f072 v16.19 (the fade at the top, on both screens). Those entries are ticked done; he says it is still there, so they did not fix what he sees. Read #883 / #903 in full, and the memory note "He names the place, not the cause" — the fault may be BEHIND the bar (the page colour, a gradient veil, a safe-area inset, the status-bar theme-color), not the bar itself. #883 clause 2 was left because an iOS standalone web app could not be run here — that is probably where it lives.
       1. [x] ✅ 22 Sep — FOUND, and it is not the page: tools/shot.py now fakes the iPhone safe area (--safe-top 47, Chrome's Emulation.setSafeAreaInsetsOverride), and with it the page's own top is clean on Home light/dark and in a project. Since iOS 26 an installed web app running UNDER the status bar (our black-translucent + viewport-fit=cover, since v5.49) gets the system Liquid Glass scroll-edge fade over its top ~45pt — white over light, black over dark: his words exactly. Same report from other apps: github.com/MrClit/fin-app/issues/411, github.com/amir20/dozzle/pull/5222. Find what he sees: the fade at the very top, on his phone, as an installed app (standalone), on Home (light AND dark) and inside a project.
@@ -32737,10 +32680,11 @@ re-opened #480, which I had marked done and had not fixed.
       8. [ ] It stops being intermittent (sometimes there, sometimes not).
       9. [ ] In light mode the top is white all the way up — never a BLACK bar.
       10. [ ] Going in and out of projects no longer changes it.
-      ⏳ The logging chat is researching iOS 26's status-bar sampling for this (its 17:46 note): wait for its plan block (`tools/design/plans/2026-09-26-…/plan.md`) before building; do NOT ask him for screenshots (#920's standing rule).
+      ⏳ PLAN PENDING: the logging chat is researching iOS 26's status-bar sampling for this (its 17:46 note): wait for its plan block (`tools/design/plans/2026-09-26-…/plan.md`) before building; do NOT ask him for screenshots (#920's standing rule).
       JUMPED: waiting on the logging chat's plan block for this (its 17:46 note: "don't start building any of them until its plan block has landed") — #945 (his answer, fully built) ships ahead of it in v17.04. Take this line off when the plan lands.
 
 - [ ] **921 — LIVE COLLABORATION: two or more people editing the SAME project at the same time, seeing each other live, like Google Docs / Sheets.** (22 Sep, his words IN FULL, verbatim — he said "I don't want you to miss out any details":)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       > *"I just had a genius idea. Now, hear me out. So, you know how in Microsoft Excel or Google Spreadsheets or Google Docs, basically, if two people are working in the same file at the same time, it essentially updates live for both people. So, essentially, two people can both work on a project at the same time, be in the same spreadsheet at the same time. And you can see what they do and what they change live and what they are clicking on, whatever, you know, all of that sort of stuff. I want that in this. I want the ability to basically share a project to a friend as like not just saving it as you know a file that they can put into their app but actually live update it we can both do it at the same time and i want you to fully work this out hash it out figure out how it's going to work um you know i'm more than just two people obviously whatever you think a good limit on how many people is if you can do unlimited people then i guess that would work maybe i don't know how it all works in the back end I don't know if we're going to need a server for this. Hopefully it can just kind of like run off of one person's thing. Like I really don't want to have to have servers or anything like that. This feature would be a very cool idea because me and my friend like to do collab edits and just being in the same project, I think would be sick. Like being able to do that together. And I don't think there's any editing software that has something like that. And yeah, it's going to need the ability to see who's inside of it. Maybe we're going to need a profile system as well, where you make like an account. I don't know how that's going to work either because I don't at the moment, like this could be a future thing where when I release it, we might need servers and stuff for people's accounts, I guess, because an account would have data and stuff and like subscriptions, not sure. But I guess we'll figure that out later. But for now, I don't want to start up any servers yet necessarily. I just want to be able to like have a friend and myself working in the same project at the same time, seeing what each other are doing live or as live as possible. And, you know, PC and mobile can connect to each other, like, you know, anything just like, just being able to see everything each other does, you know, like if a friend is selecting a layer or has multiple layers selected, it would like show that they have it selected for you somehow. Um, I just want it to work seamlessly and be, you know, easy and perfect and just work. And yeah, just take inspiration from what Google Docs has and all that stuff, because there'll be a lot of different settings and things you'll need to be able to do. So it might need its own settings menu for when you do have it enabled. And yeah, it's just gonna be like this really cool thing. And I think it could be a game changer. And I know I still have to answer a lot of the questions you have about a lot of stuff. [… #920, logged separately …] And if you need to log this entire thing, you can log that and keep going. But just know that I want this and I don't want you to miss out any details. And I want you to put a lot of effort into it. And I want it to be a really fully fledged and cool feature. And I think whoever is the owner of the project should have full control, but the other person should be able to still export it themselves on their end and should be able to like, you know, do whatever they want in the project. I guess they could have it set so you can give the person viewing permissions, kind of like what Google Docs and all that has. You can either be on viewing permissions or editor permissions sort of thing. I think there's a third option as well, but I can't remember. Just make this work, make it good. Just put a lot of time and effort into it. Get agents, other agents to all verify and make sure there's no issues. You know, make sure there's going to be like, there's going to be a lot of different bugs. Make sure they're all ironed out. Just, you know, go the full nine yards. Um, I'm not going to be supervising it much at the moment. Try not to break the thing as well. Make sure you've got backups before you start doing this. And yeah, good luck."*
       **JUMPED: (22 Sep)** #921 is a nine-stage build (COLLAB-DESIGN.md §26) that is being worked NOW, stage by stage — it is not waiting, it is long. Finished and proven fixes from the #912 hunt (#913–#918) must not queue behind it for weeks, so they ship as they land; #921's stages keep going in order between them.
       **His clauses, every one (tick one at a time; none may be dropped):**
@@ -32799,6 +32743,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⤷ This is queue 810's parked half, answered by him asking again: #810 measured it on 6 Sep and left the pick to him because docking needed the cards re-sized. Its clause 2 can close with this.
 
 - [ ] **923 — 🔒 NEEDS HIS APPROVAL BEFORE ANY BUILD: an easy editor and a deep editor in ONE app, switchable — like After Effects + Premiere Pro, or "CapCut and Alight Motion both in one", both improved.** (23 Sep, his words in full, verbatim:)
+      **STATUS: ⏸️ HELD — you asked to leave this**
       > *"The reason or one of the reasons why After Effects is so popular is because it also has Premiere Pro which basically if you can have something that's easily integrates both of the things you can essentially quickly switch between easy editing and complex editing and i think we should have a plan to do the same thing but i don't want you to start working on it yet by yourself just log it as something that you need approval for me from from me for later on and we'll work on it later and basically it'll be like simply and easily integrated and very easy to use and basically it'll be like having CapCut and a light motion both in one editing software but also both improved and better and combined so people with not much skill can use it people with lots of skill can use it but also people with lots of skill who want a quick and easy system can also use it and then if they want to switch over to something that's more in depth they can also do that so i think we should do that especially because that would just bring us one step closer to ticking every box that after effects has and adding extra ticks to stuff that a light motion has feel free to When you have nothing to do, to brainstorm ideas on this and how it can work, you don't have to actually, don't actually like implement the ideas, just when you run out of stuff to do, like fully run out of stuff to do at the bottom of the list, if I still haven't given you anything to do, just brainstorm that and get it working."*
       ("a light motion" = Alight Motion.)
       ⚠️ **HELD AT HIS REQUEST — do not build, do not prototype, do not "get it working".** His words: *"i don't want you to start working on it yet by yourself just log it as something that you need approval for me from from me for later on"*.
@@ -32866,6 +32811,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **SHIPPED** — the fix went live in v16.91 and is ticked in its turn, with v16.93.
 
 - [ ] **929 — The HUMAN shapes are still bad (use real reference shapes found online); the HEART's icon does not match the heart you get, and its outline bulges near the bottom.** (24 Sep, his words in full, verbatim:)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       > *"the human shapes are still bad. Make sure you reference other shapes that you can find online and try and make them look like it. Also, the heart, um, in its little icon picture, like before you add it, the like it doesn't look the same as when you actually add it, and it's also got like these little lines that look funny. Like I don't know how to explain it, but it's like basically like the line bulges out near the bottom of the heart and doesn't look good."*
       His clauses:
       1. [x] ✅ v17.02 (people — the airport-sign pair he picked, 26 Sep) "STILL bad" — find the earlier human-shape entry and read what was tried. Remake the human shapes from real reference silhouettes found online (standard figure/pictogram shapes), not drawn from memory.
@@ -33147,6 +33093,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **SHIPPED v17.00.**
 
 - [ ] **941 — The seventh real-input bug hunt (26 Sep) — 16 findings, all 16 confirmed by a skeptic and fixed. (hunt HIGH #941)** (26 Sep — found by Claude under #690, NOT his words; his words that started it: *"Keep going"*.)
+      **STATUS: 🟢 READY — nothing is stopping this**
       **JUMPED: a container of independent findings closed in one release; each confirmed finding has its own "690 …" / "HUNT-…" test that failed before its fix.** Same method as #934/#935/#937/#938/#939/#940 (real touch/mouse input through tests/_cdp.py, one skeptic per finding, a fixer per area, every fix proven against its reverted source). Full detail: `audits/941-hunt.json`.
       ━━ **Home and project management** ━━
       [x] ✅ v17.01 [high] In Select mode a finger swipe on the project list ticks projects instead of scrolling, so with a long library he cannot reach the projects further down — *He taps Select, or holds a card, to clear out his 60+ projects, then swipes up to get to the older ones. The list does not move at all. Every card his finger crosses gets a tick instead. The only thing that scrolls is the 16 px strip beside the cards, so the projects below the first screen cannot…*
@@ -33231,6 +33178,7 @@ re-opened #480, which I had marked done and had not fixed.
   1. [x] The cog rotates when tapped on mobile, the same as on PC (today only PC does it). ✅ v17.03 — the phone's editor cog (#m-settings) and Home's cog both turn on every press (one helper, FM.cogTurn); test `946 the phone cog and the Home cog…` counts the running animation on each, twice, and checks the phone cog does NOT turn again by itself when it comes back from being hidden (the first ship's full suite caught that replay: the class was left on).
 
 - [ ] **947 — The New project + gets its own animation, really well thought out** (26 Sep — his words in #944)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
   1. [ ] Pressing + to create a new project gets a DIFFERENT animation from the one used everywhere else.
   2. [ ] It should "actually look really good and be really well thought out".
   3. [ ] (his standing design rule, #545) options drawn and shown to him before it ships.
@@ -33239,6 +33187,7 @@ re-opened #480, which I had marked done and had not fixed.
   BUILT OUT UNTIL HE picks A, B or C (the sheet and three clips were sent 26 Sep).
 
 - [ ] **948 — Templates and Elements: + opens a proper, designed menu; and they are their own things, not reskinned projects** (26 Sep — his words in #944)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
   1. [ ] In the Templates and Elements tabs, + opens a proper, thought-out menu — not the "shitty tiny menu" it opens today.
   2. [ ] "just remember that I do want elements and templates to be their own things, not just reskinned projects" — check what is still project-shaped about them and list it for him.
   3. [ ] (his standing design rule, #545) options drawn and shown to him before it ships.
@@ -33248,6 +33197,7 @@ re-opened #480, which I had marked done and had not fixed.
   BUILT OUT UNTIL HE picks A, B or C and says which of fixes 2–4 he wants (the sheet was sent 26 Sep).
 
 - [ ] **949 — Standing instruction: a second chat LOGS his requests (with a brainstorm/spec under each); this chat builds** (26 Sep, via INBOX)
+      **STATUS: 📌 NOTE — nothing to build**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~10:20 AWST — Standing instruction: this new chat is the LOGGING chat; the other chat builds
 
@@ -33347,6 +33297,7 @@ re-opened #480, which I had marked done and had not fixed.
       🖼 **His approved before/after picture (26 Sep, ~11:08 AWST, sent on its own with no words): `tools/design/950-952-before-after.png`.** It is the TARGET, rendered by the claude.ai chat against v17.00. When this ships, render the same crop from the build and send it beside that picture, so he can see it matches what he approved.
 
 - [ ] **953 — Housekeeping from the logging chat's open-questions audit: answers never recorded, stale asks, missing asks, status.sh frozen (hunt MEDIUM #953)** (26 Sep, via INBOX — the logging chat's audit, NOT his words except where quoted)
+      **STATUS: 📌 NOTE — nothing to build**
       ### 26 Sep 2026, ~10:42 AWST — His answers that were never written into REQUESTS.md (found by the logging chat's open-questions audit)
 
       These are HIS words, found in his chat history, that answer an open ask but were never recorded against it. The logging chat checked his typed messages since July against every entry that waits on him (71 entries, 19 readers, each verdict checked by a second reader trying to refute it). Record each one verbatim in the entry it answers, then strike the ask.
@@ -33388,19 +33339,26 @@ re-opened #480, which I had marked done and had not fixed.
       - #945: add the '(#545) options drawn and shown to him before it ships' clause, as #947 and #948 have. #947 and #948: draw 2–3 options, render them at phone size and send with one marked Recommended. They only become questions after that.
       - Add one line under #870: 12 Sep 09:13:43Z, his words "idk u decide whats best, i just want everything safe to move over" (reply to his 09:08:44 Sonnet/limit question). Moot since #880.
       - Critic's note: these are the recommendations the logging chat chose where the entries gave none: #917 option rows (A), #937 (Keep), #679 (Yes), #882 Xcode (run it), effects-plan (show me). Optional veto items were deliberately NOT put to him, because nothing waits on them and he said to stop asking: card 61's ten decided items, #858's four extreme filters, #534 Stroke Colour rename, #664 line-height tile, #92 audio Favourites, #934's two calls, #482 speed sliders, #867 options 2/3.
+      ✅ v17.05 (part): status.sh's LABEL now has 'built out — waiting on him' (and the new 'waiting on the logging chat') — it had been dying on a KeyError inside every ship (`|| true` hid it), so the STATUS stamps on his list had gone stale. Run in a scratch copy: 44 added, 36 refreshed, 80 dropped from closed entries.
 
 - [ ] **954 — Rename EVERY effect away from Alight Motion and change the category order (his 1 Sep ask, until now only in BEFORE-PUBLISHING.md)** (logged 26 Sep from #484, at the logging chat's audit)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       His words, 1 Sep (quoted in #484): *"what is a flowing ribbon even? im so confused and also i want every effect to be named different to what it is in alight motion and also have different ordering to avoid getting taken down by aligiht motion for copying and so far this isnt done"*
       Clauses:
       1. [ ] Every effect has a name different from its Alight Motion name.
       2. [ ] The effect categories/ordering differ from Alight Motion's.
-      3. [ ] Step (a), listing ours against AM's, needs nothing from him — do it first; the renames themselves are his to veto (#545 picture).
+      3. [x] ✅ 26 Sep — Step (a), listing ours against AM's, needs nothing from him — do it first; the renames themselves are his to veto (#545 picture).
+      **26 Sep — step (a) DONE and the sheet SENT** (`tools/design/954-options.html`; the record with ids is `tools/design/954-effect-names.md`). AM's names came from PARITY.md's effects table plus a third-party list of ~170 AM effects (smartmotionapp.com/effects-list — the official help centre refused the fetch), so "ours" means "in neither list", not proven original. Of 206: **40 distinctly AM's** (proposed new names, checked for clashes with our own names and with AM's), **70 generic craft names** (recommend keeping), **96 already ours**. AM's category ORDER is published nowhere reachable, so a new order is proposed anyway. Labels only — type ids never move (BEFORE-PUBLISHING.md), and the old names stay as search aliases.
+      ❓ASK: (1) the 40 renames — OK as they are, or which to cross out? (2) the 70 plain names — keep (recommended) or rename too? (3) the proposed category order — OK?
+      BUILT OUT UNTIL HE answers the three picks on the #954 sheet (sent 26 Sep).
 
 - [ ] **955 — Widening the window moves the playhead back to 0 (hunt MEDIUM #955)** (26 Sep — found in passing by the seventh hunt's fixer, #941; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
       Measured with a throwaway probe: a 2 s project with the playhead at 1.2 s; widening the window put the playhead at 0. Not fixed in #941 (outside its findings).
       1. [ ] Resizing the window keeps the playhead where it was.
 
 - [ ] **956 — Reminder: a page of questions he still has to go through and answer (made by another chat)** (26 Sep, ~11:10 AWST, via INBOX — his words)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **His words (verbatim):** "https://claude.ai/artifact/4hddzpLiJvQvkUifK2sdw5 Can you see this? If so make note that I still need to go through it and answer everything. You can read through but don’t make any decisions on it - I got another that to build this up"
 
       **Logger's note (not his words):**
@@ -33413,6 +33371,7 @@ re-opened #480, which I had marked done and had not fixed.
       BUILT OUT UNTIL HE answers the questions on the page at the link above (his answers come back through the inbox as their own blocks).
 
 - [ ] **957 — Home: the drawn arrow's tip lands INSIDE the + button; and in an empty project the “Tap +” text goes, replaced by a clapperboard that claps** (26 Sep, via INBOX — his words)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:26 AWST — Two things from his phone at v17.02: (A) the Home arrow's tip lands INSIDE the + button; (B) the empty-project text goes, and the clapperboard gets a clap animation
 
@@ -33447,7 +33406,7 @@ re-opened #480, which I had marked done and had not fixed.
       - **#545 applies (he did NOT waive options this time):** render 2–3 variants as short clips or frame strips at phone size and send them with one marked Recommended. Suggested variants: A plays once when the empty project opens, then again every ~6s while it stays empty (recommended). B plays once only. C loops continuously. The line colour (grey vs accent) can ride along.
       - Test ideas: at phone width `.dh-phone` is gone; `.dh-stick` has a running animation whose keyframes include a rotate (`getAnimations()`); under reduced motion there are none. Fails on HEAD because there is no `.dh-stick`.
 
-      ⏳ The logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
+      ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
       1. [ ] The arrow (the #936 drawn arrow on the empty Projects tab) must not end inside the + button.
       2. [ ] In an empty project, the outdated “press + to add a photo or video” text goes.
@@ -33456,6 +33415,7 @@ re-opened #480, which I had marked done and had not fixed.
       5. [ ] (his standing design rule, #545 — not waived) the clapper's options drawn and shown to him before it ships.
 
 - [ ] **958 — PC: the separately-draggable Add menu must drag right up to the top of the screen, whatever height the timeline is** (26 Sep, via INBOX — his words)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:33 AWST — PC: the separately-draggable Add menu stops short. It should drag up to the top of the screen whatever height the timeline is at
 
@@ -33480,7 +33440,7 @@ re-opened #480, which I had marked done and had not fixed.
       - ❓ASK: at full height, should the Add menu stop just under the top bar (Back, project name, ?, notes, settings, Export all stay clickable) or cover the top bar too? Recommended: stop just under the top bar. Build that now; don't block on it.
       - Test idea: with the timeline at its MIN height, drag the Add menu's handle to y=0. Its top edge must end within a few px of the top bar's bottom, at 900, 1280 and 1920 wide. Repeat with the timeline at its max: same top edge. Fails on HEAD, which stops at 0.62·vh. Also re-run the #244 and #512 tests (snap, coupling, floor).
 
-      ⏳ The logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
+      ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
       1. [ ] On PC the Add menu (the one that drags separately from the timeline, #244) goes as far up as it should.
       2. [ ] It is no longer bound to how high the timeline is.
@@ -33488,6 +33448,7 @@ re-opened #480, which I had marked done and had not fixed.
       4. [ ] That holds no matter where the timeline is.
 
 - [ ] **959 — PC: the three layer-action buttons lose their background and outline, for two fading corner lines (top-right and bottom-left)** (26 Sep, via INBOX — his words)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:35 AWST — PC: the three layer-action buttons lose their background and outline, and get two fading corner lines instead (top-right and bottom-left)
 
@@ -33515,7 +33476,7 @@ re-opened #480, which I had marked done and had not fixed.
       - ⚠️ Tests: about 19 tests mention `t-sel`. Some assert the #516 outline and background (and the #242/#251 contrast). Those will fail by design. Retune them to the new look and record them as **DROPS TEST … RENAMED, not removed** in the POLISH-LOG line, as with #649. New test: with a layer selected, `#t-sel` has no background and no border, and its `::before`/`::after` have a corner border plus a mask. It fails on HEAD.
       - Related, still open: #425. Q1 in the list he was given today asks whether the copy button moves right into this group. If he says yes, the corners wrap four buttons instead of three. Design it so the pseudo-elements scale with the group's width.
 
-      ⏳ The logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
+      ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
       1. [ ] The three-button menu that appears when a layer is selected looks like his drawing (tools/design/2026-09-26-layer-actions-corners.webp).
       2. [ ] No background, and no line all the way around it.
@@ -33524,6 +33485,7 @@ re-opened #480, which I had marked done and had not fixed.
       5. [ ] (his standing design rule, #545) rendered and shown to him before it ships.
 
 - [ ] **960 — Import media and Import audio match: both get the shiny look, and “Import” is renamed “Import media”** (26 Sep, via INBOX — his words)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:42 AWST — The Import (media) and Import audio buttons should match: both get the shiny look, and "Import" is renamed "Import media"
 
@@ -33546,13 +33508,14 @@ re-opened #480, which I had marked done and had not fixed.
       - Tests: about 3 lines in tests.js mention 'Import' / 'Import audio'. Any that find the tile by the label 'Import' must follow the rename. New test: both tiles' icon strokes resolve to a `url(#…)` gradient (not currentColor), and the Media tile reads "Import media". It fails on HEAD.
       - #545: small, and he named the exact look to copy, so one before/after picture of both tabs is enough. Send it with the release.
 
-      ⏳ The logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
+      ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
       1. [ ] The Import media and Import audio buttons stop looking different from each other.
       2. [ ] Both get the shiny look the Import media button has.
       3. [ ] The Import media button, now just “Import”, is renamed “Import media”.
 
 - [ ] **961 — The Car shape needs to be improved** (26 Sep, via INBOX — his words)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:42 AWST — The Car shape needs to be improved
 
@@ -33566,11 +33529,12 @@ re-opened #480, which I had marked done and had not fixed.
       - ❓ASK (optional, only if the options do not settle it): what bothers him about the current car: the look overall, the wheels, or the proportions? Build the options without waiting.
       - Test idea: the chosen car keeps a visible tyre-to-arch gap (≥ 1.5px) at the 34px icon size, measured on the rendered icon. The current car fails that.
 
-      ⏳ The logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
+      ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
       1. [ ] The Car shape is improved (options traced from real pictograms, shown big and at the 34px icon size — #545).
 
 - [ ] **962 — The Eye shape needs to be HEAVILY improved (and a standing steer to the logging chat: PLAN, don't just log)** (26 Sep, via INBOX — his words)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:43 AWST — The Eye shape needs to be HEAVILY improved; and a standing steer for the logging chat: PLAN, don't just log
 
@@ -33584,12 +33548,13 @@ re-opened #480, which I had marked done and had not fixed.
       - Clause 2 is done structurally: the INBOX.md header now asks for a ready-to-build plan under every block, and CLAUDE.md's logging-chat exception quotes his words. For the builder, it means: **follow the plan in the entry.** If the tree has moved and a step no longer fits, say so in the entry instead of improvising silently.
       - Eye (`S.eye`, `js/compositor.js` ~13461): today it is a 4-point almond ring (two sharp corners and two Catmull-Rom tops) with a plain circle pupil. That is why it reads crude. A full plan is being drawn in the logging chat right now, with real options rendered big and at the 34px icon size (and the Car's the same way). It arrives as a follow-up block that links `tools/design/plans/`, with his pick recorded once he makes it. **Don't start the Eye or the Car before that block lands.**
 
-      ⏳ The logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
+      ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
       1. [ ] The Eye shape is heavily improved (options shown big and at 34px — #545).
       2. [ ] (standing, for the logging chat — done there) each request gets a ready-to-build plan; the builder follows it.
 
 - [ ] **963 — PC: the Add menu and the layer inspector shrink well — drop the text when too small, or a better dynamic — and behave as ONE system** (26 Sep, via INBOX — his words)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:44 AWST — PC: when the Add menu or the layer inspector is shrunk, the tiles bunch up. Make both shrink well (drop the text when too small, or a better dynamic), and make the two behave as ONE system
 
@@ -33604,7 +33569,7 @@ re-opened #480, which I had marked done and had not fixed.
 
       **Logger's plan (not his words):** being drawn now in the logging chat. Both panels are being captured at a range of sizes through the real app, what each does well and badly is being written down, and one shared shrink system is being proposed with options rendered for him to pick. It arrives as a follow-up block linking `tools/design/plans/`. **Don't start this before that block lands.** Where: the Add menu tiles are `.addmenu-card` (`styles.css` ~1258–1320, `js/addmenu.js`); the inspector is `#inspector-panel` / `#inspector` (`index.html` ~481–500) with its numbered category tiles (Colouring, Outline & Shadows, …).
 
-      ⏳ The logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
+      ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
       1. [ ] On PC, a shrunk Add menu or layer inspector no longer looks bunched up.
       2. [ ] Either it loses the text when it gets too small…
@@ -33625,3 +33590,131 @@ re-opened #480, which I had marked done and had not fixed.
       - the Add menu / inspector shrink system (both panels captured at many sizes; one shared design)
 
       Each plan was reviewed by a second reader and lands as a follow-up block linking `tools/design/plans/2026-09-26-<name>/plan.md`, with his picks recorded once he makes them. Log these blocks as normal, **but don't start building any of them until its plan block has landed.** They are at the back of the queue anyway.
+
+- [ ] **964 — Empty project, phone: tapping the big add area is glitchy — the blue outline misses the top edge and gets stuck; a far better, colourful, whole-area tap animation; the outline PULSES round and goes** (26 Sep, ~20:29 AWST, via INBOX — his words)
+      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 26 Sep 2026, ~20:29 AWST — Empty project, phone: tapping the big add area is glitchy. The blue outline misses the top edge and gets stuck; the tap animation needs a far better, colourful, whole-area version; the outline should PULSE around and then go
+
+      His screenshot (an empty project on his phone, v17.02) is saved at `tools/design/2026-09-26-empty-timeline-tap.png`.
+
+      **His words (verbatim; dictated, so transcription fixes are in [brackets]):** "When tapping on this menu and stuff it's very glitchy like the blue bar that's supposed to go around. The edges doesn't fully go around the edges at the top and also it just stays there get safe stock [gets stuck] and it doesn't look very good and also the animation you made for like when you tap on the screen looks really shitty. Like you could do way better better than that like cops [cook up a] way better animation that like actually play in that hole [whole] like that little touch pad area in the bottom bottom when you tap on it something a lot more colourful and actually put a lot of work into it and I'm not just a small little touch thing like I actually cook up the whole area and then also make sure that like the blue lines in the outside actually look good and actually go away like they actually pulse when you type of it [tap on it] don't just say that [stay there] and they pulse all the way around it not just like all the lines appear at once"
+
+      His clauses:
+      1. Tapping the empty project's big add area is glitchy: the blue outline meant to go around it does not reach the TOP edge.
+      2. The outline stays there (gets stuck) and does not look good.
+      3. The tap animation (#571's colourful press) looks bad. Make a far better one.
+      4. It plays across the WHOLE touch-pad area at the bottom, much more colourful, with real work put in. Not a small touch effect.
+      5. The blue lines around the outside must look good and GO AWAY.
+      6. When tapped, they PULSE, travelling all the way around the edge, not all the lines appearing at once.
+
+      **Logger's plan (not his words). A first diagnosis from the code (not yet measured on a phone). The full plan follows as its own block:**
+      - The outline is `styles.css` ~8357–8362: `#timeline-panel.tl-empty-start #timeline:focus-within, …#timeline:hover { box-shadow: inset 0 0 0 1px rgba(150,232,255,.8), inset 0 0 14px … }` (#600 moved it from the row to `#timeline`).
+      - **Why it gets stuck (clause 2):** it is drawn by `:hover` and `:focus-within`. On iOS, `:hover` sticks after a tap until you tap elsewhere. And the add row has `tabIndex = 0` (`js/timeline.js` ~2969), so it keeps focus after the tap, which makes `:focus-within` stay true. Both states persist, so the box persists.
+      - **Why the top is missing (clause 1):** most likely the ruler strip above the tracks overlaps `#timeline`'s top edge, or `#timeline` scrolls or clips at the top, so the inset line's top side is covered. MEASURE this at 380 and 440.
+      - The tap animation is `tapBurst()` in `js/timeline.js` ~2905–2945 (`.tl-tapburst`, `styles.css` ~8251–8294: a small ripple whose hue depends on position, 620ms, max 6 at once). His brief keeps #571's "comes from where you tapped" idea, but at the scale of the whole area.
+      - Direction for the plan:
+        - (a) The outline becomes a one-shot, JS-triggered animation on pointerdown, not a CSS state. A bright segment travels all the way round the perimeter (SVG rect `stroke-dashoffset` or a rotating conic-gradient border), then fades out. It is never left on.
+        - (b) Keep a real `:focus-visible` ring for KEYBOARD users only.
+        - (c) A new whole-area colourful press animation, e.g. a colour wave or aurora that blooms from the tap point and sweeps across the entire area. Options will be drawn and shown to him (#545), with reduced-motion respected.
+
+      ⏳ PLAN PENDING: the logging chat's full plan for this follows as its own block (its note above): don't start building before it lands; then follow it.
+      Clauses (his):
+      1. [ ] The blue outline reaches the TOP edge too.
+      2. [ ] It does not stay (get stuck) after the tap.
+      3. [ ] A far better tap animation than the current one.
+      4. [ ] It plays across the WHOLE touch area, much more colourful, real work put in.
+      5. [ ] The blue lines look good and GO AWAY.
+      6. [ ] They PULSE, travelling all the way round the edge — not all appearing at once.
+      7. [ ] (#545) options drawn and shown to him before it ships.
+
+- [x] **965 — Settings: redesign the close ✕ (use the search ✕'s drawn design) — and, his yes, the same drawn ✕ on every close button in the app** (26 Sep, ~20:57 AWST, via INBOX — his words)
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 26 Sep 2026, ~20:57 AWST — Settings: redesign the close ✕, or use the same drawn ✕ as search (#951)
+
+      His screenshot (Home → Settings, light look, his phone) is saved at `tools/design/2026-09-26-settings-close-x.png`.
+
+      **His words (verbatim):** "Redesign the X for this menu and make it actually look good or just use the same design that you're gonna use for the other ex that I'm making you do now like the one for when you're selecting stuff I think it was or might be no it was for when you're searching stuff, yeah yeah that X"
+
+      His clauses:
+      1. Redesign the Settings panel's ✕ so it actually looks good…
+      2. …or just use the same design as the search ✕ (#951, shipped v17.03).
+
+      **Logger's plan (not his words). Ready to build:**
+      - Cause: the same bug class as #951. `js/settings.js` ~408 builds `el('button', 'set-close', '✕')`, a TEXT glyph in a 34px ring (`styles.css` ~6026 `.set-close {…font-size: 13px…}`), so it sits low and thin.
+      - Options drawn and SENT to him in the logging chat: `tools/design/plans/2026-09-26-settings-x/options.jpg`, source `options.html` in the same folder.
+        - **A**: the search ✕ exactly (22px slate disc, white cross).
+        - **B**: the same design at 28px, to match the big "Settings" title, with the same 34px tap area. **Recommended.**
+        - **His pick: pending.** It comes back as its own block. If none has arrived when you reach this, build B (never block).
+      - Build (B; for A use width/height 22):
+        - `js/settings.js` ~408: `const close = el('button', 'set-close');` then `close.innerHTML = '<svg viewBox="0 0 22 22" width="28" height="28" aria-hidden="true"><circle class="set-x-disc" cx="11" cy="11" r="11"/><path class="set-x-cross" d="M7.6 7.6l6.8 6.8M14.4 7.6l-6.8 6.8"/></svg>';`. Constant markup, no user data. Keep `type`, `aria-label` and the click handler as they are.
+        - `styles.css` ~6026: replace the `.set-close` rule with `.set-close { width: 34px; height: 34px; border-radius: 50%; border: none; background: transparent; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; } .set-close svg { display: block; } .set-x-disc { fill: var(--text-dim); } .set-x-cross { fill: none; stroke: var(--panel); stroke-width: 2; stroke-linecap: round; } .set-close:active .set-x-disc { opacity: .7; }`. These are the dark defaults and mirror `.hm-clear-disc`/`.hm-clear-x` at ~4776.
+        - `theme-glass.css`:
+          - Remove `html[data-theme="glass"] .set-close` from the glass round-button group (~278), or it paints a glass circle behind the disc.
+          - Replace the light rule at ~1145 (`html[data-home="light"] body.home-open .set-close {background-color…; color: #23304a…}`) with `html[data-home="light"] body.home-open .set-close { background: transparent; border: none; box-shadow: none; } html[data-home="light"] body.home-open .set-x-disc { fill: #8792a4; } html[data-home="light"] body.home-open .set-x-cross { stroke: #fff; }`. Scoped to `home-open` so Settings opened from the dark editor keeps the dark disc.
+        - Bump `?v=` for `js/settings.js`, `styles.css` and `theme-glass.css` in `index.html`.
+      - Test: copy #951's test (`tests/tests.js` ~100755). Open Settings; `.set-close` must contain `.set-x-disc` and `.set-x-cross`, and the cross's bbox centre must be within 0.5px of the button's centre. No test references `set-close` today, so nothing breaks. It fails on HEAD because there is no svg.
+      - ❓ASK (optional, recommend YES): the same text ✕ is used by five more close buttons: `js/ai-chat.js` ~293 `.aic-close`, `js/ai-panel.js` ~62 `.ai-close`, `js/elements-browser.js` ~133 `.fxb-close`, `js/voice-rec.js` ~270 `.vr-close`, and the notepad/caption/preset delete ✕s. Give all the close buttons the same drawn ✕ so there is one ✕ in the app? Do Settings now, the rest only on his yes.
+      - Verify: Settings opened from light Home, dark Home and the editor, at 380/440 and on PC.
+
+      ✅ HE ANSWERED (21:08, via INBOX), whole block:
+      ### 26 Sep 2026, ~21:08 AWST — HE ANSWERED the Settings ✕ question: the recommended options
+
+      **His words (verbatim):** "do reconmended"
+
+      **Logger's note (not his words):** this was his reply to the two questions the logging chat had just asked, which are the latest ones on screen:
+      1. **Settings ✕ → B** (the search ✕'s drawn design at 28px, same 34px tap area). Build B exactly as the plan in the Settings ✕ block above says.
+      2. **The optional sweep → YES**: give every text-✕ close button the same drawn ✕, so the app has one ✕. That covers `js/ai-chat.js` ~293 `.aic-close`, `js/ai-panel.js` ~62 `.ai-close`, `js/elements-browser.js` ~133 `.fxb-close`, `js/voice-rec.js` ~270 `.vr-close`, and the delete ✕s in `js/notepad.js` ~110, `js/captions.js` ~445 and `js/fx-browser.js` ~698.
+         - Plan: factor ONE helper, e.g. `FM.drawnX(size)`, returning the svg string with classes `set-x-disc`/`set-x-cross`. Use it in all of them, sizing each to its button (close buttons 22–28px; small inline delete ✕s ~16px).
+         - Move the `.set-x-*` colour rules to a shared name (e.g. `.fm-x-disc`/`.fm-x-cross`) with the light-Home override.
+         - Render one before/after sheet of all of them and send it with the release.
+         - Search's own `.hm-clear-*` can stay as it is, or join the helper. Your call, but keep #951's test passing.
+
+      This does NOT answer the 36-question list from this morning. Those are still open.
+
+      Clauses (his):
+      1. [x] ✅ v17.05 — The Settings ✕ is redesigned so it actually looks good — his pick: B, the search ✕'s drawn design at 28px in the same 34px tap area.
+      2. [x] ✅ v17.05 — (his yes to the sweep) every text-✕ close/delete button gets the same drawn ✕ — one ✕ in the app (one helper), sized to each button; a before/after sheet goes with the release.
+      ✅ **v17.05 — BUILT.** One helper, `FM.drawnX(button, size)` (js/drawn-x.js, loaded before everything that builds one), puts the search ✕'s drawn disc + cross into a button and keeps its own size, label and handler. Settings at 28px (his B) in its 34px button, measured dead centre on the light and the dark Home; and the sweep — the AI chat, the AI panel, the Elements browser (28, a header close), Record voice, the notes, captions and preset delete ✕s, the live banner's × and the collab media card's ×: ten typed ✕s, now one drawn ✕. The old rings go (the disc is the look); a delete ✕ still goes red on hover. Left alone on purpose: the "no fill" swatch (its ✕ MEANS none) and the connection test's pass/fail marks. Test `965 …` measures the Settings ✕ in both looks and SCANS every script the app loads — any typed ✕ button not drawn within three lines fails it, so a new one cannot slip back in. Before/after sheet sent with the release.
+
+- [ ] **966 — Standing instruction: when there is nothing else to do, add new effects, filters and sound effects, and polish effects with more features — this is the COMPLEX version, as much choice as possible** (26 Sep, ~20:57 AWST, via INBOX — his words)
+      **STATUS: 📌 NOTE — nothing to build**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 26 Sep 2026, ~20:57 AWST — Standing instruction: when there is nothing else to do, add new effects, filters and sound effects, and polish effects with more features. This is the COMPLEX version: as much choice as possible
+
+      **His words (verbatim):** "You're a bunch of ideas of things you can do if you ever run out of things to do which I doubt it but in case you do you can add new effects. You can add new filters. You can add new sound effects you can polish other effects just giving them more features and making them work a bit better and have more customisation like you know more choices always better I'd say like for this we're definitely trying to keep it as you know like because we're gonna have two versions the simple version and then the complex version this is the complex version we want as much choice as possible"
+
+      His clauses:
+      1. If the builder ever runs out of things to do, it can: add new effects…
+      2. …add new filters…
+      3. …add new sound effects…
+      4. …and polish existing effects: more features, working better, more customisation. "More choices always better."
+      5. There will be two versions, a simple one and a complex one. **This app is the complex version: as much choice as possible.**
+
+      **Logger's plan (not his words):**
+      - **Make it structural, not a note:** today LOOP.md ends a turn in one line when the queue is empty, and `next.sh` reports "only long-term ideas left". Add a line to `tools/next.sh`: when ACTIONABLE is 0, print this entry's number with "IDLE STEER: new effects / filters / sound effects / polish effects with more options (his words, 26 Sep)". That way an idle loop turns into work instead of stopping. Then change LOOP.md's empty-queue rule to point at it.
+      - Standing note, not a build item: log it as a standing instruction (like #846/#875). It holds nothing in the queue.
+      - **Clause 5 is direction for #923** (easy editor + deep editor, "needs his approval before any build"). Record it there as context: the current app is the COMPLEX one, and more options are welcome in it. It is NOT approval to start the easy editor, which is still Q36 in his list.
+      - Where to look when idle, so the idle work has a starting menu:
+        - #482 (go through every effect and improve it; its speed-slider offer).
+        - #904 (effects missing a control).
+        - #912 (the ten filters on branch fm912-filters, waiting on his pick, Q12).
+        - #858 (the extreme filters).
+        - The unnumbered "Continue the EFFECTS-PLAN build rounds" (Q34: three pro effects he wants pictures of first).
+        - The sound-effects library in the Add menu's Audio tab.
+      - New effects and filters still go through #545 (draw options, show him, he picks) before shipping. Polish with more controls on an existing effect can ship with a before/after.
+      - A full, vetted idea backlog (existing effects/filters/sfx inventoried against what pro editors offer, with specs) can be drawn by the logging chat when the queue is close to empty. Say so in an INBOX block and it will be planned.
+
+      Standing instruction — holds nothing in the queue. Clause 5 is context for #923 (this app is the COMPLEX version), NOT approval to start the easy editor.
+      Builder's note: ✅ v17.05 — the structural half is in: next.sh prints an IDLE STEER line (his words, the starting menu, the #545 reminder) whenever nothing is ACTIONABLE, and LOOP.md's empty-queue rule points at it.
+
+- [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
+      His words, verbatim, in full: *"I hope the like new friends joining or like Collab feature isn’t finished because it’s extremely extremely underbaked from what I’ve seen on my phone like there’s just 1 million things that are missing that you can’t do like you can’t even send it to your friends like there’s a switch to turn it on, but you can never turn it off on any project ever like it just doesn’t seem finished at all and I saw you doing a lot of stuff so I feel like it should be finished like you have all you’ve built the things for it. I feel like it’s just that there’s no way to use them at the moment. I don’t know if you’ve buried it all in a deeper setting or something like I don’t know what’s going on with this but just make sure you actually pull it up and make sure it’s all there and it’s all working and all good and actually makes sense for someone who doesn’t know how to use it to use it like how to use actually use it doesn’t make sense. It’s simple like you know all that stuff."*
+      Clauses (his):
+      1. [ ] On his phone the collaboration ("friends joining") feature is "extremely extremely underbaked" — "1 million things that are missing that you can't do".
+      2. [ ] "you can't even send it to your friends" — sending a project/invite to a friend has to be obvious and work.
+      3. [ ] "there's a switch to turn it on, but you can never turn it off on any project ever" — turning it off (per project, and the switch) has to be findable and work.
+      4. [ ] "I saw you doing a lot of stuff … you've built the things for it … there's no way to use them at the moment … buried it all in a deeper setting" — surface what was built; nothing useful buried.
+      5. [ ] "pull it up and make sure it's all there and it's all working and all good" — an end-to-end check of every part on a phone.
+      6. [ ] "actually makes sense for someone who doesn't know how to use it … It's simple" — a first-timer can use it without help.
+      Builder's context (not his words): at v17.02 on his phone the only door to sharing was a small person+ on the stage, and only with Settings → Labs on — nothing in Canvas settings, no Stop sharing he could find once Labs was on. v17.04 (shipped today) added the Friends block in Canvas settings on the phone (Start sharing / Stop sharing, the Labs switch in place). This entry is the end-to-end audit he is asking for, done as a first-time user on a phone, and whatever it finds.

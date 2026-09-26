@@ -10868,3 +10868,19 @@ html[data-pb-cursor="ew"], html[data-pb-cursor="ew"] * { cursor: ew-resize !impo
 @media (prefers-reduced-motion: reduce) {
   .pb-mark, .pb-ghost { transition: none; }
 }
+
+/* ===== ONE DRAWN ✕ FOR THE WHOLE APP (queue 965, js/drawn-x.js) ================================================
+   His pick for Settings was the search box's drawn ✕ (#951), and his yes to the sweep put the same one on every button
+   that used to be a typed ✕. The disc IS the look now, so the rings and fills those buttons wore go; each keeps its own
+   size (the tap target) and its handlers. At the END of the file on purpose: several of the old rules tie on
+   specificity (.fxb-close:hover, .aic-close:hover), and the later rule wins a tie. */
+.fm-x { padding: 0; line-height: 0; }
+.fm-x, .set-close.fm-x, .aic-close.fm-x, .ai-close.fm-x, .fxb-close.fm-x, .vr-close.fm-x, .cap-del.fm-x, .np-del.fm-x, .fxp-del.fm-x,
+.collab-banner .cb-x.fm-x, .collab-media .cm-close.fm-x { background: transparent; border-color: transparent; box-shadow: none; }
+.fm-x svg { display: block; margin: auto; flex: none; }
+.fm-x-disc { fill: var(--text-dim); transition: fill .12s; }
+.fm-x-cross { fill: none; stroke: var(--panel); stroke-width: 2; stroke-linecap: round; }
+.fm-x:hover .fm-x-disc { fill: var(--text); }
+.fm-x:active .fm-x-disc { opacity: .7; }
+/* a DELETE ✕ still warns on hover, as its old glyph did */
+.np-del.fm-x:hover .fm-x-disc, .cap-del.fm-x:hover .fm-x-disc, .fxp-del.fm-x:hover .fm-x-disc { fill: #ff6b6b; }

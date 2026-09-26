@@ -132,6 +132,7 @@ window.FM = window.FM || {};
     top.appendChild(el('div', 'fxb-title', 'Elements'));
     const close_ = el('button', 'fxb-close', '✕');
     close_.type = 'button'; close_.setAttribute('aria-label', 'Close elements');
+    if (FM.drawnX) FM.drawnX(close_, 28);   // queue 965: one drawn ✕ for the app — 28, like Settings: a header's close
     close_.addEventListener('click', close);
     top.appendChild(close_);
     root.appendChild(top);

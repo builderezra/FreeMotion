@@ -67,7 +67,7 @@ CLAUSE  = re.compile(r'^\s*\d+\. \[ \]')
 HEDGED  = re.compile(r'\(long term\)|\(Idea|potentially|eventually|one day', re.I)
 
 
-BUCKETS = ['ACTIONABLE', 'blocked on Ezra', 'built out — waiting on him', 'held by Ezra', 'needs its own session',
+BUCKETS = ['ACTIONABLE', 'blocked on Ezra', 'built out — waiting on him', 'waiting on the logging chat', 'held by Ezra', 'needs its own session',
            'standing note (no build)', 'only long-term ideas left']
 
 
@@ -138,6 +138,7 @@ def classify(body):
     return ('only long-term ideas left' if hedged_only else
             'standing note (no build)' if _standing(body) else
             'held by Ezra' if (HELD.search(body) and not lifted) else
+            'waiting on the logging chat' if (PLAN_PENDING.search(body) and 'PLAN LANDED' not in body) else
             'built out — waiting on him' if (not unblocked and BUILT_OUT.search(tail)) else
             'blocked on Ezra' if (not unblocked and (needs_eye or BLOCKED.search(tail))) else
             'needs its own session' if BIG.search(body) else 'ACTIONABLE')
@@ -175,6 +176,16 @@ JUMPED = re.compile(r'JUMPED:')
 # (The first wording was "NOTHING TO BUILD UNTIL HE" — and its own self-test caught it matching STANDING_BODY's
 # "Nothing to build", which would have filed all three entries as standing notes: hidden, the exact failure.)
 BUILT_OUT = re.compile(r'BUILT OUT UNTIL (HE|YOU|EZRA)\b|[Nn]othing to build until')   # the lowercase park: see STANDING_BODY (25 Sep, #202)
+
+# ── WAITING ON THE LOGGING CHAT'S PLAN (26 Sep) ─────────────────────────────────────────────────────
+# Since 26 Sep a second chat LOGS his requests and writes a ready-to-build plan under each (#949; his words: "your job
+# in this chat is to actually plan these things, not just log them"). For several blocks it wrote "don't start
+# building before its plan block lands" — and to this file those entries were plain ACTIONABLE: next.sh handed them
+# out as the next work, and ship.sh's queue gate refused every other release while they sat open below it. That is
+# the "an item parked on a decision FEELS blocked" confusion again, from the other side: it IS blocked, on somebody
+# other than him. So it gets a phrase the tool honours — `PLAN PENDING:` — and its own bucket, LISTED every tick
+# (never hidden), not handed out, not holding the queue. `PLAN LANDED` lifts it, like HOLD LIFTED does a hold.
+PLAN_PENDING = re.compile(r'PLAN PENDING:')
 
 
 # ── WHICH UNTICKED CLAUSES INSIDE A DONE ENTRY ARE ACTUALLY A MISS ─────────────────────────────────
@@ -528,6 +539,10 @@ _CASES = [
      'UNBLOCKED lifts a built-out line like it lifts a block'),
     ('- [ ] **8 — Standing reminder** about the thing', 'standing note (no build)',
      'a standing note in the HEADER is not work'),
+    ('- [ ] **957 — x**\n      ⏳ PLAN PENDING: the logging chat is drawing the plan', 'waiting on the logging chat',
+     'a request whose plan the logging chat is still drawing is not handed out, and does not hold the queue (26 Sep)'),
+    ('- [ ] **957 — x**\n      ⏳ PLAN PENDING: the logging chat is drawing the plan\n      PLAN LANDED 27 Sep: tools/design/plans/x/plan.md', 'ACTIONABLE',
+     'PLAN LANDED lifts it — the plan is the thing it was waiting for'),
     # The phrase must sit in the BODY here, not the header — that distinction IS the rule. Writing this
     # case with "standing instruction" in the header line failed, correctly, and is worth recording: a
     # header saying it IS a standing note should match; a body merely quoting one must not.

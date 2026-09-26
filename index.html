@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=726">
-<link rel="stylesheet" href="theme-glass.css?v=63">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=727">
+<link rel="stylesheet" href="theme-glass.css?v=64">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.04</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.05</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1043,7 +1043,8 @@
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=12"></script>
-  <script src="js/settings.js?v=46"></script>
+  <script src="js/drawn-x.js?v=1"></script>
+  <script src="js/settings.js?v=47"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=10"></script>
@@ -1065,12 +1066,12 @@
   <script src="js/timeline.js?v=257"></script>
   <script src="js/addmenu.js?v=80"></script>
   <script src="js/inspector.js?v=392"></script>
-  <script src="js/fx-browser.js?v=95"></script>
-  <script src="js/elements-browser.js?v=3"></script>
+  <script src="js/fx-browser.js?v=96"></script>
+  <script src="js/elements-browser.js?v=4"></script>
   <script src="js/color-wheel.js?v=53"></script>
   <script src="js/canvas-edit.js?v=121"></script>
   <script src="js/panelsize.js?v=1"></script>   <!-- queue 927: Notes and Shortcuts/tips grow BIG from a grab corner; before both panels -->
-  <script src="js/notepad.js?v=9"></script>
+  <script src="js/notepad.js?v=10"></script>
   <script src="js/popfrom.js?v=11"></script>
   <script src="js/draw-tool.js?v=37"></script>
   <script src="js/point-edit.js?v=21"></script>
@@ -1103,13 +1104,13 @@
   <script src="js/ask.js?v=2"></script>
   <script src="js/shortcuts.js?v=85"></script>
   <script src="js/captions-vad.js?v=1"></script>
-  <script src="js/captions.js?v=57"></script>
+  <script src="js/captions.js?v=58"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/app.js?v=458"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
-  <script src="js/voice-rec.js?v=8"></script>
+  <script src="js/voice-rec.js?v=9"></script>
   <script src="js/audio-react.js?v=12"></script>
   <script src="js/mobile.js?v=46"></script>
   <script src="js/ai-manifest.js?v=10"></script>
@@ -1119,8 +1120,8 @@
   <script src="js/ai-mock.js?v=5"></script>
   <script src="js/ai-templates.js?v=3"></script>
   <script src="js/ai.js?v=11"></script>
-  <script src="js/ai-panel.js?v=7"></script>
-  <script src="js/ai-chat.js?v=5"></script>   <!-- queue 856: the AI you TALK to; after ai-panel (reuses its key form) -->
+  <script src="js/ai-panel.js?v=8"></script>
+  <script src="js/ai-chat.js?v=6"></script>   <!-- queue 856: the AI you TALK to; after ai-panel (reuses its key form) -->
   <!-- queue 921 stage S1 — the pure collaboration core. Path grammar, the diff/apply engine and the
        host sequencer, in dependency order. All three are libraries: they define FM.collab.path /
        .diff / .Host and do nothing else, so with no session running they cost one parse each. -->
@@ -1138,7 +1139,7 @@
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
        A library like the rest: it does nothing at all until a session installs a controller on it. -->
-  <script src="js/collab-media.js?v=4"></script>
+  <script src="js/collab-media.js?v=5"></script>
   <!-- queue 921 stage S3 — the first real connection and the only collaboration UI there is. Both are
        libraries too: `signal` is the minimal-SDP codec and the auth handshake (no rendezvous driver, no
        invite link — those are S6), and `ui` builds nothing at all until Settings → Labs → Live
@@ -1147,7 +1148,7 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=8"></script>
+  <script src="js/collab-ui.js?v=9"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->

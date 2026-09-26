@@ -1395,6 +1395,7 @@ window.FM = window.FM || {};
       const x = document.createElement('button');
       x.type = 'button'; x.className = 'cm-close'; x.textContent = '×';
       x.setAttribute('aria-label', 'Hide');
+      if (FM.drawnX) FM.drawnX(x, 18);   // queue 965: one drawn ✕ for the app
       x.addEventListener('click', function () { const c = UI._ctl; if (c) c.cardHidden = sigOf(c); UI.hide(); });
       cardEl.appendChild(textEl); cardEl.appendChild(subEl); cardEl.appendChild(track); cardEl.appendChild(x);
       (document.getElementById('stage') || document.body).appendChild(cardEl);

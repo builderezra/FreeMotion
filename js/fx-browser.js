@@ -696,6 +696,7 @@ window.FM = window.FM || {};
       row.appendChild(txt);
       if (mine) {
         const del = el('span', 'fxp-del', '✕'); del.title = 'Delete this preset';
+        if (FM.drawnX) FM.drawnX(del, 16);   // queue 965: one drawn ✕ for the app
         del.addEventListener('click', (e) => {
           e.stopPropagation();
           FM.effectPresets.remove(preset.id);

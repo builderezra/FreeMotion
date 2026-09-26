@@ -60,6 +60,7 @@ window.FM = window.FM || {};
     ringFill = ring.querySelector('.ring-fill');
     head.appendChild(ring);
     var close = el('button', 'ai-close', '✕'); close.title = 'Close'; close.addEventListener('click', hide);
+    if (FM.drawnX) FM.drawnX(close, 20);   // queue 965: one drawn ✕ for the app
     head.appendChild(close);
     panelEl.appendChild(head);
 

@@ -3347,6 +3347,7 @@ window.FM = window.FM || {};
     if (typeof o.onClose === 'function') {
       const x = btn('cb-x', '\u00d7', function (e) { e.stopPropagation(); o.onClose(); });
       x.setAttribute('aria-label', o.closeLabel || 'Close');
+      if (FM.drawnX) FM.drawnX(x, 18);   // queue 965: one drawn ✕ for the app
       bannerEl.appendChild(x);
     }
     if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }

@@ -559,6 +559,71 @@ for q in $(printf '%s' "$LOGLINE_Q" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+
   exit 1
 done
 
+# ⚠️ THESE TWO GATES RUN BEFORE THE PROOF AND THE SUITE (26 Sep, v17.04). They read files and the commit message and
+# nothing else, so they answer in a second — but they sat AFTER the half-hour desktop pass, and v17.04 lost an hour to a
+# deliberate test RENAME that the gate (rightly) wanted declared, found only once 1980 tests had already gone green.
+# ─── NO TEST MAY VANISH WITHOUT SAYING SO (28 Aug) ──────────────────────────────────────────────
+# A DELETED TEST IS INDISTINGUISHABLE FROM A PASSING ONE. On 28 Aug a text edit meant to REPLACE one
+# test spliced away four — #649, both #664s and #666 — and the suite went green on 1047 where it had
+# been 1051. Green is exactly what that looks like. It was found only by diffing the test NAMES against
+# the last commit, by hand, because it happened to occur to me.
+# ⚠️ THE TEST-FLOOR CHECK ABOVE IS NOT THIS. It compares a COUNT, so four deletions and four additions
+# net to zero and it says nothing — and the floor is a number a session edits by hand, so the honest
+# way to silence it is the same keystroke as the honest way to update it.
+# This compares the NAMES. Deleting a test is a legitimate thing to do — a fixture dies, a feature goes
+# — so it is not forbidden, it is DECLARED: put "DROPS TEST:" in the commit message and it passes. That
+# turns a silent deletion into a line in the log, which is the whole pattern this file is built on.
+GONE="$(git show HEAD:tests/tests.js 2>/dev/null | grep -o "^  test('[^']*'" | sed "s/^  test('//;s/'\$//" | sort > /tmp/fm_tests_before.txt
+grep -o "^  test('[^']*'" tests/tests.js | sed "s/^  test('//;s/'\$//" | sort > /tmp/fm_tests_after.txt
+comm -23 /tmp/fm_tests_before.txt /tmp/fm_tests_after.txt)"
+if [ -n "$GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS TEST:'; then
+  echo "❌ these tests exist in HEAD and are GONE from the working tree:"
+  printf '   · %s\n' $(printf '%s' "$GONE" | tr ' ' '_') 2>/dev/null || printf '%s\n' "$GONE"
+  echo
+  echo "   A deleted test is indistinguishable from a passing one — the suite goes GREEN."
+  echo "   If the deletion is deliberate, say so: put \"DROPS TEST: <why>\" in the commit message."
+  exit 1
+fi
+
+# ─── NO REQUEST MAY VANISH WITHOUT SAYING SO (2 Sep) ────────────────────────────────────────────
+# The twin of the gate above, and it exists because the thing it prevents ALREADY HAPPENED. On 1 Sep,
+# v14.89 — a release about the camera's motion-blur shutter — deleted queue 703 from REQUESTS.md. That
+# entry held one of HIS OWN VERBATIM INSTRUCTIONS: "Dont stop looping, keep it going, have a failsafe
+# incase the loop fails". Nothing in that commit mentioned it. Nothing went red. The file is prose, and
+# prose has no test.
+# CLAUDE.md already names this as the worst thing that can happen here — "quietly dropping a request is
+# the exact failure this file exists to prevent" — and until today the only thing enforcing it was care,
+# which is exactly what this repo has learned not to rely on.
+# It was caught a day later by tools/next.sh, and only indirectly: that script flags a NUMBER with no
+# entry, so it saw a hole at 703 rather than a deletion. That is luck dressed as detection — it would
+# have said nothing at all had the entry been the highest-numbered one, or unnumbered.
+# Deleting an entry is occasionally legitimate (a renumber, a merge into a neighbour — three such have
+# happened and all three came back). So this is not forbidden, it is DECLARED, the same shape as the
+# test gate: put "DROPS REQUEST:" in the commit message and it passes, which turns a silent deletion
+# into a line in the log.
+REQ_GONE="$(git show HEAD:REQUESTS.md 2>/dev/null | grep -oE '^- \[[ x]\] \*\*[0-9]+[a-z]?' | grep -oE '[0-9]+[a-z]?$' | sort -u > /tmp/fm_req_before.txt
+grep -oE '^- \[[ x]\] \*\*[0-9]+[a-z]?' REQUESTS.md | grep -oE '[0-9]+[a-z]?$' | sort -u > /tmp/fm_req_after.txt
+comm -23 /tmp/fm_req_before.txt /tmp/fm_req_after.txt)"
+# ⚠️ AND THE GATE MUST PROVE IT CAN SEE. A pattern that matches NOTHING reports no losses and waves
+# every deletion through — the failure is silence, which is the one thing no one notices. If the entry
+# header format in REQUESTS.md ever drifts from this regex, that is what happens, so count first.
+REQ_SEEN="$(wc -l < /tmp/fm_req_before.txt | tr -d ' ')"
+if [ "${REQ_SEEN:-0}" -lt 100 ]; then
+  echo "❌ the REQUESTS.md entry gate matched only $REQ_SEEN entries in HEAD — it expects hundreds."
+  echo "   The header format has drifted from the pattern, so this gate is blind and would pass"
+  echo "   ANY deletion silently. Fix the regex in tools/ship.sh before shipping."
+  exit 1
+fi
+if [ -n "$REQ_GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS REQUEST:'; then
+  echo "❌ these REQUESTS.md entries exist in HEAD and are GONE from the working tree:"
+  printf '%s\n' "$REQ_GONE" | sed 's/^/   · #/'
+  echo
+  echo "   A request that vanishes is not deprioritised, it is UNREACHABLE — and he cannot see that it"
+  echo "   went. This is how #703 lost his own words: \"Dont stop looping… have a failsafe\"."
+  echo "   If the removal is deliberate, say so: put \"DROPS REQUEST: <why>\" in the commit message."
+  exit 1
+fi
+
 echo "→ proving the release (its changed tests must fail without the fix)…"
 tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
 
@@ -627,68 +692,6 @@ echo "✅ $SUM"
 # paying five minutes to prove that on every one of them is how a gate gets switched off. Deliberately
 # NOT an allowlist of "UI files": such a list is right the day it is written and stale by the next
 # module, which is the failure mode this file exists to remove.
-# ─── NO TEST MAY VANISH WITHOUT SAYING SO (28 Aug) ──────────────────────────────────────────────
-# A DELETED TEST IS INDISTINGUISHABLE FROM A PASSING ONE. On 28 Aug a text edit meant to REPLACE one
-# test spliced away four — #649, both #664s and #666 — and the suite went green on 1047 where it had
-# been 1051. Green is exactly what that looks like. It was found only by diffing the test NAMES against
-# the last commit, by hand, because it happened to occur to me.
-# ⚠️ THE TEST-FLOOR CHECK ABOVE IS NOT THIS. It compares a COUNT, so four deletions and four additions
-# net to zero and it says nothing — and the floor is a number a session edits by hand, so the honest
-# way to silence it is the same keystroke as the honest way to update it.
-# This compares the NAMES. Deleting a test is a legitimate thing to do — a fixture dies, a feature goes
-# — so it is not forbidden, it is DECLARED: put "DROPS TEST:" in the commit message and it passes. That
-# turns a silent deletion into a line in the log, which is the whole pattern this file is built on.
-GONE="$(git show HEAD:tests/tests.js 2>/dev/null | grep -o "^  test('[^']*'" | sed "s/^  test('//;s/'\$//" | sort > /tmp/fm_tests_before.txt
-grep -o "^  test('[^']*'" tests/tests.js | sed "s/^  test('//;s/'\$//" | sort > /tmp/fm_tests_after.txt
-comm -23 /tmp/fm_tests_before.txt /tmp/fm_tests_after.txt)"
-if [ -n "$GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS TEST:'; then
-  echo "❌ these tests exist in HEAD and are GONE from the working tree:"
-  printf '   · %s\n' $(printf '%s' "$GONE" | tr ' ' '_') 2>/dev/null || printf '%s\n' "$GONE"
-  echo
-  echo "   A deleted test is indistinguishable from a passing one — the suite goes GREEN."
-  echo "   If the deletion is deliberate, say so: put \"DROPS TEST: <why>\" in the commit message."
-  exit 1
-fi
-
-# ─── NO REQUEST MAY VANISH WITHOUT SAYING SO (2 Sep) ────────────────────────────────────────────
-# The twin of the gate above, and it exists because the thing it prevents ALREADY HAPPENED. On 1 Sep,
-# v14.89 — a release about the camera's motion-blur shutter — deleted queue 703 from REQUESTS.md. That
-# entry held one of HIS OWN VERBATIM INSTRUCTIONS: "Dont stop looping, keep it going, have a failsafe
-# incase the loop fails". Nothing in that commit mentioned it. Nothing went red. The file is prose, and
-# prose has no test.
-# CLAUDE.md already names this as the worst thing that can happen here — "quietly dropping a request is
-# the exact failure this file exists to prevent" — and until today the only thing enforcing it was care,
-# which is exactly what this repo has learned not to rely on.
-# It was caught a day later by tools/next.sh, and only indirectly: that script flags a NUMBER with no
-# entry, so it saw a hole at 703 rather than a deletion. That is luck dressed as detection — it would
-# have said nothing at all had the entry been the highest-numbered one, or unnumbered.
-# Deleting an entry is occasionally legitimate (a renumber, a merge into a neighbour — three such have
-# happened and all three came back). So this is not forbidden, it is DECLARED, the same shape as the
-# test gate: put "DROPS REQUEST:" in the commit message and it passes, which turns a silent deletion
-# into a line in the log.
-REQ_GONE="$(git show HEAD:REQUESTS.md 2>/dev/null | grep -oE '^- \[[ x]\] \*\*[0-9]+[a-z]?' | grep -oE '[0-9]+[a-z]?$' | sort -u > /tmp/fm_req_before.txt
-grep -oE '^- \[[ x]\] \*\*[0-9]+[a-z]?' REQUESTS.md | grep -oE '[0-9]+[a-z]?$' | sort -u > /tmp/fm_req_after.txt
-comm -23 /tmp/fm_req_before.txt /tmp/fm_req_after.txt)"
-# ⚠️ AND THE GATE MUST PROVE IT CAN SEE. A pattern that matches NOTHING reports no losses and waves
-# every deletion through — the failure is silence, which is the one thing no one notices. If the entry
-# header format in REQUESTS.md ever drifts from this regex, that is what happens, so count first.
-REQ_SEEN="$(wc -l < /tmp/fm_req_before.txt | tr -d ' ')"
-if [ "${REQ_SEEN:-0}" -lt 100 ]; then
-  echo "❌ the REQUESTS.md entry gate matched only $REQ_SEEN entries in HEAD — it expects hundreds."
-  echo "   The header format has drifted from the pattern, so this gate is blind and would pass"
-  echo "   ANY deletion silently. Fix the regex in tools/ship.sh before shipping."
-  exit 1
-fi
-if [ -n "$REQ_GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS REQUEST:'; then
-  echo "❌ these REQUESTS.md entries exist in HEAD and are GONE from the working tree:"
-  printf '%s\n' "$REQ_GONE" | sed 's/^/   · #/'
-  echo
-  echo "   A request that vanishes is not deprioritised, it is UNREACHABLE — and he cannot see that it"
-  echo "   went. This is how #703 lost his own words: \"Dont stop looping… have a failsafe\"."
-  echo "   If the removal is deliberate, say so: put \"DROPS REQUEST: <why>\" in the commit message."
-  exit 1
-fi
-
 PHONE_RELEVANT="$(git diff --cached --name-only; git diff --name-only)"
 if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; then
   echo "→ running the suite again at PHONE width (380px)…"

@@ -42,7 +42,9 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
    · **Stopping is never mine to choose.** He asked for a loop that does not stop. If a tick has nothing,
      the answer is one line — not switching off the thing he asked for.
    If a tick ever genuinely has nothing: say so in ONE LINE and let the next tick fire. Do not touch the
-   cron. If the queue looks empty for several ticks running, that is a signal to AUDIT THE CLASSIFIER
+   cron. ⚠️ **But since 26 Sep (#966) "nothing" has a standing answer in his own words:** next.sh prints an
+   IDLE STEER whenever nothing is ACTIONABLE — new effects, filters, sound effects, and more options on
+   existing effects ("more choices always better … this is the complex version"). Work that before calling a tick empty. If the queue looks empty for several ticks running, that is a signal to AUDIT THE CLASSIFIER
    ⚠️ **AMENDED 20 Sep, by him, and this half is NEWER than everything above it (queue #877, #880).** He
    said, unprompted, at the end of the restart brief: *"you can stop the loop if you truely run out of
    productive things to do."* That REVERSES "stopping is never mine to choose". It does NOT reverse the

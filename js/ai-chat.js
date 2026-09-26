@@ -292,6 +292,7 @@ window.FM = window.FM || {};
     head.appendChild(keyBtn);
     var close = el('button', 'aic-close', '✕');
     close.type = 'button'; close.title = 'Close'; close.setAttribute('aria-label', 'Close assistant');
+    if (FM.drawnX) FM.drawnX(close, 22);   // queue 965: one drawn ✕ for the app
     close.addEventListener('click', hide);
     head.appendChild(close);
     panelEl.appendChild(head);

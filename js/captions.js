@@ -443,6 +443,7 @@ window.FM = window.FM || {};
            with no warning. The row's text button and time fields already held the caption itself; now the cross does
            too, and a row whose caption has gone (an undo replaced every cue) removes nothing and redraws the list. */
         const del = el('button', 'cap-del', '✕'); del.title = 'Remove cue';
+        if (FM.drawnX) FM.drawnX(del, 18);   // queue 965: one drawn ✕ for the app
         del.addEventListener('click', () => {
           const k = layer.captions.indexOf(c);
           if (k >= 0) layer.captions.splice(k, 1);

@@ -407,6 +407,7 @@ window.FM = window.FM || {};
     head.appendChild(el('div', 'set-title', 'Settings'));
     const close = el('button', 'set-close', '✕');
     close.type = 'button'; close.setAttribute('aria-label', 'Close settings');
+    if (FM.drawnX) FM.drawnX(close, 28);   // queue 965: his pick B — the search ✕'s drawn disc at 28px, in the same 34px button
     close.addEventListener('click', () => FM.settings.close());
     head.appendChild(close);
 

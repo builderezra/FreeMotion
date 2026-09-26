@@ -269,6 +269,7 @@ window.FM = window.FM || {};
     top.appendChild(el('div', 'vr-title', 'Record voice'));
     var x = el('button', 'vr-close', '✕');
     x.type = 'button'; x.setAttribute('aria-label', 'Close');
+    if (FM.drawnX) FM.drawnX(x, 22);   // queue 965: one drawn ✕ for the app
     x.addEventListener('click', function () { close(); });
     top.appendChild(x);
     card.appendChild(top);

@@ -400,7 +400,7 @@ for n, i in enumerate(starts):
     key = classify(body)
     buckets[key].append((tag, title, i + 1))
     if is_audit(body): audit_tags.append(tag)        # my findings list after his words (2 Sep)
-for k in ('ACTIONABLE', 'blocked on Ezra', 'built out — waiting on him', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):
+for k in ('ACTIONABLE', 'blocked on Ezra', 'built out — waiting on him', 'waiting on the logging chat', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):
     print('%-28s %d' % (k + ':', len(buckets[k])))
 # BUILT OUT, LISTED — NEVER HIDDEN (2 Sep). These are older than everything in the work queue below and
 # each says in its own tail what it is waiting for from him. They are printed here every tick so a
@@ -409,6 +409,12 @@ bo = buckets['built out — waiting on him']
 if bo:
     print('\n⏸ BUILT OUT — nothing to build until he answers (%d, oldest first; the entry says what it needs):' % len(bo))
     for tag, title, ln in sorted(bo, key=lambda r: (0, 0) if not r[0][0].isdigit() else (1, int(''.join(c for c in r[0] if c.isdigit())))):
+        print('  %-6s line %-6d %s' % (tag, ln, title))
+# WAITING ON THE LOGGING CHAT'S PLAN — listed, never hidden (26 Sep; see _classify.py PLAN_PENDING).
+lp = buckets['waiting on the logging chat']
+if lp:
+    print('\n⏳ PLAN PENDING — the logging chat is drawing the plan; build when its block lands and the entry says PLAN LANDED (%d):' % len(lp))
+    for tag, title, ln in sorted(lp, key=lambda r: (0, 0) if not r[0][0].isdigit() else (1, int(''.join(c for c in r[0] if c.isdigit())))):
         print('  %-6s line %-6d %s' % (tag, ln, title))
 # ⚠️ THIS LIST INCLUDES ITEMS BLOCKED ON HIM, ON PURPOSE (queue 660). It used to show ACTIONABLE only,
 # and the classifier files 43 of 76 open items as blocked — so more than half the list was invisible and
@@ -432,5 +438,13 @@ if wq:
         print('     keep going". Build the half that does not need the answer and write the question down.')
 else:
     print('\nNothing left in the work queue — bug hunts are the fallback (his explicit instruction).')
+# IDLE STEER (#966, his words 26 Sep): "if you ever run out of things to do … add new effects … new filters … new
+# sound effects … polish other effects … more choices always better … this is the complex version". Printed whenever
+# nothing is ACTIONABLE, so an idle loop turns into work instead of a one-line stop. New effects/filters still go
+# through #545 (draw options, he picks); more controls on an existing effect can ship with a before/after.
+if not buckets['ACTIONABLE']:
+    print('\nIDLE STEER (#966, his words 26 Sep): new effects / new filters / new sound effects / polish effects with more')
+    print('  options — "more choices always better … this is the complex version". Starting menu: #482, #904, #912, #858,')
+    print('  the EFFECTS-PLAN build rounds, the sound-effects library. New effects and filters: options first (#545).')
 print('\n(A guess from the prose. If one is wrong, the entry is what to fix, not this script.)')
 PY

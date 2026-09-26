@@ -109,6 +109,7 @@ window.FM = window.FM || {};
 
         const del = el('button', 'np-del', '✕');
         del.type = 'button'; del.title = 'Delete this note';
+        if (FM.drawnX) FM.drawnX(del, 18);   // queue 965: one drawn ✕ for the app
         del.addEventListener('click', () => { list().splice(i, 1); save(); render(); badge(); });
 
         row.append(tick, ta, del);
