@@ -6459,24 +6459,21 @@ window.FM = window.FM || {};
       const amFloor = () => bandH();          // queue 808: measured, never parsed out of the custom property
       const amClamp = (h) => {
         const vh = window.innerHeight;
-        /* How far up it may go. This was 0.82 of the window, which leaves about 140px of stage on a
-           1280x800 screen — with the sideways bug on top of it, that is the "takes up the whole
-           screen" he reported. 0.62 keeps roughly a third of the window as canvas, which is the point
-           of a menu that floats OVER the canvas rather than replacing it. A judgement call rather than
-           a measured one, so it is a single number in one place if he wants it taller.
-           ⚠️ …AND IT MUST NEVER BE LOWER THAN WHAT THE TIMELINE DRAG CAN ALREADY PRODUCE (queue 512).
-           Ezra: "it gets to a limit on how far it can be dragged up by itself. But if you drag it up
-           with the timeline at the same time, then it lets it drag up higher, which is really weird."
-           He is describing this exactly, and the numbers are stark — measured at a 820px window: this
-           ceiling is 508px, the timeline's is 590px, and the panel's FLOOR is `--tl-h`. The floor is
-           applied with Math.max AFTER the Math.min below, so once the timeline has been dragged to its
-           own 590 the floor overrides this ceiling and the panel goes to 590 — while dragging the panel
-           on its own still stopped dead at 508. Two paths to one size, 82px apart.
-           So the ceiling now asks the timeline's own clamp what IT would allow and never sits below it.
-           Tied to the function rather than to a copy of the number, so the two cannot drift apart again
-           — which is how they got 82px apart in the first place. */
-        const ceil = Math.max(200, Math.round(vh * 0.62),
-                              FM.clampTimelineH ? FM.clampTimelineH(vh) : 0);
+        /* queue 958 — UP TO THE TOP OF THE WINDOW, WHEREVER THE TIMELINE IS. Ezra, 26 Sep: *"You should be able to drag it
+           like up to like the top of the screen, honestly. So it covers up the whole side of the screen. But you know, it, no
+           matter where the timeline is."*
+           The ceiling this replaces was max(0.62·vh, the TIMELINE's own ceiling): queue 512 tied the two together so the
+           menu could never stop lower alone than it could with the timeline, and that tie is his "still bound to how high the
+           timeline is" — measured with the real drag, the menu stopped at 576 of an 800px window (top at y=224) at 900 and
+           1280 wide, and at 778 of 1080 (y=302) at 1920, identically with the timeline at its min, its default and its max.
+           Nothing above it needs protecting on PC: #topbar is display:none there, and Back / ? / notes / settings / Export
+           live in the transport row, inside the band the menu rises out of. So it may rise until its HANDLE — which hangs
+           above the panel's top edge — reaches the window's top; any higher and the handle is off screen and the menu could
+           never be pulled back down. --am-bottom is the gap the band leaves under it (0 in every PC layout measured; read so
+           a band that ever sits higher still stops right). Queue 512's rule holds by construction: this is never below the
+           timeline's own ceiling (0.72·vh at most). */
+        const below = parseInt(root.style.getPropertyValue('--am-bottom'), 10) || 0;
+        const ceil = Math.max(200, vh - below - (amRez.offsetHeight || 9));
         return Math.max(amFloor(), Math.min(ceil, h));
       };
       FM.clampAddMenuH = amClamp;         // exposed so the suite tests the clamp that runs, not a copy
@@ -6612,8 +6609,9 @@ window.FM = window.FM || {};
         amSheetFollow();
       };
       /* queue 807: a window that shrinks under a raised panel used to leave --am-h where the drag put it,
-         so the handle could end up above the screen with no way to reach it; re-clamped to the same
-         0.62·vh rule the drag obeys, and the sheet told to follow. */
+         so the handle could end up above the screen with no way to reach it; re-clamped by amClamp — the
+         same rule the drag obeys (queue 958: up to the window's top, handle on screen) — and the sheet
+         told to follow. */
       window.addEventListener('resize', () => {
         if (isPhone()) { FM.dropAddMenuFloat(); return; }
         if (!document.body.classList.contains('am-floating')) return;
