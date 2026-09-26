@@ -941,11 +941,15 @@ window.FM = window.FM || {};
    * The skips are collected here rather than at the caller because this is the one place that knows
    * WHICH file was dropped and how big it was, and `omitted` travels INSIDE the written file so the
    * file can answer "is my video in here" a year later without the app's help. */
-  FM.storage.serializeScene = async function (scene) {
+  FM.storage.serializeScene = function (scene) { return serializeWith(scene, function (layerId) { return FM.media.get(layerId); }); };
+  /* `mediaOf(layerId)` says where a layer's file comes from: the live FM.media for the open project, or IndexedDB for
+     one that is not open (exportProjectFile below, queue 690 seventh hunt). ONE loop for both, so the size limit and
+     the named omissions (queue 888) cannot drift apart between the two ways of saving a project file. */
+  async function serializeWith(scene, mediaOf) {
     const media = {}, omitted = [];
     for (const layer of scene.layers) {
-      if (layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
-      const m = FM.media.get(layer.id);
+      if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
+      const m = await mediaOf(layer.id);
       if (!m || !m.file) continue;                     // nothing loaded for this layer — not an omission
       if (m.file.size > EMBED_LIMIT) {
         omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
@@ -957,7 +961,7 @@ window.FM = window.FM || {};
     }
     const fonts = await embedFonts(scene.layers);
     return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts, omitted: omitted };
-  };
+  }
 
   /* Embed the custom fonts the text layers actually use, so the file still renders correctly when it is
      opened on another device (fonts are otherwise a device-local library).
@@ -1727,8 +1731,47 @@ window.FM = window.FM || {};
   };
 
   FM.storage.exportFile = async function () {
-    const obj = await FM.storage.serializeScene(FM.scene);
-    const name = ((FM.scene.project.name || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
+    saveProjectFile(await FM.storage.serializeScene(FM.scene));
+  };
+  /* ═══ SAVE A PROJECT FILE FOR A PROJECT THAT IS NOT OPEN (queue 690, seventh hunt) ═════════════════════════════════
+   * Home's ⋯ → Save project file… on another card used to OPEN that project, export it, and open his own again. The
+   * second open is a full reload from disk, and a reload is a fresh start: his undo history gone, the playhead back at
+   * 0, his selected layer let go — all for an action that only writes a backup file. And leaving the other project
+   * re-took ITS card picture at time 0, so a card whose clip starts later turned into an empty background.
+   * A project that is not open is already whole on this device — its document in localStorage and its files in
+   * IndexedDB — which is how templates, elements and Back up every project already read one (packFromProject). So
+   * this writes the same .fmotion.json from there and never touches the open project. The document gets what every
+   * open gives it (the size clamp and the per-layer safety checks of load()), so the file is the one opening it and
+   * saving would have written. The CARD's name wins, as in the backup: it is the name he chose it by.
+   * Resolves false when the project is no longer on this device. */
+  FM.storage.exportProjectFile = async function (projectId) {
+    if (!projectId || projectId === tabId()) {   // the open one: its live scene is the truth — with anything Home released put back first (queue 385)
+      await hydrateSceneMedia({ onlyMissing: true });
+      await FM.storage.exportFile();
+      return true;
+    }
+    const doc = readJSON('fm.proj.' + projectId, null);
+    if (!doc || !doc.project) return false;
+    const scene = JSON.parse(JSON.stringify(doc));
+    clampProjectDims(scene.project);
+    scene.layers = (Array.isArray(scene.layers) ? scene.layers : []).filter(Boolean);
+    scene.layers.forEach(l => { sanitizeMasks(l); sanitizeEffects(l); sanitizeUnsafeValues(l); });
+    const live = new Set(scene.layers.map(l => l.id));
+    scene.selectedIds = (Array.isArray(scene.selectedIds) ? scene.selectedIds : (scene.selectedId ? [scene.selectedId] : [])).filter(id => live.has(id));
+    const card = ((FM.projects && FM.projects.list()) || []).find(p => p.id === projectId);
+    if (card && card.name) scene.project.name = card.name;
+    let db = null;
+    try { db = await openDB(); } catch (e) { db = null; }
+    try {
+      saveProjectFile(await serializeWith(scene, async function (layerId) {
+        if (!db) return null;
+        try { return await idbGetMedia(db, layerId); } catch (e) { return null; }   // a pointer reads as its file (queue 915)
+      }));
+    } finally { try { if (db) db.close(); } catch (e) {} }
+    return true;
+  };
+  function saveProjectFile(obj) {
+    const name = (((obj.project && obj.project.name) || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
     const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = name + '.fmotion.json';
@@ -1745,7 +1788,7 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (many ? ' clips — ' : ' clip — ') +
       names + (miss.length > 2 ? ' and more' : '') + (many ? ' are' : ' is') +
       ' too big to fit in a project file. Use Settings → Back up every project to keep the footage.', 12000);
-  };
+  }
 
   /* ═══ BACK UP EVERY PROJECT TO ONE FILE (queue 869) ═══════════════════════════════════════════
    * Until now the ONLY backup was exportFile above: one project, by hand, before anything went
