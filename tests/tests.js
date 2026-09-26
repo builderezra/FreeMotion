@@ -100709,4 +100709,34 @@
     }
   });
 
+  /* ═══ QUEUE 942 — OPENING THE APP LANDS ON HOME ══════════════════════════════════════════════════════════════════════════
+     Ezra, 26 Sep: *"Make it to that every time you load into the app for the first time like in the loading screen plays it puts
+     you in the home menu not in your project"*. The boot dropped him back into the editor whenever he had left from inside a
+     project (localStorage fm.view). The intro plays once per browser session, so the rule is: a session's first load lands on
+     Home; a reload inside the session (the version chip's update, a refresh) still returns to the project. Measured on a whole
+     app on its own origin, through the collab test agent: leave from inside a project, reload in the SAME session (control —
+     back in the editor), then open the app afresh (a NEW session) — Home. */
+  test('942 opening the app lands on Home even when he left from inside a project — a reload in the same session still goes back in', { item: '942', budgetMs: 150000 }, async function () {
+    const R = rig921();
+    const tag = 'o942';
+    const src = 'http://o942.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag;
+    try {
+      await R.bootSrc(tag, src, 390, 844);
+      const e1 = await R.rpc(tag, 'enterEditor942');
+      if (e1.homeOpen || e1.view !== 'editor' || !e1.cur) throw new Error('setup: could not get into the editor on a project: ' + JSON.stringify(e1).replace(/"/g, "'"));
+      await R.reboot(tag);   // the SAME session: a refresh or the version chip's update
+      await R.sleep(1500);
+      const s1 = await R.rpc(tag, 'fresh936');
+      if (s1.homeOpen) throw new Error('control: a reload in the SAME session landed on Home — a refresh or the version chip update must still go back into the project he was in');
+      const was = R.upCount(tag);
+      await R.rpc(tag, 'newSession942');
+      await R.waitUp(tag, was + 1);
+      await R.rpc(tag, 'ready');
+      await R.sleep(1500);
+      const s2 = await R.rpc(tag, 'fresh936');
+      if (!s2.homeOpen) throw new Error('opening the app afresh put him straight back inside the project he left, not on Home — his words: every time the loading screen plays it puts you in the home menu');
+      if (!s2.cur) throw new Error('control: the project he was in is no longer the open one — landing on Home must not close it');
+    } finally { R.drop(tag); }
+  });
+
 })();

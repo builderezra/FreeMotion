@@ -240,6 +240,21 @@
     /* queue 936: what a fresh start left behind — projects listed, one open, the empty state, the OPEN badge, and
        every project doc in storage (a fresh start must write none). */
     fresh936: function () { return snap936(); },
+    /* queue 942: into the editor on a project, as he leaves the app from inside one */
+    enterEditor942: async function () {
+      if (!FM.projects.currentId()) await FM.projects.create({ name: 'In the editor', confirmed: true });
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(600);
+      let v = null; try { v = localStorage.getItem('fm.view'); } catch (e) {}
+      return { homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), view: v, cur: FM.projects.currentId(), first: window.FM_FIRST_LOAD };
+    },
+    /* a NEW session: what a phone does when the app was closed and is opened again (sessionStorage is per session) */
+    newSession942: function () {
+      try { sessionStorage.clear(); } catch (e) {}
+      const url = location.href.replace(/([?&])fmwipe=1(&|$)/, function (m, a, b) { return b ? a : ''; });
+      setTimeout(function () { location.replace(url); }, 10);
+      return true;
+    },
     /* a window with nothing open doing what it does when it is hidden or switches: flush, stamp its card, re-render Home */
     fresh936flush: async function () {
       FM.storage.flushSync(); FM.projects.touchCurrent(true);

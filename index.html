@@ -101,6 +101,11 @@
     <div id="splash-skip">tap to skip</div>
   </div>
   <script>
+    /* queue 942: IS THIS THE FIRST LOAD SINCE THE APP WAS OPENED? Ezra, 26 Sep: *"every time you load into the app for the
+       first time like in the loading screen plays it puts you in the home menu not in your project"*. The intro plays once per
+       browser session (fm.splashed below), so "the loading screen plays" = the session's first load. Recorded HERE, before the
+       intro's own early returns (reduced motion skips the film but is still a first load), and read by app.js's boot landing. */
+    try { window.FM_FIRST_LOAD = !sessionStorage.getItem('fm.session'); sessionStorage.setItem('fm.session', '1'); } catch (e) { window.FM_FIRST_LOAD = true; }
     (function () {
       try {
         if (sessionStorage.getItem('fm.splashed')) return;

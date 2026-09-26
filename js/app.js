@@ -6789,7 +6789,12 @@ window.FM = window.FM || {};
         // the project they were editing — home.js writes 'fm.view' on every open/close. The
         // restored-project guard keeps a deleted/first-boot project from opening an empty editor.
         let lastView = null; try { lastView = localStorage.getItem('fm.view'); } catch (e) {}
-        if (!(restored && lastView === 'editor')) FM.home.open();
+        /* queue 942: …but NOT when the app has just been opened. His words: "every time you load into the app for the first
+           time like in the loading screen plays it puts you in the home menu not in your project". A reload inside the same
+           session (the version chip's update, a pull-to-refresh) still drops him back where he was — the intro does not play
+           for those either. The project stays loaded behind Home, marked OPEN, one tap away. */
+        const firstLoad = window.FM_FIRST_LOAD !== false;
+        if (firstLoad || !(restored && lastView === 'editor')) FM.home.open();
       }
       /* ⚠️ WARN ABOUT THE PROJECT HE IS ACTUALLY IN (queue 487). `warnOversizeProject` had exactly one
          caller — `projects.open()` — and a refresh does not go through it: the boot above restores the
