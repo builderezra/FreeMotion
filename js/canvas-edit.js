@@ -217,6 +217,30 @@ window.FM = window.FM || {};
     return rx >= -s.w * ax + shx && rx <= s.w * (1 - ax) + shx && ry >= -s.h * ay && ry <= s.h * (1 - ay);
   }
 
+  /* TWO ONE-LINE TIPS FOR TWO OF HIS RULES (UX review top #1 and #2). Both rules stay exactly as he set them:
+     the preview never selects (v2.93, "Layers are picked from the timeline"), and a preview drag moves the
+     WHOLE animation (v3.00, his clarification). What the review found is that nothing says so: two bots
+     tapped layers for minutes and concluded selection was broken, and both expected a drag on an animated
+     layer to edit the keyframe at the playhead. So each rule explains itself the first few times it
+     surprises someone — at most TIP_MAX times ever, per rule, and never inside the suite's frame. */
+  const CANVAS_TIP_MAX = 3;
+  FM._canvasTipsAllowed = (function () { try { return window.top === window; } catch (e) { return false; } })();
+  const CANVAS_TIPS = {
+    pick: { key: 'fm.tip.canvasPick', text: 'Layers are picked from the timeline below. The preview is for watching, panning and zooming.' },
+    whole: { key: 'fm.tip.wholeAnim', text: 'Moved the whole animation. To change just this keyframe, use Move & Transform.' },
+  };
+  FM._canvasTips = { tips: CANVAS_TIPS, max: CANVAS_TIP_MAX };
+  function canvasTip(which) {
+    const tip = CANVAS_TIPS[which];
+    if (!tip || !FM._canvasTipsAllowed || !FM.toast) return;
+    try {
+      const n = +(localStorage.getItem(tip.key) || 0);
+      if (n >= CANVAS_TIP_MAX) return;
+      localStorage.setItem(tip.key, String(n + 1));
+    } catch (e) { return; }   // no storage, no way to stop repeating it: say nothing
+    FM.toast(tip.text, 4000);
+  }
+
   function topHit(px, py) {
     const t = FM.time;
     for (let i = 0; i < FM.scene.layers.length; i++) {
@@ -677,6 +701,8 @@ window.FM = window.FM || {};
       if (d.mode === 'viewpan') {
         // Nothing selected → the canvas NEVER selects (Ezra): it's purely the player surface —
         // tap does nothing, drag pans, pinch/wheel zooms. Layers are picked from the timeline.
+        // …and the first few times the tap lands ON a layer, say so (UX review top #1).
+        if (d.startP && topHit(d.startP.x, d.startP.y)) canvasTip('pick');
       } else if (d.mode === 'move' && d.fromSelected) {
         if (hitSelected(d.layer, d.startP.x, d.startP.y)) {
           // Re-tapping the ALREADY-selected layer must still reopen the phone inspector sheet if it
@@ -687,6 +713,9 @@ window.FM = window.FM || {};
       return;   // no undo snapshot — nothing changed
     }
     if (d.mode === 'viewpan') return;   // view-only — never touches the scene or history
+    // A preview drag on an ANIMATED layer shifted every position keyframe (his v3.00 rule); say so the first
+    // few times, because it reads as "my animation vanished" otherwise (UX review top #2).
+    if (d.mode === 'move' && d.layer && d.layer.transform && (FM.isAnimated(d.layer.transform.x) || FM.isAnimated(d.layer.transform.y))) canvasTip('whole');
     if (FM.inspector) FM.inspector.refresh();  // sync number fields once, after the drag
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.history) FM.history.commit();

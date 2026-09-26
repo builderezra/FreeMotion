@@ -48470,6 +48470,64 @@
     }
   });
 
+  test('the preview explains its two rules: taps never select, and a drag moves the whole animation (UX review top #1 and #2)', { item: 'uxr-1-2' }, async function () {
+    /* Both rules are his and stay (v2.93: "the canvas never selects… Layers are picked from the timeline";
+     * v3.00: a preview drag "MOVES THE WHOLE ANIMATION"). The review found that neither says so: two bots
+     * tapped layers and concluded selection was broken, and both expected a drag on an animated layer to
+     * edit the keyframe at the playhead. Each rule now explains itself, at most three times ever. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const T = FM._canvasTips;
+    if (!T) throw new Error('FM._canvasTips is missing, so the preview tips are not wired in');
+    const cv = document.getElementById('preview');
+    if (!cv) throw new Error('#preview is missing');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time, toast0 = FM.toast, allowed0 = FM._canvasTipsAllowed;
+    const saved = {}; Object.keys(T.tips).forEach(k => { saved[k] = localStorage.getItem(T.tips[k].key); localStorage.removeItem(T.tips[k].key); });
+    const seen = [];
+    const at = () => { const r = cv.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    const ev = (type, x, y, tgt) => (tgt || cv).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 11, isPrimary: true, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y }));
+    try {
+      FM._canvasTipsAllowed = true;
+      FM.toast = function (m) { seen.push(String(m)); return toast0.apply(this, arguments); };
+      if (FM._resetVpPointers) FM._resetVpPointers();
+      FM.scene.layers.length = 0;
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { name: 'Big', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width * 0.8, shapeH: P.height * 0.8, fill: '#e33', start: 0, duration: 5 });
+      FM.scene.layers.push(L); FM.selectLayer(null); FM.time = 0; FM.refreshAll(); await sleep(60);
+
+      // #1 — tapping ON a layer with nothing selected: still selects nothing, and now says why (3x max).
+      for (let i = 0; i < 4; i++) { const p = at(); ev('pointerdown', p.x, p.y); ev('pointerup', p.x, p.y, window); await sleep(20); }
+      if (FM.scene.selectedId) throw new Error('a tap on the preview SELECTED a layer — his v2.93 rule is that the preview never selects');
+      const picks = seen.filter(m => m === T.tips.pick.text).length;
+      if (picks === 0) throw new Error('four taps on a layer in the preview selected nothing and said nothing about where layers are picked');
+      if (picks !== T.max) throw new Error('the pick tip showed ' + picks + ' times in four taps; it must stop at ' + T.max);
+
+      // #2 — a drag on an ANIMATED layer shifts every key (his rule, kept) and now says so.
+      FM.toggleKeyframe(L, 'x', 0); FM.time = 2; L.transform.x.kf[0].v = P.width / 2; FM.setTransform ? FM.setTransform(L, 'x', P.width / 2 + 100, 2) : FM.toggleKeyframe(L, 'x', 2);
+      FM.time = 0; FM.selectLayer(L.id); FM.refreshAll(); await sleep(40);
+      if (!FM.isAnimated(L.transform.x)) throw new Error('fixture: the layer is not animated on x');
+      const k0 = L.transform.x.kf.map(k => k.v);
+      seen.length = 0;
+      { const p = at(); ev('pointerdown', p.x, p.y); for (let i = 1; i <= 6; i++) { await sleep(12); ev('pointermove', p.x + i * 8, p.y, window); } ev('pointerup', p.x + 48, p.y, window); await sleep(40); }
+      const k1 = L.transform.x.kf.map(k => k.v);
+      if (k1.length !== k0.length || k1.every((v, i) => v === k0[i])) throw new Error('fixture: the drag did not move the animated layer (' + k0 + ' -> ' + k1 + ')');
+      if (!(k1[0] - k0[0] > 0 && Math.abs((k1[0] - k0[0]) - (k1[1] - k0[1])) < 1e-6)) throw new Error('his v3.00 rule changed: a preview drag no longer moves every keyframe by the same amount (' + k0 + ' -> ' + k1 + ')');
+      if (!seen.includes(T.tips.whole.text)) throw new Error('a drag that moved the whole animation said nothing (toasts: ' + JSON.stringify(seen) + ')');
+
+      // CONTROL: dragging a layer with NO keyframes says nothing about animations.
+      const S = FM.makeLayer('shape', { name: 'Still', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width * 0.8, shapeH: P.height * 0.8, fill: '#3e3', start: 0, duration: 5 });
+      FM.scene.layers.unshift(S); FM.selectLayer(S.id); FM.refreshAll(); seen.length = 0; await sleep(30);
+      { const p = at(); ev('pointerdown', p.x, p.y); for (let i = 1; i <= 6; i++) { await sleep(12); ev('pointermove', p.x + i * 8, p.y, window); } ev('pointerup', p.x + 48, p.y, window); await sleep(40); }
+      if (seen.includes(T.tips.whole.text)) throw new Error('dragging a layer with no keyframes claimed to move a whole animation');
+    } finally {
+      FM.toast = toast0; FM._canvasTipsAllowed = allowed0;
+      Object.keys(T.tips).forEach(k => { if (saved[k] == null) localStorage.removeItem(T.tips[k].key); else localStorage.setItem(T.tips[k].key, saved[k]); });
+      if (FM._resetVpPointers) FM._resetVpPointers();
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.time = t0; FM.refreshAll();
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.
