@@ -15,6 +15,17 @@ if [ -n "$(git log --oneline HEAD..ssh/main)" ]; then
   echo "↓ pulled $(git log --oneline HEAD@{1}..HEAD 2>/dev/null | wc -l | tr -d ' ') new commit(s)"
 fi
 BODY="$(sed -n '/^---$/,$p' INBOX.md | sed '1d' | sed '/^[[:space:]]*$/d')"
+# A MISSING DIVIDER HIDES EVERYTHING. From 20 Sep to 26 Sep INBOX.md had no line of three dashes — the
+# --done below split on the FIRST "---" in the file, which was the one inside the header's own sentence,
+# and cut the divider off. Every sed above then printed nothing, so anything appended read as "inbox
+# empty". Say so instead of reporting a clean inbox.
+grep -q '^---$' INBOX.md || { echo "⛔ INBOX.md HAS NO --- DIVIDER LINE — anything in it is invisible to this script and to next.sh. Put a line of exactly --- under the header."; exit 2; }
+# WHAT WAS SHOWN is what --done may remove — nothing else. Since 26 Sep a second chat (the logging one)
+# appends here while this session works, so anything written between reading the inbox and running
+# --done would have been wiped unlogged by the old "clear everything". The display writes a snapshot;
+# --done removes only lines in it. The --done run itself does not refresh it, or it would bless lines
+# nobody has read yet.
+[ "${1:-}" = "--done" ] || sed -n '/^---$/,$p' INBOX.md | sed '1d' > .inbox-seen
 
 # SECOND CHANNEL: a plain text file in iCloud Drive. His phone can append to it in one tap and it is
 # NOT a git repo, so none of the reasons not to put the project in iCloud apply — no .git to corrupt,
@@ -79,10 +90,31 @@ if [ "$1" = "--done" ]; then
            "$HOME/Library/Mobile Documents/iCloud~is~workflow~my~workflows/Documents/"*.txt; do
     [ -f "$f" ] && printf '\n### drained %s\n' "$(date '+%Y-%m-%d %H:%M')" >> "$f"
   done
+  # Split on the divider LINE, never on the first "---" anywhere: the header's own prose contained one,
+  # and split('---')[0] cut the divider off (20 Sep), making the inbox invisible for six days.
+  # Remove only the lines that were SHOWN (.inbox-seen, written by the last plain run or next.sh), so a
+  # request appended while this session was logging survives to the next drain instead of vanishing.
   python3 - <<'PYX'
-import re
-p='INBOX.md'; s=open(p,encoding='utf-8').read()
-open(p,'w',encoding='utf-8').write(s.split('---')[0] + '---\n\n')
+import os, re, sys
+from collections import Counter
+p = 'INBOX.md'; s = open(p, encoding='utf-8').read()
+m = re.search(r'^---$', s, re.M)
+if not m:
+    print('⛔ NOTHING CLEARED: INBOX.md has no line of exactly --- ; put one under the header.'); sys.exit(1)
+head, body = s[:m.end()], s[m.end():]
+if not os.path.exists('.inbox-seen'):
+    print('⛔ NOTHING CLEARED: no record of what you were shown. Run tools/inbox.sh, log what it lists, then --done.'); sys.exit(1)
+shown = Counter(l for l in open('.inbox-seen', encoding='utf-8').read().split('\n') if l.strip())
+kept = []
+for l in body.split('\n'):
+    if l.strip() and shown[l] > 0: shown[l] -= 1
+    else: kept.append(l)
+rest = re.sub(r'\n{3,}', '\n\n', '\n'.join(kept)).strip('\n')
+open(p + '.tmp', 'w', encoding='utf-8').write(head + '\n\n' + (rest + '\n' if rest else ''))
+os.replace(p + '.tmp', p); os.remove('.inbox-seen')
+if rest:
+    print('⚠️ KEPT — these arrived AFTER you read the inbox, so they are NOT logged yet. Log them next:')
+    print(rest)
 PYX
   echo "marked drained"
 fi

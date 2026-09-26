@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=722">
-<link rel="stylesheet" href="theme-glass.css?v=60">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=723">
+<link rel="stylesheet" href="theme-glass.css?v=61">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -101,6 +101,11 @@
     <div id="splash-skip">tap to skip</div>
   </div>
   <script>
+    /* queue 942: IS THIS THE FIRST LOAD SINCE THE APP WAS OPENED? Ezra, 26 Sep: *"every time you load into the app for the
+       first time like in the loading screen plays it puts you in the home menu not in your project"*. The intro plays once per
+       browser session (fm.splashed below), so "the loading screen plays" = the session's first load. Recorded HERE, before the
+       intro's own early returns (reduced motion skips the film but is still a first load), and read by app.js's boot landing. */
+    try { window.FM_FIRST_LOAD = !sessionStorage.getItem('fm.session'); sessionStorage.setItem('fm.session', '1'); } catch (e) { window.FM_FIRST_LOAD = true; }
     (function () {
       try {
         if (sessionStorage.getItem('fm.splashed')) return;
@@ -260,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.00</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.01</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1032,7 +1037,7 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=4"></script>
   <script src="js/gl-color.js?v=3"></script>
-  <script src="js/compositor.js?v=192"></script>
+  <script src="js/compositor.js?v=193"></script>
   <script src="js/fx-registry.js?v=25.23"></script>
   <script src="js/filters.js?v=17"></script>
   <script src="js/fx-presets.js?v=11"></script>
@@ -1044,8 +1049,9 @@
   <script src="js/elements-browser.js?v=3"></script>
   <script src="js/color-wheel.js?v=53"></script>
   <script src="js/canvas-edit.js?v=121"></script>
-  <script src="js/notepad.js?v=8"></script>
-  <script src="js/popfrom.js?v=10"></script>
+  <script src="js/panelsize.js?v=1"></script>   <!-- queue 927: Notes and Shortcuts/tips grow BIG from a grab corner; before both panels -->
+  <script src="js/notepad.js?v=9"></script>
+  <script src="js/popfrom.js?v=11"></script>
   <script src="js/draw-tool.js?v=37"></script>
   <script src="js/point-edit.js?v=21"></script>
   <script src="js/crop-tool.js?v=12"></script>
@@ -1054,31 +1060,32 @@
   <script src="js/motion-path.js?v=9"></script>
   <script src="js/touchup-tool.js?v=3"></script>
   <script src="js/eyedropper.js?v=2"></script>
-  <script src="js/text-edit.js?v=23"></script>
+  <script src="js/text-edit.js?v=24"></script>
   <script src="js/tracker.js?v=10"></script>
   <script src="js/frames.js?v=21"></script>
   <script src="js/audio-fx.js?v=11"></script>
   <script src="js/audio-play.js?v=65"></script>
-  <script src="js/audio-fx-live.js?v=9"></script>
+  <script src="js/audio-fx-live.js?v=10"></script>
   <script src="js/audio-fx-browser.js?v=12"></script>
   <script src="js/history.js?v=37"></script>
-  <script src="js/storage.js?v=56"></script>
+  <script src="js/storage.js?v=57"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
-  <script src="js/home.js?v=184"></script>
+  <script src="js/home-arrow.js?v=1"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
+  <script src="js/home.js?v=185"></script>
   <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=124"></script>
+  <script src="js/exporter.js?v=125"></script>
   <script src="js/sample.js?v=10"></script>
   <script src="js/contextmenu.js?v=46"></script>
   <script src="js/ask.js?v=2"></script>
-  <script src="js/shortcuts.js?v=84"></script>
+  <script src="js/shortcuts.js?v=85"></script>
   <script src="js/captions-vad.js?v=1"></script>
-  <script src="js/captions.js?v=56"></script>
+  <script src="js/captions.js?v=57"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=455"></script>
+  <script src="js/app.js?v=456"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
@@ -1086,7 +1093,7 @@
   <script src="js/audio-react.js?v=12"></script>
   <script src="js/mobile.js?v=45"></script>
   <script src="js/ai-manifest.js?v=10"></script>
-  <script src="js/ai-ops.js?v=17"></script>
+  <script src="js/ai-ops.js?v=18"></script>
   <script src="js/ai-key.js?v=1"></script>
   <script src="js/ai-budget.js?v=1"></script>
   <script src="js/ai-mock.js?v=5"></script>
@@ -1159,22 +1166,73 @@
     }
     // One-tap "force latest": TAP the version label to nuke the service worker + all caches and reload
     // fresh. The bulletproof escape hatch when an installed PWA is serving a stale build.
+    /* ⚠️ queue 690 (HUNT-d): …BUT ONLY ONCE THE NEW BUILD CAN ACTUALLY BE FETCHED. With no signal (a train, or Wi-Fi
+       that goes nowhere while navigator.onLine still says true) the wipe below removed the worker and its cache and
+       then navigated to an address that could not load: a browser error page, and every launch after it the same
+       until signal came back, because the worker only registers again from a page that loads. And the app's own
+       offline-launch toast used to send him to this exact tap. So the page is fetched first, the same request the
+       reload is about to make; no answer in 8 s counts as none. Kept self-contained on purpose (no FM needed):
+       this is the escape hatch for a build whose own scripts are broken. */
+    function fmCanFetchLatest() {
+      if (navigator.onLine === false) return Promise.resolve(false);
+      var url = location.href.split('?')[0].split('#')[0];
+      return new Promise(function (res) {
+        var ctl = window.AbortController ? new AbortController() : null;
+        var t = setTimeout(function () { try { if (ctl) ctl.abort(); } catch (e) {} res(false); }, 8000);
+        var done = function (ok) { clearTimeout(t); res(ok); };
+        try { fetch(url, ctl ? { cache: 'no-store', signal: ctl.signal } : { cache: 'no-store' }).then(function (r) { done(!!(r && r.ok)); }, function () { done(false); }); }
+        catch (e) { done(false); }
+      });
+    }
     window.addEventListener('load', function () {
       var vers = document.querySelectorAll('.ver, #ver-m');
       Array.prototype.forEach.call(vers, function (el) {
         el.style.cursor = 'pointer';
         el.title = 'Tap to force-update to the very latest build';
+        var busy = false;   // while it waits on the network or his answer, a second tap must not start a second run (or keep '…' as the label)
         el.addEventListener('click', function () {
+          if (busy) return;
+          busy = true;
+          var label = el.textContent;
           el.textContent = '…';
+          var stay = function (msg) {
+            busy = false; el.textContent = label; if (msg && window.FM && FM.toast) FM.toast(msg, 5000);
+            /* A join that collab stashed for AFTER this update (U.updateNow, seconds ago) is dropped when the update does not
+               happen — kept, it had no expiry, and some later launch opened the Join sheet for an old invite unasked
+               (hunt-7 review, 26 Sep). An invite opened from a link is older than a minute by now and is left alone. */
+            try { var pj = JSON.parse(localStorage.getItem('fm.pendingJoin') || 'null'); if (pj && typeof pj.at === 'number' && Date.now() - pj.at < 60000) localStorage.removeItem('fm.pendingJoin'); } catch (e) {}
+          };
           // Flush the pending 600ms-debounced autosave FIRST — tapping this within ~0.6s of an edit
           // then navigated away and lost that edit (nothing flushes on unload).
           try { if (window.FM && FM.storage && FM.storage.flushSync) FM.storage.flushSync(); } catch (e) {}
-          // Navigate to a BRAND-NEW URL (cache-busted) rather than reload(): a reload can still be served by
-          // a stuck old service worker, but a never-seen URL forces a real network fetch of every asset.
-          var done = function () { var base = location.href.split('?')[0].split('#')[0]; location.replace(base + '?fresh=' + Date.now()); };
-          (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve())
-            .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; })
-            .then(done, done);
+          fmCanFetchLatest().then(function (ok) {
+            if (!ok) { stay('No signal — the latest build can’t be fetched right now, so nothing was changed. Try again when you’re online.'); return; }
+            /* ⚠️ queue 690 (HUNT-d): A FULL PHONE ASKS HERE TOO. The flush's answer used to be thrown away, so with the store
+               refusing his project the reload below brought back the last save that fitted and everything since was gone,
+               unasked — while opening another card, New project and Restore all stop and ask (queue 690, hunt f). Same
+               question, same default: Stay (also Cancel, Escape, a tap outside) leaves everything exactly as it was. */
+            var asking = (window.FM && FM.projects && FM.projects.confirmLeave)
+              ? Promise.resolve().then(function () { return FM.projects.confirmLeave({ why: 'Updating reloads the app, and that throws it away.', ok: 'Update anyway' }); })
+                  /* ⚠️ …and a question that cannot be ASKED does not stop the update (hunt-7 review, 26 Sep). This chip is the
+                     escape hatch for a broken build; when the app's own scripts throw, going ahead is the whole point. */
+                  .catch(function () { return true; })
+              : Promise.resolve(true);
+            return asking.then(function (go) {
+              if (!go) { stay(); return; }
+              /* The signal is asked about AGAIN (hunt-7 review, 26 Sep): the question can sit on screen for as long as he likes,
+                 and a train tunnel in between turned "Update anyway" into wiping the offline copy with nothing to load. */
+              return fmCanFetchLatest().then(function (still) {
+              if (!still) { stay('No signal — the latest build can’t be fetched right now, so nothing was changed. Try again when you’re online.'); return; }
+              busy = false;   // decided — the page is leaving; nothing below waits on him, so nothing is held shut behind it
+              // Navigate to a BRAND-NEW URL (cache-busted) rather than reload(): a reload can still be served by
+              // a stuck old service worker, but a never-seen URL forces a real network fetch of every asset.
+              var done = function () { var base = location.href.split('?')[0].split('#')[0]; location.replace(base + '?fresh=' + Date.now()); };
+              (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve())
+                .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; })
+                .then(done, done);
+              });
+            });
+          }).catch(function () { stay(); });
         });
       });
     });

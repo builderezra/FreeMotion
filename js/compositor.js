@@ -2478,7 +2478,11 @@ window.FM = window.FM || {};
     const own = [];   // paragraph -> the clock of the cue it came from
     live.forEach(o => {
       const sp = (FM.captions && FM.captions.animSpan) ? FM.captions.animSpan(o.c, layer.duration) : { from: Math.max(0, o.c.start), to: Math.min(layer.duration, o.c.end) };
-      const ck = { t0: layer.start + sp.from, t1: layer.start + sp.to, n: 0 };
+      /* The caption he is typing, on the paused preview (FM._typingCue, set by app.js render() for that one call —
+         queue 690, seventh hunt): its clock began long ago and ends long after, so every unit has entered and none
+         is leaving, and he sees what he types. Finite, not Infinity: wave and jitter read the clock as a phase. */
+      const held = FM._typingCue && o.c === FM._typingCue;
+      const ck = held ? { t0: t - 1e4, t1: t + 1e4, n: 0 } : { t0: layer.start + sp.from, t1: layer.start + sp.to, n: 0 };
       String(o.c.text).split('\n').forEach(() => own.push(ck));
     });
     const para = lines.para;   // set by FM.textLines when it wrapped; unwrapped, line i IS paragraph i

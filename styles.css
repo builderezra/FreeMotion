@@ -4743,9 +4743,11 @@ body.home-open #toast { z-index: 205; }
 .hm-grid { display: flex; flex-direction: column; gap: 10px; max-width: var(--hm-col); margin: 0 auto; }   /* same variable as .hm-tabs — the two must line up */
 .hm-card { position: relative; display: flex; align-items: center; gap: 13px; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px; cursor: pointer; color: var(--text); }
 .hm-card:active { background: var(--panel-3); }
-/* While selecting, a drag across cards PAINTS a selection, so the card must not hand the gesture to
-   the scroller. Outside select mode it stays scrollable — dragging a card is how you scroll a list. */
-body.hm-selecting .hm-card { touch-action: none; }
+/* ⚠️ NO `touch-action: none` WHILE SELECTING ANY MORE (queue 690, seventh hunt). It was here so a finger drag across
+   the cards would paint ticks — and it took the scroll away with it: with Select on, a swipe on his 60-project list
+   ticked what it crossed and the list never moved, so the projects below the first screen could not be reached to
+   select them. A card scrolls like any card now, in Select or not; the paint starts on a HOLD (js/home.js selectify),
+   and the card's own touchmove guard keeps the slide after the hold from becoming a scroll. */
 /* Moving film-grain static over every project card (v6.23, queue 76 — Ezra sent a reference photo:
    "a static effect to each project that is subtle and moves like how the static looks in this image").
    The tile is a 64px noise PNG generated once in home.js and handed over as --hm-static; if that ever
@@ -5196,6 +5198,11 @@ body.hm-selecting .hm-pin { display: none; }
 .hm-select-btn { margin-left: auto; margin-right: 8px; padding: 7px 14px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
 .hm-note { grid-column: 1 / -1; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text-dim); font-size: 12.5px; line-height: 1.5; padding: 10px 12px; }
 .hm-card.hm-sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The card a Duplicate or Rename just moved in the list (queue 690, seventh hunt): home.js revealCard scrolls to it and
+   puts this on for a moment — the ticked card's own accent outline, fading out, so his eye lands on the right card. */
+.hm-card.hm-found { outline: 2px solid var(--accent); outline-offset: -2px; animation: hm-found 1.6s ease-out forwards; }
+@keyframes hm-found { 0%, 55% { outline-color: var(--accent); } 100% { outline-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .hm-card.hm-found { animation: none; } }
 .hm-check { position: absolute; top: 7px; right: 7px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; background: rgba(10, 13, 20, .55); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #0b0e14; }
 .hm-check.on { background: var(--accent); border-color: var(--accent); }
 /* `color` declared, for the same reason .hm-dlg-card declares it (queue 649/665): a dark bar that sets
@@ -10619,3 +10626,156 @@ body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
 .set-conn-lines .skip { color: var(--text-dim); font-weight: 700; flex: 0 0 auto; }
 /* Thumb-sized on a phone: the row's two buttons are the whole of what it asks him to do. */
 .set-conn .set-perf-btns .set-action { min-height: 40px; }
+
+/* ===== NOTES AND SHORTCUTS/TIPS: SMALL OR BIG (queue 927) ==========================================================
+   Ezra: "when you grab the corner of a window, and it'll show that you can extend it out. Like, like the cursor will
+   change … it only has two states either zoomed in or zoomed out … it expands into a bigger view where it basically
+   covers up more of the screen and is in the center". The behaviour is js/panelsize.js; this is the look.
+   Two sizes and nothing between: `.pb-big` is the only thing that changes the card's size, and the card's own
+   flex-centred scrim is what puts big in the middle. */
+.pb-card { position: relative; }   /* the grip and the edges are placed inside the card's corner */
+
+/* --- the BIG size: MOST OF THE SCREEN, IN THE MIDDLE (queue 927). He chose it himself, 26 Sep: *"Just taking up most of
+   the screen in the middle, using the space wisely tho."* — of Roomy / Focus / Most, the last; the other two are gone.
+   "In the middle" is the scrim's own centring; "using the space wisely" is what BIG does with the room below (the paper
+   fills on Notes; the PC shortcuts flow into two balanced columns rather than one long list). --- */
+:root {
+  --pb-w: calc(100vw - 64px);
+  --pb-h: min(calc(100vh - 56px), calc(100dvh - 56px));
+}
+/* A phone: big is the whole screen, inside the notch and the home bar. */
+@media (max-width: 700px) {
+  :root {
+    --pb-w: calc(100vw - 20px);
+    --pb-h: calc(100dvh - 20px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+}
+/* `flex: none`: the scrim is a flex row, and a flex item shrinks to its container by default — big must not. */
+.pb-card.pb-big { flex: none; width: var(--pb-w); height: var(--pb-h); max-width: none; max-height: none; min-width: 0; }
+
+/* While the frame animates between the two sizes nothing may clamp it — the shortcuts card's 440px max-width
+   would otherwise stop a shrinking panel dead at 440 and then jump. !important so popfrom's inline cap loses too. */
+.pb-card.pb-morph { flex: none !important; max-width: none !important; max-height: none !important; min-width: 0 !important; min-height: 0 !important; }
+
+/* --- what BIG does with the room --- */
+.np-card.pb-big .np-list { flex: 1 1 auto; }   /* at every width: the paper fills, and Add and Done sit at the bottom */
+/* On PC, bigger type and more air. NOT on a phone: there BIG is barely wider than small (360 against 343), so a wider
+   key column or bigger type only makes every line wrap more — measured in the design review, BIG shortcuts showed
+   FEWER rows than small. On a phone BIG keeps small's layout exactly and just gains the height. */
+@media (min-width: 701px) {
+  .np-card.pb-big .np-list { padding: 8px 18px 4px; }
+  .np-card.pb-big .np-title { font-size: 18px; }
+  .np-card.pb-big .np-hint { font-size: 13px; padding: 12px 22px 4px; }
+  .np-card.pb-big .np-text { font-size: 16px; line-height: 1.5; }
+  .np-card.pb-big .np-add { margin: 10px 20px 0; }
+  .np-card.pb-big .np-actions { padding: 14px 20px 18px; }
+  .shortcuts-card.pb-big { container-type: inline-size; }
+  .shortcuts-card.pb-big .shortcuts-title { font-size: 18px; margin-bottom: 16px; }
+  .shortcuts-card.pb-big .shortcuts-list { gap: 9px; }
+  .shortcuts-card.pb-big .shortcut-key { font-size: 13px; flex-basis: 128px; }
+  .shortcuts-card.pb-big .shortcut-key.wide { flex-basis: 168px; }
+  .shortcuts-card.pb-big .shortcut-desc { font-size: 14px; }
+}
+/* Wide enough: the WHOLE list flows down two columns — Keyboard, then Mouse / stage under its tail — so both columns
+   are full and it all fits on a 1280×800 screen. (Side by side by section left the second column 60% empty while the
+   first still scrolled.) The list is plain blocks here, not flex, because a flex list is one unbreakable piece in
+   Safari's columns; each row stays whole. .shortcuts-cols is an inner wrapper so the columns balance on their own
+   height rather than spilling sideways out of the fixed-height scroller. */
+@container (min-width: 720px) {
+  .shortcuts-cols { column-count: 2; column-gap: 44px; column-rule: 1px solid var(--line); }
+  .shortcuts-cols .shortcuts-list { display: block; margin-bottom: 10px; }
+  .shortcuts-cols .shortcut-row { margin-bottom: 8px; break-inside: avoid; -webkit-column-break-inside: avoid; }
+  .shortcuts-cols .shortcuts-sub { break-after: avoid; -webkit-column-break-after: avoid; margin-top: 0; }
+  .shortcuts-cols .shortcuts-sub + .shortcuts-list { break-before: avoid; }
+}
+
+/* --- the GRIP: a corner you can see and grab --- */
+.pb-grip { position: absolute; top: 0; z-index: 6; width: 30px; height: 30px; color: rgba(255, 255, 255, .5);
+  touch-action: none; -webkit-tap-highlight-color: transparent; outline: none; }
+.pb-card[data-pb-corner="tl"] > .pb-grip { left: 0; cursor: nwse-resize; }
+.pb-card[data-pb-corner="tr"] > .pb-grip { right: 0; cursor: nesw-resize; }
+.np-card .pb-grip { color: rgba(58, 47, 5, .5); }   /* on the notepad's yellow band */
+html[data-home="light"] body.home-open .shortcuts-card .pb-grip { color: rgba(16, 30, 52, .45); }
+.pb-grip:hover, .pb-grip:focus-visible, .pb-card.pb-dragging .pb-grip { color: rgba(255, 255, 255, .95); }
+.np-card .pb-grip:hover, .np-card .pb-grip:focus-visible, .np-card.pb-dragging .pb-grip { color: #3a2f05; }
+html[data-home="light"] body.home-open .shortcuts-card .pb-grip:hover { color: rgba(16, 30, 52, .9); }
+/* the title steps clear of a top-left grip (PC), so the grip never sits on the word */
+.np-card[data-pb-corner="tl"] .np-head { padding-left: 32px; }
+.shortcuts-card[data-pb-corner="tl"] .shortcuts-title { padding-left: 10px; }
+
+.pb-mark { position: absolute; top: 4px; pointer-events: none; transition: transform .16s cubic-bezier(.2, .9, .3, 1.2), opacity .16s; }
+[data-pb-corner="tl"] > .pb-grip .pb-mark { left: 4px; }
+[data-pb-corner="tr"] > .pb-grip .pb-mark { right: 4px; }
+/* A — the corner ARC (recommended): a rounded bracket that runs along the card's own corner, concentric with it —
+   the handle iPad windows use, so it reads as "grab here" without a word. */
+.pb-arc { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
+[data-pb-corner="tl"] > .pb-grip .pb-arc { transform-origin: 0 0; }
+[data-pb-corner="tr"] > .pb-grip .pb-arc { transform-origin: 100% 0; }
+/* the path is drawn for the top-left; mirrored inside its own box for the top-right, so it stays in the corner */
+[data-pb-corner="tr"] > .pb-grip .pb-arc path { transform: scaleX(-1); transform-box: fill-box; transform-origin: 50% 50%; }
+.pb-grip:hover .pb-arc, .pb-card.pb-dragging .pb-arc { transform: scale(1.14); }
+/* B — the desktop GRIP LINES: three diagonal ridges, the mark on the corner of every resizable window and text box. */
+/* C — an EXPAND CHIP: a round button with arrows out (small) or in (big). Says what it does; still drags. */
+
+/* THE FRAME takes the drag too, on a mouse: "grab the edges again and drag it back in". Thin strips on the edges and
+   small squares on the corners, each with its own resize cursor. SMALL: the two edges beside the grip (the other two
+   face the button and the screen edge). BIG: every edge and every corner — a centred window is grabbed from wherever
+   the hand is, and on a desktop that is the bottom-right first. A finger gets the big grip instead (below). */
+.pb-edge { display: none; position: absolute; z-index: 5; touch-action: none; }
+@media (hover: hover) and (pointer: fine) {
+  .pb-z-n { top: 0; left: 16px; right: 16px; height: 6px; cursor: ns-resize; }
+  .pb-z-s { bottom: 0; left: 16px; right: 16px; height: 6px; cursor: ns-resize; }
+  .pb-z-w { left: 0; top: 16px; bottom: 16px; width: 6px; cursor: ew-resize; }
+  .pb-z-e { right: 0; top: 16px; bottom: 16px; width: 6px; cursor: ew-resize; }
+  .pb-z-nw, .pb-z-ne, .pb-z-sw, .pb-z-se { width: 16px; height: 16px; }
+  .pb-z-nw { top: 0; left: 0; cursor: nwse-resize; }
+  .pb-z-ne { top: 0; right: 0; cursor: nesw-resize; }
+  .pb-z-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+  .pb-z-se { bottom: 0; right: 0; cursor: nwse-resize; }
+  .pb-card > .pb-z-n,
+  .pb-card[data-pb-corner="tl"] > .pb-z-w,
+  .pb-card[data-pb-corner="tr"] > .pb-z-e,
+  .pb-card.pb-big > .pb-edge { display: block; }
+  /* the grip already is that corner */
+  .pb-card[data-pb-corner="tl"] > .pb-z-nw, .pb-card[data-pb-corner="tr"] > .pb-z-ne { display: none; }
+  /* the notes list scrolls right up to the card's edge: keep its scrollbar clear of the right-hand strip */
+  .np-card.pb-big .np-list { margin-right: 6px; }
+}
+/* A finger has no cursor, so on a touch screen — and in the phone layout whatever is pointing — the grip is simply
+   bigger: a 48px target and a heavier mark. */
+@media (max-width: 700px), (hover: none), (pointer: coarse) {
+  .pb-grip { width: 48px; height: 48px; }
+  .pb-arc { width: 28px; height: 28px; stroke-width: 3.2; }
+  .pb-grip .pb-arc { top: 5px; }
+  [data-pb-corner="tl"] > .pb-grip .pb-arc { left: 5px; }
+  [data-pb-corner="tr"] > .pb-grip .pb-arc { right: 5px; }
+  .pb-grip { color: rgba(255, 255, 255, .62); }
+  .np-card .pb-grip { color: rgba(58, 47, 5, .62); }
+}
+/* While a drag is on, the resize cursor stays whatever the pointer passes over. */
+html[data-pb-cursor="nwse"], html[data-pb-cursor="nwse"] * { cursor: nwse-resize !important; }
+html[data-pb-cursor="nesw"], html[data-pb-cursor="nesw"] * { cursor: nesw-resize !important; }
+html[data-pb-cursor="ns"], html[data-pb-cursor="ns"] * { cursor: ns-resize !important; }
+html[data-pb-cursor="ew"], html[data-pb-cursor="ew"] * { cursor: ew-resize !important; }
+.pb-card.pb-dragging { user-select: none; -webkit-user-select: none; }
+
+/* A phone's BIG fills the screen but for a 10px margin, and the top bar's lit Export button glowed through that margin
+   right beside the grip — a second rounded corner. Under BIG the scrim is nearly opaque there, so the panel is the
+   only corner in sight. */
+@media (max-width: 700px) {
+  .np-scrim.pb-host-big, #shortcuts-overlay.pb-host-big { background: rgba(2, 6, 9, .9); }
+}
+
+/* THE PREVIEW: a dashed outline of the size letting go will give — two sizes, and he can see which. */
+.pb-ghost { position: fixed; pointer-events: none; border-radius: 16px; border: 2px dashed rgba(255, 255, 255, .55);
+  background: rgba(255, 255, 255, .05); opacity: 0; transform: scale(.985);
+  transition: opacity .16s ease, transform .22s cubic-bezier(.2, .9, .3, 1); }
+.pb-ghost.on { opacity: 1; transform: none; }
+.pb-ghost.pb-ghost-over { z-index: 3103; }
+.pb-ghost[data-pb-key="notes"] { border-color: rgba(255, 207, 71, .85); background: rgba(255, 207, 71, .07); }
+/* A panel folding away takes no more presses — the one behind it is live again at once. */
+.np-scrim.np-closing, #shortcuts-overlay.pb-closing { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-mark, .pb-ghost { transition: none; }
+}

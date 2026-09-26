@@ -1319,7 +1319,7 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Open', action: () => openProject(p.id) },
         pinMenuItem('projects', p.id),
-        { label: 'Rename…', action: async () => { const n = await FM.ask({ title: 'Rename project', input: { value: p.name || '' }, ok: 'Rename' }); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); } } },
+        { label: 'Rename…', action: async () => { const n = await FM.ask({ title: 'Rename project', input: { value: p.name || '' }, ok: 'Rename' }); if (n && n.trim()) { FM.projects.rename(p.id, n.trim()); render(); revealCard(p.id); } } },   // a rename re-sorts the card (latest edit first, or A–Z) — show him where it went
         // queue 915 clause 3: duplicate() now says when there is no whole copy — the template/element twins' wording
         /* §19.6: somebody else's shared copy is not his to duplicate, template or share — it can be kept as his
            own (the same detach Leave does), exported, or left and deleted. */
@@ -1343,7 +1343,15 @@ window.FM = window.FM || {};
             render();
           } }
         ] : [
-          { label: 'Duplicate', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.projects.duplicate(p.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
+          { label: 'Duplicate', action: async () => {
+            if (FM.toast) FM.toast('Duplicating…', 1200);
+            const had = new Set(FM.projects.list().map(x => x.id));
+            const ok = await FM.projects.duplicate(p.id);
+            render();
+            if (!ok) { if (FM.toast) FM.toast('Could not duplicate — storage is full'); return; }
+            const made = FM.projects.list().find(x => !had.has(x.id));
+            if (made) revealCard(made.id);   // the copy lists FIRST — from down the list it landed off screen and Duplicate looked like it did nothing
+          } },
           /* §19.6: "Share live…" after Duplicate — it opens the project, then the Share panel. */
           ...((FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn() && FM.collab.ui.share)
             ? [{ label: 'Share live…', action: async () => {
@@ -1407,12 +1415,18 @@ window.FM = window.FM || {};
         // the project FILE (.fmotion.json) is a different thing — a backup you can re-import — so it
         // keeps its own entry, and still exports without stealing the OPEN badge from your project
         { label: 'Save project file…', action: async () => {
-          const prev = FM.storage.openProjectId();
-          const ok = await openProject(p.id, true);
-          if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }   // switch was skipped (another open in flight): exporting now would serialize the WRONG scene
+          /* ⚠️ ANOTHER PROJECT IS SAVED FROM WHERE IT IS STORED, NOT BY OPENING IT (queue 690, seventh hunt). This opened
+             the card's project, exported it and opened his own again — and that second open is a reload from disk: his
+             undo history, his playhead and his selected layer were all gone when he went back in, and the card he only
+             backed up was re-pictured from its first frame. FM.storage.exportProjectFile writes the same file from the
+             stored project and leaves the open one alone (and with nothing open, nothing is opened — queue 936). */
+          if (p.id !== FM.storage.openProjectId()) {
+            if (!(await FM.storage.exportProjectFile(p.id)) && FM.toast) FM.toast('That project is no longer on this device', 3200);
+            return;
+          }
+          const ok = await openProject(p.id, true);   // his OPEN project: no switch — this only puts back any media Home released (queue 385)
+          if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }   // another open in flight: exporting now would serialize the WRONG scene
           await FM.storage.exportFile();
-          if (prev && prev !== p.id) { await openProject(prev, true); render(); }
-          else if (!prev) { await FM.projects.open(null, { confirmed: true }); render(); }   // queue 936: nothing was open — saving a file must not leave one open
         } },
         { sep: true },
         { label: 'Delete…', danger: true, action: async () => {
@@ -1438,6 +1452,42 @@ window.FM = window.FM || {};
     selectify(card, th, p.id, () => openProject(p.id, false, card));
     keyActivate(card);
     return card;
+  }
+
+  /* ═══ SHOW HIM WHERE THE CARD WENT (queue 690, seventh hunt) ═══════════════════════════════════════════════════════
+   * The list is sorted — latest edit first, or A–Z — so a Duplicate or a Rename from a card's ⋯ puts the result
+   * somewhere else in it: the copy is the newest project, so it lists first. From a project down a long list that was
+   * 4,000 px above the screen, and Duplicate's only message was Duplicating…, so to him it did nothing and the natural
+   * next move was to press it again and make a second copy. A renamed card simply vanished from where he was looking.
+   * So the list scrolls to the card (smoothly, so he sees which way it went — instantly with reduced motion) and the
+   * card is outlined in the accent for a moment once it has ARRIVED: a 4,000 px glide takes about a second (measured
+   * 1.1 s at 380), and an outline lit at the start had nearly faded by the time the card reached him. Nothing moves
+   * when the card is already in full view. */
+  function revealCard(id) {
+    const sc = root && root.querySelector('.hm-scroll');
+    const find = () => id && grid && grid.querySelector('.hm-card[data-pid="' + id + '"]');
+    const c = find();
+    if (!sc || !c) return false;   // not listed (a search is on and it does not match) — nothing to show
+    const flash = () => {
+      const k = find(); if (!k) return;   // a rebuild since — the live card is the one he sees
+      k.classList.remove('hm-found'); void k.offsetWidth; k.classList.add('hm-found');
+      setTimeout(() => k.classList.remove('hm-found'), 1700);
+    };
+    const r = c.getBoundingClientRect(), s = sc.getBoundingClientRect();
+    if (r.top >= s.top + 8 && r.bottom <= s.bottom - 8) { flash(); return true; }
+    const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+    const to = Math.max(0, Math.min(max, sc.scrollTop + (r.top - s.top) - (sc.clientHeight - r.height) / 2));   // the card in the middle of the list
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try { sc.scrollTo({ top: to, behavior: reduced ? 'auto' : 'smooth' }); } catch (e) { sc.scrollTop = to; }
+    // Light it when the glide lands — or stops (his finger caught it), or after 1.6 s whatever happened.
+    const t0 = performance.now(); let last = -1, still = 0;
+    const settle = () => {
+      const y = sc.scrollTop;
+      still = Math.abs(y - last) < 0.5 ? still + 1 : 0; last = y;
+      if (Math.abs(y - to) < 2 || still >= 6 || performance.now() - t0 > 1600) flash(); else requestAnimationFrame(settle);
+    };
+    requestAnimationFrame(settle);
+    return true;
   }
 
   /* ---------- paint-select: drag across cards to select a run of them ---------------------------
@@ -1584,6 +1634,24 @@ window.FM = window.FM || {};
     return box;
   }
 
+  /* queue 936: the doodle-swoop arrow to the + (js/home-arrow.js), drawn once the empty state has laid out. While the
+     intro is still hiding Home (.hm-preintro) it waits for the intro to hand over, so its own draw-on is seen, not
+     played behind the logo. */
+  function arrowSoon() {
+    if (!FM.homeArrow || !root) return;
+    // not isOpen(): render() runs INSIDE open(), before the screen is un-hidden; one frame later it is laid out
+    // …and a timer as well as the frame: a page the browser is not painting (hidden, or off screen) runs no frames at all
+    const draw = () => {
+      let done = false;
+      const go = () => { if (done) return; done = true; if (root && !root.classList.contains('hidden') && tab === 'projects') FM.homeArrow.draw(); };
+      requestAnimationFrame(() => requestAnimationFrame(go));
+      setTimeout(go, 150);
+    };
+    if (!root.classList.contains('hm-preintro')) { draw(); return; }
+    const mo = new MutationObserver(() => { if (!root.classList.contains('hm-preintro')) { mo.disconnect(); setTimeout(draw, 260); } });
+    mo.observe(root, { attributes: true, attributeFilter: ['class'] });
+  }
+
   function renderSelBar() {
     let bar = document.getElementById('hm-selbar');
     if (!selectMode) { if (bar) bar.remove(); return; }
@@ -1696,35 +1764,56 @@ window.FM = window.FM || {};
       if (ev.pointerType === 'mouse' && ev.button !== 0) return;
       if (ev.target.closest && ev.target.closest('.hm-card-more')) return;   // the ⋯ stays a button
       downX = ev.clientX; downY = ev.clientY;
-      if (selectMode) { beginPaint(id, ev.clientY); }
-      else {
-        setPress(card);   // synchronous, on THIS frame — the press is the tap's only acknowledgement until the project has loaded
-        clearTimeout(holdTimer);
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          if (!card.isConnected) return;
+      /* ⚠️ IN SELECT, ONLY A MOUSE PAINTS STRAIGHT AWAY (queue 690, seventh hunt). A finger used to as well: every
+         pointerdown in Select began a paint and every card was `touch-action: none`, so with Select on a swipe on the
+         list ticked each card it crossed and the list did not move — measured, a real 250 px swipe that scrolls the
+         list 235 px with Select off moved it 0 px and ticked two projects. Select is how he tidies a big library (Home
+         says so itself from 60 projects), and the projects he wants are the ones below the first screen.
+         So a finger in Select does what it does outside it, and what the timeline's track heads have always done —
+         the gesture he pointed at when he asked for this ("the drag thing that we have elsewhere", v3.86): a swipe
+         scrolls, a HOLD starts the paint, and the same finger slides on to tick a run (the touchmove guard at the
+         bottom keeps that slide from turning into a scroll). A mouse cannot scroll by dragging, so its drag still
+         paints the moment it moves, as before. */
+      if (selectMode && ev.pointerType === 'mouse') { beginPaint(id, ev.clientY); return; }
+      if (!selectMode) setPress(card);   // synchronous, on THIS frame — the press is the tap's only acknowledgement until the project has loaded
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        if (!card.isConnected) return;
+        if (!selectMode) {
           cancelPress(card);   // a HOLD is not a tap: the render below throws this node away, so let the press go with it rather than leaving pressEl pointing at a detached card
+          /* ⚠️ THE CARD UNDER HIS FINGER MUST NOT MOVE (queue 690, seventh hunt). This render swaps every card for a
+             new one while the finger is still down, and the slide that follows ticks whatever card is under the
+             finger NOW. If anything above the card changes height the whole list jumps under him — the You have N
+             projects note used to leave the list here, 70 px, and the slide ticked a project he never touched. The
+             note stays now (render); this puts back any shift that is left, so the rule does not rest on every
+             line above the cards keeping its height. */
+          const sc = root && root.querySelector('.hm-scroll');
+          const top0 = card.getBoundingClientRect().top;
           selectMode = true; selected.clear(); selected.add(id);
           document.body.classList.add('hm-selecting');
           render();                                   // one rebuild to draw the checks, BEFORE painting starts
-          beginPaint(id, downY);
-          if (paint) {
-            paint.moved = true;
-            paint.y = downY;
-            // render() above replaced this card, so `card` is now a detached node — flag the LIVE one
-            // (whichever node the follow-up click actually lands on) or the release immediately
-            // un-ticks the thing you just held to select.
-            const live = grid && grid.querySelector('.hm-card[data-pid="' + id + '"]');
-            if (live) live._paintedAway = true;
-            card._paintedAway = true;
-            // Arm the auto-scroll here too. The pointermove branch below only starts it on the
-            // moved:false → true transition, and this path has already set moved — so entering select
-            // mode by HOLD and then dragging to the edge of the list never scrolled.
-            paint.raf = requestAnimationFrame(paintAutoScroll);
-            paintClasses(); renderSelBar();
-          }
-        }, 380);
-      }
+          const now = grid && grid.querySelector('.hm-card[data-pid="' + id + '"]');
+          if (sc && now) { const d = now.getBoundingClientRect().top - top0; if (Math.abs(d) >= 1) sc.scrollTop += d; }
+        }
+        selected.add(id);   // the card he is holding starts the run — ticked by the hold itself, in Select or entering it
+        beginPaint(id, downY);
+        if (paint) {
+          paint.moved = true;
+          paint.y = downY;
+          // render() above replaced this card, so `card` is now a detached node — flag the LIVE one
+          // (whichever node the follow-up click actually lands on) or the release immediately
+          // un-ticks the thing you just held to select.
+          const live = grid && grid.querySelector('.hm-card[data-pid="' + id + '"]');
+          if (live) live._paintedAway = true;
+          card._paintedAway = true;
+          // Arm the auto-scroll here too. The pointermove branch below only starts it on the
+          // moved:false → true transition, and this path has already set moved — so entering select
+          // mode by HOLD and then dragging to the edge of the list never scrolled.
+          paint.raf = requestAnimationFrame(paintAutoScroll);
+          paintClasses(); renderSelBar();
+        }
+      }, 380);
     });
     card.addEventListener('pointermove', (ev) => {
       if (holdTimer && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 10) { clearTimeout(holdTimer); holdTimer = null; }
@@ -1766,11 +1855,17 @@ window.FM = window.FM || {};
       }
     });
     card.addEventListener('pointercancel', () => { finish(); cancelPress(card); });
+    /* ⚠️ A MOUSE DRAG FROM THE CARD'S PICTURE IS A PAINT, NOT THE PICTURE BEING PICKED UP (queue 690, seventh hunt).
+       The thumbnail is an <img>, and the browser drags an image by default: on PC, in Select, a drag that began on a
+       card's picture — the biggest thing on the card — lifted a ghost of the picture, the browser cancelled the pointer,
+       and not one card was painted. Found by the control that checks the mouse drag-select survived the swipe fix. */
+    card.addEventListener('dragstart', (ev) => { ev.preventDefault(); });
     /* ⚠️ HOLD-THEN-SLIDE HAS TO BE OURS, NOT A SCROLL (queue 690, HUNT-c). Holding a card enters Select and the same
        finger is meant to slide on and tick a run. With a real finger only the held card got ticked: the browser reads
-       touch-action at touchstart, when the card was still an ordinary scrollable card (`touch-action: none` only
-       arrives with `hm-selecting`, 380 ms later), so the first move after the hold became a pan and pointercancel
-       ended the paint. preventDefault in pointermove cannot stop a pan; only a touchmove can.
+       touch-action at touchstart, when the card was still an ordinary scrollable card, so the first move after the
+       hold became a pan and pointercancel ended the paint. preventDefault in pointermove cannot stop a pan; only a
+       touchmove can. (Since the seventh hunt the card stays scrollable in Select too, and a hold there starts the
+       paint the same way — so this guard is what makes the slide paint in both.)
        ⚠️ ON THE CARD ITSELF, NOT THE LIST OR THE WINDOW: the hold's render() throws this node away while the finger is
        still on it, and a touch keeps its original target, so its events never bubble past the detached card. Only
        while a paint has actually started (`moved` — set by the hold, or by a real drag in Select), so ordinary
@@ -2320,9 +2415,10 @@ window.FM = window.FM || {};
     // ids are only meaningful within their own list, and carrying three ticked project ids into the
     // Templates tab is how "delete 3" ends up deleting the wrong three things. The tab handler
     // clears the set; the MODE stays on, which is what you want when you're tidying up two lists.
-    document.body.classList.toggle('hm-selecting', selectMode);   // CSS hands card drags to paint-select instead of scrolling
+    document.body.classList.toggle('hm-selecting', selectMode);   // hides the pins and the + while selecting (a finger still scrolls — see selectify)
     grid.innerHTML = '';
     shownIds = [];
+    if (FM.homeArrow) FM.homeArrow.clear();   // queue 936: the drawn arrow belongs to the EMPTY Projects tab only — redrawn below when it is
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     // header Select toggle (built once, kept in sync)
     const selBtn = document.getElementById('hm-select-btn');
@@ -2344,7 +2440,7 @@ window.FM = window.FM || {};
          best MATCH first, and a pinned project outranking a closer one reads as broken search. */
       const list = projectsInGridOrder();
       if (query) {
-        if (!list.length) { grid.appendChild(emptyState('▶', 'Let’s see what you’re made of')); renderSelBar(); return; }
+        if (!list.length) { grid.appendChild(emptyState('▶', 'Let’s see what you’re made of')); arrowSoon(); renderSelBar(); return; }
         const range = parseDateQuery(query);
         const scored = list.map(p => { const r = scoreProject(p, query, range); return { p: p, score: r.score, exact: r.exact, why: r.why }; })
           .sort((a, b) => (b.score - a.score) || ((b.p.modified || 0) - (a.p.modified || 0)));
@@ -2358,11 +2454,16 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(emptyState('▶', 'Let’s see what you’re made of'));
+      if (!list.length) { grid.appendChild(emptyState('▶', 'Let’s see what you’re made of')); arrowSoon(); }
       // gentle housekeeping nudge on a big library (thumbs are out of the hot path now, so this is
       // informational — never a "you must delete to fix lag" like some other editors)
+      /* ⚠️ IT STAYS WHILE SELECTING (queue 690, seventh hunt). It used to be left out with Select on, and Select
+         comes on from a HOLD, while his finger is still on a card — so the rebuild took the note out from above the
+         cards and every one of them jumped 70 px up under his finger. The slide that followed then ticked one
+         project further down than his finger went, and that one went with the next Delete. Same note, same place,
+         in both modes: nothing above the cards changes height when Select comes on or goes off. */
       const h = FM.projects.health && FM.projects.health();
-      if (h && h.level !== 'ok' && !selectMode) {
+      if (h && h.level !== 'ok') {
         const msg = h.level === 'full'
           ? 'You have ' + h.count + ' projects. Things still run fast — but tap Select to tidy up any you don’t need.'
           : 'You have ' + h.count + ' projects. Tap Select to bulk-delete or duplicate.';

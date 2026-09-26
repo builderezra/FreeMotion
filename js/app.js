@@ -99,7 +99,19 @@ window.FM = window.FM || {};
        staring at an empty canvas. So the nudge is here, on the preview path, and the file is untouched.
        `_endInstantTime` returns t unchanged unless nothing is live at t and something ends exactly
        there — so a cut still shows the incoming clip. */
-    FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time);
+    /* THE CAPTION HE IS TYPING IS DRAWN AS IT LOOKS ONCE IT IS IN (queue 690, seventh hunt) — THE PREVIEW ONLY, and
+       only while the playhead is standing still. v16.98 gave every caption its own entrance, and the caption editor
+       parks the playhead 0.05 s into the caption it opens (it has to be inside it, and before any later caption that
+       overlaps it, or the editor binds the wrong one) — the first frame of that entrance. With Fade in or Pop that
+       frame is empty and with Typewriter it is one letter, so on his phone he tapped › and typed every caption blind:
+       the field had his words and the canvas above the keyboard had none of them. Moving the playhead cannot cure it,
+       because the entrance grows with every letter he types (the stagger) and a caption from Detect speech starts
+       empty. So the one caption bound to the editor holds its settled look here, the way the reference apps show text
+       while the keyboard is up — every other caption, and this one the moment he presses play, animates exactly as
+       it exports. `_typingCue` lives for this one call: the exporter, thumbnails and the onion skin never see it. */
+    FM._typingCue = (!FM.playing && FM.textEdit && FM.textEdit.typingCue) ? FM.textEdit.typingCue() : null;
+    try { FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
+    finally { FM._typingCue = null; }
     if (FM.onionSkin && !FM.playing) drawOnionSkin();
     if (FM.showGuides) drawGuides();
     if (FM.canvasEdit) FM.canvasEdit.update();
@@ -1257,11 +1269,48 @@ window.FM = window.FM || {};
    * can test is a warning that will be broken on the day it is needed. `null` in, `null` out: no note,
    * no message, and the caller does nothing.
    */
-  FM.staleShellNotice = function (ver) {
+  /* ⚠️ queue 690 (HUNT-d): THE NOTE SAYS THE WORKER ANSWERED FROM ITS COPY — NOT THAT THE COPY IS OLD.
+   * sw.js leaves it on every navigation it could not fetch, and a launch with NO SIGNAL is exactly that: a train,
+   * or Wi-Fi that does not reach the internet (navigator.onLine still true). The copy it serves is the last good
+   * load, which is nearly always the build he is running — so every offline launch said "that is why it looks old.
+   * Tap the version chip", about a build that was not old, and sent him to the one tap that deletes the offline
+   * copy (the chip, index.html — it now refuses to with no signal as well). It also meant the #306 diagnostic
+   * ("if this message appears, that was the cause") fired on every offline launch and blamed the worker falsely.
+   * Only the network can say whether the copy is old, so the network is ASKED before anything is said:
+   *   `net` absent        — the caller could not ask (the unit test): the #306 wording, as before.
+   *   `net.latest` null   — still no signal: say THAT, and nothing about old builds or the chip.
+   *   `net.latest` = ver  — the network is back and this IS the latest build: nothing is old, say nothing.
+   *   another version     — the network names a different build: the copy really is old, and the chip fixes it.
+   *   '' (a page naming no build) — it cannot be told, and "old" is never said without knowing: nothing. */
+  FM.staleShellNotice = function (ver, net) {
     if (!ver) return null;
     const which = (/^v\d/.test(ver)) ? ver : 'an older build';
+    if (net && net.latest === null) {
+      return 'No signal — FreeMotion opened from its offline copy' + (/^v\d/.test(ver) ? ' (' + ver + ')' : '') +
+             '. Everything still saves on this phone.';
+    }
+    if (net && !(/^v\d/.test(net.latest || '') && net.latest !== ver)) return null;
     return 'Your connection dropped on refresh, so FreeMotion loaded ' + which +
            ' from its offline copy — that is why it looks old. Tap the version chip to get the latest.';
+  };
+  /* Which build the server has NOW: its version label ('v17.01'), '' when it answered with a page that names none (or an error),
+     or null when it cannot be reached at all — no signal, a network that goes nowhere, or no answer in 8 s (one bar
+     can leave a request hanging far longer than anyone waits on a toast). `no-store` because GitHub Pages lets the
+     browser keep index.html for ten minutes (the #306 note in sw.js), and a cached copy would answer for a server
+     that is not there. Not a navigation and carries no `?v=`, so sw.js hands it straight to the network. */
+  FM.latestBuild = function () {
+    if (navigator.onLine === false) return Promise.resolve(null);
+    const url = location.href.split('?')[0].split('#')[0];
+    return new Promise(res => {
+      const ctl = window.AbortController ? new AbortController() : null;
+      const t = setTimeout(() => { try { if (ctl) ctl.abort(); } catch (_) {} res(null); }, 8000);
+      const done = v => { clearTimeout(t); res(v); };
+      try {
+        fetch(url, ctl ? { cache: 'no-store', signal: ctl.signal } : { cache: 'no-store' })
+          .then(r => (r && r.ok ? r.text().then(html => { const m = html.match(/>\s*(v\d+\.\d+)\s*<\/span>/); done(m ? m[1] : ''); }) : done('')))   // an error page is an answer: reachable, naming no build
+          .catch(() => done(null));
+      } catch (_) { done(null); }
+    });
   };
   FM.checkStaleShell = function () {
     if (!window.caches || !navigator.serviceWorker) return Promise.resolve(null);
@@ -1271,9 +1320,12 @@ window.FM = window.FM || {};
         if (!hit) return null;
         // Clear it first: the note describes THIS load, and one left behind would cry wolf on the next.
         try { hit.c.delete('served-stale-shell'); } catch (_) {}
-        const msg = FM.staleShellNotice(hit.v);
-        if (msg && FM.toast) FM.toast(msg, 9000);
-        return msg;
+        // queue 690 (HUNT-d): ask the network before calling the copy old — see staleShellNotice.
+        return FM.latestBuild().then(latest => {
+          const msg = FM.staleShellNotice(hit.v, { latest: latest });
+          if (msg && FM.toast) FM.toast(msg, 9000);
+          return msg;
+        });
       })
       .catch(() => null);
   };
@@ -1829,18 +1881,32 @@ window.FM = window.FM || {};
    * together, so there is no discontinuity to protect against — but each half applied its own 45ms ramp
    * to its own new edge, and the two met as a V-shaped duck to COMPLETE SILENCE about 90ms wide, right at
    * the cut. Measured (tests/_splitdeclick.html): a flat 1.00 across the same window before the split,
-   * and 1.00 → 0.00 → 1.00 after it. Preview only — the export does not build the envelope this way —
-   * which is worse rather than better, because it makes the render sound different from the edit.
+   * and 1.00 → 0.00 → 1.00 after it. (The export builds this same envelope since queue 690 — see
+   * FM.declickSeamAt below — so the file and the edit agree at a seam as well as at every other edge.)
    * Only an edge that actually TOUCHES a sibling half is exempt, so dragging the halves apart brings the
-   * de-click straight back. Gated on `splitOf`: a clip that was never split never scans. */
-  function seamAt(layer, edgeT) {
-    if (!layer.splitOf || !FM.scene) return false;
-    const ls = FM.scene.layers;
+   * de-click straight back. Gated on `splitOf`: a clip that was never split never scans.
+   * `layers` is the list to look in — the exporter passes the scene it is mixing; the preview's is FM.scene.
+   * …AND ONLY WHILE THE OTHER HALF IS SOUNDING THERE (queue 690, audio hunt). The exemption is right because the
+   * sound carries straight on across the cut. If the other half is hidden, muted, at zero, silenced by a solo or
+   * faded to nothing at the cut, the sound does NOT carry on: this edge is where it really starts or stops, and a
+   * waveform cut dead there is the click #148 is about. This used to be masked for a clip START in the preview —
+   * the half after a cut was always opened from silence, which is the drop-out queue 690 removed — so without
+   * this the preview would have gained that click, and the export (which now builds this envelope too) had it. */
+  function soundingAt(l, t, ls) {
+    if (l.visible === false || (FM.groupHidden && FM.groupHidden(l))) return false;
+    if (!l.solo && ls.some(x => x.solo)) return false;
+    const into = Math.min(Math.max(0, t - (l.start || 0)), l.duration || 0);
+    return (FM.layerVolume ? FM.layerVolume(l, t) : 1) * (FM.fadeMul ? FM.fadeMul(l, into, l.duration) : 1) > 0;
+  }
+  function seamAt(layer, edgeT, layers) {
+    const ls = layers || (FM.scene && FM.scene.layers);
+    if (!layer.splitOf || !ls) return false;
     for (let i = 0; i < ls.length; i++) {
       const l = ls[i];
       if (l === layer || l.splitOf !== layer.splitOf) continue;
-      if (Math.abs((l.start || 0) - edgeT) < 1e-3) return true;                        // a sibling starts here
-      if (Math.abs((l.start || 0) + (l.duration || 0) - edgeT) < 1e-3) return true;    // …or ends here
+      const touches = Math.abs((l.start || 0) - edgeT) < 1e-3                          // a sibling starts here
+                   || Math.abs((l.start || 0) + (l.duration || 0) - edgeT) < 1e-3;     // …or ends here
+      if (touches && soundingAt(l, edgeT, ls)) return true;
     }
     return false;
   }
@@ -1861,6 +1927,66 @@ window.FM = window.FM || {};
     return Math.max(0, Math.min(1, k));
   }
   FM._declickGain = declickGain;   // exposed for the suite
+  /* THE EXPORT FADES THE SAME EDGES (queue 690, audio hunt). js/exporter.js buildAudioMix builds this envelope
+     for the file — the same 45 ms, the same seam rule — so a trim that is smooth in the preview is smooth in
+     the file. One number and one rule, read from here, so the two cannot drift apart. */
+  FM.DECLICK_S = DECLICK_S;
+  FM.declickSeamAt = seamAt;
+
+  /* ═══ A SPLIT IS INAUDIBLE WHEN HE PLAYS ACROSS IT, NOT ONLY ON PAPER (queue 690, audio hunt) ═══════════
+   * His words for the hunt: "go re audit, find some bugs coz theres a shit load".
+   * The seam rule above stopped the two halves ramping their OWN edges at a cut — and the 21 Aug test
+   * proved it by calling declickGain with no element. declickGain has a third term, `_resumedAt`, which
+   * the sync tick arms whenever it starts a PAUSED element, and the second half's element is paused until
+   * the playhead reaches it. So at every cut the first half played to its end at full level, and the
+   * second opened at volume 0 and climbed over 45 ms — on top of however long the element took to start
+   * making sound at all. MEASURED at the speakers: playing across a split song, the level fell to 0
+   * percent right at the cut, where the same song unsplit held 98 percent and the exported file 97.
+   * Two parts, because either alone leaves a gap:
+   *   1. PRE-ROLL. For the last PREROLL_S before a split half begins, its element is already playing,
+   *      MUTED, from just far enough before its first sample to arrive there on the cut — the same
+   *      recording runs on before the cut, so there is always something to play. FM.play waits up to
+   *      START_WAIT_MS for an element to start making sound (queue 95, ~200 ms measured); this is that
+   *      wait, taken before the cut instead of at it. At the cut the tick finds it playing and simply
+   *      unmutes it, and the first half stops on the same tick.
+   *   2. NO RESUME FADE ACROSS A SEAM. If the pre-roll could not happen (a refused play(), a tick that
+   *      jumped the whole window) the element is still started at the cut — but at the level the first
+   *      half was playing at, not from silence, when the playhead has just RUN ACROSS the seam. Only
+   *      then: pressing play with the playhead parked on a cut (where a split leaves it) or a loop
+   *      wrapping onto one still opens from silence, because nothing was sounding a moment before. That
+   *      is why this lives in the sync tick, which knows where the playhead was last tick, and not in
+   *      declickGain, which cannot tell those apart. */
+  const PREROLL_S = 0.4;       // = START_WAIT_MS: the start-up FM.play is prepared to wait for
+  const SEAM_CROSS_S = 0.25;   // how far past a cut a tick may land and still be the one that crossed it (ticks have been measured 100 ms apart under load)
+  let _syncPrevT = null;       // FM.time at the previous sync tick of THIS pass — null after play and after a wrap, where nothing was crossed
+  function prerollAtSeam(layer, m, now) {
+    if (!FM.playing || !layer.splitOf || layer.reversed) return false;
+    const lead = (layer.start || 0) - FM.time;
+    if (!(lead > 0 && lead <= PREROLL_S)) return false;
+    if (!seamAt(layer, layer.start)) return false;                 // halves pulled apart: an ordinary clip start, faded as ever
+    const first = FM.layerLocalTime(layer, layer.start);
+    if (first == null) return false;
+    const rate = Math.min(16, Math.max(0.0625, (FM.evalProp(layer.speed, layer.start) || 1) * (FM.previewRate || 1)));
+    const from = first - lead * rate;                               // where it has to be NOW to reach its first sample on the cut
+    if (!(from >= 0)) return false;
+    try {
+      m.el.muted = true;                                            // heard from the cut on, never before it
+      /* …and where the level lives in a Web Audio stage (an iPhone), that goes to 0 as well — the same guard the
+         mute path keeps, in case an engine lets a routed element's audio past el.muted. The tick lifts it at the cut. */
+      if (m._boost && FM.audioFxLive && FM.audioFxLive.volumeLocked && FM.audioFxLive.volumeLocked(m)) FM.audioFxLive.setBoost(layer, 0);
+      if (m.el.paused) {
+        if (m._playRefusedAt && now - m._playRefusedAt < 500) return true;
+        if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);
+        if (FM.pitchForRate) FM.pitchForRate(m.el, rate);
+        m.el.playbackRate = rate;
+        m.el.currentTime = from; m._syncAt = now;
+        // a fresh pass for the drift controller, exactly as FM.play starts one — it learns this element from the cut on
+        m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null; m._resumedAt = 0;
+        m.el.play().then(() => { m._playRefusedAt = 0; }, e => { m._playRefusedAt = now; try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });
+      }
+    } catch (e) {}
+    return true;
+  }
 
   /* `rateWrites` and `errs` are what queue 148 turned on, and they are not the same as `trims`.
    * A trim is a DECISION; a write is what the element actually hears, and `preservesPitch` makes a
@@ -1984,6 +2110,7 @@ window.FM = window.FM || {};
         } catch (e) {}
       }
     });
+    _syncPrevT = null;                         // a wrap lands on a time, it does not run across one (queue 690)
     clockAnchor(t);                            // the wrap is a real discontinuity — re-origin the clock…
     if (FM.audioPlay) FM.audioPlay.start();
     clockAdopt();                              // …and adopt the context if that call just created one
@@ -2042,7 +2169,10 @@ window.FM = window.FM || {};
         const hiddenHere = layer.visible === false
           || (FM.groupHidden && FM.groupHidden(layer))
           || (FM.soloSilenced && FM.soloSilenced(layer));
-        if (local == null || hiddenHere) { try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return; }
+        if (local == null || hiddenHere) {
+          if (local == null && !hiddenHere && prerollAtSeam(layer, m, now)) return;   // the next half of a split, starting early and muted (queue 690)
+          try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return;
+        }
         try {
           if (m.el.paused) {
             /* queue 820: a play() the browser just refused is not retried on the very next frame. Without
@@ -2082,8 +2212,14 @@ window.FM = window.FM || {};
             if (FM.pastSourceEnd(m, local)) { try { m.el.muted = true; } catch (e) {} return; }   // see FM.sourceEnd
             // Open SILENT and let declickGain bring it up: play() on an arbitrary sample at full volume
             // is the same click as pausing on one, and this is the path a loop takes every lap. (#148)
-            try { m.el.volume = 0; } catch (e) {}
-            m._resumedAt = now;
+            /* …unless the playhead has just RUN ACROSS a split: the half before this one was sounding right
+               up to the cut, so the sound continues rather than opens (queue 690 — see prerollAtSeam). */
+            const crossedSeam = _syncPrevT != null && _syncPrevT < layer.start && FM.time - layer.start < SEAM_CROSS_S && seamAt(layer, layer.start);
+            if (crossedSeam) m._resumedAt = 0;
+            else {
+              try { m.el.volume = 0; } catch (e) {}
+              m._resumedAt = now;
+            }
             /* THE SOUND STOPPED AND WE ARE STARTING IT AGAIN. This branch runs both when the playhead
                ENTERS a clip (ordinary) and when an element that was already playing has stopped on
                its own (a fault, and on iOS the likeliest shape of "it cuts in and out"). The watcher
@@ -2238,6 +2374,7 @@ window.FM = window.FM || {};
         } catch (e) {}
       }
     });
+    _syncPrevT = FM.time;   // the next tick can tell whether it ran across a seam (queue 690)
   }
 
   /* How long the transport will wait for sound before giving up and starting anyway (queue 95).
@@ -2321,6 +2458,7 @@ window.FM = window.FM || {};
     if (FM.time >= FM.scene.project.duration - 1e-3) FM.time = 0;
     FM.playing = true;
     _struggleHits = 0;      // a fresh run of frames — never inherit a count from the last one (queue 492)
+    _syncPrevT = null;      // pressing play crosses no seam: a clip opened here opens from silence (queue 690)
     /* `rateWrites` and `errs` are what queue 148 turned on, and they are not the same as `trims`.
    * A trim is a DECISION; a write is what the element actually hears, and `preservesPitch` makes a
    * write a PITCH change — 85 writes in four seconds is the scratchy warble he reported, and the
@@ -3285,6 +3423,7 @@ window.FM = window.FM || {};
     if (dur > seg + 0.3) layer.captions.push({ start: seg, end: Math.min(dur, seg * 2), text: 'Second caption' });   // only if there's room (no zero-length segment on tiny projects)
     layer.text = '';
     layer.captionBg = true;
+    if (FM.captions && FM.captions.giveWrap) FM.captions.giveWrap(layer);   // a spoken sentence wraps inside the frame (queue 690, seventh hunt)
     FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
@@ -6650,7 +6789,12 @@ window.FM = window.FM || {};
         // the project they were editing — home.js writes 'fm.view' on every open/close. The
         // restored-project guard keeps a deleted/first-boot project from opening an empty editor.
         let lastView = null; try { lastView = localStorage.getItem('fm.view'); } catch (e) {}
-        if (!(restored && lastView === 'editor')) FM.home.open();
+        /* queue 942: …but NOT when the app has just been opened. His words: "every time you load into the app for the first
+           time like in the loading screen plays it puts you in the home menu not in your project". A reload inside the same
+           session (the version chip's update, a pull-to-refresh) still drops him back where he was — the intro does not play
+           for those either. The project stays loaded behind Home, marked OPEN, one tap away. */
+        const firstLoad = window.FM_FIRST_LOAD !== false;
+        if (firstLoad || !(restored && lastView === 'editor')) FM.home.open();
       }
       /* ⚠️ WARN ABOUT THE PROJECT HE IS ACTUALLY IN (queue 487). `warnOversizeProject` had exactly one
          caller — `projects.open()` — and a refresh does not go through it: the boot above restores the

@@ -86,8 +86,12 @@ window.FM = window.FM || {};
        at the end of the scroll and nowhere else. A sticky footer inside the scroller can only ever
        approximate a pinned one; a footer that is a SIBLING of the scroller cannot move at all. */
     const scroll = document.createElement('div'); scroll.className = 'shortcuts-scroll';
-    section(scroll, 'Keyboard', SHORTCUTS.map(addMenuRow), 'shortcut-key');
-    section(scroll, 'Mouse / stage', TIPS, 'shortcut-key wide');
+    /* An inner wrapper (queue 927): BIG on PC flows the whole list down two columns, and columns need a box whose
+       height follows its content — on the fixed-height scroller itself they would spill sideways instead. */
+    const cols = document.createElement('div'); cols.className = 'shortcuts-cols';
+    section(cols, 'Keyboard', SHORTCUTS.map(addMenuRow), 'shortcut-key');
+    section(cols, 'Mouse / stage', TIPS, 'shortcut-key wide');
+    scroll.appendChild(cols);
     card.appendChild(scroll);
     /* A WAY OUT TO THE TUTORIALS (queue 274). Ezra: "At the bottom of the keyboard shortcuts menu when
        you press the ? Icon it should show a button that takes you straight to the tutorial section and
@@ -103,7 +107,7 @@ window.FM = window.FM || {};
     const tut = document.createElement('button'); tut.className = 'btn shortcuts-tut'; tut.type = 'button';
     tut.textContent = 'Tutorials';
     tut.addEventListener('click', () => {
-      FM.shortcuts.hide();
+      FM.shortcuts.hide({ now: true });   // Home is about to cover the ? — nothing to fold into
       if (FM.home && FM.home.open) FM.home.open();
       /* AFTER open(), and on a TIMER rather than rAF. Two separate reasons, both load-bearing:
          · open() sets its tab back to 'projects' itself and then renders, so switching before it runs
@@ -135,6 +139,21 @@ window.FM = window.FM || {};
     overlay.addEventListener('pointerdown', (e) => { downOnOverlay = e.target === overlay; });
     overlay.addEventListener('click', (e) => { if (e.target === overlay && downOnOverlay) FM.shortcuts.hide(); downOnOverlay = false; });
     document.body.appendChild(overlay);
+    /* SMALL OR BIG (queue 927). Built once, like the card: the overlay lives for the session and is only shown and
+       hidden, so the size is re-read on every show (sync) rather than on build. */
+    if (FM.panelSize) sizer = FM.panelSize.attach(card, { key: 'shortcuts', name: 'Shortcuts', button: helpButton, parts: () => [scroll, row] });
+  }
+  let sizer = null, folding = null;
+  /* The ? that is on screen — the PC transport row's or the phone top bar's — and none from Home, where the
+     editor's ? is buried (#912): the fold (#927) must land on a button he can see. */
+  function helpButton() {
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) return null;
+    const phone = window.matchMedia('(max-width: 700px)').matches;   // the phone bar's first — see notesButton in js/notepad.js
+    for (const id of (phone ? ['m-help', 'btn-help'] : ['btn-help', 'm-help'])) {
+      const b = document.getElementById(id);
+      if (b && b.getBoundingClientRect().width > 0) return b;
+    }
+    return null;
   }
   /* POP OUT OF THE ? BUTTON (queue 548). The card opened dead centre at 500,63 with no animation;
      his ask is that each of the four transport menus comes out of its own button with a comic tail
@@ -159,14 +178,37 @@ window.FM = window.FM || {};
   }
   function popShut() { if (popCleanup) { popCleanup(); popCleanup = null; } }
 
+  /* CLOSING WHILE BIG FOLDS INTO THE ? (queue 927 clause 8). It counts as closed from the first frame — isOpen()
+     is false and a second ? opens it again at once — and is hidden when the fold lands. */
+  function shut(now) {
+    if (!overlay) return;
+    if (folding) { if (now) folding.finish(); return; }
+    if (!now && sizer && sizer.isBig() && !overlay.classList.contains('hidden')) {
+      overlay.classList.add('pb-closing');
+      folding = sizer.fold(() => {
+        folding = null;
+        overlay.classList.remove('pb-closing');
+        overlay.classList.add('hidden');
+        popShut();
+      });
+      return;
+    }
+    overlay.classList.add('hidden');
+    popShut();
+  }
+  function open() {
+    if (!overlay) build();
+    if (folding) folding.finish();   // opened again mid-fold: end the fold, then open as normal
+    overlay.classList.remove('hidden');
+    if (sizer) sizer.sync();         // before popOpen, so a panel he left big opens big and centred
+    popOpen();
+    if (sizer) sizer.refresh();
+  }
+
   FM.shortcuts = {
-    isOpen() { return !!overlay && !overlay.classList.contains('hidden'); },
-    toggle() {
-      if (!overlay) build();
-      overlay.classList.toggle('hidden');
-      if (overlay.classList.contains('hidden')) popShut(); else popOpen();
-    },
-    show() { if (!overlay) build(); overlay.classList.remove('hidden'); popOpen(); },
-    hide() { if (overlay) overlay.classList.add('hidden'); popShut(); },
+    isOpen() { return !!overlay && !overlay.classList.contains('hidden') && !overlay.classList.contains('pb-closing'); },
+    toggle() { if (FM.shortcuts.isOpen()) shut(false); else open(); },
+    show() { open(); },
+    hide(o) { shut(!!(o && o.now)); },
   };
 })(window.FM);

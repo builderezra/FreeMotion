@@ -1292,3 +1292,25 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cs-relay.warn { color: #c62740; }
 .collab-scrim.collab-light .cl-steps,
 .collab-scrim.collab-light .cj-softsas b { color: #10151f; }
+
+/* ═══ THE OPEN CARD'S TRAVELLING LIGHT, ON THE LIGHT HOME (queue 943) ═════════════════════════════════════════════════════
+   Ezra, 26 Sep: *"On light mode that isn’t the same thing on Dark Mode where your project has that little circle circling
+   around it … make sure both have a dark mode and light mode"*. The ring (.hm-glint, styles.css) was always on the open card
+   in both looks — but its comet is near-white, so on a white card it could not be seen. Of three drawn options he picked C,
+   *"2 - c"*: dark ink, subtle. Same ring, same speed, same mask; only the light changes colour, a hair wider so a dark line
+   reads as clearly on paper as the white one does on glass. */
+html[data-home="light"] .hm-glint { padding: 2px; }
+html[data-home="light"] .hm-glint i {
+  background: conic-gradient(from 0deg,
+    rgba(16, 21, 31, 0)   0turn,
+    rgba(16, 21, 31, 0)   .58turn,
+    rgba(16, 21, 31, .25) .72turn,
+    rgba(16, 21, 31, .85) .80turn,
+    rgba(16, 21, 31, .25) .88turn,
+    rgba(16, 21, 31, 0)   .97turn,
+    rgba(16, 21, 31, 0)   1turn);
+  filter: drop-shadow(0 0 3px rgba(80, 170, 255, .6));
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-home="light"] .hm-glint i { background: rgba(16, 21, 31, .3); }
+}

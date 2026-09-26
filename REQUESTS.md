@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Sep at v17.00
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Sep at v17.01
 >
-> **State:** v17.00 — **a sixth real-input bug hunt fixed 15 more things**: moving effects (Spin, Swing, Pulse…) are no longer told they "change nothing"; Undo keeps the effect you were tuning open; swiping away the share sheet after Save no longer throws the export away; the phone stays awake during a long export; clips with no sound track no longer end exports on silence; clicking the canvas lets go of a number box; Cmd+Z while drawing really undoes the stroke; a trackpad swipe no longer zooms the preview; live-collaboration undo, renames and friends' edits behave. v16.99: pausing shows the right frame, the preview matches the export, saving is safer. v16.98: the empty Projects screen — the arrow comes with your pick (A, B or C).
+> **State:** v17.01 — **your picks are in**: the empty Projects screen has the drawn arrow to the + (A); the light Home shows the light circling your open project in dark ink (C); Notes and Shortcuts grow BIG from their arc corner to most of the screen, in the middle; opening the app now always lands on Home. Plus **a seventh real-input bug hunt fixed 16 more things** (Select mode scrolls on the phone, no clicks at clip joins in exports, captions wrap on 9:16, offline launches no longer lie about the app being old, a full phone no longer loses work on update or New project). Next: your big message — #944 onwards.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -32816,21 +32816,23 @@ re-opened #480, which I had marked done and had not fixed.
       3. [x] ✅ test 926 at 1100 AND 360, the eye pressed with REAL input, then the button the other way, then undo; each half proven by removing it. — Checked on the phone (380) and on PC.
       ✅ **SHIPPED v16.91.**
 
-- [ ] **927 — NOTES and SHORTCUT/TIPS menus: grab a corner to make them BIG — two sizes only, animated, remembered, and a shrink-and-fold close.** (24 Sep, his words in full, verbatim:)
+- [x] **927 — NOTES and SHORTCUT/TIPS menus: grab a corner to make them BIG — two sizes only, animated, remembered, and a shrink-and-fold close.** (24 Sep, his words in full, verbatim:)
       > *"Make it so that for the note book, like the notes menu, and the shortcut tips menu, when you basically open them up, they stay in their little area right But since it's in the corner of the screen, it's a little bit small. Make it so that if you basically want to extend it and make it bigger, you can so almost like how on like any computer, when you grab the corner of a window, and it'll show that you can extend it out. Like, like the cursor will change. And then you click and then you drag it to what size you want. I want something similar for the notes and shortcut slash tips menu. But basically I want it so that when you do it, it does like a nice animation so instead of it being like it has like unlimited different states where depending on how much you drag it out it only has two states either zoomed in or zoomed out when you zoom it out it will basically do a nice little animation where it expands into a bigger view where it basically covers up more of the screen and is in the center and then if you grab the edges again and drag it back in again it'll go back to smaller but if you drag it out every time you open it up and close it it'll remember what you last had it like but if you extend it out big and you close it it does a nice little animation where it kind of like shrinks down onto itself before closing so it's like shrinking and then folding into the button sort of thing"*
       His clauses:
-      1. [ ] Applies to BOTH the Notes (notebook) menu and the Shortcuts/Tips menu.
-      2. [ ] Grab a corner/edge like a desktop window — the cursor changes to a resize cursor over it.
-      3. [ ] Click and drag the corner outwards to make it bigger.
-      4. [ ] ONLY TWO SIZES, not free sizing: small (where it is now, in its corner) and big.
-      5. [ ] Going big is a nice animation: it expands into a bigger view that covers more of the screen and sits in the CENTRE.
-      6. [ ] Grab the edges again and drag inwards → it animates back to small.
-      7. [ ] It REMEMBERS the last size: open/close keeps whichever size he left it at.
-      8. [ ] Closing while big: a nice animation where it shrinks down onto itself and then folds into its button.
-      9. [ ] (his standing design rule, #545) show him options as a picture before it ships; check on PC AND at 380 (a finger has no cursor — the corner needs a visible grab handle there).
+      1. [x] ✅ v17.01 Applies to BOTH the Notes (notebook) menu and the Shortcuts/Tips menu.
+      2. [x] ✅ v17.01 Grab a corner/edge like a desktop window — the cursor changes to a resize cursor over it.
+      3. [x] ✅ v17.01 Click and drag the corner outwards to make it bigger.
+      4. [x] ✅ v17.01 ONLY TWO SIZES, not free sizing: small (where it is now, in its corner) and big.
+      5. [x] ✅ v17.01 Going big is a nice animation: it expands into a bigger view that covers more of the screen and sits in the CENTRE.
+      6. [x] ✅ v17.01 Grab the edges again and drag inwards → it animates back to small.
+      7. [x] ✅ v17.01 It REMEMBERS the last size: open/close keeps whichever size he left it at.
+      8. [x] ✅ v17.01 Closing while big: a nice animation where it shrinks down onto itself and then folds into its button.
+      9. [x] ✅ v17.01 (his standing design rule, #545) show him options as a picture before it ships; check on PC AND at 380 (a finger has no cursor — the corner needs a visible grab handle there).
       🎨 **25 Sep — BUILT on branch `fm-design-927` (a WORKING prototype, rebased on v16.92, with real-input tests) and drawn as a sheet, criticised by a separate agent and revised (it caught: the phone's big Shortcuts showing FEWER rows than small, the close animation blanking the contents, no pictures of dragging it back in). Sent to his phone as 11 pages.**
-      ⏸ **BUILT OUT UNTIL HE picks** the grab corner — **A arc (recommended)** / B grip lines / C expand button — and the BIG size — Roomy / **Focus (recommended)** / Most of the screen. On his pick: merge the branch, set the defaults, ship.
+      ✅ ~~⏸ **BUILT OUT UNTIL HE picks** the grab corner — **A arc (recommended)** / B grip lines / C expand button — and the BIG size — Roomy / **Focus (recommended)** / Most of the screen. On his pick: merge the branch, set the defaults, ship.~~ (he answered 26 Sep — build it)
 
+      **UNBLOCKED 26 Sep — HE ANSWERED, in #944:** *"I asked for the feature like with expanding the notes menu and the help menu um, would be nice if you just worked on those like features that I asked for eventually"* — he wants it built, not asked about again. Deciding under rule 16 with the recommended picks (grab corner A — arc; big size — Focus), and showing him the result; one word changes either.
+      **HE ANSWERED (26 Sep), verbatim:** *"3 - a"* and *"4 - Just taking up most of the screen in the middle, using the space wisely tho."* (items 3 and 4 of the list = #927's grab corner and big size) → **A, the arc** (the grip lines and the expand chip deleted) and **Most of the screen, centred** (Roomy and Focus deleted). Built from branch fm-design-927 into v17.01; the five 927 tests pass at 380 and 1280.
 - [x] **928 — Colour keyframes: the clip's colour strip STARTS BLACK; the layer NAME drops to the bottom line of the clip; keyframe diamonds sit ABOVE the clip's centre line.** (24 Sep, PC screenshot at v16.90 — the Rect clip, pink with two colour keyframes, darkens to near-black at its left end; "Rect" sits on the clip's bottom edge while Hexagon/Squircle's names are centred; the two ◇ sit high in the clip. His words in full, verbatim:)
       > *"with the feature that makes a layer change color depending on how you keyframe the colors and have the colors change, make it so that it doesn't start black because for some reason it always makes the start of it black. I don't know why it does that. It kind of looks bad. Get rid of that. Just, yeah, don't do that. And also for some reason I noticed a glitch where when I change the color of a layer with coloring, like when I change it with um, keyframes, for some reason the name of the layer goes to the bottom of the layer like it's sitting on the bottom line of the layer for some reason now. And also for some reason, I noticed that keyframes aren't in the center of the layer. They're not centered in the line. They're like a bit up."*
       His clauses:
@@ -32850,6 +32852,7 @@ re-opened #480, which I had marked done and had not fixed.
       🎨 **25 Sep — options drawn from REAL published pictograms** (branch `fm-design-929`): people **A AIGA/US DOT airport sign (public domain, recommended)** / B Mapbox Maki (CC0) / C Google Material Symbols (Apache-2.0, no arms) / keep today's; each card shows the original, the trace and an overlay, and the real Add → Shape tiles at phone and PC size. Heart: found both faults — the knee on each lower side (bend 45 against 3.7 on the lobes) and a HAND-TYPED tile path with an S-bend (the "little lines"); **A his heart with the bulge fixed (recommended)** / B Google's / C textbook, and the tile drawn from the heart's own geometry (outline recommended, or filled) — plus the same fix for the other 6 data-shape tiles and a test that fails if a tile is ever hand-drawn again. Criticised and revised once. Sent to his phone as 14 pages.
       ⏸ **BUILT OUT UNTIL HE picks** people A / B / C / today's, heart A / B / C, and an outline or filled heart tile. (Picking any new people option means rewriting the 6 old people tests around it — they were written around today's figure; the sheet says so plainly.)
 
+      **HE ASKED (26 Sep), verbatim:** *"5 You gotta show me what these look like"* (item 5 = the people shapes) → the four people pages resent the same minute (scratchpad d929/929-people-part0..3). ⏸ **BUILT OUT UNTIL HE picks the people (A airport sign, recommended · B Mapbox · C Google · keep today's), the heart (A/B/C) and the heart icon (outline/filled).** ✔ reply checked 26 Sep.
 - [x] **930 — The ASSISTANT and DIRECTOR menus open on top of each other; and the API key belongs in App Settings, reachable from both.** (24 Sep, his words in full, verbatim:)
       > *"the assistant menu and the director menu both pop up at the same time and go on top of each other, you should make it when you open one or the other, the other one closes. And also, the only way you can put in an API key is in the director menu. So basically what you should do is move it so that there's a button in both pages that takes you to app settings and it takes you to a section in the app settings where you put in the API key and you put it in there instead. But also you should add an option to do like password protected. Oh, actually, never mind. Don't do that because when we actually make this thing, we'll add accounts to it so people can have accounts and stuff. And people will just you know be protected by their account."*
       His clauses:
@@ -32960,7 +32963,7 @@ re-opened #480, which I had marked done and had not fixed.
       [x] ✅ v16.95 [medium] **Found while shipping:** a toast that only says something ("Keyframe added") caught the next tap meant for whatever was under it — it sits over the middle of the phone timeline for a second or two after nearly every action; a real finger on a keyframe diamond right after adding a keyframe landed on the toast. Plain toasts now let taps through; a tappable toast (with its ›) still takes its own. Test "690 a toast that only says something…" (fails on v16.94).
       ✅ **SHIPPED v16.95.**
 
-- [ ] **936 — a fresh start opens on an empty screen with inviting text, not an open project** (25 Sep)
+- [x] **936 — a fresh start opens on an empty screen with inviting text, not an open project** (25 Sep)
   His words, verbatim: *"When you start the app fresh it shouldnt start with an open project, it should start empty like all the other pages with some inviting text"*
   Clauses:
   1. [x] ✅ v16.97 Starting the app fresh does not open a project.
@@ -32977,9 +32980,9 @@ re-opened #480, which I had marked done and had not fixed.
       **HE CHANGED IT (25 Sep, minutes later), his words in full, verbatim:** *"actually make it say lets see what you're made of. and have drawn arrow thats stylish and points towards to plus button"*
       Clauses (new):
       4. [x] ✅ v16.98 The empty Projects screen says "Let’s see what you’re made of" (replaces "Let’s make something"); the 936 test checks the exact words in a real fresh start.
-      5. [ ] A DRAWN arrow, stylish, pointing towards the + button.
+      5. [x] ✅ v17.01 A DRAWN arrow, stylish, pointing towards the + button — option A, his pick.
       6. [x] (his standing design rule, #545) options drawn and shown to him before it ships. — sent 25 Sep (scratchpad 936-arrows.png): three arrows, phone light/dark + PC.
-      ⏸ **BUILT OUT UNTIL HE picks the arrow — A the doodle swoop in the + button's colours (recommended) · B the teal brush flick · C the pencil sketch-note with a sparkle.** The words are already in (v16.98, unshipped); the arrow ships with his pick. ✔ reply checked 25 Sep.
+      ✅ ~~⏸ BUILT OUT UNTIL HE picks the arrow~~ — **HE ANSWERED (26 Sep), verbatim:** *"Question 1 - A"* (item 1 of the list = #936's arrow) → **A, the doodle swoop**, built as js/home-arrow.js: drawn on the empty Projects screen once the intro hands over, cleared the moment a project exists; test 936 checks both.
 
 - [x] **937 — The third real-input bug hunt (25 Sep) — 24 findings, all 24 confirmed by a skeptic and fixed. (hunt HIGH #937)** (25 Sep — found by Claude under #690, NOT his words; his words that started it: *"Keep going"*.)
       **JUMPED: a container of independent findings closed in one release; each confirmed finding has its own "690 …" / "HUNT-…" test that failed before its fix.** Same method as #934/#935 (real touch/mouse input through tests/_cdp.py, one skeptic per finding, a fixer per area, every fix proven against its reverted source). Full detail: `audits/937-hunt.json`.
@@ -33119,3 +33122,234 @@ re-opened #480, which I had marked done and had not fixed.
       [x] ✅ v17.00 [medium] In a live session, Undo with the text card open blames someone else, undoes nothing, and the new text can never be undone — *Sharing from the Mac, he adds a text, types Hello world and clicks Undo with the text card still open. Alone, that takes back the typing. In a session it says: Can't undo — someone else changed it since. Nobody else touched it. Nothing is undone, and the step that added the text is thrown away, so…*
       ↳ left as it was: Bug 4, not done: a refusal caused by his own change still uses up the step (§10.2 'consumed either way'). I left it because putting the step back would just refuse again on every press. With the flush fix the text-card case no longer refuses at all. The only…
       ✅ **SHIPPED v17.00.**
+
+- [ ] **941 — The seventh real-input bug hunt (26 Sep) — 16 findings, all 16 confirmed by a skeptic and fixed. (hunt HIGH #941)** (26 Sep — found by Claude under #690, NOT his words; his words that started it: *"Keep going"*.)
+      **JUMPED: a container of independent findings closed in one release; each confirmed finding has its own "690 …" / "HUNT-…" test that failed before its fix.** Same method as #934/#935/#937/#938/#939/#940 (real touch/mouse input through tests/_cdp.py, one skeptic per finding, a fixer per area, every fix proven against its reverted source). Full detail: `audits/941-hunt.json`.
+      ━━ **Home and project management** ━━
+      [x] ✅ v17.01 [high] In Select mode a finger swipe on the project list ticks projects instead of scrolling, so with a long library he cannot reach the projects further down — *He taps Select, or holds a card, to clear out his 60+ projects, then swipes up to get to the older ones. The list does not move at all. Every card his finger crosses gets a tick instead. The only thing that scrolls is the 16 px strip beside the cards, so the projects below the first screen cannot…*
+      [x] ✅ v17.01 [high] With 60+ projects, hold-and-slide ticks one more project than the finger passed over, because the list jumps 70 px when Select comes on — *With 60 or more projects, Home shows a note at the top of the list (You have N projects…). He holds a card to start Select, and the whole list jumps up 70 px under his finger. He slides down over two more cards and lifts on the third. A fourth project he never touched is ticked too, and the next…*
+      [x] ✅ v17.01 [medium] Save project file… on another project from Home reloads the open project: its undo history, playhead and selection are lost, and the other card's picture is replaced with its first frame — *He is working in project A, goes Home and uses ⋯ → Save project file… on project B to back it up. When he goes back into A, Undo does nothing because his history is gone. The playhead has jumped back to 0 and his selected layer is no longer selected. B's card, which he only backed up, now shows B's…*
+      [x] ✅ v17.01 [medium] Duplicate or Rename on a card down a long list moves the result to the top, off screen, with nothing saying where it went — *He scrolls down his list to an older project and taps ⋯ → Duplicate. A 'Duplicating…' toast flashes and nothing on screen changes: the copy was put first in the list, about 4,000 px above where he is looking. The natural next move is to press Duplicate again, which makes a second copy. Rename does…*
+      ↳ left as it was: Not fixed, a separate bug noticed in passing (worth its own item): widening the window moves the playhead back to 0. I measured it with a throwaway probe test, since deleted: a 2 s project with the playhead at 1.2 s. Widening the frame from 900 to 1280 or…
+      ↳ left as it was: Not changed: the Templates and Elements tabs' own ⋯ → Duplicate template / Duplicate element still only toast 'Duplicating…' and do not scroll to the copy. They are the same pattern, but those lists are short, and they were outside these four findings.…
+      ↳ left as it was: No visual screenshot was sent. The visible changes are described in 'fixed' (hold-to-paint in Select on phone, the note staying in Select, the scroll-and-outline after Duplicate or Rename). The outline timing was measured in the page: lit at about 1.13 s when…
+      ━━ **Audio: preview vs export** ━━
+      [x] ✅ v17.01 [high] The exported file pops at the start and end of every trimmed clip. The preview fades each edge, so he never hears the pops while editing — *He trims a song so it starts or stops partway through the music, or cuts between two clips. In the preview the cut is smooth. In the exported video there is a sharp pop at every cut. This covers every trim, every change from one clip to another, and every song that stops before the video ends.…*
+      [x] ✅ v17.01 [medium] Splitting a song leaves a short drop to near-silence at the cut in the preview. The export plays straight through — *He splits a song, for example to change the volume of one part or to cut it, and plays across the split. Every time the playhead crosses the cut, the sound drops to near-silence for about 45 ms and then fades back in. Measured at the speakers: the level falls to 0 percent right at the cut. The same…*
+      [x] ✅ v17.01 [medium] The exported video's sound is 44 ms behind the picture, and the audio track runs 72 ms past the end of the video — *Every exported video with sound plays its soundtrack 44 ms after the picture. A click at 1.000 s on his timeline is at 1.044 s in the exported MP4, and a 3.000 s video has a 3.072 s audio track. Speech is at the edge of visible lip-sync error, and cuts timed to the beat land late. If he exports a…*
+      [x] ✅ v17.01 [medium] On an iPhone, a clip with Echo or Reverb that is not at 100 percent volume, or has a fade, goes silent the moment it ends in the preview. In the export the echo keeps ringing — *On his phone he puts Echo or Reverb on a voice clip and turns it down (for example 80 percent) or gives it a fade. While he previews, the echo or reverb stops dead the moment the clip ends. In the exported video it rings on after the clip. Measured: after the clip ends, the phone preview's echo is…*
+      ↳ left as it was: iPhone only, split clip that has a level stage (volume not 100 percent, a fade, or a boost): while the next half pre-rolls, its Web Audio level stage is also held at 0. This is the same guard the mute path uses, in case WebKit lets a routed element's audio…
+      ↳ left as it was: The AAC warm-up fix needs AudioDecoder to measure the warm-up. Where AudioDecoder is missing or the measurement disagrees, the file is left as the encoder made it, still 44 ms late. I did this on purpose, because a wrong guess would put the sound early and…
+      ↳ left as it was: Stated cost of cutting the warm-up out without an edit list: the first ~11 ms of every exported soundtrack fade in (on a steady tone: silent to ~9 ms, exact from ~12 ms, no step). A clip that starts with the export already fades over 45 ms, so this only shows…
+      ↳ left as it was: As the spec asked, an export range that starts or ends in the middle of a clip is not faded at that edge, so such a file still starts or stops on an arbitrary sample.
+      ↳ left as it was: A cut where both halves are sounding but at different volumes (split to turn one part down) still steps in level at the cut, in both the preview and the file. That is existing behaviour and outside these four bugs.
+      ━━ **Captions** ━━
+      [x] ✅ v17.01 [high] A caption of an ordinary sentence runs off both sides of a 9:16 frame: caption tracks never wrap — *He adds Captions to his 1080x1920 project and types what was said, e.g. 'Welcome to this beautiful family home in Perth' (46 characters). The caption is one line 1788 px wide on a 1080 px frame, so both ends are cut off and only the middle words show, in the preview and burned into the export. Any…*
+      [x] ✅ v17.01 [high] A caption he trimmed off the clip flashes back, stacked on the first caption, after he edits any other caption — *He trims the start of his caption clip (Trim start to playhead, the A key or the grip), so the first caption is cut away and the clip opens on the second one. Then he types a word into any other caption and ticks. Now the first 0.1 s of the clip shows the cut caption stacked on top of the real one…*
+      [x] ✅ v17.01 [high] After + in the caption strip, the cross on a caption in the Aa sheet deletes a different caption — *On his phone, typing captions with the Aa sheet open, he taps + for a new caption after Alpha. The Aa list does not change and still shows Alpha, Bravo, Charlie. He taps the cross on the row reading Charlie. Charlie stays, and Bravo (a caption he never touched) is deleted with its words and no…*
+      [x] ✅ v17.01 [medium] With an Animate preset on the captions, the caption he is typing is invisible on the canvas — *His captions have Animate > Fade in (or Pop). On his phone he taps › to type the next caption. The field shows its words, but the canvas above the keyboard shows nothing of that caption while he types (0 lit px, where the same caption with no preset shows 544). With Typewriter only the first letter…*
+      ↳ left as it was: Existing caption tracks, made before this fix, still have wrapWidth 0 and still run off the frame until he drags a side handle. They were deliberately not migrated on load, because a 0 there cannot be told apart from him double-clicking a handle to turn…
+      ↳ left as it was: Optional part of fix 1 not done: the editor's ‹ › and the Aa caption list still include trimmed-off captions (as they did before), so ‹ from the first visible caption can land on one that is cut away. Not covered by the confirmed test, and left alone to keep…
+      ↳ left as it was: Not in this batch (listed in the hunt commit as lower, not confirmed): whole-project re-detect carries typed text by un-shifted times, and Detect speech on a speed-ramped clip places cues by the average rate.
+      ━━ **Resilience: offline, updates, a full phone** ━━
+      [x] ✅ v17.01 [high] When he opens the app with no signal, it says the app looks old and tells him to tap the version chip. Tapping the chip with no network deletes the offline copy, and the installed app shows an error page until signal returns — *He opens FreeMotion on a train, or on Wi-Fi that does not reach the internet. The app opens from its offline copy, as it should. About a second later it shows this message: Your connection dropped on refresh, so FreeMotion loaded v17.00 from its offline copy — that is why it looks old. Tap the…*
+      [x] ✅ v17.01 [high] With the phone storage full, tapping the version label reloads the app and throws away every change since the last save, without asking — *His phone storage is full. The app has already said 'Storage full — autosave paused' once, and his changes since then exist only on screen. The app then starts acting oddly, so he taps the version label ('Tap to force-update to the very latest build'). The app reloads straight away with no Stay or…*
+      [x] ✅ v17.01 [medium] On a full phone, a replaced photo that could not be saved turns back into the old photo after a trip to Home, drawn at the wrong size — *His phone is full. He uses ⋯ → Replace media to swap a photo or clip. The app says 'Not enough storage to save that media' but keeps showing the new one, so it looks fine for now. He taps ← to Home and then taps the project's card again. The OLD photo is back in its place, with no message. It is…*
+      [x] ✅ v17.01 [medium] With the phone storage full, New project says 'That project is no longer on this device' and drops him into the project he was already in — *His phone (or the 5 MB of project documents the app keeps) is full. On Home he taps +, keeps or types a name such as 'Project 3', and taps Create. 'Storage full — autosave paused…' flashes and is immediately replaced by 'That project is no longer on this device'. That is untrue: the project was…*
+      ↳ left as it was: One thing the merger should know: the version chip now makes one no-store fetch of the page (up to 8 s) before its update. Collab's U.updateNow clicks the chip, so it goes through the same check, which is also correct offline. If an old, broken service worker…
+      ↳ left as it was: The ?v= cache-busters for js/app.js and js/storage.js were not bumped, as instructed. The release gate must bump them, since both files changed.
+      🔍 **Reviewed before shipping — by hand** (the review agents hit the weekly usage limit, 26 Sep, and 4 of 5 failed): the update-flow reviewer's three claims were all real and are fixed with this release — the version chip now goes on to the update when its full-phone question cannot be asked (the escape hatch for a broken build; test 690 when the version chip cannot ask…), asks about the signal again after the question, and drops a collab join it stashed seconds earlier when the update does not happen. The storage half (media release by revision, Save project file for a project that is not open, New project on a full phone) was read end to end and holds.
+      ✅ **SHIPPED v17.01** — the fixes are live; this entry stays open until his #944–#948 are done, because the queue gate closes his own requests before my hunt findings (it refused v17.01 for closing this first). Nothing here is left to build.
+
+- [x] **942 — Every time the app starts (the loading screen plays), it lands on Home — not inside the last project** (26 Sep)
+  His words, verbatim: *"Make it to that every time you load into the app for the first time like in the loading screen plays it puts you in the home menu not in your project"*
+  Clauses:
+  1. [x] ✅ v17.01 When the app is opened and the loading screen (the intro) plays, it ends on the Home screen.
+  2. [x] ✅ v17.01 It does not drop him back inside the project he last had open — even if he closed the app from inside it.
+
+- [x] **943 — The light Home is missing the dark Home's circling ring and shiny sparkles around the project card** (26 Sep)
+  His words, verbatim: *"On light mode that isn’t the same thing on Dark Mode where your project has that little circle circling around it then like shiny things circling around it that looks cool doesn’t have that so make sure both have a dark mode and light mode"*
+  Clauses:
+  1. [x] ✅ Find the effect: the open card's travelling light (.hm-glint).
+  2. [x] ✅ v17.01 The LIGHT Home gets the same effect, made to look right on a light background (dark ink, his pick C).
+  3. [x] ✅ v17.01 "make sure both have a dark mode and light mode" — white comet on the dark Home, dark ink on the light.
+  1b. ✅ found (26 Sep): it is the open card's travelling light, `.hm-glint` (styles.css). It IS on the light Home — js/home.js adds it to the open card whatever the look — but its comet is near-white (rgba(232,251,255)), so on a white card it cannot be seen. The fix is a light-look colour for the same ring.
+  4. [x] (his standing design rule, #545) show him a picture before it ships. — sent 26 Sep (scratchpad 943-options.png).
+      ✅ ~~⏸ BUILT OUT UNTIL HE picks the light-mode colour~~ — **HE ANSWERED (26 Sep), verbatim:** *"2 - c"* (item 2 = #943) → **C, dark ink**, in theme-glass.css; test 943 reads the ring's gradient in both looks.
+
+- [ ] **944 — PC: remove the top-left + for adding friends (there is already another button), and that button must close when tapped again** (26 Sep, one long message — logged whole here; its other asks are #945–#948 and #927)
+  His words, verbatim, IN FULL (the whole message, so no clause is lost): *"On PC, get rid of the little plus at the top left to add friends. There's already another button for on PC and also for some reason with that button when I click on it to open it and click on the same button again to close it, it doesn't close it, it just reopens it which is annoying which I've told you to fix about a lot of other things so if you could just fix that up and also I asked for a feature which I'm not too sure if you've just asked me what you should do with it but I asked for the feature like with expanding the notes menu and the help menu um, would be nice if you just worked on those like features that I asked for eventually and also um, for the feature to add friends there's like no option for it on mobile um, just make it so that when you open up the canvas settings on mobile it shows up in there but basically it wouldn't show up on the same menu as the canvas settings but it would like open up at the same time so basically like imagine this you've got your canvas settings and its own little block but then in another separated block above it you've got the um like you know project settings to like do it with friends or whatever and you can just like basically there'll be like basically like a button to open it up so it expands and goes over the top of the canvas settings button and when you do that it'll like expand big so you can see all the settings and then the canvas button will turn into like a smaller because basically when you first open the canvas settings the canvas settings will be like a big block like you know big and in the center of the screen but then there'll be like for the friend settings it'll be like a rectangular block above it just like you know with the option to expand it. When you expand it, it'll do like a nice little animation. It'll expand and the canvas settings will do an animation where it shrinks into like a rectangle. And then basically the roles are reversed where the friend settings are big, but the canvas settings are small at the top. And you can expand the canvas settings and then continue editing those. Which I think is a cool idea. I think that's good. And make sure that when you reopen when you press the settings cog and keep reopening it. It will um still be open to whatever you had it on last so if you were editing friend settings last it'll stay back to where you were on that and also make it so that the settings cog does a little rotate animation like it does on PC but on mobile because currently it's only on um, PC that it does that and also I just like to say that when you press the plus button to create a new project um it looks like the animation you did is just the same you've done for everything else i want it to be a different animation and i want it to actually look really good and be really well thought out and also in the templates elements sections the plus button still just open up a shitty tiny menu instead of like a proper thought out one And I'm not sure if you've done it yet, but just remember that I do want elements and templates to be their own things, not just reskinned projects."*
+  Clauses (this entry):
+  1. [ ] On PC, get rid of the little + at the top left for adding friends — there is already another button for it on PC.
+  2. [ ] The (remaining) friends button toggles: click to open, click the same button again to CLOSE — it currently just reopens. "which I've told you to fix about a lot of other things".
+  Split out of the same message: **#927** (big Notes/Help — "would be nice if you just worked on those"), **#945** (friends settings on mobile inside Canvas settings, with the swap animation, remembering the last view), **#946** (the settings cog rotates on mobile too), **#947** (a new, well-thought-out animation for the New project +), **#948** (Templates/Elements + open a proper menu; templates and elements are their own things, not reskinned projects).
+
+- [ ] **945 — Mobile: friends (sharing) settings open WITH Canvas settings, as a second block that can swap places with it** (26 Sep — his words in #944)
+  1. [ ] On mobile there is no option to add friends: when Canvas settings opens, the friends/project-sharing settings open at the same time — NOT inside the same menu, as a separate block ABOVE it.
+  2. [ ] First look: Canvas settings is the big block in the centre of the screen; the friends settings are a rectangular block above it with an option (button) to expand.
+  3. [ ] Expanding the friends block: a nice animation — it expands big (over the top of the canvas block) and Canvas settings shrinks into a small rectangle. The roles are reversed.
+  4. [ ] The small Canvas settings block can be expanded again to carry on editing it (the same swap back).
+  5. [ ] Reopening via the settings cog (again and again) comes back to whichever block he had open last — "if you were editing friend settings last it'll stay back to where you were".
+
+- [ ] **946 — Mobile: the settings cog does its little rotate animation, like on PC** (26 Sep — his words in #944)
+  1. [ ] The cog rotates when tapped on mobile, the same as on PC (today only PC does it).
+
+- [ ] **947 — The New project + gets its own animation, really well thought out** (26 Sep — his words in #944)
+  1. [ ] Pressing + to create a new project gets a DIFFERENT animation from the one used everywhere else.
+  2. [ ] It should "actually look really good and be really well thought out".
+  3. [ ] (his standing design rule, #545) options drawn and shown to him before it ships.
+
+- [ ] **948 — Templates and Elements: + opens a proper, designed menu; and they are their own things, not reskinned projects** (26 Sep — his words in #944)
+  1. [ ] In the Templates and Elements tabs, + opens a proper, thought-out menu — not the "shitty tiny menu" it opens today.
+  2. [ ] "just remember that I do want elements and templates to be their own things, not just reskinned projects" — check what is still project-shaped about them and list it for him.
+  3. [ ] (his standing design rule, #545) options drawn and shown to him before it ships.
+
+- [ ] **949 — Standing instruction: a second chat LOGS his requests (with a brainstorm/spec under each); this chat builds** (26 Sep, via INBOX)
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 26 Sep 2026, ~10:20 AWST — Standing instruction: this new chat is the LOGGING chat; the other chat builds
+
+      **His words (verbatim):** The job of this chat is to log all of my requests for free motion everything that I want to be built you will log it all and you will brainstorm ideas for all of the things what it would look like how it would work and then you would basically give the instructions inside so you'd log everything and everything that the builder the other Claude chat that actually builds everything would need to know this is just so I don't this is so I can keep logging stuff without needing to pause the builder from working And then also since it's in a separate since you have only this one job you're not gonna overlap and both try and do the same thing so this should make us a little bit extra efficient and yeah um you know make sure you're up to date on all the requests list out every request that is for me like every ant question that I need to answer that hasn't been answered yet all my answer hasn't been logged right now
+
+      **Logger's brainstorm (not his words):**
+      1. Arrangement: same as #843 (one chat builds, one chat logs), with one addition. The logging chat
+         also writes a brainstorm/spec under every request, so the builder starts from a worked-out idea.
+         The logging chat never edits REQUESTS.md, never runs the loop and never ships. The builder never
+         needs to ask him "what did you mean". If the spec has a question, it is a `❓ASK:` line.
+      2. Done by the logging chat, uncommitted, for the builder to ship with its next release. Found while
+         setting this up: **INBOX.md had been blind since 20 Sep.** `tools/inbox.sh --done` did
+         `s.split('---')[0]`, and the first `---` in the file was inside the header's own sentence
+         ("clears everything under the `---`."). So every drain cut off the real divider line, and
+         `next.sh`, `inbox.sh` and `tick.sh` all read "inbox empty" whatever was written below.
+         Nothing was lost this time, because nothing had been written since. Fixed:
+         - `tools/inbox.sh --done` now splits on the divider LINE.
+         - It removes ONLY the lines the builder was shown (snapshot in `.inbox-seen`, written by the plain
+           `tools/inbox.sh` run and by the `next.sh` gate, and gitignored). The old version cleared
+           everything, so a request the logging chat appended between the builder reading the inbox and
+           running `--done` would have been deleted unlogged. It now survives, and `--done` prints it under
+           "KEPT".
+         - `next.sh` and `inbox.sh` both now REFUSE (exit 2) if the divider line is missing, instead of
+           reporting a clean inbox.
+         - Tested in a throwaway repo, all six cases: display; append mid-drain gets kept; `--done` without
+           a display refuses; display+done clears; a header with `---` in its prose keeps its divider; a
+           missing divider refuses. Not in the suite. If you want it as a gate, add it to ship.sh.
+         - Also: `tick.sh` shows the inbox through `tail -20`, which cuts the TOP off a long block (his
+           verbatim words). `next.sh` prints the whole block, so read it there.
+      3. His second ask, "list every question I need to answer that has not been answered", is being done
+         in the logging chat and answered to him there. Anything it finds was answered but never recorded
+         comes in as its own block below, with his exact words and a timestamp. Strike those asks.
+
+      Builder's note: the logging chat's tool fixes (tools/inbox.sh --done splits on the divider LINE and removes only what was shown; next.sh/inbox.sh refuse when the divider is missing; CLAUDE.md's LOGGING-chat exception; .inbox-seen gitignored) ship with this chat's next release. Nothing to build here — this is a standing arrangement.
+
+- [ ] **950 — Phone: remove the Cancel button from the Select bar (Done already leaves Select)** (26 Sep, via INBOX — his words, from a claude.ai handoff)
+      ### 26 Sep 2026, ~10:38 AWST — Phone select mode: remove the Cancel button (1 of 3 from a claude.ai handoff)
+
+      Source: a claude.ai chat that read the public repo at v17.00 (052fa8a) and prototyped all three, but could not push, so NONE of this has shipped. His words were dictated, so transcription fixes are in [brackets]. He may send a before/after picture of 1–3. None had arrived when this was logged.
+
+      **His words (verbatim):** "In mobile, remove the council [Cancel] button at the bottom left of the screen."
+
+      **Logger's brainstorm (not his words), with the prototype from the handoff checked against the working tree on 26 Sep:**
+      - Why: in select mode the header button already reads **Done** and leaves select mode (`js/home.js` ~2425: `selBtn.textContent = selectMode ? 'Done' : 'Select'`). On a phone, Cancel wraps onto a row of its own.
+      - Build: in `renderSelBar()` (`js/home.js` ~1725) change `el('button', 'hm-selbtn', 'Cancel')` to `el('button', 'hm-selbtn hm-selcancel', 'Cancel')`. In `styles.css` add `@media (hover: none) { .hm-selcancel { display: none; } }`. PC keeps it. The handoff checked the bar is one row at 375px.
+      - ⚠️ Things the handoff did not know:
+        - **The CDP suite does NOT match `(hover: none)`.** Touch emulation is only on during real-input touch steps (`tests/_cdp.py` ~241). So in the suite, Cancel stays visible even at 380px, and #666 (`tests/tests.js` ~68152) keeps passing unchanged. The handoff's suggested edit (skip `display:none` buttons in the "under 30px tall" check) is still right for a real phone, but it will not show up in the suite.
+        - **To PROVE it** (prove.sh needs a test that fails on HEAD), copy the queue-797 test (~43904–43915). It reads the stylesheet for a rule under a `hover: none` media that hides the element. Assert one hides `.hm-selcancel`.
+        - Tests that find Cancel by its text (~13853, ~68177, ~68208, ~68214, ~84521) still work: the text and `.hm-selbtn` class are unchanged, and `.click()` fires on a hidden element anyway.
+        - **Your working tree has moved on from v17.00.** `home.js`, `styles.css`, `index.html` and `theme-glass.css` all carry ~400 uncommitted lines. Apply this by hand, not as a patch. The lines it touches were still as described when checked.
+      - Verify at his phone width in a touch context (`hover: none`): the bar is one row, and Done in the header exits select mode.
+
+      Clauses:
+      1. [ ] On mobile, the Cancel button at the bottom left of the screen (the Select bar) is gone.
+      2. [ ] PC keeps it; Done in the header still leaves Select on the phone.
+
+- [ ] **951 — Home search: redesign the ✕ clear button — it is off-centre; pick the best one, NO options** (26 Sep, via INBOX — his words)
+      ### 26 Sep 2026, ~10:38 AWST — Search clear button (the ✕): redesign it; he says pick the best one, no options (2 of 3 from the handoff)
+
+      **His words (verbatim):** "The X in the circle menu was shit and offended [off-centred] redesign it don't ask me which choice I like best. Just pick the best one."
+
+      **Logger's brainstorm (not his words):**
+      - ⚠️ **He has waived the options step for THIS request** ("don't ask me which choice I like best. Just pick the best one"). Do NOT draw options per #545. Ship the pick, and show him the after picture in the release note.
+      - Cause: the ✕ is a font glyph (`index.html` ~696: `<button id="hm-search-clear" aria-label="Clear search">✕</button>`). On his iPhone screenshot it sat about 1px low and was a ~5px speck inside a 34px grey disc. Same bug class as the old + on `#hm-new`: text glyphs do not centre reliably, drawn geometry does.
+      - The pick, already rendered by the handoff (drawn geometry):
+        - `index.html`: `<button id="hm-search-clear" aria-label="Clear search"><svg viewBox="0 0 22 22" width="22" height="22" aria-hidden="true"><circle class="hm-clear-disc" cx="11" cy="11" r="11"/><path class="hm-clear-x" d="M7.6 7.6l6.8 6.8M14.4 7.6l-6.8 6.8"/></svg></button>`
+        - `styles.css` (~4697): `#hm-search-clear` becomes a transparent 34px button (padding 0, `display: flex`, centred both ways, svg `display: block`). Add `.hm-clear-disc { fill: var(--text-dim); }`, `.hm-clear-x { fill: none; stroke: var(--panel); stroke-width: 2; stroke-linecap: round; }` and `#hm-search-clear:active .hm-clear-disc { opacity: .7; }`.
+        - `theme-glass.css` (~783): replace `html[data-home="light"] #hm-search-clear { background-color: …; color: #46566e; }` with `html[data-home="light"] .hm-clear-disc { fill: #8792a4; }` and `html[data-home="light"] .hm-clear-x { stroke: #fff; }`.
+      - Handoff measured disc and cross both 0.0px off centre. Checked 26 Sep:
+        - Safe: the button is never hidden by a `hidden` attribute (its click handler is at `js/home.js` ~2860–2865), so `display: flex` cannot override a hide.
+        - Check yourself: the light-theme disc `#8792a4` against the light search field, and the dark `--text-dim` disc against `--panel`. Look at both at his phone width. The whole point is that it reads as centred at 34px.
+      - Test idea: measure the path's bounding box centre against the button's centre (tolerance from measurement, per the float-tolerance rule). It fails on HEAD because there is no svg.
+
+      Clauses:
+      1. [ ] The ✕ in the circle is redesigned and truly centred.
+      2. [ ] He waived the options step for this one: "don't ask me which choice I like best. Just pick the best one." — ship the pick and show him the after picture.
+
+- [ ] **952 — Select mode: the Done button turns blue, like the lit search button** (26 Sep, via INBOX — his words)
+      ### 26 Sep 2026, ~10:38 AWST — Done turns blue while selecting, like the lit search button (3 of 3 from the handoff)
+
+      **His words (verbatim):** "Make the done button when you're selecting stuff um, blue, like how everything else goes blue when you have it selected like the search button."
+
+      **Logger's brainstorm (not his words):**
+      - Build (from the handoff):
+        - `js/home.js` `render()` (~2424–2425, where `selBtn` text is set): add `selBtn.classList.toggle('on', selectMode)`.
+        - `styles.css`: `.hm-select-btn.on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }`. This mirrors `.hm-search-btn.on` at ~4690.
+        - `theme-glass.css`: add `html[data-theme="glass"] .hm-select-btn.on` as a second selector on the existing `html[data-theme="glass"] .hm-search-btn.on` rule (~300, the blue gradient). Also add `html[data-home="light"] #hm-select-btn.on { color: #05141b; }`, because the ID rule at ~860 outranks `.on`.
+      - ⚠️ Specificity trap to re-measure: the light-theme ID rule at ~860 sets `background-color` and `border-color` as well as `color`, and it outranks the `.on` rules. The gradient still paints (it is a background-image), so it should look right. The handoff says it measured gradient, ink and border matching the lit search button exactly, light and dark. Re-measure in YOUR tree (it has moved since v17.00): compare the computed `background-image`, `color` and `border-color` of `#hm-select-btn.on` against `.hm-search-btn.on`, in light AND dark.
+      - Test idea: enter select mode, then assert `#hm-select-btn` has `.on` and its computed colours equal the lit search button's. Leave select mode, then assert `.on` is gone. It fails on HEAD because `.on` is never added.
+      - Verify at his phone width and on PC.
+
+      Clauses:
+      1. [ ] While selecting, Done is blue — the same blue as other lit buttons (the search button when it is on), in both Home looks.
+      2. [ ] It goes back to normal when Select ends.
+
+- [ ] **953 — Housekeeping from the logging chat's open-questions audit: answers never recorded, stale asks, missing asks, status.sh frozen (hunt MEDIUM #953)** (26 Sep, via INBOX — the logging chat's audit, NOT his words except where quoted)
+      ### 26 Sep 2026, ~10:42 AWST — His answers that were never written into REQUESTS.md (found by the logging chat's open-questions audit)
+
+      These are HIS words, found in his chat history, that answer an open ask but were never recorded against it. The logging chat checked his typed messages since July against every entry that waits on him (71 entries, 19 readers, each verdict checked by a second reader trying to refute it). Record each one verbatim in the entry it answers, then strike the ask.
+
+      - **#929 (the people shapes)** — "Do the airport sign", builder chat, 2026-09-26T02:25:43Z (10:25 AWST), after the people pages were resent
+        → Not in REQUESTS.md. #929's line 'BUILT OUT UNTIL HE picks the people …' (~L32855) still waits on it. Record it verbatim: people = A, now buildable.
+      - **#96 (a song won't play)** — "Pretty much all of the files audio files are added sounded fine deciding effects to them. They start to glitch out on my phone." (9 Sep, 23:29 UTC)
+        → Logged verbatim in #844 (~L30094) but never applied to #96. That answers 'has a song failed with NO effects' with a no. Strike #96's ❓ASK (~L1942) and its 24 Sep ⏸ line, then close it into #845.
+      - **#406 (duplicate preset-save button)** — "Actually u are right to keep both options to save effect presets and full layer preseets i change my mind" (1 Sep, logged in #454 ~L17217). His original words also settle which one goes: "if you realise we just have two buttons for the same thing just get rid of the one"
+        → #454 has it. #406's ❓ASK (~L15766) and ⏸ (~L15814) are still open. Remove the layer ⋯ 'Save whole look as preset…' duplicate and tell him in one line.
+      - **#875 clause 2 (suite length)** — "use ur own reasoning and sence" (#879) and "stop asking me for permision" (#872), applied in #882 clause 2 (~L31199, 20 Sep): keep ship.sh as is
+        → #875's '❓ ASK HIM' (~L31144) is still unstruck. Point it at #882 clause 2.
+      - **#870 area (chat-only question, no entry)** — "idk u decide whats best, i just want everything safe to move over" (2026-09-12T09:13:43Z, session 0984aa9d), replying to his own 09:08:44 question about switching to Sonnet or using up his 5-hour limit before handing over to ChatGPT
+        → Nowhere in REQUESTS.md. It's moot now (he's back on Claude since #880), so add one line under #870 for the record.
+
+      ### 26 Sep 2026, ~10:42 AWST — Open-questions audit: housekeeping in REQUESTS.md (hunt MEDIUM #1)
+
+      **Logger's audit (not his words).** This is the builder's side of his ask to "list out every … question that I need to answer that hasn't been answered yet". He has been given the verified list in the logging chat: 19 quick picks, 14 things to try on his phone, 3 bigger calls. Anything he answers there comes in as its own block. What follows is what the entries need so `next.sh` / `asks.sh` show him exactly that list and nothing stale. Line numbers are approximate, taken while you were editing.
+
+      - ✅ VERIFIED by the logging chat: `tools/status.sh` line ~44 does `LABEL[classify(body)]`, and `LABEL` has no key for `'built out — waiting on him'`, so it raises KeyError before writing anything. ship.sh:519 runs it as `>/dev/null 2>&1 || true`, so the crash is swallowed and every **STATUS:** line has been frozen since the bucket was added (~2 Sep). Add the label, and make ship.sh stop swallowing the failure (safeguards must be structural).
+      - Record #929 people verbatim: HE ANSWERED (26 Sep, 02:25:43Z) "Do the airport sign" → people A. Strike 'the people' from the ⏸ line, then build people A and rewrite the 6 old people tests. The heart (A/B/C) and heart icon (outline/filled) are still open. Resend the heart pages.
+      - #96: apply his 9 Sep words from #844 ("…sounded fine deciding effects to them. They start to glitch out on my phone."). Strike the ❓ASK (~L1942) and the 24 Sep ⏸ line, close into #845, and drop unblock card 37.
+      - #406: strike the ❓ASK (~L15766) and the ⏸ (~L15814), and tick clause 3 citing #454. Remove the layer ⋯ 'Save whole look as preset…' (js/app.js ~5265). Decide whether the third copy in the ⧉ menu (js/app.js ~7144) goes too. Fix #454's close note (~L17285), drop card 24, and tell him in one line what went.
+      - #867 is NOT waiting on him. v16.21 built option 1 (green New group). Strike the ❓ASK (~L31009) and the ⏸ line, record 'built as option 1, say 2 or 3 to change it', tick the clauses, and drop card 22.
+      - #657: strike the 3 Sep paste line and its STATUS. It's superseded by #768's question and the Your last scrub report. Drop card 42.
+      - Export sound (#215, #604, #677): one ❓ASK line in each, all pointing at the same camera-roll check, and close all three on one answer. #215: strike the answered asks ~10024 and ~10027 (answered by #844: TRACK WRITTEN, peak 0.931) and mark ~9669, ~9880 and ~9900 superseded. #604: add 'ANSWERED BY EZRA 10 Sep (#844)', strike the PC Chrome asks (~21671, ~21693) and the 2 Sep ⏸ (~21699), since #662 says it's phone-only. Fix the header's 'PHONE and PC'. #677: strike the unstruck '❓ THE ONE THING THAT SETTLES IT' (~26978). Note the #844 export was 27 KB for 2.05s at 1080x1080@60, which is suspicious, so don't read TRACK WRITTEN as proof the video is fine.
+      - Audio (#663, #845, #692): put one ❓ASK in #845 that asks 'still glitching?' first and the paste second, and point #663 at it. Mark #663's 30 Aug '❓ So the ask stands' answered. Strike #692's 5 Sep ⏸ (~27719), since the paste arrived 10 Sep.
+      - Lag (unnumbered 'Editing lags' ~L3534, and #202): bundle as one ask, a What's slow → Measure report taken while playing with effects. Add ❓ASK lines to both. Strike the superseded ❓ verdicts (~L3664, ~L3998), refresh the 'Status (v6.33)' header, and fix #202's header (~10031) 'NOTE — nothing to build' to waiting on him. Merge unblock cards 39 and 40.
+      - Add ❓ASK lines where missing: #129 (and strike the old .mov/.mp4 ❓ at ~L334, which he answered 27 Aug 'I have no idea'), #619, #676/#706 (one updated line naming the v15.08 and v16.94 fixes; drop 'which button'), #768 (fix its '🟢 READY' STATUS and merge cards 33 and 44), #775, #920 (strike the half-struck reinstall ⏸ ~L32690, and tick clause 3 since the picture was sent 25 Sep).
+      - Ticked entries that still hold live questions, so keep the ❓ unstruck and make sure next.sh sees them: #911 clause 3 (~L32376), #937 (~L33029; write 'Keep recommended' into the entry), #679 (new open item or build under rule 16. Text only: timeline.js clipColorStops()/shapeClipColor() return early for non-shapes).
+      - #482: strike the category ⏸ (~13308) and the NEEDS YOU header, citing #859. Gradient Overlay stays open: the real default is Amount 0.8 Normal (js/compositor.js ~658), not 1. Drop the Palette Map call (superseded by #904/v16.68). Decide the speed-slider offer (~13163) yourself or drop it, don't ask.
+      - #917: re-measure finding 7 (Export box) at 380 and 320px before sending, and write the choice-4 recommendation into the entry (I suggested A). Ask choice 3 once with #918 finding 11. For #918/#775, re-check the PC row at 900px before resending the picture: the Share button was added in v16.84 and #944 removes the friends +.
+      - #912: resend both filter sheets with the question. The entry's 'Portra' is the lists' 'Portrait Film'. Branch fm912-filters holds all ten.
+      - #777: merge the two unstruck asks (~29261, ~29325). Whatever he answers, update this entry, the REQUESTS.md top summary (line ~7) and CLAUDE.md together; all three still link dead artifact 0ab35f83…. If he says publish, also remove the answered or obsolete cards 1–4, 22, 24, 37 and 42 first.
+      - Strike these stale ❓ lines (the answer is already recorded): #595 ~21088; #603 ~21519 and ~21522; #606 ~21775; #621 ~22850 (turn into 'To overrule') and ~22778; #624 ~22934 and ~22944; #592 ~24237 and ~24258; #587 ~24496 and ~24502; #582 ~24563, ~24578, ~24764, ~24779, and turn ~24762 into a veto; #583 ~24803 (veto); #578 ~25014, ~25121, ~25127, ~25130; #570 ~25422 and ~25464-25472 (he picked 'stepped', see #865/#924); #669 ~26676; #672 ~26775; #765 ~29047 (decided under rule 16); #772 ~29132 (#803 answered it); #875 ~31144; #883 ~31261-31263 (tighten the classifier so struck ❓ text isn't read as live); #903 ~L32004 (superseded by #920).
+      - Reword entries the classifier wrongly treats as waiting on him: #690 clause 1 ('42 wait on you'), #778 (quoted 'waiting on him' text; add UNBLOCKED), #591 ('❓ASK: nothing.'), #784 ~29506 (a builder note, not an ask; give the 14 mismatched param defaults their own hunt item).
+      - Log as new numbered items: (a) his 1 Sep ask to rename EVERY effect away from Alight Motion and change the category order (~12809, currently only in BEFORE-PUBLISHING.md; step (a), listing ours vs AM's, needs nothing from him). (b) The #941 side-find: widening the window moves the playhead back to 0 (L33133, hunt tier).
+      - Held, not to be asked as owed: identity pass (unnumbered, BEFORE-PUBLISHING.md), #545 and #206. For card 52, record from his own words that the effect hold card copies AM behaviour he described (25 Jul) and the presets menu was modelled on an AM screenshot (11 Aug, IMG_2436). Add both to BEFORE-PUBLISHING.md. If card 53 stays, cut it to the optional 'may I count the fiddliest shapes' yes/no.
+      - #945: add the '(#545) options drawn and shown to him before it ships' clause, as #947 and #948 have. #947 and #948: draw 2–3 options, render them at phone size and send with one marked Recommended. They only become questions after that.
+      - Add one line under #870: 12 Sep 09:13:43Z, his words "idk u decide whats best, i just want everything safe to move over" (reply to his 09:08:44 Sonnet/limit question). Moot since #880.
+      - Critic's note: these are the recommendations the logging chat chose where the entries gave none: #917 option rows (A), #937 (Keep), #679 (Yes), #882 Xcode (run it), effects-plan (show me). Optional veto items were deliberately NOT put to him, because nothing waits on them and he said to stop asking: card 61's ten decided items, #858's four extreme filters, #534 Stroke Colour rename, #664 line-height tile, #92 audio Favourites, #934's two calls, #482 speed sliders, #867 options 2/3.
+
+- [ ] **954 — Rename EVERY effect away from Alight Motion and change the category order (his 1 Sep ask, until now only in BEFORE-PUBLISHING.md)** (logged 26 Sep from #484, at the logging chat's audit)
+      His words, 1 Sep (quoted in #484): *"what is a flowing ribbon even? im so confused and also i want every effect to be named different to what it is in alight motion and also have different ordering to avoid getting taken down by aligiht motion for copying and so far this isnt done"*
+      Clauses:
+      1. [ ] Every effect has a name different from its Alight Motion name.
+      2. [ ] The effect categories/ordering differ from Alight Motion's.
+      3. [ ] Step (a), listing ours against AM's, needs nothing from him — do it first; the renames themselves are his to veto (#545 picture).
+
+- [ ] **955 — Widening the window moves the playhead back to 0 (hunt MEDIUM #955)** (26 Sep — found in passing by the seventh hunt's fixer, #941; NOT his words)
+      Measured with a throwaway probe: a 2 s project with the playhead at 1.2 s; widening the window put the playhead at 0. Not fixed in #941 (outside its findings).
+      1. [ ] Resizing the window keeps the playhead where it was.

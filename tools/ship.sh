@@ -562,7 +562,10 @@ done
 echo "→ proving the release (its changed tests must fail without the fix)…"
 tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
 
-SUITE_TIMEOUT=1800
+# 2700, not 1800 (26 Sep): measured at v17.01 on an idle Mac (load ~2 on 6 cores) a green full pass took 1848 s — the suite
+# had simply outgrown 1800 (1971 tests; the tier-3 and real-input tests are the long ones). Two ships ran out of time with the
+# stall point MOVING (a hunt-7 test, then a #927 test), which is this file's own sign of "not one hung test".
+SUITE_TIMEOUT=2700
 # ⚠️ A TIMEOUT'S REAL CAUSE IS USUALLY THE MACHINE, AND NOTHING HERE MEASURED IT (21 Sep). Three ship
 # cycles went on "the suite ran out of time" — first at prove's 600s, then at the suite's 1800s — before
 # anyone thought to run `uptime`. The answer was a 6-core Mac in a Spotlight/Photos indexing storm

@@ -20,6 +20,12 @@ and it is the same three steps each time.** Unless his first message is plainly 
    was interrupted mid-ship and the fixes are NOT on his phone. Ship it before starting anything new;
    the work is already done and verified, it just needs to land.
 
+**EXCEPTION — the LOGGING chat.** If his first message says this chat is for logging his requests
+(his arrangement: #843 on 10 Sep, restated 26 Sep with a brainstorm/spec under each request), you are
+NOT the loop. Do none of the three steps above: no cron (a second loop in a second chat works the same
+tree as the first), no ship, no REQUESTS.md edits. Append to INBOX.md in the format its header gives.
+See "IF YOU ARE NOT THE LOOP SESSION" below.
+
 Then tell him in ONE line what you found and what you are working on. He has asked twice for less
 repetition, so do not narrate the three steps back to him — just the state and the next item.
 

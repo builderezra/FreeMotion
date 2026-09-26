@@ -35,8 +35,19 @@ cd "$(dirname "$0")/.." || exit 1
 # that is important even slightly that could be forgotten needs to be structural."
 #
 # Draining is: move each item into REQUESTS.md with a number, then clear the list below the ---.
+# NO DIVIDER = A BLIND GATE. 20-26 Sep INBOX.md had lost its line of dashes (inbox.sh --done split on the
+# first "---" in the file, inside the header's own sentence), so the sed below printed nothing and this
+# gate waved the loop through while anything written there sat unread.
+if [ -f INBOX.md ] && ! grep -q '^---$' INBOX.md; then
+  echo "⛔  STOP — INBOX.md has NO '---' divider line, so this gate cannot see anything in it."
+  echo "    Read INBOX.md by eye, log what is there, and put a line of exactly --- under its header."
+  exit 2
+fi
 INBOX_BODY="$(sed -n '/^---$/,$p' INBOX.md 2>/dev/null | sed '1d' | tr -d '[:space:]')"
 if [ -n "$INBOX_BODY" ]; then
+  # What was shown is all that `tools/inbox.sh --done` may clear (see there): the logging chat can append
+  # while this session is logging, and those lines must survive to the next drain.
+  sed -n '/^---$/,$p' INBOX.md | sed '1d' > .inbox-seen
   echo "=============================================================================="
   echo "⛔  STOP — INBOX.md IS NOT EMPTY. Ezra has said something. Read it FIRST."
   echo "=============================================================================="

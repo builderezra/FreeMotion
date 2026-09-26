@@ -114,12 +114,13 @@ window.FM = window.FM || {};
     } catch (e) {}
     return lim;
   }
+  /* The gain and its limiter are handed back UNJOINED (queue 690): sync() puts the gain before the audio
+     effects and the limiter after them, with the effects in between — see the wiring there. */
   function makeBoostStage(ctx) {
     const gain = ctx.createGain();
     gain.gain.value = 1;
     const lim = makeLimiter(ctx);
-    gain.connect(lim);
-    return { input: gain, output: lim, gain: gain };
+    return { input: gain, output: lim, gain: gain, lim: lim };
   }
   /* THE LEVEL STAGE (queue 690): the same gain, and NO limiter, because it only ever turns a clip DOWN.
    * A limiter sitting at -1.5 dBFS would squash the peaks of a song mastered near full scale even at 90%,
@@ -128,7 +129,7 @@ window.FM = window.FM || {};
   function makeLevelStage(ctx) {
     const gain = ctx.createGain();
     gain.gain.value = 1;
-    return { input: gain, output: gain, gain: gain };
+    return { input: gain, output: gain, gain: gain, lim: null };
   }
 
   // The element's source node is created ONCE per element, ever: a second call throws, and once it
@@ -245,24 +246,37 @@ window.FM = window.FM || {};
       if (m._afxChain) { try { m._afxChain.dispose(); } catch (e) {} m._afxChain = null; }
       dropBoost(m);
       const chain = FM.buildAudioFxChain(ctx, layer);
-      /* Boost stage LAST, after any audio effects — it is the output stage, and a limiter has to be
-       * the final thing in the path or an effect downstream of it can push the signal back over the
-       * ceiling it was there to hold. A layer routed only because of its volume has no fx chain at
-       * all, and then the boost IS the whole chain. */
+      /* THE LEVEL GOES IN BEFORE THE EFFECTS; THE LIMITER STAYS LAST (queue 690, audio hunt).
+       * His words for the hunt: "go re audit, find some bugs coz theres a shit load".
+       * The limiter has to be the final thing in the path, or an effect downstream of it can push the
+       * signal back over the ceiling it was there to hold — that part has not moved. The GAIN used to sit
+       * beside it, after the effects: element -> effects -> gain -> limiter. The export does it the other
+       * way round (js/exporter.js buildAudioMix: clip -> volume and fade -> effects -> limiter), and so do
+       * the reversed preview (js/audio-play.js) and el.volume on a desktop, which is upstream of the
+       * element's source node. For an Echo or a Reverb the order is the whole difference: the playback tick
+       * drives this gain to zero where the clip ends (its fade, and the 45 ms de-click), and with the echo
+       * UPSTREAM of it the echo went to zero too. MEASURED on the iPhone stand-in, where this gain carries
+       * the whole level: a clip at 80 percent with Echo rang on at 1 to 8 percent of the clip after it ended,
+       * where the file rings at 44 percent. Distortion, Compressor and Limiter heard the clip at full level
+       * on the phone and at its real level in the file. And on a desktop a boosted clip's tail dropped to
+       * 1x at its end, where the file keeps it boosted.
+       * So: element -> gain -> effects -> limiter (when boosted) -> speakers. A layer routed only because
+       * of its volume has no fx chain, and then the stage IS the whole path, exactly as before. */
       const boost = needsBoost(layer) ? makeBoostStage(ctx) : (needsLevel(layer, m) ? makeLevelStage(ctx) : null);
       m._boost = boost;
-      const tail = boost ? boost.input : ctx.destination;
+      const out = (boost && boost.lim) ? boost.lim : ctx.destination;   // where the path ends: the limiter, if there is one
+      if (boost && boost.lim) { try { boost.lim.connect(ctx.destination); } catch (e) {} }
       if (!chain) {
-        try { mes.connect(tail); } catch (e) {}
-        if (boost) { try { boost.output.connect(ctx.destination); } catch (e) {} }
+        try { mes.connect(boost ? boost.gain : ctx.destination); } catch (e) {}
+        if (boost) { try { boost.gain.connect(out); } catch (e) {} }
         m._afxSig = boost ? sig : '';
         m._afxInsts = null;
         if (boost) this.setBoost(layer);
         return;
       }
-      mes.connect(chain.input);
-      chain.output.connect(tail);
-      if (boost) { try { boost.output.connect(ctx.destination); } catch (e) {} }
+      if (boost) { mes.connect(boost.gain); boost.gain.connect(chain.input); }
+      else mes.connect(chain.input);
+      chain.output.connect(out);
       m._afxChain = chain;
       m._afxSig = sig;
       m._afxInsts = ((layer.audioFx) || []).slice();   // the exact objects the chain now reads from

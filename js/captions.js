@@ -81,11 +81,34 @@ window.FM = window.FM || {};
     },
 
     /* Sort by start and keep every cue inside the clip with a usable length. Called after any edit
-     * that can reorder or overshoot; it never merges or deletes, so nothing disappears silently. */
-    normalize(layer) {
+     * that can reorder or overshoot; it never merges or deletes, so nothing disappears silently.
+     *
+     * ⚠️ …EXCEPT A CUE A TRIM PUT OUTSIDE THE CLIP, WHICH IS LEFT EXACTLY WHERE IT IS (queue 690, seventh hunt).
+     * A head trim leaves the cues it cut away at NEGATIVE local times on purpose (FM.shiftLayerCues — #452: "dragging
+     * the head back out restores it exactly"), and a tail trim leaves the ones past the new end where they were. This
+     * used to clamp every one of them into the clip — the cut-away head cues to 0:00–0:00.1, the tail ones to the last
+     * 0.1 s — and it runs on EVERY caption edit: the text editor's ✓, a cue dragged on the timeline, a Start or End typed
+     * in the list. So the moment he typed into any other caption, each caption he had trimmed off came back as a
+     * three-frame flash stacked on top of the first real one (#574 draws overlapping cues together), in the preview and
+     * burned into the export; and the squash overwrote their times, so pulling the head back out no longer put them
+     * where they were said. A cue that pokes out of the clip — wholly, or across an edge — is not broken, it is TRIMMED:
+     * only the part inside the window is ever drawn. So its times stay as they are, and only a length under MIN_CUE is
+     * repaired, without moving it in.
+     * `edited` is the cue whose Start or End he has just TYPED into the list. That one is still pulled inside the clip,
+     * as before: a number he typed past the end should land where he can see it, not vanish off the end of the clip.
+     * A drag — the list's grip, a chip on the timeline — passes none, on purpose: the drag keeps its own cue inside the
+     * clip as it goes, and grabbing one a trim left outside must not pull it back in as a 0.1 s flash. */
+    normalize(layer, edited) {
       const cues = C.cues(layer);
       const dur = layer.duration > 0 ? layer.duration : Infinity;
       cues.forEach(c => {
+        const s = num(c.start, NaN), e = num(c.end, NaN);
+        if (c !== edited && isFinite(s) && (s < 0 || s >= dur || e > dur)) {   // trimmed off, wholly or in part
+          c.start = s;
+          c.end = isFinite(e) && e >= s + MIN_CUE ? e : s + MIN_CUE;
+          if (typeof c.text !== 'string') c.text = String(c.text == null ? '' : c.text);
+          return;
+        }
         c.start = clamp(num(c.start, 0), 0, isFinite(dur) ? Math.max(0, dur - MIN_CUE) : 1e9);
         c.end = num(c.end, c.start + MIN_CUE);
         if (isFinite(dur)) c.end = Math.min(c.end, dur);
@@ -121,7 +144,29 @@ window.FM = window.FM || {};
       const dur = layer.duration > 0 ? layer.duration : DEFAULT_CUE;
       layer.captions = [{ start: 0, end: Math.min(DEFAULT_CUE, dur), text: layer.text || '' }];
       layer.text = '';
+      C.giveWrap(layer);   // a caption is a spoken sentence: it wraps inside the frame (queue 690, seventh hunt)
       return layer.captions;
+    },
+
+    /* A CAPTION WRAPS INSIDE THE FRAME (queue 690, seventh hunt). A caption track is a text layer, and a text layer only
+     * wraps at `wrapWidth` — 0, no wrapping, until someone drags the side handles on the canvas (FM.textLines, v5.40).
+     * Every caption track was made with 0, so one ordinary spoken sentence was one line far wider than the picture:
+     * "Welcome to this beautiful family home in Perth" at Add → Captions' size is 1788 px on a 1080 px 9:16 frame,
+     * centred, so both ends were cut off and he saw only the middle words, in the preview and burned into the export.
+     * Anything over about twenty characters did it, including every caption typed after Detect speech.
+     * So a layer gets a column the moment it BECOMES a caption track (Add → Captions, Use as caption track, Detect
+     * speech on a plain layer, the assistant's addCaptionTrack): 86% of the frame's width, which sits inside the
+     * title-safe guide with the caption plate's padding either side. Measured in the layer's own px like the handles
+     * are, so a layer that is already scaled still wraps at that width on screen. A column already set — dragged on
+     * the canvas, or turned off by double-clicking a handle on an existing track — is his, and is never touched; nor is
+     * a track that existed before this, because its wrap cannot be told apart from one he turned off. */
+    WRAP_FRAC: 0.86,
+    giveWrap(layer) {
+      if (!layer || layer.type !== 'text' || Number(layer.wrapWidth) > 0) return;
+      const P = FM.scene && FM.scene.project, W = (P && P.width > 0) ? P.width : 1080;
+      const tr = layer.transform || {};
+      const k = Math.abs(Number(FM.evalProp ? FM.evalProp(tr.scale, FM.time || 0) : tr.scale)) || 1;
+      layer.wrapWidth = Math.max(20, Math.round(W * C.WRAP_FRAC / (k > 0.05 ? k : 1)));
     },
 
     /* Every layer in the project whose media could be analysed for speech. Audio-only imports become
@@ -239,6 +284,7 @@ window.FM = window.FM || {};
       const res = await FM.detectSpeech(buf, { onProgress: onProgress });
 
       const dur = capLayer.duration > 0 ? capLayer.duration : Infinity;
+      const wasTrack = C.isTrack(capLayer);
       const old = C.cues(capLayer).filter(c => (c.text || '').trim());
       // Detecting on a PLAIN text layer converts it. Its existing string is real user work, so it
       // rides along as a whole-clip pseudo-cue and lands on the first detected cue.
@@ -267,6 +313,7 @@ window.FM = window.FM || {};
       capLayer.duration = fit.duration;
       capLayer.captions = cues;
       capLayer.text = '';
+      if (!wasTrack) C.giveWrap(capLayer);   // a plain layer just became a caption track (queue 690, seventh hunt)
       C.normalize(capLayer);
       return { count: cues.length, stats: res.stats };
     },
@@ -295,7 +342,7 @@ window.FM = window.FM || {};
       // scroller — parked under a long cue list on a phone it sat below the fold, unfound.
       container.appendChild(FM.captionsEditor.detectRow(layer, () => refreshAll(container, layer)));
 
-      layer.captions.forEach((c, i) => {
+      layer.captions.forEach((c) => {
         const row = el('div', 'cap-row');
 
         // TEXT: a button, not a field. Cue text is typed in the REAL text editor (same font/size/
@@ -316,7 +363,7 @@ window.FM = window.FM || {};
         s.addEventListener('input', () => { c.start = num(s.value, c.start); FM.requestRender(); });
         s.addEventListener('change', () => {
           c.start = num(s.value, c.start);
-          C.normalize(layer); refreshAll(container, layer); commitH();
+          C.normalize(layer, c); refreshAll(container, layer); commitH();
         });
 
         const e = document.createElement('input');
@@ -324,7 +371,7 @@ window.FM = window.FM || {};
         e.addEventListener('input', () => { c.end = num(e.value, c.end); FM.requestRender(); });
         e.addEventListener('change', () => {
           c.end = num(e.value, c.end);
-          C.normalize(layer); refreshAll(container, layer); commitH();
+          C.normalize(layer, c); refreshAll(container, layer); commitH();
         });
 
         /* ⚠️ DRAG TO EXTEND A CUE — queue 575. Ezra: *"In captions I can't extend the texts inside each
@@ -388,8 +435,19 @@ window.FM = window.FM || {};
           grip.addEventListener('pointercancel', done);
         })();
 
+        /* ✕ REMOVES THIS CAPTION, FOUND BY WHAT IT IS — NOT BY THE PLACE IT HAD WHEN THE ROW WAS DRAWN (queue 690,
+           seventh hunt). This was `splice(i, 1)` with `i` fixed at mount. The text editor's caption strip is on screen
+           with this list whenever it is in the Aa sheet, and its + (a new caption after this one) sorts one into the middle, while ‹ ›
+           drop a blank one the editor made in a gap — both change the list under rows that stay on screen. So after +
+           after Alpha, the cross on the row reading Charlie removed Bravo, a caption he never touched, words and all,
+           with no warning. The row's text button and time fields already held the caption itself; now the cross does
+           too, and a row whose caption has gone (an undo replaced every cue) removes nothing and redraws the list. */
         const del = el('button', 'cap-del', '✕'); del.title = 'Remove cue';
-        del.addEventListener('click', () => { layer.captions.splice(i, 1); refreshAll(container, layer); commitH(); });
+        del.addEventListener('click', () => {
+          const k = layer.captions.indexOf(c);
+          if (k >= 0) layer.captions.splice(k, 1);
+          refreshAll(container, layer); commitH();
+        });
 
         const times = el('div', 'cap-times'); times.append(s, e, grip);
         row.append(t, times, del);

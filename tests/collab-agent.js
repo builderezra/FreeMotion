@@ -72,7 +72,7 @@
       cur: FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : 'no FM.storage',   // THIS window's project
       shared: FM.projects ? FM.projects.currentId() : null,
       homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()),
-      emptyTitle: et ? et.textContent : '', emptyLine: (function () { const q = home && home.querySelector('.hm-empty p'); return q ? q.textContent : ''; })(), openBadges: home ? home.querySelectorAll('.hm-open-badge').length : -1,
+      emptyTitle: et ? et.textContent : '', arrow: !!document.getElementById('hm-arrow936'), emptyLine: (function () { const q = home && home.querySelector('.hm-empty p'); return q ? q.textContent : ''; })(), openBadges: home ? home.querySelectorAll('.hm-open-badge').length : -1,
       docKeys: keys, docNames: keys.map(function (k) { try { return (JSON.parse(localStorage.getItem(k)).project || {}).name; } catch (e) { return '?'; } }), sceneName: FM.scene && FM.scene.project && FM.scene.project.name, layers: (FM.scene && FM.scene.layers || []).length
     };
   }
@@ -240,13 +240,28 @@
     /* queue 936: what a fresh start left behind — projects listed, one open, the empty state, the OPEN badge, and
        every project doc in storage (a fresh start must write none). */
     fresh936: function () { return snap936(); },
+    /* queue 942: into the editor on a project, as he leaves the app from inside one */
+    enterEditor942: async function () {
+      if (!FM.projects.currentId()) await FM.projects.create({ name: 'In the editor', confirmed: true });
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(600);
+      let v = null; try { v = localStorage.getItem('fm.view'); } catch (e) {}
+      return { homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), view: v, cur: FM.projects.currentId(), first: window.FM_FIRST_LOAD };
+    },
+    /* a NEW session: what a phone does when the app was closed and is opened again (sessionStorage is per session) */
+    newSession942: function () {
+      try { sessionStorage.clear(); } catch (e) {}
+      const url = location.href.replace(/([?&])fmwipe=1(&|$)/, function (m, a, b) { return b ? a : ''; });
+      setTimeout(function () { location.replace(url); }, 10);
+      return true;
+    },
     /* a window with nothing open doing what it does when it is hidden or switches: flush, stamp its card, re-render Home */
     fresh936flush: async function () {
       FM.storage.flushSync(); FM.projects.touchCurrent(true);
       if (FM.home && FM.home.refresh) FM.home.refresh();
       await sleep(400); return snap936();
     },
-    fresh936make: async function () { await FM.projects.create({ name: 'First', confirmed: true }); await sleep(700); return snap936(); },
+    fresh936make: async function () { await FM.projects.create({ name: 'First', confirmed: true }); if (FM.home && FM.home.refresh) FM.home.refresh(); await sleep(700); return snap936(); },   // Home re-renders as it does when he comes back to it
     fresh936delete: async function () {
       const cur = FM.projects.currentId();
       const ids = cur ? [cur] : FM.projects.list().filter(function (p) { return !p.elementDraft && !p.templateDraft; }).map(function (p) { return p.id; });

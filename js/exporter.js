@@ -641,7 +641,42 @@ window.FM = window.FM || {};
       } else {
         gain.gain.value = vol;
       }
-      // Audio effects: node -> gain -> chain -> destination. Each clip gets its OWN chain (they are
+      /* ═══ THE SAME EDGE DE-CLICK THE PREVIEW PLAYS (queue 690, audio hunt) ═══════════════════════════════
+       * His words for the hunt: "go re audit, find some bugs coz theres a shit load".
+       * The preview has faded every clip's two edges over 45 ms since #148 (his "scratchy popping noise
+       * that hurts my ears" — and on #663, "Seems fixed for the scratchy popping"): js/app.js declickGain.
+       * The file never got it. The clip's buffer started on whatever sample the trim landed on and stopped
+       * dead at its end, so a trimmed song stepped from silence to full level in ONE sample and back —
+       * measured 0.00 to 0.50 and 0.50 to 0.00, 31 times the steepest step in the song itself. A pop at
+       * every trim, every cut between two clips and every song that stops before the video does, in the
+       * exported file only, where he could not hear it while editing.
+       * So the export builds the preview's envelope: 0 to 1 over the first 45 ms of the clip's own start,
+       * 1 to 0 over the last 45 ms before its own end, the two meeting in the middle on a clip too short
+       * for both — exactly declickGain's min() of the two. It MULTIPLIES the volume and fades below, as the
+       * preview's does. Two edges are left alone, for the preview's reasons:
+       *   - one that touches the other half of a SPLIT (the same seamAt rule), because the halves are one
+       *     continuous recording and ramping both made a notch of silence at the cut (21 Aug);
+       *   - one the export RANGE cuts through, because the clip is not really starting or ending there —
+       *     the sound goes on, the file simply stops recording it. */
+      const DS = FM.DECLICK_S || 0.045;
+      const seamAt = FM.declickSeamAt || (() => false);
+      const visEnd = layer.start + layer.duration;         // the edge the preview fades at, like the fades above
+      const rampIn = !(oStart > layer.start + 1e-6) && !seamAt(layer, layer.start, scene.layers);
+      const rampOut = !(to < visEnd - 1e-6) && !seamAt(layer, visEnd, scene.layers);
+      let edge = null;
+      if (rampIn || rampOut) {
+        edge = oac.createGain();
+        const a = layer.start - from, b = visEnd - from;   // the clip's own edges, in output time
+        const k = t => { let v = 1; if (rampIn) v = Math.min(v, (t - a) / DS); if (rampOut) v = Math.min(v, (b - t) / DS); return Math.max(0, Math.min(1, v)); };
+        // The envelope is straight lines between these points, so ramping from each to the next IS it.
+        const pts = [0, a, a + DS, (a + b) / 2, b - DS, b].filter(t => t >= 0).sort((x, y) => x - y);
+        pts.forEach((t, i) => {
+          if (i === 0) edge.gain.setValueAtTime(k(t), t);
+          else if (t > pts[i - 1]) edge.gain.linearRampToValueAtTime(k(t), t);
+        });
+        edge.connect(gain);
+      }
+      // Audio effects: node -> (edge) -> gain -> chain -> destination. Each clip gets its OWN chain (they are
       // stateful node graphs). Best-effort like the rest of export audio: a chain that throws falls back
       // to the dry gain -> destination path for this clip rather than aborting the whole export.
       let chain = null;
@@ -688,7 +723,7 @@ window.FM = window.FM || {};
       } else {
         gain.connect(sink);
       }
-      node.connect(gain);
+      node.connect(edge || gain);   // …through the edge de-click first, when the clip has an edge to fade
       // when-in-range, offset-into-THIS-BUFFER (it begins at clip sample k0), play-len. Clamped at 0: a
       // float can put k0/sr one ulp past the true offset, and a negative offset throws.
       node.start(oStart - from, Math.max(0, (oStart - layer.start) - k0 / geom.sr), oEnd - oStart);
@@ -804,15 +839,103 @@ window.FM = window.FM || {};
     return { audioBuffer: rendered, sampleRate, channels };
   }
 
+  /* ═══ THE ENCODER'S WARM-UP IS NOT PART OF THE SOUND (queue 690, audio hunt) ═══════════════════════
+   * His words for the hunt: "go re audit, find some bugs coz theres a shit load".
+   * An AAC encoder starts every stream with a warm-up (priming) that is not meant to be heard — 2112
+   * samples, 44 ms at 48 kHz, on the encoder Chrome uses on a Mac. A file is supposed to tell a player to
+   * skip it with an edit list; vendor/mp4-muxer.js cannot write one, so every player played it first and
+   * the whole soundtrack came out 44 ms BEHIND the picture in every export. MEASURED: a click at 1.000 s
+   * on the timeline decoded back out of the MP4 at 1.044 s, and a 3.000 s video carried a 3.072 s audio
+   * track. Cuts on the beat landed late, and a clip exported and imported again slipped another 44 ms.
+   * So the warm-up is taken OUT of the file rather than described in it: a little silence is fed ahead of
+   * the mix so that, once the whole warm-up frames are dropped, the first frame kept begins EXACTLY on
+   * the mix's first sample; what is left is re-timed from 0; and the last frame is cut to the mix's own
+   * length, so the track ends where the video does.
+   * MEASURED, NOT ASSUMED: the length of the warm-up belongs to the ENCODER, and an iPhone, a Mac and an
+   * Android phone need not share one. So a click is encoded and decoded back once per encoder and the
+   * delay is read off where it lands (aacPriming). Anything that cannot be measured — no AudioDecoder, two
+   * clicks that disagree — leaves the file exactly as the encoder made it: late is the old, known fault,
+   * and a wrong guess would put the sound EARLY and cut off its start.
+   * THE ONE COST, stated: a decoder that starts on a kept frame has no dropped frame to overlap it with,
+   * so the first ~11 ms of the file fade in (measured on a steady tone: silent to ~9 ms, exact from
+   * ~12 ms, and no step anywhere in between). A clip's own start already fades over 45 ms (the de-click
+   * in buildAudioMix), so on a clip that starts with the export there is nothing to lose. */
+  const AAC_FRAME = 1024;   // AAC-LC ('mp4a.40.2') codes 1024 samples a frame, by the standard
+  const _primingByEncoder = new WeakMap();   // encoder constructor → { 'rate/channels': samples }; a stand-in encoder is measured afresh
+  async function aacPriming(sampleRate, channels) {
+    const Enc = window.AudioEncoder, Dec = window.AudioDecoder;
+    if (typeof Enc !== 'function' || typeof Dec !== 'function' || typeof AudioData !== 'function') return 0;
+    const key = sampleRate + '/' + channels;
+    const known = _primingByEncoder.get(Enc);
+    if (known && known[key] != null) return known[key];
+    try {
+      const F = AAC_FRAME, N = 12 * F, WIN = 4 * F;
+      const AT = [1500, 1500 + 5 * F + 517];   // two clicks, neither on a frame boundary, further apart than WIN
+      const sig = new Float32Array(N); AT.forEach(a => { sig[a] = 0.9; });
+      const chunks = []; let cfg = null, err = null;
+      const enc = new Enc({ output: (c, m) => { chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = m.decoderConfig; }, error: e => { err = e; } });
+      enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 });
+      for (let off = 0; off < N; off += F) {   // framed exactly as encodeAudio frames the mix
+        const planar = new Float32Array(F * channels);
+        for (let c = 0; c < channels; c++) planar.set(sig.subarray(off, off + F), c * F);
+        const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: F, numberOfChannels: channels, timestamp: Math.round(off / sampleRate * 1e6), data: planar });
+        enc.encode(ad); ad.close();
+      }
+      await enc.flush(); enc.close();
+      if (err || !cfg || !chunks.length) return 0;
+      const heard = []; let derr = null;
+      const dec = new Dec({ output: ad => { try { const d = new Float32Array(ad.numberOfFrames); ad.copyTo(d, { planeIndex: 0, format: 'f32-planar' }); heard.push(d); } finally { ad.close(); } }, error: e => { derr = e; } });
+      dec.configure(cfg);
+      chunks.forEach(c => dec.decode(c));
+      await dec.flush(); dec.close();
+      if (derr) return 0;
+      let len = 0; heard.forEach(d => { len += d.length; });
+      const all = new Float32Array(len); let at = 0; heard.forEach(d => { all.set(d, at); at += d.length; });
+      const lands = AT.map(a => {
+        let pk = 0, pi = -1;
+        for (let i = a; i < Math.min(all.length, a + WIN); i++) { const v = Math.abs(all[i]); if (v > pk) { pk = v; pi = i; } }
+        return pk > 0.3 ? pi - a : -1;
+      });
+      if (lands[0] < 0 || lands[0] !== lands[1]) return 0;   // unheard, or the two clicks disagree: not a number to act on
+      const k = known || {}; k[key] = lands[0]; _primingByEncoder.set(Enc, k);
+      return lands[0];
+    } catch (e) { return 0; }
+  }
+  /* Drops the `skip` warm-up frames, re-times what is left from 0, keeps only the frames the mix fills,
+     and cuts the last one's duration to the mix's own end. The decoder description rides the first frame
+     KEPT — the muxer takes it from whichever chunk carries it, and the one that did has been dropped. */
+  function dropPriming(got, skip, total, sampleRate) {
+    const cfgFrom = got.find(g => g.meta && g.meta.decoderConfig);
+    const want = Math.ceil(total / AAC_FRAME);
+    const kept = got.slice(skip, skip + want);
+    if (!kept.length) return null;
+    const t0 = kept[0].chunk.timestamp;
+    return kept.map((g, i) => {
+      const c = g.chunk;
+      const data = new Uint8Array(c.byteLength); c.copyTo(data);
+      const init = { type: c.type, timestamp: c.timestamp - t0, data: data };
+      if (i === want - 1) init.duration = Math.round((total - i * AAC_FRAME) / sampleRate * 1e6);   // the track stops with the mix
+      else if (c.duration != null) init.duration = c.duration;
+      const meta = (i === 0 && cfgFrom) ? Object.assign({}, g.meta || {}, { decoderConfig: cfgFrom.meta.decoderConfig }) : g.meta;
+      return { chunk: new EncodedAudioChunk(init), meta: meta };
+    });
+  }
+
   /* `out` is where the encoded chunks go — the muxer, or an array. Taking a sink instead of the muxer
      is what lets the soundtrack be encoded BEFORE the muxer exists; see the call site for why that
      matters. */
   async function encodeAudio(out, mix) {
     const { audioBuffer, sampleRate, channels } = mix;
     const push = (chunk, meta) => { if (typeof out === 'function') out(chunk, meta); else out.addAudioChunk(chunk, meta); };
+    const total = audioBuffer.length;
+    // The warm-up, and what it takes to cut it out cleanly (queue 690) — see aacPriming above.
+    const prime = total > 0 ? await aacPriming(sampleRate, channels) : 0;
+    const skip = prime > 0 ? Math.ceil(prime / AAC_FRAME) : 0;   // whole warm-up frames to drop
+    const lead = skip * AAC_FRAME - prime;                         // silence fed first, so the first frame kept starts ON the mix
+    const got = [];
     let encErr = null;
     const enc = new AudioEncoder({
-      output: (chunk, meta) => push(chunk, meta),
+      output: (chunk, meta) => { if (skip) got.push({ chunk: chunk, meta: meta }); else push(chunk, meta); },
       /* An encoder error arrives on this callback, NOT as a rejection from flush() on every browser —
          so a soundtrack could fail here and the export carry on believing it had succeeded. Held and
          rethrown after the flush, where the caller can see it. */
@@ -823,12 +946,13 @@ window.FM = window.FM || {};
     for (let c = 0; c < channels; c++) {
       chData.push(audioBuffer.numberOfChannels > c ? audioBuffer.getChannelData(c) : audioBuffer.getChannelData(0));
     }
-    const frameSize = 1024, total = audioBuffer.length;
+    const frameSize = 1024, fed = lead + total;
     let ts = 0;
-    for (let off = 0; off < total; off += frameSize) {
-      const n = Math.min(frameSize, total - off);
-      const planar = new Float32Array(n * channels);
-      for (let c = 0; c < channels; c++) planar.set(chData[c].subarray(off, off + n), c * n);
+    for (let off = 0; off < fed; off += frameSize) {
+      const n = Math.min(frameSize, fed - off);
+      const planar = new Float32Array(n * channels);   // starts as zeros — which is what the lead is
+      const a = Math.max(off, lead);                     // the part of this frame the mix itself fills
+      if (off + n > a) for (let c = 0; c < channels; c++) planar.set(chData[c].subarray(a - lead, off + n - lead), c * n + (a - off));
       const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round(ts), data: planar });
       enc.encode(ad); ad.close();
       ts += (n / sampleRate) * 1e6;
@@ -836,6 +960,11 @@ window.FM = window.FM || {};
     await enc.flush();
     enc.close();
     if (encErr) throw encErr;
+    if (skip) {
+      let kept = null;
+      try { kept = dropPriming(got, skip, total, sampleRate); } catch (e) { console.warn('[export] could not cut the AAC warm-up out — the sound stays as the encoder made it', e); kept = null; }
+      (kept || got).forEach(g => push(g.chunk, g.meta));
+    }
   }
 
   FM._encodeAudio = encodeAudio;   // suite seam: the contract the muxer-ordering fix rests on
