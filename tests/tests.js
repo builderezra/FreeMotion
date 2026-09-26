@@ -48162,6 +48162,60 @@
     }
   });
 
+  test('a finger scrub that starts on a clip tips how to move it, three times at most and never after a hold-move (UX review top #5)', { item: 'uxr-5' }, async function () {
+    /* The review: two bots separately concluded that clips "cannot be moved" on a phone, because a quick
+     * drag scrubs (the AM model, kept) and nothing mentions the short hold that picks a clip up. So the
+     * first few clip scrubs say how. It must stay out of the way of someone who scrubs from clips all day
+     * (queue 351), hence: sideways scrubs only, at most three times ever, and never once a hold has worked. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const T = FM._holdMoveTip;
+    if (!T) throw new Error('FM._holdMoveTip is missing, so the tip is not wired into the timeline');
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration, allowed0 = FM._holdMoveTipAllowed, toast0 = FM.toast;
+    const store = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} };
+    const saved = { tip: localStorage.getItem(T.key), did: localStorage.getItem(T.didKey) };
+    let shown = 0;
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Clip', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 8; FM.scene.layers.push(L); FM.scene.project.duration = 20;
+      FM.selectLayer(null); FM.refreshAll(); await sleep(80);
+      FM._holdMoveTipAllowed = true; store(T.key, null); store(T.didKey, null);
+      FM.toast = function (msg) { if (msg === T.text) shown++; return toast0.apply(this, arguments); };
+      const clip = () => document.querySelector('.clip');
+      if (!clip()) throw new Error('no .clip on the timeline to swipe from');
+      const swipe = async (vertical) => {
+        const r = clip().getBoundingClientRect(), x = r.left + r.width * 0.6, y = r.top + r.height / 2;
+        const ev = (type, cx, cy, tgt) => (tgt || clip()).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, isPrimary: true, pointerType: 'touch', clientX: cx, clientY: cy, buttons: type === 'pointerup' ? 0 : 1 }));
+        ev('pointerdown', x, y);
+        for (let i = 1; i <= 6; i++) { await sleep(16); ev('pointermove', vertical ? x : x - i * 10, vertical ? y - i * 10 : y, window); }
+        ev('pointerup', vertical ? x : x - 60, vertical ? y - 60 : y, window);
+        FM.timeline._abortGestures(); await sleep(40);
+      };
+      await swipe(true);
+      if (shown !== 0) throw new Error('a VERTICAL swipe on a clip (a list scroll) showed the move tip');
+      for (let i = 0; i < 4; i++) await swipe(false);
+      if (shown === 0) throw new Error('four sideways scrubs that started on a clip never said how to move a clip');
+      if (shown !== T.max) throw new Error('the tip showed ' + shown + ' times in four scrubs; it must stop at ' + T.max);
+
+      // Reset the count, then do a real HOLD-move: after that the tip must never come back.
+      store(T.key, null); shown = 0;
+      const r = clip().getBoundingClientRect(), x = r.left + r.width * 0.5, y = r.top + r.height / 2;
+      const ev = (type, cx, tgt) => (tgt || clip()).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 8, isPrimary: true, pointerType: 'touch', clientX: cx, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+      ev('pointerdown', x); await sleep(600);
+      for (let i = 1; i <= 4; i++) { await sleep(16); ev('pointermove', x + i * 10, window); }
+      ev('pointerup', x + 40, window); FM.timeline._abortGestures(); await sleep(60);
+      if (!localStorage.getItem(T.didKey)) throw new Error('a hold that picked the clip up was not remembered, so the tip would keep coming back to someone who already knows the gesture');
+      await swipe(false);
+      if (shown !== 0) throw new Error('after a successful hold-move the tip still showed');
+    } finally {
+      FM.toast = toast0; FM._holdMoveTipAllowed = allowed0;
+      store(T.key, saved.tip); store(T.didKey, saved.did);
+      try { FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers = layers0; FM.scene.project.duration = dur0;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.

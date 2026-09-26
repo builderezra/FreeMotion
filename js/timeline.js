@@ -317,6 +317,27 @@ window.FM = window.FM || {};
   // in the hand felt like waiting rather than deciding; 320ms still can't be hit by a tap or by the
   // start of a timeline scrub (both move within ~100ms) but stops the deliberate press from dragging.
   const KF_HOLD_MS = 320;
+  /* THE HOLD-TO-MOVE TIP (UX review top #5). On a finger a clip moves only after a short HOLD; a quick
+     drag scrubs (the AM model, and Ezra scrubs from clips constantly: queue 351). That is right, but it is
+     invisible: two of the review's bots concluded clips "cannot be moved at all". So the first few times a
+     scrub starts ON a clip, say how moving works — at most TIP_MAX times ever, and never again once a hold
+     has actually picked a clip up. Only in the real app, not the suite's frame (a stray toast there would
+     overwrite the one a test is reading); FM._holdMoveTipAllowed is the seam that lets its own test in. */
+  const HOLD_TIP_KEY = 'fm.tip.holdMove', HOLD_DID_KEY = 'fm.did.holdMove', HOLD_TIP_MAX = 3;
+  const HOLD_TIP_TEXT = 'Tip: to move a clip, hold it for a moment, then drag.';
+  FM._holdMoveTipAllowed = (function () { try { return window.top === window; } catch (e) { return false; } })();
+  function holdMoveTip() {
+    if (!FM._holdMoveTipAllowed || !FM.toast) return;
+    try {
+      if (localStorage.getItem(HOLD_DID_KEY)) return;
+      const n = +(localStorage.getItem(HOLD_TIP_KEY) || 0);
+      if (n >= HOLD_TIP_MAX) return;
+      localStorage.setItem(HOLD_TIP_KEY, String(n + 1));
+    } catch (e) { return; }   // no storage → no way to stop nagging, so say nothing
+    FM.toast(HOLD_TIP_TEXT, 3200);
+  }
+  function noteHoldMove() { try { localStorage.setItem(HOLD_DID_KEY, '1'); } catch (e) {} }
+  FM._holdMoveTip = { key: HOLD_TIP_KEY, didKey: HOLD_DID_KEY, max: HOLD_TIP_MAX, text: HOLD_TIP_TEXT };
   /* ⚠️ AN ARMED HOLD IS STILL A HOLD UNTIL THE FINGER REALLY TRAVELS (queue 690). On the phone the hold IS the only way
      into a keyframe's menu — Delete, easing, loop — because a finger never double-clicks or right-clicks. Once the hold
      armed, the drag branch used to treat ANY pointermove as a retime, and a real finger resting on glass for half a
@@ -2228,6 +2249,7 @@ window.FM = window.FM || {};
                    panel up over the timeline you were dragging on. This flag says "a clip drag owns
                    the screen"; the sheet consults it and stays down. Cleared on pointerup/cancel. */
                 clipTap = null;
+                noteHoldMove();   // they know the gesture now — the tip never shows again
                 if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
               } else {
                 armHold();   // finger still moving → keep waiting for it to settle
@@ -4668,6 +4690,7 @@ window.FM = window.FM || {};
            * scroll it natively. Same axis lock the empty-lane path uses 90 lines below — commit at 5px,
            * and horizontal needs only to tie because scrubbing is the primary action here. */
           if (!clipTap.axis && (adx > 5 || ady > 5)) clipTap.axis = (ady > adx + 4) ? 'y' : 'x';
+          if (clipTap.axis === 'x' && !clipTap.tipped) { clipTap.tipped = true; holdMoveTip(); }   // UX review top #5
           if (clipTap.axis === 'y') {
             /* …AND SAMPLE ITS VELOCITY, so the release glides (queue 690). Queue 415 gave the vertical pan its glide —
                "Scrolling up and down on timeline should have some glide to it like dragging left and right" — but only
