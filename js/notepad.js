@@ -28,6 +28,9 @@ window.FM = window.FM || {};
   function uid() { return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   let popCleanup = null;   // queue 548 — see the popFrom call in open()
   let remindBack = null;   // queue 690 — while the "Before you export" card is up, how to press its Back
+  let sizer = null;        // queue 927 — the small/BIG grip (js/panelsize.js)
+  let folding = null;      // queue 927 — a close that is still folding into the button
+  let curScrim = null;     // the notepad's own scrim (the export reminder and the comments card are np-scrims too)
 
   function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
@@ -52,9 +55,21 @@ window.FM = window.FM || {};
     });
   }
 
+  /* The Notes button that is on screen — the PC transport row's or the phone top bar's. The fold (#927) lands
+     on it, so it must be the one he can see. The phone bar's first at a phone width: a narrow desktop window lays
+     out BOTH (measured: the transport row's at 83,379 as well as the top bar's), and the fold flew to the wrong one. */
+  function notesButton() {
+    const phone = window.matchMedia('(max-width: 700px)').matches;
+    for (const id of (phone ? ['m-notes', 'btn-notes'] : ['btn-notes', 'm-notes'])) {
+      const b = document.getElementById(id);
+      if (b && b.getBoundingClientRect().width > 0) return b;
+    }
+    return null;
+  }
+
   // ---- the panel -------------------------------------------------------------------------------
   function open() {
-    close();
+    closeNow();
     const scrim = el('div', 'np-scrim');
     const card = el('div', 'np-card');
     card.setAttribute('role', 'dialog');
@@ -86,8 +101,10 @@ window.FM = window.FM || {};
         ta.value = n.text || '';
         ta.rows = 1;
         ta.placeholder = 'Write a note…';
-        const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };
+        // BIG (#927) lets a long note show more of itself before it scrolls
+        const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(card.classList.contains('pb-big') ? 420 : 160, ta.scrollHeight) + 'px'; };
         ta.addEventListener('input', () => { n.text = ta.value; grow(); badge(); });
+        ta.addEventListener('np-fit', grow);   // the panel changed size (#927)
         ta.addEventListener('change', save);
 
         const del = el('button', 'np-del', '✕');
@@ -116,6 +133,7 @@ window.FM = window.FM || {};
     card.append(head, hint, body, add, actions);
     scrim.appendChild(card);
     document.body.appendChild(scrim);
+    curScrim = scrim;
     /* A tap outside closes it ON CLICK, and only when the press began on the backdrop (queue 690) — see
        js/ask.js and js/shortcuts.js for the rule. Closing on pointerdown handed the rest of the tap to
        whatever was under the pad: on the phone a second tap on the Notes button shut it on the way down
@@ -123,6 +141,13 @@ window.FM = window.FM || {};
     let downOnScrim = false;
     scrim.addEventListener('pointerdown', e => { downOnScrim = e.target === scrim; });
     scrim.addEventListener('click', e => { if (e.target === scrim && downOnScrim) close(); downOnScrim = false; });
+    /* SMALL OR BIG (queue 927) — before popFrom, so a notepad he left big opens big and centred rather than
+       hanging off the button first. */
+    if (FM.panelSize) sizer = FM.panelSize.attach(card, {
+      key: 'notes', name: 'Notes', button: notesButton,
+      parts: () => [hint, body, add, actions],
+      onChange: () => body.querySelectorAll('.np-text').forEach(t => t.dispatchEvent(new Event('np-fit')))
+    });
     render();
     /* POP OUT OF THE 📒 BUTTON, WITH ITS OWN ANIMATION (queue 548 clauses 1-4). The notepad is the one
        clause where he asked for invention rather than consistency: "it would be cool if the note pad one
@@ -130,11 +155,38 @@ window.FM = window.FM || {};
        its own top edge, the way you turn back the cover of a pad (`pop-note` in styles.css).
        After render(), because popFrom measures the card and an empty card is the wrong size. */
     if (FM.popFrom) popCleanup = FM.popFrom(card, document.getElementById('btn-notes'), { flavour: 'note' });
+    if (sizer) sizer.refresh();   // which corner the grip sits on depends on whether popFrom hung it off the button
     // Nothing is focused on open: on a phone that would throw the keyboard up over the list you came
     // to read. The + button focuses its own new row, which is the moment you actually want to type.
   }
 
-  function close() {
+  /* CLOSING WHILE BIG FOLDS INTO THE BUTTON (queue 927 clause 8): "it kind of like shrinks down onto itself before
+     closing so it's like shrinking and then folding into the button". The notepad counts as closed from the first
+     frame of that — isOpen() is false, a tap on the button opens it again at once — and the scrim is only taken
+     away when the fold lands. Small closes the way it always has. */
+  function close(o) {
+    if (o && o.now === true) { closeNow(); return; }   // e.g. a test tidying up: no fold
+    const scrim = curScrim && curScrim.isConnected && !curScrim.classList.contains('np-closing') ? curScrim : null;
+    if (scrim && sizer && sizer.isBig() && !folding) {
+      const s = sizer, pc = popCleanup;
+      sizer = null; popCleanup = null;
+      scrim.classList.add('np-closing');
+      folding = s.fold(() => {
+        folding = null;
+        s.detach();
+        if (pc) pc();   // after the fold: the button stays lifted over the scrim until the panel has gone into it
+        scrim.remove();
+        badge();
+      });
+      badge();
+      return;
+    }
+    closeNow();
+  }
+  function closeNow() {
+    if (folding) folding.finish();   // a fold still in flight ends now, and cleans up after itself
+    if (sizer) { sizer.detach(); sizer = null; }
+    curScrim = null;
     if (popCleanup) { popCleanup(); popCleanup = null; }   // the button stays lifted above the scrim otherwise
     /* COMMIT THE LINE BEING TYPED FIRST (queue 690). A note is saved on its field's `change`, which fires when
        the field loses focus — a tap on Done or on the backdrop does that on the way. Esc while typing (the
@@ -224,7 +276,7 @@ window.FM = window.FM || {};
     });
   }
 
-  function isOpen() { return !!document.querySelector('.np-scrim'); }
+  function isOpen() { return !!document.querySelector('.np-scrim:not(.np-closing)'); }   // a panel folding away is already closed (#927)
   function toggle() { if (isOpen()) close(); else open(); }   // a second tap on the Notes button CLOSES it (queue 762)
   /* ESCAPE (queue 690). Neither card listened for it, so on a PC Escape fell through to the editor and
      deselected the layer behind them. Answered for the app's Escape branch (js/app.js), true when it
