@@ -522,22 +522,38 @@ window.FM = window.FM || {};
   async function releaseSceneMedia() {
     if (releaseBlocked()) return 0;
     let ids = [];
+    const layers = FM.scene.layers;
     try {
       const db = await openDB();
-      const keys = new Set(await idbKeys(db));
-      db.close();
-      for (const layer of FM.scene.layers) {
-        if (!layer || layer.type === 'text') continue;
-        const id = layer.id;
-        if (!FM.media.get(id)) continue;                                  // nothing resident to free
-        if (FM.media.isPinned && FM.media.isPinned(id)) continue;         // owned by something other than the scene
-        if (!keys.has(id)) continue;                                      // ← IDB cannot give it back, so it is not ours to free
-        const m = FM.media.get(id);
-        if (m && m.ref && !keys.has(m.ref)) continue;                     // queue 915 phase B: …nor can a pointer whose shared copy is not there
-        ids.push(id);
-      }
+      try {
+        const keys = new Set(await idbKeys(db));
+        for (const layer of layers) {
+          if (!layer || layer.type === 'text') continue;
+          const id = layer.id;
+          if (!FM.media.get(id)) continue;                                  // nothing resident to free
+          if (FM.media.isPinned && FM.media.isPinned(id)) continue;         // owned by something other than the scene
+          if (!keys.has(id)) continue;                                      // ← IDB cannot give it back, so it is not ours to free
+          const m = FM.media.get(id);
+          if (m && m.ref && !keys.has(m.ref)) continue;                     // queue 915 phase B: …nor can a pointer whose shared copy is not there
+          /* ⚠️ queue 690 (HUNT-d): …AND WHAT IT GIVES BACK MUST BE THIS FILE, not just A file under this key. After a
+             Replace media on a full phone the new file was refused ("Not enough storage to save that media") and the
+             record under the layer's id is still the OLD one — the key is there, so the check above let the only copy
+             of the new file go. Back in the project the old photo returned in its place, at the scale Replace media
+             had set for the new one, with nothing said: the replace silently undone while the app was open. So the
+             revision in memory — the one planBlobWrites saves under — must be the one on disk: known from this session
+             (_stored: a hydrate read it, a save wrote it), or else read off the record itself. A file that has not
+             landed stays resident, plays from memory as it did before Home, and the next save tries it again. */
+          const want = (m && m.rev != null ? m.rev : layer.mediaRev) || 0;
+          if (_stored.get(id) !== want) {
+            const rec = await idbGet(db, id);
+            if (!rec || (rec.rev || 0) !== want) continue;
+          }
+          ids.push(id);
+        }
+      } finally { db.close(); }
     } catch (e) { return 0; }
     if (releaseBlocked()) return 0;   // re-checked: the reads above awaited, and he may be back inside
+    if (FM.scene.layers !== layers) return 0;   // …or in another project, whose media these ids are not
     ids.forEach(id => { FM.media.remove(id); _released.add(id); });   // queue 915: remembered, see sceneMediaReleased
     return ids.length;
   }
@@ -2327,13 +2343,17 @@ window.FM = window.FM || {};
    * gone with nothing said at the moment it happened. The template and element save-backs already refuse
    * on a failed flush; the ordinary switch was the one door that did not. Now it asks, and Stay (also
    * what Cancel, Escape and a tap outside give) leaves everything exactly where it was. */
-  function askLeave() {
+  /* `how` (queue 690, HUNT-d): the version label asks the same question on the way to a reload, which is not
+     "opening another project" — so the sentence that says what throws it away, and the button that does it, can
+     be named by the caller. Everything else, Stay included, is the same question. */
+  function askLeave(how) {
     const name = (FM.scene && FM.scene.project && FM.scene.project.name) || 'This project';
     if (!FM.ask) return Promise.resolve(false);   // no way to ask — never throw it away unasked
+    const why = (how && how.why) || 'Opening another project now throws it away.';
     return FM.ask({
       title: 'Storage full — “' + name + '” is not saved',
-      message: 'What you changed since it last saved is only on this screen. Opening another project now throws it away. To keep it, stay and use ⚙ → Save project file inside it.',
-      ok: 'Leave anyway', cancel: 'Stay', danger: true,
+      message: 'What you changed since it last saved is only on this screen. ' + why + ' To keep it, stay and use ⚙ → Save project file inside it.',
+      ok: (how && how.ok) || 'Leave anyway', cancel: 'Stay', danger: true,
     }).then(v => !!v);
   }
 
@@ -2342,9 +2362,9 @@ window.FM = window.FM || {};
     /* queue 690: save the open project, and if that cannot be done and it matters, ask before leaving it.
        True = go ahead. For callers that must ask BEFORE they start moving things — Home's card tap asks here,
        ahead of the push, rather than half-way through it — and then pass { confirmed: true } to open(). */
-    async confirmLeave() {
+    async confirmLeave(how) {
       if (FM.storage.flushSync() || !FM.storage.unsavedOnScreen()) return true;
-      return askLeave();
+      return askLeave(how);
     },
     // Thumbnail for a card — IDB first, then the legacy inline thumb (pre-migration entries). Async.
     async getThumb(id) {
@@ -2542,7 +2562,20 @@ window.FM = window.FM || {};
          pointer here, a relaunch after such a crash wiped the template to empty (review, 2 Sep). openForEdit puts
          ofTemplate on the project only AFTER the pack is adopted, so a half-hydrated workspace is never committable.
          The INDEX record still carries it (below) for the card's label and the one-workspace-per-template reuse. */
-      writeJSON('fm.proj.' + id, { project: fresh.project, layers: [], selectedId: null, selectedIds: [] });
+      /* ⚠️ queue 690 (HUNT-d): ON A FULL PHONE THERE IS NO NEW PROJECT, AND IT MUST SAY SO. Both writes below were
+         unread, so a store with no room refused them, open() then found neither and said "That project is no longer
+         on this device" — untrue, it was never made — and returned false, which this ignored too, handing back the
+         new id as if it had worked. Home then pushed into the editor, still showing the project he was already in,
+         and his new idea went into the old one. duplicate() learned this in queue 915; create() had not. So: no
+         document or no index entry → take back the half that landed (the key was minted a moment ago — nothing of
+         his), say plainly there was no room, and answer false, which every caller already reads as "nothing
+         changed, stay where you are". */
+      const noRoom = () => {
+        try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
+        if (FM.toast) FM.toast('Storage full — no room for a new project, so none was made. Delete one you no longer need, then try again.', 6000);
+        return false;
+      };
+      if (!writeJSON('fm.proj.' + id, { project: fresh.project, layers: [], selectedId: null, selectedIds: [] })) return noRoom();
       const idx = this.list();
       /* `elementDraft` marks a project that exists only as a WORKSPACE for building an element (queue
          340). Ezra: *"When you create a new element it just creates a new project"* — and he was right,
@@ -2555,8 +2588,10 @@ window.FM = window.FM || {};
       if (opts.templateDraft) rec.templateDraft = true;      // a workspace EDITING a template (queue 505 clause 4): hidden from Projects, shown under Templates
       if (opts.ofTemplate) rec.ofTemplate = opts.ofTemplate;
       idx.unshift(rec);
-      this.saveIndex(idx);
-      await this.open(id, { confirmed: true });   // queue 690: asked (or saved) above, and nothing has changed since
+      if (!this.saveIndex(idx)) return noRoom();
+      /* queue 690: asked (or saved) above, and nothing has changed since. Its false (the project vanished in between —
+         another window) is read now too: the id of a project that did not open is not a project he is in. */
+      if (!(await this.open(id, { confirmed: true }))) return false;
       return id;
     },
     /* ⚠️ queue 915 clause 3: TRUE ONLY WHEN THERE IS A WHOLE COPY. Every write here was unread and the
