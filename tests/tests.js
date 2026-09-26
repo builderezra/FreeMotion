@@ -48305,6 +48305,64 @@
     }
   });
 
+  test('typing a time past the end says why, and offers to stretch the selected clip there (UX review top #8)', { item: 'uxr-8' }, async function () {
+    /* The review, confirmed by a second bot: in a 5 s project, typing 6 into the time readout silently
+     * snapped to 5, and "Extend end to playhead" then had nowhere to reach, so a slideshow could only be
+     * made longer by an unreliable drag. The project stays exactly as long as its clips (that rule is
+     * kept); what changes is that the snap is explained, and a selected clip can be stretched to the time. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ro = document.getElementById('time-readout');
+    if (!ro) throw new Error('#time-readout is missing');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time, toast0 = FM.toast;
+    let last = null;
+    const errs = [], onErr = e => errs.push(String(e.message || e.error || e));
+    window.addEventListener('error', onErr);
+    const typeTime = async (v) => {
+      ro.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await sleep(30);
+      const inp = document.querySelector('.time-edit');
+      if (!inp) throw new Error('double-clicking the time readout did not open the type-a-time box');
+      inp.value = String(v);
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(60);
+    };
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Photo three', shape: 'rect', x: 100, y: 100, shapeW: 50, shapeH: 50, fill: '#e33', start: 0, duration: 5 });
+      FM.scene.layers.push(L); FM.refreshAll();
+      FM.toast = function (m, ms, onTap) { last = { msg: String(m), onTap: onTap }; return toast0.apply(this, arguments); };
+      if (Math.abs(FM.scene.project.duration - 5) > 1e-3) throw new Error('fixture: the project is ' + FM.scene.project.duration + ' s, not 5');
+
+      // Nothing selected: the snap is explained.
+      FM.selectLayer(null); last = null;
+      await typeTime(6);
+      if (Math.abs(FM.time - 5) > 0.05) throw new Error('typing 6 into a 5 s project left the playhead at ' + FM.time + ' (the end should still be the limit)');
+      if (!last || !/ends at 5 s/.test(last.msg)) throw new Error('typing a time past the end snapped back in silence (last toast: ' + JSON.stringify(last && last.msg) + ')');
+
+      // A clip selected: the toast offers to stretch it, and the offer works.
+      FM.selectLayer(L.id); last = null;
+      await typeTime(6);
+      if (!last || typeof last.onTap !== 'function' || !/Photo three/.test(last.msg)) throw new Error('with a clip selected, no offer to stretch it to the time typed (last toast: ' + JSON.stringify(last && last.msg) + ')');
+      last.onTap(); await sleep(60);
+      if (Math.abs(L.start + L.duration - 6) > 0.02) throw new Error('the offer did not stretch the clip to end at 6 s (it ends at ' + (L.start + L.duration) + ')');
+      if (Math.abs(FM.scene.project.duration - 6) > 0.02) throw new Error('the project did not grow to 6 s with its clip (' + FM.scene.project.duration + ')');
+      if (Math.abs(FM.time - 6) > 0.05) throw new Error('after stretching, the playhead is at ' + FM.time + ', not at the 6 s that was typed');
+
+      // CONTROL: a time INSIDE the project is untouched and says nothing.
+      last = null; await typeTime(2);
+      if (Math.abs(FM.time - 2) > 0.05) throw new Error('typing 2 no longer moves the playhead to 2');
+      if (last && /ends at/.test(last.msg)) throw new Error('a time inside the project produced the past-the-end message');
+      // …and closing the box never throws (Enter used to run done() twice: NotFoundError on every Enter).
+      if (errs.length) throw new Error('typing a time threw ' + errs.length + ' uncaught error(s): ' + errs[0]);
+    } finally {
+      window.removeEventListener('error', onErr);
+      FM.toast = toast0;
+      const inp = document.querySelector('.time-edit'); if (inp) inp.remove();
+      ro.style.display = '';
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.time = t0; FM.refreshAll();
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.

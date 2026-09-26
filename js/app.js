@@ -6160,13 +6160,41 @@ window.FM = window.FM || {};
       headTap.title = 'Tap: add or remove a bookmark here · hold: set this frame as the project thumbnail';
     }
     // double-click the time readout to type an exact playhead time
+    /* A TYPED TIME PAST THE END (UX review top #8, confirmed by a second bot). The project is exactly as
+       long as its clips (FM.autoFitDuration), so the playhead stops at the end, and that stays. What was
+       wrong is that typing 6 into a 5 s project snapped back to 5 without a word, and "Extend end to
+       playhead" then had nowhere to reach: making a slideshow one photo longer took an unreliable drag.
+       So say why, and when a clip is selected offer to stretch THAT clip to the time typed — the same
+       FM.extendClipTo the Extend button uses, so a video still stops where its source runs out. */
+    function typedPastEnd(v, endNow) {
+      if (!FM.toast) return;
+      const fmtS = x => (Math.round(x * 100) / 100) + ' s';
+      const sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+      if (sel && !sel.locked && sel.type !== 'camera' && FM.extendClipTo) {
+        const nm = String(sel.name || 'the selected clip');
+        FM.toast('The project ends at ' + fmtS(endNow) + '. Tap to make “' + nm + '” end at ' + fmtS(v), 6000, function () {
+          if (!FM.extendClipTo(sel, v)) { FM.toast('No more source to extend into', 1800); return; }
+          refreshAll();
+          FM.setTime(Math.min(v, FM.scene.project.duration));
+          if (FM.history) FM.history.commit();
+        });
+      } else {
+        FM.toast('The project ends at ' + fmtS(endNow) + ': it is as long as its clips. Select a clip, then type the time again to stretch it.', 5200);
+      }
+    }
+    FM._typedPastEnd = typedPastEnd;   // seam: the suite checks the message and the offer without a keyboard
     readoutEl.addEventListener('dblclick', () => {
       if (tcTapTimer) { clearTimeout(tcTapTimer); tcTapTimer = null; }   // cancel the pending play/pause tap
       const input = document.createElement('input');
       input.className = 'time-edit'; input.type = 'text'; input.value = FM.time.toFixed(2);
       readoutEl.style.display = 'none'; readoutEl.parentNode.insertBefore(input, readoutEl);
-      const done = () => { if (!input.parentNode) return; const v = parseFloat(input.value); if (!isNaN(v)) { FM.pause(); FM.setTime(Math.max(0, Math.min(FM.scene.project.duration, v))); } input.remove(); readoutEl.style.display = ''; updateReadout(); };
-      input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') done(); else if (ev.key === 'Escape') { input.remove(); readoutEl.style.display = ''; } });
+      /* ONCE ONLY. Removing the focused box fires its own `blur` synchronously, while it is still attached,
+         so Enter ran done() twice: the inner call removed the box and the outer remove() then threw
+         NotFoundError on every Enter (found while building UX fix #8; the review's edge bot saw the same
+         class of error). `closed` makes the second call a no-op; Escape shares it. */
+      let closed = false;
+      const done = () => { if (closed || !input.parentNode) return; closed = true; const v = parseFloat(input.value); if (!isNaN(v)) { FM.pause(); const endNow = FM.scene.project.duration; FM.setTime(Math.max(0, Math.min(endNow, v))); if (v > endNow + 0.5 / (FM.scene.project.fps || 30)) typedPastEnd(v, endNow); } input.remove(); readoutEl.style.display = ''; updateReadout(); };
+      input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') done(); else if (ev.key === 'Escape') { if (closed) return; closed = true; input.remove(); readoutEl.style.display = ''; } });
       input.addEventListener('blur', done);
       input.focus(); input.select();
     });
