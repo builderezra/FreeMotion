@@ -98813,4 +98813,335 @@
     });
   });
 
+  /* ═══ HUNT-a (queue 690, seventh hunt, 26 Sep) — HOME AND PROJECT MANAGEMENT, REAL FINGER AT 380, REAL MOUSE AT 1280 ═══
+   * His standing brief: "go re audit, find some bugs coz theres a shit load". Found as four failing HUNT-a tests on
+   * v17.00; all four fixed and renamed 690 for what they now hold — js/home.js selectify (a finger in Select scrolls, a
+   * hold paints), render (the You have N projects note stays while selecting), revealCard (Duplicate and Rename show
+   * where the card went), and js/storage.js exportProjectFile (Save project file on another card never opens it).
+   * Each was re-proven failing with its fix reverted. Helpers are prefixed ha7 so they cannot collide with anything else here.
+   * ha7Seed writes plain project cards straight into the index (no media, no thumbnails) so a library of 60+ projects
+   * — the size at which Home shows its You have N projects note — costs milliseconds instead of 60 project switches.
+   * They are dated a month back, so they list AFTER anything the suite made and are found by id, never by position. */
+  function ha7Seed(n, tag, thumb) {
+    const idx = FM.projects.list(), now = Date.now(), ids = [];
+    for (let i = 0; i < n; i++) {
+      const id = 'p_ha7' + tag.replace(/\W/g, '') + i + '_' + Math.random().toString(36).slice(2, 6);
+      const sc = FM.newScene(); sc.project.name = tag + ' ' + (i + 1); sc.project.width = 320; sc.project.height = 240;
+      localStorage.setItem('fm.proj.' + id, JSON.stringify({ rev: 1, project: sc.project, layers: [], selectedId: null, selectedIds: [] }));
+      idx.push({ id: id, name: sc.project.name, created: now - 86400000 * 40 - i * 60000, modified: now - 86400000 * 30 - i * 60000, width: 320, height: 240, fps: 30, duration: 3, layers: 0, thumb: thumb || null });   // `thumb`: an inline card picture (the legacy field getThumb still reads), for a test that needs the <img>
+      ids.push(id);
+    }
+    if (!FM.projects.saveIndex(idx)) throw new Error('setup: could not write ' + n + ' project cards');
+    return ids;
+  }
+  async function ha7Unseed(ids) {
+    const set = new Set(ids);
+    for (const id of ids) {
+      if (id.indexOf('p_ha7') === 0) { try { localStorage.removeItem('fm.proj.' + id); } catch (e) {} }
+      else { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    }
+    FM.projects.saveIndex(FM.projects.list().filter(function (p) { return !set.has(p.id); }));
+  }
+  function ha7Name(id) { return (FM.projects.list().find(function (p) { return p.id === id; }) || {}).name || id; }
+  function ha7Scroll() { return document.querySelector('#home-screen .hm-scroll'); }
+  function ha7Seen(el) {
+    const sc = ha7Scroll(); if (!el || !sc) return false;
+    const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
+    const bar = document.getElementById('hm-selbar'), bottom = bar ? Math.min(s.bottom, bar.getBoundingClientRect().top) : s.bottom;
+    return r.bottom > s.top + 20 && r.top < bottom - 20;
+  }
+  function ha7Swipe(p, dy) {
+    const s = [{ t: 'touchStart', x: p.x, y: p.y, ms: 30 }];
+    for (let k = 1; k <= 10; k++) s.push({ t: 'touchMove', x: p.x, y: Math.round(p.y + dy * k / 10), ms: 16 });
+    s.push({ t: 'touchEnd', x: p.x, y: p.y + dy, ms: 0 });
+    return s;
+  }
+  async function ha7Done(ids, orig, wasOpen) {
+    try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    try { const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const c = a.querySelector('.fm-ask-cancel'); if (c) c.click(); } } catch (e) {}
+    try { if (FM.home._selectionState().selectMode) { const b = document.getElementById('hm-select-btn'); if (b) b.click(); } } catch (e) {}
+    try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+    await ha7Unseed(ids);
+    try { if (wasOpen) FM.home.open(); else FM.home.close(); } catch (e) {}
+    await sleep(200);
+  }
+
+  test('690 in Select a finger swipe on his long project list scrolls it and ticks nothing — a hold, or a mouse drag, still paints a run', { item: '690', budgetMs: 120000 }, async function () {
+    /* Select is for tidying up a big library, and a big library does not fit on the screen. body.hm-selecting made every
+       card touch-action none and a pointerdown on a card started a paint, so with Select on a swipe on the list painted a
+       run of ticks and the list never moved — the only way to scroll was the 16 px strip beside the cards. Fixed: a
+       finger in Select scrolls like it does outside it, and a HOLD starts the paint (the timeline heads' gesture he
+       pointed at in v3.86: "the drag thing that we have elsewhere"). The second half is the control that the fix kept
+       his drag-select: with Select on, a hold and a slide ticks exactly the cards it passed, and a real mouse drag,
+       which cannot scroll anything, still paints the moment it moves. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const pic = document.createElement('canvas'); pic.width = 16; pic.height = 12;
+    const pg = pic.getContext('2d'); pg.fillStyle = '#e76f51'; pg.fillRect(0, 0, 16, 12);
+    const ids = ha7Seed(62, 'HUNTa7 swipe', pic.toDataURL('image/png'));   // with pictures: the mouse drag below starts on one, as it does on his PC
+    try {
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(1000);
+          const sc = ha7Scroll();
+          sc.scrollTop = 0; await sleep(200);
+          if (sc.scrollHeight - sc.clientHeight < 3000) throw new Error('setup: with 62 more projects the Home list scrolls only ' + (sc.scrollHeight - sc.clientHeight) + ' px');
+          /* Any card will do — the suite's own projects list before the seeded ones, so on a full run the seeded cards
+             start well below the first screen. What matters is a card in the middle of the screen with room to swipe. */
+          const pick = function () {
+            return Array.prototype.filter.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'), function (c) { const y = hcPt(c).y; return y > 260 && y < 500; })[0];
+          };
+          /* CONTROL: with Select off, the same real swipe scrolls the list — the gesture and the driver are fine. */
+          const c0 = pick(); if (!c0) throw new Error('setup: no card sits between y 260 and 500 on Home');
+          await realInput924(ha7Swipe(hcPt(c0, 70), -250), 'a swipe up on the Home list with Select off');
+          await sleep(1400);
+          if (FM.home._selectionState().selectMode) throw new Error('setup: a quick swipe turned Select on');
+          const ctl = Math.round(sc.scrollTop);
+          if (!(ctl > 60)) throw new Error('CONTROL: with Select off a real 250 px swipe moved the list only ' + ctl + ' px');
+          sc.scrollTop = 0; await sleep(400);
+          document.getElementById('hm-select-btn').click(); await sleep(500);
+          if (!FM.home._selectionState().selectMode) throw new Error('setup: the Select button did not turn Select on');
+          const c1 = pick(); if (!c1) throw new Error('setup: with Select on, no card sits between y 260 and 500');
+          const p = hcPt(c1, 70), bar = document.getElementById('hm-selbar');
+          if (bar && p.y + 20 > bar.getBoundingClientRect().top) throw new Error('setup: the swipe would start on the select bar');
+          const s0 = sc.scrollTop, before = FM.home._selectionState().selected.slice();
+          await realInput924(ha7Swipe(p, -250), 'the same swipe up with Select on');
+          await sleep(1400);
+          const moved = Math.round(sc.scrollTop - s0);
+          const ticked = FM.home._selectionState().selected.filter(function (id) { return before.indexOf(id) < 0; });
+          if (moved < 60 || ticked.length) {
+            throw new Error('with Select on and ' + FM.projects.list().length + ' projects, a real finger swiped 250 px up his list — the swipe that moves it ' + ctl + ' px with Select off — and the list moved ' + moved + ' px' +
+              (ticked.length ? ' while ' + ticked.length + ' project(s) he only swiped across got ticked (' + ticked.map(ha7Name).join(', ') + ')' : '') +
+              ': every swipe that starts on a card paints ticks instead of scrolling, so he cannot get down to the projects further down to select them — only the thin strip beside the cards scrolls');
+          }
+          /* …AND THE DRAG-SELECT IS STILL THERE. Three seeded cards in a row, on screen, clear of the select bar. */
+          const run = async function (needPic) {
+            await sleep(300);
+            const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
+            const top = document.getElementById('hm-selbar') ? document.getElementById('hm-selbar').getBoundingClientRect().top : 700;
+            for (let i = 0; i + 2 < cards.length; i++) {
+              const y0 = hcPt(cards[i]).y, y2 = hcPt(cards[i + 2]).y;
+              const img = cards[i].querySelector('.hm-thumb img');
+              if (needPic && !(img && img.complete && img.naturalWidth)) continue;
+              if (y0 > 200 && y2 + 30 < Math.min(top, 700)) return [cards[i], cards[i + 1], cards[i + 2]];
+            }
+            throw new Error('setup: no three cards in a row on screen with Select on' + (needPic ? ', the first with its picture showing' : ''));
+          };
+          const reselect = async function () {
+            const b = document.getElementById('hm-select-btn');
+            if (FM.home._selectionState().selectMode) { b.click(); await sleep(300); }
+            b.click(); await sleep(400);
+            if (!FM.home._selectionState().selectMode || FM.home._selectionState().selected.length) throw new Error('setup: could not start Select again with nothing ticked');
+          };
+          await reselect();
+          const tri = await run(), want = tri.map(function (c) { return c.dataset.pid; });
+          const a = hcPt(tri[0], 70), end = hcPt(tri[2], 70).y + 20;
+          const slide = [{ t: 'touchStart', x: a.x, y: a.y, ms: 650 }];
+          for (let k = 1; k <= 12; k++) slide.push({ t: 'touchMove', x: a.x, y: Math.round(a.y + (end - a.y) * k / 12), ms: 35 });
+          slide.push({ t: 'touchMove', x: a.x, y: end, ms: 250 }, { t: 'touchEnd', x: a.x, y: end, ms: 0 });
+          const sHold = sc.scrollTop;
+          await realInput924(slide, 'a hold on a card with Select on, then a slide down over two more');
+          await sleep(500);
+          const gotHold = FM.home._selectionState().selected.slice().sort().join();
+          if (gotHold !== want.slice().sort().join()) {
+            throw new Error('with Select on, he held ' + ha7Name(want[0]) + ' and slid the same finger over ' + ha7Name(want[1]) + ' to ' + ha7Name(want[2]) + ' and the ticks are [' + FM.home._selectionState().selected.map(ha7Name).join(', ') +
+              '] — the drag-select he asked for has to survive the swipe fix' + (Math.abs(sc.scrollTop - sHold) > 2 ? ' (the list scrolled ' + Math.round(sc.scrollTop - sHold) + ' px instead)' : ''));
+          }
+          await reselect();
+          const tri2 = await run(true), want2 = tri2.map(function (c) { return c.dataset.pid; });
+          const m0 = hcPt(tri2[0], 40), mEnd = hcPt(tri2[2], 40).y;   // on the card's picture — the biggest thing on it
+          const drag = [{ t: 'mouseMove', x: m0.x, y: m0.y, ms: 40 }, { t: 'mouseDown', x: m0.x, y: m0.y, ms: 60 }];
+          for (let k = 1; k <= 10; k++) drag.push({ t: 'mouseMove', x: m0.x, y: Math.round(m0.y + (mEnd - m0.y) * k / 10), ms: 30 });
+          drag.push({ t: 'mouseUp', x: m0.x, y: mEnd, ms: 0 });
+          await realInput924(drag, 'a mouse drag down over three cards with Select on');
+          await sleep(500);
+          const gotMouse = FM.home._selectionState().selected.slice().sort().join();
+          if (gotMouse !== want2.slice().sort().join()) {
+            throw new Error('with Select on, a real mouse dragged from the picture on ' + ha7Name(want2[0]) + ' down to ' + ha7Name(want2[2]) + ' and the ticks are [' + FM.home._selectionState().selected.map(ha7Name).join(', ') + '] — on PC a drag has to paint the run (a drag from a picture picks the picture up instead)');
+          }
+        }, 380);
+      });
+    } finally {
+      await ha7Done(ids, orig, wasOpen);
+    }
+  });
+
+  test('690 with 60 or more projects, holding a card and sliding over two more ticks exactly those three — nothing jumps under his finger when Select comes on', { item: '690', budgetMs: 90000 }, async function () {
+    /* From 60 projects Home puts a note at the top of the list (You have N projects. Tap Select…), and render() used to
+       leave it out while Select was on. So the hold that turns Select on rebuilt the list without it and every card
+       jumped up by the note plus a gap, under the finger that was still down. The slide that followed painted from where
+       the cards were NOW, so it ran one card further down the list than his finger did — and that card went with the
+       next Delete. Fixed: the note stays while selecting, and the hold puts back any shift that is left (selectify). */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ids = ha7Seed(62, 'HUNTa7 hold');
+    try {
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(1000);
+          const sc = ha7Scroll(); sc.scrollTop = 0; await sleep(250);
+          const note = document.querySelector('#home-screen .hm-grid > .hm-note');
+          if (!note) throw new Error('setup: with ' + FM.projects.list().length + ' projects Home shows no You have N projects note');
+          /* The FIRST cards on the list, under the note, with the list at the very top — the case where nothing can
+             scroll to make up for a jump. Any project's card will do (on a full run the suite's own list first). */
+          const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
+          let k = -1;
+          for (let i = 0; i + 3 < cards.length; i++) {
+            if (hcPt(cards[i]).y > 150) { k = i; break; }
+          }
+          if (k < 0) throw new Error('setup: no card with three more below it on screen');
+          const want = [cards[k], cards[k + 1], cards[k + 2]].map(function (c) { return c.dataset.pid; });
+          const pA = hcPt(cards[k], 70), pC = hcPt(cards[k + 2], 70), end = pC.y + 20;
+          if (end > 640) throw new Error('setup: the third card is at y ' + pC.y + ', too low for the slide');
+          const top0 = cards[k].getBoundingClientRect().top;
+          const moves = [];
+          for (let s = 1; s <= 12; s++) moves.push({ t: 'touchMove', x: pA.x, y: Math.round(pA.y + (end - pA.y) * s / 12), ms: 35 });
+          await realInput924([{ t: 'touchStart', x: pA.x, y: pA.y, ms: 650 }].concat(moves).concat([{ t: 'touchMove', x: pA.x, y: end, ms: 250 }, { t: 'touchEnd', x: pA.x, y: end, ms: 0 }]),
+            'a hold on a card, then a slide down over two more');
+          await sleep(500);
+          const st = FM.home._selectionState();
+          if (!st.selectMode) throw new Error('holding a card with a real finger for 650 ms did not turn Select on');
+          const got = want.filter(function (id) { return st.selected.indexOf(id) >= 0; });
+          if (got.length < 3) throw new Error('CONTROL: the hold and slide ticked only ' + got.length + ' of the 3 cards the finger went over (' + want.map(ha7Name).join(', ') + ')');
+          const extra = st.selected.filter(function (id) { return want.indexOf(id) < 0; });
+          const live = hcCard(want[0]), jump = live ? Math.round(top0 - live.getBoundingClientRect().top) : 0;
+          if (extra.length || Math.abs(jump) > 2) {
+            throw new Error('with ' + FM.projects.list().length + ' projects he held ' + ha7Name(want[0]) + ' until Select came on, slid the same finger down over ' + ha7Name(want[1]) + ' and lifted it on ' + ha7Name(want[2]) +
+              (extra.length ? ' — and ' + extra.length + ' more project(s) his finger never reached got ticked too (' + extra.map(ha7Name).join(', ') + ')' : '') +
+              '. When Select came on every card jumped ' + jump + ' px up under his finger' + (document.querySelector('#home-screen .hm-grid > .hm-note') ? '' : ' (the You have N projects note left the top of the list)') +
+              ', so the slide runs from a different card than the one he held, and the next Delete takes what it passed');
+          }
+        }, 380);
+      });
+    } finally {
+      await ha7Done(ids, orig, wasOpen);
+    }
+  });
+
+  test('690 Save project file on another project from Home writes that project and leaves the open one alone — its undo, playhead, selection, and the other card picture', { item: '690', budgetMs: 120000 }, async function () {
+    /* ⋯ → Save project file… on a card that is NOT the open project used to open that project (keepOpen), save it, and
+       then open his own project again with FM.projects.open — a full reload. The reload reset his undo history, put the
+       playhead back to 0 and dropped his selection; and the switch away re-took the other project's card picture at
+       time 0, where its clip has not started yet. He only asked for a backup file. Fixed: FM.storage.exportProjectFile
+       writes it from the stored project and opens nothing. Driven with a real mouse at 1280. The download link is
+       caught (nothing is saved to disk) and the file READ — the CONTROL is that it is the other project, whole. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const mk = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+    const blobs = [], files = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const b = await FM.projects.create({ name: 'HUNTa7 Backup me', width: 320, height: 240 }); made.push(b);
+      const lb = hcShape('HUNTa7 late box', '#2a9d8f');
+      lb.start = 1; lb.duration = 2; FM.refreshAll(); FM.history.commit();
+      FM.setTime(1.5); await sleep(120);
+      FM.projects.touchCurrent(true);
+      if (!FM.storage.flushSync()) throw new Error('setup: HUNTa7 Backup me could not be saved');
+      const thumb0 = await FM.projects.getThumb(b);
+      if (!thumb0) throw new Error('setup: HUNTa7 Backup me has no card picture');
+      const a = await FM.projects.create({ name: 'HUNTa7 Working on', width: 320, height: 240 }); made.push(a);
+      const la = hcShape('HUNTa7 title', '#e76f51');
+      la.x = 220; FM.refreshAll(); FM.history.commit();   // a move he can take back
+      if (!FM.history.canUndo()) throw new Error('setup: HUNTa7 Working on has nothing to undo');
+      if (!FM.storage.flushSync()) throw new Error('setup: HUNTa7 Working on could not be saved');
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          /* The playhead and the selection are set AT the width he works at: widening the frame to 1280 puts the
+             playhead back to 0 by itself (a resize, not this bug), so set before it they would measure the resize. */
+          await sleep(300);
+          FM.selectLayer(la.id); FM.setTime(1.2); await sleep(400);
+          if (Math.abs((FM.time || 0) - 1.2) > 0.01 || FM.scene.selectedId !== la.id) throw new Error('setup: the playhead (' + FM.time + ') or the selection did not stay where the test put them before Home opened');
+          FM.home.open(); await sleep(1500);
+          const sc = ha7Scroll(); if (sc) sc.scrollTop = 0;
+          await sleep(150);
+          URL.createObjectURL = function (bl) { const u = mk.call(URL, bl); if (bl instanceof Blob) blobs.push({ url: u, blob: bl }); return u; };
+          HTMLAnchorElement.prototype.click = function () { if (this.download) { const h = this.href; files.push({ name: this.download, blob: (blobs.filter(function (x) { return x.url === h; })[0] || {}).blob || null }); return; } return realClick.call(this); };
+          const card = hcCard(b), more = card && card.querySelector('.hm-card-more');
+          if (!more) throw new Error('setup: HUNTa7 Backup me has no card with a ⋯ on Home');
+          await hcMouse(more, 'a click on the ⋯ of HUNTa7 Backup me');
+          const item = await hcMenuItem(/^Save project file/);
+          await hcMouse(item, 'a click on Save project file…');
+          await hcUntil('the file to be written and his own project to be open', function () { return files.length && FM.projects.currentId() === a; }, 10000);
+          await sleep(1500);
+        }, 1280);
+      });
+      URL.createObjectURL = mk; HTMLAnchorElement.prototype.click = realClick;
+      const f = files[0];
+      let doc = null; try { doc = JSON.parse(await f.blob.text()); } catch (e) { doc = null; }
+      const names = doc && Array.isArray(doc.layers) ? doc.layers.map(function (l) { return l.name; }) : [];
+      if (files.length !== 1 || !doc || f.name !== 'HUNTa7 Backup me.fmotion.json' || doc.project.name !== 'HUNTa7 Backup me' || names.join() !== 'HUNTa7 late box') {
+        throw new Error('CONTROL: Save project file… on HUNTa7 Backup me wrote ' + files.length + ' file(s): ' + files.map(function (x) { return x.name; }).join(', ') + (doc ? ' — project ' + doc.project.name + ' with layers [' + names.join(', ') + ']' : ' that could not be read'));
+      }
+      if (!FM.home.isOpen()) throw new Error('setup: Home closed during Save project file…');
+      const thumb1 = await FM.projects.getThumb(b);
+      const bad = [];
+      if (!FM.history.canUndo()) bad.push('Undo has nothing left to take back — the move he made just before going Home is gone from his history');
+      if (Math.abs((FM.time || 0) - 1.2) > 0.01) bad.push('the playhead is at ' + (FM.time || 0).toFixed(2) + ' s instead of 1.20 s where he left it');
+      if (FM.scene.selectedId !== la.id) bad.push('the layer he had selected is no longer selected');
+      if (thumb1 !== thumb0) bad.push('and the HUNTa7 Backup me card, which he only backed up, now shows its first frame, an empty background, instead of the picture it had');
+      if (bad.length) {
+        throw new Error('he was working in HUNTa7 Working on, went Home and used ⋯ → Save project file… on another project, HUNTa7 Backup me, to back it up. His own project, still open behind Home: ' + bad.join('; ') +
+          '. Backing up the other file quietly closed his project and loaded it again from disk');
+      }
+    } finally {
+      URL.createObjectURL = mk; HTMLAnchorElement.prototype.click = realClick;
+      await ha7Done(made, orig, wasOpen);
+    }
+  });
+
+  test('690 Duplicate or Rename on a project down his long list brings the card into view where it went — it no longer looks like nothing happened', { item: '690', budgetMs: 120000 }, async function () {
+    /* The list is sorted by last edit and both actions make the card brand new: Duplicate lists the copy first, and
+       Rename bumps the edit time. With the list scrolled down to the project he chose, the result used to land above
+       the screen; Duplicate only ever said Duplicating…, and the renamed card simply vanished from where he was
+       looking. Fixed: js/home.js revealCard scrolls the list to the card and outlines it for a moment. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ids = ha7Seed(62, 'HUNTa7 far');
+    try {
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          FM.home.open(); await sleep(1000);
+          const sc = ha7Scroll();
+          const bringTo = async function (id) {
+            const c = hcCard(id); if (!c) throw new Error('setup: ' + ha7Name(id) + ' has no card on Home');
+            sc.scrollTop += c.getBoundingClientRect().top - 260; await sleep(300);
+            const r = hcCard(id).getBoundingClientRect();
+            if (r.top < 200 || r.bottom > 520) throw new Error('setup: could not scroll ' + ha7Name(id) + ' into the middle of the screen (top ' + Math.round(r.top) + ')');
+            return hcCard(id);
+          };
+          const tapMenu = async function (id, re, what) {
+            const card = await bringTo(id);
+            await realInput924(hcTap(hcPt(card.querySelector('.hm-card-more'))), 'a tap on the ⋯ of ' + ha7Name(id));
+            const it = await hcMenuItem(re);
+            await realInput924(hcTap(hcPt(it, 30)), 'a tap on ' + what);
+          };
+          /* Duplicate */
+          const src = ids[38], srcName = ha7Name(src);
+          await tapMenu(src, /^Duplicate$/, 'Duplicate');
+          const copy = await hcUntil('the copy to be made', function () { return FM.projects.list().find(function (p) { return p.name === srcName + ' copy'; }); }, 8000);
+          ids.push(copy.id);
+          await hcUntil('the copy card on Home', function () { return hcCard(copy.id); }, 3000);
+          await sleep(2200);   // the list glides to the copy — about a second for 4,000 px — so wait past it
+          const bad = [];
+          const cc = hcCard(copy.id);
+          if (!ha7Seen(cc)) {
+            const above = Math.round(ha7Scroll().getBoundingClientRect().top - cc.getBoundingClientRect().bottom);
+            bad.push('he scrolled down to ' + srcName + ' and pressed ⋯ → Duplicate: the copy, ' + srcName + ' copy, went to the top of the list, ' + (above > 0 ? above + ' px above' : 'off') + ' the screen he was looking at, and the only message was Duplicating… — so to him Duplicate did nothing, and the obvious next move is to press it again and make a second copy');
+          }
+          /* Rename */
+          const ren = ids[44], renName = ha7Name(ren);
+          await tapMenu(ren, /^Rename/, 'Rename…');
+          const inp = await hcUntil('the Rename box', function () { const a = document.getElementById('fm-ask'); return a && !a.classList.contains('hidden') && a.querySelector('input.fm-ask-input'); }, 3000);
+          inp.value = renName + ' final'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(300);
+          await realInput924(hcTap(hcPt(document.querySelector('#fm-ask .fm-ask-ok'))), 'a tap on Rename');
+          await hcUntil('the new name', function () { return ha7Name(ren) === renName + ' final'; }, 4000);
+          await sleep(2200);
+          if (!ha7Seen(hcCard(ren))) bad.push('he renamed ' + renName + ' to ' + renName + ' final from its ⋯ and the card vanished from where he was looking — it went to the top of the list, off screen, and nothing said where');
+          if (bad.length) throw new Error('with ' + FM.projects.list().length + ' projects on Home: ' + bad.join('; also, ') + '.');
+        }, 380);
+      });
+    } finally {
+      await ha7Done(ids, orig, wasOpen);
+    }
+  });
+
 })();
