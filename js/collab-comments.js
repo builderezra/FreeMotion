@@ -290,7 +290,9 @@ window.FM = window.FM || {};
        it — Edit and Delete could not be reached at all, and "Let in" took two taps. `cc-open` lifts those
        three above it (styles.css), still under FM.ask (3200). */
     document.body.classList.add('cc-open');
-    scrim.addEventListener('pointerdown', function (e) { if (e.target === scrim) CM.close(); });
+    let downOnScrim = false;   // queue 944: close on the CLICK of a press that began on the backdrop — see js/collab-ui.js openCard
+    scrim.addEventListener('pointerdown', function (e) { downOnScrim = e.target === scrim; });
+    scrim.addEventListener('click', function (e) { if (e.target === scrim && downOnScrim) CM.close(); downOnScrim = false; });
     card._esc = function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); CM.close(); } };
     window.addEventListener('keydown', card._esc, true);
     drawComposer();

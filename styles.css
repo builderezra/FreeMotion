@@ -10294,6 +10294,10 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .collab-people.cp-hidden { display: none; }
 body.text-editing .collab-people { display: none; }
 @media (max-width: 700px) { body.sel-mode .collab-people { display: none; } }
+/* queue 944 — ON PC THE CHIP DOES NOT OFFER AN INVITE. His words: "On PC, get rid of the little plus at the top left to add friends.
+   There's already another button for on PC". Alone, the chip is only an invite (+ and a person), and on a desktop the Share button
+   beside Export already is one. With people in the room it shows their faces, and that stays. */
+@media (min-width: 701px) { #collab-people.cp-invite { display: none; } }
 .collab-people .cp-av {
   position: relative; flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
   display: grid; place-items: center; background: var(--peer); color: #0b0d12;

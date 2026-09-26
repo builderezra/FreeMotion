@@ -14057,89 +14057,7 @@
     });
   });
 
-  test('figures: person and woman are the same figure below the neck', { item: 'figure-shapes' }, function () {
-    // They appear side by side in the picker and in a project. Before v5.90 they shared only a head:
-    // her shoulders were 0.69x his and her legs 0.62x his.
-    const p = figStats('person', 512, 512), w = figStats('woman', 512, 512);
-    const same = (a, b, tol, what) => {
-      if (Math.abs(a - b) > tol) throw new Error('the pair disagree on ' + what + ': person ' + a + ' vs woman ' + b + ' px (tolerance ' + tol + ')');
-    };
-    same(p.H, w.H, 1, 'total height');
-    same(p.headH, w.headH, 1, 'head height');
-    same(p.headW, w.headW, 1, 'head width');
-    same(p.neckGap, w.neckGap, 1, 'the neck gap');
-    /* Read across the ARMS and across the CHEST, not at the shoulder line. The shoulder line is now
-       the steepest part of the silhouette — it slopes from 0.150 to 0.227 of figure height in under
-       0.072 of it — so a one-pixel difference in where the neck gap is judged to end moves the reading
-       by several pixels and the two figures disagree while being identical by construction. Measured
-       at 512px: 172 vs 165 for geometry that comes from the same builder. Both numbers below are read
-       on flat stretches. */
-    same(p.armSpanW, w.armSpanW, 3, 'width across the arms');
-    same(p.chestW, w.chestW, 3, 'chest width');
-    same(p.legW, w.legW, 3, 'leg thickness');
-    same(p.legGap, w.legGap, 3, 'the gap between the legs');
-  });
 
-  test('figures: pictogram proportions — 1:6–1:7 head, legs, shoulders, and a torso that only tapers', { item: 'figure-shapes' }, function () {
-    const p = figStats('person', 512, 512), w = figStats('woman', 512, 512);
-    [p, w].forEach(function (s) {
-      if (!(s.headsPerHeight >= 6 && s.headsPerHeight <= 7)) {
-        throw new Error(s.kind + ' is 1:' + s.headsPerHeight.toFixed(2) + ' heads tall — outside the 1:6–1:7 pictogram band');
-      }
-      /* THE 1.7–2.3 SHOULDER RULE IS GONE, AND ITS REPLACEMENT WAS DELETED TOO — read this before
-         adding another one (queue 435).
-         It used to read "shoulders 1.7–2.3 head-widths" and it measured the BODY's shoulder, because
-         the arms began just below the shoulder line and reached WIDER: 0.300H of shoulder with arms out
-         at 0.454H. That is exactly what put a dark notch at each shoulder — an arm wider than the
-         shoulder it hangs from has to slope back IN to meet it — and at 220px the figure read as a coat
-         hanger, two slabs laid on a torso. The fix makes the shoulder as wide as the arms, so the two
-         measurements are now necessarily equal and the old band would contradict the 2.5–3.3 arm-span
-         rule below.
-         The obvious replacement — "the shoulder line must be as wide as the arm span" — was written,
-         and then MUTATION-TESTED AND DELETED, because it cannot see its own defect: `shoulderW` is
-         sampled 0.012H below the top of the body, by which point the arms are already in the row, so
-         narrowing the shoulder or dropping the arms lower both leave the two numbers identical. It
-         passed while the geometry was broken.
-         A notch is not a row-width change at all. Both the old shape and the new one widen
-         monotonically from neck to arm; what differs is HOW the outer edge gets there — gradually, or
-         in a step whose inner corner reads as a nick. Row widths cannot tell those apart, so **this one
-         is verified by RENDER (tests/_people.html) and not by the suite**, and saying so is worth more
-         than a green assertion that proves nothing. What the suite does still hold is everything that
-         IS measurable: the 24px legibility bar, the pair staying distinct, the chest rule below (which
-         carries the original "the head is as wide as the body" intent), and the arm-span band. */
-      /* And the arms have to stay arms. Under about 2.5 they are tucked so close that the armpit dies
-         at picker size — the fault three judges kept naming; over about 3.3 the figure is doing a lat
-         spread. The shipped pair sits at 3.0. */
-      if (!(s.chestW / s.headW >= 0.9 && s.chestW / s.headW <= 1.6)) {
-        throw new Error(s.kind + "'s chest is " + (s.chestW / s.headW).toFixed(2) + ' head-widths (want 0.9–1.6) — too narrow and the arms have eaten the torso, too wide and there is no room for an armpit');
-      }
-      if (!(s.armSpanW / s.headW >= 2.5 && s.armSpanW / s.headW <= 3.3)) {
-        throw new Error(s.kind + ' measures ' + (s.armSpanW / s.headW).toFixed(2) + ' head-widths across the arms (want 2.5–3.3) — under that the arms have closed against the body, over it they are held out like a lat spread');
-      }
-      if (!(s.legLenFrac >= 0.35)) throw new Error(s.kind + "'s legs are " + (100 * s.legLenFrac).toFixed(1) + '% of height — under 35% the figure reads squat');
-      if (!(s.neckGap >= 2)) throw new Error(s.kind + "'s head is touching the shoulders (" + s.neckGap + 'px of neck)');
-    });
-    // his silhouette must TAPER to the hip and must never widen on the way down…
-    if (!(p.hipW < p.shoulderW * 0.92)) throw new Error('person: hips ' + p.hipW + 'px under shoulders ' + p.shoulderW + 'px — that is a fridge, not a torso (want at least 8% of taper)');
-    /* The hip nick, still watched for — but BELOW the arms, which is the only stretch where the outer
-       silhouette is the torso. Above it the silhouette is the arms, and their ending is a legitimate
-       step, not a nick. His hip does widen a little under his wrist and that is a hip: what this
-       catches is the concave undercut that put a 26px notch in the old silhouette. */
-    if (p.wristY > 0 && p.dirBelowArms !== 0) throw new Error('person: below the arms the silhouette narrows and then widens again (' + p.dirBelowArms + ' direction change(s), worst rebound ' + p.reboundPx + 'px) — that is the hip nick');
-    if (p.wristY < 0) throw new Error('person: no wrist step found, so the figure has no arms — queue 160 asked for arms on both figures');
-    /* …and hers flares, cleanly and once. Read below the arms for the same reason as his: the narrowing
-       this test used to watch for — shoulder down to a waist — is now behind the arms, because her
-       chest is the same narrow 0.090H his is. What is left to check below the wrist is that the dress
-       opens out and does not wobble on the way.
-       And the flare has to CLEAR the arms. That is the whole reason the hem was widened from 0.205 to
-       0.258 when the arms went on: with the arms as the widest thing on both figures, "the arms mask
-       exactly the taper that carried the gender read" and the man and the woman converge into the same
-       shape at the size the picker draws. Her skirt being the widest thing about her is what keeps the
-       pair apart, so it is asserted rather than left to the eye. */
-    if (w.wristY > 0 && w.dirBelowArms !== 0) throw new Error('woman: the dress outline changes direction ' + w.dirBelowArms + ' time(s) below the arms — a pictogram dress flares once, cleanly');
-    if (!(w.W > w.armSpanW + 4)) throw new Error('woman: her widest point is ' + w.W + 'px against ' + w.armSpanW + 'px across the arms — the hem no longer clears the arms, so she and the man converge into the same silhouette');
-    if (!(w.W > p.W)) throw new Error('woman: she is ' + w.W + 'px at her widest and the man is ' + p.W + 'px — the pair no longer read as different figures');
-  });
 
   test('figures: both are mirror-symmetric to within a pixel', { item: 'figure-shapes' }, function () {
     ['person', 'woman'].forEach(function (kind) {
@@ -14149,18 +14067,6 @@
     });
   });
 
-  test('figures: still legible at 24 and 48px — head off the shoulders, legs apart, no holes', { item: 'figure-shapes' }, function () {
-    // The documented failure: at 24px person measured ONE ink run at the feet — a solid black column.
-    [24, 48].forEach(function (n) {
-      ['person', 'woman'].forEach(function (kind) {
-        const s = figStats(kind, n, n);
-        if (!(s.ink > n * n * 0.1)) throw new Error(kind + ' at ' + n + 'px is almost blank: ' + s.ink + ' ink pixels');
-        if (s.components !== 2) throw new Error(kind + ' at ' + n + 'px renders ' + s.components + ' components — a pictogram is exactly 2 (head, body+legs), so the head has fused to the shoulders');
-        if (s.holes !== 0) throw new Error(kind + ' at ' + n + 'px has ' + s.holes + ' enclosed hole(s) — the nonzero union of the parts has broken');
-        if (s.legRuns90 !== 2) throw new Error(kind + ' at ' + n + 'px has ' + s.legRuns90 + ' ink run(s) across the legs — they have merged into one column');
-      });
-    });
-  });
 
   test('shape tiles keep their big icons; only the labelled cards are trimmed', { item: 'shape-icon-size' }, function () {
     // v5.05. Trimming the Elements grid's cards used a 4-class selector, which outranks the shape
@@ -56218,76 +56124,6 @@
    *   · and an arm must not be a hole. Mirroring by sign flips the winding, and under nonzero fill a
    *     backwards arm is cut THROUGH the torso as a slot. That really happened, on the first render. */
 
-  test('the person and woman shapes have arms, and the two do not converge (queue 160)', { item: 'picto-arms' }, function () {
-    function ink(kind, s) {
-      const cell = Math.round(s * 24 / 18), off = (cell - s) / 2;
-      const c = document.createElement('canvas'); c.width = c.height = cell;
-      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.beginPath();
-      FM.traceShapePath(x, { type: 'shape', shape: kind }, off, off, s, s, 0); x.fill();
-      return { d: x.getImageData(0, 0, cell, cell).data, cell: cell, off: off, s: s };
-    }
-    const fOf = (g, y) => ((y - g.off) / g.s - 0.005) / 0.98;      // canvas row → fraction of figure height
-    const yOf = (g, f) => Math.round(g.off + (0.005 + f * 0.98) * g.s);
-    const lit = (g, x, y) => g.d[(y * g.cell + x) * 4 + 3] > 128;  // over half covered counts as ink
-    function armpit(kind, s) {
-      const g = ink(kind, s), w = [];
-      for (let y = yOf(g, 0.32); y <= yOf(g, 0.42); y++) {
-        let a = -1, b = -1;
-        for (let x = 0; x < g.cell; x++) if (lit(g, x, y)) { if (a < 0) a = x; b = x; }
-        if (a < 0) continue;
-        let run = 0, best = 0;
-        for (let x = a; x <= b; x++) { if (!lit(g, x, y)) { run++; if (run > best) best = run; } else run = 0; }
-        w.push(best);
-      }
-      w.sort(function (m, n) { return m - n; });
-      return w.length ? w[Math.floor(w.length / 2)] : 0;
-    }
-    function widest(kind, s) {
-      const g = ink(kind, s); let best = 0, atF = 0;
-      for (let y = 0; y < g.cell; y++) {
-        let a = -1, b = -1;
-        for (let x = 0; x < g.cell; x++) if (lit(g, x, y)) { if (a < 0) a = x; b = x; }
-        if (a < 0) continue;
-        if (b - a + 1 > best) { best = b - a + 1; atF = fOf(g, y); }
-      }
-      return { px: best, atF: atF };
-    }
-
-    /* 51px is the picker on a DPR-2 screen and 76 on his phone; 2px is the floor three judges asked
-       for. The shipped pair measures 3 and 4. */
-    ['person', 'woman'].forEach(function (kind) {
-      [[51, 2], [76, 3]].forEach(function (pair) {
-        const got = armpit(kind, pair[0]);
-        if (got < pair[1]) throw new Error(kind + ' at ' + pair[0] + 'px: the armpit is ' + got + 'px of clear background — the arms have closed up against the body, which is the fault every judge named');
-      });
-    });
-
-    // The divergence guarantee. His widest is the ARMS, in the upper third; hers is the HEM, low down.
-    const m = widest('person', 128), w = widest('woman', 128);
-    if (!(m.atF < 0.45)) throw new Error('the man is widest at ' + m.atF.toFixed(2) + ' of his height — that is hip level, and a man who flares at the hip is the woman\'s silhouette');
-    if (!(w.atF > 0.50)) throw new Error('the woman is widest at ' + w.atF.toFixed(2) + ' of her height — her skirt is no longer the widest thing about her, so the pair converges at picker size');
-    if (!(w.px > m.px)) throw new Error('the woman (' + w.px + 'px) is no wider than the man (' + m.px + 'px) at her widest — the hem has stopped clearing the arms');
-
-    /* An arm must be ADDED, not cut out — asserted on the winding, not on a pixel.
-       The first version of this sampled the middle of the left arm and was DEAD: reversing the mirrored
-       arm's winding leaves most of the arm filled and only voids the sliver where it OVERLAPS the
-       torso, which is 0.005 of figure height wide. The mutation ran green and the assertion proved
-       nothing — caught by mutation-checking it, not by reading it.
-       The real invariant is the one the compositor states: "every body here winds clockwise, so a hole
-       must wind anticlockwise". Neither figure has a hole, so every subpath must share one sign. */
-    const area = function (poly) {
-      let a = 0;
-      for (let i = 0; i < poly.length; i++) { const q = poly[i], r = poly[(i + 1) % poly.length]; a += q[0] * r[1] - r[0] * q[1]; }
-      return a;
-    };
-    ['person', 'woman'].forEach(function (kind) {
-      const polys = FM.SHAPE_POLYS[kind];
-      if (polys.length !== 6) throw new Error(kind + ' is built from ' + polys.length + ' parts — a figure with arms is 6: head, torso, two legs, two arms');
-      const signs = polys.map(function (p) { return Math.sign(+area(p).toFixed(6)); });
-      const odd = signs.findIndex(function (g) { return g !== signs[0]; });
-      if (odd >= 0) throw new Error(kind + ': part ' + odd + ' winds against the rest of the figure — under nonzero fill that part is a HOLE cut through the shape rather than a piece added to it, which is what a mirrored polygon does if its point order is not reversed with it');
-    });
-  });
 
   /* ---------------- queue 275: the mobile shapes menu scrolled up and down ----------------
    * "on mobile the shapes menu has like a thing where you can scroll up and down but it shouldn't have
@@ -65122,68 +64958,6 @@
     }
   });
 
-  test('the two people pictograms survive 24px, and still tell each other apart there', { item: '435' }, function () {
-    /* Queue 435. His words: "The people shapes look awful, make sure when you try and fix them you use
-       a workflow, and make sure they actually have arms, reference photos online."
-       They already HAVE arms (queue 160) — what is wrong is that they do not read as arms — so the
-       redesign is a matter of taste, and this test is the part that is NOT: whatever the silhouette
-       becomes, four things have to survive being shrunk to the icon size, and each is a way a pictogram
-       dies that you cannot see by looking at it big.
-       ⚠️ MEASURED at v10.74 (tests/_pictolegible.html) BEFORE any redesign, so this pins what already
-       worked rather than only what changed: neck gap, leg gap and two open armpits held at every size
-       from 24px up — but at 24px the woman measured IDENTICALLY to the man (both 12x24, widest 10px at
-       21% down). Her skirt does not survive the smallest size, so at the icon size the pair converges
-       into one shape. That last assertion is the one that fails today’s art, and it is deliberate. */
-    if (!FM.traceShapePath) throw new Error('FM.traceShapePath is missing');
-    const PX = 24;
-    const shot = function (kind) {
-      const c = document.createElement('canvas'); c.width = PX; c.height = PX;
-      const g = c.getContext('2d');
-      g.clearRect(0, 0, PX, PX);
-      FM.traceShapePath(g, { shape: kind }, 0, 0, PX, PX);
-      g.fillStyle = '#fff'; g.fill('nonzero');
-      const d = g.getImageData(0, 0, PX, PX).data;
-      const on = (x, y) => d[(y * PX + x) * 4 + 3] > 100;
-      const inkRow = y => { let n = 0; for (let x = 0; x < PX; x++) if (on(x, y)) n++; return n; };
-      let t = -1, b = -1;
-      for (let y = 0; y < PX; y++) if (inkRow(y)) { if (t < 0) t = y; b = y; }
-      if (t < 0) throw new Error('the "' + kind + '" shape drew nothing at ' + PX + 'px');
-      const h = b - t + 1;
-      // gaps in a row = background runs with ink on both sides
-      const gaps = y => {
-        const out = []; let run = -1, seen = false;
-        for (let x = 0; x < PX; x++) {
-          if (on(x, y)) { if (run >= 0 && seen) out.push(x - run); run = -1; seen = true; }
-          else if (run < 0) run = x;
-        }
-        return out;
-      };
-      let wMax = 0, wAt = t;
-      for (let y = t; y <= b; y++) { const w = inkRow(y); if (w > wMax) { wMax = w; wAt = y; } }
-      // a clean neck: some row between the head and the shoulders with no ink at all
-      let neck = false;
-      for (let y = t + 1; y < b; y++) { if (inkRow(y) === 0) { neck = true; break; } }
-      return {
-        kind: kind, t: t, b: b, h: h,
-        neck: neck,
-        legGap: gaps(Math.round(t + h * 0.95)).filter(n => n >= 1).length,
-        armpits: gaps(Math.round(t + h * 0.32)).length,
-        widestAt: (wAt - t) / h,
-        widest: wMax,
-      };
-    };
-    const man = shot('person'), woman = shot('woman');
-    [man, woman].forEach(function (f) {
-      if (!f.neck) throw new Error('at ' + PX + 'px the "' + f.kind + '" head has fused into the shoulders — there is no clear row between them');
-      if (!f.legGap) throw new Error('at ' + PX + 'px the "' + f.kind + '" legs have merged into one column — the gap between them closed');
-      if (f.armpits < 2) throw new Error('at ' + PX + 'px the "' + f.kind + '" has ' + f.armpits + ' open armpit(s) instead of 2 — the arms have merged into the torso, which is the "it has no arms" read');
-    });
-    /* AND THE PAIR MUST STILL BE A PAIR. What separates them is WHERE the figure is widest: his
-       shoulders and arms up top, her hem down low. At 24px today they measure the same. */
-    const sep = Math.abs(man.widestAt - woman.widestAt);
-    if (sep < 0.2) throw new Error('at ' + PX + 'px the man is widest ' + Math.round(man.widestAt * 100) + '% down and the woman ' + Math.round(woman.widestAt * 100) + '% down — only ' + Math.round(sep * 100) + ' points apart, so at the icon size the two shapes converge into one blob');
-    if (woman.widestAt < man.widestAt) throw new Error('the woman is widest ' + Math.round(woman.widestAt * 100) + '% down and the man ' + Math.round(man.widestAt * 100) + '% down — her hem should be the lowest wide point, not his shoulders');
-  });
 
   test('tapping a position number opens the editor on the FIRST tap', { item: 'position-tap-type' }, async function () {
     /* Queue 414. Ezra: "The buttons that show a number for the position should be able to be tapped on and
@@ -83811,38 +83585,6 @@
     }
   });
 
-  test('760: the people are the round-two construction — rounded shoulders, an open armpit channel, a hem that clears his widest point — and both render', { item: '760', budgetMs: 30000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const P = FM.SHAPE_POLYS && FM.SHAPE_POLYS.person, W = FM.SHAPE_POLYS && FM.SHAPE_POLYS.woman;
-    if (!P || !W) throw new Error('no person/woman outlines');
-    if (P.length !== 6 || W.length !== 6) throw new Error('person has ' + P.length + ' and woman ' + W.length + ' subpaths — head, torso/dress, two legs, two arms is six each (queue 760 clause 3)');
-    const xs = poly => poly.map(q => q[0]);
-    const torsoMaxX = Math.max(...xs(P[1]).filter((x, i) => P[1][i][1] > 0.35));   // the chest below the shoulder slab
-    const armMinX = Math.min(...xs(P[5]));
-    if (!(armMinX - torsoMaxX >= 0.06)) throw new Error('the armpit channel is ' + (armMinX - torsoMaxX).toFixed(3) + ' of the box — under 0.06 it closes at 24px, the "it has no arms" read');
-    const hemMax = Math.max(...xs(W[1])), hipMax = Math.max(...xs(P[1]));
-    if (!(hemMax - hipMax >= 0.06)) throw new Error('her hem (' + hemMax + ') does not clear his widest (' + hipMax + ') — the two converge at 24px');
-    if (!(P[1][0][1] > 0.2 && P[0].length >= 10)) throw new Error('the head is not a smooth circle above a neck gap');
-    const saved = FM.scene, savedSel = FM.scene.selectedId;
-    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
-    try {
-      if (hadHome) FM.home.close();
-      FM.scene = scene([], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
-      if (FM.pause) FM.pause(); FM.setTime(0);
-      FM.addShapeLayer('person', { name: 'Person' }); FM.addShapeLayer('woman', { name: 'Woman' }); await sleep(120);
-      const cv = document.createElement('canvas'); cv.width = 270; cv.height = 480;
-      const g = cv.getContext('2d', { willReadFrequently: true }); g.setTransform(0.25, 0, 0, 0.25, 0, 0);
-      FM.renderScene(g, FM.scene, 0.2);
-      const d = g.getImageData(0, 0, 270, 480).data; let ink = 0;
-      for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) ink++;
-      if (ink < 600) throw new Error('the two people render ' + ink + ' lit pixels at quarter size — the outlines exist and the compositor draws nothing for them');
-    } finally {
-      FM.scene = saved; FM.scene.selectedId = savedSel;
-      try { FM.refreshAll(); } catch (e) {}
-      if (hadHome && FM.home && FM.home.open) FM.home.open();
-      await sleep(60);
-    }
-  });
 
   test('606: the add-layer row grip is centred on the same x as the layer rows handles, bare and unboxed, at 380 and at his 440', { item: '606', budgetMs: 40000 }, async function () {
     /* v13.47 lined the add row's ≡ up with the layer rows' boxed ≡ and shipped without a test (tools/spotcheck.sh: NO TEST). This is
@@ -100807,6 +100549,102 @@
       try { delete swc.getRegistrations; } catch (e) {}
       lab.textContent = label0;
     }
+  });
+
+
+  /* ═══ QUEUE 944 — PC: NO SECOND INVITE BUTTON, AND THE SHARE BUTTON CLOSES WHAT IT OPENED ════════════════════════════════
+     Ezra, 26 Sep: *"On PC, get rid of the little plus at the top left to add friends. There's already another button for on PC
+     and also for some reason with that button when I click on it to open it and click on the same button again to close it, it
+     doesn't close it, it just reopens it"*. */
+  test('944 on PC the people chip offers no second invite — alone it is hidden beside the Share button, with people it shows them; on a phone it stays', { item: '944', budgetMs: 30000 }, async function () {
+    const stage = document.getElementById('stage');
+    if (!stage) throw new Error('setup: no stage');
+    let chip = document.getElementById('collab-people'), made = false;
+    if (!chip) { chip = document.createElement('button'); chip.id = 'collab-people'; chip.className = 'collab-people'; stage.appendChild(chip); made = true; }
+    const cls0 = chip.className;
+    try {
+      chip.className = 'collab-people cp-invite';
+      await atWideWidth(async function () {
+        if (getComputedStyle(chip).display !== 'none') throw new Error('on PC the people chip still shows its invite + at the top left of the preview — the Share button beside Export already invites; his words: get rid of the little plus at the top left');
+        chip.className = 'collab-people';
+        if (getComputedStyle(chip).display === 'none') throw new Error('control: on PC the chip with people in the room is hidden too — it must still show who is here');
+      }, 1280);
+      chip.className = 'collab-people cp-invite';
+      await atPhoneWidth(async function () {
+        if (getComputedStyle(chip).display === 'none') throw new Error('control: on a phone the chip invite is gone as well — the phone has no Share button beside Export, so the chip is its invite');
+      });
+    } finally { chip.className = cls0; if (made) chip.remove(); }
+  });
+
+  test('944 on PC a second click on the Share button closes the Share panel — it does not open it again', { item: '944', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(450); }
+    try {
+    await withLabs921(async function (ui) {
+      await atWideWidth(async function () {
+        await sleep(300);
+        const b = document.getElementById('btn-share');
+        if (!b || !b.getBoundingClientRect().width) throw new Error('setup: no Share button beside Export on PC with Labs on');
+        const open = () => !!document.querySelector('.collab-scrim .collab-card');
+        /* A click as the browser delivers it: the press goes to whatever is under the pointer when it lands, the click
+           to whatever is under it when it LIFTS — hit-tested again, after anything the press did. That second hit-test is
+           the whole bug: a backdrop that closes on the press is gone by the lift, so the click lands on the button. */
+        const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const press = function () {
+          const down = document.elementFromPoint(x, y);
+          down.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
+          down.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
+          const up = document.elementFromPoint(x, y);
+          (up || down).dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+          return { down: down, up: up };
+        };
+        const first = press();
+        if (first.down !== b && !b.contains(first.down)) throw new Error('setup: the first press did not land on the Share button (' + (first.down && (first.down.id || first.down.className)) + ')');
+        await hcUntil('the Share panel to open', open, 8000);
+        await sleep(450);   // past the entrance
+        press();   // on PC the button sits above the card's backdrop, so this press reaches the button itself
+        await sleep(700);
+        if (open()) throw new Error('on PC a second click on the Share button left the Share panel open — it shut on the press and opened again on the release (his words: it just reopens it)');
+        ui.close();
+      }, 1280);
+    });
+    } finally { if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200); }
+  });
+
+
+  /* ═══ QUEUE 929 — THE PEOPLE ARE THE AIRPORT SIGN HE PICKED ══════════════════════════════════════════════════════════════
+     His words, 26 Sep: *"Do the airport sign"* — A of three pairs traced from real pictograms (tools/design/929). These replace
+     the six tests that pinned the previous hand-built construction (six parts, the woman identical to the man below the neck),
+     which the AIGA pair deliberately is not. What they pin now is the sign itself and how it reads where it is shown, measured:
+     at 48px and up the head stands clear and the legs are apart; at 24px the head joins the shoulders (the sheet showed him
+     that); the woman's arm gap closes into a few pinholes under ~60px, which is the real sign's gap and is not asserted away. */
+  test('929 the people are the airport-sign pair — one head for both at about 1:6.4 of the height, and she is wider at the hem than he is anywhere', { item: '929' }, function () {
+    const P = FM.SHAPE_POLYS && FM.SHAPE_POLYS.person, W = FM.SHAPE_POLYS && FM.SHAPE_POLYS.woman;
+    if (!P || !W) throw new Error('the person or woman shape is missing');
+    if (P.length !== 2 || W.length !== 2) throw new Error('the people are not the airport-sign pair: ' + P.length + ' and ' + W.length + ' parts, where the sign he picked is a head and one body each');
+    if (JSON.stringify(P[0]) !== JSON.stringify(W[0])) throw new Error('the two do not share one head — the sign he picked draws the same head on both');
+    const span = function (poly) { let lo = 1, hi = 0, top = 1, bot = 0; poly.forEach(function (sp) { sp.forEach(function (q) { lo = Math.min(lo, q[0]); hi = Math.max(hi, q[0]); top = Math.min(top, q[1]); bot = Math.max(bot, q[1]); }); }); return { w: hi - lo, h: bot - top }; };
+    const head = span([P[0]]), man = span(P), her = span(W);
+    const ratio = man.h / head.h;
+    if (!(ratio >= 6 && ratio <= 7)) throw new Error('the head is 1:' + ratio.toFixed(2) + ' of the height — a pictogram reads between 1:6 and 1:7');
+    if (!(her.w > man.w + 0.03)) throw new Error('she is ' + her.w.toFixed(3) + ' wide and he is ' + man.w.toFixed(3) + ' — the dress no longer tells the pair apart');
+  });
+
+  test('929 the airport-sign people read cleanly where they are shown — head clear and legs apart at 48px and up, and both still draw at 24px', { item: '929' }, function () {
+    [48, 51, 96].forEach(function (n) {
+      ['person', 'woman'].forEach(function (k) {
+        const st = figStats(k, n, n);
+        if (st.components !== 2) throw new Error(k + ' at ' + n + 'px renders ' + st.components + ' pieces — at this size the head must stand clear of the shoulders (head, body)');
+        if (st.legRuns90 !== 2) throw new Error(k + ' at ' + n + 'px shows ' + st.legRuns90 + ' ink run(s) across the legs — they have merged into one column');
+      });
+    });
+    ['person', 'woman'].forEach(function (k) {
+      const st = figStats(k, 24, 24);
+      if (!(st.ink > 24 * 24 * 0.15)) throw new Error(k + ' at 24px is almost blank (' + st.ink + ' ink pixels)');
+    });
+    const p96 = figStats('person', 96, 96), w96 = figStats('woman', 96, 96);
+    if (!(w96.W > p96.W)) throw new Error('at 96px she is ' + w96.W + 'px wide and he is ' + p96.W + 'px — the pair no longer read as different figures');
   });
 
 })();

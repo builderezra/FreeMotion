@@ -13242,12 +13242,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        Drawn through FM.pointCtrl beside three alternatives (A as shipped, C rounded, D athletic) on tools/design/people760.html and
        decided under rule 16: say "people A / C / D" to change it. The PICTO builder above is no longer used by these two and is kept
        for the record of what was tried. */
-    S.person = [
-      [[0.5,0.02,1],[0.5375,0.03,1],[0.565,0.0575,1],[0.575,0.095,1],[0.565,0.1325,1],[0.5375,0.16,1],[0.5,0.17,1],[0.4625,0.16,1],[0.435,0.1325,1],[0.425,0.095,1],[0.435,0.0575,1],[0.4625,0.03,1]],   // head: Ø 0.15 of the box (1:6.4 of the figure)
-      [[0.3,0.23],[0.7,0.23],[0.735,0.255,1],[0.735,0.3],[0.6,0.3],[0.6,0.6],[0.4,0.6],[0.4,0.3],[0.265,0.3],[0.265,0.255,1]],   // torso: rounded shoulders over a 0.20 chest that does not taper (the arms hang beside it with a 0.07 channel)
-      [[0.4,0.58],[0.465,0.58],[0.465,0.985],[0.4,0.985]], [[0.535,0.58],[0.6,0.58],[0.6,0.985],[0.535,0.985]],   // legs: 0.065 each, a 0.07 gap, from 0.58 — 42% of the height
-      [[0.33,0.28],[0.33,0.55],[0.275,0.55],[0.265,0.525],[0.265,0.28]], [[0.67,0.28],[0.735,0.28],[0.735,0.525],[0.725,0.55],[0.67,0.55]],   // arms: straight down from under the shoulder to 0.55, above the hip line so the hips measure narrower than the shoulders, overlapping the slab so the union is one silhouette
-    ];
+    /* PEOPLE, ROUND THREE — THE AIRPORT SIGN (queue 929). His words, 26 Sep: *"Do the airport sign"*, choosing A of three
+       people traced from real published pictograms (tools/design/929: A the AIGA/US DOT symbol signs, public domain; B Mapbox
+       Maki, CC0; C Google Material, no arms), after his *"the human shapes are still bad. Make sure you reference other shapes
+       that you can find online"*. Traced by tools/design/929/build.py into this format (a point may carry its own tangent
+       handle as p[3], p[4]); the two drawn in the app are exactly the pair on the sheets he picked from. */
+    S.person = [[[0.5,0.01,1,0.0421,0.0],[0.5763,0.0863,1,0.0,0.0421],[0.5,0.1626,1,-0.0421,0.0],[0.4237,0.0863,1,0.0,-0.0421]],[[0.5876,0.1918,1,0.0568,0.0],[0.6905,0.2946,1,0.0,0.0568],[0.6905,0.5429,1,0.0,0.019],[0.6561,0.5773,1,-0.019,0.0],[0.6217,0.5429,1,0.0,-0.019],[0.6217,0.317],[0.5994,0.317],[0.5994,0.9456,1,0.0,0.0245],[0.555,0.99,1,-0.0245,0.0],[0.5106,0.9456,1,0.0,-0.0245],[0.5106,0.5773],[0.4894,0.5773],[0.4894,0.9456,1,0.0,0.0245],[0.445,0.99,1,-0.0245,0.0],[0.4006,0.9456,1,0.0,-0.0245],[0.4006,0.317],[0.3783,0.317],[0.3783,0.5429,1,0.0,0.019],[0.3439,0.5773,1,-0.019,0.0],[0.3095,0.5429,1,0.0,-0.019],[0.3095,0.2946,1,0.0,-0.0568],[0.4124,0.1918,1,0.0568,0.0]]];
     S.rocket = [[[0.5,0.02,1],[0.635,0.22,1],[0.645,0.45,1],[0.62,0.70],[0.38,0.70],[0.355,0.45,1],[0.365,0.22,1]],[[0.38,0.60],[0.38,0.82],[0.2,0.94],[0.3,0.66]],[[0.62,0.60],[0.7,0.66],[0.8,0.94],[0.62,0.82]],[[0.46,0.74],[0.54,0.74],[0.5,0.94]]];
     // woman: the SAME head, the SAME shoulders, the SAME arms and the SAME legs as `person` — see
     // PICTO. The only difference is the middle: her sides hold the chest width past the wrist and then
@@ -13260,12 +13260,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // is his arms above a narrow hip.
     // woman: the SAME head and arms as `person`; the body is the dress — shoulders to a straight hem below the wrist — with two legs
     // under it. Her hem (0.26–0.74) is wider than his hips (0.34–0.66) by 0.16 of the box, so the two stay apart at 24px.
-    S.woman = [
-      S.person[0],
-      [[0.3,0.23],[0.7,0.23],[0.735,0.255,1],[0.735,0.3],[0.6,0.3],[0.6,0.45],[0.81,0.62],[0.19,0.62],[0.4,0.45],[0.4,0.3],[0.265,0.3],[0.265,0.255,1]],   // the same shoulders and chest; the dress flares ONCE, from below her wrist (0.45) to a hem 0.62 wide at 0.62 — the widest thing on her, and her legs stay 38% of the height
-      [[0.4,0.62],[0.465,0.62],[0.465,0.985],[0.4,0.985]], [[0.535,0.62],[0.6,0.62],[0.6,0.985],[0.535,0.985]],   // her legs are his legs
-      [[0.33,0.28],[0.33,0.45],[0.275,0.45],[0.265,0.425],[0.265,0.28]], [[0.67,0.28],[0.735,0.28],[0.735,0.425],[0.725,0.45],[0.67,0.45]],   // her arms stop at 0.45, above the flare, so the channel under them stays open
-    ];
+    S.woman = [[[0.5,0.01,1,0.0421,0.0],[0.5763,0.0863,1,0.0,0.0421],[0.5,0.1626,1,-0.0421,0.0],[0.4237,0.0863,1,0.0,-0.0421]],[[0.5548,0.1918,1,0.0454,0.0],[0.6533,0.265,1,0.0131,0.0435],[0.7226,0.4951,1,0.0054,0.0179],[0.7,0.5372,1,-0.0179,0.0054],[0.658,0.5146,1,-0.0054,-0.0179],[0.5948,0.3047],[0.5722,0.3047],[0.6802,0.6755],[0.5847,0.6755],[0.5847,0.953,1,0.0,0.0205],[0.5477,0.99,1,-0.0205,0.0],[0.5106,0.953,1,0.0,-0.0205],[0.5106,0.6755],[0.4894,0.6755],[0.4894,0.953,1,0.0,0.0205],[0.4523,0.99,1,-0.0205,0.0],[0.4153,0.953,1,0.0,-0.0205],[0.4153,0.6755],[0.3198,0.6755],[0.4278,0.3047],[0.4052,0.3047],[0.342,0.5146,1,-0.0054,0.0179],[0.3,0.5372,1,-0.0179,-0.0054],[0.2774,0.4951,1,0.0054,-0.0179],[0.3467,0.265,1,0.0131,-0.0435],[0.4452,0.1918,1,0.0454,0.0]]];   // the AIGA woman — his pick A, the same sheet (queue 929)
     // stamp: perforated edge = semicircular notches cut INTO the square (one smooth point per notch),
     // with explicit corner points so the outline never overshoots the square
     S.stamp = [(function(){ const pts=[]; const bumps=4, r=0.05, c0=0.20, span=(0.80-0.20)/(bumps-1);

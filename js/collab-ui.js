@@ -134,7 +134,13 @@ window.FM = window.FM || {};
        and a tap looked like it did nothing (the S7 review fixed one row of this, Restore, and no others).
        While a card is up the toast is lifted above its scrim (styles.css `body.collab-card-open #toast`). */
     document.body.classList.add('collab-card-open');
-    scrim.addEventListener('pointerdown', function (e) { if (e.target === scrim && o.dismissable !== false) closeCard(); });
+    /* A tap outside closes the card ON CLICK, and only when the press began on the backdrop (queue 944) — the rule js/ask.js,
+       Notes and the ? sheet already follow. Closing on pointerdown handed the rest of the tap to whatever was underneath: a
+       second click on the Share button shut the card on the way down and opened it again on the way up. His words: "when I
+       click on it to open it and click on the same button again to close it, it doesn't close it, it just reopens it". */
+    let downOnScrim = false;
+    scrim.addEventListener('pointerdown', function (e) { downOnScrim = e.target === scrim; });
+    scrim.addEventListener('click', function (e) { if (e.target === scrim && downOnScrim && o.dismissable !== false) closeCard(); downOnScrim = false; });
     /* A modal owns Escape. Capture, like ask.js, because the editor's bare-key shortcuts do not check
        what has focus and Backspace deletes the selected layer. */
     card._esc = function (e) { if (e.key === 'Escape' && o.dismissable !== false) { e.preventDefault(); e.stopPropagation(); closeCard(); } };
@@ -3697,7 +3703,8 @@ window.FM = window.FM || {};
       b = el('button', 'btn icon-btn');
       b.id = 'btn-share';
       b.type = 'button';
-      b.addEventListener('click', function (e) { e.stopPropagation(); U.share(); });
+      // a second press on the button that opened the card CLOSES it (queue 944) — wherever the card sits
+      b.addEventListener('click', function (e) { e.stopPropagation(); if (card && card.isConnected) { closeCard(); return; } U.share(); });
     }
     const mode = at.stage ? 'stage' : 'bar';
     if (b._mode !== mode) {
