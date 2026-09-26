@@ -1257,11 +1257,48 @@ window.FM = window.FM || {};
    * can test is a warning that will be broken on the day it is needed. `null` in, `null` out: no note,
    * no message, and the caller does nothing.
    */
-  FM.staleShellNotice = function (ver) {
+  /* ⚠️ queue 690 (HUNT-d): THE NOTE SAYS THE WORKER ANSWERED FROM ITS COPY — NOT THAT THE COPY IS OLD.
+   * sw.js leaves it on every navigation it could not fetch, and a launch with NO SIGNAL is exactly that: a train,
+   * or Wi-Fi that does not reach the internet (navigator.onLine still true). The copy it serves is the last good
+   * load, which is nearly always the build he is running — so every offline launch said "that is why it looks old.
+   * Tap the version chip", about a build that was not old, and sent him to the one tap that deletes the offline
+   * copy (the chip, index.html — it now refuses to with no signal as well). It also meant the #306 diagnostic
+   * ("if this message appears, that was the cause") fired on every offline launch and blamed the worker falsely.
+   * Only the network can say whether the copy is old, so the network is ASKED before anything is said:
+   *   `net` absent        — the caller could not ask (the unit test): the #306 wording, as before.
+   *   `net.latest` null   — still no signal: say THAT, and nothing about old builds or the chip.
+   *   `net.latest` = ver  — the network is back and this IS the latest build: nothing is old, say nothing.
+   *   another version     — the network names a different build: the copy really is old, and the chip fixes it.
+   *   '' (a page naming no build) — it cannot be told, and "old" is never said without knowing: nothing. */
+  FM.staleShellNotice = function (ver, net) {
     if (!ver) return null;
     const which = (/^v\d/.test(ver)) ? ver : 'an older build';
+    if (net && net.latest === null) {
+      return 'No signal — FreeMotion opened from its offline copy' + (/^v\d/.test(ver) ? ' (' + ver + ')' : '') +
+             '. Everything still saves on this phone.';
+    }
+    if (net && !(/^v\d/.test(net.latest || '') && net.latest !== ver)) return null;
     return 'Your connection dropped on refresh, so FreeMotion loaded ' + which +
            ' from its offline copy — that is why it looks old. Tap the version chip to get the latest.';
+  };
+  /* Which build the server has NOW: its version label ('v17.01'), '' when it answered with a page that names none (or an error),
+     or null when it cannot be reached at all — no signal, a network that goes nowhere, or no answer in 8 s (one bar
+     can leave a request hanging far longer than anyone waits on a toast). `no-store` because GitHub Pages lets the
+     browser keep index.html for ten minutes (the #306 note in sw.js), and a cached copy would answer for a server
+     that is not there. Not a navigation and carries no `?v=`, so sw.js hands it straight to the network. */
+  FM.latestBuild = function () {
+    if (navigator.onLine === false) return Promise.resolve(null);
+    const url = location.href.split('?')[0].split('#')[0];
+    return new Promise(res => {
+      const ctl = window.AbortController ? new AbortController() : null;
+      const t = setTimeout(() => { try { if (ctl) ctl.abort(); } catch (_) {} res(null); }, 8000);
+      const done = v => { clearTimeout(t); res(v); };
+      try {
+        fetch(url, ctl ? { cache: 'no-store', signal: ctl.signal } : { cache: 'no-store' })
+          .then(r => (r && r.ok ? r.text().then(html => { const m = html.match(/>\s*(v\d+\.\d+)\s*<\/span>/); done(m ? m[1] : ''); }) : done('')))   // an error page is an answer: reachable, naming no build
+          .catch(() => done(null));
+      } catch (_) { done(null); }
+    });
   };
   FM.checkStaleShell = function () {
     if (!window.caches || !navigator.serviceWorker) return Promise.resolve(null);
@@ -1271,9 +1308,12 @@ window.FM = window.FM || {};
         if (!hit) return null;
         // Clear it first: the note describes THIS load, and one left behind would cry wolf on the next.
         try { hit.c.delete('served-stale-shell'); } catch (_) {}
-        const msg = FM.staleShellNotice(hit.v);
-        if (msg && FM.toast) FM.toast(msg, 9000);
-        return msg;
+        // queue 690 (HUNT-d): ask the network before calling the copy old — see staleShellNotice.
+        return FM.latestBuild().then(latest => {
+          const msg = FM.staleShellNotice(hit.v, { latest: latest });
+          if (msg && FM.toast) FM.toast(msg, 9000);
+          return msg;
+        });
       })
       .catch(() => null);
   };

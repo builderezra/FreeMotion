@@ -98817,11 +98817,12 @@
    * His brief: "go re audit, find some bugs coz theres a shit load". This pass looked at what happens when the world is not
    * kind to the app — no network after install, a phone with no room left, the service-worker update chip, and the media a
    * project lets go of when he goes Home. Four findings, each written to FAIL on v17.00 because of the bug it names, each
-   * failure message saying what he would see. Nothing here is fixed yet. The two version-chip tests stop the chip's own
-   * reload with stand-ins that record and never settle, so the suite frame can never navigate away. */
+   * failure message saying what he would see. All four fixed, each re-proven failing with its fix reverted (index.html
+   * and app.js for the chip and the offline note, storage.js for the release and New project). The two version-chip tests
+   * stop the chip's own reload with stand-ins that record and never settle, so the suite frame can never navigate away. */
   const nq7d = s => String(s == null ? '' : s).replace(/"/g, "'");   // failure messages must not carry a double quote
 
-  test('HUNT-d opened with no signal, the app says it looks old and sends him to the version chip, and the chip with no signal deletes the offline copy of the app', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 opened with no signal, the app says it is offline (not that it looks old), and the version chip with no signal keeps the offline copy of the app', { item: '690', budgetMs: 60000 }, async function () {
     /* sw.js answers a navigation it cannot fetch from its offline copy AND stamps `served-stale-shell` — on EVERY offline
        launch, not only after a blip, because a launch with no signal is exactly a fetch that throws twice. 1.5 s after load
        FM.checkStaleShell reads the stamp and toasts: Your connection dropped on refresh, so FreeMotion loaded v17.00 from its
@@ -98836,7 +98837,12 @@
        run navigator.onLine was still TRUE (the machine had a network, the server did not answer) — which is his phone on
        Wi-Fi or one bar that does not reach the internet — so both are measured here: onLine false, and onLine true with
        every fetch failing. Here: the REAL sw.js on an offline launch of this build (runSW), the page's real reader, and a
-       real mouse click on the chip, each with the network down. */
+       real mouse click on the chip, each with the network down.
+       FIXED: the reader asks the network before it says anything (FM.latestBuild) — no signal says so and nothing more,
+       the build that is running says nothing, and only a server naming a DIFFERENT build gets the #306 wording and the
+       chip; the chip fetches the page it is about to load before it removes anything, and with no answer puts its
+       label back and says there is no signal. The controls at the end hold the other side: with the network up the
+       #306 warning still fires for a copy that really is old, and the chip still goes on to the update. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const lab = document.querySelector('.brand .ver') || document.querySelector('.ver');
     if (!lab) throw new Error('setup: no version chip in the page');
@@ -98900,22 +98906,54 @@
         if (calls.length) bad.push(pass.what + ', a tap on the chip went straight on to ' + calls.join(', then ') + ' without finding out whether the new build could be fetched — the page then navigates to an address that cannot load, and with the worker and its cache gone the installed app shows a browser error page on every launch until the network is back');
         await sleep(200);
       }
+      if (bad.length) throw new Error('offline after install: ' + bad.join('; ') + '.');
+      /* THE OTHER SIDE, with the network up — a fix that went quiet for good would pass everything above. */
+      /* a. the server names a different build → the copy really is old: the #306 warning, pointing at the chip */
+      const serve = function (v) { window.fetch = function () { return Promise.resolve(new Response('<div class=brand><span class=ver>' + v + '</span></div>', { status: 200 })); }; };
+      for (const kase of [{ v: 'v99.99', old: true }, { v: ver, old: false }]) {
+        const told = [];
+        await c.put('served-stale-shell', new Response(stamp));
+        let said = null;
+        FM.toast = function (m) { told.push(String(m)); return realToast.apply(this, arguments); };
+        serve(kase.v);
+        try { said = await FM.checkStaleShell(); await sleep(60); }
+        finally { window.fetch = realFetch; FM.toast = realToast; try { await c.delete('served-stale-shell'); } catch (e) {} }
+        const all = told.concat(said && told.indexOf(said) < 0 ? [said] : []).join(' / ');
+        if (kase.old && !/version chip/i.test(all)) throw new Error('with the network back and the server on ' + kase.v + ', a launch served the offline copy ' + ver + ' and said ' + (nq7d(all) || 'nothing') + ' — the #306 warning no longer fires for a copy that really is old');
+        if (!kase.old && all) throw new Error('with the network back and the server on this same build ' + ver + ', the app still said ' + nq7d(all) + ' — nothing is old');
+      }
+      /* b. the chip, with the network up, still goes on to the update (its reload stood in for, as above) */
+      {
+        const calls = [];
+        if (swc) swc.getRegistrations = function () { calls.push('unregister'); return new Promise(function () {}); };
+        caches.keys = function () { calls.push('keys'); return new Promise(function () {}); };
+        try {
+          await onScreen924(async function () { await hcMouse(lab, 'a click on the version chip, network up'); });
+          await hcUntil('the chip to go on to the update with the network up', () => calls.length, 8000);
+        } finally {
+          if (swc) { try { delete swc.getRegistrations; } catch (e) {} }
+          try { delete caches.keys; } catch (e) {}
+          lab.textContent = label0;
+        }
+      }
     } finally {
       window.fetch = realFetch; FM.toast = realToast;
       try { delete navigator.onLine; } catch (e) {}
       lab.textContent = label0;
       if (wasHome) { try { FM.home.open(); } catch (e) {} }
     }
-    if (bad.length) throw new Error('offline after install: ' + bad.join('; ') + '.');
   });
 
-  test('HUNT-d with the phone storage full, a tap on the version label reloads the app and throws away everything since the last save without asking', { item: '690', budgetMs: 60000 }, async function () {
+  test('690 with the phone storage full, a tap on the version label asks first — Stay keeps his unsaved work, Update anyway goes on', { item: '690', budgetMs: 60000 }, async function () {
     /* When the store refuses the project, the app says Storage full — autosave paused ONCE and keeps his work on screen —
        and every other way out of the project (opening another card, New project, Restore) now stops and asks Stay or
        Leave anyway (queue 690, hunt f). The version chip is the door that does not: its handler calls flushSync, ignores
        the answer, unregisters the worker and reloads. A full phone is also exactly when the app starts behaving oddly and
        he reaches for the chip that says Tap to force-update — and everything he did since the last save that fitted is
-       gone on the reload, with nothing said at the moment it happened. */
+       gone on the reload, with nothing said at the moment it happened.
+       FIXED: the chip asks FM.projects.confirmLeave, the same question as every other door, worded for an update (Update
+       anyway / Stay). Stay puts the label back and touches nothing; Update anyway goes on — checked here too, so the
+       door is asked, not locked. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
     const realSet = Storage.prototype.setItem, realAsk = FM.ask;
@@ -98944,15 +98982,26 @@
       if (!FM.storage.unsavedOnScreen()) throw new Error('CONTROL: the app does not think anything is unsaved, so this measured nothing');
       /* the chip's reload is stopped here (recorded, never settles); any question it asks is answered Stay */
       if (swc) swc.getRegistrations = function () { calls.push('unregister the worker'); return new Promise(function () {}); };
-      FM.ask = function () { asked++; return Promise.resolve(false); };
+      let q = null, answer = false;
+      FM.ask = function (o) { asked++; q = o || {}; return Promise.resolve(answer); };
       const inputs = [];
       const rec = function (e) { inputs.push(e.isTrusted); };
       lab.addEventListener('click', rec, true);
-      try { await onScreen924(async function () { await hcMouse(lab, 'a click on the version label'); }); await sleep(400); }
-      finally { lab.removeEventListener('click', rec, true); }
+      try {
+        await onScreen924(async function () { await hcMouse(lab, 'a click on the version label'); });
+        await hcUntil('the tap to ask or to go on', () => asked || calls.length, 8000);
+        await sleep(300);
+      } finally { lab.removeEventListener('click', rec, true); }
       if (!inputs.length || !inputs.every(Boolean)) throw new Error('CONTROL: no trusted click reached the version label, so this measured nothing');
       if (calls.length && !asked) throw new Error('with the phone storage full and his last change only on screen (the move of HUNT-d title card), a tap on the version label went straight on to reload the app — no Stay or Leave anyway, nothing said. The reload throws away everything he did since the last save that fitted');
       if (calls.length) throw new Error('with the phone storage full the version label asked first, he chose Stay, and it reloaded anyway — his unsaved work is gone');
+      if (!/updat|reload/i.test(String(q.message || '') + ' ' + String(q.ok || ''))) throw new Error('the question on the version label talks about something else: ' + nq7d(q.message) + ' [' + nq7d(q.ok) + '] — it is an update he is about to throw his work away for');
+      if (lab.textContent !== label0) throw new Error('after Stay the version label still reads ' + nq7d(lab.textContent) + ', not ' + nq7d(label0));
+      /* …and Update anyway goes on: the door is asked, not locked */
+      answer = true;
+      await onScreen924(async function () { await hcMouse(lab, 'a click on the version label, then Update anyway'); });
+      await hcUntil('Update anyway to go on to the update', () => calls.length, 8000);
+      if (asked < 2) throw new Error('the second tap went on to the update without asking again');
     } finally {
       Storage.prototype.setItem = realSet; FM.ask = realAsk;
       if (swc) { try { delete swc.getRegistrations; } catch (e) {} }
@@ -98962,13 +99011,15 @@
     }
   });
 
-  test('HUNT-d on a full phone a replaced photo that could not be stored turns back into the old photo after a trip to Home, at the wrong size', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 on a full phone a replaced photo that could not be stored stays the new photo, at its size, after a trip to Home', { item: '690', budgetMs: 90000 }, async function () {
     /* Going Home lets a project's media go (queue 385) and coming back reads it again from IndexedDB. The release promises
        NOTHING IS FREED THAT IDB CANNOT GIVE BACK — and checks that with `keys.has(id)` alone. After a Replace media on a
        full phone the record under the layer's id is still the OLD file (the new one was refused: Not enough storage to save
        that media), the key is there, so the NEW file is let go. Back in the project the old photo returns in its place, with
        the scale Replace media set for the new file, and nothing says so — the replace he did minutes ago is silently undone
-       while the app was open the whole time. Driven with a real finger at 360: ⋯ → Replace media, ← to Home, the card back. */
+       while the app was open the whole time. Driven with a real finger at 360: ⋯ → Replace media, ← to Home, the card back.
+       FIXED: releaseSceneMedia frees a file only when the revision on disk is the one in memory (known from this session,
+       or read off the record) — a file that never landed stays resident and plays from memory, as it did before Home. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
     const made = [], lib0 = h3aLibSnapshot();
@@ -99039,14 +99090,16 @@
     }
   });
 
-  test('HUNT-d with the phone storage full, New project says That project is no longer on this device and drops him into the project he was already in', { item: '690', budgetMs: 90000 }, async function () {
+  test('690 with the phone storage full, New project says there is no room and leaves him on Home, not in the project he was already in', { item: '690', budgetMs: 90000 }, async function () {
     /* FM.projects.create writes the new document and the index entry and ignores both answers, then open() finds neither,
        toasts That project is no longer on this device and returns false — which create() also ignores, returning the new id
        as if it had worked. Home then pushes into the editor, and the editor is still the project he was in before he tapped
        +. So on a full phone he names a new project, taps Create, reads a message that is not true (the project was never
        made — there was no room), and starts building his new idea on top of an old project. The first half of the same
        story, Storage full — autosave paused, is shown and then written over by the second a moment later. Driven with a
-       real finger at 360: + on Home, then Create. */
+       real finger at 360: + on Home, then Create.
+       FIXED: create() reads both writes and open()'s answer. No room → the half that landed is taken back, it says so
+       (Storage full — no room for a new project, so none was made…) and answers false, so Home stays where it is. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
     const made = [];
@@ -99090,6 +99143,8 @@
       const bad = [];
       if (lie.length) bad.push('the last thing it said was That project is no longer on this device — the project was never made, there was no room for it');
       if (!got.home && got.name !== newName) bad.push('Home closed into the editor showing ' + nq7d(got.name) + ', the project he was already in, not the ' + nq7d(newName) + ' he just made — whatever he builds next goes into the old project');
+      if (!lie.length && !toasts.some(t => /no room/i.test(t) && /new project/i.test(t))) bad.push('nothing told him there was no room for a new project, so the tap on Create just seemed to do nothing');
+      if (got.cards !== before.size) bad.push('a card was left behind for a project that was never made (' + before.size + ' cards before, ' + got.cards + ' after)');
       if (bad.length) throw new Error('with the phone storage full he tapped + on Home and then Create (' + nq7d(newName) + '): ' + bad.join('; ') + '. What it said, in order: ' + nq7d(toasts.join(' / ')));
     } finally {
       Storage.prototype.setItem = realSet; FM.toast = realToast;

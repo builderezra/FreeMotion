@@ -1159,22 +1159,59 @@
     }
     // One-tap "force latest": TAP the version label to nuke the service worker + all caches and reload
     // fresh. The bulletproof escape hatch when an installed PWA is serving a stale build.
+    /* ⚠️ queue 690 (HUNT-d): …BUT ONLY ONCE THE NEW BUILD CAN ACTUALLY BE FETCHED. With no signal (a train, or Wi-Fi
+       that goes nowhere while navigator.onLine still says true) the wipe below removed the worker and its cache and
+       then navigated to an address that could not load: a browser error page, and every launch after it the same
+       until signal came back, because the worker only registers again from a page that loads. And the app's own
+       offline-launch toast used to send him to this exact tap. So the page is fetched first, the same request the
+       reload is about to make; no answer in 8 s counts as none. Kept self-contained on purpose (no FM needed):
+       this is the escape hatch for a build whose own scripts are broken. */
+    function fmCanFetchLatest() {
+      if (navigator.onLine === false) return Promise.resolve(false);
+      var url = location.href.split('?')[0].split('#')[0];
+      return new Promise(function (res) {
+        var ctl = window.AbortController ? new AbortController() : null;
+        var t = setTimeout(function () { try { if (ctl) ctl.abort(); } catch (e) {} res(false); }, 8000);
+        var done = function (ok) { clearTimeout(t); res(ok); };
+        try { fetch(url, ctl ? { cache: 'no-store', signal: ctl.signal } : { cache: 'no-store' }).then(function (r) { done(!!(r && r.ok)); }, function () { done(false); }); }
+        catch (e) { done(false); }
+      });
+    }
     window.addEventListener('load', function () {
       var vers = document.querySelectorAll('.ver, #ver-m');
       Array.prototype.forEach.call(vers, function (el) {
         el.style.cursor = 'pointer';
         el.title = 'Tap to force-update to the very latest build';
+        var busy = false;   // while it waits on the network or his answer, a second tap must not start a second run (or keep '…' as the label)
         el.addEventListener('click', function () {
+          if (busy) return;
+          busy = true;
+          var label = el.textContent;
           el.textContent = '…';
+          var stay = function (msg) { busy = false; el.textContent = label; if (msg && window.FM && FM.toast) FM.toast(msg, 5000); };
           // Flush the pending 600ms-debounced autosave FIRST — tapping this within ~0.6s of an edit
           // then navigated away and lost that edit (nothing flushes on unload).
           try { if (window.FM && FM.storage && FM.storage.flushSync) FM.storage.flushSync(); } catch (e) {}
-          // Navigate to a BRAND-NEW URL (cache-busted) rather than reload(): a reload can still be served by
-          // a stuck old service worker, but a never-seen URL forces a real network fetch of every asset.
-          var done = function () { var base = location.href.split('?')[0].split('#')[0]; location.replace(base + '?fresh=' + Date.now()); };
-          (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve())
-            .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; })
-            .then(done, done);
+          fmCanFetchLatest().then(function (ok) {
+            if (!ok) { stay('No signal — the latest build can’t be fetched right now, so nothing was changed. Try again when you’re online.'); return; }
+            /* ⚠️ queue 690 (HUNT-d): A FULL PHONE ASKS HERE TOO. The flush's answer used to be thrown away, so with the store
+               refusing his project the reload below brought back the last save that fitted and everything since was gone,
+               unasked — while opening another card, New project and Restore all stop and ask (queue 690, hunt f). Same
+               question, same default: Stay (also Cancel, Escape, a tap outside) leaves everything exactly as it was. */
+            var asking = (window.FM && FM.projects && FM.projects.confirmLeave)
+              ? Promise.resolve().then(function () { return FM.projects.confirmLeave({ why: 'Updating reloads the app, and that throws it away.', ok: 'Update anyway' }); })
+              : Promise.resolve(true);
+            return asking.then(function (go) {
+              if (!go) { stay(); return; }
+              busy = false;   // decided — the page is leaving; nothing below waits on him, so nothing is held shut behind it
+              // Navigate to a BRAND-NEW URL (cache-busted) rather than reload(): a reload can still be served by
+              // a stuck old service worker, but a never-seen URL forces a real network fetch of every asset.
+              var done = function () { var base = location.href.split('?')[0].split('#')[0]; location.replace(base + '?fresh=' + Date.now()); };
+              (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve())
+                .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; })
+                .then(done, done);
+            });
+          }).catch(function () { stay(); });
         });
       });
     });
