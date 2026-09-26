@@ -21,8 +21,8 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
    Play lives in the 00:00:00 time pill, as you asked in queue 364. Nothing on a phone says the pill is tappable, and the project length isn't shown anywhere.
    *Fix:* Your call, with pictures first: a small play/pause glyph inside the pill, plus "current / total".
 
-5. **Moving a clip in time needs a hold nobody tells you about (a quick drag scrubs or trims instead)** (high · Checked by Claude on phone and desktop)
-   A quick drag on a clip scrubs the playhead on a phone, and trims the clip's end with a mouse. Holding for about 0.7 s first does move it. Two bots decided clips can't be moved at all, which shows how hidden the hold is.
+5. **On a phone, moving a clip needs a hold nobody tells you about (a quick drag scrubs)** (high · Checked by Claude (phone half confirmed, desktop half withdrawn))
+   A quick finger drag on a clip scrubs the playhead, and moving it needs a short hold first. That's the Alight Motion model you chose; nothing on screen says so, and two bots decided clips can't be moved at all. (On desktop a plain drag already moves it.)
    *Fix:* Show "Hold, then drag to move" after the first quick drag, and lift the clip visibly when the hold kicks in. On desktop, let a plain drag on the body move the clip.
 
 6. **Importing several photos at once stacks them all at 0:00 instead of one after another** (high · Confirmed by a 2nd bot)
@@ -50,8 +50,8 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
    *Fix:* Give text layers a box width with side handles so text wraps inside it by default. At minimum, warn or auto-shrink when text leaves the frame.
 
 12. **Tapping a template opens the template itself for editing, not a new project from it** (medium · Confirmed by a 2nd bot)
-   In every template gallery a tap means "use this". Here it opens the master template for editing, with only a short toast saying so, and every later project made from it inherits the change.
-   *Fix:* Tap = new project from this template. Move "Edit template" into its "..." menu, and show a TEMPLATE chip in the editor header while editing one.
+   Tapping a template opens the template itself for editing, which is what you asked for in queue 505. The only sign you're editing the master is a toast that disappears in 3 seconds, and it covers the + button.
+   *Fix:* Keep tap-to-edit. Add a persistent TEMPLATE chip in the editor header (pictures first), and make "New project from template" easy to reach from the card.
 
 ## How long everyday jobs take (taps from the home screen)
 
@@ -125,7 +125,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Where:** Home > Templates tab, tap a template card
 - **What happened:** Tapped the "Blank vertical" template card. It opened the template in the editor; a toast says "Editing 'Blank vertical', your changes save back to it when you go Home". The toast covers the editor's main "Tap here to start creating" + button, and after ~3 s it is gone. From then on the header just says "Blank v..." and nothing shows you are editing a template rather than a project. Starting a project from the template needs the "..." > "New project from template" route instead. The same happens for elements (tap = edit the element, toast only).
 - **Why it matters:** In every template gallery a tap means "use this". Here a user who meant to start a video edits the master template, and every later project made from it inherits the change.
-- **Suggested fix:** Make a tap on a template card do "New project from template" (recommended) and move "Edit template" into its "..." menu. Alternatively, a tap opens a small sheet: "Use template" (primary) / "Edit template". In either case, while editing a template or element show a persistent chip in the editor header ("TEMPLATE" / "ELEMENT") instead of only a toast, and place that toast away from the + button.
+- **Suggested fix:** Keep tap-to-edit, as you asked in queue 505. What's missing is knowing you're in a template: replace the 3-second toast with a persistent TEMPLATE (or ELEMENT) chip in the editor header, and make "New project from template" easy to reach from the card (recommended). The chip is a visual change, so pictures first.
 - **Screenshots:** [A-home-103-tap-template.webp](shots/A-home-103-tap-template.webp), [A-home-104-template-editing-no-toast.webp](shots/A-home-104-template-editing-no-toast.webp)
 
 ### Duplicates are indistinguishable from the original
@@ -226,10 +226,10 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Suggested fix:** Keep the time pill as the play button, as you asked. The open question is only whether the pill should also show a small play/pause glyph so a first-time user knows it's tappable, plus the project length ("0:03 / 0:10"). That's a visual change, so per your rule it needs pictures of options first, not a build.
 - **Screenshots:** [B-build-03-editor-empty.webp](shots/B-build-03-editor-empty.webp), [B-build-87-playing.webp](shots/B-build-87-playing.webp)
 
-### Moving a clip in time needs a hold nobody tells you about (a quick drag scrubs or trims instead)
-- **Impact:** HIGH · Checked by Claude on phone and desktop
+### On a phone, moving a clip needs a hold nobody tells you about (a quick drag scrubs)
+- **Impact:** HIGH · Checked by Claude (phone half confirmed, desktop half withdrawn)
 - **Where:** Timeline, any clip, both the full multi-layer view and the isolated single-clip view (after selecting it)
-- **What happened:** Phone: a quick drag on a clip's body scrubs the playhead instead of moving the clip. Desktop: a quick mouse drag on the clip body trims its right edge instead (desktop bot, 4 repros on 2 clips). Holding for about 0.7 s first and then dragging does move the clip on both. Claude checked: the circle clip moved from 0:00 to about 2 s on the phone, and the Star clip moved about 150 px later on desktop.
+- **What happened:** Phone: a quick drag on a clip's body scrubs the playhead instead of moving the clip; holding for about 0.35 s first and then dragging moves it (Claude checked: the circle clip moved from 0:00 to about 2 s). Desktop: a quick mouse drag on the body DOES move the clip (checked: start 0 to 0.76 s, length unchanged). The desktop bot's report that it trims the end came from the review browser's window bug, so that half is withdrawn.
 - **Why it matters:** Moving a clip in time is one of the most common edits there is. Two separate bots concluded it was impossible, which shows how invisible the hold is. On desktop the quick drag does something destructive instead.
 - **Suggested fix:** The first time someone quick-drags a clip, show a one-line hint ("Hold, then drag to move") (recommended). Give the clip a visible lift (shadow, slight scale, haptic on phones) the moment the hold kicks in, so people learn it. On desktop, let a plain drag on the clip body move it and keep trimming for the edge handles only, with a move cursor on the body and a resize cursor on the edges.
 - **Screenshots:** [main-14-holddrag-clip.webp](shots/main-14-holddrag-clip.webp), [main-32-desk-holddrag.webp](shots/main-32-desk-holddrag.webp), [F-desk-1b-33-drag-clip.webp](shots/F-desk-1b-33-drag-clip.webp)
@@ -783,6 +783,8 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Re-tested:** A second bot re-did the 9 high-impact claims that only one bot had made, each from a fresh project. 6 confirmed. Keyframe diamonds and the blend-mode list were partly confirmed. The Undo double-revert wasn't reproduced, so it dropped to medium and out of the top 12.
 - **Retracted:** "The effects library won't scroll" (top pick #6) and "the blend-mode list won't scroll" were false. The review's test browser had a bug: its real window was 720px tall under a 844px phone screen, so swipes starting in the bottom 124px went nowhere while taps still worked. With that fixed, both lists scroll from anywhere. Removed from the report.
 - **Your decisions:** Three top picks turned out to be things you asked for: preview taps never select (v2.93), a preview drag moves the whole animation (v3.00), and the time pill is the play button (queue 364). They're labelled on the page, and their fixes now keep your rule and only add the missing explanation.
+- **Corrected:** "On desktop a quick drag on a clip trims its end" was false: a quick mouse drag moves the clip (measured). It was the review browser's window bug again.
+- **Built:** 9 of the 12 top picks are now built on the branch claude/freemotion-ux-improvements-fu5r8p, each with a test that fails on the old code and passes on the new; #10 was already fixed on main in v16.94; #4 and #12 wait on your pick of a visual. See ux-review/BUILD-LOG.md.
 
 ## Not covered yet
 
