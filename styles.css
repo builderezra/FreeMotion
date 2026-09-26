@@ -7958,11 +7958,44 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
      treatments rendered with the real buttons and picked the outline-plus-lift. A choice made from the
      rendered thing outranks one made from a description, so the newer answer stands; the older one is
      kept above rather than deleted, because it is the reason this was ever dark. */
+  /* ⚠️ 26 Sep — TWO CORNERS THAT FADE, NOT A BOX (queue 959). He came back to it a fourth time, with a screenshot and the
+     corners drawn on in red: "instead of it having like a background and a line all the way around it, it should have two
+     like corner lines … I mean, the top right to the bottom left … that like fade out so it's like a solid line in the
+     corner but then it slowly fades out".
+     So: no fill, no outline, and two pseudo-elements, each the size of the whole group but with only the two borders that
+     meet at ITS corner lit — ::before top-right, ::after bottom-left. One radial mask centred on that corner fades both arms
+     at once: solid to a quarter of the way, gone at 60% of the width / 85% of the height, which is the length he drew.
+     Percentages, so the corners stay at the group's corners and keep his proportions when it grows (two selected adds
+     group + mask-group; #425 may move copy in) — measured: 126px and 206px groups, corners 126px and 206px.
+     box-sizing: border-box on the corners is load-bearing: it makes each corner exactly the group's size (the test
+     compares them), and without it the 1.5px borders would make the box 2-3px larger than the group.
+     The old 1px outline's room is kept as PADDING (1px 6px instead of 0 5px + a 1px border), so the group is still
+     126 x 36 at the same place and nothing else in the row moves.
+     WHITE, not accent: Export is this row's cyan mark on purpose (see #btn-export above), and a cyan frame a few buttons
+     from it reads as a second thing to press. 1.5px is a hairline on a 2x screen; on a 100% PC Chrome snaps it to 1px,
+     measured. (Option A of three he was shown — B is `--sel-corner: var(--accent)`, C is 2px / .85 with 30% 70% arms.)
+     ⚠️ THIS REVERSES #516's OUTLINE, AND #516 REVERSED #251's RECESS. The newer pick outranks the older; the notes above
+     are kept because they are the reason each earlier look existed. */
   #t-sel.has-sel {
-    padding: 0 5px; margin: 0 3px;
+    position: relative;                      /* the corners hang off this box */
+    padding: 1px 6px; margin: 0 3px;         /* = the old 0 5px + 1px border: still 126 x 36 */
     border-radius: 11px;
-    background: rgba(255, 255, 255, .045);
-    border: 1px solid rgba(255, 255, 255, .13);
+    --sel-corner: rgba(255, 255, 255, .6);
+  }
+  #t-sel.has-sel::before,
+  #t-sel.has-sel::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; box-sizing: border-box;
+    border: 1.5px solid transparent; border-radius: inherit;
+  }
+  #t-sel.has-sel::before {                   /* top-right */
+    border-top-color: var(--sel-corner); border-right-color: var(--sel-corner);
+    -webkit-mask-image: radial-gradient(60% 85% at 100% 0, #000 25%, transparent 100%);
+            mask-image: radial-gradient(60% 85% at 100% 0, #000 25%, transparent 100%);
+  }
+  #t-sel.has-sel::after {                    /* bottom-left */
+    border-bottom-color: var(--sel-corner); border-left-color: var(--sel-corner);
+    -webkit-mask-image: radial-gradient(60% 85% at 0 100%, #000 25%, transparent 100%);
+            mask-image: radial-gradient(60% 85% at 0 100%, #000 25%, transparent 100%);
   }
 }
 

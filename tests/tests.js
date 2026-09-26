@@ -12092,7 +12092,7 @@
     if (swallowed.length) throw new Error(swallowed.length + ' effect parameter(s) treat a dial at 0 as their default, which is exactly what `evalProp(p.x, t) || N` does: ' + swallowed.slice(0, 8).join('; '));
   });
 
-  test('PC: the layer actions sit on the right of the transport row, in one pill you can see', { item: '425' }, function () {
+  test('PC: the layer actions sit on the right of the transport row, as one group you can see', { item: '425' }, function () {
     /* Queue 425, from a desktop screenshot. Ezra: "THE three buttons on pc with trash copy and parent
        need to be on the right side not left and also the background they have is too subtle". */
     if (!FM.pcTransportLayout) throw new Error('no pcTransportLayout to test');
@@ -12114,42 +12114,16 @@
           this is the line that says so. */
     if (sel.contains(menu)) throw new Error('the copy button was moved into the selection group — queue 373 put it on the left in his own words and the add-row switch is placed relative to it, so this needs his word first');
 
-    /* 3. The background is a REAL recess. Both halves of what he has asked for over two rounds: deep
-          enough to see (v10.61 and earlier were .22, which he called too subtle), and DARKER rather
-          than brighter — v7.89 lifted it with a white wash and he sent it back with "instead of being
-          brighter than everything else make its lightly darker". A future lift would satisfy "stronger"
-          and reopen the older complaint, so both are asserted. */
+    /* 3. …and it READS AS ONE GROUP. "Too subtle" (queue 425) has outlived every way this group has been drawn: a white wash
+          (v7.89), a black recess (#251 / #425), an outline (#516, v12.46), and since queue 959 two corner lines that fade —
+          top-right and bottom-left, his drawing of 26 Sep: "instead of it having like a background and a line all the way
+          around it, it should have two like corner lines". So the assertion is the one that survives all of them: the group
+          paints something you can SEE, at its corners. The exact look is queue 959's own test. */
     sel.classList.add('has-sel');
-    const bg = getComputedStyle(sel).backgroundColor || '';
-    const m = bg.match(/rgba?\(([^)]+)\)/);
-    if (!m) throw new Error('the group has no background colour at all (' + bg + ')');
-    const n = m[1].split(',').map(parseFloat), a = n.length > 3 ? n[3] : 1;
-    /* ⚠️ v12.46 — THIS USED TO DEMAND A DARK FILL AND HE OVERTURNED IT (queue 516). His words then:
-       "instead of being brighter than everything else make its lightly darker", which is where the
-       black slab came from. His words on 25 Aug, looking at the result: "the black bar in the background
-       looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make
-       it, like, an outline or something instead." He was then shown four treatments rendered with the
-       REAL buttons and picked the outlined one.
-       What survives is the half that was never about the colour: the group must still READ as one
-       container rather than three loose icons — so it needs a visible edge, whichever side of the
-       background it sits on. */
-    const bgA = (String(bg).match(/[\d.]+/g) || []).map(Number);
-    const bgAlpha = bgA.length > 3 ? bgA[3] : 1;
-    const bgLum = bgA.length >= 3 ? (bgA[0] + bgA[1] + bgA[2]) / 3 : 0;
-    const selBorder = parseFloat(getComputedStyle(sel).borderTopWidth) || 0;
-    if (bgAlpha > 0.02 && bgLum < 60 && selBorder < 0.5)
-      throw new Error('the group is a dark fill with no outline (' + bg + ') — that is the "entire black backdrop" he asked to replace');
-    if (bgAlpha <= 0.02 && selBorder < 0.5)
-      throw new Error('the group has neither a fill nor an outline — it no longer reads as one container at all');
-    /* ⚠️ "TOO SUBTLE" IS ABOUT BEING ABLE TO SEE THE GROUP, NOT ABOUT THE ALPHA (queue 425 -> 516).
-       This demanded a fill of at least 0.35, which was the right answer while a FILL was the only way
-       the group was drawn. From v12.46 it is drawn with a hairline outline instead - his choice, from
-       four treatments rendered with the real buttons - and an outline delineates a group far more
-       cheaply than a wash. So the requirement is restated as what he actually complained about: the
-       group must be VISIBLY one thing. A strong fill satisfies that, and so does a real outline; having
-       neither does not, and that is still caught. */
-    if (!(a >= 0.35) && selBorder < 0.5)
-      throw new Error('the group has neither a strong fill (alpha ' + a + ') nor an outline - "too subtle" was the complaint, and it would be again');
+    const aOf = c => { const n = (String(c).match(/[\d.]+/g) || []).map(Number); return n.length > 3 ? n[3] : (n.length === 3 ? 1 : 0); };
+    const tr = getComputedStyle(sel, '::before'), bl = getComputedStyle(sel, '::after');
+    if (tr.content === 'none' || aOf(tr.borderTopColor) < 0.3 || bl.content === 'none' || aOf(bl.borderBottomColor) < 0.3)
+      throw new Error('the group has no visible corner lines (top-right ' + tr.content + ' ' + tr.borderTopColor + ', bottom-left ' + bl.content + ' ' + bl.borderBottomColor + ') — it no longer reads as one group, and "too subtle" was the complaint');
 
     /* 4. …and the group survives a round trip. The wrapper now lives in .t-right rather than .t-left, so
           the narrow-the-window teardown that queue 405 built is walking a different tree than it was
@@ -17018,8 +16992,11 @@
          three buttons have a different background to signify their difference." They are the controls
          that belong to the SELECTION rather than to the project, and they come and go with it. */
       const selW = document.getElementById('t-sel');
-      const bg = getComputedStyle(selW).backgroundColor;
-      if (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') throw new Error('the selection trio has no ground of its own — it reads the same as the project controls beside it');
+      /* queue 959: the trio's "own ground" is two fading corner lines now, not a fill — his drawing, 26 Sep ("instead of it
+         having like a background and a line all the way around it … two like corner lines"). What this protects is the same:
+         the trio reads differently from the project controls beside it. */
+      const trC = getComputedStyle(selW, '::before');
+      if (trC.content === 'none' || !((parseFloat(trC.borderTopWidth) || 0) >= 1)) throw new Error('the selection trio has no mark of its own (no corner lines) — it reads the same as the project controls beside it');
       // …and the buttons inside stay BARE. Queue 230 removed every resting box on his own instruction
       // ("if you're not hovering over it, you don't show it"), and a ground behind the GROUP must not
       // quietly put boxes back on the members.
@@ -51068,7 +51045,7 @@
     }
   });
 
-  test('the selection button group is an outlined container, and the bin is calm at rest (queue 516)', { item: '516' }, async function () {
+  test('the selection button group is no dark slab, and the bin is calm at rest (queue 516)', { item: '516' }, async function () {
     /* Ezra: "the bin icon doesn't look really good there … And then also the black bar in the background
        looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make
        it, like, an outline or something instead."
@@ -51109,8 +51086,12 @@
          LIGHTER than the bar behind it — not another layer of black. */
       if (alpha > 0.02 && lum < 60)
         throw new Error('the selection group is filled with a dark colour again (' + cs.backgroundColor + ') — that is the "entire black backdrop" he asked to replace with an outline');
-      if (parseFloat(cs.borderTopWidth) < 0.5)
-        throw new Error('the selection group has no outline (' + cs.borderTopWidth + ') — the outline IS the treatment he chose');
+      /* ⚠️ queue 959 (26 Sep) — THE OUTLINE IS GONE, BY HIM: "instead of it having like a background and a line all the way
+         around it, it should have two like corner lines … the top right to the bottom left … that like fade out". The half of
+         #516 that survives is the one above — no dark slab. The corners do the outline's job now. */
+      const trc = getComputedStyle(slab, '::before'), blc = getComputedStyle(slab, '::after');
+      if (trc.content === 'none' || blc.content === 'none' || !((parseFloat(trc.borderTopWidth) || 0) >= 1) || !((parseFloat(blc.borderBottomWidth) || 0) >= 1))
+        throw new Error('the selection group has no corner lines (top-right ' + trc.content + ' ' + trc.borderTopWidth + ', bottom-left ' + blc.content + ' ' + blc.borderBottomWidth + ') — the corners ARE the treatment he chose (queue 959)');
 
       /* THE BIN: neutral at rest. Red is a hover/press state now, not the resting colour. */
       const restCol = rgba(getComputedStyle(del).color);
@@ -56275,7 +56256,7 @@
    * lightly darker, and also it isnt centred and aligned so fix that." Two faults, and measuring
    * found the second one to be the same class as #209: not the boxes, the INK. */
 
-  test('the selection cluster recesses rather than glowing, and its glyphs are centred', { item: 'sel-ground' }, async function () {
+  test('the selection cluster reads as one group by its corner lines, and its glyphs are centred', { item: 'sel-ground' }, async function () {
     if (!matchMedia('(min-width: 701px)').matches) return;   // PC arrangement
     const frame = () => new Promise(r => setTimeout(r, 120));
     const layers0 = FM.scene.layers.slice();
@@ -56301,9 +56282,13 @@
          description, so the colour is his to change; what this test protects now is that the cluster is
          still READABLE AS ONE GROUP, which is what the entry was actually about.
          The glyph-centring half below is untouched — that was never about the wash. */
-      const edge = parseFloat(getComputedStyle(sel).borderTopWidth) || 0;
-      if (a <= 0.02 && edge < 0.5) {
-        throw new Error('the cluster has neither a wash nor an outline — it no longer reads as one group, which is what "the background they have is too subtle" was about');
+      /* ⚠️ queue 959 (26 Sep) — NEITHER A WASH NOR AN OUTLINE, BY HIM: "instead of it having like a background and a line
+         all the way around it, it should have two like corner lines … the top right to the bottom left". What this protects
+         is unchanged — the cluster still reads as ONE group — and the corners carry that now. */
+      const trc = getComputedStyle(sel, '::before'), blc = getComputedStyle(sel, '::after');
+      const lit = c => { const n = (String(c).match(/[\d.]+/g) || []).map(Number); return (n.length > 3 ? n[3] : (n.length === 3 ? 1 : 0)) >= 0.3; };   // 'transparent' has no numbers → not lit
+      if (trc.content === 'none' || blc.content === 'none' || !lit(trc.borderTopColor) || !lit(blc.borderBottomColor)) {
+        throw new Error('the cluster has no corner lines (top-right ' + trc.content + ' ' + trc.borderTopColor + ', bottom-left ' + blc.content + ' ' + blc.borderBottomColor + ') — it no longer reads as one group, which is what "the background they have is too subtle" was about');
       }
       // the ink, not the boxes — the same class of fault as #209
       const kids = Array.prototype.slice.call(sel.children).filter(function (k) { return k.getBoundingClientRect().width > 0; });
@@ -101229,6 +101214,82 @@
       });
     }
     if (misses.length) throw new Error('these buttons are still a typed ✕ (queue 965: one drawn ✕ for the app): ' + misses.join(', '));
+  });
+
+  test('959 on PC the layer-action group has no background and no outline — two corner lines, top-right and bottom-left, solid at the corner and fading out', { item: '959', budgetMs: 30000 }, async function () {
+    /* Ezra, 26 Sep, with a PC screenshot and the corners drawn on in red (tools/design/2026-09-26-layer-actions-corners.webp):
+       "This little menu with the three buttons in it that pops up when you select a layer, … instead of it having like a
+        background and a line all the way around it, it should have two like corner lines on the bottom left and then the
+        bottom right. I mean, the top right to the bottom left, top right. that like fade out so it's like a solid line in the
+        corner but then it slowly fades out"
+       One block per clause: no background; no line all the way round; a corner at TOP-RIGHT and one at BOTTOM-LEFT (he
+       corrected himself, so bottom-right and top-left stay dark); each solid at its corner and fading along both arms. Then
+       the buttons must still take the click, and the corners must follow the group when it grows (two selected adds group +
+       mask-group; #425 may move copy in).
+       Fails on HEAD at the background: the #516 look is rgba(255,255,255,.045) with a 1px rgba(255,255,255,.13) outline,
+       and no ::before / ::after at all. The colour is NOT pinned (his pick among white / accent is the CSS's business);
+       only "visible" is (alpha >= .3). Width is asserted >= 1, not 1.5: at DPR 1 Chrome snaps 1.5px to 1px (measured). */
+    const aOf = c => { if (String(c).trim() === 'transparent') return 0; const n = (String(c).match(/[\d.]+/g) || []).map(Number); return n.length > 3 ? n[3] : (n.length === 3 ? 1 : 0); };
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'k959a', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#c05030', start: 0, duration: 3 });
+      const B = FM.makeLayer('shape', { name: 'k959b', shape: 'ellipse', x: 700, y: 900, shapeW: 200, shapeH: 200, fill: '#3070c0', start: 0, duration: 3 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      await atWideWidth(async function () {
+        FM.selectLayer(A.id); FM.refreshAll(); await sleep(250);
+        const sel = document.getElementById('t-sel'), del = document.getElementById('btn-del-layer');
+        if (!sel || !del) throw new Error('setup: the PC layer-action group is not built (t-sel ' + !!sel + ', delete ' + !!del + ') at ' + innerWidth + 'px');
+        const r = sel.getBoundingClientRect();
+        // CONTROL — every "has no …" below passes against a group that is not on screen
+        if (!sel.classList.contains('has-sel') || r.width < 60 || r.height < 24) throw new Error('control: with a layer selected the group is ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' (has-sel ' + sel.classList.contains('has-sel') + ') — not on screen, so nothing below would mean anything');
+        const cs = getComputedStyle(sel);
+        // clause 2a — no background
+        if (aOf(cs.backgroundColor) > 0.02 || cs.backgroundImage !== 'none') throw new Error('the group still has a background (' + cs.backgroundColor + (cs.backgroundImage !== 'none' ? ' / ' + cs.backgroundImage.slice(0, 60) : '') + ') — he asked for no background (queue 959)');
+        // clause 2b — no line all the way around (as a border, an outline or a box-shadow)
+        ['Top', 'Right', 'Bottom', 'Left'].forEach(function (s) {
+          if ((parseFloat(cs['border' + s + 'Width']) || 0) > 0 && aOf(cs['border' + s + 'Color']) > 0.02) throw new Error('the group still has its outline (' + s.toLowerCase() + ' ' + cs['border' + s + 'Width'] + ' ' + cs['border' + s + 'Color'] + ') — "instead of … a line all the way around it" (queue 959)');
+        });
+        if (cs.outlineStyle !== 'none' && (parseFloat(cs.outlineWidth) || 0) > 0 && aOf(cs.outlineColor) > 0.02) throw new Error('the outline came back as a CSS outline (' + cs.outlineWidth + ' ' + cs.outlineColor + ')');
+        if (cs.boxShadow && cs.boxShadow !== 'none') throw new Error('the outline came back as a box-shadow (' + cs.boxShadow + ')');
+        // clauses 3 + 4 — the two corners
+        const corner = function (pseudo, lit, dark, at, pos) {
+          const p = getComputedStyle(sel, pseudo);
+          if (p.content === 'none' || p.display === 'none') throw new Error(pseudo + ' is not drawn — there is no ' + at + ' corner line (queue 959)');
+          if (p.position !== 'absolute' || p.pointerEvents !== 'none') throw new Error('the ' + at + ' corner is ' + p.position + ' / pointer-events ' + p.pointerEvents + ' — it must be absolute and click-through, or it moves the buttons or eats their clicks');
+          lit.forEach(function (s) { if (!((parseFloat(p['border' + s + 'Width']) || 0) >= 1) || aOf(p['border' + s + 'Color']) < 0.3) throw new Error('the ' + at + ' corner has no visible ' + s.toLowerCase() + ' arm (' + p['border' + s + 'Width'] + ' ' + p['border' + s + 'Color'] + ')'); });
+          dark.forEach(function (s) { if ((parseFloat(p['border' + s + 'Width']) || 0) > 0 && aOf(p['border' + s + 'Color']) > 0.02) throw new Error('the ' + at + ' corner also draws its ' + s.toLowerCase() + ' edge (' + p['border' + s + 'Color'] + ') — that is the line all the way round again'); });
+          // the size of the whole group, so it sits exactly at the group's corner and follows it when the group grows
+          if (Math.abs(parseFloat(p.width) - r.width) > 1.5 || Math.abs(parseFloat(p.height) - r.height) > 1.5) throw new Error('the ' + at + ' corner is ' + p.width + ' x ' + p.height + ' but the group is ' + r.width.toFixed(1) + ' x ' + r.height.toFixed(1) + ' — it is not sitting on the group\'s corner');
+          if (!((parseFloat(p['border' + (at === 'top-right' ? 'TopRight' : 'BottomLeft') + 'Radius']) || 0) >= 6)) throw new Error('the ' + at + ' corner is square — it must keep the group\'s rounding');
+          // clause 4 — solid at the corner, fading out: a radial mask centred on this corner, opaque first, transparent last
+          const m = String(p.maskImage && p.maskImage !== 'none' ? p.maskImage : (p.webkitMaskImage || 'none'));
+          if (!/radial-gradient\(/.test(m) || !pos.test(m)) throw new Error('the ' + at + ' corner does not fade from its corner (mask: ' + m.slice(0, 120) + ') — "a solid line in the corner but then it slowly fades out"');
+          const cols = m.match(/rgba?\([^)]*\)|transparent/g) || [];
+          if (cols.length < 2 || aOf(cols[0]) < 0.99 || aOf(cols[cols.length - 1]) > 0.01) throw new Error('the ' + at + ' fade is not solid-then-gone (' + m.slice(0, 120) + ')');
+        };
+        corner('::before', ['Top', 'Right'], ['Bottom', 'Left'], 'top-right', /at (100%|right) (0(px|%)?|top)[ ,)]/);
+        corner('::after', ['Bottom', 'Left'], ['Top', 'Right'], 'bottom-left', /at (0(px|%)?|left) (100%|bottom)[ ,)]/);
+        // the buttons still take the click
+        const dr = del.getBoundingClientRect(), hit = document.elementFromPoint(dr.left + dr.width / 2, dr.top + dr.height / 2);
+        if (!hit || !(hit === del || del.contains(hit))) throw new Error('the bin is covered by "' + (hit && (hit.id || hit.className)) + '" — the corners must not take its click');
+        // the corners follow the group when it grows
+        FM.toggleSelect(B.id); FM.refreshAll(); await sleep(250);
+        const r2 = sel.getBoundingClientRect();
+        if (!(r2.width > r.width + 20)) throw new Error('control: with two layers selected the group did not grow (' + Math.round(r.width) + ' → ' + Math.round(r2.width) + 'px) — the check below would measure nothing');
+        const w2 = parseFloat(getComputedStyle(sel, '::before').width), w3 = parseFloat(getComputedStyle(sel, '::after').width);
+        if (Math.abs(w2 - r2.width) > 1.5 || Math.abs(w3 - r2.width) > 1.5) throw new Error('the corners did not follow the group when it grew to ' + Math.round(r2.width) + 'px (top-right ' + w2 + ', bottom-left ' + w3 + ')');
+        // …and leave with the selection
+        FM.selectLayer(null); FM.refreshAll(); await sleep(200);
+        if (getComputedStyle(sel, '::before').content !== 'none' || getComputedStyle(sel, '::after').content !== 'none') throw new Error('with nothing selected the corner lines are still drawn — an empty frame left hanging in the row');
+      }, 1280);
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
   });
 
 })();
