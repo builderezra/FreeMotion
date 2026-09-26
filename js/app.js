@@ -2717,12 +2717,20 @@ window.FM = window.FM || {};
     setTimeout(function () { if (FM.loadingDot) FM.loadingDot.check(); }, 0);
     const scene = FM.scene, P = scene.project;
     const first = scene.layers.length === 0;
-    if (first && rec.width && rec.height) {
+    /* THE FIRST CLIP SIZES THE PROJECT ONLY WHEN NOBODY CHOSE A SIZE (UX review top #9, confirmed by a
+       second bot). Pick "9:16 Phone", import a landscape photo first, and the canvas silently became 16:9:
+       the choice made one screen earlier was thrown away, and a Reel only found out at export. A project
+       made with an explicit ratio carries `keepSize`, and its first clip is fitted INTO that frame by the
+       scale below, like every later clip. Custom ("Auto adjusts", queue 659), the auto-made first project
+       and every older project have no flag and follow the first clip as before, and now it is said. */
+    if (first && rec.width && rec.height && !P.keepSize) {
+      const w0 = P.width, h0 = P.height;
       const fit = FM.fitProjectSize(rec.width, rec.height);
       P.width = fit.w; P.height = fit.h;
       // Say so rather than quietly disagreeing with the file — a capped project is a real choice the
       // app made on his behalf, and Canvas settings is where to undo it.
       if (fit.capped && FM.toast) FM.toast('Project set to ' + fit.w + '\u00d7' + fit.h + ' — ' + rec.width + '\u00d7' + rec.height + ' is bigger than any preset. Change it in Canvas settings.', 4600);
+      else if ((fit.w !== w0 || fit.h !== h0) && FM.toast) FM.toast('Canvas set to ' + fit.w + '\u00d7' + fit.h + ' to match this clip. Change it in Canvas settings.', 4200);
       resizeCanvas();
     }
     // Use the clip's FULL length — never cap it to the existing composition. A still has no length
@@ -7708,6 +7716,7 @@ window.FM = window.FM || {};
             FM.toast('Canvas ' + s.w + '\u00d7' + s.h + ' — ' + r.layers + ' layer' + (r.layers === 1 ? '' : 's') + ' scaled to match. Undo puts it back.', 3600);
           }
         }
+        if (s.w !== P0w || s.h !== P0h) FM.scene.project.keepSize = true;   // UX review top #9: a size set here is a choice the first clip must not overrule
         FM.scene.project.width = s.w; FM.scene.project.height = s.h;
         FM.scene.project.fps = s.fps;
         FM.scene.project.background = cvBg === 'none' ? null : cvBg;   // null = transparent

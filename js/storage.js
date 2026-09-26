@@ -873,6 +873,7 @@ window.FM = window.FM || {};
     if ('background' in p && p.background !== null && !(typeof p.background === 'string' && p.background.length <= 64)) p.background = null;   // null IS a value: transparent
     ['loopIn', 'loopOut'].forEach(k => { if (k in p && p[k] !== null && !(typeof p[k] === 'number' && isFinite(p[k]))) p[k] = null; });
     if ('thumbPinned' in p && typeof p.thumbPinned !== 'boolean') p.thumbPinned = false;
+    if ('keepSize' in p && typeof p.keepSize !== 'boolean') delete p.keepSize;   // UX review top #9
     if ('notes' in p) {
       if (!Array.isArray(p.notes)) p.notes = [];
       else {
@@ -2281,6 +2282,7 @@ window.FM = window.FM || {};
       if (opts.width) fresh.project.width = opts.width;
       if (opts.height) fresh.project.height = opts.height;
       if (opts.fps) fresh.project.fps = Math.max(1, Math.min(120, parseInt(opts.fps, 10) || 30));
+      if (opts.keepSize) fresh.project.keepSize = true;   // UX review top #9: the first import fits INTO this size instead of replacing it
       // background: a #rrggbb string paints, null/'' means TRANSPARENT (the compositor skips the fill).
       // Anything else is rejected rather than written into the doc — this value goes straight to fillStyle.
       if ('background' in opts) fresh.project.background = /^#[0-9a-f]{6}$/i.test(String(opts.background || '')) ? opts.background : null;

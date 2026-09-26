@@ -2662,7 +2662,10 @@ window.FM = window.FM || {};
     const s = npCompute(), fps = npFps();
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
-    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg });
+    /* keepSize (UX review top #9): a picked ratio (9:16, 16:9, 1:1, 4:5, 4:3) is a decision, and the first
+       photo must not quietly overrule it; "Custom" is the one he named "Auto adjusts" (queue 659), so only
+       that keeps following the first clip. */
+    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg, keepSize: npAspect !== 'custom' });
     if (!pid) return;   // queue 690: his open project could not be saved and he chose to stay — Home stays as it is
     FM.home.close({ push: true });   // same hand-off as tapping a card — every route from home into a project pushes
   }

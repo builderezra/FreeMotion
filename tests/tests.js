@@ -48363,6 +48363,59 @@
     }
   });
 
+  test('a picked aspect ratio survives the first photo; Custom still auto-adjusts and says so (UX review top #9)', { item: 'uxr-9' }, async function () {
+    /* The review, confirmed by a second bot: New project → 9:16 Phone → import a landscape photo first →
+     * the canvas silently became 16:9. A picked ratio is a decision; "Custom" is the tile he named "Auto
+     * adjusts" (queue 659), so only that (and projects with no choice on record) follow the first clip. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const img = (w, h) => new Promise(res => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').fillRect(0, 0, w, h); c.toBlob(b => res(new File([b], 'land.png', { type: 'image/png' })), 'image/png'); });
+    const P = FM.scene.project, layers0 = FM.scene.layers.slice();
+    const saved = { w: P.width, h: P.height, keep: P.keepSize, toast: FM.toast, create: FM.projects && FM.projects.create, homeOpen: FM.home && FM.home.isOpen && FM.home.isOpen() };
+    const toasts = [];
+    try {
+      FM.toast = function (m) { toasts.push(String(m)); return saved.toast.apply(this, arguments); };
+      const rec1 = await FM.loadImageFile(await img(320, 180));
+
+      // 1 — a project with a picked size keeps it, and the photo is fitted inside.
+      FM.scene.layers.length = 0; P.width = 1080; P.height = 1920; P.keepSize = true; FM.refreshAll();
+      FM.addMediaLayer(rec1); await sleep(60);
+      if (P.width !== 1080 || P.height !== 1920) throw new Error('a 9:16 project with its size chosen became ' + P.width + 'x' + P.height + ' when a landscape photo was imported first');
+      const L1 = FM.scene.layers.find(l => l.type === 'image');
+      if (!L1 || Math.abs(L1.transform.scale - 1080 / 320) > 0.01) throw new Error('the photo was not fitted inside the kept 9:16 frame (scale ' + (L1 && L1.transform.scale) + ')');
+
+      // 2 — CONTROL: with no choice on record the first clip still sizes the project, and now it says so.
+      FM.scene.layers.length = 0; P.width = 1080; P.height = 1920; delete P.keepSize; FM.refreshAll(); toasts.length = 0;
+      FM.addMediaLayer(await FM.loadImageFile(await img(320, 180))); await sleep(60);
+      if (!(P.width > P.height)) throw new Error('with no size chosen, a landscape first photo no longer sizes the project (' + P.width + 'x' + P.height + ')');
+      if (!toasts.some(m => /Canvas set to/.test(m))) throw new Error('the project was resized to match the photo in silence (toasts: ' + JSON.stringify(toasts) + ')');
+
+      // 3 — the New project dialog records the choice: a ratio tile keeps the size, Custom does not.
+      if (!FM.home || !FM.projects) throw new Error('Home / projects are not reachable');
+      const got = [];
+      FM.projects.create = async function (opts) { got.push(opts); return null; };   // null: nothing is made, Home stays
+      FM.home.open(); await sleep(400);
+      const pick = async (aspect) => {
+        document.getElementById('hm-new').click(); await sleep(80);
+        const tile = document.querySelector('#hm-dialog .hm-aspect[data-aspect="' + aspect + '"]');
+        if (!tile) throw new Error('no ' + aspect + ' tile in the New project dialog');
+        tile.click(); await sleep(40);
+        document.getElementById('hm-create').click(); await sleep(120);
+      };
+      await pick('16:9'); await pick('custom');
+      if (got.length !== 2) throw new Error('the dialog did not create twice (' + got.length + ')');
+      if (got[0].keepSize !== true) throw new Error('a 16:9 tile did not ask the project to keep its size');
+      if (got[1].keepSize) throw new Error('the Custom ("Auto adjusts") tile asked the project to keep its size');
+    } finally {
+      FM.toast = saved.toast;
+      if (saved.create) FM.projects.create = saved.create;
+      const dlg = document.getElementById('hm-dialog'); if (dlg) dlg.classList.add('hidden');
+      try { if (!saved.homeOpen && FM.home) FM.home.close(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      P.width = saved.w; P.height = saved.h; if (saved.keep === undefined) delete P.keepSize; else P.keepSize = saved.keep;
+      FM.refreshAll();
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.
