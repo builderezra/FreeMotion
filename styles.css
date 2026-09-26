@@ -679,14 +679,56 @@ body.text-editing .sb-wrap { display: none !important; }
   pointer-events: none;
 }
 .dh-icon { font-size: 44px; opacity: .85; }
-/* Two wordings, one per layout (queue 917 finding 14): a phone told to "drag" and to "click Import
-   media" is being told about controls it does not have, and at 320 the PC sentence also wrapped with
-   "here" alone on a line. */
-#drop-hint .dh-phone { display: none; }
+/* Only the PC has words now. The phone had its own (queue 917 finding 14: "Tap + below to add a video or image"),
+   and queue 957 took them away at his word — "that's actually outdated that text instead get rid of the text":
+   the timeline's big + right under the canvas already says "Tap here to start creating". The PC keeps its
+   sentence; nothing else there tells you that you can drag files in. */
 @media (max-width: 700px) {
   #drop-hint .dh-pc { display: none; }
-  #drop-hint .dh-phone { display: block; }
 }
+/* ═══ THE CLAP (queue 957) ═════════════════════════════════════════════════════════════════════════════
+   His words: *"it's like open and then it slams down with like a little effect with like some lines coming out of
+   it to show that it's like slap down and like clapped"*. One 6 s cycle, starting OPEN so the first thing seen is
+   an open clapper: hold, a 3° lift (anticipation), SLAM shut in 90 ms (ease-in all the way into the board), a 3.5°
+   rebound, shut; the whole icon dips 0.5 units on the impact; three lines shoot out of the tip (drawn in 70 ms)
+   and retract away, gone 230 ms after the hit. Then it sits shut until it lifts open again over the last 0.7 s,
+   so 100% = 0% and the loop has no seam.
+   It claps as the empty project opens (the 400 ms delay lets the 380 ms push from Home land first, js/home.js
+   PUSH_MS) and every 6 s while the project stays empty.
+   ⚠️ Rotations are RELATIVE TO THE DRAWN POSE, which is 7.68° open (atan2(2.4, 17.8)): 7.68deg = shut flat,
+   -20.32deg = 28° open. The hinge is the translate() wrappers in index.html, so transform-origin stays 0 0.
+   It costs nothing when it cannot be seen: #drop-hint is display:none (.hidden) as soon as there is a layer
+   (js/app.js updateDropHint), which removes the animations outright, and body.home-open stops them behind Home
+   — the same reasoning as #hm-grain's pause. Coming back to the empty project restarts them, so it claps again. */
+.dh-icon svg { overflow: visible; }   /* the open stick rises ~8 px above the 54 px box; the lines reach ~6 px past its right edge */
+.dh-stick { transform-box: view-box; transform-origin: 0 0; animation: dh-clap 6s .4s infinite both; }
+.dh-body { animation: dh-jolt 6s .4s infinite both; }
+.dh-whack path { opacity: 0; stroke-dasharray: 1 2; stroke-dashoffset: 1; animation: dh-whack 6s .4s infinite both; }
+.dh-whack { stroke: var(--accent); }   /* the lines in the accent, not the icon's grey: at 54 px grey lines read as part of the drawing, cyan reads as the hit */
+@keyframes dh-clap {
+  0% { transform: rotate(-20.32deg); }
+  5% { transform: rotate(-20.32deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  6.333% { transform: rotate(-23.32deg); animation-timing-function: cubic-bezier(.6, 0, 1, .6); }
+  7.833% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  8.833% { transform: rotate(4.18deg); animation-timing-function: ease-in; }
+  10% { transform: rotate(7.68deg); }
+  88.333% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  100% { transform: rotate(-20.32deg); }
+}
+@keyframes dh-jolt {
+  0% { transform: translateY(0px); }
+  7.833% { transform: translateY(0px); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  8.5% { transform: translateY(.5px); animation-timing-function: ease-in; }
+  10%, 100% { transform: translateY(0px); }
+}
+@keyframes dh-whack {   /* pathLength="1": offset 1 = not drawn, 0 = drawn in full, -1 = retracted off the far end */
+  0%, 7.817% { opacity: 0; stroke-dashoffset: 1; }
+  7.833% { opacity: 1; stroke-dashoffset: .7; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  9% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
+  11.667%, 100% { opacity: 0; stroke-dashoffset: -.95; }
+}
+body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path { animation: none; }
+@media (prefers-reduced-motion: reduce) { .dh-stick, .dh-body, .dh-whack path { animation: none; } }
 #stage.dragover { box-shadow: inset 0 0 0 2px var(--accent); }
 
 /* ═══ THE TWO SIDE PANELS (queue 853) ══════════════════════════════════════════════════════════════
@@ -10543,9 +10585,10 @@ body.collab-ro #btn-parent, body.collab-ro #btn-group, body.collab-ro #btn-maskg
 body.collab-ro #proj-name-m, body.collab-ro #clip-name-m, body.collab-ro #proj-name-s, body.collab-ro #proj-name { pointer-events: none; }
 /* S7 review: #add-fab is display:none at EVERY width already (queue 294), so the rule above hid nothing. The
    phone's + is the timeline's add row, the ⋯ is a menu of edits (lock, flip, fit, reset, masks), the ≡ grips
-   reorder layers, and the empty stage says "Tap + below" — none of it is a Viewer's or a Commenter's. */
+   reorder layers — none of it is a Viewer's or a Commenter's. (The empty stage's "Tap + below" line that was
+   hidden here is gone for everyone since queue 957.) */
 body.collab-ro .tl-addrow, body.collab-ro .row-drag, body.collab-ro #m-more, body.collab-ro #btn-more-layer,
-body.collab-ro #btn-split, body.collab-ro #vb-camera, body.collab-ro #drop-hint .dh-phone { display: none !important; }
+body.collab-ro #btn-split, body.collab-ro #vb-camera { display: none !important; }
 .collab-ro-note {
   margin: 6px 10px 4px; padding: 6px 10px; border-radius: 9px; font-size: 12px; font-weight: 600; line-height: 1.35;
   background: rgba(90, 199, 237, .1); border: 1px solid rgba(90, 199, 237, .32); color: var(--text);

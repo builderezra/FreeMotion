@@ -12352,10 +12352,12 @@
     }
   });
 
-  /* 917.14 — the empty canvas told a PHONE to "Drag a video or image here or click Import media": no drag,
-     no such button. The phone gets its own words; the PC keeps its sentence. And at 320 the PC sentence
-     wrapped with "here" alone on a line, so the phone wording must not wrap past its own two lines. */
-  test('917.14 the empty canvas hint tells a phone what it can do, and the PC keeps drag and Import media', { item: '917' }, async function () {
+  /* 917.14 — the empty canvas told a PHONE to "Drag a video or image here or click Import media": no drag, no such
+     button. The phone got its own words ("Tap + below…"), and queue 957 took those away too. His words: "that's
+     actually outdated that text instead get rid of the text" — the timeline's big + right under the canvas already
+     says "Tap here to start creating" (js/timeline.js addRowLabel), so the stage was saying it twice. The phone shows
+     the clapper alone; the PC keeps its sentence, the only place that tells you you can drag files in. */
+  test('917.14 the empty canvas hint: a phone shows the clapper and no words, the PC keeps drag and Import media', { item: '917' }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
     const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -12367,16 +12369,14 @@
     try {
       if (homeWasOpen) FM.home.close();
       FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(80);
-      await atPhoneWidth(async function () {
-        const d = shown(), txt = d.innerText.replace(/\s+/g, ' ').trim();
-        if (/drag|click|import media/i.test(txt)) throw new Error('at 320px the empty canvas says "' + txt + '" — a phone has no drag-and-drop and no Import media button');
-        if (!/tap/i.test(txt)) throw new Error('at 320px the empty canvas says "' + txt + '", which does not tell him what to tap');
-        const vis = [].slice.call(d.children).filter(c => !c.classList.contains('dh-icon') && c.getBoundingClientRect().width > 0)[0];
-        const rg = document.createRange(); rg.selectNodeContents(vis);
-        const tops = new Set([].slice.call(rg.getClientRects()).filter(r => r.width > 1).map(r => Math.round(r.top)));
-        const want = vis.querySelectorAll('br').length + 1;
-        if (tops.size > want) throw new Error('at 320px the phone hint wraps onto ' + tops.size + ' lines instead of its own ' + want + ' — a word is left alone on a line');
-      }, 320);
+      for (const w of [320, 380, 440]) {
+        await atPhoneWidth(async function () {
+          const d = shown(), txt = d.innerText.replace(/\s+/g, ' ').trim();
+          if (txt) throw new Error('at ' + w + 'px the empty canvas still says "' + txt + '" — he asked for the words to go; the big + under the canvas already says "Tap here to start creating"');
+          const ic = d.querySelector('.dh-icon svg'), r = ic && ic.getBoundingClientRect();
+          if (!r || !(r.width > 30 && r.height > 30)) throw new Error('at ' + w + 'px the clapper is not on screen either — the empty canvas shows nothing at all');
+        }, w);
+      }
       await atWideWidth(async function () {
         const txt = shown().innerText.replace(/\s+/g, ' ').trim();
         if (!/drag/i.test(txt) || !/import media/i.test(txt)) throw new Error('on PC the empty canvas lost its drag / Import media wording: "' + txt + '"');
@@ -101229,6 +101229,196 @@
       });
     }
     if (misses.length) throw new Error('these buttons are still a typed ✕ (queue 965: one drawn ✕ for the app): ' + misses.join(', '));
+  });
+
+  /* ═══ QUEUE 957 — THE ARROW'S TIP LANDS INSIDE THE + ══════════════════════════════════════════════════════════════
+     Ezra, 26 Sep, on his phone at v17.02 (dictated): *"The hour [arrow] is inside of the plus button"*.
+     home-arrow.js aims the tip at the +'s centre + (radius + 12) px, reading the + from getBoundingClientRect() at the
+     moment it draws — and on the first open that moment falls inside the +'s OWN ENTRANCE (hm-rise-fab: held at
+     translateY(18px) scale(.86) through its animation-delay, then rising). So the arrow is aimed at a + that is 18px low
+     and 14% small, and the + then rises up into the tip. Reproduced here the way both launch roads reach it: the + is
+     stamped with the exact classes stampIntro() gives it, and Home re-renders its EMPTY Projects tab, which calls
+     arrowSoon() -> FM.homeArrow.draw() two frames later, inside the +'s delay. Measured on HEAD (tools/shot.py, a real
+     first launch in a 440x956 phone frame): see plan — the tip ends ~25px from the centre of a 29px-radius +.
+     CONTROL first: the same arrow drawn with the + at rest must land exactly where the code aims it — proves the tip is
+     read correctly, so a red below is the timing, not the measuring. */
+  test('957 the Home arrow to the + ends outside the + even when Home opens with the + still rising in (queue 957)', { item: '957', budgetMs: 60000 }, async function () {
+    if (!FM.homeArrow || !FM.home || !FM.projects) throw new Error('need FM.homeArrow, FM.home and FM.projects');
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const U = [Math.cos(-52 * Math.PI / 180), Math.sin(-52 * Math.PI / 180)];
+    const tip = () => {            // the main stroke's centre-line is the FIRST mask path; its last point is the tip E
+      const mp = document.querySelector('#hm-arrow936 mask path');
+      if (!mp) return null;
+      const n = mp.getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number);
+      return [n[n.length - 2], n[n.length - 1]];
+    };
+    const plus = () => { const p = document.getElementById('hm-new').getBoundingClientRect(); return { cx: p.left + p.width / 2, cy: p.top + p.height / 2, r: p.width / 2 }; };
+    const finiteAnims = el => el.getAnimations().filter(a => { const t = a.effect.getComputedTiming(); return isFinite(t.endTime) && a.playState !== 'finished' && a.playState !== 'idle'; });
+    const home = document.getElementById('home-screen'), fab = document.getElementById('hm-new');
+    if (!home || !fab) throw new Error('need #home-screen and #hm-new');
+    const hadHome = FM.home.isOpen(), list0 = FM.projects.list, look0 = document.documentElement.getAttribute('data-home');
+    const rows = [];
+    const oneCase = async (label) => {
+      FM.home.refresh(); await wait(700);             // the empty Projects tab, settled: no entrance on the +
+      if (!document.querySelector('#home-screen .hm-grid .hm-empty-title')) throw new Error(label + ': the Projects tab is not showing its empty state');
+      if (finiteAnims(fab).length) throw new Error(label + ': the + is still animating before the case starts');
+      // CONTROL — drawn with the + at rest, the tip is exactly radius + 12 from the centre, up and to the right
+      FM.homeArrow.draw({ still: true });
+      const P0 = plus(), E0 = tip();
+      if (!E0) throw new Error(label + ': control: no arrow was drawn at rest (is the frame tall enough for the swoop?)');
+      const d0 = Math.hypot(E0[0] - P0.cx, E0[1] - P0.cy);
+      if (Math.abs(d0 - (P0.r + 12)) > 1) throw new Error(label + ': control: at rest the tip is ' + d0.toFixed(1) + 'px from the +\'s centre, the code aims at ' + (P0.r + 12).toFixed(1) + ' — the tip is not being read right');
+      // HIS CONDITION — the + stamped exactly as stampIntro() stamps it on a first open, then Home renders the empty tab
+      home.classList.add('hm-intro');
+      fab.classList.add('hm-in-fab');
+      fab.style.animationDelay = '0.545s';           // 0.05 + 9 x 0.055: brand, search, Select, cog, 4 tabs, the empty state
+      FM.home.refresh();
+      // (under prefers-reduced-motion the entrance is `animation: none` — styles.css — so there is no rise to be caught in;
+      //  the arrow then draws at once and the checks below still hold. Measured with the setting emulated: without this
+      //  guard the control, not the code, was the red.)
+      if (!finiteAnims(fab).length && !matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error(label + ': control: the +\'s entrance did not start, so this case is not his');
+      for (let i = 0; i < 60 && (finiteAnims(fab).length || !tip()); i++) await wait(100);   // the + lands; the arrow is there
+      await wait(1500);                              // …and the draw-on (1.27s) has finished
+      const P = plus(), E = tip();
+      if (!E) throw new Error(label + ': no arrow at all once the + had landed — the empty Projects tab must still point at the +');
+      const d = Math.hypot(E[0] - P.cx, E[1] - P.cy);
+      const want = [P.cx + U[0] * (P.r + 12), P.cy + U[1] * (P.r + 12)], off = Math.hypot(E[0] - want[0], E[1] - want[1]);
+      rows.push(label + ' ' + d.toFixed(1) + '/' + (P.r + 12).toFixed(1));
+      if (d < P.r + 4) throw new Error(label + ': the arrow\'s tip is ' + d.toFixed(1) + 'px from the centre of a ' + P.r.toFixed(1) + 'px-radius + — INSIDE it (his "the arrow is inside of the plus button"). It was aimed while the + was still rising in.');
+      if (off > 2) throw new Error(label + ': the tip is ' + off.toFixed(1) + 'px from where it is aimed (radius + 12 at -52°) — ' + d.toFixed(1) + 'px from the centre, wanted ' + (P.r + 12).toFixed(1));
+      home.classList.remove('hm-intro'); fab.classList.remove('hm-in-fab'); fab.style.animationDelay = '';
+    };
+    try {
+      FM.projects.list = () => [];                   // an EMPTY Projects tab without touching the suite's own project
+      if (!hadHome) FM.home.open();
+      await wait(2200);                              // past stripIntro's 2 s timer, in case this open ran the first-open entrance itself
+      const pt = home.querySelector('.hm-tab[data-tab="projects"]');
+      if (pt && !pt.classList.contains('active')) { pt.click(); await wait(700); }
+      for (const w of [440, 380]) {
+        await atPhoneWidth(async () => {
+          for (const look of ['light', 'dark']) {
+            document.documentElement.setAttribute('data-home', look);
+            await oneCase(w + ' ' + look);
+          }
+        }, w);
+      }
+    } finally {
+      home.classList.remove('hm-intro'); fab.classList.remove('hm-in-fab'); fab.style.animationDelay = '';
+      FM.projects.list = list0;
+      if (look0 == null) document.documentElement.removeAttribute('data-home'); else document.documentElement.setAttribute('data-home', look0);
+      FM.homeArrow.clear();
+      FM.home.refresh();
+      if (!hadHome) FM.home.close();
+      await wait(100);
+    }
+  });
+
+  /* ═══ 957 — THE EMPTY PROJECT'S CLAPPER CLAPS ════════════════════════════════════════════════════════════
+     His words, 26 Sep (dictated): "get rid of the text and just make it make a little animation for like the film
+     real thing where it's like open and then it slams down with like a little effect with like some lines coming out
+     of it to show that it's like slap down and like clapped".
+     ⚠️ MEASURED ON THE DRAWING, NOT READ OFF THE CSS. The clap is paused and SEEKED through its first 1.2 s, and every
+     10 ms the bar's hinge and tip are mapped through its live CTM into the board's coordinates: open at the start,
+     hinge on the board's corner the whole way, shut flat on the board, and quick about it. A keyframe that exists but
+     turns the stick about the wrong point — the transform-origin trap on SVG children — moves the hinge and fails
+     here, where a check of the CSS text would pass.
+     ⚠️ "IT STOPS" HAS ITS CONTROL: the same query that must find nothing behind Home and with a layer on the stage
+     must first find the clap running on the empty stage, and must find it again when each of those goes away. */
+  test('957 the empty project clapper opens, slams shut on the board with lines out of the tip, and stops when it cannot be seen', { item: '957' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const d = document.getElementById('drop-hint');
+    const claps = () => d.getAnimations({ subtree: true }).filter(a => /^dh-/.test(a.animationName || ''));
+    try {
+      if (homeWasOpen) FM.home.close();
+      FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(80);
+      if (d.classList.contains('hidden') || !(d.getBoundingClientRect().width > 0)) throw new Error('the empty-canvas hint is not on screen with no layers, so there is nothing to watch');
+      const stick = d.querySelector('.dh-stick');
+      const bar = stick && stick.querySelectorAll('path')[1], board = d.querySelector('.dh-body > path');
+      const lines = [].slice.call(d.querySelectorAll('.dh-whack path'));
+      if (!stick || !bar || !board) throw new Error('the clapper is still one still drawing: no hinged stick (.dh-stick) to open and slam onto a board (.dh-body > path)');
+      if (lines.length < 3) throw new Error('the slam has ' + lines.length + ' impact lines; he asked for "some lines coming out of it"');
+
+      // reduced motion: the still v5.92 drawing, no clap — asserted on the stylesheet so it holds on every machine,
+      // not only on one with the OS setting on (the runner does not emulate it)
+      const rmRules = [];
+      [].slice.call(document.styleSheets).forEach(ss => {
+        let rules; try { rules = ss.cssRules; } catch (e) { return; }
+        [].slice.call(rules || []).forEach(r => {
+          if (!r.media || !/prefers-reduced-motion:\s*reduce/.test(r.media.mediaText)) return;
+          [].slice.call(r.cssRules).forEach(c => { if (c.selectorText && /\.dh-stick/.test(c.selectorText) && c.style.animationName === 'none') rmRules.push(c.selectorText); });
+        });
+      });
+      if (!rmRules.length) throw new Error('no prefers-reduced-motion rule stops the clap (.dh-stick { animation: none }) — someone who has asked for less motion gets a slamming icon');
+      if (reduced) {
+        if (claps().length) throw new Error('under prefers-reduced-motion the clapper still runs ' + claps().map(a => a.animationName).join(', '));
+        return;
+      }
+
+      const running = claps();
+      const clap = running.filter(a => a.animationName === 'dh-clap')[0];
+      if (!clap) throw new Error('nothing animates the stick (running on the empty stage: ' + (running.map(a => a.animationName).join(', ') || 'none') + ')');
+      const tm = clap.effect.getComputedTiming();
+      // his pick (variant A): it claps as the empty project opens and again every ~6 s while it stays empty
+      if (tm.iterations !== Infinity) throw new Error('the clap plays ' + tm.iterations + ' time(s); it is meant to come back every few seconds while the project is empty');
+      if (!(tm.duration >= 4000 && tm.duration <= 8000)) throw new Error('one clap cycle is ' + tm.duration + 'ms — meant to be a clap every ~6 s, not constant flapping nor a rare one');
+
+      // ⚠️ Points, not boxes: getBoundingClientRect on a rotated SVG path is the box of its ROTATED BOUNDING BOX
+      // (measured: the shut bar reads 8.4 units tall, not 3.6), which cannot tell shut from ajar. So the bar's own
+      // hinge and tip are mapped through its live CTM into the BOARD's coordinates, where the board's top is y = 9.
+      const inBoard = (el, x, y) => new DOMPoint(x, y).matrixTransform(el.getScreenCTM()).matrixTransform(board.getScreenCTM().inverse());
+      const S = [];
+      for (let ms = 0; ms <= 1200; ms += 10) {
+        running.forEach(a => { a.pause(); a.currentTime = tm.delay + ms; });
+        const H = inBoard(bar, 3.2, 8.9), R = inBoard(bar, 21, 6.5);          // the bar's bottom edge: hinge → tip
+        S.push({ ms: ms, deg: Math.atan2(H.y - R.y, R.x - H.x) * 180 / Math.PI,  // how far OPEN, in degrees (0 = flat)
+                 hinge: Math.hypot(H.x - 3.2, H.y - 8.9), tipY: R.y,
+                 ink: Math.max.apply(null, lines.map(p => +getComputedStyle(p).opacity)),
+                 out: Math.min.apply(null, lines.map(p => { const b = p.getBBox(); return inBoard(p, b.x, b.y).x - 21; })) });
+      }
+      running.forEach(a => a.play());
+      const s0 = S[0];
+      // 1. it starts OPEN — "it's like open and then it slams down"
+      if (!(s0.deg > 20)) throw new Error('at the start the stick is ' + s0.deg.toFixed(1) + '° open — it does not start open');
+      if (s0.ink > 0.05) throw new Error('the impact lines are showing before the slam (opacity ' + s0.ink + ')');
+      // 2. the hinge stays on the board's top-left corner through the whole clap — a wrong rotation centre moves it
+      const off = S.filter(s => s.hinge > 0.3)[0];
+      if (off) throw new Error('at ' + off.ms + 'ms the stick\'s hinge has moved ' + off.hinge.toFixed(2) + ' units off the board\'s corner — it is swinging about the wrong point');
+      // 3. it SHUTS: flat on the board, its tip down on the board's top edge
+      const hit = S.filter(s => s.deg < 1)[0];
+      if (!hit) throw new Error('the stick never shuts: it is never less than ' + Math.min.apply(null, S.map(s => s.deg)).toFixed(1) + '° open in the first 1.2 s');
+      if (Math.abs(hit.tipY - 8.9) > 0.4) throw new Error('shut, the stick\'s tip is at y=' + hit.tipY.toFixed(2) + ' — not down on the board\'s top edge');
+      // 4. it SLAMS: from mostly open to shut in a blink, not a gentle close
+      const lastOpen = S.filter(s => s.ms < hit.ms && s.deg > 0.8 * s0.deg).pop();
+      if (!lastOpen) throw new Error('the stick was never mostly open before it shut');
+      if (hit.ms - lastOpen.ms > 150) throw new Error('the stick takes ' + (hit.ms - lastOpen.ms) + 'ms from open to shut — that is a close, not a slam');
+      // 5. the lines burst AT the impact, out past the tip, and are gone again
+      const burst = S.filter(s => s.ms >= hit.ms - 10 && s.ms <= hit.ms + 80 && s.ink > 0.5)[0];
+      if (!burst) throw new Error('no impact lines within 80ms of the slam at ' + hit.ms + 'ms');
+      if (burst.out < -0.5) throw new Error('the impact lines start ' + (-burst.out).toFixed(1) + ' units inside the board — they are meant to fly out of the tip');
+      const late = S.filter(s => s.ms >= hit.ms + 400 && s.ink > 0.05)[0];
+      if (late) throw new Error('the impact lines still show at ' + late.ms + 'ms, 400ms after the slam — a burst, not a decoration');
+
+      // 6. nothing animates where it cannot be seen — and it comes back when it can (the "running" above is the control)
+      FM.home.open(); await sleep(150);
+      const behindHome = claps().length;
+      FM.home.close(); await sleep(150);
+      if (behindHome) throw new Error('the clapper keeps animating behind Home (' + behindHome + ' animations), repainting under a screen that covers it');
+      if (!claps().length) throw new Error('back from Home the clap did not start again');
+      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: '957', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+      FM.refreshAll(); await sleep(80);
+      if (!d.classList.contains('hidden')) throw new Error('with a layer on the stage the empty-canvas hint is still shown');
+      if (claps().length) throw new Error('with a layer on the stage the hidden clapper still animates (' + claps().length + ')');
+      FM.scene.layers.length = 0; FM.refreshAll(); await sleep(80);
+      if (!claps().length) throw new Error('with the stage empty again the clap did not come back');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
   });
 
 })();
