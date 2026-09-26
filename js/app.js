@@ -4854,33 +4854,77 @@ window.FM = window.FM || {};
   async function handleFiles(files) {
     // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
     const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
-    for (const file of files) {
+    /* SEVERAL PICTURES FROM ONE PICK GO END TO END (UX review top #6). Every import lands at the playhead
+       and then parks the playhead at its own start, so the second of three photos landed exactly where the
+       first did: all three stacked at 0:00, only the top one visible, and a slideshow began with 14 steps
+       of trimming and moving (a second bot confirmed it). Picking several photos in order almost always
+       means "in this order", so each picture now lands where the previous one ends; audio picked in the
+       same batch lines up under the first picture. Stacking stays one tap away in the toast. */
+    const kinds = files.map(f => { try { return mediaKind(f); } catch (e) { return ''; } });
+    const seq = !wantAudio && kinds.filter(k => k === 'video' || k === 'image').length > 1;
+    let seqAt = null, seqFirst = null;
+    const seqIds = [];
+    const seqBefore = (kind) => {
+      if (!seq) return;
+      if (kind === 'audio') { if (seqFirst != null) FM.time = seqFirst; }
+      else if (seqAt != null) FM.time = seqAt;
+    };
+    const seqAfter = (kind) => {
+      if (!seq || (kind !== 'video' && kind !== 'image')) return;
+      const L = FM.layerById(FM.scene, FM.scene.selectedId);
+      if (!L || seqIds.indexOf(L.id) >= 0) return;
+      if (seqFirst == null) seqFirst = L.start;
+      seqAt = L.start + L.duration; seqIds.push(L.id);
+    };
+    for (let fi = 0; fi < files.length; fi++) {
+      const file = files[fi];
       try {
-        const kind = mediaKind(file);
-        if (wantAudio && kind === 'video') {
-          if (FM.loadingDot) FM.loadingDot.check();
-          if (FM.toast) FM.toast('Taking the audio out of “' + (file.name || 'that clip') + '”…', 2200);
-          const wav = await audioFromVideo(file);
-          if (wav) {
-            FM.addMediaLayer(await FM.loadVideoFile(wav));
-            if (FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”');
-          } else {
-            // Say what happened and still do the useful thing, rather than importing nothing.
-            if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — added it as a video instead', 5200);
-            FM.addMediaLayer(await FM.loadVideoFile(file));
-          }
-          continue;
-        }
-        if (kind === 'video') FM.addMediaLayer(await FM.loadVideoFile(file));
-        else if (kind === 'image') FM.addMediaLayer(await FM.loadImageFile(file));
-        // Audio rides the pictureless-video path: a <video> element plays mp3/m4a/wav fine, and a
-        // 0×0-picture clip already gets the waveform lane, live mix, keyframed volume and export mix.
-        else if (kind === 'audio') FM.addMediaLayer(await FM.loadVideoFile(file));
-        // Never fail silently: an unusable file used to vanish without a word, which reads as the
-        // importer being broken rather than the file being unsupported.
-        else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
+        const kind = kinds[fi] || mediaKind(file);
+        seqBefore(kind);
+        const _n0 = FM.scene.layers.length;
+        await addOne(file, kind, wantAudio);
+        if (FM.scene.layers.length > _n0) seqAfter(kind);
       } catch (e) { FM.reportError('importing “' + (file && file.name || 'a file') + '”', e, 'FreeMotion could not open “' + (file && file.name || 'that file') + '”.\n\nIf it plays elsewhere on this device it is usually the format — try exporting it as MP4 (video) or WAV/M4A (audio) and importing that.'); }
     }
+    if (seq && seqIds.length > 1) {
+      if (FM.setTime) FM.setTime(seqFirst); else FM.time = seqFirst;
+      const ids = seqIds.slice(), at = seqFirst;
+      if (FM.toast) FM.toast('Added ' + ids.length + ' in a row. Tap to stack them at the start instead', 5200, function () {
+        ids.forEach(id => { const L = FM.layerById(FM.scene, id); if (L) L.start = at; });
+        const P = FM.scene.project;
+        P.duration = Math.max(0.1, ...FM.scene.layers.map(l => (l.start || 0) + (l.duration || 0)));
+        if (FM.setTime) FM.setTime(at);
+        refreshAll();
+        if (FM.history) FM.history.commit();
+      });
+    }
+  }
+  FM._handleFiles = handleFiles;   // seam: the suite drives a multi-file pick without a native picker
+  // One file of a pick, added through FM.addMediaLayer. Split out of handleFiles so the batch can place
+  // each one (see the end-to-end note above); the body is unchanged apart from `continue` → `return`.
+  async function addOne(file, kind, wantAudio) {
+    if (wantAudio && kind === 'video') {
+      if (FM.loadingDot) FM.loadingDot.check();
+      if (FM.toast) FM.toast('Taking the audio out of “' + (file.name || 'that clip') + '”…', 2200);
+      const wav = await audioFromVideo(file);
+      if (wav) {
+        FM.addMediaLayer(await FM.loadVideoFile(wav));
+        if (FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”');
+      } else {
+        // Say what happened and still do the useful thing, rather than importing nothing.
+        if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — added it as a video instead', 5200);
+        FM.addMediaLayer(await FM.loadVideoFile(file));
+      }
+      return;
+    }
+    if (kind === 'video') FM.addMediaLayer(await FM.loadVideoFile(file));
+    else if (kind === 'image') FM.addMediaLayer(await FM.loadImageFile(file));
+    // Audio rides the pictureless-video path: a <video> element plays mp3/m4a/wav fine, and a
+    // 0×0-picture clip already gets the waveform lane, live mix, keyframed volume and export mix.
+    else if (kind === 'audio') FM.addMediaLayer(await FM.loadVideoFile(file));
+    // Never fail silently: an unusable file used to vanish without a word, which reads as the
+    // importer being broken rather than the file being unsupported.
+    else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
   }
 
   /* ---------- export ---------- */

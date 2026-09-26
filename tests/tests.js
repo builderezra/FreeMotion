@@ -48216,6 +48216,53 @@
     }
   });
 
+  test('several photos from one pick land end to end, and the toast can stack them back (UX review top #6)', { item: 'uxr-6' }, async function () {
+    /* The review (confirmed by a second bot): picking three photos at once put all three at 0:00, stacked,
+     * only the top one visible — a 3-photo slideshow then began with 14 steps of trimming and moving. Every
+     * import lands at the playhead and parks the playhead at its own start, so the next one landed on top. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM._handleFiles) throw new Error('FM._handleFiles is missing, so a multi-file pick cannot be driven');
+    const png = (col) => new Promise(res => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; const g = c.getContext('2d'); g.fillStyle = col; g.fillRect(0, 0, 64, 64); c.toBlob(b => res(new File([b], col.replace('#', 'c') + '.png', { type: 'image/png' })), 'image/png'); });
+    const layers0 = FM.scene.layers.slice(), P = FM.scene.project, dur0 = P.duration, w0 = P.width, h0 = P.height, t0 = FM.time, toast0 = FM.toast;
+    let lastToast = null;
+    try {
+      FM.scene.layers.length = 0; P.duration = 10; FM.time = 0; FM.refreshAll();
+      FM.toast = function (msg, ms, onTap) { lastToast = { msg: msg, onTap: onTap }; return toast0.apply(this, arguments); };
+      const d = FM.defaultLayerDuration();
+      const files = [await png('#e33'), await png('#3e3'), await png('#33e')];
+      await FM._handleFiles(files); await sleep(150);
+      const got = FM.scene.layers.filter(l => l.type === 'image').sort((a, b) => a.start - b.start);
+      if (got.length !== 3) throw new Error('expected 3 image layers from the pick, got ' + got.length);
+      const starts = got.map(l => +l.start.toFixed(3));
+      if (starts[0] !== 0 || Math.abs(starts[1] - d) > 1e-3 || Math.abs(starts[2] - 2 * d) > 1e-3)
+        throw new Error('three photos from one pick started at ' + starts.join(', ') + ' s; they should run end to end at 0, ' + d + ', ' + (2 * d));
+      const names = got.map(l => l.name).join(',');
+      if (names !== 'ce33,c3e3,c33e') throw new Error('the pictures are not in the order they were picked: ' + names);
+      if (Math.abs(FM.time) > 1e-3) throw new Error('after the pick the playhead is at ' + FM.time + ', not at the start of what was added');
+      if (!lastToast || !/in a row/.test(lastToast.msg) || typeof lastToast.onTap !== 'function') throw new Error('no "added in a row" toast with a tap to stack them: ' + JSON.stringify(lastToast && lastToast.msg));
+
+      // Tapping the toast puts them all back at the start (the old behaviour, kept one tap away).
+      lastToast.onTap(); await sleep(60);
+      const stacked = FM.scene.layers.filter(l => l.type === 'image').map(l => +l.start.toFixed(3));
+      if (stacked.some(v => v !== 0)) throw new Error('"stack them" left starts at ' + stacked.join(', '));
+
+      // CONTROL: a single pick is untouched — it lands at the playhead, and says nothing about rows.
+      FM.scene.layers.length = 0;
+      FM.scene.layers.push(FM.makeLayer('shape', { name: 'bg', shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, fill: '#000', start: 0, duration: 10 }));
+      FM.refreshAll(); P.duration = 10;   // AFTER the refresh, which recomputes the length from the layers
+      FM.time = 2; lastToast = null;
+      await FM._handleFiles([await png('#999')]); await sleep(100);
+      const one = FM.scene.layers.find(l => l.type === 'image');
+      if (!one || Math.abs(one.start - 2) > 1e-3) throw new Error('a single photo no longer lands at the playhead (start ' + (one && one.start) + ')');
+      if (lastToast && /in a row/.test(lastToast.msg)) throw new Error('a single photo announced "in a row"');
+    } finally {
+      FM.toast = toast0;
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      P.duration = dur0; P.width = w0; P.height = h0; FM.time = t0;
+      FM.refreshAll();
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.
