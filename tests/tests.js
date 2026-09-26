@@ -48263,6 +48263,48 @@
     }
   });
 
+  test('a finished GIF or saved PNG frame leaves a message naming the file, not a 900 ms flash (UX review top #7)', { item: 'uxr-7', budgetMs: 40000 }, async function () {
+    /* The review, confirmed by a second bot: the "Exporting… NN%" box reached 100% and vanished. Its only
+     * confirmation, "Done — saved to your Downloads.", lived for 900 ms, so a finished export looked exactly
+     * like a failed one; and a saved PNG frame said nothing at all. The MP4 path already ends on its own
+     * card (queue 141 part 4) and is not what this is about. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (typeof FM._runExport !== 'function') throw new Error('FM._runExport is not reachable, so the Export button cannot be driven');
+    const saved = { scene: FM.scene, time: FM.time, toast: FM.toast };
+    const fmtEl = document.getElementById('exp-format'), resEl = document.getElementById('exp-res'), rangeEl = document.getElementById('exp-range');
+    const fmt0 = fmtEl && fmtEl.value, res0 = resEl && resEl.value, range0 = rangeEl && rangeEl.value;
+    const msgs = [];
+    try {
+      const L = FM.makeLayer('shape', { name: 'gif body', shape: 'rect', x: 32, y: 32, shapeW: 30, shapeH: 30, fill: '#e33', start: 0, duration: 1 });
+      FM.scene = { layers: [L], selectedId: null, selectedIds: [], project: { name: 'uxr7 clip', width: 64, height: 64, fps: 10, duration: 1, background: '#000000' } };
+      FM.time = 0; FM.refreshAll();
+      FM.toast = function (m) { msgs.push(String(m)); return saved.toast.apply(this, arguments); };
+      if (!fmtEl || ![].some.call(fmtEl.options, o => o.value === 'gif')) throw new Error('no GIF option in #exp-format');
+      fmtEl.value = 'gif';
+      if (resEl && !resEl.options.length) { const o = document.createElement('option'); o.value = '1'; resEl.appendChild(o); }
+      if (resEl) resEl.value = [].some.call(resEl.options, o => o.value === '1') ? '1' : resEl.options[0].value;
+      if (rangeEl) rangeEl.value = [].some.call(rangeEl.options, o => o.value === 'all') ? 'all' : rangeEl.value;
+      await FM._runExport();
+      const overlay = document.getElementById('export-overlay');
+      await sleep(1400);   // past the overlay's 900 ms "Done" beat
+      if (overlay && !overlay.classList.contains('hidden')) throw new Error('the export overlay is still up 1.4 s after the GIF finished, so the probe did not see a finished export');
+      const said = msgs.filter(m => /Saved/.test(m) && /\.gif/.test(m));
+      if (!said.length) throw new Error('a finished GIF left no message behind (toasts seen: ' + JSON.stringify(msgs.slice(-4)) + ')');
+      if (!/uxr7 clip\.gif/.test(said[0])) throw new Error('the message does not name the file that was made: ' + said[0]);
+
+      // The single PNG frame: it used to save in complete silence.
+      msgs.length = 0;
+      FM.snapshotPNG(); await sleep(600);
+      if (!msgs.some(m => /Saved/.test(m) && /\.png/.test(m))) throw new Error('saving a PNG frame said nothing (toasts seen: ' + JSON.stringify(msgs) + ')');
+    } finally {
+      FM.toast = saved.toast;
+      if (fmtEl && fmt0 != null) fmtEl.value = fmt0; if (resEl && res0 != null) resEl.value = res0; if (rangeEl && range0 != null) rangeEl.value = range0;
+      const ov = document.getElementById('export-overlay'); if (ov) ov.classList.add('hidden');
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.

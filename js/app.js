@@ -3823,6 +3823,8 @@ window.FM = window.FM || {};
       const a = document.createElement('a'); a.href = url; a.download = base + '-' + t.toFixed(2) + 's.png';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // Say it happened (UX review top #7): a saved frame used to produce no sign at all on screen.
+      if (FM.toast) FM.toast('Saved “' + a.download + '” to your Downloads', 3600);
     }, 'image/png');
   };
 
@@ -5554,7 +5556,15 @@ window.FM = window.FM || {};
        * downloads straight away and still gets told so. (queue 141 part 4) */
       if (fmt !== 'mp4') {
         status.textContent = 'Done — saved to your Downloads.';
-        setTimeout(() => overlay.classList.add('hidden'), 900);
+        /* …AND IT STAYS SAID (UX review top #7, confirmed by a second bot). That line was the only
+           confirmation and it lived for 900ms, so a finished GIF looked exactly like a cancelled or failed
+           one: two bots screenshotting right after 100% never once caught it. The overlay still closes on
+           the same beat; a toast with the file's name is left behind, where nothing is painted over it. */
+        const savedAs = fmt === 'gif' ? expName + '.gif' : (fmt === 'frames' ? expName + '_frames.zip' : '');
+        setTimeout(() => {
+          overlay.classList.add('hidden');
+          if (FM.toast) FM.toast(savedAs ? 'Saved “' + savedAs + '” to your Downloads' : 'Export saved to your Downloads', 4200);
+        }, 900);
       } else {
         overlay.classList.add('hidden');
       }
