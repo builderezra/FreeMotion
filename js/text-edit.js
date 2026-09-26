@@ -551,11 +551,38 @@ window.FM = window.FM || {};
     FM.requestRender();
   }
 
+  /* A PASTED PARAGRAPH SHOULD NOT RUN OFF BOTH EDGES (UX review top #11, confirmed by a second bot). A text
+     layer does not wrap until you drag its side bars (v5.40, "drag the border of the text to decide when the
+     text wraps"), so a 300-character caption committed as one giant line far past the frame, while the
+     typing box above it showed it neatly wrapped. When THIS edit is what pushed an unwrapped layer past the
+     frame, it gets a wrap at 90% of the frame's width and says so; the side bars still move it. A line that
+     already overflowed before the edit (a ticker made on purpose) is left alone, and so is any layer with
+     a wrap of its own. */
+  function textWidthOnCanvas(l) {
+    if (!FM.layerSize || !FM.evalProp) return 0;
+    const sz = FM.layerSize(l); if (!sz) return 0;
+    const tr = l.transform || {};
+    const sc = Math.abs((FM.evalProp(tr.scale, FM.time) || 1) * (tr.scaleX != null ? FM.evalProp(tr.scaleX, FM.time) : 1)) || 1;
+    return { w: sz.w * sc, sc: sc };
+  }
+  function autoWrapIfNewlyOverflowing(l, before) {
+    if (!l || l.type !== 'text' || Number(l.wrapWidth) > 0) return;
+    const P = FM.scene && FM.scene.project; if (!P || !P.width) return;
+    if (before && before.w > P.width) return;               // it already ran past the frame before this edit
+    const now = textWidthOnCanvas(l);
+    if (!now || now.w <= P.width) return;
+    l.wrapWidth = Math.max(20, Math.round(P.width * 0.9 / now.sc));
+    if (FM.toast) FM.toast('Long text wrapped to fit the frame. Drag the side bars to change where it wraps.', 4200);
+  }
+  FM._textAutoWrap = autoWrapIfNewlyOverflowing;   // seam for the suite
+
   function commit() {
     const l = layer();
     if (l && input) {
       const c = activeCue();
+      const before = active ? active.startW : null;   // onInput has already written the new text, so this was taken when the editor opened
       if (c) c.text = input.value; else l.text = input.value;
+      if (!c) autoWrapIfNewlyOverflowing(l, before);
     }
     dropEmptyCreated();
     if (l && FM.captions && Array.isArray(l.captions)) FM.captions.normalize(l);
@@ -646,7 +673,8 @@ window.FM = window.FM || {};
       if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       if (FM.selectLayer) FM.selectLayer(l.id);
-      active = { layerId: layerId, prevText: l.text, cueIndex: null, createdCue: false };
+      active = { layerId: layerId, prevText: l.text, cueIndex: null, createdCue: false,
+                 startW: (l.type === 'text' && !(Number(l.wrapWidth) > 0)) ? textWidthOnCanvas(l) : null };   // UX review top #11: measured BEFORE typing, because onInput writes the text live
       bindCue(l);   // caption track → this session edits a CUE, not layer.text
 
       // ---- the editor's one wrapper ----

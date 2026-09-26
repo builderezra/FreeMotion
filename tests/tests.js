@@ -48416,6 +48416,60 @@
     }
   });
 
+  test('a pasted paragraph wraps to fit the frame instead of running off both edges (UX review top #11)', { item: 'uxr-11' }, async function () {
+    /* The review, confirmed by a second bot: a ~300-character caption wrapped neatly in the typing box and
+     * rendered on the canvas as one line running far past both edges. Wrapping is still the side bars'
+     * job (v5.40); what changes is that an edit which newly pushes an unwrapped text layer past the frame
+     * gets a wrap at 90% of the frame, and says so. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('FM.textEdit is not reachable');
+    const P = FM.scene.project, layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, toast0 = FM.toast, w0 = P.width, h0 = P.height;
+    const toasts = [];
+    const para = 'We drove down the coast for three days, stopping at every beach we could find, eating too much ice cream and ' +
+                 'watching the sun go down over the water every single evening until it finally felt like summer had arrived.';
+    const edit = async (L, text) => {
+      FM.selectLayer(L.id); FM.textEdit.start(L.id); await sleep(120);
+      const inp = document.getElementById('te-input');
+      if (!inp) throw new Error('the text editor did not open (#te-input missing)');
+      inp.value = text; inp.dispatchEvent(new Event('input', { bubbles: true }));
+      const done = document.querySelector('.te-done');
+      if (!done) throw new Error('the text editor has no ✓ button');
+      done.click(); await sleep(80);
+    };
+    const canvasW = L => FM.layerSize(L).w * Math.abs(FM.evalProp(L.transform.scale, FM.time) || 1);
+    try {
+      FM.toast = function (m) { toasts.push(String(m)); return toast0.apply(this, arguments); };
+      P.width = 1080; P.height = 1920;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('text', { name: 'Caption', text: 'Hi', fontSize: 160, x: 540, y: 960, start: 0, duration: 5 });
+      FM.scene.layers.push(L); FM.refreshAll();
+
+      await edit(L, para);
+      if (!(Number(L.wrapWidth) > 0)) throw new Error('a pasted paragraph left the layer unwrapped: it is ' + Math.round(canvasW(L)) + ' px wide on a ' + P.width + ' px frame');
+      if (canvasW(L) > P.width) throw new Error('after wrapping, the text is still ' + Math.round(canvasW(L)) + ' px wide on a ' + P.width + ' px frame');
+      if (!toasts.some(m => /wrapped to fit/.test(m))) throw new Error('the text was wrapped in silence');
+
+      // CONTROL 1: short text stays unwrapped.
+      const S = FM.makeLayer('text', { name: 'Short', text: 'Hi', fontSize: 160, x: 540, y: 400, start: 0, duration: 5 });
+      FM.scene.layers.push(S); FM.refreshAll();
+      await edit(S, 'SUMMER');
+      if (Number(S.wrapWidth) > 0) throw new Error('a short word was given a wrap');
+
+      // CONTROL 2: a line that ALREADY ran past the frame (on purpose, e.g. a ticker) is left alone.
+      const T = FM.makeLayer('text', { name: 'Ticker', text: para, fontSize: 160, x: 540, y: 1500, start: 0, duration: 5 });
+      FM.scene.layers.push(T); FM.refreshAll(); toasts.length = 0;
+      await edit(T, para + ' And more.');
+      if (Number(T.wrapWidth) > 0) throw new Error('a line that was already longer than the frame before the edit got wrapped anyway');
+    } finally {
+      FM.toast = toast0;
+      try { const d = document.querySelector('.te-done'); if (FM.textEdit.isActive && FM.textEdit.isActive() && d) d.click(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      P.width = w0; P.height = h0;
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+    }
+  });
+
   test('a clip cannot be dragged off past the end of the project (queue 394)', { item: '394' }, function () {
     /* Ezra: *"Found a glitch where when you drag a layer to the right too far it breaks the project
      * timeline"*, and with a screenshot: *"it just keeps going past the timeline"*.
