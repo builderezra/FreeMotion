@@ -48,9 +48,63 @@ window.FM = window.FM || {};
     const c = want();
     if (c !== last) { meta.setAttribute('content', c); last = c; }
   }
+  /* ═══ THE TOP-EDGE TAB (queue 920, 26 Sep) — WHAT iOS READS FOR THE STATUS BAR, AND WHEN IT READS IT ═══════════════════
+   * Ezra, 26 Sep: "sometimes the top bar instead of it being like when you're on the white mode it going white all the way
+   * to the top it's got a black bar at the top and like when you go in and out of projects it's like changing constantly".
+   * iOS 26's WebKit fills the status-bar strip from the FIXED (or sticky) element it finds by hit-testing the top centre of
+   * the viewport, 4px down, taking the first plain background-color on the way up (LocalFrameView::fixedContainerEdges).
+   * It looks again ONLY when a fixed/sticky element is added or removed, and a container the size of the whole viewport may
+   * never REPLACE a colour already set (WebKit commit 8b209a7, "to mitigate the color thrashing problems"). Every screen
+   * here is exactly that: #splash (#111), #home-screen, and #app while it pushes or pops (position:fixed, z 210, #161a21
+   * under the phone top bar). So the editor's #161a21, sampled as it slid off the returning Home, stuck on the LIGHT Home:
+   * his black bar. With NO fixed element at the top (a project, once the push is over) there is no colour at all and iOS
+   * draws its soft scroll-edge blur instead: his fade, there in a project and not on Home. Measured in a real WKWebView
+   * (macOS 27, same WebCore): the light Home read #161a21 after one round trip, while <html> said #fafdff the whole time.
+   * THE FIX gives WebKit one ordinary element to find on every screen, re-read every time:
+   *   - full width, 12px tall (WebKit ignores a box 10px or thinner) and nowhere near full height, so it is a plain bar —
+   *     whose colour is read fresh — not a full-screen layer that inherits the last one;
+   *   - above every screen (z 214: Home 200, the pushing editor 210, the push's + and toast 212/213) and below the scrims
+   *     (220+) and the intro (10000), which WebKit's own rules then handle;
+   *   - MASKED to nothing (styles.css), so it paints nothing: WebKit's sampler reads background-color from style and its
+   *     hit-test ignores masks. Measured: a zero-height box with overflow:hidden, and clip-path, are NOT read (the
+   *     hit-test does not reach through them); mask-image and filter:opacity(0) are;
+   *   - RE-INSERTED on every colour change (display none → flush → back), because an add/remove is the only thing WebKit
+   *     re-samples on; a second kick 700ms later covers something else sitting on the sample point the first time (the
+   *     Show-touches ripple, z 9999, is fixed and would be hit first).
+   * ⚠️ Measured: what WebKit DECIDES (WKWebView on macOS 27). NOT measured: how iOS then paints it — no simulator runtime
+   * on this Mac. His next look at the phone is the real check. */
+  let tab = null, tabColour = '', lateKick = 0;
+  function ensureTab() {
+    if (tab && tab.isConnected) return tab;
+    tab = document.getElementById('fm-sb-tab');
+    if (!tab) {
+      tab = document.createElement('div');
+      tab.id = 'fm-sb-tab';
+      tab.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(tab);
+    }
+    return tab;
+  }
+  function kick() {
+    if (!document.body) return;
+    const t = ensureTab();
+    t.style.display = 'none';
+    void t.offsetHeight;          // flush: its renderer goes now — that removal is what makes WebKit look at the top again
+    t.style.display = '';
+  }
+  function syncTab() {
+    if (!document.body) return;
+    const t = ensureTab(), c = want();
+    if (c === tabColour) return;
+    tabColour = c;
+    t.style.setProperty('--sb', c);
+    kick();
+    clearTimeout(lateKick);
+    lateKick = setTimeout(kick, 700);   // again once the pop (380ms) / push's slide has run: in case something else sat on the sample point the first time
+  }
   function start() {
-    sync();
-    const mo = new MutationObserver(sync);
+    sync(); syncTab();
+    const mo = new MutationObserver(function () { sync(); syncTab(); });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-home'] });
     if (document.body) mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
   }
@@ -97,5 +151,5 @@ window.FM = window.FM || {};
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
   setTimeout(maybeTell, 2500);   // after the intro and the Home cards have settled
-  FM.statusBar = { colours: COLOURS, sync, want, staleInstall: staleInstall, explain: explain, _maybeTell: maybeTell, _SEEN: SEEN };
+  FM.statusBar = { colours: COLOURS, sync, want, syncTab, kick, staleInstall: staleInstall, explain: explain, _maybeTell: maybeTell, _SEEN: SEEN };
 })(window.FM);
