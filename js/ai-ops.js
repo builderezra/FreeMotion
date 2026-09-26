@@ -230,6 +230,7 @@ window.FM = window.FM || {};
             layer.name = str(o.name, 80) || 'Captions';
             layer.text = '';
             layer.captionBg = bool(o.captionBg, true);
+            if (FM.captions && FM.captions.giveWrap) FM.captions.giveWrap(layer);   // wraps inside the frame, like Add → Captions (queue 690, seventh hunt)
             layer.captions = (Array.isArray(o.segments) ? o.segments : []).slice(0, 60).map(function (s) {
               return { start: clamp(num(s && s.start, 0), 0, 600), end: clamp(num(s && s.end, 1), 0, 600), text: str(s && s.text, 300) || '' };
             }).filter(function (s) { return s.end > s.start; });

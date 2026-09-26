@@ -99,7 +99,19 @@ window.FM = window.FM || {};
        staring at an empty canvas. So the nudge is here, on the preview path, and the file is untouched.
        `_endInstantTime` returns t unchanged unless nothing is live at t and something ends exactly
        there — so a cut still shows the incoming clip. */
-    FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time);
+    /* THE CAPTION HE IS TYPING IS DRAWN AS IT LOOKS ONCE IT IS IN (queue 690, seventh hunt) — THE PREVIEW ONLY, and
+       only while the playhead is standing still. v16.98 gave every caption its own entrance, and the caption editor
+       parks the playhead 0.05 s into the caption it opens (it has to be inside it, and before any later caption that
+       overlaps it, or the editor binds the wrong one) — the first frame of that entrance. With Fade in or Pop that
+       frame is empty and with Typewriter it is one letter, so on his phone he tapped › and typed every caption blind:
+       the field had his words and the canvas above the keyboard had none of them. Moving the playhead cannot cure it,
+       because the entrance grows with every letter he types (the stagger) and a caption from Detect speech starts
+       empty. So the one caption bound to the editor holds its settled look here, the way the reference apps show text
+       while the keyboard is up — every other caption, and this one the moment he presses play, animates exactly as
+       it exports. `_typingCue` lives for this one call: the exporter, thumbnails and the onion skin never see it. */
+    FM._typingCue = (!FM.playing && FM.textEdit && FM.textEdit.typingCue) ? FM.textEdit.typingCue() : null;
+    try { FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
+    finally { FM._typingCue = null; }
     if (FM.onionSkin && !FM.playing) drawOnionSkin();
     if (FM.showGuides) drawGuides();
     if (FM.canvasEdit) FM.canvasEdit.update();
@@ -3371,6 +3383,7 @@ window.FM = window.FM || {};
     if (dur > seg + 0.3) layer.captions.push({ start: seg, end: Math.min(dur, seg * 2), text: 'Second caption' });   // only if there's room (no zero-length segment on tiny projects)
     layer.text = '';
     layer.captionBg = true;
+    if (FM.captions && FM.captions.giveWrap) FM.captions.giveWrap(layer);   // a spoken sentence wraps inside the frame (queue 690, seventh hunt)
     FM.insertLayer(layer);
     FM.scene.selectedId = layer.id;
     FM.scene.selectedIds = [layer.id];
