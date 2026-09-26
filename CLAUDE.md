@@ -21,7 +21,9 @@ and it is the same three steps each time.** Unless his first message is plainly 
    the work is already done and verified, it just needs to land.
 
 **EXCEPTION — the LOGGING chat.** If his first message says this chat is for logging his requests
-(his arrangement: #843 on 10 Sep, restated 26 Sep with a brainstorm/spec under each request), you are
+(his arrangement: #843 on 10 Sep, restated 26 Sep: under each request goes a READY-TO-BUILD plan, options
+drawn and shown to him, measurements taken, research done, not just a note: *"your job in this chat is to
+actually plan these things, not just log them"*), you are
 NOT the loop. Do none of the three steps above: no cron (a second loop in a second chat works the same
 tree as the first), no ship, no REQUESTS.md edits. Append to INBOX.md in the format its header gives.
 See "IF YOU ARE NOT THE LOOP SESSION" below.

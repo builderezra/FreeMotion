@@ -1722,7 +1722,9 @@ window.FM = window.FM || {};
       }
       exitSelect();
     });
-    const cancel = el('button', 'hm-selbtn', 'Cancel');
+    /* queue 950: hidden on a phone (styles.css, under hover: none) — the header's Done already leaves Select, and there
+       Cancel wrapped onto a row of its own. A keyboard-and-mouse screen keeps it. */
+    const cancel = el('button', 'hm-selbtn hm-selcancel', 'Cancel');
     cancel.addEventListener('click', exitSelect);
     bar.appendChild(count); bar.appendChild(el('span', 'hm-selspacer')); bar.appendChild(all);
     // Duplicate is projects-only: neither FM.templates nor FM.elements has one, and a button that
@@ -2422,7 +2424,7 @@ window.FM = window.FM || {};
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     // header Select toggle (built once, kept in sync)
     const selBtn = document.getElementById('hm-select-btn');
-    if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = ''; }
+    if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = ''; selBtn.classList.toggle('on', selectMode); }   // queue 952: Done is lit, like the search button
     // the + means something different on each tab — say which, so it isn't a mystery button
     const newBtn = document.getElementById('hm-new');
     // Nothing to create on the Tutorials tab, so the + hides rather than making a project from a
@@ -2831,7 +2833,7 @@ window.FM = window.FM || {};
         const cg = el('button', 'hm-search-btn', ''); cg.id = 'hm-settings-btn';
         cg.setAttribute('aria-label', 'Settings'); cg.title = 'Settings';
         cg.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';   // same mark as the editor's cog
-        cg.addEventListener('click', () => { if (FM.settings) (FM.settings.toggle || FM.settings.open)(); });   // queue 762: tap again to close
+        cg.addEventListener('click', () => { if (FM.cogTurn) FM.cogTurn(cg); if (FM.settings) (FM.settings.toggle || FM.settings.open)(); });   // queue 762: tap again to close; queue 946: it turns
         top.appendChild(cg);   // cog is now the last control in the row
       }
       // re-sort / re-render when a setting that affects this screen changes

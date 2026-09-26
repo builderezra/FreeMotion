@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>947 New Project Motion</title>
+<!-- queue 947 — the options sheet. Every frame is the REAL Home and the REAL New project dialog at 390x844, with
+     the throwaway 947-proto.js driving each entrance, frozen at exact points (tools/design/947-render.py). -->
+<style>
+  :root { --bg: #0d131a; --card: #151e28; --line: #2a3a4b; --text: #eef3f8; --dim: #b4c1ce; --acc: #5cc8ef; --rec: #4fd18b; --warn: #ffcf47; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 30px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; }
+  .page { width: 900px; margin: 0 auto; padding: 44px 30px 60px; }
+  h1 { font-size: 50px; line-height: 1.1; margin: 0 0 16px; letter-spacing: -.5px; }
+  .sub { font-size: 29px; color: var(--dim); margin: 0 0 10px; }
+  .sub b { color: var(--text); }
+  .his { font-size: 27px; color: var(--warn); margin: 0 0 8px; }
+  h2 { font-size: 40px; line-height: 1.15; margin: 56px 0 10px; }
+  .opt { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 22px 20px 18px; margin: 20px 0; }
+  .opt.rec { border-color: var(--rec); box-shadow: 0 0 0 4px rgba(79, 209, 139, .2); }
+  .opt h3 { font-size: 38px; margin: 0 0 8px; }
+  .opt h3 .tag { font-size: 24px; font-weight: 800; color: #06231a; background: var(--rec); border-radius: 999px; padding: 4px 16px; vertical-align: 6px; margin-left: 8px; }
+  .opt p { margin: 0 0 16px; color: var(--dim); }
+  .opt p b { color: var(--text); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 6px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; border-radius: 12px; border: 2px solid var(--line); background: #000; }
+  figcaption { font-size: 26px; color: var(--dim); margin: 8px 2px 6px; line-height: 1.25; }
+  figcaption b { color: var(--text); }
+  .g4 figcaption { font-size: 22px; text-align: center; }
+  .q { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 20px 26px; margin: 16px 0; }
+  .q b { color: var(--text); }
+  .q .r { color: var(--rec); font-weight: 800; }
+  .q div { color: var(--dim); margin-top: 6px; }
+  .note { font-size: 27px; color: var(--dim); margin-top: 12px; }
+  @media (max-width: 700px) {
+    body { font-size: 16px; } .page { width: auto; padding: 22px 16px 36px; }
+    h1 { font-size: 26px; } .sub, .his, .note { font-size: 15px; } h2 { font-size: 21px; margin-top: 32px; }
+    .opt { padding: 14px; } .opt h3 { font-size: 20px; } .opt h3 .tag { font-size: 13px; padding: 2px 10px; }
+    figcaption { font-size: 14px; } .g4 figcaption { font-size: 12px; }
+  }
+  .g5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 6px; }
+  .g5 figcaption { font-size: 21px; text-align: center; margin: 4px 0 2px; }
+  .row { font-size: 24px; color: var(--dim); margin: 12px 0 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>#947 — The + gets its own entrance</h1>
+  <p class="his">You: “it looks like the animation you did is just the same you've done for everything else … i want it to actually look really good and be really well thought out”</p>
+  <p class="sub">Today the New project card pops up the same way every other box in the app does. Here are three entrances that belong only to the <b>+</b>. Every frame is your <b>real Home and the real New project card</b>, frozen partway through. <b>The three clips show them moving.</b></p>
+<div class="opt rec"><h3>A · The orb becomes the card <span class="tag">RECOMMENDED</span></h3><p>The <b>+</b> turns away, and the colourful orb itself swells up and becomes the card. Its colours drain into the card as it lands, then the fields rise in one by one. <b>The button you pressed is literally the thing that opens</b>, and nothing else in the app has that orb. Cancel runs it backwards, so the card shrinks back into the orb.</p><div class="row">Dark Home</div><div class="g5"><figure><img src="947/AD-00.jpg" alt=""><figcaption>tap</figcaption></figure><figure><img src="947/AD-03.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/AD-06.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/AD-09.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/AD-16.jpg" alt=""><figcaption>landed</figcaption></figure></div><div class="row">Light Home</div><div class="g5"><figure><img src="947/A-00.jpg" alt=""><figcaption>tap</figcaption></figure><figure><img src="947/A-03.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/A-06.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/A-09.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/A-16.jpg" alt=""><figcaption>landed</figcaption></figure></div></div><div class="opt"><h3>B · A new canvas is drawn</h3><p>A small blank <b>9:16 frame</b> (a new project’s canvas) rises out of the + with its outline drawing itself in the orb’s colours. It pauses in the middle, then grows into the card and fills in. <b>It shows “a blank canvas is being made”.</b> It is the showiest on the dark Home and the quietest on the light one.</p><div class="row">Dark Home</div><div class="g5"><figure><img src="947/BD-00.jpg" alt=""><figcaption>tap</figcaption></figure><figure><img src="947/BD-03.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/BD-06.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/BD-09.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/BD-16.jpg" alt=""><figcaption>landed</figcaption></figure></div><div class="row">Light Home</div><div class="g5"><figure><img src="947/B-00.jpg" alt=""><figcaption>tap</figcaption></figure><figure><img src="947/B-03.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/B-06.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/B-09.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/B-16.jpg" alt=""><figcaption>landed</figcaption></figure></div></div><div class="opt"><h3>C · A ripple opens it</h3><p>A ring in the orb’s colours spreads out from the +, and the dimmed screen opens behind it as a growing circle. The card rises from below with a little bounce, and the + turns into an ×. <b>The simplest of the three</b>, but this kind of reveal is common in other apps.</p><div class="row">Dark Home</div><div class="g5"><figure><img src="947/CD-00.jpg" alt=""><figcaption>tap</figcaption></figure><figure><img src="947/CD-03.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/CD-06.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/CD-09.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/CD-16.jpg" alt=""><figcaption>landed</figcaption></figure></div><div class="row">Light Home</div><div class="g5"><figure><img src="947/C-00.jpg" alt=""><figcaption>tap</figcaption></figure><figure><img src="947/C-03.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/C-06.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/C-09.jpg" alt=""><figcaption></figcaption></figure><figure><img src="947/C-16.jpg" alt=""><figcaption>landed</figcaption></figure></div></div>
+  <h2>One pick</h2>
+  <div class="q"><b>A, B or C?</b> <span class="r">A recommended.</span> It's the one that could only be the +. The same entrance plays on PC.</div>
+</div>
+</body>
+</html>

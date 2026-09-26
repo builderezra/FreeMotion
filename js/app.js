@@ -6999,6 +6999,29 @@ window.FM = window.FM || {};
     // So the two agree now: inside a project, the cog is Canvas settings on every platform, and the
     // app-wide preferences are one clearly-labelled button away inside it (#cv-appset above).
     // On the HOME screen the cog is still FM.settings — there is no canvas there to configure.
+    /* The quarter turn, for EVERY cog (queue 946). Ezra: "the settings cog does a little rotate animation like it
+       does on PC but on mobile" — the phone's cog (#m-settings) and Home's cog never turned, because the turn was
+       written inline in this one button's handler. So it is one helper now, and each cog calls it on its own press. */
+    FM.cogTurn = function (btn) {
+      const ic = btn && btn.querySelector('svg');
+      if (!ic) return;
+      if (ic.getAnimations) { ic.getAnimations().forEach(a => { try { a.cancel(); } catch (e) {} }); }
+      ic.classList.remove('cog-turn');
+      void btn.offsetWidth;                      // NOT ic.offsetWidth — see the note in the handler below
+      ic.classList.add('cog-turn');
+      /* ⚠️ AND THE CLASS COMES OFF WHEN THE TURN IS OVER. A CSS animation replays whenever its element comes back from
+         display:none, and the phone hides its cog in Select and while editing text (body.sel-mode / body.m-editing) —
+         so a class left on made the cog spin again every time the bar came back. The suite caught it mid-turn: the
+         phone bar's spacing test measured a cog rotated 45°.
+         Watched through THIS turn's own Animation object, not animationend/animationcancel events: an event names only
+         the keyframes, and the cancel of the PREVIOUS turn (cancelled just above) can be delivered late — measured in the
+         suite, where an off-screen frame paints nothing, it landed 90 ms into the new turn and stripped its class. */
+      const tok = ic._cogTok = (ic._cogTok || 0) + 1;
+      const off = function () { if (ic._cogTok === tok) ic.classList.remove('cog-turn'); };
+      const mine = ic.getAnimations ? ic.getAnimations().filter(a => a.animationName === 'cog-turn') : [];
+      if (!mine.length) { off(); return; }   // not rendered (or reduced motion): nothing turns, so nothing to replay later
+      mine.forEach(a => a.finished.then(off, off));
+    };
     const setBtn = document.getElementById('btn-settings');
     if (setBtn) setBtn.addEventListener('click', () => {
       /* A quarter turn on press (queue 241). Ezra: "Make the cog do a little turn animation when you
@@ -7011,13 +7034,7 @@ window.FM = window.FM || {};
          no change, and the animation ran exactly once, ever.
          So the reflow is forced on the BUTTON, which is a real HTMLElement, and any in-flight run is
          cancelled first so a fast double-press restarts instead of being swallowed. */
-      const ic = setBtn.querySelector('.ico');
-      if (ic) {
-        if (ic.getAnimations) { ic.getAnimations().forEach(a => { try { a.cancel(); } catch (e) {} }); }
-        ic.classList.remove('cog-turn');
-        void setBtn.offsetWidth;                 // NOT ic.offsetWidth — see above
-        ic.classList.add('cog-turn');
-      }
+      FM.cogTurn(setBtn);
       /* ⚠️ A SECOND TAP CLOSES WHAT THE FIRST OPENED (queue 762). Ezra: "when u tap on something like the
          notes button and settings button and tap it again it should close it not open it again". On Home
          this button opens the settings panel; in a project it opens the canvas dialog. Whichever is up,

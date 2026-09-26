@@ -297,7 +297,8 @@ html[data-theme="glass"] .hm-tab.active {
   /* Raised in step with the idle buttons above (.10 bloom), so "selected" is still unmistakable. */
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .44), 0 2px 14px rgba(90, 199, 237, .26);
 }
-html[data-theme="glass"] .hm-search-btn.on {
+html[data-theme="glass"] .hm-search-btn.on,
+html[data-theme="glass"] .hm-select-btn.on {   /* queue 952: Done while selecting */
   background: linear-gradient(180deg, #7ad6f2, var(--accent));
   color: #05141b;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 4px 18px rgba(90, 199, 237, .28);
@@ -780,9 +781,9 @@ html[data-home="light"] .hm-search-wrap {
   border-color: rgba(16, 30, 52, .14);
 }
 html[data-home="light"] .hm-search-ico { color: #5f6b7d; }
-html[data-home="light"] #hm-search-clear {
-  background-color: rgba(16, 30, 52, .07); color: #46566e;
-}
+/* queue 951: the drawn disc and cross — a solid slate disc with a white cross reads on the light field */
+html[data-home="light"] .hm-clear-disc { fill: #8792a4; }
+html[data-home="light"] .hm-clear-x { stroke: #fff; }
 html[data-home="light"] .hm-search-btn { background-color: rgba(255, 255, 255, .82); border-color: rgba(16, 30, 52, .12); color: #23304a; }
 /* ⚠️ THE HINT LINE IS A MEASUREMENT, NOT A PREFERENCE. `--text-dim` is #93aeb9, and on this ground it
    computes to **2.18:1** — under WCAG's 3:1 floor for large text, let alone the 4.5:1 for 11.5px body
@@ -862,6 +863,8 @@ html[data-home="light"] #hm-select-btn {
   border-color: rgba(20, 50, 80, .16);
   color: #16233a;
 }
+/* queue 952: the ID rule above outranks `.hm-select-btn.on`, so lit Done needs the lit search button's ink said here */
+html[data-home="light"] #hm-select-btn.on { color: #05141b; }
 
 /* ---- THE NEW INTRO (queue 639 / 636) ----------------------------------------------------------
    MEASURED, not assumed: 2160x3840 portrait, 2.05s, starting on rgb(17,17,17) and ENDING ON PURE

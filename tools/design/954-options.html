@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>954 Effect Names</title>
+<!-- queue 954 step (a): the rename sheet. The record with ids is tools/design/954-effect-names.md. -->
+<style>
+  :root { --bg: #0d131a; --card: #151e28; --line: #2a3a4b; --text: #eef3f8; --dim: #b4c1ce; --acc: #5cc8ef; --rec: #4fd18b; --warn: #ffcf47; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 30px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; }
+  .page { width: 900px; margin: 0 auto; padding: 44px 30px 60px; }
+  h1 { font-size: 50px; line-height: 1.1; margin: 0 0 16px; letter-spacing: -.5px; }
+  .sub { font-size: 29px; color: var(--dim); margin: 0 0 10px; }
+  .sub b { color: var(--text); }
+  .his { font-size: 27px; color: var(--warn); margin: 0 0 8px; }
+  h2 { font-size: 40px; line-height: 1.15; margin: 56px 0 10px; }
+  .opt { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 22px 20px 18px; margin: 20px 0; }
+  .opt.rec { border-color: var(--rec); box-shadow: 0 0 0 4px rgba(79, 209, 139, .2); }
+  .opt h3 { font-size: 38px; margin: 0 0 8px; }
+  .opt h3 .tag { font-size: 24px; font-weight: 800; color: #06231a; background: var(--rec); border-radius: 999px; padding: 4px 16px; vertical-align: 6px; margin-left: 8px; }
+  .opt p { margin: 0 0 16px; color: var(--dim); }
+  .opt p b { color: var(--text); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 6px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; border-radius: 12px; border: 2px solid var(--line); background: #000; }
+  figcaption { font-size: 26px; color: var(--dim); margin: 8px 2px 6px; line-height: 1.25; }
+  figcaption b { color: var(--text); }
+  .g4 figcaption { font-size: 22px; text-align: center; }
+  .q { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 20px 26px; margin: 16px 0; }
+  .q b { color: var(--text); }
+  .q .r { color: var(--rec); font-weight: 800; }
+  .q div { color: var(--dim); margin-top: 6px; }
+  .note { font-size: 27px; color: var(--dim); margin-top: 12px; }
+  @media (max-width: 700px) {
+    body { font-size: 16px; } .page { width: auto; padding: 22px 16px 36px; }
+    h1 { font-size: 26px; } .sub, .his, .note { font-size: 15px; } h2 { font-size: 21px; margin-top: 32px; }
+    .opt { padding: 14px; } .opt h3 { font-size: 20px; } .opt h3 .tag { font-size: 13px; padding: 2px 10px; }
+    figcaption { font-size: 14px; } .g4 figcaption { font-size: 12px; }
+  }
+  table.rn { width: 100%; border-collapse: collapse; font-size: 27px; margin-top: 10px; }
+  table.rn td { padding: 9px 8px; border-bottom: 1px solid var(--line); }
+  table.rn td.o { color: var(--dim); text-decoration: line-through; text-decoration-color: rgba(255,120,120,.6); }
+  table.rn td.a { color: var(--dim); width: 28px; text-align: center; }
+  table.rn td.n { color: var(--text); font-weight: 750; }
+  table.rn tr.cat td { color: var(--acc); font-weight: 800; font-size: 25px; letter-spacing: .5px; text-transform: uppercase; padding-top: 20px; border-bottom: none; }
+  .chips { line-height: 1.9; color: var(--dim); font-size: 26px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>#954 — Every effect away from Alight Motion's names</h1>
+  <p class="his">You (1 Sep): “i want every effect to be named different to what it is in alight motion and also have different ordering”</p>
+  <p class="sub">I checked all <b>206</b> effect names against Alight Motion's (from a public list of about 170 of theirs, plus our own notes). Three piles:</p>
+  <div class="q"><b>40 use a name that is distinctly Alight Motion's.</b> <span class="r">Rename these.</span> My suggestions are below. Cross out any you don't like and I'll try again.</div>
+  <div class="q"><b>70 share a plain name every editor uses</b>, like Gaussian Blur, Invert, Chroma Key or Vignette.<div>My advice is to <b>keep these</b>: renaming “Blur” makes the app harder to use and protects nothing. But you asked for <i>every</i> one, so it's your call.</div></div>
+  <div class="q"><b>96 are already our own.</b> Nothing to do.</div>
+  <h2>The 40 renames</h2>
+  <p class="sub">Saved projects are safe: only the name you see changes, not what the app stores. Searching the old name will still find the effect.</p>
+  <table class="rn"><tr class="cat"><td colspan="3">Colouring</td></tr><tr><td class="o">Hot Colour</td><td class="a">→</td><td class="n">Heat Map</td></tr><tr><td class="o">Light Glow</td><td class="a">→</td><td class="n">Highlight Bloom</td></tr><tr><td class="o">Long Shadow</td><td class="a">→</td><td class="n">Poster Shadow</td></tr><tr><td class="o">Dark Glow</td><td class="a">→</td><td class="n">Shadow Bloom</td></tr><tr><td class="o">Iridescence</td><td class="a">→</td><td class="n">Oil Slick</td></tr><tr><td class="o">Gradient Overlay</td><td class="a">→</td><td class="n">Colour Wash</td></tr><tr><td class="o">Soft Glow</td><td class="a">→</td><td class="n">Dreamy Bloom</td></tr><tr><td class="o">Spot Colour</td><td class="a">→</td><td class="n">Colour Pop</td></tr><tr><td class="o">Four-Colour Gradient</td><td class="a">→</td><td class="n">Corner Colours</td></tr><tr><td class="o">Spectral Map</td><td class="a">→</td><td class="n">Hue Ramp</td></tr><tr><td class="o">Radial Shadow</td><td class="a">→</td><td class="n">Lamp Shadow</td></tr><tr class="cat"><td colspan="3">Blur</td></tr><tr><td class="o">Linear Streaks</td><td class="a">→</td><td class="n">Light Streaks</td></tr><tr><td class="o">Spin Streaks</td><td class="a">→</td><td class="n">Orbit Streaks</td></tr><tr><td class="o">Zoom Streaks</td><td class="a">→</td><td class="n">Burst Streaks</td></tr><tr><td class="o">Inner Blur</td><td class="a">→</td><td class="n">Blurred Rim</td></tr><tr class="cat"><td colspan="3">Warping</td></tr><tr><td class="o">Circular Ripple</td><td class="a">→</td><td class="n">Pond Rings</td></tr><tr><td class="o">Fractal Warp</td><td class="a">→</td><td class="n">Noise Warp</td></tr><tr><td class="o">Inner Pinch</td><td class="a">→</td><td class="n">Centre Squeeze</td></tr><tr><td class="o">Tunnel</td><td class="a">→</td><td class="n">Wormhole</td></tr><tr><td class="o">Stretch Segment</td><td class="a">→</td><td class="n">Taffy Pull</td></tr><tr><td class="o">Tile Shift</td><td class="a">→</td><td class="n">Brick Slide</td></tr><tr><td class="o">Tile Rotate</td><td class="a">→</td><td class="n">Tile Spin</td></tr><tr class="cat"><td colspan="3">Generative</td></tr><tr><td class="o">Fractal Ridges</td><td class="a">→</td><td class="n">Rock Noise</td></tr><tr><td class="o">Contour Strips</td><td class="a">→</td><td class="n">Topo Bands</td></tr><tr><td class="o">Voronoi Cells</td><td class="a">→</td><td class="n">Cracked Cells</td></tr><tr><td class="o">Lightning</td><td class="a">→</td><td class="n">Bolts</td></tr><tr class="cat"><td colspan="3">Drawing / Edge</td></tr><tr><td class="o">Halftone Lines</td><td class="a">→</td><td class="n">Engraving</td></tr><tr><td class="o">Smooth Edges</td><td class="a">→</td><td class="n">Soft Outline</td></tr><tr><td class="o">Edge Glow</td><td class="a">→</td><td class="n">Neon Outline</td></tr><tr><td class="o">Contour Lines</td><td class="a">→</td><td class="n">Topo Lines</td></tr><tr><td class="o">Inner Glow</td><td class="a">→</td><td class="n">Glow Inward</td></tr><tr><td class="o">Roughen Edges</td><td class="a">→</td><td class="n">Torn Edge</td></tr><tr><td class="o">Electric Edges</td><td class="a">→</td><td class="n">Live Wire</td></tr><tr><td class="o">Glow Scan</td><td class="a">→</td><td class="n">Light Sweep</td></tr><tr><td class="o">Smooth Bevel</td><td class="a">→</td><td class="n">Raised Edge</td></tr><tr class="cat"><td colspan="3">Opacity / Visibility</td></tr><tr><td class="o">Blink</td><td class="a">→</td><td class="n">Strobe</td></tr><tr><td class="o">Block Dissolve</td><td class="a">→</td><td class="n">Block Fade</td></tr><tr class="cat"><td colspan="3">3D</td></tr><tr><td class="o">Ellipsoid</td><td class="a">→</td><td class="n">Capsule</td></tr><tr><td class="o">Hexagonal Prism</td><td class="a">→</td><td class="n">Hex Column</td></tr><tr><td class="o">Star Prism</td><td class="a">→</td><td class="n">Star Column</td></tr></table>
+  <h2>The order of the categories</h2>
+  <p class="sub">I couldn't find Alight Motion's own order published anywhere, so I can't prove ours differs. The safe move is to change ours anyway:</p>
+  <div class="q"><b>Today:</b> Colouring · Blur · Warping · Generative · Stylize · Drawing / Edge · Shakes / Movement · Repetition · Keying · Opacity · Text · 3D</div>
+  <div class="q"><b>Proposed:</b> <span class="r">Colouring · Keying · Blur · Stylize · Drawing / Edge · Warping · Shakes / Movement · Repetition · Generative · 3D · Text · Opacity</span><div>Your most-used ones stay near the top, and the rest are reshuffled.</div></div>
+  <h2>Three picks</h2>
+  <div class="q"><b>1. The 40 renames:</b> OK as they are, or cross some out?</div>
+  <div class="q"><b>2. The 70 plain names:</b> keep them <span class="r">(recommended)</span>, or rename those too?</div>
+  <div class="q"><b>3. The new category order:</b> OK?</div>
+</div>
+</body>
+</html>

@@ -100647,4 +100647,163 @@
     if (!(w96.W > p96.W)) throw new Error('at 96px she is ' + w96.W + 'px wide and he is ' + p96.W + 'px — the pair no longer read as different figures');
   });
 
+
+  /* ---------------- queue 946: every cog turns, not only PC's ----------------
+     Ezra (26 Sep): "the settings cog does a little rotate animation like it does on PC but on mobile". The turn was
+     written inline in #btn-settings' handler, so the phone's cog (#m-settings) and Home's (#hm-settings-btn) never
+     moved. Counts ANIMATIONS on each cog's svg, as the queue-255 test does: a class can sit there with nothing playing. */
+  test('946 the phone cog and the Home cog both do the quarter turn, and do it again on the next press', { item: '946' }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 90));
+    const turning = (svg) => svg.getAnimations().filter(function (a) { return /cog/.test(a.animationName || ''); });
+    if (!document.createElementNS('http://www.w3.org/2000/svg', 'svg').getAnimations) return;   // engine cannot answer
+    const shut = function () {
+      const dlg = document.getElementById('canvas-dialog');
+      if (dlg && !dlg.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); else dlg.classList.add('hidden'); }
+      document.body.classList.remove('cv-anchored', 'cv-up');
+      if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close();
+    };
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await atPhoneWidth(async function () {
+        const b = document.getElementById('m-settings');
+        if (!b || !b.getBoundingClientRect().width) throw new Error('no phone cog on screen at 390px');
+        const svg = b.querySelector('svg');
+        for (let i = 1; i <= 2; i++) {
+          b.click(); await frame();
+          const a = turning(svg);
+          if (!a.length) throw new Error('press ' + i + ' on the PHONE cog started no turn — it only turns on PC');
+          a.forEach(function (x) { try { x.finish(); } catch (e) {} });
+          shut(); await frame();
+        }
+        /* …AND IT DOES NOT TURN AGAIN BY ITSELF. The phone hides this cog in Select and while editing text; a turn class
+           left on replays the animation every time the bar comes back (the bar-spacing test caught it measuring mid-turn). */
+        b.style.display = 'none'; await frame(); b.style.display = ''; await frame();
+        if (turning(svg).length) throw new Error('the phone cog turned again on its own when it came back from being hidden — the turn class was left on');
+      });
+      FM.home.open(); await frame();
+      const h = document.getElementById('hm-settings-btn');
+      if (!h) throw new Error('no Home cog');
+      const hs = h.querySelector('svg');
+      for (let i = 1; i <= 2; i++) {
+        h.click(); await frame();
+        const a = turning(hs);
+        if (!a.length) throw new Error('press ' + i + ' on the HOME cog started no turn');
+        a.forEach(function (x) { try { x.finish(); } catch (e) {} });
+        shut(); await frame();
+      }
+    } finally {
+      shut();
+      if (!homeWasOpen && FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+
+  /* ---------------- queues 950, 951, 952: three Home fixes from his claude.ai handoff (26 Sep) ----------------
+     His approved before/after picture is tools/design/950-952-before-after.png. */
+  test('950 on a phone the Select bar has no Cancel (Done in the header leaves Select); a mouse screen keeps it', { item: '950' }, async function () {
+    /* "In mobile, remove the council [Cancel] button at the bottom left of the screen." On his phone it wrapped the bar onto a
+       second row. The runner cannot switch its own media (the 797 precedent), so the phone half is read off the stylesheet: a
+       rule under hover: none that hides the class the bar's Cancel carries. The mouse half is measured for real. */
+    let hides = false;
+    for (const sheet of document.styleSheets) {
+      let rules; try { rules = sheet.cssRules; } catch (e) { continue; }
+      for (const r of rules) {
+        if (!(r instanceof CSSMediaRule) || !/hover:\s*none/.test(r.conditionText || r.media.mediaText)) continue;
+        for (const q of r.cssRules) if (q.selectorText && /\.hm-selcancel\b/.test(q.selectorText) && q.style.display === 'none') hides = true;
+      }
+    }
+    if (!hides) throw new Error('no rule under a hover: none media hides .hm-selcancel — on his phone Cancel still wraps the Select bar onto a second row');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      if (FM.home._selectionState().selectMode) { document.getElementById('hm-select-btn').click(); await sleep(300); }
+      document.getElementById('hm-select-btn').click(); await sleep(400);
+      if (!FM.home._selectionState().selectMode) throw new Error('setup: the Select button did not turn Select on');
+      const cancel = Array.prototype.find.call(document.querySelectorAll('#hm-selbar button'), function (b) { return b.textContent.trim() === 'Cancel'; });
+      if (!cancel) throw new Error('the Select bar has no Cancel at all — a mouse screen should keep it');
+      if (!cancel.classList.contains('hm-selcancel')) throw new Error('the bar\'s Cancel does not carry .hm-selcancel, so the phone rule cannot reach it');
+      if (matchMedia('(hover: none)').matches) throw new Error('setup: this runner reports hover: none, so the mouse half cannot be checked here');
+      if (!cancel.getBoundingClientRect().width) throw new Error('on a mouse screen Cancel is hidden — only the phone was meant to lose it');
+      document.getElementById('hm-select-btn').click(); await sleep(400);
+      if (FM.home._selectionState().selectMode) throw new Error('Done in the header did not leave Select — with Cancel gone on a phone, that is the only way out');
+    } finally {
+      if (FM.home._selectionState().selectMode) { document.getElementById('hm-select-btn').click(); await sleep(300); }
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('951 the search clear button is a drawn disc and cross, dead centre in a 34px button', { item: '951' }, async function () {
+    /* "The X in the circle … was … off-centred". It was a font glyph (✕), which sat a pixel low. Now drawn geometry, measured
+       against the button's own box. Tolerance: the drawn shapes land on exact half-pixels (measured 0.0px off both ways at 390
+       and 1280), and the glyph was ~1px low — so 0.5px separates right from wrong. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const inp = document.getElementById('hm-search-input');
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const b = document.getElementById('hm-search-clear');
+      if (!b) throw new Error('no search clear button');
+      if (/✕|×/.test(b.textContent)) throw new Error('the clear button still draws its ✕ as a font glyph — glyphs sit off-centre (queue 951)');
+      const disc = b.querySelector('.hm-clear-disc'), x = b.querySelector('.hm-clear-x');
+      if (!disc || !x) throw new Error('the clear button has no drawn disc and cross (.hm-clear-disc / .hm-clear-x)');
+      if (!document.getElementById('hm-searchbar') || document.getElementById('hm-searchbar').classList.contains('hidden')) { document.getElementById('hm-search-btn').click(); await sleep(400); }
+      inp.value = 'q951'; inp.dispatchEvent(new Event('input', { bubbles: true })); await sleep(500);
+      const br = b.getBoundingClientRect();
+      if (!br.width) throw new Error('setup: the clear button is not on screen with text in the search box');
+      if (Math.round(br.width) !== 34 || Math.round(br.height) !== 34) throw new Error('the clear button is ' + br.width + 'x' + br.height + ' — the tap target must stay 34x34');
+      const cx = br.left + br.width / 2, cy = br.top + br.height / 2;
+      [['disc', disc], ['cross', x]].forEach(function (p) {
+        const r = p[1].getBoundingClientRect();
+        const dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) throw new Error('the ' + p[0] + ' sits ' + dx.toFixed(2) + 'px across and ' + dy.toFixed(2) + 'px down from the button\'s centre');
+      });
+      const ink = getComputedStyle(x).stroke, fill = getComputedStyle(disc).fill;
+      if (ink === fill) throw new Error('the cross is the same colour as its disc (' + ink + ') — it would vanish');
+    } finally {
+      inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+      const sb = document.getElementById('hm-searchbar');
+      if (sb && !sb.classList.contains('hidden')) { const c = document.getElementById('hm-search-btn'); if (c) c.click(); }
+      await sleep(300);
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('952 while selecting, Done is lit exactly like the lit search button, and goes back when Select ends', { item: '952' }, async function () {
+    /* "Make the done button when you're selecting stuff um, blue, like how everything else goes blue when you have it selected
+       like the search button." Compared with the search button lit the same moment, in both Home looks — the light look's ID
+       rule outranks the .on rules, which is where this could go wrong. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const look0 = document.documentElement.getAttribute('data-home');
+    const s = document.getElementById('hm-search-btn');
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const b = document.getElementById('hm-select-btn');
+      if (FM.home._selectionState().selectMode) { b.click(); await sleep(300); }
+      if (b.classList.contains('on')) throw new Error('Select is lit before Select mode is on');
+      b.click(); await sleep(400);
+      if (!FM.home._selectionState().selectMode || b.textContent.trim() !== 'Done') throw new Error('setup: the header button did not turn into Done');
+      if (!b.classList.contains('on')) throw new Error('Done is not lit while selecting');
+      for (const look of ['light', 'dark']) {
+        document.documentElement.setAttribute('data-home', look);
+        const hadOn = s.classList.contains('on'); s.classList.add('on');
+        const bc = getComputedStyle(b), sc = getComputedStyle(s);
+        const got = { image: bc.backgroundImage, ink: bc.color }, want = { image: sc.backgroundImage, ink: sc.color };
+        if (!hadOn) s.classList.remove('on');
+        if (got.image !== want.image) throw new Error('on the ' + look + ' Home, lit Done paints ' + got.image + ' but the lit search button paints ' + want.image);
+        if (got.ink !== want.ink) throw new Error('on the ' + look + ' Home, lit Done\'s text is ' + got.ink + ' but the lit search button\'s is ' + want.ink);
+        if (got.image === 'none' && bc.backgroundColor !== sc.backgroundColor) throw new Error('on the ' + look + ' Home, lit Done is ' + bc.backgroundColor + ', the lit search button ' + sc.backgroundColor);
+      }
+      if (look0 === null) document.documentElement.removeAttribute('data-home'); else document.documentElement.setAttribute('data-home', look0);
+      b.click(); await sleep(400);
+      if (b.classList.contains('on')) throw new Error('Done stays lit after Select ends');
+    } finally {
+      if (look0 === null) document.documentElement.removeAttribute('data-home'); else document.documentElement.setAttribute('data-home', look0);
+      if (FM.home._selectionState().selectMode) { document.getElementById('hm-select-btn').click(); await sleep(300); }
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
 })();

@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=724">
-<link rel="stylesheet" href="theme-glass.css?v=61">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=725">
+<link rel="stylesheet" href="theme-glass.css?v=62">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.02</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.03</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -693,7 +693,7 @@
       <div class="hm-search-wrap">
         <svg class="hm-search-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="15.4" y1="15.4" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <input id="hm-search-input" type="text" aria-label="Search projects by name or date" placeholder="Search a name or a date…" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
-        <button id="hm-search-clear" aria-label="Clear search">✕</button>
+        <button id="hm-search-clear" aria-label="Clear search"><svg viewBox="0 0 22 22" width="22" height="22" aria-hidden="true"><circle class="hm-clear-disc" cx="11" cy="11" r="11"/><path class="hm-clear-x" d="M7.6 7.6l6.8 6.8M14.4 7.6l-6.8 6.8"/></svg></button>
       </div>
       <div class="hm-search-hint">Vague is fine — “yesterday”, “last week”, “2 aug”, “august”, or part of a name.</div>
     </div>
@@ -1073,7 +1073,7 @@
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
   <script src="js/home-arrow.js?v=1"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
-  <script src="js/home.js?v=185"></script>
+  <script src="js/home.js?v=186"></script>
   <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -1085,13 +1085,13 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=57"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=456"></script>
+  <script src="js/app.js?v=457"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
   <script src="js/voice-rec.js?v=8"></script>
   <script src="js/audio-react.js?v=12"></script>
-  <script src="js/mobile.js?v=45"></script>
+  <script src="js/mobile.js?v=46"></script>
   <script src="js/ai-manifest.js?v=10"></script>
   <script src="js/ai-ops.js?v=18"></script>
   <script src="js/ai-key.js?v=1"></script>

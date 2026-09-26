@@ -360,7 +360,7 @@ window.FM = window.FM || {};
       ]);
     });
     var mSettings = document.getElementById('m-settings');
-    if (mSettings) mSettings.addEventListener('click', function () { clickHidden('btn-canvas'); });
+    if (mSettings) mSettings.addEventListener('click', function () { if (FM.cogTurn) FM.cogTurn(mSettings); clickHidden('btn-canvas'); });   // queue 946: it turns, like PC's
     var mExport = document.getElementById('m-export');
     if (mExport) mExport.addEventListener('click', function () { clickHidden('btn-export'); });
     /* No notes button on the phone BAR (queue 139). One was added and the suite caught the hazard:

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Sep at v17.02
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Sep at v17.03
 >
-> **State:** v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -33191,19 +33191,37 @@ re-opened #480, which I had marked done and had not fixed.
   3. [ ] Expanding the friends block: a nice animation — it expands big (over the top of the canvas block) and Canvas settings shrinks into a small rectangle. The roles are reversed.
   4. [ ] The small Canvas settings block can be expanded again to carry on editing it (the same swap back).
   5. [ ] Reopening via the settings cog (again and again) comes back to whichever block he had open last — "if you were editing friend settings last it'll stay back to where you were".
+  6. [ ] (his standing design rule, #545) options drawn and shown to him before it ships.
+  **26 Sep — options drawn and SENT** (`tools/design/945-options.html`, pictures in `tools/design/945/`, clips `945-A.gif` / `945-B.gif`; every picture is the real app at 390×844 with the throwaway `tools/design/945-proto.js` injected by `tools/design/945-render.py`). A = the small block always sits on top (a true swap, same thumb spot — recommended); B = Friends always on top, Canvas shrinks to a bar underneath. Both: the bar shows Live + faces once people are in; opening Canvas settings never starts sharing (a Start sharing button does).
+  ~~❓ASK: (1) A or B — A recommended. (2) Live sharing is still a Labs switch: show the Friends bar always, offering the switch when Labs is off (recommended), or only when Labs is on? (3) The phone's little person+ on the video: keep it and make it open this pair with Friends big (recommended), or remove it?~~ ✅ answered below
+  Note, found re-reading his full message after the sheet went out: he said *"the canvas settings are small at the top"* — that IS option A, so A is his own description and B only an alternative.
+  ✅ HE ANSWERED, 26 Sep (builder chat), verbatim: *"For the friends right beside canvas just do everything u reconmend"* — so all three recommendations:
+  ~~❓ASK: (1) A or B … (2) Labs … (3) person+~~ → (1) **A** — the small block always sits on top, a true swap; (2) the Friends bar shows **always**, and with Labs off opening it offers the one switch to turn live sharing on; (3) the phone's little person+ on the video **stays**, and opens this pair with Friends big (it still turns into faces when people join).
+  JUMPED: by v17.03 only — #946/#950–#952 were built and proven while this entry was parked on his pick; his answer arrived in the middle of that release's test run, and the build could not start until the run finished (it reads the app files). This is being built next; the line comes off once v17.03 lands.
+  7. [ ] Build A: Canvas settings opens with a Friends bar above it; ⤢ swaps them (the FLIP swap from the prototype); reopening the cog lands on whichever was open last.
+  8. [ ] The Friends block is the real sharing card (people, invite link/code, join-as, settings, Stop sharing), and opening it NEVER starts sharing — a Start sharing button does.
+  9. [ ] Labs off: the bar still shows; opened, it explains live sharing is being tested and offers one switch to turn it on.
+  10. [ ] The phone's person+ on the video opens the pair with Friends big; with people in, it still shows their faces.
 
-- [ ] **946 — Mobile: the settings cog does its little rotate animation, like on PC** (26 Sep — his words in #944)
-  1. [ ] The cog rotates when tapped on mobile, the same as on PC (today only PC does it).
+- [x] **946 — Mobile: the settings cog does its little rotate animation, like on PC** (26 Sep — his words in #944) — ✅ v17.03
+  1. [x] The cog rotates when tapped on mobile, the same as on PC (today only PC does it). ✅ v17.03 — the phone's editor cog (#m-settings) and Home's cog both turn on every press (one helper, FM.cogTurn); test `946 the phone cog and the Home cog…` counts the running animation on each, twice, and checks the phone cog does NOT turn again by itself when it comes back from being hidden (the first ship's full suite caught that replay: the class was left on).
 
 - [ ] **947 — The New project + gets its own animation, really well thought out** (26 Sep — his words in #944)
   1. [ ] Pressing + to create a new project gets a DIFFERENT animation from the one used everywhere else.
   2. [ ] It should "actually look really good and be really well thought out".
   3. [ ] (his standing design rule, #545) options drawn and shown to him before it ships.
+  **26 Sep — three options drawn and SENT** (`tools/design/947-options.html`, frames in `tools/design/947/`, clips `947-A/B/C.gif`; every frame is the real Home + the real New project dialog at 390×844, the entrance driven by the throwaway `tools/design/947-proto.js` and frozen at exact points by `tools/design/947-render.py`, both Home looks). A = the orb becomes the card (recommended; Cancel reverses it into the orb); B = a 9:16 canvas outline is drawn out of the + and grows into the card; C = a ripple from the + reveals the dimmed screen and the card rises with a bounce.
+  ❓ASK: A, B or C? (A recommended.)
+  BUILT OUT UNTIL HE picks A, B or C (the sheet and three clips were sent 26 Sep).
 
 - [ ] **948 — Templates and Elements: + opens a proper, designed menu; and they are their own things, not reskinned projects** (26 Sep — his words in #944)
   1. [ ] In the Templates and Elements tabs, + opens a proper, thought-out menu — not the "shitty tiny menu" it opens today.
   2. [ ] "just remember that I do want elements and templates to be their own things, not just reskinned projects" — check what is still project-shaped about them and list it for him.
   3. [ ] (his standing design rule, #545) options drawn and shown to him before it ships.
+  **26 Sep — three menus drawn and SENT, with the clause-2 list** (`tools/design/948-options.html`, pictures in `tools/design/948/`; drawn by the throwaway `tools/design/948-proto.js` over the real Home by `tools/design/948-render.py`; the project pictures inside the menus are stand-ins). A = one card: Start-from-scratch with shape chips + a sideways row of his projects (recommended); B = two big picture tiles, "From a project" slides to a full page of projects; C = a bottom sheet with three rows incl. "Open a file". Every option adds a blank TEMPLATE start (new).
+  Clause 2's list, as sent (read from the code 26 Sep): (1) a template can only be a copy of a project — fixed by any option; (2) a new element is a hidden project that becomes an element only via ⋯ → Save as element, sitting as a "draft" until then — fix: save itself as an element on leaving, like editing an existing one already does; (3) editing a template/element is indistinguishable from editing a project (no ofElement/ofTemplate reference anywhere in app.js/mobile.js/timeline.js; Export still there) — fix: a slim "Editing element: … · Done" bar, no Export; (4) a template's shared file is a project file (`templates.exportFile` writes the project shape as .fmotion.json) and `FM.elements` has no export at all — fix: their own file types; (5) tapping a template forks a project — that is #619, waiting on him.
+  ❓ASK: (1) A, B or C? (A recommended.) (2) Fix 2, 3 and 4 from the list? (All three recommended; each becomes its own entry.)
+  BUILT OUT UNTIL HE picks A, B or C and says which of fixes 2–4 he wants (the sheet was sent 26 Sep).
 
 - [ ] **949 — Standing instruction: a second chat LOGS his requests (with a brainstorm/spec under each); this chat builds** (26 Sep, via INBOX)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -33241,7 +33259,7 @@ re-opened #480, which I had marked done and had not fixed.
 
       Builder's note: the logging chat's tool fixes (tools/inbox.sh --done splits on the divider LINE and removes only what was shown; next.sh/inbox.sh refuse when the divider is missing; CLAUDE.md's LOGGING-chat exception; .inbox-seen gitignored) ship with this chat's next release. Nothing to build here — this is a standing arrangement.
 
-- [ ] **950 — Phone: remove the Cancel button from the Select bar (Done already leaves Select)** (26 Sep, via INBOX — his words, from a claude.ai handoff)
+- [x] **950 — Phone: remove the Cancel button from the Select bar (Done already leaves Select)** (26 Sep, via INBOX — his words, from a claude.ai handoff)
       ### 26 Sep 2026, ~10:38 AWST — Phone select mode: remove the Cancel button (1 of 3 from a claude.ai handoff)
 
       Source: a claude.ai chat that read the public repo at v17.00 (052fa8a) and prototyped all three, but could not push, so NONE of this has shipped. His words were dictated, so transcription fixes are in [brackets]. He may send a before/after picture of 1–3. None had arrived when this was logged.
@@ -33259,10 +33277,11 @@ re-opened #480, which I had marked done and had not fixed.
       - Verify at his phone width in a touch context (`hover: none`): the bar is one row, and Done in the header exits select mode.
 
       Clauses:
-      1. [ ] On mobile, the Cancel button at the bottom left of the screen (the Select bar) is gone.
-      2. [ ] PC keeps it; Done in the header still leaves Select on the phone.
+      1. [x] On mobile, the Cancel button at the bottom left of the screen (the Select bar) is gone. ✅ v17.03 — hidden under hover: none; measured at 390 with touch media: one row, Select all · Duplicate · Delete.
+      2. [x] PC keeps it; Done in the header still leaves Select on the phone. ✅ v17.03 — measured at 1280: Cancel still there.
+      🖼 **His approved before/after picture (26 Sep, ~11:08 AWST, sent on its own with no words): `tools/design/950-952-before-after.png`.** It is the TARGET, rendered by the claude.ai chat against v17.00. When this ships, render the same crop from the build and send it beside that picture, so he can see it matches what he approved.
 
-- [ ] **951 — Home search: redesign the ✕ clear button — it is off-centre; pick the best one, NO options** (26 Sep, via INBOX — his words)
+- [x] **951 — Home search: redesign the ✕ clear button — it is off-centre; pick the best one, NO options** (26 Sep, via INBOX — his words)
       ### 26 Sep 2026, ~10:38 AWST — Search clear button (the ✕): redesign it; he says pick the best one, no options (2 of 3 from the handoff)
 
       **His words (verbatim):** "The X in the circle menu was shit and offended [off-centred] redesign it don't ask me which choice I like best. Just pick the best one."
@@ -33280,10 +33299,11 @@ re-opened #480, which I had marked done and had not fixed.
       - Test idea: measure the path's bounding box centre against the button's centre (tolerance from measurement, per the float-tolerance rule). It fails on HEAD because there is no svg.
 
       Clauses:
-      1. [ ] The ✕ in the circle is redesigned and truly centred.
-      2. [ ] He waived the options step for this one: "don't ask me which choice I like best. Just pick the best one." — ship the pick and show him the after picture.
+      1. [x] The ✕ in the circle is redesigned and truly centred. ✅ v17.03 — drawn 22px disc + cross in a 34px button; measured 0.0px off centre both ways, light and dark.
+      2. [x] ✅ v17.03 (the after picture goes to him with the release) He waived the options step for this one: "don't ask me which choice I like best. Just pick the best one." — ship the pick and show him the after picture.
+      🖼 **His approved before/after picture (26 Sep, ~11:08 AWST, sent on its own with no words): `tools/design/950-952-before-after.png`.** It is the TARGET, rendered by the claude.ai chat against v17.00. When this ships, render the same crop from the build and send it beside that picture, so he can see it matches what he approved.
 
-- [ ] **952 — Select mode: the Done button turns blue, like the lit search button** (26 Sep, via INBOX — his words)
+- [x] **952 — Select mode: the Done button turns blue, like the lit search button** (26 Sep, via INBOX — his words)
       ### 26 Sep 2026, ~10:38 AWST — Done turns blue while selecting, like the lit search button (3 of 3 from the handoff)
 
       **His words (verbatim):** "Make the done button when you're selecting stuff um, blue, like how everything else goes blue when you have it selected like the search button."
@@ -33298,8 +33318,9 @@ re-opened #480, which I had marked done and had not fixed.
       - Verify at his phone width and on PC.
 
       Clauses:
-      1. [ ] While selecting, Done is blue — the same blue as other lit buttons (the search button when it is on), in both Home looks.
-      2. [ ] It goes back to normal when Select ends.
+      1. [x] While selecting, Done is blue — the same blue as other lit buttons (the search button when it is on), in both Home looks. ✅ v17.03 — gradient, ink and border measured equal to the lit search button, light and dark.
+      2. [x] It goes back to normal when Select ends. ✅ v17.03
+      🖼 **His approved before/after picture (26 Sep, ~11:08 AWST, sent on its own with no words): `tools/design/950-952-before-after.png`.** It is the TARGET, rendered by the claude.ai chat against v17.00. When this ships, render the same crop from the build and send it beside that picture, so he can see it matches what he approved.
 
 - [ ] **953 — Housekeeping from the logging chat's open-questions audit: answers never recorded, stale asks, missing asks, status.sh frozen (hunt MEDIUM #953)** (26 Sep, via INBOX — the logging chat's audit, NOT his words except where quoted)
       ### 26 Sep 2026, ~10:42 AWST — His answers that were never written into REQUESTS.md (found by the logging chat's open-questions audit)
@@ -33354,3 +33375,15 @@ re-opened #480, which I had marked done and had not fixed.
 - [ ] **955 — Widening the window moves the playhead back to 0 (hunt MEDIUM #955)** (26 Sep — found in passing by the seventh hunt's fixer, #941; NOT his words)
       Measured with a throwaway probe: a 2 s project with the playhead at 1.2 s; widening the window put the playhead at 0. Not fixed in #941 (outside its findings).
       1. [ ] Resizing the window keeps the playhead where it was.
+
+- [ ] **956 — Reminder: a page of questions he still has to go through and answer (made by another chat)** (26 Sep, ~11:10 AWST, via INBOX — his words)
+      **His words (verbatim):** "https://claude.ai/artifact/4hddzpLiJvQvkUifK2sdw5 Can you see this? If so make note that I still need to go through it and answer everything. You can read through but don’t make any decisions on it - I got another that to build this up"
+
+      **Logger's note (not his words):**
+      - The logging chat could NOT open this link ("artifact not found": not shared with that session, a different account, or deleted). Its contents are unknown here.
+      - ⚠️ **Make NO decisions from it.** It is his to go through and answer, and another chat of his is building it up. This is a reminder that waits on him, not work.
+      - It may overlap the 36 questions he was given in the logging chat today (#953) and the dead unblock page (#777). Do not merge, publish or republish anything about it until he says so. His answers come back as their own blocks.
+
+      Clauses:
+      1. [ ] Noted: he still has to go through the page and answer everything on it. No decisions from it here.
+      BUILT OUT UNTIL HE answers the questions on the page at the link above (his answers come back through the inbox as their own blocks).

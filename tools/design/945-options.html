@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>945 Friends Block</title>
+<!-- queue 945 — the options sheet. Every picture is the REAL app at 390x844 with the throwaway prototype
+     945-proto.js injected (tools/design/945-render.py). The JPG sent to him is this page rendered 900px wide. -->
+<style>
+  :root { --bg: #0d131a; --card: #151e28; --line: #2a3a4b; --text: #eef3f8; --dim: #b4c1ce; --acc: #5cc8ef; --rec: #4fd18b; --warn: #ffcf47; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 30px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; }
+  .page { width: 900px; margin: 0 auto; padding: 44px 30px 60px; }
+  h1 { font-size: 50px; line-height: 1.1; margin: 0 0 16px; letter-spacing: -.5px; }
+  .sub { font-size: 29px; color: var(--dim); margin: 0 0 10px; }
+  .sub b { color: var(--text); }
+  .his { font-size: 27px; color: var(--warn); margin: 0 0 8px; }
+  h2 { font-size: 40px; line-height: 1.15; margin: 56px 0 10px; }
+  .opt { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 22px 20px 18px; margin: 20px 0; }
+  .opt.rec { border-color: var(--rec); box-shadow: 0 0 0 4px rgba(79, 209, 139, .2); }
+  .opt h3 { font-size: 38px; margin: 0 0 8px; }
+  .opt h3 .tag { font-size: 24px; font-weight: 800; color: #06231a; background: var(--rec); border-radius: 999px; padding: 4px 16px; vertical-align: 6px; margin-left: 8px; }
+  .opt p { margin: 0 0 16px; color: var(--dim); }
+  .opt p b { color: var(--text); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 6px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; border-radius: 12px; border: 2px solid var(--line); background: #000; }
+  figcaption { font-size: 26px; color: var(--dim); margin: 8px 2px 6px; line-height: 1.25; }
+  figcaption b { color: var(--text); }
+  .g4 figcaption { font-size: 22px; text-align: center; }
+  .q { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 20px 26px; margin: 16px 0; }
+  .q b { color: var(--text); }
+  .q .r { color: var(--rec); font-weight: 800; }
+  .q div { color: var(--dim); margin-top: 6px; }
+  .note { font-size: 27px; color: var(--dim); margin-top: 12px; }
+  @media (max-width: 700px) {
+    body { font-size: 16px; } .page { width: auto; padding: 22px 16px 36px; }
+    h1 { font-size: 26px; } .sub, .his, .note { font-size: 15px; } h2 { font-size: 21px; margin-top: 32px; }
+    .opt { padding: 14px; } .opt h3 { font-size: 20px; } .opt h3 .tag { font-size: 13px; padding: 2px 10px; }
+    figcaption { font-size: 14px; } .g4 figcaption { font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>#945 — Friends, right beside Canvas settings</h1>
+  <p class="his">You: “a rectangular block above it with an option to expand … it expands big … and canvas settings shrinks into a small rectangle. The roles are reversed.”</p>
+  <p class="sub">These pictures are your <b>real app on a phone</b>, with the new block built in. <b>Tap the ⤢ on a bar and the two swap.</b> It always reopens on <b>whichever one you had open last</b>. The two moving versions are sent as separate clips.</p>
+
+  <h2>Which way do they swap?</h2>
+
+  <div class="opt rec">
+    <h3>A · The small one always sits on top <span class="tag">RECOMMENDED</span></h3>
+    <p>This is your “roles reversed” exactly. The big block is always in the middle, and the one you can switch to is always the bar at the top. <b>So swapping is always the same thumb spot.</b> The two cross over as they swap, and the one arriving flies above the one leaving.</p>
+    <div class="g2">
+      <figure><img src="945/A-canvas.jpg" alt=""><figcaption><b>Opens like this:</b> Friends is the bar on top.</figcaption></figure>
+      <figure><img src="945/A-friends.jpg" alt=""><figcaption><b>After ⤢:</b> Friends is big, and Canvas is now the bar on top.</figcaption></figure>
+    </div>
+    <div class="g4">
+      <figure><img src="945/A-f02.jpg" alt=""><figcaption>1</figcaption></figure>
+      <figure><img src="945/A-f04.jpg" alt=""><figcaption>2</figcaption></figure>
+      <figure><img src="945/A-f06.jpg" alt=""><figcaption>3</figcaption></figure>
+      <figure><img src="945/A-f08.jpg" alt=""><figcaption>4</figcaption></figure>
+    </div>
+  </div>
+
+  <div class="opt">
+    <h3>B · Friends always stays on top</h3>
+    <p>Nothing changes places. Friends grows downward over Canvas, and Canvas shrinks to a bar underneath. <b>It's calmer to watch, but the bar you tap jumps from the top to the bottom.</b></p>
+    <div class="g2">
+      <figure><img src="945/A-canvas.jpg" alt=""><figcaption><b>Opens like this:</b> the same as A.</figcaption></figure>
+      <figure><img src="945/B-friends.jpg" alt=""><figcaption><b>After ⤢:</b> Friends is big, and Canvas is a bar underneath.</figcaption></figure>
+    </div>
+    <div class="g4">
+      <figure><img src="945/B-f02.jpg" alt=""><figcaption>1</figcaption></figure>
+      <figure><img src="945/B-f04.jpg" alt=""><figcaption>2</figcaption></figure>
+      <figure><img src="945/B-f06.jpg" alt=""><figcaption>3</figcaption></figure>
+      <figure><img src="945/B-f08.jpg" alt=""><figcaption>4</figcaption></figure>
+    </div>
+  </div>
+
+  <h2>Once people are in (both options)</h2>
+  <div class="opt">
+    <p>The Friends bar shows a green <b>Live</b> dot and <b>everyone's faces</b>, so you can see who's there without opening it. Opened up, it's the same sharing card you already have on PC.</p>
+    <div class="g2">
+      <figure><img src="945/live-canvas.jpg" alt=""><figcaption><b>Bar:</b> Live · 3 people, with faces.</figcaption></figure>
+      <figure><img src="945/live-friends.jpg" alt=""><figcaption><b>Opened:</b> people, invite link and code, Stop sharing.</figcaption></figure>
+    </div>
+  </div>
+
+  <h2>Three quick picks</h2>
+  <div class="q"><b>1. A or B?</b> <span class="r">A recommended.</span></div>
+  <div class="q"><b>2. Live sharing is still a test switch</b> (Settings → Labs). That may be why you saw no friends option on your phone.
+    <div><b>a)</b> Show the Friends bar always. With Labs off, opening it offers one switch to turn sharing on. <span class="r">Recommended.</span></div>
+    <div><b>b)</b> Show it only when Labs is on.</div></div>
+  <div class="q"><b>3. The little person+ at the top-left of the video</b> (the phone's current share button, easy to miss).
+    <div><b>a)</b> Keep it, but make it open this pair with Friends big. It still turns into faces when people join. <span class="r">Recommended.</span></div>
+    <div><b>b)</b> Remove it. Friends lives only in Canvas settings.</div></div>
+  <p class="note">Opening Canvas settings never starts sharing by itself. Sharing only starts when you press <b>Start sharing</b> (today, the Share button starts it straight away).</p>
+</div>
+</body>
+</html>

@@ -4687,14 +4687,24 @@ body.home-open #toast { z-index: 205; }
 /* .hm-more removed in v5.24 — the home ⋯ menu's two entries moved into the settings cog. */
 /* magnifier beside Select/⋯ — opens the name+date search bar */
 .hm-search-btn { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; margin-right: 8px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); cursor: pointer; }
-.hm-search-btn.on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
+.hm-search-btn.on, .hm-select-btn.on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }   /* queue 952: Done while selecting is lit the same way */
 #hm-searchbar { padding: 4px 18px 0; }
 #hm-searchbar.hidden { display: none; }
 .hm-search-wrap { display: flex; align-items: center; gap: 8px; max-width: 700px; margin: 0 auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 0 10px; }   /* 700px = .hm-grid, so the bar lines up with the cards it filters */
 .hm-search-wrap:focus-within { border-color: var(--accent); }
 .hm-search-ico { flex: none; color: var(--text-dim); }
 #hm-search-input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--text); font-size: 16px; padding: 11px 0; }   /* 16px exactly: anything smaller and iOS Safari zooms the page on focus (this viewport has no user-scalable=no to suppress it), which pans the top bar off-screen */
-#hm-search-clear { flex: none; width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--panel-3); color: var(--text-dim); font-size: 12px; cursor: pointer; }
+/* queue 951: "The X in the circle … was off-centred". It was a font glyph, which sat a pixel low as a 5px speck in a pale
+   34px disc — the same bug class the old + on #hm-new had. Now a DRAWN 22px disc and cross, centred by geometry, inside a
+   transparent 34px button so the tap target does not shrink. */
+#hm-search-clear { flex: none; width: 34px; height: 34px; border-radius: 50%; border: none; background: transparent; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+#hm-search-clear svg { display: block; }
+.hm-clear-disc { fill: var(--text-dim); }
+.hm-clear-x { fill: none; stroke: var(--panel); stroke-width: 2; stroke-linecap: round; }
+#hm-search-clear:active .hm-clear-disc { opacity: .7; }
+/* queue 950: on a phone the Select bar loses Cancel — Done in the header already leaves Select, and Cancel wrapped the bar
+   onto a second row. A keyboard-and-mouse screen keeps it. */
+@media (hover: none) { .hm-selcancel { display: none; } }
 .hm-search-hint { max-width: 700px; margin: 0 auto; font-size: 11.5px; color: var(--text-dim); padding: 6px 4px 0; line-height: 1.4; }   /* --text-dim, not --text-faint: at 11px the faint tone is ~3:1 and this line is the ONLY place the date syntax is taught */
 .hm-search-hint.hidden { display: none; }
 /* AM-style pill tabs */
@@ -7829,9 +7839,10 @@ body.fm-pushing #toast { z-index: 213; }
    as a complete, deliberate movement while taking half the time a full rotation would, and the panel it
    opens is already on its way in. Eased out so it arrives rather than stops.
    prefers-reduced-motion turns it off — it is decoration on a control that works without it. */
-.ico.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
+/* queue 946: on every cog's svg (the phone's is .m-ico and Home's has no class), not only PC's .ico */
+svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 @keyframes cog-turn { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
-@media (prefers-reduced-motion: reduce) { .ico.cog-turn { animation: none; } }
+@media (prefers-reduced-motion: reduce) { svg.cog-turn { animation: none; } }
 
 /* ---- The selection trio wears its own ground (v7.89, queue 242) --------------------------------
    Ezra, with the three circled: "make these three buttons have a different background to signify their
