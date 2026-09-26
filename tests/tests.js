@@ -98813,4 +98813,275 @@
     });
   });
 
+  /* ═══ HUNT-b — AUDIO MIX, PREVIEW VS EXPORT (queue 690, his words: go re audit, find some bugs coz theres a shit load) ═══
+   * Four faults found by MEASURING what comes out — the exporter's own mix (buildAudioMix), the exported MP4 decoded back,
+   * and the live preview tapped at the speakers (every connection to the destination is re-routed through a recorder,
+   * the same tap the HUNT-e iPhone test uses). Each test FAILS today and says what he would hear. Not fixed yet. */
+
+  // A speaker tap for the live preview: every node that connects to the destination is re-routed through a recorder that
+  // logs the RMS of each 512-sample block beside the transport time it was heard at. Returns { log, stop }.
+  async function huntBTap() {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ctx = FM.audioCtx();
+    const origConnect = AudioNode.prototype.connect;
+    const tapIn = ctx.createGain();
+    const rec = ctx.createScriptProcessor(512, 2, 2);
+    origConnect.call(tapIn, rec); origConnect.call(rec, ctx.destination);
+    const log = [];
+    rec.onaudioprocess = function (e) {
+      const d = e.inputBuffer.getChannelData(0); let s = 0;
+      for (let i = 0; i < d.length; i++) s += d[i] * d[i];
+      log.push({ rms: Math.sqrt(s / d.length), ft: FM.time, pl: FM.playing });
+    };
+    try { await ctx.resume(); } catch (e) {}
+    const w0 = Date.now(), c0 = ctx.currentTime;
+    while (!(ctx.state === 'running' && ctx.currentTime > c0 + 0.05)) {
+      if (Date.now() - w0 > 9000) { try { tapIn.disconnect(); rec.disconnect(); } catch (e) {} throw new Error('setup: the audio context never ran (state ' + ctx.state + ') - the environment refuses to run audio at all'); }
+      await sleep(50);
+    }
+    AudioNode.prototype.connect = function () {
+      const a = Array.prototype.slice.call(arguments);
+      if (a[0] === ctx.destination && this !== rec) a[0] = tapIn;
+      return origConnect.apply(this, a);
+    };
+    return {
+      log: log,
+      stop: function () {
+        AudioNode.prototype.connect = origConnect;
+        rec.onaudioprocess = null;
+        try { tapIn.disconnect(); rec.disconnect(); } catch (e) {}
+      },
+    };
+  }
+  function huntBRms(buf, t0, t1) {
+    const d = buf.getChannelData(0), sr = buf.sampleRate;
+    const a = Math.max(0, Math.floor(t0 * sr)), b = Math.min(d.length, Math.floor(t1 * sr));
+    let s = 0; for (let i = a; i < b; i++) s += d[i] * d[i];
+    return Math.sqrt(s / Math.max(1, b - a));
+  }
+
+  /* HUNT-b 1 — A TRIMMED SONG CLICKS AT EVERY CUT IN THE EXPORTED FILE.
+   * The preview fades every clip edge in and out over 45 ms (js/app.js declickGain, DECLICK_S) — that is #148, his
+   * scratchy-popping report — so a song trimmed to start or stop mid-waveform never pops while he edits. The exporter's
+   * mix (js/exporter.js buildAudioMix) builds the same clip with no edge envelope at all: the clip's buffer starts on
+   * whatever sample the trim lands on and stops dead at oEnd, so the soundtrack steps from silence to full level in one
+   * sample, and back. That is a click at every trim, every cut between two clips and every clip that ends before the
+   * project does — in the file only. The seam comment in js/app.js already names the gap: the export does not build the
+   * envelope this way, which makes the render sound different from the edit.
+   * CONTROLS: the song is in the mix at its own level, and mid-clip it never steps by more than a 250 Hz sine can. */
+  test('HUNT-b a trimmed song pops where it starts and where it ends in the exported file, while the preview fades each edge', { item: '690', budgetMs: 60000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('FM.exporter.buildAudioMix is not reachable');
+    if (typeof FM._declickGain !== 'function') throw new Error('FM._declickGain is not exposed - the preview edge envelope cannot be read');
+    const saved = FM.scene, made = [];
+    const SR = 48000, AMP = 0.5, HZ = 250;
+    try {
+      window.__fmStep = 'HUNT-b export edge click';
+      const rec = await FM.loadVideoFile(huntEWav(4, t => AMP * Math.sin(2 * Math.PI * HZ * t), 'huntb-edge'));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 1, duration: 1.5 });
+      L.trimStart = 1.001;   // a quarter cycle in: the trim lands on a crest, as a trim of real music lands mid-waveform
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 4);
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 4);
+      if (!mix) throw new Error('setup: the exporter built no soundtrack for a clip that has sound');
+      const d = mix.audioBuffer.getChannelData(0);
+      let level = 0, natural = 0;
+      for (let i = Math.round(1.5 * SR); i < Math.round(2.0 * SR); i++) { level = Math.max(level, Math.abs(d[i])); natural = Math.max(natural, Math.abs(d[i] - d[i - 1])); }
+      if (!(level > 0.45 && level < 0.55)) throw new Error('CONTROL: mid-clip the soundtrack peaks at ' + level.toFixed(3) + ', not the song at 0.5 - the mix is not this clip, so nothing below means anything');
+      const smooth = AMP * 2 * Math.PI * HZ / SR;
+      if (!(natural < smooth * 1.5)) throw new Error('CONTROL: mid-clip the waveform already steps by ' + natural.toFixed(4) + ' per sample where a 250 Hz sine at 0.5 steps at most ' + smooth.toFixed(4) + ' - the step reading is broken');
+      const stepAt = t => { const c = Math.round(t * SR); let w = 0, from = 0, to = 0; for (let i = c - 4; i <= c + 4; i++) { const s = Math.abs(d[i] - d[i - 1]); if (s > w) { w = s; from = d[i - 1]; to = d[i]; } } return { w: w, from: from, to: to }; };
+      const head = stepAt(1.0), tail = stepAt(2.5);
+      const pvHead = FM._declickGain(L, 1.001, null, 0), pvTail = FM._declickGain(L, 2.499, null, 0);
+      if (head.w > natural * 4 || tail.w > natural * 4) {
+        throw new Error('a song trimmed to play from 1.00 s to 2.50 s jumps from ' + head.from.toFixed(2) + ' to ' + head.to.toFixed(2) + ' in a single sample where it starts, and from ' +
+          tail.from.toFixed(2) + ' to ' + tail.to.toFixed(2) + ' where it ends, in the exported soundtrack (' + Math.round(Math.max(head.w, tail.w) / natural) +
+          ' times the steepest step of the song itself) - a pop at every cut in the file. The preview never plays these pops: it fades each clip edge over 45 ms (1 ms in, it plays at ' +
+          Math.round(pvHead * 100) + ' percent; 1 ms before the end, at ' + Math.round(pvTail * 100) + ' percent). So every trim, every cut between two clips and every song that stops before the video does clicks in the exported video but not while he edits');
+      }
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-b 2 — SPLITTING A SONG PUTS A DROP-OUT AT THE CUT IN THE PREVIEW.
+   * A split is meant to be invisible, and the declick seam exemption (js/app.js seamAt, 21 Aug) was written for exactly
+   * this: the two halves are one continuous recording, so neither edge may fade. But declickGain has a THIRD term that
+   * the exemption does not cover: `m._resumedAt`, which the sync tick sets every time a PAUSED element is started — and
+   * the tail half's element is paused until the playhead reaches it. So at the cut the head half plays to its end at full
+   * level, and the tail half opens at volume 0 and climbs over 45 ms: a notch of near-silence at every split, every time
+   * he plays across it. The 21 Aug test drives declickGain with m = null, so it never sees the term. The export has no
+   * such envelope, so the file plays straight through (asserted below as the second control).
+   * Heard at the speakers: the clip carries a Gain effect at 0 dB, which changes nothing about its level but routes its
+   * element through Web Audio, where the tap can hear it. CONTROL: the same song, unsplit, played over the same second. */
+  test('HUNT-b splitting a song leaves a drop-out at the cut when he plays across it, while the export plays straight through', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (typeof FM.splitLayer !== 'function') throw new Error('FM.splitLayer is missing');
+    const saved = FM.scene, made = [];
+    const tap = await huntBTap();
+    const median = a => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+    async function across(split) {
+      window.__fmStep = 'HUNT-b seam ' + (split ? 'split' : 'whole');
+      const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'huntb-seam-' + (split ? 's' : 'w')));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 4 });
+      L.audioFx = [{ type: 'gain', enabled: true, params: { gain: 0 } }];
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 4);
+      FM.refreshAll();
+      if (split) {
+        FM.setTime(2);
+        await FM.splitLayer(L.id);
+        FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
+        if (FM.scene.layers.length !== 2) throw new Error('setup: the split did not make two halves');
+      }
+      FM.setTime(1.2);
+      await sleep(300);
+      tap.log.length = 0;
+      FM.play();
+      await sleep(1600);
+      FM.pause();
+      await sleep(100);
+      const rows = tap.log.filter(r => r.pl);
+      const steady = median(rows.filter(r => r.ft > 1.5 && r.ft < 1.85).map(r => r.rms));
+      const near = rows.filter(r => r.ft > 1.9 && r.ft < 2.25);
+      let dip = Infinity, dipAt = null;
+      near.forEach(r => { if (r.rms < dip) { dip = r.rms; dipAt = r.ft; } });
+      return { steady: steady, dip: near.length ? dip : NaN, dipAt: dipAt, n: near.length };
+    }
+    try {
+      const whole = await across(false);
+      if (!(whole.steady > 0.15)) throw new Error('CONTROL: the tap hears the playing song at only ' + whole.steady.toFixed(3) + ' - the preview is not reaching the speakers here, so nothing below means anything');
+      if (!(whole.n > 3) || !(whole.dip / whole.steady > 0.8)) throw new Error('CONTROL: the UNSPLIT song already dips to ' + (whole.dip / whole.steady * 100).toFixed(0) + ' percent around 2 s (' + whole.n + ' blocks) - the tap or the timing is off, not the split');
+      const cut = await across(true);
+      // …and the FILE plays straight through the same cut: its soundtrack has no hole there.
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 4);
+      if (!mix) throw new Error('setup: the exporter built no soundtrack for the split song');
+      let fileMin = Infinity; for (let t = 1.95; t < 2.05; t += 0.005) fileMin = Math.min(fileMin, huntBRms(mix.audioBuffer, t, t + 0.005));
+      const fileSteady = huntBRms(mix.audioBuffer, 1.5, 1.85);
+      if (!(fileMin / fileSteady > 0.9)) throw new Error('CONTROL: the exported soundtrack also dips at the cut (' + (fileMin / fileSteady * 100).toFixed(0) + ' percent) - this is not a preview-only fault');
+      if (!(cut.n > 3) || !(cut.dip / cut.steady > 0.6)) {
+        throw new Error('he splits a song at 2.00 s and plays across the cut: the sound drops to ' + Math.round(cut.dip / cut.steady * 100) + ' percent of its level right at the cut (at ' + (cut.dipAt || 0).toFixed(2) +
+          ' s), a blip of near-silence every time the playhead crosses a split, where the same song unsplit holds ' + Math.round(whole.dip / whole.steady * 100) + ' percent and the exported file holds ' + Math.round(fileMin / fileSteady * 100) +
+          ' percent. The tail half opens silent and fades in over 45 ms because its element was paused until the cut (declickGain: the _resumedAt term, which the split seam exemption does not cover)');
+      }
+    } finally {
+      tap.stop();
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-b 3 — ON AN IPHONE THE PREVIEW CUTS OFF THE ECHO AND REVERB TAIL; THE EXPORT LETS IT RING.
+   * On an iPhone el.volume cannot be set (the HUNT-e fix, queue 690), so a clip whose level is not a flat 100% — any
+   * volume other than 100%, or any fade — is routed through a Web Audio level stage (js/audio-fx-live.js makeLevelStage).
+   * sync() puts that stage AFTER the audio effects: element -> effects -> level -> speakers. The export does the opposite:
+   * clip -> volume and fade gain -> effects (js/exporter.js buildAudioMix). For an echo or a reverb the order is the whole
+   * difference: in the export the echo of the last notes rings on after the clip ends; on the phone the playback tick
+   * drives the level stage to zero at the clip's end (the fade, and the 45 ms de-click), and because the echo is upstream
+   * of it the echo goes to zero with it. Nonlinear effects (Distortion, Compressor, Limiter) likewise see the clip at full
+   * level on the phone and at its real level in the file.
+   * The stand-in for WebKit is the one the HUNT-e test uses: the element's volume reads 1 and ignores writes.
+   * CONTROLS: the same clip at 100% on the same stand-in (no level stage) rings on at the speakers, which proves the tap
+   * hears a tail; and the exported soundtrack of the 80% clip rings on too. */
+  test('HUNT-b on an iPhone a clip with Echo that is not at 100 percent stops dead at its end in the preview, but the echo rings on in the export', { item: '690', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const tap = await huntBTap();
+    const avg = a => a.reduce((x, r) => x + r.rms, 0) / Math.max(1, a.length);
+    async function play(label, vol) {
+      window.__fmStep = 'HUNT-b echo tail ' + label;
+      const rec = await FM.loadVideoFile(huntEWav(4, t => 0.4 * Math.sin(2 * Math.PI * 440 * t), 'huntb-echo-' + label));
+      // WebKit on iPhone: the volume attribute cannot be set by a page and always reads 1
+      Object.defineProperty(rec.el, 'volume', { configurable: true, get: function () { return 1; }, set: function () {} });
+      const L = FM.makeLayer('video', { name: 'voice ' + label, x: 32, y: 32, start: 0, duration: 1 });
+      L.volume = vol;
+      L.audioFx = [{ type: 'delay', enabled: true, params: { time: 0.3, feedback: 0.5, mix: 0.5 } }];
+      // a title under it keeps the project running past the clip, so the transport plays on while the echo should ring
+      const T = FM.makeLayer('shape', { name: 'title', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 3 });
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L, T], 3);
+      FM.refreshAll(); FM.setTime(0.3);
+      await sleep(250);
+      tap.log.length = 0;
+      FM.play();
+      await sleep(1800);
+      const reached = FM.time;
+      FM.pause();
+      await sleep(150);
+      const rows = tap.log.filter(r => r.pl);
+      const on = avg(rows.filter(r => r.ft > 0.6 && r.ft < 0.9)), tail = avg(rows.filter(r => r.ft > 1.1 && r.ft < 1.45));
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 3);
+      if (!mix) throw new Error('setup: the exporter built no soundtrack for the ' + label + ' clip');
+      return { on: on, tail: tail, ratio: on > 0 ? tail / on : 0, reached: reached, level: !!rec._boost,
+               fileRatio: huntBRms(mix.audioBuffer, 1.1, 1.45) / huntBRms(mix.audioBuffer, 0.6, 0.9) };
+    }
+    try {
+      const full = await play('100', 1);
+      if (!(full.reached > 1.5)) throw new Error('setup: the transport stopped at ' + full.reached.toFixed(2) + ' s, before the echo could be heard');
+      if (!(full.on > 0.1)) throw new Error('CONTROL: the tap hears the 100 percent clip at only ' + full.on.toFixed(3) + ' while it plays - the preview is not reaching the speakers here');
+      if (!(full.ratio > 0.2)) throw new Error('CONTROL: at 100 percent (no level stage) the echo after the clip ends measured only ' + (full.ratio * 100).toFixed(0) + ' percent of the clip - the tap cannot hear a tail, so the reading below means nothing');
+      const quiet = await play('80', 0.8);
+      if (!quiet.level) throw new Error('setup: the 80 percent clip on the iPhone stand-in got no level stage - the routing this test is about did not happen');
+      if (!(quiet.fileRatio > 0.2)) throw new Error('CONTROL: the EXPORTED 80 percent clip has no echo after it ends either (' + (quiet.fileRatio * 100).toFixed(0) + ' percent) - then preview and file agree');
+      if (!(quiet.ratio > 0.2)) {
+        throw new Error('on his iPhone, a voice clip at 80 percent with Echo goes silent the moment the clip ends in the preview - the echo after it measured ' + Math.round(quiet.ratio * 100) +
+          ' percent of the clip, where the exported file rings on at ' + Math.round(quiet.fileRatio * 100) + ' percent and the same clip at 100 percent rings on at ' + Math.round(full.ratio * 100) +
+          ' percent in the preview. The level stage an iPhone needs sits AFTER the effects, so the end-of-clip fade silences the echo and reverb tails too; the export turns the clip down BEFORE the effects. Any volume but 100 percent, or any fade, does it - so what he hears on the phone is not what the file contains');
+      }
+    } finally {
+      tap.stop();
+      try { FM.pause(); } catch (e) {}
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* HUNT-b 4 — THE SOUND IN AN EXPORTED VIDEO IS 44 MS BEHIND THE PICTURE.
+   * js/exporter.js encodeAudio feeds the mix to an AAC AudioEncoder from timestamp 0 and hands every chunk to the muxer.
+   * An AAC encoder starts every stream with a warm-up (priming) of 2112 samples — 44 ms at 48 kHz — that is not part of
+   * the sound, and the file has to say so for a player to skip it (an edit list: an edts/elst box). vendor/mp4-muxer.js
+   * writes none (it has no edts, elst or sgpd box at all), so every player plays the warm-up first and the whole
+   * soundtrack comes out 44 ms late against the video, whose first frame is at 0. The audio track also runs past the end.
+   * Measured in the FILE: a click at exactly 1.000 s, exported through FM.exporter.run and decoded back.
+   * CONTROL: in the soundtrack the exporter builds before encoding, the click is at 1.000 s. */
+  test('HUNT-b the sound in an exported video comes 44 ms after the picture', { item: '690', budgetMs: 120000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const saved = FM.scene, made = [];
+    const firstLoud = (d, sr) => { for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 0.2) return i / sr; return -1; };
+    try {
+      window.__fmStep = 'HUNT-b export offset';
+      const rec = await FM.loadVideoFile(huntEWav(3, t => (t >= 1.0 && t < 1.002) ? 0.9 : 0, 'huntb-click'));
+      const C = FM.makeLayer('video', { name: 'click', x: 32, y: 32, start: 0, duration: 3 });
+      FM.media.set(C.id, rec); made.push(C.id);
+      FM.scene = huntEScene([C], 3);
+      FM.refreshAll();
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 3);
+      if (!mix) throw new Error('setup: the exporter built no soundtrack');
+      const mixAt = firstLoud(mix.audioBuffer.getChannelData(0), mix.audioBuffer.sampleRate);
+      if (Math.abs(mixAt - 1.0) > 0.001) throw new Error('CONTROL: in the soundtrack the exporter builds, the click is at ' + mixAt.toFixed(4) + ' s, not 1.000 s - the offset is already in the mix, not the file');
+      let blob = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'huntb', onReady: async r => { blob = r.blob; } });
+      if (!blob) throw new Error('setup: the export produced no file');
+      const dec = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(await blob.arrayBuffer());
+      const fileAt = firstLoud(dec.getChannelData(0), dec.sampleRate);
+      if (fileAt < 0) throw new Error('setup: the click is not in the exported file at all');
+      const lateMs = (fileAt - mixAt) * 1000;
+      if (Math.abs(lateMs) > 5) {
+        throw new Error('a click at 1.000 s on his timeline is at ' + fileAt.toFixed(3) + ' s in the exported MP4: the whole soundtrack plays ' + Math.round(lateMs) + ' ms behind the picture in every exported video (and the audio track is ' +
+          dec.duration.toFixed(3) + ' s long for a 3.000 s video). The AAC encoder starts every stream with a warm-up it does not mean to be heard, and the file carries no edit list telling a player to skip it, so every player plays it. Speech sits at the edge of visible lip-sync error, cuts on the beat land late, and a clip he exports and imports again drifts another ' + Math.round(lateMs) + ' ms each time');
+      }
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 })();
