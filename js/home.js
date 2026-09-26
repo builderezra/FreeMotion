@@ -1352,13 +1352,21 @@ window.FM = window.FM || {};
             const made = FM.projects.list().find(x => !had.has(x.id));
             if (made) revealCard(made.id);   // the copy lists FIRST — from down the list it landed off screen and Duplicate looked like it did nothing
           } },
-          /* §19.6: "Share live…" after Duplicate — it opens the project, then the Share panel. */
+          /* §19.6: "Share live…" after Duplicate — it opens the project, then the Share panel.
+             #967 (his words: "you can never turn it off on any project ever"): a project that is live, or holds a room
+             kept from before, offers Stop sharing here instead — the same question as the panel's, and it drops the
+             room without opening (and so re-arming) the project. And "Share live…" opens the people door, never an arm:
+             on a phone that is the Friends block, where only Start sharing starts anything (U.openPeople). */
           ...((FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn() && FM.collab.ui.share)
-            ? [{ label: 'Share live…', action: async () => {
-              const ok = await openProject(p.id);
-              if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }
-              setTimeout(() => { try { FM.collab.ui.share(); } catch (e) {} }, 260);
-            } }] : [])
+            ? [(FM.collab.ui.isSharing && FM.collab.ui.isSharing(p.id))
+              ? { label: 'Stop sharing', danger: true, action: async () => {
+                if (await FM.collab.ui.stopSharing(p.id)) render();
+              } }
+              : { label: 'Share live…', action: async () => {
+                const ok = await openProject(p.id);
+                if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }
+                setTimeout(() => { try { (FM.collab.ui.openPeople || FM.collab.ui.share)(); } catch (e) {} }, 260);
+              } }] : [])
         ]),
         /* queue 921 S7 review: the save points taken while he shared this project, readable WITHOUT sharing it
            again (Share would arm a new room, and write a save point of its own, just to show the list). With
@@ -3004,6 +3012,9 @@ window.FM = window.FM || {};
       }
       if (FM.requestRender) FM.requestRender();
       try { localStorage.setItem('fm.view', 'editor'); } catch (e) {}   // in the editor now — reloads return here
+      /* #967: a project he shared, kept behind Home at a cold launch, starts sharing again when he goes INTO it — not
+         while Home is on screen (collab-ui.js resumeOpen). A no-op with Labs off, or with nothing kept. */
+      if (FM.collab && FM.collab.ui && FM.collab.ui.afterHomeClose) { try { FM.collab.ui.afterHomeClose(); } catch (e) {} }
     },
     // Phase 2 of the two-phase push (queue 128) — see armPushIn. Returns false when there was no
     // phase 1 to complete, so a caller can fall back to the ordinary one-shot close.

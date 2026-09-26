@@ -58,6 +58,7 @@ window.FM = window.FM || {};
   let hostOlder = null;                      // host: somebody newer knocked (§14.7) — { name }
   let versionNote = null;                    // guest: the owner refused a reconnect on version — { why }
   let resumeT = null;
+  let booted = false;                        // #967: the boot has landed (Home or the editor) — see resumeOpen
   let otherTab = null;                       // S8 review: the linked copy another tab is already reconnecting
   let docWatch = false;                      // visibilitychange + online, only while a relay or a reconnect runs
   /* ── S7 ── */
@@ -93,6 +94,14 @@ window.FM = window.FM || {};
   }
   U.cleanName = cleanName;
   U.cleanColor = cleanColor;
+  /* #967: THE COLOUR THE PROMPT WILL PRE-SELECT, picked once. The idle Friends row showed PALETTE[0] (red) while the
+     prompt it opens pre-selected a random colour (orange), so the preview and the pick disagreed. One pick, both read it. */
+  let suggested = null;
+  function suggestColor() {
+    if (!suggested) suggested = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+    return suggested;
+  }
+  U._suggestColor = suggestColor;
 
   U.getProfile = function () {
     let p = null;
@@ -116,9 +125,11 @@ window.FM = window.FM || {};
    * open time and written as a class, for the reason ask.js spells out: `html[data-home="light"]` is on
    * the root and stays "light" inside the editor, which is dark whatever Home is set to — so the
    * question a body-level card has to ask is "is the light Home on screen right now". */
+  let reopening = false;                     // closeCard() called by openCard(): a redraw, not a close
   function openCard(id, opts) {
     const o = opts || {};
-    closeCard();
+    reopening = true;
+    try { closeCard(); } finally { reopening = false; }
     scrim = el('div', 'collab-scrim');
     card = el('div', 'collab-card fm-ask-card');
     card.id = id;
@@ -154,6 +165,8 @@ window.FM = window.FM || {};
   }
   function closeCard() {
     if (!card) return;
+    /* #967: the Share card closing in the middle of the five-character check is an answer — "not let in", said. */
+    if (!reopening && card.id === 'collab-share') abandonSas();
     if (card._esc) window.removeEventListener('keydown', card._esc, true);
     if (card._unpop) { try { card._unpop(); } catch (e) {} }
     if (card._onclose) { const f = card._onclose; card._onclose = null; try { f(); } catch (e) {} }
@@ -186,16 +199,18 @@ window.FM = window.FM || {};
       c._onclose = function () { if (!done) resolve(null); };
       c.appendChild(el('div', 'fm-ask-title', 'What should others see?'));
       const pb = bodyOf(c);
-      pb.appendChild(el('div', 'collab-sub', 'Your name and colour show up beside your cursor on the other person’s screen.'));
+      /* #967: a phone has no cursor — the name shows next to what this person is doing on the other screen. */
+      pb.appendChild(el('div', 'collab-sub', 'Your name and colour show up next to what you’re doing on their screen.'));
       const input = el('input', 'fm-ask-input collab-name');
       input.type = 'text';
       input.maxLength = (C.LIMITS && C.LIMITS.NAME) || 32;
       input.placeholder = 'Your name';
       input.setAttribute('aria-label', 'Your name');
+      input.setAttribute('enterkeyhint', 'done');   // the phone keyboard's return key says what it does, as ask.js's does
       input.value = (have && have.name) || '';
       pb.appendChild(input);
       const row = el('div', 'collab-swatches');
-      let picked = (have && have.color) || PALETTE[Math.floor(Math.random() * PALETTE.length)];
+      let picked = (have && have.color) || suggestColor();
       PALETTE.forEach(function (hex) {
         const s = btn('collab-swatch', '', function () {
           picked = hex;
@@ -216,7 +231,7 @@ window.FM = window.FM || {};
       pb.appendChild(err);
       const acts = el('div', 'fm-ask-actions');
       acts.appendChild(btn('fm-ask-cancel', 'Cancel', function () { closeCard(); }));
-      acts.appendChild(btn('fm-ask-ok accent collab-continue', 'Continue', function () {
+      const cont = btn('fm-ask-ok accent collab-continue', 'Continue', function () {
         const p = U.setProfile(input.value, picked);
         if (!p) {
           err.textContent = cleanName(input.value) ? 'Pick one of the colours.' : 'Type a name so people know who you are.';
@@ -227,7 +242,17 @@ window.FM = window.FM || {};
         done = true;
         closeCard();
         resolve(p);
-      }));
+      });
+      acts.appendChild(cont);
+      /* #967: RETURN FINISHES IT. On an iPhone the keyboard's return key is the natural finish, and it did nothing —
+         measured: "Mia" typed, Return, the card still up and no profile saved. Enter presses Continue, exactly as
+         ask.js answers Enter; an IME confirming a word is not an answer. */
+      input.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+        e.preventDefault();
+        e.stopPropagation();
+        cont.click();
+      });
       c.appendChild(acts);
       input.focus();
       try { input.select(); } catch (e) {}
@@ -279,6 +304,13 @@ window.FM = window.FM || {};
     try { localStorage.setItem(hostKey(pid), JSON.stringify(r)); } catch (e) {}
   }
   function dropRoom(pid) { try { localStorage.removeItem(hostKey(pid)); } catch (e) {} }
+  function hasRoom(pid) { try { return !!localStorage.getItem(hostKey(pid)); } catch (e) { return false; } }
+  /* #967: every room this device holds — the live one and every one paused by opening another project. */
+  function hostRoomKeys() {
+    const out = [];
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('fm.collab.host.') === 0) out.push(k); } } catch (e) {}
+    return out;
+  }
   /* ⚠️ THE ROOM BELONGS TO A PROJECT, AND THE MODULE REMEMBERED IT WITHOUT SAYING WHICH (S6). `hostRoom`
      outlived the session it was loaded for: share project A, switch to B, share B with a session that
      already existed, and the panel, the relay and every admission ran on A's room — A's link and code
@@ -407,7 +439,7 @@ window.FM = window.FM || {};
 
   function memberRows(s) {
     const list = el('ul', 'cs-people');
-    const me = U.getProfile() || { name: 'You', color: PALETTE[0] };
+    const me = U.getProfile() || { name: 'You', color: suggestColor() };
     list.appendChild(personRow(me.name, me.color, 'you', null, null));
     if (!s || !s.host) return list;
     const members = s.host.members || {};
@@ -490,6 +522,7 @@ window.FM = window.FM || {};
   function followItem(mid, name) {
     const pz = presenceOf(mid);
     if (!pz || !C.presence) return null;
+    if (pz.st === 'off' && !pz.following) return null;   // #967: an offline person has nothing to follow
     return pz.following
       ? { label: 'Stop following', action: function () { C.presence.unfollow(); redrawShare(); } }
       : { label: 'Follow', action: function () { startFollow(mid, name); } };
@@ -563,7 +596,9 @@ window.FM = window.FM || {};
       if (rid) revokeRid(rid);
       if (s && mid) {
         const ep = s._eps && s._eps[mid];
+        removing[mid] = true;                  // #967: he is told "removed", never "<name> left" on top of it
         if (ep) { try { ep.send('ctl', { t: 'bye', why: 'removed' }); } catch (e) {} try { ep.close(); } catch (e) {} }
+        setTimeout(function () { delete removing[mid]; }, 0);
         s.dropPeer(mid);
       }
       rotateRoom();
@@ -615,6 +650,7 @@ window.FM = window.FM || {};
      another project and is still a member. Leave throws the device's token away (the copy becomes its own, or
      is deleted), so its row could only ever read "offline", and a rejoin by link added a second one beside it. */
   U.onPeerLeft = function (mid, why) {
+    leftWhy[mid] = why || 'left';              // #967: read a tick later by saidGone — a goodbye, not a dropped wire
     if (why !== 'left' || !hostRoom) return false;
     const rid = ridOfMid(mid);
     if (!rid || !forgetRid(rid)) return false;
@@ -672,6 +708,77 @@ window.FM = window.FM || {};
     });
   }
 
+  /* ═══ #967 · THE GUEST'S CLOCK STARTS WHEN THE OWNER'S SIDE DOES ═══════════════════════════════════════════
+   * His words: "you can't even send it to your friends". The guest's answer code has to be copied, sent in a message,
+   * opened on the other phone, copied and pasted there — a minute at the very least — and the 20 s race above started
+   * the moment the code appeared. Measured with two separate Chromes: "They did not answer — ask for a fresh code" at
+   * t+20.2 s, and the owner's paste three minutes later got "They did not answer — try a fresh code" too.
+   * Measured on the same pair with no clock at all: the guest's ICE is 'connected' at once (the owner's device answers
+   * its checks before it has the answer), DTLS sits in 'connecting' — 71 checks answered in 175 s, never 'failed' —
+   * and the moment the answer is pasted the connection is 'connected' and the join completes two seconds later.
+   * So the guest waits WITHOUT that clock, up to CODE_ANSWER_WAIT (ten minutes; Cancel on the sheet ends it sooner),
+   * until the owner's side starts — the peer connection turning 'connected', which only the paste can cause — and only
+   * then races ICE_CONNECT for the channels to open, exactly as before. `onStart` says so on the sheet. */
+  let pasteWait = null;                      // test seam, like `connectWait`: ten minutes is not a thing a suite waits out
+  U._pasteWait = function (ms) { pasteWait = (ms == null ? null : ms); return pasteWait; };
+  function answeredWithin(link, onStart, onLost) {
+    const outer = pasteWait != null ? pasteWait : ((C.LIMITS && C.LIMITS.CODE_ANSWER_WAIT) || 600000);
+    const inner = connectWait != null ? connectWait : ((C.LIMITS && C.LIMITS.ICE_CONNECT) || 20000);
+    const grace = (C.link && C.link.grace) ? C.link.grace() : ((C.LIMITS && C.LIMITS.LINK_GRACE) || 120000);
+    const pc = link.pc;
+    return new Promise(function (res, rej) {
+      let done = false, tIn = null, tLost = null;
+      const tOut = setTimeout(function () { end(rej, { why: 'expired' }); }, outer);
+      function end(f, v) {
+        if (done) return;
+        done = true;
+        clearTimeout(tOut); clearTimeout(tIn); clearTimeout(tLost);
+        if (pc && pc.removeEventListener) {
+          try { pc.removeEventListener('connectionstatechange', check); pc.removeEventListener('iceconnectionstatechange', check); } catch (e) {}
+        }
+        f(v);
+      }
+      function check() {
+        if (done || !pc) return;
+        const st = pc.connectionState;
+        if (!tIn && st === 'closed') { end(rej, { why: 'closed' }); return; }
+        /* #967: THE OWNER'S SIDE WENT QUIET WHILE HE WAITED — LOST TOUCH, NOT GONE. Measured with two Chromes: the
+           guest's connection 'failed' about 16 s after the owner's side went (Stop sharing, the app killed) — and
+           equally 16-20 s after the owner merely switched to Messages to fetch this very code. The first fix ended the
+           wait there, and the paste he came back with never connected; left alone, the same connection came back and
+           Step 3 was reached. So a 'failed' is said softly and the code is KEPT; it carries on if the connection comes
+           back; and only a 'failed' that lasts LINK_GRACE ends it with the dropped line. */
+        if (!tIn && (st === 'failed' || link.down === true)) {
+          if (!tLost) {
+            tLost = setTimeout(function () { end(rej, { why: 'closed' }); }, grace);
+            if (onLost) { try { onLost(true); } catch (e) {} }
+          }
+          return;
+        }
+        if (tLost) {
+          clearTimeout(tLost); tLost = null;
+          if (onLost) { try { onLost(false); } catch (e) {} }
+        }
+        if (tIn || st !== 'connected') return;
+        clearTimeout(tOut);
+        tIn = setTimeout(function () { end(rej, { why: 'timeout' }); }, inner);
+        if (onStart) { try { onStart(); } catch (e) {} }
+      }
+      if (pc && pc.addEventListener) {
+        try { pc.addEventListener('connectionstatechange', check); pc.addEventListener('iceconnectionstatechange', check); } catch (e) {}
+      }
+      check();
+      /* The link closing on its own before their side ever started (collab-link.js closes a 'failed' one after its
+         grace) is the same thing said the same way — not "Could not join". */
+      link.opened.then(function (v) { end(res, v); }, function (e) {
+        const w = e && e.why;
+        end(rej, !tIn && (w === 'ice' || w === 'channel' || w === 'closed') ? { why: 'closed' } : e);
+      });
+    });
+  }
+  U._answeredWithin = answeredWithin;
+  const LOST_TOUCH = 'Lost touch with them — this code still works if they come back';
+
   /* ⚠️ "THE CODES YOU HAVE HANDED OUT STOP WORKING" IS A PROMISE THE CARD MAKES OUT LOUD, so stopping
      has to CLOSE the outstanding offer rather than merely forget about it. It did neither, and both
      halves of that were real. The RTCPeerConnection stayed open and gathering after the session ended
@@ -683,6 +790,8 @@ window.FM = window.FM || {};
      It is the same retryable-versus-spent split `hostConnect` already reasons about, which is why both
      ends go through one helper rather than two copies of the same three lines. (queue 921 S3) */
   function dropOffer(delayMs) {
+    if (sasPending) answerSas('dropped');       // #967: a check still on screen goes with the code (stop, Labs off)
+    connectingCode = '';
     if (offerLink) {
       const l = offerLink;
       offerLink = null;
@@ -1027,6 +1136,7 @@ window.FM = window.FM || {};
 
   /* §12.1 arming steps 8 and on, in one place for the Share button and for the resume on reopen. */
   function afterArm() {
+    forgetPeerNotes();                       // #967: notes from a session that ended are not this one's
     ridMid = Object.create(null);
     hostOlder = null;
     startHostRelay();
@@ -1067,13 +1177,15 @@ window.FM = window.FM || {};
     const head = el('div', 'cs-head');
     head.appendChild(el('h2', 'fm-ask-title', 'Share “' + projectName() + '”'));
     head.appendChild(el('div', 'cs-state', stateLine(null)));
+    /* #967: the one-shot line — what just happened (Stop sharing from Home, a name prompt he backed out of). */
+    if (shareNote) { head.appendChild(el('div', 'cs-note', shareNote)); shareNote = null; }
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
     /* Him, as the others will see him — and NOT memberRows(), which also lists a stored room's offline members. The row's
        second line is said here, not by statusLine(): nothing is shared, so he is nobody's "Owner" yet (critic's finding). */
     const have = U.getProfile();
-    const me = have || { name: 'You', color: PALETTE[0] };
+    const me = have || { name: 'You', color: suggestColor() };   // #967: the colour Set up… will pre-select
     const ul = el('ul', 'cs-people');
     const li = personRow(me.name, me.color, 'you', null, null);
     const pr = li.querySelector('.cs-prole');
@@ -1085,7 +1197,10 @@ window.FM = window.FM || {};
     body.appendChild(ul);
     const start = btn('cs-start accent', 'Start sharing', function () {
       start.disabled = true;
-      armShare().then(function () {
+      armShare().then(function (ok) {
+        /* #967: backing out of the name prompt Start sharing raised said nothing at all — the block just went back to
+           "Not shared yet". A name is what sharing needs, so that is what it says. */
+        if (!ok && !U.getProfile()) shareNote = 'Add a name to start sharing.';
         if (fhost === host && host.isConnected) U.renderFriends(host); else start.disabled = false;
       }, function () { start.disabled = false; });
     });
@@ -1107,7 +1222,7 @@ window.FM = window.FM || {};
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
-    body.appendChild(el('div', 'collab-sub', 'Share this project live and edit it together from your own phones or computers. It is still being tested, so it stays off until you turn it on — and you can turn it off again in Settings → Labs.'));
+    body.appendChild(el('div', 'collab-sub', 'Share this project live and edit it together from your own phones or computers. It is still being tested, so it stays off until you turn it on — and you can turn it off again in Settings → Live collaboration (at the bottom).'));
     body.appendChild(switchRow('Live collaboration', 'Being tested', false, function () {
       if (FM.settings && FM.settings.set) FM.settings.set('collabLabs', true);
       if (fhost === host && host.isConnected) U.renderFriends(host);
@@ -1120,6 +1235,7 @@ window.FM = window.FM || {};
   }
   /* Everything the block holds, let go — at every close of the dialog, and by the observer at a bare hide. */
   U.friendsClosed = function () {
+    abandonSas();                               // #967: closing the block mid-check says "not let in"
     if (fhostObs) { try { fhostObs.disconnect(); } catch (e) {} fhostObs = null; }
     if (fhostShowedCode) { fhostShowedCode = false; touchCode(); }
     const b = fhost || document.getElementById('cv-fr-body');
@@ -1263,30 +1379,91 @@ window.FM = window.FM || {};
       foot.appendChild(gear);
     }
     foot.appendChild(btn('cs-stop', 'Stop sharing', function () {
-      FM.ask({
-        title: 'Stop sharing?', danger: true, ok: 'Stop sharing',
-        message: 'Everyone here keeps their own copy. The codes you have handed out stop working.'
-      }).then(function (yes) {
+      FM.ask(stopAsk()).then(function (yes) {
         if (!yes) return;
-        const pid = currentPid();
-        /* §12.1 "ending": a final save point, BEFORE the room goes — the last picture of the project as the
-           people in it left it. Not awaited: IndexedDB takes its own time and the stop must not wait on it. */
-        checkpoint(pid, 'stop');
-        C.end();
-        dropOffer();                 // …and the code he read out a minute ago really does stop working
-        dropRoom(pid);
-        hostRoom = null; hostRoomPid = null;
-        U.syncBanner();
+        stopSharingNow(currentPid());
         /* queue 945: in the Friends block the block stays, and says it is not shared any more (with Start sharing). */
         if (host) { if (fhost === host && host.isConnected) U.renderFriends(host); }
         else closeCard();
         if (FM.toast) FM.toast('Sharing stopped', 2200);
       });
     }));
-    foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
+    /* #967: while the five letters are being checked, "They match" is the ONE blue button — Done sat blue right under it
+       on a phone (measured at 390×844: [They match, Done], the foot starting at the check's bottom edge), and Done is the
+       natural "I've checked" word, which turned the friend away. It stays a way out, just not the one lit up. */
+    foot.appendChild(btn('cs-done' + (sasPending ? '' : ' accent'), 'Done', function () { if (host) closeAny(); else closeCard(); }));
     c.appendChild(foot);
     return c;
   }
+
+  /* ═══ STOP SHARING — one ask, one stop, from the panel AND from Home (#967) ═══════════════════════════════════
+   * His words: "you can never turn it off on any project ever". A project he had shared once kept its room when he
+   * opened another one, and the only Stop was inside that project — which re-armed it the moment it opened. Home's ⋯
+   * now offers Stop sharing on a project that is live or holds a kept room, with the same question, and it drops the
+   * record without arming anything. */
+  function stopAsk() {
+    return { title: 'Stop sharing?', danger: true, ok: 'Stop sharing',
+      message: 'Everyone here keeps their own copy. The codes you have handed out stop working.' };
+  }
+  function stopSharingNow(pid) {
+    if (!pid) return false;
+    const s = C.session;
+    const live = !!(s && s.isOwner && (s.pid || currentPid()) === pid);
+    if (live) {
+      /* §12.1 "ending": a final save point, BEFORE the room goes — the last picture of the project as the
+         people in it left it. Not awaited: IndexedDB takes its own time and the stop must not wait on it. */
+      checkpoint(pid, 'stop');
+      C.end();
+    }
+    /* …and the code he read out a minute ago really does stop working — the offer belongs to the live session (or to
+       none), never to a different project that is live right now. */
+    if (live || !s) dropOffer();
+    dropRoom(pid);
+    if (hostRoomPid === pid) { hostRoom = null; hostRoomPid = null; }
+    U.syncBanner();
+    return true;
+  }
+  /* Is this project shared from this device — live now, or holding a kept room that would come back when opened? */
+  U.isSharing = function (pid) {
+    const s = C.session;
+    return !!pid && U.labsOn() && ((!!s && s.isOwner && C.active && s.pid === pid) || hasRoom(pid));
+  };
+  /* #967 review: STOP SHARING FROM HOME, WHILE ANOTHER TAB IS THE ONE SHARING IT. isSharing() is true for any project with
+     a kept room, and this tab's stop only ends THIS tab's session — so it said "Sharing stopped" and dropped the record
+     while the other tab's session went on running on the relays, and that tab wrote the record straight back at its
+     next save (the card flipping back to Stop sharing). The tab holding the project's host lock is the one sharing it;
+     from anywhere else he is told where to stop it, and nothing is dropped. Asked before the question and again after
+     it — he can take a while to answer. */
+  function sharedElsewhere(pid) {
+    const s = C.session;
+    if (s && s.isOwner && C.active && s.pid === pid) return Promise.resolve(false);   // this tab is the one sharing it
+    if (locks[hostLock(pid)]) return Promise.resolve(false);
+    const L = navigator.locks;
+    if (!L || typeof L.query !== 'function') return Promise.resolve(false);
+    return L.query().then(function (q) {
+      return ((q && q.held) || []).some(function (h) { return h && h.name === hostLock(pid); });
+    }, function () { return false; });
+  }
+  function toldElsewhere() {
+    FM.ask({ title: OTHER_TAB, single: true, ok: 'OK', message: 'This project is being shared from another FreeMotion tab or window — stop it there.' });
+    return false;
+  }
+  U.stopSharing = function (pid) {
+    if (!U.isSharing(pid)) return Promise.resolve(false);
+    return sharedElsewhere(pid).then(function (away) {
+      if (away) return toldElsewhere();
+      return FM.ask(stopAsk()).then(function (yes) {
+        if (!yes || !U.isSharing(pid)) return false;
+        return sharedElsewhere(pid).then(function (away2) {
+          if (away2) return toldElsewhere();
+          stopSharingNow(pid);
+          if (fhostLive()) U.renderFriends(fhost);
+          if (FM.toast) FM.toast('Sharing stopped', 2200);
+          return true;
+        });
+      });
+    });
+  };
 
   function gearSvg() {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1956,7 +2133,7 @@ window.FM = window.FM || {};
         let reuse = (member && typeof member.mid === 'string') ? member.mid : null;
         if (old) {
           const ep0 = s._eps && s._eps[old];
-          if (ep0) { delete s._eps[old]; ep0.onclose = null; try { ep0.close(); } catch (e) {} }
+          if (ep0) { delete s._eps[old]; ep0.onclose = null; ep0.ondown = null; try { ep0.close(); } catch (e) {} }
           if (s.peerIds().indexOf(old) >= 0) s.dropPeer(old);
           reuse = old;
         }
@@ -1968,11 +2145,14 @@ window.FM = window.FM || {};
         ridMid[rid] = mid;
         s._eps = s._eps || Object.create(null);
         s._eps[mid] = link;
+        const leaver = rec.name;             // #967: NOT `who` — that name is the knock's, above, and a second one here shadowed it into its TDZ
+        delete downSaid[mid];
         link.onclose = function () {
-          if (s._eps && s._eps[mid] === link) { delete s._eps[mid]; try { s.dropPeer(mid); } catch (e) {} }
+          if (s._eps && s._eps[mid] === link) { delete s._eps[mid]; try { s.dropPeer(mid); } catch (e) {} saidGone(s, mid, leaver); }
           redrawShare();
           paintRelayLine();
         };
+        link.ondown = function (down) { if (s._eps && s._eps[mid] === link) saidDown(s, mid, leaver, down); };
         s.onMessage('ctl', hello, mid);
         (link._buffered || []).forEach(function (m) { try { s.onMessage(m.ch, m.msg, mid); } catch (e) {} });
         link._buffered = null;
@@ -2080,7 +2260,7 @@ window.FM = window.FM || {};
     body.appendChild(codeBox);
     const copy = btn('cs-copy', 'Copy code', function () { copyText(codeBox.textContent); });
     copy.disabled = true;
-    body.appendChild(copy);
+    body.appendChild(codeRow(copy, function () { return codeBox.textContent; }));
 
     body.appendChild(el('div', 'cs-steplabel', 'Step 2 · paste the code they send back'));
     const input = el('input', 'fm-ask-input cs-answer');
@@ -2091,23 +2271,40 @@ window.FM = window.FM || {};
     input.setAttribute('aria-label', 'Their code');
     body.appendChild(input);
     const status = el('div', 'cs-status');
+    status.id = 'collab-code-status';
     body.appendChild(status);
     const connect = btn('cs-connect accent', 'Connect', function () {
+      /* #967: ONE PRESS. A second tap while the first is still connecting started nothing new but read as a second
+         request; the button is off (dimmed, .cs-connect:disabled) until the attempt settles. */
+      if (connecting || connect.disabled) return;
       /* SAY SOMETHING. Returning silently is indistinguishable from a broken button, and this branch
          is reachable: a code that could not be minted leaves no live offer (queue 921 S3 review). */
       if (!offerLink) { status.textContent = 'There is no live code here — go back and start again.'; return; }
+      connect.disabled = true;
       status.textContent = 'Connecting…';
       hostConnect(offerLink, input.value, status);
     });
+    connect.id = 'collab-code-connect';
     body.appendChild(connect);
     body.appendChild(btn('cs-back', '‹ Back', function () {
       /* Backing out of a connect that is IN FLIGHT cancels it. Without this the chain kept running
          against a card nobody can see, writing its status into a detached node. A step he merely
          looked at keeps its link, which is what the note below is about. */
+      /* #967: …and one waiting on the five-character check is answered "not let in", said, not left hanging. */
+      if (sasPending) { abandonSas(); return; }
       if (connecting) dropOffer();
       shareStep = 'main';
       redrawShare();
     }));
+    /* #967: a redraw in the middle of a connect (somebody joining by link, a role change) used to throw the step's
+       status away — Step 3's two buttons with it, so the one gate he had to pass simply vanished. The step is drawn
+       back as it is: still connecting, or still asking. */
+    if (connecting) {
+      connect.disabled = true;
+      input.value = connectingCode || input.value;
+      if (sasPending) drawSas(sasPending.sas, status, connect);
+      else status.textContent = 'Connecting…';
+    }
 
     /* ⚠️ ONE LINK PER STEP, not one per DRAW. Anything on this card can redraw it — the ask segment, a
        peer joining, a role change — and a version that only reused the link once its code had ARRIVED
@@ -2116,7 +2313,7 @@ window.FM = window.FM || {};
        against. The pending `.then` below looks its box up by id at resolve time, so it fills whichever
        draw is on screen. (queue 921 S3) */
     if (offerLink) {
-      if (offerLink._code) { codeBox.textContent = offerLink._code; copy.disabled = false; }
+      if (offerLink._code) { codeBox.textContent = offerLink._code; copy.disabled = false; enableShare(body); }
       return;
     }
     let link;
@@ -2130,6 +2327,7 @@ window.FM = window.FM || {};
       live.textContent = code;
       const cp = live.parentNode.querySelector('.cs-copy');
       if (cp) cp.disabled = false;
+      enableShare(live.parentNode);
     }).catch(function (e) {
       const live = document.getElementById('collab-offer-code');
       if (!live) return;
@@ -2139,6 +2337,25 @@ window.FM = window.FM || {};
     });
   }
 
+  /* #967: SEND THE LONG CODE IN ONE TAP. The long code is the hardest thing in the feature to pass on and it had the
+     fewest ways to do it — Copy, switch app, paste. Share… beside Copy is the invite block's own pair (Copy link ·
+     Share…): the same row, the same button, the system share sheet with the code as its text. Only where the browser
+     has a share sheet, as there; without one the Copy button is drawn exactly as before. */
+  function codeRow(copyBtn, getText) {
+    if (!navigator.share) return copyBtn;
+    const row = el('div', 'cs-linkrow cs-coderow');
+    row.appendChild(copyBtn);
+    const sh = btn('cs-sharelink cs-sharecode', 'Share…', function () {
+      const t = String(getText() || '');
+      if (!t || t.indexOf('FM1') !== 0) return;
+      /* Inside the tap, like Copy (§19.1): a share sheet asked for after an await is refused on iOS. */
+      try { navigator.share({ text: t }).catch(function () {}); } catch (e) {}
+    });
+    sh.disabled = copyBtn.disabled;
+    row.appendChild(sh);
+    return row;
+  }
+  function enableShare(root) { const sh = root && root.querySelector('.cs-sharecode'); if (sh) sh.disabled = false; }
   function copyText(text) {
     const t = String(text || '');
     if (!t || t.indexOf('FM1') !== 0) return;
@@ -2161,18 +2378,60 @@ window.FM = window.FM || {};
    * and the fingerprints THIS leg is really using, so under a relay his five and theirs differ. He may
    * not admit anybody until he has said they match. It is a gate, not a notice: the promise resolves
    * false and the code is spent. */
+  /* #967: THE CHECK IS A PROMISE HELD HERE, NOT IN A NODE. Its two buttons are drawn into the step's status line —
+     which a redraw throws away, and which the pinned [Stop sharing][Done] foot covered on a phone: measured at 390×844,
+     "They match" at y 753–797 under a foot starting at 762, and a tap on it pressed Done, closed the block and left
+     the guest waiting for nothing. So the pending check survives a redraw (drawCodeStep draws it back), is scrolled
+     into view above the foot when it appears, and a close in the middle of it is an answer: "not let in", said. */
+  let sasPending = null;           // { sas, resolve } while the owner is being asked to compare the five characters
+  let connectingCode = '';         // the answer code being connected, so a redraw keeps it in its field
+  function drawSas(sas, status, connect) {
+    status.textContent = '';
+    status.appendChild(el('div', 'cs-steplabel', 'Step 3 · check these letters match theirs'));
+    status.appendChild(el('div', 'cs-sas', sas));
+    status.appendChild(el('div', 'collab-sub', 'Ask them to read out what their screen shows. If it is different, somebody is in the middle — stop.'));
+    const row = el('div', 'cs-sasacts');
+    row.appendChild(btn('cs-sasno', 'They don’t match', function () { answerSas(false); }));
+    row.appendChild(btn('cs-sasyes accent', 'They match', function () { answerSas(true); }));
+    status.appendChild(row);
+    /* One blue button: Connect has done its job, and "They match" is the one that finishes it. */
+    const cn = connect || document.getElementById('collab-code-connect');
+    if (cn) cn.classList.add('hidden');
+    doneLit(false);
+    /* Into view ABOVE the foot: the step scrolls inside .cs-body, and the foot is outside it, so "nearest" inside the
+       body is enough — but only once it has a box (the redraw path draws it before it is in the page). */
+    const show = function () { try { if (row.isConnected) row.scrollIntoView({ block: 'nearest' }); } catch (e) {} };
+    show();
+    requestAnimationFrame(show);
+  }
+  function answerSas(v) {
+    const p = sasPending;
+    if (!p) return;
+    sasPending = null;
+    doneLit(true);
+    p.resolve(v);
+  }
+  /* The foot's Done, on whichever panel is up (the Share card or the Friends block): blue unless a check is pending. */
+  function doneLit(on) {
+    const root = panelRoot();
+    const d = root && root.querySelector('.cs-foot .cs-done');
+    if (d) d.classList.toggle('accent', !!on && !sasPending);
+  }
+  /* A close (the block, the card, ‹ Back) while he is being asked: the guest is not let in, and he is told so. */
+  function abandonSas() { if (sasPending) answerSas('closed'); }
+  U._sasPending = function () { return !!sasPending; };
   function confirmSas(sas, status) {
     return new Promise(function (resolve) {
       if (!sas) return resolve(false);
-      status.textContent = '';
-      status.appendChild(el('div', 'cs-steplabel', 'Step 3 \u00b7 check these letters match theirs'));
-      status.appendChild(el('div', 'cs-sas', sas));
-      status.appendChild(el('div', 'collab-sub', 'Ask them to read out what their screen shows. If it is different, somebody is in the middle \u2014 stop.'));
-      const row = el('div', 'cs-sasacts');
-      row.appendChild(btn('cs-sasno', 'They don\u2019t match', function () { resolve(false); }));
-      row.appendChild(btn('cs-sasyes accent', 'They match', function () { resolve(true); }));
-      status.appendChild(row);
+      if (sasPending) answerSas(false);
+      sasPending = { sas: sas, resolve: resolve };
+      drawSas(sas, liveCodeStatus(status));
     });
+  }
+  /* The step's status line as it is on screen now — a redraw replaces the node hostConnect was handed. */
+  function liveCodeStatus(fallback) {
+    const n = document.getElementById('collab-code-status');
+    return n && n.isConnected ? n : fallback;
   }
 
   /* The owner's half of §14.5 step 3, and the point at which a stranger becomes a member. */
@@ -2180,11 +2439,13 @@ window.FM = window.FM || {};
     const s = C.session;
     if (!s) { status.textContent = 'Sharing stopped.'; return; }
     connecting = true;
+    connectingCode = String(answerCode || '');
+    const say = function (t) { liveCodeStatus(status).textContent = t; };
     link.acceptAnswer(answerCode).then(function () {
-      status.textContent = 'Connecting\u2026';
+      say('Connecting…');
       return openedWithin(link);
     }).then(function () {
-      status.textContent = 'Checking the code\u2026';
+      say('Checking the code…');
       const me = U.getProfile() || {};
       return C.signal.handshake(link, {
         side: 'host', key: link.mk, sid: hostRoom ? hostRoom.sid : '',
@@ -2199,8 +2460,10 @@ window.FM = window.FM || {};
          hello is a machine's answer and arrives in milliseconds. */
       const wait = awaitHello(link);
       return confirmSas(res && res.sas, status).then(function (yes) {
+        if (yes === 'dropped') return Promise.reject({ why: 'dropped' });
+        if (yes === 'closed') return Promise.reject({ why: 'abandoned' });
         if (!yes) return Promise.reject({ why: 'sas' });
-        status.textContent = 'Waiting for them\u2026';
+        say('Waiting for them…');
         return wait;
       });
     }).then(function (hello) {
@@ -2210,12 +2473,15 @@ window.FM = window.FM || {};
         /* ⚠️ AND THE FAR END MAY HAVE GONE WHILE THE KNOCK SAT THERE (queue 921 S3 review). `addPeer`
            refuses a closed endpoint and answers null; admitting one anyway put a person in his people
            list who was never there and whose row could never clear itself. */
+        const who = cleanName(hello.name) || 'Someone';
         const mid = s.addPeer(link, { role: role, name: cleanName(hello.name), color: cleanColor(hello.color) || PALETTE[0] });
         if (!mid) return Promise.reject({ why: 'gone' });
         noteMidTop(s);
         s._eps = s._eps || Object.create(null);
         s._eps[mid] = link;
-        link.onclose = function () { try { s.dropPeer(mid); } catch (e) {} redrawShare(); };
+        delete downSaid[mid];
+        link.onclose = function () { try { s.dropPeer(mid); } catch (e) {} saidGone(s, mid, who); redrawShare(); };
+        link.ondown = function (down) { saidDown(s, mid, who, down); };
         /* Replay the hello that started all this, now that the member exists — the host answers it with
            the welcome and the snapshot, exactly as it would any other. */
         s.onMessage('ctl', hello, mid);
@@ -2223,6 +2489,7 @@ window.FM = window.FM || {};
         link._buffered = null;
         offerLink = null;
         connecting = false;
+        connectingCode = '';
         shareStep = 'main';
         redrawShare();
         U.syncBanner();
@@ -2230,7 +2497,11 @@ window.FM = window.FM || {};
       });
     }).catch(function (e) {
       connecting = false;
+      connectingCode = '';
+      if (sasPending) answerSas(false);
       const why = (e && e.why) || '';
+      /* Sharing stopped (or Labs went off) with the check on screen: the code is gone with the room — nothing to say. */
+      if (why === 'dropped') { try { link.close(); } catch (x) {} return; }
       /* ⚠️ A DENIED OR SPENT CODE MUST NOT STAY ON THE CARD (queue 921 S3 review). The deny branch used
          to `return` normally, so the `.catch` that clears `offerLink` never ran: the SAME dead code
          stayed on screen for ever, every answer he pasted failed inside `setRemoteDescription` on a
@@ -2240,23 +2511,85 @@ window.FM = window.FM || {};
          auto-decline enters here, so putting the phone down burned the code.
          A MISREAD ANSWER is the one retryable case — `acceptAnswer` leaves the connection in
          have-local-offer, so the code he read out is still good and he can just paste again. */
-      if (why === 'bad-code') { status.textContent = codeError(e); return; }
-      if (why === 'denied' || why === 'sas') {
+      if (why === 'bad-code') {
+        say(codeError(e));
+        const cn = document.getElementById('collab-code-connect');
+        if (cn) { cn.disabled = false; cn.classList.remove('hidden'); }
+        return;
+      }
+      if (why === 'denied' || why === 'sas' || why === 'abandoned') {
         try { link.send('ctl', { t: 'refused', why: 'denied' }); } catch (x) {}
+        /* #967: a close in the middle of the check used to abandon the join in silence — the guest waited on a
+           link nobody was going to answer, and he never learned he had not let them in. */
         shareNote = why === 'sas'
-          ? 'Stopped \u2014 those letters did not match. That code is used up; add them again for a fresh one.'
-          : 'Not let in. That code is used up \u2014 add them again for a fresh one.';
+          ? 'Stopped — those letters did not match. That code is used up; add them again for a fresh one.'
+          : why === 'abandoned' ? 'Not let in — they’ll need a fresh code.'
+          : 'Not let in. That code is used up — add them again for a fresh one.';
+        if (why === 'abandoned' && !panelRoot() && FM.toast) FM.toast('Not let in — they’ll need a fresh code', 3000);
         if (offerLink === link) dropOffer(250);
         else setTimeout(function () { try { link.close(); } catch (x) {} }, 250);
         redrawShare();
         return;
       }
-      shareNote = why === 'gone' ? 'They gave up waiting \u2014 that code is used up. Add them again for a fresh one.' : codeError(e);
+      shareNote = why === 'gone' ? 'They gave up waiting — that code is used up. Add them again for a fresh one.' : codeError(e);
       if (offerLink === link) dropOffer();
       else { try { link.close(); } catch (x) {} }
       redrawShare();
     });
   }
+
+  /* ═══ #967 · "<NAME> LEFT" ═══════════════════════════════════════════════════════════════════════════════════
+   * A member's chip simply vanished when they went — by Leave, by their Labs switch, by opening another project, by a
+   * dropped link — and nobody said a word (the owner's link.onclose redrew and nothing else). The owner is told now.
+   * The session's `bye` closes the member's link BEFORE it reports why (collab-session.js hostMessage), so the words
+   * are chosen a tick later, once U.onPeerLeft has said whether it was a goodbye or the wire going. Not when HE ends
+   * it (the session is no longer active), not for somebody he removed (he has just been told that), and not for a
+   * member whose old link is replaced by its own reconnect (that onclose is unhooked first). */
+  const leftWhy = Object.create(null);       // mid → the `bye` reason its session reported
+  const removing = Object.create(null);      // mid → he is removing them right now
+  const downSaid = Object.create(null);      // mid → "<name>'s connection dropped" said for a link still held (its grace)
+  /* ⚠️ PER SESSION, NOT FOR EVER (found shipping v17.06: the full suite went red where every slice was green). These three
+     are keyed by the member's mid, and mids are reused from session to session — so a note left by a session that ended
+     while somebody's link was down (or mid-goodbye) silenced the NEXT session's "<name>'s connection dropped" for whoever
+     got that mid. In use: one session where a friend dropped, and a friend in a later one could drop unannounced.
+     Cleared whenever a session starts (afterArm) or ends (U.onDetach). */
+  function forgetPeerNotes() {
+    [leftWhy, removing, downSaid].forEach(function (m) { Object.keys(m).forEach(function (k) { delete m[k]; }); });
+  }
+  U._peerNotes = function () { return { leftWhy: Object.keys(leftWhy).length, removing: Object.keys(removing).length, downSaid: Object.keys(downSaid).length }; };
+  /* #967 round 2: A 'FAILED' CONNECTION IS SAID AT ONCE AND HELD (collab-link.js, "'FAILED' IS NOT FINAL"). The person is
+     greyed (collab-presence.js reads `ep.down`) and he is told "<name>'s connection dropped" once; if it comes back he
+     is told "<name> is back" once; if it does not, the grace closes the link and the person leaves the list without
+     the same sentence twice (saidGone). Not while he is ending it himself. */
+  function saidDown(s, mid, name, down) {
+    if (!s || s.active === false || C.session !== s) return;
+    if (down) {
+      if (downSaid[mid]) return;
+      downSaid[mid] = 1;
+      if (FM.toast) FM.toast((cleanName(name) || 'Someone') + '’s connection dropped', 2600);
+    } else {
+      if (!downSaid[mid]) return;
+      delete downSaid[mid];
+      if (FM.toast) FM.toast((cleanName(name) || 'Someone') + ' is back', 2400);
+    }
+    U.friendsBar();
+    redrawShare();
+  }
+  U._saidDown = saidDown;
+  function saidGone(s, mid, name) {
+    if (removing[mid]) { delete removing[mid]; delete leftWhy[mid]; delete downSaid[mid]; return; }
+    if (downSaid[mid]) { delete downSaid[mid]; delete leftWhy[mid]; U.friendsBar(); return; }   // already told, when it dropped
+    if (!s || s.active === false || C.session !== s) return;
+    setTimeout(function () {
+      const why = leftWhy[mid];
+      delete leftWhy[mid];
+      if (C.session !== s || s.active === false) return;
+      if (s.peerIds && s.peerIds().indexOf(mid) >= 0) return;   // it came straight back on the same mid
+      if (FM.toast) FM.toast((cleanName(name) || 'Someone') + (why === 'left' || why === 'paused' ? ' left' : '’s connection dropped'), 2600);
+      U.friendsBar();
+    }, 0);
+  }
+  U._saidGone = saidGone;
 
   function codeError(e) {
     const why = (e && e.why) || '';
@@ -2369,7 +2702,7 @@ window.FM = window.FM || {};
       const dot = li.querySelector('.cs-dot');
       if (dot) dot.style.background = dotColor(pz, null);
       const f = li.querySelector('.cs-follow');
-      if (f) followBtn(f, pz);
+      if (f) { followBtn(f, pz); f.classList.toggle('hidden', pz.st === 'off'); }
     });
   };
 
@@ -2380,7 +2713,8 @@ window.FM = window.FM || {};
     head.appendChild(el('h2', 'fm-ask-title', 'Shared with you'));
     head.appendChild(el('div', 'cs-state', s.ended ? 'Ended — your copy stays on this device'
       : s.online === false ? 'Offline — the live link dropped; your changes are kept here' : 'Live'));
-    head.appendChild(el('div', 'collab-sub cs-myrole', 'You’re ' + (s.role === 'viewer' ? 'a Viewer' : s.role === 'commenter' ? 'a Commenter' : 'an Editor') + '.'));
+    /* #967: an ended copy is nobody's room — "You're an Editor" under "Ended" was a contradiction. */
+    if (!s.ended) head.appendChild(el('div', 'collab-sub cs-myrole', 'You’re ' + (s.role === 'viewer' ? 'a Viewer' : s.role === 'commenter' ? 'a Commenter' : 'an Editor') + '.'));
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
@@ -2407,6 +2741,7 @@ window.FM = window.FM || {};
           else startFollow(pz.mid, pz.name);
         });
         followBtn(f, pz);
+        f.classList.toggle('hidden', pz.st === 'off');   // #967: nobody to follow while they are offline
         li.appendChild(f);
         list.appendChild(li);
       });
@@ -2472,6 +2807,7 @@ window.FM = window.FM || {};
      and staying in; the copy runs under a "Leaving…" line; and the result is said either way. */
   function leaveKeeping(s) {
     const gpid = s && s.gpid;
+    const who = hostNameOf(s);                 // read before the copy stops being theirs
     return copyRoom(gpid).then(function (fits) {
       if (fits === false) {
         return FM.ask({ title: 'Not enough room to keep a copy', danger: true, ok: 'Delete it instead', cancel: 'Stay in the session',
@@ -2484,7 +2820,8 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('Leaving… copying your clips', 0);
       return C.leave({ keep: true }).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
         U.syncBanner();
-        if (nid) { if (FM.toast) FM.toast('You left — this is now your own copy', 2600); return nid; }
+        /* #967: one sentence for every way out — Leave, the Labs switch, opening another project. */
+        if (nid) { if (FM.toast) FM.toast('You left ' + who + '’s project — your copy is kept', 2600); return nid; }
         if (FM.hideToast) FM.hideToast();
         FM.ask({ title: 'Your copy could not be made your own', ok: 'OK', single: true,
           message: 'You have left the live session, but this device could not finish copying the project — it may be full. The copy stays as it is and will not reconnect; free some space and open it to try again, or delete it from Home.' });
@@ -2564,6 +2901,8 @@ window.FM = window.FM || {};
 
   /* ═══ 3. THE JOIN SHEET (§19.2) ═══════════════════════════════════════════════════════════════ */
 
+  /* #967: the owner's way to a connection code, as the controls on a phone actually read. */
+  const CODE_DOOR = 'the round person+ on their video → Start sharing → Connect with a code instead';
   const STEPS = ['Reading the code…', 'Connecting…', 'Checking the code…',
     'Waiting for them to let you in…', 'Downloading the project…'];
   let joinLink = null;             // the RtcLink a join in flight is using
@@ -2588,8 +2927,9 @@ window.FM = window.FM || {};
       if (c._scan) { try { c._scan.stop(); } catch (e) {} c._scan = null; }
       if (joinLink) { try { joinLink.close(); } catch (e) {} joinLink = null; }
       if (joinFlow && joinFlow.cancel) joinFlow.cancel();
-      /* §12.4: a pending invite is spent "on use" — joined, or looked at and put away. */
-      if (jo.fromPending) clearPendingJoin();
+      /* §12.4: a pending invite is spent "on use" — joined (the join clears it before this runs). #967: looked at and
+         put away is NOT use — Cancel keeps it for its day, and says how to come back to it. */
+      if (jo.fromPending && !c._joined) putAwayPendingJoin();
     };
     c.appendChild(el('h2', 'fm-ask-title', 'Join a live project'));
     const jb = bodyOf(c);
@@ -2597,7 +2937,8 @@ window.FM = window.FM || {};
        pinned — gets no [Scan QR] (a control that can only ever refuse) and is told what does work. */
     const canScan = !C.signal.codesOnly() && !!(C.qr && C.qr.reader && (!C.qr.canRead || C.qr.canRead()));
     jb.appendChild(el('div', 'collab-sub', C.signal.codesOnly()
-      ? 'Codes only is on: ask them to tap Share → Add someone with a code, then paste the code they send you.'
+      /* #967: "tap Share" named a button a phone does not have — the owner's door there is the round person+. */
+      ? 'Codes only is on: ask them to tap ' + CODE_DOOR + ', then paste the code they send you.'
       : 'Paste the invite link they sent, or type the short code they read out. A long code from “Connect with a code” works here too.'
         + (canScan ? '' : ' To use their QR code, point your camera app at it.')));
     const fieldRow = el('div', 'cj-fieldrow');
@@ -2637,9 +2978,11 @@ window.FM = window.FM || {};
     jb.appendChild(status);
     const back = el('div', 'cj-back hidden');
     const backCode = el('div', 'cs-code');
-    back.appendChild(el('div', 'cs-steplabel', 'Read this back to them'));
+    /* #967: nobody can read a 180-character code aloud (the comment on the Share panel's code row already banned
+       "read out" for it) — it is copied and sent, and the owner pastes it in their Step 2. */
+    back.appendChild(el('div', 'cs-steplabel', 'Copy this and send it back to them — they paste it in Step 2'));
     back.appendChild(backCode);
-    back.appendChild(btn('cs-copy', 'Copy code', function () { copyText(backCode.textContent); }));
+    back.appendChild(codeRow(btn('cs-copy', 'Copy code', function () { copyText(backCode.textContent); }), function () { return backCode.textContent; }));
     jb.appendChild(back);
     /* §14.6's short authentication string. It is HIS half of the check the owner is making: the key
        rode inside the code, so only the two people can tell a relay from a friend. */
@@ -2929,7 +3272,7 @@ window.FM = window.FM || {};
   function joinAny(text, profile, status, back, backCode, go, sasBox) {
     const k = C.signal.classify(text);
     if (!k) { status.textContent = 'That does not look like an invite link or a code.'; go.disabled = false; return; }
-    if (k.kind === 'conn') return guestJoin(text, profile, status, back, backCode, go, sasBox);
+    if (k.kind === 'conn') return guestJoin(k.code, profile, status, back, backCode, go, sasBox);   // #967: the code inside the message
     return relayJoin(k, profile, status, go, sasBox);
   }
 
@@ -2972,7 +3315,7 @@ window.FM = window.FM || {};
    * snapshot and the same-device choice are all the ones S3 proved. */
   function relayJoin(target, profile, status, go, sasBox) {
     if (C.signal.codesOnly()) {
-      status.textContent = 'Codes only is on in Settings → Labs, so invite links and short codes cannot connect. Ask them for a connection code, or turn Codes only off.';
+      status.textContent = 'Codes only is on in Settings → Live collaboration (at the bottom), so invite links and short codes cannot connect. Ask them for a connection code, or turn Codes only off.';
       go.disabled = false;
       return null;
     }
@@ -3003,7 +3346,10 @@ window.FM = window.FM || {};
       status.appendChild(document.createTextNode(relayError(Object.assign({ kind: target.kind }, e || {}), hostLabel)));
       const why = e && e.why;
       /* §22: two failures come with the one thing that fixes them. */
-      if (why === 'relays') status.appendChild(btn('cj-alt', 'Connect with a code instead', function () { status.textContent = 'Ask them to tap Share → Connect with a code instead, then paste the long code they send you here.'; }));
+      /* #967: IT WAS A BUTTON THAT DID NOTHING — a full-width [Connect with a code instead] whose only effect was to
+         replace itself with instructions for the OTHER person, naming a "Share" a phone does not have. It is the
+         instruction, as text, naming the door as it looks on their phone. */
+      if (why === 'relays') status.appendChild(el('div', 'collab-sub cj-althint', 'Ask them to tap ' + CODE_DOOR + ', then paste the long code they send you here.'));
       if (why === 'guest-older') status.appendChild(btn('cj-alt accent', 'Update', function () { U.updateNow(target.kind === 'code' ? { c: target.code } : (target.j || null)); }));
       go.disabled = false;
     }
@@ -3085,6 +3431,7 @@ window.FM = window.FM || {};
         if (s && !s.isOwner && s.gpid) takeLock(guestLock(s.gpid));   // S8 review: this tab holds the new copy's room
         showSas(sasBox, null);
         U.syncBanner();
+        if (card) card._joined = true;
         closeCard();
         showEditor();
         if (FM.toast) FM.toast('You’re in — this copy stays in sync with ' + hostLabel, 3000);
@@ -3154,17 +3501,28 @@ window.FM = window.FM || {};
     function done() {
       status.textContent = STEPS[4];
       joinLink = null;             // the session owns the link now — closing the card must not kill it
-      if (C.session && !C.session.isOwner && C.session.gpid) takeLock(guestLock(C.session.gpid));   // S8 review
+      const s = C.session;
+      if (s && !s.isOwner && s.gpid) takeLock(guestLock(s.gpid));   // S8 review
+      /* #967: A CODE-JOINED GUEST LEARNS WHEN THE LINK DIES. Liveness (a ping every 2 s, six seconds of silence closes
+         the link) was switched on only for relay joins and reconnects, so a guest who came in with a code sat on
+         "● Live" typing into nothing after the owner's app died — measured 40 s later: online, no banner. With it on,
+         the Offline banner comes up within about six seconds. */
+      if (s && !s.isOwner && s.setLiveness) s.setLiveness(true);
       showSas(sasBox, null);
       U.syncBanner();
+      if (card) card._joined = true;
       closeCard();
       showEditor();
-      if (FM.toast) FM.toast('You\u2019re in \u2014 this copy stays in sync', 3000);
+      if (FM.toast) FM.toast('You’re in — this copy stays in sync', 3000);
     }
     function fail(e) {
       try { link.close(); } catch (x) {}
       if (joinLink === link) joinLink = null;
       showSas(sasBox, null);
+      /* #967: the answer code is dead once its link is — it and its Copy button go, so nobody sends a code that can no
+         longer connect. */
+      back.classList.add('hidden');
+      backCode.textContent = '';
       status.textContent = joinError(e);
       go.disabled = false;
     }
@@ -3172,11 +3530,15 @@ window.FM = window.FM || {};
     link.acceptOffer(code).then(function (answer) {
       backCode.textContent = answer;
       back.classList.remove('hidden');
-      status.textContent = STEPS[1];
+      enableShare(back);
+      /* #967: waiting on a person, not on the app — and no 20 s clock until their side starts (answeredWithin). */
+      status.textContent = 'Waiting for them to paste your code…';
       /* NO AUTOMATIC CLIPBOARD WRITE HERE. It would be outside the tap that started this, which Safari
          refuses — and the refusal path ends in a toast saying "could not copy", i.e. an error message
          for something nobody asked for. The Copy button beside the code is inside its own tap. */
-      return openedWithin(link);
+      return answeredWithin(link, function () { status.textContent = STEPS[1]; }, function (lost) {
+        status.textContent = lost ? LOST_TOUCH : 'Waiting for them to paste your code…';
+      });
     }).then(function () {
       status.textContent = STEPS[2];
       /* No `sid` is passed: on the code path the guest has no source for it but the host's own auth1,
@@ -3208,7 +3570,8 @@ window.FM = window.FM || {};
     if (why === 'same-device') return 'You already have this project on this device.';
     if (why === 'no-candidates') return 'That code has no way to connect on this network — ask for a fresh one on Wi-Fi.';
     if (why === 'no-room') return 'Not enough room on this device — delete a project and try again.';
-    if (why === 'timeout') return 'They did not answer — ask for a fresh code.';
+    /* #967: the clock ran out, not the other person — it said "They did not answer", which blamed them. */
+    if (why === 'timeout' || why === 'expired') return 'Your code timed out — ask them for a fresh one.';
     if (why === 'closed') return 'The connection dropped while you were waiting — ask for a fresh code and try again.';
     return 'Could not join — ask for a fresh code.';
   }
@@ -3407,9 +3770,12 @@ window.FM = window.FM || {};
        all — so the guest kept editing a project that was no longer syncing while its panel read "Live".
        And the offline line PROMISED A RE-SEND: there is no reconnect in S3 (`C.reopen` has no caller),
        so "will send when you reconnect" was untrue. It says what is true instead. */
+    /* #967: THE PHONE KEEPS THE REASSURING HALF. The pill is ~250 px on a phone and these two were cut mid-sentence —
+       "This live session has ended — your…" — losing exactly the half that says the work is safe. Same facts, fewer
+       words, as the other states already had. */
     if (s.ended) return U.banner(s.ended === 'removed'
-      ? 'You were removed from this project — your copy stays on this device'
-      : 'This live session has ended — your copy stays on this device', { warn: true });
+      ? (isPhoneNow() ? 'Removed · your copy is kept' : 'You were removed from this project — your copy stays on this device')
+      : (isPhoneNow() ? 'Session ended · your copy is kept' : 'This live session has ended — your copy stays on this device'), { warn: true });
     /* §13.1 (S8 review): "Too many offline changes to hold — [Save my version as a copy]". */
     if (!s.isOwner && s.outboxFull) {
       return U.banner(isPhoneNow() ? 'Too many offline changes' : 'Too many offline changes to hold — editing waits until they are sent', {
@@ -3438,7 +3804,7 @@ window.FM = window.FM || {};
           ? 'Reconnecting to ' + hostNameOf(s) + '…' + (n ? ' (' + n + ' kept)' : '')
           : hostNameOf(s) + ' is offline · reconnecting… your changes are kept' + (n ? ' (' + n + ')' : ''), { warn: true });
       }
-      return U.banner('Offline — the live link dropped; your changes are kept on this device', { warn: true });
+      return U.banner(short ? 'Offline · changes kept' : 'Offline — the live link dropped; your changes are kept on this device', { warn: true });   // #967: the short form
     }
     /* §14.7 on the owner's side: somebody newer knocked and was turned away. */
     if (s.isOwner && hostOlder) {
@@ -3669,6 +4035,12 @@ window.FM = window.FM || {};
     if (s && !s.isOwner && s.gpid) { try { if (FM.projects.patchCollab) FM.projects.patchCollab(s.gpid, { ended: why === 'removed' ? 'removed' : 'ended' }); } catch (e) {} }
     stopRecon();
   };
+  /* #967: the session came back online on the link it already had (a silence that ended — collab-session.js liveTick),
+     not through this reconnect: the reconnect has nothing left to do, and a second link would only displace the first. */
+  U.onOnline = function () {
+    const s = C.session;
+    if (recon && recon.mode === 'live' && !recon.awaiting && s && !s.isOwner && s.gpid === recon.gpid) { stopRecon(); U.syncBanner(); }
+  };
   /* The owner admitted a reconnect's hello: NOW it is back in sync (S6 review). */
   U.onWelcome = function () {
     const s = C.session;
@@ -3689,6 +4061,7 @@ window.FM = window.FM || {};
     /* full / declined / busy: the owner closes this link in a moment and the reconnect carries on. */
   };
   U.onDetach = function (s) {
+    forgetPeerNotes();                         // #967: per-person notes die with the session (see forgetPeerNotes)
     applyRoleClasses();                        // S7: no session, no role — the editor is his again
     if (s && s.isOwner && s.pid) dropLock(hostLock(s.pid));
     if (s && !s.isOwner && s.gpid && !(recon && recon.gpid === s.gpid && !recon.stopped)) dropLock(guestLock(s.gpid));
@@ -3701,9 +4074,17 @@ window.FM = window.FM || {};
     if (wakeLock && !wantWake()) dropWake();   // S8 review: a guest's download lock goes with its session too
     versionNote = null;
     unwatchDocIfIdle();
+    /* #967: a guest who opens another project has left the live session — said, like Leave and the Labs switch say it.
+       (Leave and the switch say it themselves, once the copy has been made; a session the owner had already ended has
+       its own banner.) */
+    if (s && !s.isOwner && s.stopWhy === 'paused' && !s.ended && FM.toast) FM.toast('You left ' + hostNameOf(s) + '’s project — your copy is kept', 3000);
     /* queue 945: the Friends block redraws to what is true now — never through U.share, which would arm again. */
     U.friendsBar();
     if (fhostLive()) U.renderFriends(fhost);
+    /* #967: THE BANNER GOES WITH THE SESSION. A red "Offline — the live link dropped" set while the session stopped
+       outlived the detach and sat on the guest's own, unshared project — measured 15 s later: no session, no collab
+       record, banner still up. Said from what is true now. */
+    U.syncBanner();
   };
 
   /* ═══ S6 · RESUME ON REOPEN (§12.1 "paused ─reopened─▶ arming", §12.4 guest recovery) ═══════════════
@@ -3718,6 +4099,12 @@ window.FM = window.FM || {};
   };
   U.resumeOpen = function () {
     if (!U.labsOn() || !installed) return null;
+    /* #967: NOTHING RESUMES BEFORE THE BOOT HAS DECIDED WHERE IT LANDS. The boot's FIRST history.reset() (app.js, before
+       storage.load() resolves) asks this on the next turn — and Home is not open yet then, although the boot is about to
+       open it, so a kept room passed the Home check below and armed behind Home on every cold launch (measured: resumeOpen
+       at 185 ms with Home closed, Home open at 204 ms, C.share at 234 ms behind it, LIVE on the relays before a tap). The
+       boot says when it has landed (U.afterBoot, or U.markBooted when the load failed), and asks again from there. */
+    if (!booted) return null;
     const pid = currentPid();
     if (recon && recon.mode === 'reopen' && recon.gpid !== pid) stopRecon();
     /* S8 review: …nor while a Leave is still copying this project into his own — the card is already marked
@@ -3730,8 +4117,26 @@ window.FM = window.FM || {};
       if (!R) U.syncBanner();                  // S8 review: a copy with no way back says so (see syncBanner)
       return R;
     }
+    /* #967: NO SHARING AGAIN BEHIND HOME. At a cold launch the app lands on Home (#942) with the last project loaded
+       behind it — and a kept room re-armed there, before he had touched anything: LIVE on the public relays, its toast
+       spent under the splash. A kept room resumes when he actually OPENS that project — Home closing onto it
+       (U.afterHomeClose) — never while Home is what he is looking at. Going Home DURING a session is not this: that
+       session never stood down, so there is nothing to resume. */
+    if (FM.home && FM.home.isOpen && FM.home.isOpen() && hasRoom(pid)) return null;
     const room = loadRoom(pid);
-    return room ? resumeHost(pid, room) : null;
+    if (room) return resumeHost(pid, room);
+    U.syncBanner();                            // #967: a plain project of his own — no banner from the one before it
+    return null;
+  };
+  /* Home closed onto a project (home.js close): a kept room that waited behind Home resumes now. Nothing with Labs off,
+     and nothing unless this project really has a kept room and no session is running. */
+  U.afterHomeClose = function () {
+    if (!U.labsOn() || !installed || C.session || resumeT) return;
+    const pid = currentPid();
+    if (!pid || !hasRoom(pid)) return;
+    const lc = cardOf(pid);
+    if (lc && lc.collab) return;
+    U.afterReset();
   };
   function resumeHost(pid, room) {
     const p = U.getProfile();
@@ -3742,13 +4147,22 @@ window.FM = window.FM || {};
       return checkpoint(pid, 'resume').then(function () { return true; });
     }).then(function (go) {
       if (!go) return null;
-      if (C.session || currentPid() !== pid || !U.labsOn()) {
+      /* #967: …and Home is asked AGAIN here, at the last moment. The lock and the checkpoint are both asynchronous, and
+         Home can open while they run (the boot, or him going back to it) — the check in resumeOpen was only true when
+         it was asked. Behind Home the room waits for Home to close onto the project (U.afterHomeClose). */
+      const homeUp = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+      if (C.session || currentPid() !== pid || !U.labsOn() || homeUp) {
         if (!(C.session && C.session.isOwner && C.session.pid === pid)) dropLock(hostLock(pid));   // not if that session is the one holding it
         return null;
       }
       C.share({ ownerInfo: { name: p.name, color: p.color }, sid: room.sid, midFloor: room.midTop || 0 });
       afterArm();
-      if (FM.toast) FM.toast('Sharing is on again — people can reconnect', 2600);
+      /* #967: "people can reconnect" is true only of people who came in by the link or the short code — they have a
+         member token and come back through the hub. Somebody who joined with a connection code has neither, and was
+         told nothing while this promised they could come back. */
+      const back = Object.keys(room.members || {}).length;
+      if (FM.toast) FM.toast(back ? 'Sharing is on again — people can reconnect'
+        : 'Sharing is on again — anyone who joined with a code needs a new one', 2600);
       return C.session;
     });
   }
@@ -3767,6 +4181,18 @@ window.FM = window.FM || {};
   }
   function clearPendingJoin() { try { localStorage.removeItem('fm.pendingJoin'); } catch (e) {} }
   U.pendingJoin = readPendingJoin;
+  /* #967: "NOT NOW" THREW THE INVITE AWAY. Not now on the Labs card, Cancel on the name prompt or on the filled-in Join
+     sheet all deleted fm.pendingJoin, with no word — a newcomer who stepped back to look around first had lost it, and
+     nothing said to find the message again. It is kept for its normal day (PENDING_JOIN), marked put away so the next
+     launch does not push the same card at him again, and he is told what brings it back: the link, tapped again
+     (collab-core.js stashes it afresh, unmarked). */
+  function putAwayPendingJoin() {
+    const p = readPendingJoin();
+    if (!p) return false;
+    try { localStorage.setItem('fm.pendingJoin', JSON.stringify(Object.assign({}, p, { put: Date.now() }))); } catch (e) {}
+    if (FM.toast) FM.toast('Tap the link again when you’re ready', 2800);
+    return true;
+  }
 
   /* iOS, and not the installed app. iPadOS reports itself as a Mac, so a Mac with a touch screen is one. */
   U.isIosBrowser = function (nav, standalone) {
@@ -3781,7 +4207,19 @@ window.FM = window.FM || {};
   let iosProbe = null;                       // test seam: {nav, standalone}
   U._iosProbe = function (p) { iosProbe = p || null; return iosProbe; };
 
-  U.afterBoot = function () { return U.resumePendingJoin(); };
+  /* app.js, once the boot has landed — on Home, or back in the editor on a reload inside the session. The resume the boot's
+     own history.reset() asked for was held until now (resumeOpen, #967); asked again here, it resumes a kept room only
+     when the boot landed in the editor, and behind Home it waits for Home to close onto the project. */
+  U.afterBoot = function () {
+    booted = true;
+    try { return U.resumePendingJoin(); }
+    finally { U.afterReset(); }
+  };
+  /* The boot's other ending — the load failed and it landed on Home with a toast: nothing to resume, but everything
+     opened after it must be able to. */
+  U.markBooted = function () { booted = true; };
+  /* Test seam: the one way a suite that has long since booted can stand where the boot's first reset stands. */
+  U._booted = function (v) { if (v != null) booted = !!v; return booted; };
 
   U.resumePendingJoin = function (opts) {
     const o = opts || {};
@@ -3790,6 +4228,7 @@ window.FM = window.FM || {};
     const lim = (C.LIMITS && C.LIMITS.PENDING_JOIN) || 86400000;
     const age = Date.now() - pj.at;
     if (!(age >= -60000 && age < lim)) { clearPendingJoin(); return null; }
+    if (pj.put && !o.again) return null;          // #967: he put it away — kept, not pushed at him on every launch
     /* S6 review: a short code comes back here too — [Update] on a join typed as a code stashes it — and it
        was typed on THIS device, so it never needs the iPhone landing card. */
     const code = typeof pj.c === 'string' ? C.signal.normRoomCode(pj.c) : null;
@@ -3806,7 +4245,7 @@ window.FM = window.FM || {};
       return null;
     }
     return U.profile().then(function (p) {
-      if (!p) { clearPendingJoin(); return null; }
+      if (!p) { putAwayPendingJoin(); return null; }   // #967: kept for its day, and he is told how to come back to it
       return drawJoin(p, { prefill: link, fromPending: true });
     });
   };
@@ -3825,7 +4264,7 @@ window.FM = window.FM || {};
     const steps = el('ol', 'cl-steps');
     steps.appendChild(el('li', null, 'Tap Copy invite'));
     steps.appendChild(el('li', null, 'Open FreeMotion from your Home Screen'));
-    steps.appendChild(el('li', null, 'If Live collaboration is off, turn it on in Settings → Labs'));
+    steps.appendChild(el('li', null, 'If Live collaboration is off, turn it on in Settings → Live collaboration (at the bottom)'));
     steps.appendChild(el('li', null, 'On Home, tap ⎇ (Join a live project), then Paste'));
     lb.appendChild(steps);
     const acts = el('div', 'fm-ask-actions cl-acts');
@@ -3844,9 +4283,9 @@ window.FM = window.FM || {};
   function labsCard(o) {
     const c = openCard('collab-labs-ask', { label: 'Turn on live collaboration' });
     let keep = false;
-    c._onclose = function () { if (!keep) clearPendingJoin(); };
+    c._onclose = function () { if (!keep) putAwayPendingJoin(); };   // #967: Not now keeps it (see putAwayPendingJoin)
     c.appendChild(el('h2', 'fm-ask-title', 'Turn on Live collaboration to join'));
-    bodyOf(c).appendChild(el('div', 'collab-sub', 'Somebody sent you an invite to a live project. Live collaboration is still a preview, so it is off until you turn it on (Settings → Labs).'));
+    bodyOf(c).appendChild(el('div', 'collab-sub', 'Somebody sent you an invite to a live project. Live collaboration is still a preview, so it is off until you turn it on (Settings → Live collaboration, at the bottom).'));
     const acts = el('div', 'fm-ask-actions');
     acts.appendChild(btn('fm-ask-cancel', 'Not now', function () { closeCard(); }));
     acts.appendChild(btn('fm-ask-ok accent cl-turnon', 'Turn on', function () {
@@ -4048,6 +4487,80 @@ window.FM = window.FM || {};
     return was;
   };
 
+  /* ═══ #967 · TURNING THE MASTER SWITCH OFF SAYS WHAT STOPS, AND ASKS FIRST ════════════════════════════════════════
+   * The Settings switch flipped at once — C.end(), the room dropped, guests kicked, invite codes dead — with no "are you
+   * sure" (Stop sharing asks) and no word after it. And since it now drops EVERY kept room (syncLabs below), what it
+   * stops is more than the project on screen. So Settings asks this first: nothing live and nothing kept → no question;
+   * otherwise the app's own ask dialog names what stops and for whom, and the answer carries the sentence the Settings
+   * row then shows (a toast from Settings was once painted under its scrim — the row is where he is looking). */
+  function plural(names) {
+    const q = names.map(function (n) { return '“' + n + '”'; });
+    return q.length <= 1 ? q.join('') : q.slice(0, -1).join(', ') + ' and ' + q[q.length - 1];
+  }
+  function nameOfPid(pid) {
+    const c = cardOf(pid);
+    return cleanName((c && c.name) || '') || 'Untitled';
+  }
+  U.labsOffPlan = function () {
+    const s = C.session;
+    const plan = { guestOf: null, live: null, people: [], kept: [] };
+    if (s && C.active && !s.isOwner && !s.ended) plan.guestOf = hostNameOf(s);
+    if (s && C.active && s.isOwner) {
+      plan.live = s.pid || currentPid();
+      const ms = (s.host && s.host.members) || {};
+      (s.peerIds ? s.peerIds() : []).forEach(function (mid) {
+        const m = ms[mid];
+        const pz = presenceOf(mid);
+        plan.people.push(cleanName((pz && pz.name) || (m && m.name)) || 'Someone');
+      });
+    }
+    hostRoomKeys().forEach(function (k) {
+      const pid = k.slice('fm.collab.host.'.length);
+      if (pid && pid !== plan.live && cardOf(pid)) plan.kept.push(pid);   // a record whose project is gone is dropped too, never named
+    });
+    return plan;
+  };
+  U.confirmLabsOff = function () {
+    const plan = U.labsOffPlan();
+    const projects = (plan.live ? [plan.live] : []).concat(plan.kept);
+    if (!plan.guestOf && !projects.length) return Promise.resolve({ ok: true, said: null });
+    let message, said;
+    if (plan.guestOf) {
+      message = 'This leaves ' + plan.guestOf + '’s project — your copy stays on this device.';
+      said = 'You left ' + plan.guestOf + '’s project — your copy is kept.';
+    } else {
+      const names = projects.map(nameOfPid);
+      message = 'This stops sharing ' + plural(names) + (plan.people.length ? ' for ' + plural(plan.people).replace(/[“”]/g, '') : '') +
+        '. The links and codes you handed out stop working, and everyone keeps their own copy.';
+      said = 'Sharing stopped — ' + plural(names) + (names.length === 1 ? ' is' : ' are') + ' no longer shared.';
+    }
+    if (plan.guestOf && projects.length) message += ' It also stops sharing ' + plural(projects.map(nameOfPid)) + '.';
+    /* #967 review: A ROOM ANOTHER TAB IS SHARING IS NOT THIS SWITCH'S TO STOP — the same check as Stop sharing from Home
+       (sharedElsewhere). Measured with two tabs on one profile: tab 2's switch said "“Untitled” is no longer shared" and
+       deleted the record, while tab 1's session, relay and host lock ran on and wrote the record back the next time
+       its Friends block drew. The tab holding the project's host lock is the one sharing it: he is told where to stop
+       it, the switch stays on, and nothing is dropped. Asked before the question and again after it. */
+    return heldElsewhere(plan.kept).then(function (away) {
+      if (away.length) return labsElsewhere(away);
+      return FM.ask({ title: 'Turn off live collaboration?', message: message, ok: 'Turn off', danger: true }).then(function (yes) {
+        if (!yes) return { ok: false, said: null };
+        return heldElsewhere(U.labsOffPlan().kept).then(function (away2) {
+          return away2.length ? labsElsewhere(away2) : { ok: true, said: said };
+        });
+      });
+    });
+  };
+  function heldElsewhere(pids) {
+    if (!pids || !pids.length) return Promise.resolve([]);
+    return Promise.all(pids.map(sharedElsewhere)).then(function (r) { return pids.filter(function (p, i) { return !!r[i]; }); });
+  }
+  function labsElsewhere(pids) {
+    const names = pids.map(nameOfPid);
+    return Promise.resolve(FM.ask({ title: OTHER_TAB, single: true, ok: 'OK',
+      message: plural(names) + (names.length === 1 ? ' is' : ' are') + ' being shared from another FreeMotion tab or window — stop it there, then turn this off.' }))
+      .then(function () { return { ok: false, said: null, elsewhere: pids.slice() }; });
+  }
+
   /* The one entry point Settings calls, at boot and on every flip. Turning Labs OFF while a session is
      live ENDS it rather than hiding it — a switch that leaves a connection running behind a hidden UI is
      worse than no switch, and he can read the promise off the label. */
@@ -4071,18 +4584,36 @@ window.FM = window.FM || {};
        session's, so ask the session. */
     if (C.active) {
       const s = C.session;
-      if (s && !s.isOwner) { try { C.leave({ keep: true }); } catch (e) {} }
-      else {
+      if (s && !s.isOwner) {
+        /* #967: the guest is told where they are now — they left, and the copy is theirs. */
+        const who = hostNameOf(s);
+        try {
+          Promise.resolve(C.leave({ keep: true })).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
+            U.syncBanner();
+            if (FM.toast) FM.toast(nid ? 'You left ' + who + '’s project — your copy is kept'
+              : 'You left ' + who + '’s project — your copy could not be made your own yet (the device may be full)', 3200);
+          });
+        } catch (e) {}
+      } else {
         /* ⚠️ AN END IS AN END (S6 review). This told every guest "ended" and kept the room — so turning Labs
            back on, weeks later, and opening the project re-armed it on the same link and code, on the
            public relays, with a toast saying people could reconnect. Stop sharing drops the room; so does
-           this. (A room PAUSED by opening another project is kept: its guests were told "paused".) */
+           this. */
         const pid = s && s.pid;
         try { C.end(); } catch (e) {}
         dropOffer();
         if (pid) { dropRoom(pid); if (hostRoomPid === pid) { hostRoom = null; hostRoomPid = null; } }
       }
     }
+    /* #967 — HIS WORDS: "there's a switch to turn it on, but you can never turn it off on any project ever".
+       📐 REVERSES S6's DELIBERATE CHOICE. S6 kept a room PAUSED by opening another project ("its guests were told
+       paused"), so the master switch turned off only the project on screen: every other project he had ever shared
+       came back live on its old link and code the next time Labs was on and it was opened. Off is off now — EVERY
+       room this device holds is dropped, and the outstanding code offer with it. Runs whenever Labs is off (Settings
+       calls this at boot and on every change), so a room kept from before this build goes the same way. */
+    dropOffer();
+    hostRoomKeys().forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    hostRoom = null; hostRoomPid = null;
     const r = U.uninstall();
     if (fhost) U.renderFriends(fhost);           // queue 945: the block shows the Labs-off view, never stale live content
     U.friendsBar();

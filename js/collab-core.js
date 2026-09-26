@@ -48,6 +48,15 @@ window.FM = window.FM || {};
     COALESCE: 50,
     PING: 2000, OFFLINE_AFTER: 6000, PRESENCE_PURGE: 60000, LEASE_EXPIRY: 30000,
     ICE_GATHER: 3000, ICE_CONNECT: 20000,
+    /* #967: the guest's answer code waits this long for the owner to paste it — copied, sent in a message, opened,
+       copied and pasted on the other phone. ICE_CONNECT only starts once the owner's side starts (collab-ui.js
+       answeredWithin); measured with two separate Chromes, a guest's peer connection sat three minutes waiting and
+       still connected the moment the answer was pasted. */
+    CODE_ANSWER_WAIT: 10 * 60000,
+    /* #967: how long a link is HELD after its peer connection 'failed' (or the other side went silent) before it is
+       closed for good — the person is shown offline and told at once, and cut off only after this. Why 120 s: see
+       collab-link.js, "'FAILED' IS NOT FINAL". */
+    LINK_GRACE: 120000,
     RING_BATCHES: 2000, RING_BYTES: 8 * 1024 * 1024,
     HASH_IDLE: 2000, HASH_MIN: 10000, HASH_ESCALATE: 3, HASH_WINDOW: 600000,
     OUTBOX_OPS: 5000, OUTBOX_BYTES: 4 * 1024 * 1024,

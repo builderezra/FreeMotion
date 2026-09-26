@@ -1,0 +1,1000 @@
+{
+ "journeys": [
+  {
+   "journey": "J1: \"I want to share this project with my friend.\" A first-time phone user (fresh install, 390x844, iPhone notch emulated, touch phone) goes from opening the app to holding something they can send (link, short code, QR, long code). Environment note: on localhost the app refuses the public relays, so every share panel here shows the red \"Couldn't reach the free connection service\" line. On his phone it should read \"Waiting for people \u00b7 the link and the code are live\". Because of that, the link and short-code routes were judged from the screens and the code. The long connection-code route was proven end to end between two separate Chromes.",
+   "walked": "All screenshots are in /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/a967/j1/ (called J1/ below). I drove the app with real touch taps through my own CDP driver (../drv.py). Each tap checked elementFromPoint first, and none of the taps landed on something covering the target.\n1. Fresh install: Home is empty, no projects (J1/01-home-fresh.png). Tapped the + (#hm-new), the New project sheet opened (J1/02-after-plus.png), tapped Create and landed in the editor (J1/03-editor-new-project.png). The top bar has back, name, version, ?, notes, cog (aria \"Canvas settings\") and \u2191 (Export). Labs is off: no #btn-share, no #hm-join-btn, no #collab-people.\n2. Tapped \u2191, the button that looks like the iPhone Share icon. It opens the Export dialog only, with nothing about live sharing (J1/05-export-tapped.png).\n3. Tapped the cog. Canvas settings opens with a \"Friends \u00b7 Share it live with friends\" bar above the canvas card (J1/04-canvas-settings.png).\n4. Tapped the Friends bar. It opened \"Work on this with friends \u00b7 Live sharing is still being tested\", an explanation, a Live collaboration switch and a 7-line privacy paragraph (J1/06-friends-labs-off.png).\n5. Flipped the switch. The block became \"Share \"Project 1\" \u00b7 Not shared yet\": a You row with Set up\u2026, Start sharing, \"Opening this never shares anything by itself.\", \"New people join as Editor \u25be\" and Done. The switch is gone. A 28px person+ appeared at the stage's top-left (J1/07-friends-labs-on-idle.png).\n6. Tapped Start sharing. The \"What should others see?\" sheet opened with the name field focused (J1/08-profile-prompt.png). Continue with an empty name shows \"Type a name so people know who you are.\" Typed \"Mia\" and pressed Return: nothing happened (card still up, profile still null; J1/10-profile-typed-return.png). Cancel went back to the idle block with no message (J1/09-after-profile-cancel.png).\n7. Continue with a name: \"Live \u00b7 waiting for someone\", the Comments row, then \"Invite with a link or a code\": Copy link, Share\u2026, QR, the short code with Copy, and Reset link and code. A \"Keep FreeMotion open \u2014 the session pauses when your screen locks\" toast lay on top of the short code for 3.6 s (J1/11-share-panel-top.png, J1/12-share-panel-after-toast.png).\n8. Copy link showed the toast \"Link copied\", and the clipboard held https://builderezra.github.io/FreeMotion/#j=\u2026 (J1/13-after-copy-link.png). QR drew a 196px code with \"Point the other phone's camera at this.\" (J1/14-qr-shown.png). Scrolling down: Ask me first / Let them in, New people join as, Connect with a code instead, and the privacy paragraph again (J1/15-share-panel-bottom.png).\n9. Tapped Connect with a code instead: \"Step 1 \u00b7 send them this code\" (a 233-character FM1 code) with Copy code, then \"Step 2 \u00b7 paste the code they send back\" and Connect (J1/16-connect-with-code.png).\n10. Two-device test, owner A and guest B, each in its own Chrome. B (fresh) turned Labs on, tapped Home \u2387, set a name, pasted A's code and tapped Join. B showed \"Read this back to them\" with its answer code (J1/35-guest-join-sheet.png, J1/36-guest-answer-code.png). A pasted the answer and tapped Connect, which showed \"Step 3 \u00b7 check these letters match theirs: MB9MY\". B showed the same MB9MY. A tapped They match. A then read \"\u25cf Live \u00b7 1 person here\" with Sam listed as Editor, and B is inside Project 1 with Mia's chip (J1/37-owner-sas-step.png, J1/38-guest-sas.png, J1/39-owner-after-match.png, J1/40-guest-after-match.png). It works.\n11. Tapped Done. The editor while live shows nothing but the 28px person+, which is pixel-identical to the not-shared state (J1/20-editor-while-sharing.png; the zoom crops J1/20b-person-plus-zoom-LIVE.png and J1/24b-person-plus-zoom.png have a PIL difference bbox of None). The cog reopens straight to Friends (\"\u25cf Live \u00b7 waiting for someone\", J1/21-cog-again-while-sharing.png).\n12. Stop sharing asks for confirmation with plain words (J1/22-stop-sharing-confirm.png) and returns to \"Not shared yet\". Labs stays on and the person+ stays (J1/23-after-stop-sharing.png, J1/24-editor-after-stop.png). The gear (Sharing settings) has no off switch for the feature (J1/25-sharing-settings-gear.png).\n13. Looked for the off switch. The path is \u2922 to Canvas, App settings\u2026, then scroll 5.6 screens to \"Live collaboration (preview)\" (y 4246 of 4401, J1/27-app-settings-from-editor.png, J1/28-labs-in-editor-settings.png). From Home's cog it is 4.2 screens (J1/18-home-settings-top.png, J1/19-home-settings-labs.png). The word \"Labs\" appears nowhere in either Settings panel.\n14. Home \u22ef on the project with Labs off: Open, Pin, Rename, Duplicate, Save as template/element, Select, Export video, Save project file, Delete. No Share (J1/30-home-card-menu-labs-off.png). With Labs on, \"Share live\u2026\" appears. It opened the editor, then a LIGHT-themed name prompt over the dark editor (J1/33-share-live-from-home.png), then the bottom-sheet Share card, not the Friends block (J1/34-share-live-from-home-after-name.png). Home also gains a \u2387 button (J1/31-home-labs-on.png).\n15. Selected a layer: the phone top bar becomes the layer tools, and both the cog and the person+ are display:none (J1/42-layer-selected-not-editing.png).\n16. Opened the copied link as an iPhone Safari friend (UA override, fresh device). The first card says \"Open this in your FreeMotion app\": 1 Copy invite, 2 Open FreeMotion from your Home Screen, 3 turn it on in Settings \u2192 Labs, 4 tap \u2387. \"Join here in Safari instead\" leads to a second card, \"Turn on Live collaboration to join\" (J1/44-friend-opens-link-iphone-safari.png, J1/45-friend-join-here-safari.png).",
+   "works": [
+    "With Labs off, Canvas settings (the cog) still shows a Friends bar that says 'Share it live with friends'. Opening it explains the feature and turns it on with one switch, right there, with no trip to Settings (J1/04, J1/06). This is the right shape, so keep it.",
+    "From the switch to something sendable takes 3 taps plus a name: switch, Start sharing, type a name, Continue. Copy link, Share\u2026, QR and the short code with Copy all fit on the first screen at 390x844 without scrolling (J1/11).",
+    "Copy link really put the invite link on the clipboard and said 'Link copied' (J1/13). QR draws a clean 196px code with a one-line instruction (J1/14).",
+    "The long connection-code route works end to end between two separate browsers: offer, answer, a matching 5-letter check (MB9MY on both screens), then '\u25cf Live \u00b7 1 person here' with the friend listed as Editor, and the friend inside the project with the owner's chip (J1/37\u201340). The steps are numbered and readable.",
+    "Opening the Friends block never starts sharing; only Start sharing does. The cog remembers Friends and reopens it showing the live state (J1/21).",
+    "Stop sharing has a plain-language confirmation ('Everyone here keeps their own copy. The codes you have handed out stop working.') and returns cleanly to 'Not shared yet' (J1/22, J1/23).",
+    "An empty name gets a clear inline error ('Type a name so people know who you are.').",
+    "Every tap target I pressed in the share flow was actually on top at its centre (elementFromPoint), with nothing covered or unreachable. Buttons are 42\u201350px tall, apart from the 28px person+."
+   ],
+   "findings": [
+    {
+     "title": "With Labs off, the editor has no visible way to share; the only way in is behind the cog labelled 'Canvas settings'",
+     "severity": "major",
+     "what_happens": "On a fresh install with a new project, the phone top bar shows back, name, version, ?, notes, cog and \u2191. The \u2191 looks like the iPhone Share icon, but it opens the Export dialog (format, resolution, quality) with no mention of sharing live. Home's \u22ef menu has no Share item while Labs is off. The only way in is to open the cog (aria 'Canvas settings') and notice the Friends bar above the canvas card.",
+     "why_it_fails_a_first_timer": "Someone who wants to send a project to a friend taps the Share-shaped \u2191 and lands in Export. A gear reads as settings, not sharing. This is his own complaint: 'I don't know if you've buried it all in a deeper setting'. The feature exists, but nothing on the editor or on Home points to it.",
+     "evidence": "J1/03-editor-new-project.png (top bar, Labs off, no #btn-share); J1/05-export-tapped.png (\u2191 opens #export-dialog, no share wording); J1/30-home-card-menu-labs-off.png (\u22ef menu has no Share); J1/04-canvas-settings.png (Friends bar only inside the cog). index.html:394 (#m-settings aria-label 'Canvas settings'), index.html:395 (#m-export path 'M12 15V4M8 8l4-4 4 4M6 20h12', an up-arrow out of a tray); js/collab-ui.js:3916-3924 (the share button only exists once Labs is on); js/home.js:1356-1361 ('Share live\u2026' only when labsOn()).",
+     "suggested_fix": "Give the phone a share entry that is always visible, whatever the Labs setting. Options: (a) the stage's person+ is always shown and, with Labs off, opens the same Friends block with the explanation and switch (drawLabsOff already exists); (b) a 'Share live with a friend' row at the top of the Export dialog that opens Friends; (c) 'Share live\u2026' in Home \u22ef always, opening the Labs-off explanation when off. Draw these for him first.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "You can turn it on in one tap, but there is no off switch anywhere near it, and every hint points to a 'Settings \u2192 Labs' that does not exist",
+     "severity": "major",
+     "what_happens": "Flipping the switch in the Friends block makes the switch disappear, along with the sentence 'you can turn it off again in Settings \u2192 Labs'. After that, neither the Friends block, the gear's Sharing settings nor Stop sharing turns the feature off. Stop sharing leaves Labs on, and the person+ stays on the stage of every project and \u2387 on Home. The real switch is 'Live collaboration (preview)' at the very bottom of App settings: 5.6 screens down from the editor (y 4246 of 4401), 4.2 screens down from Home, below 24 other rows including seven diagnostic report boxes ('Your last scrub', 'A clip with no picture', \u2026). No heading or label in Settings contains the word 'Labs'.",
+     "why_it_fails_a_first_timer": "This is exactly what he reported: 'there's a switch to turn it on, but you can never turn it off on any project ever'. The one place that told them where the off switch lives names a section that is not labelled anywhere, and the switch sits under debug reports a normal user never scrolls past.",
+     "evidence": "J1/07-friends-labs-on-idle.png (the switch is gone after turning on); J1/23-after-stop-sharing.png and J1/24-editor-after-stop.png (after Stop sharing: labs true, person+ still shown); J1/25-sharing-settings-gear.png (no feature off switch); J1/27-app-settings-from-editor.png and J1/28-labs-in-editor-settings.png (5.6 screens down); J1/19-home-settings-labs.png (4.2 screens down). Measured /\\bLabs\\b/.test(settingsPanel.innerText) === false. js/collab-ui.js:1110 (the 'Settings \u2192 Labs' sentence), :1113 (switchRow only in drawLabsOff); js/settings.js:907-990 (the Labs group is built last, after the Reports).",
+     "suggested_fix": "Keep a 'Live collaboration' on/off row inside the Friends block at all times, for example at the foot of the idle and live views or inside the gear's Sharing settings. Label the Settings group 'Labs', or rename every 'Settings \u2192 Labs' mention to the real row name. Move the collaboration group above the diagnostic Reports.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Nothing on the editor says the project is live: the 'sharing' and 'not sharing' person+ buttons are pixel-identical",
+     "severity": "major",
+     "what_happens": "After Start sharing and Done, the editor shows only a 28\u00d728 person+ in the stage's top-left corner. It is the same icon, size and place as when nothing is shared (a PIL diff of the two crops is empty). The only word that sharing started is a 3.6 s toast, which lands on top of the short code. The live state only shows inside the cog, as '\u25cf Live \u00b7 waiting for someone'.",
+     "why_it_fails_a_first_timer": "After tapping Done, a first-timer cannot tell whether their project is open to others, whether the link still works, or whether they need to stop it. It also feeds the 'can't turn it off' feeling: nothing visible says anything is on.",
+     "evidence": "J1/20-editor-while-sharing.png vs J1/24-editor-after-stop.png; zoom crops J1/20b-person-plus-zoom-LIVE.png and J1/24b-person-plus-zoom.png (ImageChops.difference bbox None, max 0). #collab-people and #btn-share are both [8,105,28,28]. styles.css:10409 (.collab-people.cp-invite width 28px); js/collab-ui.js:1044 (the only notice, a toast).",
+     "suggested_fix": "While a room is live and nobody has joined yet, show a small '\u25cf Live' pill or a coloured ring on the stage chip, plus the Friends bar's own words. Draw options for him.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "The screens are written for engineers: relays, 'free connection service', PeerJS/EMQX/HiveMQ, 'address lookup'",
+     "severity": "major",
+     "what_happens": "The turn-on screen's biggest block of text is a 7-line paragraph naming five companies and 'relays' and 'address lookup' (J1/06). The same paragraph repeats at the bottom of the share panel (J1/15). The code option is sold as 'No relay at all \u2014 you send them a long code and they send one back'. The status line reads 'Starting the relay\u2026' or 'Couldn't reach the free connection service'. The Settings switch description repeats it all again.",
+     "why_it_fails_a_first_timer": "He asked that it 'actually makes sense for someone who doesn't know how to use it'. A first-timer does not know what a relay is and cannot use it to choose between 'Copy link' and 'Connect with a code instead'. The privacy text drowns the one sentence that matters, which is what sharing does.",
+     "evidence": "J1/06-friends-labs-off.png, J1/15-share-panel-bottom.png, J1/19-home-settings-labs.png. js/collab-ui.js:1564 (PRIVACY_LINE), :1593-1605 (relayLine wording), js/settings.js:980-982 (switch description).",
+     "suggested_fix": "Lead with plain words, for example 'Send a link \u2014 your friend opens it and you edit together'. Keep the disclosure behind a one-line 'What gets sent? \u203a' toggle. Rename 'Connect with a code instead / No relay at all' to something like 'Link not working? Swap codes instead'.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "What the friend gets when they tap the link: two cards of instructions that assume the app is installed and point to a 'Labs' that doesn't exist",
+     "severity": "major",
+     "what_happens": "Opening the copied link as iPhone Safari on a fresh device shows 'Open this in your FreeMotion app': 1 Tap Copy invite, 2 Open FreeMotion from your Home Screen, 3 turn it on in Settings \u2192 Labs, 4 tap \u2387 (Join a live project), then Paste. A friend who has never installed FreeMotion cannot do step 2. 'Join here in Safari instead' leads to a second card, 'Turn on Live collaboration to join'. The \u2387 glyph means nothing to a newcomer.",
+     "why_it_fails_a_first_timer": "The owner's goal is 'send it to my friend and have it work'. The thing they sent lands on a card written for someone who already has the app and knows the menus. This overlaps the guest journey, but it is where J1's result ends up.",
+     "evidence": "J1/44-friend-opens-link-iphone-safari.png, J1/45-friend-join-here-safari.png. js/collab-ui.js:3817-3839 (landingCard steps), :3844-3858 (labsCard); js/collab-ui.js:3973 (\u2387 glyph on #hm-join-btn).",
+     "suggested_fix": "Make 'Join here' the primary button for a friend without the app, or word step 2 as 'If you have FreeMotion on your Home Screen\u2026'. Replace 'Settings \u2192 Labs' with the switch itself; the labsCard already turns it on in one tap. Give the Home join button a recognisable icon or word ('Join').",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "The 'Keep FreeMotion open' toast covers the short code the moment it appears",
+     "severity": "minor",
+     "what_happens": "Right after Start sharing on a phone, the toast sits over the short-code box and the relay line for 3.6 s. This is the moment the user wants to read or copy the code.",
+     "why_it_fails_a_first_timer": "The one thing to send is hidden right when they reach for it.",
+     "evidence": "J1/11-share-panel-top.png and J1/34-share-live-from-home-after-name.png. Measured toast rect [97.5,533,195,67] over #collab-room-code [44,532,229,44]. js/collab-ui.js:1044.",
+     "suggested_fix": "Say it inside the panel as a one-line note under the invite block, or place the toast above the invite block or at the top of the screen while a collab panel is up.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Name prompt: Return does nothing, 'cursor' on a phone, Cancel silently abandons sharing, and the preview colour doesn't match the pick",
+     "severity": "minor",
+     "what_happens": "With 'Mia' typed, pressing Return leaves the card up and saves no profile (measured). The text says the name shows 'beside your cursor', and a phone has no cursor. Cancel, or a tap on the dim backdrop, returns to 'Not shared yet' with no word that a name is needed to share. The idle row shows a red dot (PALETTE[0]) while the prompt pre-selects a random colour (orange in J1/08).",
+     "why_it_fails_a_first_timer": "On an iPhone the natural finish is the keyboard's return key, and here it does nothing. Tapping outside to dismiss the keyboard cancels the whole share without explanation.",
+     "evidence": "J1/08-profile-prompt.png, J1/09-after-profile-cancel.png, J1/10-profile-typed-return.png (after Return: card up, getProfile() null). js/collab-ui.js:179-235 (no Enter handler), :189 ('beside your cursor'), :1077 (idle dot uses PALETTE[0]), :198 (random pick).",
+     "suggested_fix": "Make Enter press Continue. Word it as 'Your name and colour show on the other person's screen'. Pre-select the same colour the idle row shows. On Cancel from Start sharing, show one line such as 'Add a name to start sharing'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "The idle Friends block uses developer wording and never says what Start sharing gives you",
+     "severity": "minor",
+     "what_happens": "The idle block shows 'You / You \u2014 pick the name and colour others will see' (the word You twice), 'Start sharing', then 'Opening this never shares anything by itself.' Nothing says that Start sharing makes a link or code to send.",
+     "why_it_fails_a_first_timer": "'Opening this never shares\u2026' answers a question only a developer would ask. What a first-timer needs is 'you'll get a link to send your friend'.",
+     "evidence": "J1/07-friends-labs-on-idle.png. js/collab-ui.js:1080, :1093.",
+     "suggested_fix": "Replace the hint with 'You'll get a link, a QR and a short code to send'. Drop the doubled 'You'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "The Home \u22ef 'Share live\u2026' route shows a different share surface, and its name prompt draws in the light theme over the dark editor",
+     "severity": "minor",
+     "what_happens": "Home \u22ef 'Share live\u2026' opens the project, then shows the name prompt with scrim.collab-light = true even though Home is closed (a white sheet over the dark editor), then the bottom-sheet Share card. The cog route shows the Friends block instead. The same task gives two different-looking screens on the phone.",
+     "why_it_fails_a_first_timer": "Two looks for one feature make it feel unfinished. The white card over the dark editor looks like a glitch.",
+     "evidence": "J1/33-share-live-from-home.png (measured {light:true, homeOpen:false}); J1/34-share-live-from-home-after-name.png (#collab-share card) vs J1/11 (Friends block). js/home.js:1357-1360 (setTimeout 260 \u2192 FM.collab.ui.share()); js/collab-ui.js:128-131 (light decided at open time while Home is still fading).",
+     "suggested_fix": "On a phone, route 'Share live\u2026' through U.openPeople, which opens the Friends block, and have the Friends block's Start sharing raise the prompt. Or decide collab-light after the Home close finishes.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "The share entry vanishes whenever a layer is selected",
+     "severity": "minor",
+     "what_happens": "After adding a text layer, the phone top bar becomes the layer tools (duplicate, delete, \u22ef). The cog is gone and the stage person+ is display:none. Friends cannot be reached until the user deselects.",
+     "why_it_fails_a_first_timer": "Right after adding something, which is the usual state, a first-timer looking for sharing finds neither door.",
+     "evidence": "J1/42-layer-selected-not-editing.png; measured #btn-share display 'none', #m-settings not visible.",
+     "suggested_fix": "Keep a Friends or person+ entry in the layer-mode top bar or its \u22ef menu, or leave the stage chip visible while a layer is selected.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "The person+ tap target is 28\u00d728",
+     "severity": "minor",
+     "what_happens": "The stage's share / people button measures 28\u00d728 CSS px at [8,105], well under the 44px touch minimum. It sits in a corner that is easy to miss.",
+     "why_it_fails_a_first_timer": "It is small and easy to miss or mis-tap, and it is the main 'invite' door once Labs is on.",
+     "evidence": "J1/24b-person-plus-zoom.png; styles.css:10409 (.collab-people.cp-invite width 28px).",
+     "suggested_fix": "Grow the hit area to 44px with padding while keeping the drawn size, or draw a larger chip.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Copy link says 'Link copied' even while the panel says the connection service is unreachable; the fallback is far below the fold",
+     "severity": "minor",
+     "what_happens": "With the relay unreachable (always the case on localhost; on a phone it happens on a blocked network), Copy link is still the highlighted button and toasts 'Link copied'. The red line says 'use Connect with a code below', but that row is about 400px further down the scroller.",
+     "why_it_fails_a_first_timer": "They send a link that cannot connect, and the only warning is a red sentence they may not read.",
+     "evidence": "J1/13-after-copy-link.png (toast 'Link copied' over the red warning); J1/15-share-panel-bottom.png (the 'Connect with a code instead' row is at the bottom). js/collab-ui.js:1596, :1625.",
+     "suggested_fix": "When the relay is unreachable, make 'Connect with a code' the highlighted button inside the invite block and grey out Copy link, or add a caution to it.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Share-panel order and code step: Comments sits above the invite block, and the long-code step has only 'Copy code'",
+     "severity": "minor",
+     "what_happens": "The first thing under your name is 'Comments \u2014 Leave a note about the edit for everyone' before 'Invite with a link or a code'. In Connect with a code, Step 1 offers only Copy code, with no Share\u2026, so sending means copy, switch app, paste.",
+     "why_it_fails_a_first_timer": "The action they came for is second in the list. The long code is the hardest thing to send, and it has the fewest ways to send it.",
+     "evidence": "J1/11-share-panel-top.png, J1/16-connect-with-code.png. js/collab-ui.js:1234 (commentsRow appended before the invite block), :2081-2084 (Copy code only).",
+     "suggested_fix": "Put the invite block directly under the people list. Add a Share\u2026 button (navigator.share with the code as text) beside Copy code.",
+     "needs_his_design_pick": false
+    }
+   ]
+  },
+  {
+   "journey": "J2: \"My friend sent me something, how do I get in?\" This is the friend's side on a phone (390x844, iPhone notch emulated) on a fresh device with Labs off, the default. I covered all three things a friend can receive: an invite link, a short room code and a long connection code. I walked the connection-code route for real between two separate headless Chromes (owner and guest) with no relay. The link and short-code relay route is refused on localhost by design, so for that route I judged the steps up to the refusal from the screens and the rest from the code.",
+   "walked": "All screenshots are under /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/a967/j2/. My driver is drv.py/common.py in that folder: two Chromes, Android or iPhone user agent, touch and hover:none turned on.\n1. Fresh phone, Labs off, Home. The only header buttons are search, Select and the cog. There is no Join button (#hm-join-btn absent). See 01-home-fresh-labs-off.png.\n2. Home cog \u2192 Settings. There is no heading called \"Labs\" anywhere (innerText has no \"Labs\"). \"Live collaboration (preview)\" is the last card: 3448px down a 3694px scroller, 4.6 screens, below six diagnostic rows (\"Your last export/playback/project open/scrub/Back\u2026\", \"A clip with no picture\"). See 02-settings-open.png and 03-settings-live-collab-row.png. Flipping it reveals Join\u2026, Test connection and Codes only (04-settings-labs-on.png). Home then gains a \u2387 glyph button (05-home-labs-on.png, zoom 05b-home-join-glyph-zoom.png).\n3. Invite link on an Android phone, Labs off: index.html#j=<44>. The fragment was stripped from the address bar and the \"Turn on Live collaboration to join\" card appeared (10-link-android-labs-off.png). Turn on \u2192 \"What should others see?\" name/colour (11-link-android-profile-prompt.png) \u2192 Join sheet prefilled with the link, \"Tap Join to connect to this project.\" (12-link-android-join-sheet-prefilled.png) \u2192 Join. On localhost the relay is refused, so it showed \"Couldn't reach the free connection service.\" with a [Connect with a code instead] button (13-link-android-join-relay-refused.png). Tapping that button only swaps the text (14-link-android-connect-with-code-instead.png).\n4. The same link as iPhone Safari: the landing card \"Open this in your FreeMotion app\", steps 1\u20134, with \"Copy invite\" as the primary button (15-link-iphone-safari-landing.png, 16-link-iphone-after-copy.png). \"Join here in Safari instead\" \u2192 labs card (17-link-iphone-join-here-labs-card.png). \"Not now\" \u2192 the card closes, fm.pendingJoin is deleted and there is still no Join anywhere (18-link-iphone-after-not-now.png).\n5. Inside a project with Labs off: cog \u2192 Canvas settings shows a Friends bar, \"Share it live with friends\" (20-editor-labs-off.png, 21-canvas-settings-labs-off.png). Opening it gives \"Work on this with friends\" and a switch (22-friends-block-labs-off.png). Switching it on shows \"Share 'Untitled'\", [Set up\u2026], [Start sharing], \"New people join as Editor\", [Done]. There is no Join (23-friends-block-labs-on-idle.png).\n6. Connection-code exchange with two real browsers:\n - Owner: cog \u2192 Friends \u2192 switch on \u2192 Start sharing \u2192 name \"Ezra\" (30-owner-sharing-main.png) \u2192 Connect with a code instead \u2192 a 210-character FM1 code (31-owner-code-step.png).\n - Guest: Settings switch \u2192 Home \u2387 \u2192 name \"Sam\" \u2192 pasted the code \u2192 Join (32-guest-join-sheet-code-pasted.png). The answer code appeared under \"READ THIS BACK TO THEM\" with status \"Connecting\u2026\" (33-guest-answer-code.png).\n - Owner pasted it \u2192 Connect \u2192 \"Step 3 \u00b7 check these letters match theirs\" SWKP8 (34-owner-check-letters.png). The guest showed the same SWKP8 (35-guest-letters.png).\n - They match \u2192 the guest landed in the editor with toast \"You're in \u2014 this copy stays in sync\" (36-guest-in-editor.png). Owner got \"Sam joined\" (37, 38).\n7. Once in: the guest added a text layer and the owner received it; the owner added a rectangle and the guest received it within about 2s, with the owner's selection outline and playhead marked \"E\" in their colour (60, 61, 62). The guest's only on-screen sign of the session is a 31x28px \"E\" button (aria \"Here: Ezra\") in the stage corner (90-guest-editor-after-toast-gone.png). Tapping it opens \"Shared with you \u00b7 Live \u00b7 You're an Editor \u00b7 Ezra Owner [Follow] \u00b7 Comments \u00b7 [Leave] [Done]\" (39-guest-people-panel.png).\n8. Back arrow to Home mid-session: still connected. The card reads SHARED and \"Shared by Ezra \u00b7 live now\", and reopening it resumes (63, 65, 66). Card \u22ef offers Keep as my own copy and Leave & delete (91-guest-home-card-menu.png).\n9. Leave: chip \u2192 Leave \u2192 \"Leave this project? \u2026 [Cancel] [Keep my own copy]\" \u2192 toast \"You left \u2014 this is now your own copy\" (70, 71, 73). The owner's chip just vanished, and there was no \"Sam left\" (72).\n10. Owner Stop sharing while the guest was in: the guest got a toast and a red banner that is cut off at \"This live session has ended \u2014 your...\" (80, 81).\n11. Guest switched Live collaboration off in Settings mid-session: it left silently with no confirm and no toast, and the owner was not told (82, 83).\n12. Timing test: guest answer shown, owner pastes 30s later. At t+19s the guest showed \"Connecting\u2026\"; at t+23s \"They did not answer \u2014 ask for a fresh code.\" (50-guest-after-30s-waiting-for-owner.png). The owner pasting at t+30s got \"They did not answer \u2014 try a fresh code.\" (51-owner-pastes-late-answer.png).\n13. Paste tolerance (s11/s12): a line-wrapped, lowercased or space-separated code is accepted. A code pasted with message text in front is rejected (\"does not look like an invite link or a code\").",
+   "works": [
+    "The connection-code exchange really works device to device with no server. Two separate browsers paired, both screens showed the same five letters, and the guest landed in the editor holding the owner's project (33-36). Keep the mechanism.",
+    "Live sync is real both ways and quick. The guest's text layer reached the owner, and the owner's rectangle reached the guest in about 2s. The guest also sees the owner's selection outline and playhead marked with their initial in their colour (62-guest-sees-owner-shape.png).",
+    "Invite link on Android/Chrome with Labs off: the #j= is taken off the address bar straight away, and the friend gets one plain card, 'Turn on Live collaboration to join' [Turn on]. Name and colour come next, then the Join sheet already filled in and waiting for a single tap. That is four taps with no hunting (10, 11, 12).",
+    "The guest panel is clear and complete: 'Shared with you \u00b7 Live \u00b7 You're an Editor', the owner with Follow, Comments, and Leave/Done (39-guest-people-panel.png).",
+    "Leave works and says what happened. The confirm explains the copy stays, the toast reads 'You left \u2014 this is now your own copy', and the Home card becomes an ordinary project (70, 71, 73).",
+    "The Home card for a shared copy is good: a SHARED badge, 'Shared by Ezra \u00b7 live now', and \u22ef \u2192 Keep as my own copy / Leave & delete (63, 91). Going back to Home mid-session keeps the connection, and reopening the card resumes it (63-65).",
+    "When the owner stops sharing, the guest is told at once by a toast and a banner, and keeps the copy (80).",
+    "Relay failure is not a dead end: it offers the code route in the same sheet (13).",
+    "The code reader is forgiving about line wraps, lowercase and spaces (s12 output)."
+   ],
+   "findings": [
+    {
+     "title": "The guest has only 20 seconds to get their answer code back to the owner, so a real code exchange almost always fails",
+     "severity": "blocker",
+     "what_happens": "The guest pastes the owner's code and taps Join. Their answer code appears with 'Connecting\u2026'. If the owner hasn't pasted it and tapped Connect within 20 seconds, the guest's sheet flips to 'They did not answer \u2014 ask for a fresh code.' When the owner then pastes the answer, they get 'They did not answer \u2014 try a fresh code.' Both have to start over, and the stale answer code (with its Copy button) stays on the guest's sheet.",
+     "why_it_fails_a_first_timer": "The screens tell the friend to copy the code, send it back and wait for it to be pasted. That means switching to a messaging app, sending, the owner opening the message, copying, switching back, pasting and tapping Connect. That takes well over 20 seconds even for two people sitting side by side, and far longer for friends in different places. The failure message blames the owner ('They did not answer'), not the clock, so they will just repeat it and fail again. This is also the route the app sends people to when relays fail.",
+     "evidence": "Measured in s7_slow.py with two real browsers: t+10s and t+19s after the answer appeared, 'Connecting\u2026'; t+23s, 'They did not answer \u2014 ask for a fresh code.'; owner pasting at t+30s got note 'They did not answer \u2014 try a fresh code.' Screens: 50-guest-after-30s-waiting-for-owner.png, 51-owner-pastes-late-answer.png. Cause: js/collab-ui.js:3179 `return openedWithin(link);` runs right after acceptOffer produces the answer, and openedWithin (collab-ui.js:663-672) races ICE_CONNECT = 20000 (js/collab-core.js:50). The owner side has the same clock after Connect (collab-ui.js:2185), which is fine there.",
+     "suggested_fix": "On the guest side, do not start the 20s ICE clock while the answer is waiting to be pasted. Wait for the owner's end to start connecting (for example the peer connection's iceConnectionState leaving 'new', or ~10 minutes as an outer limit), then apply the 20s. Say 'Waiting for Ezra to paste your code\u2026' with Cancel. On failure, clear the dead answer code and say plainly that the code timed out.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "With Labs off there is nowhere on Home to paste a code, and the switch is the last row of Settings, 4.6 screens down",
+     "severity": "major",
+     "what_happens": "A fresh friend who was sent a short code or a long connection code opens FreeMotion. Home has search, Select and the cog, and no Join. The \u2387 Join button is only created once Live collaboration is switched on. Home cog \u2192 Settings: the 'Live collaboration (preview)' switch is the very last card, below six diagnostic 'Your last \u2026' rows and 'A clip with no picture'.",
+     "why_it_fails_a_first_timer": "They are holding a code and the app shows no place to put it and no hint that such a place exists. Only someone who already knows to scroll to the bottom of Settings will find it. This is exactly Ezra's 'I don't know if you've buried it all in a deeper setting'.",
+     "evidence": "01-home-fresh-labs-off.png (probe: join:false, buttons = search, Select, Settings). 03-settings-live-collab-row.png: row offset 3448px of a 3694px scroller in a 753px viewport, 4.6 screens down. Settings labels list ends '\u2026Your last Back from an effects category, A clip with no picture, Live collaboration (preview)'. Cause: the Join button is made only in U.install (js/collab-ui.js:3998), which U.syncLabs calls only when labsOn (collab-ui.js:4054). The switch is appended last (js/settings.js:980).",
+     "suggested_fix": "Put a Join entry on Home always. With Labs off, tapping it shows the same one-tap 'Turn on Live collaboration to join' card the invite link already uses (labsCard), then the Join sheet. Move the Live collaboration group above the diagnostic Reports rows in Settings.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Every instruction says 'Settings \u2192 Labs', but Settings has no Labs heading",
+     "severity": "major",
+     "what_happens": "The invite card, the iPhone landing card, the Friends block and the Codes-only message all send the user to 'Settings \u2192 Labs'. Settings has no section or label called Labs. The row is titled 'Live collaboration (preview)', with no group title.",
+     "why_it_fails_a_first_timer": "They open Settings looking for 'Labs', scroll a long panel full of report boxes, and never see the word. The directions they were given do not match the screen.",
+     "evidence": "Probe on the open Settings panel: /\\bLabs\\b/.test(innerText) === false. References: js/collab-ui.js:3828 (landing step 3), 3849 (labs card), the drawLabsOff text 'you can turn it off again in Settings \u2192 Labs' (22-friends-block-labs-off.png), and 2600 / relayJoin's Codes-only line.",
+     "suggested_fix": "Either give the group a visible 'Labs' heading in Settings, or change every sentence to what is really there, e.g. 'Settings \u2192 Live collaboration (at the bottom)'. The wording fix alone is text-only.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "The Home Join button is a bare '\u2387' keyboard glyph with no word",
+     "severity": "major",
+     "what_happens": "With Labs on, Home gains a 38px round button holding the Unicode character U+2387 (the 'alternative key' symbol). There is no label. The iPhone landing card tells people to 'tap \u2387 (Join a live project)'.",
+     "why_it_fails_a_first_timer": "The glyph looks like a keyboard modifier or a squiggle, not 'join'. A friend told to find 'Join' will not recognise it, and the app draws its other icons (see v17.05's drawn \u2715), so this one also looks unfinished.",
+     "evidence": "05-home-labs-on.png and the zoom 05b-home-join-glyph-zoom.png (rect 158,54,38x38; font falls back to Arial). Cause: js/collab-ui.js:3975 `b.textContent = '\u2387'`; landing text js/collab-ui.js:3829.",
+     "suggested_fix": "A drawn icon plus the word 'Join' (or a 'Join' pill like 'Select'), and update the landing-card step to match. Show options first.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "The iPhone invite card assumes the friend already has FreeMotion installed and pushes them into a dead end",
+     "severity": "major",
+     "what_happens": "A friend opens the invite link on an iPhone (Safari) and gets 'Open this in your FreeMotion app'. The steps are Copy invite \u2192 'Open FreeMotion from your Home Screen' \u2192 turn on Labs \u2192 tap \u2387 \u2192 Paste. The big blue button is 'Copy invite'. The route that actually works for them, 'Join here in Safari instead', is the grey secondary button, framed by 'Joining in Safari keeps this copy separate from your FreeMotion app.'",
+     "why_it_fails_a_first_timer": "Most friends receiving an invite have never had FreeMotion, so there is nothing on their Home Screen to open. The recommended path ends at a step they cannot do, with no word on installing, and the working option is presented as the second-best, storage-jargon choice.",
+     "evidence": "15-link-iphone-safari-landing.png and 16-link-iphone-after-copy.png (iPhone user agent, fresh profile, isIosBrowser() true, Labs off). Cause: js/collab-ui.js:3800 (always landing first on iOS) and 3817-3840 (card copy and button order).",
+     "suggested_fix": "When this Safari storage has never been used for FreeMotion (no projects, no profile), lead with 'Join now' and offer 'Add FreeMotion to your Home Screen' as an optional after-step. Only show 'open your installed app' first when this browser looks like a returning user. Show options before changing.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "The Friends block inside a project only lets you share; it has no way to join someone else's project",
+     "severity": "major",
+     "what_happens": "On a phone the only collaboration door inside a project is cog \u2192 Friends ('Share it live with friends'). Opened with Labs off, it offers a switch. Once on, it shows 'Share \"Untitled\"', [Set up\u2026], [Start sharing], 'New people join as Editor', [Done]. There is nothing for 'I've been sent a link/code'.",
+     "why_it_fails_a_first_timer": "A friend who got a code and looks in the obvious 'Friends' place finds only Start sharing. Tapping it makes their own project live and shows them a link and code, the opposite of what they wanted, and they still have not joined.",
+     "evidence": "22-friends-block-labs-off.png, 23-friends-block-labs-on-idle.png; button list ['Set up\u2026','Start sharing','Editor \u25be','Done']. Cause: drawFriendsIdle js/collab-ui.js:1065-1101 and the bar text in U.friendsBar ('Share it live with friends').",
+     "suggested_fix": "Add a 'Got an invite? Join with a link or code' row to the idle Friends block (and to its Labs-off view) that opens the Join sheet.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "The guest's answer code says 'Read this back to them' and 'Connecting\u2026' when it must be copied, sent and pasted",
+     "severity": "major",
+     "what_happens": "After Join, the guest sees a 143\u2013179-character code under 'READ THIS BACK TO THEM', then five letters under 'READ THESE LETTERS BACK TO THEM', while the status says 'Connecting\u2026'. The Join button stays bright blue although it is disabled.",
+     "why_it_fails_a_first_timer": "Nobody can read a 150-character code aloud. The screen never says 'send this to them, they paste it in Step 2', and 'Connecting\u2026' suggests the app is doing the work, so they wait. Combined with the 20-second clock, they are the reason it fails without knowing it.",
+     "evidence": "33-guest-answer-code.png, 35-guest-letters.png. Cause: js/collab-ui.js:2640 label, 3175 STEPS[1] 'Connecting\u2026'. No :disabled style exists for .fm-ask-ok / .cj-go in styles.css (grep empty).",
+     "suggested_fix": "Label the code 'Send this code back to Ezra \u2014 they paste it in Step 2', add a Share\u2026 button beside Copy code, set the status to 'Waiting for Ezra to paste your code\u2026', and give disabled buttons a visibly disabled look.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Once in, the guest's only sign of the session is a 28px initial, and Leave is hidden behind it",
+     "severity": "major",
+     "what_happens": "After the 3-second toast, the guest's editor looks like any of their own projects: the same 'Untitled' title and top bar. The only difference is a 31x28px circle with 'E' in the stage corner (aria 'Here: Ezra'). Leave lives behind that circle, or cog \u2192 Friends bar, or Home card \u22ef \u2192 Leave & delete.",
+     "why_it_fails_a_first_timer": "They cannot tell at a glance whose project this is, that it is live, or who is in it, and nothing hints that the tiny letter opens the people and Leave. 'How do I get out?' has no visible answer, and the target is under the 44px touch minimum.",
+     "evidence": "36-guest-in-editor.png, 90-guest-editor-after-toast-gone.png; chip measured 31x28 at (8,105). Leave found only via the chip (39-guest-people-panel.png) or Home \u22ef (91-guest-home-card-menu.png).",
+     "suggested_fix": "While joined, show a small persistent pill such as 'Live \u00b7 Ezra's project' (tap \u2192 the guest panel with Leave), or widen the chip to carry the word 'Live' and the owner's name. Keep the chip's tap target at 44px or more.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Switching Live collaboration off mid-session leaves silently, and the owner is never told someone left",
+     "severity": "minor",
+     "what_happens": "A guest in a session goes to Settings and turns 'Live collaboration (preview)' off, perhaps just to see what it does. The session ends immediately with no confirm and no toast; the last toast still reads 'You're in'. On the owner's side, a guest leaving (by Leave or by this switch) just makes their chip vanish, with no 'Sam left'.",
+     "why_it_fails_a_first_timer": "Neither person learns what happened. The guest does not know they left, and the owner sees a face disappear with no explanation.",
+     "evidence": "s10 output: after the switch, session:false with toast still 'You\u2019re in \u2014 this copy stays in sync' (82-guest-turned-labs-off-mid-session.png, 83-guest-editor-after-labs-off.png); owner chip '' and toast still 'Sam joined' (72-owner-after-guest-left.png). Cause: js/collab-ui.js:4074 (C.leave with no toast/ask); owner link.onclose js/collab-ui.js:2218 (no toast).",
+     "suggested_fix": "If a session is live, confirm before turning the switch off ('This will leave Ezra's project \u2014 keep your copy?') and toast the result. On the owner's side, toast '<name> left'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "'Connect with a code instead' on the guest's failed join is a button that does nothing",
+     "severity": "minor",
+     "what_happens": "When the relay cannot be reached, the Join sheet shows a full-width [Connect with a code instead] button. Tapping it only replaces the line with 'Ask them to tap Share \u2192 Connect with a code instead, then paste the long code they send you here.' On the owner's phone, 'Share' is an unlabelled person+ icon, and the option only appears after Start sharing.",
+     "why_it_fails_a_first_timer": "A button promises an action and then gives instructions for the other person, naming a control that has no such word on the phone.",
+     "evidence": "13-link-android-join-relay-refused.png \u2192 14-link-android-connect-with-code-instead.png. Cause: js/collab-ui.js:3006.",
+     "suggested_fix": "Show the instruction as text (not a button), and name the phone path: 'Ask them to tap the person+ on their video \u2192 Start sharing \u2192 Connect with a code instead'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "'Ended' banner is cut off on the phone",
+     "severity": "minor",
+     "what_happens": "When the owner stops sharing, the guest's banner reads 'This live session has ended \u2014 your...', truncated mid-sentence. The guest panel then still says 'You're an Editor.' under 'Ended'.",
+     "why_it_fails_a_first_timer": "The half that is cut off ('your copy stays on this device') is the reassuring half.",
+     "evidence": "80-guest-after-owner-stopped.png, 81-guest-friends-after-owner-stopped.png. Cause: js/collab-ui.js:3410-3412 has no phone short form, although the other banners have one (the isPhoneNow branches just below).",
+     "suggested_fix": "Give the phone a short form such as 'Session ended \u00b7 your copy is kept', and hide the role line once the session has ended.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Wording a first-timer can't use: 'cursor' on a phone, relay brand names, and a Join hint that omits the long code",
+     "severity": "minor",
+     "what_happens": "Three bits of wording. The name prompt says 'Your name and colour show up beside your cursor', and phones have no cursor. The switch the friend must read to join says 'relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare\u2019s address lookup \u2026 Codes only skips them all'. The Settings 'Join a live project' hint says 'Paste an invite link, or type the short code somebody read you', with no mention of the long code.",
+     "why_it_fails_a_first_timer": "This is technical vocabulary at exactly the moment a newcomer decides whether to trust and turn on the feature, and the Join hint leaves out one of the three things they may have been sent.",
+     "evidence": "11-link-android-profile-prompt.png (js/collab-ui.js:189); 03-settings-live-collab-row.png and 04-settings-labs-on.png (js/settings.js:980-983); js/settings.js:922.",
+     "suggested_fix": "'\u2026show up next to what you're doing on their screen'. Put one plain sentence first ('Work on a project with friends on their own phones') with the privacy detail behind a 'How it connects' line. Change the hint to 'Paste the link or code they sent you'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Tapping 'Not now' on the invite card throws the invite away with no word",
+     "severity": "minor",
+     "what_happens": "Opening an invite link with Labs off, tapping 'Not now' (or Cancel on the name prompt, or Cancel on the prefilled Join sheet) deletes the stored invite (fm.pendingJoin). With Labs still off, the app then has no place to paste it later either.",
+     "why_it_fails_a_first_timer": "A newcomer who taps 'Not now' to look around first has lost the invite silently. They must find the message and tap the link again, and nothing says so.",
+     "evidence": "s3_ios output after Not now: pending: null, join: false (18-link-iphone-after-not-now.png). Cause: js/collab-ui.js:3847 labs card onclose clears it; U.resumePendingJoin clears it on a cancelled profile; drawJoin onclose clears it when fromPending.",
+     "suggested_fix": "Keep the invite for its normal lifetime after 'Not now', and offer it again from the Home Join entry (see the Home Join finding), or at least say 'Tap the link again when you're ready'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "A code pasted with message text in front of it is rejected",
+     "severity": "minor",
+     "what_happens": "If the friend copies a whole chat bubble such as 'Here is the code: FM1-\u2026', the Join sheet says 'That does not look like an invite link or a code.' An invite link inside text works, because the link reader looks for the '#'.",
+     "why_it_fails_a_first_timer": "Copying the whole message is the natural gesture in most messaging apps, and the error suggests the code itself is wrong.",
+     "evidence": "s11_paste.py: classify('Here is the code: ' + code) \u2192 null. Cause: js/collab-signal.js:115 isConnCode requires the text to start with FM1.",
+     "suggested_fix": "Find 'FM1' anywhere in the pasted text and read from there, as the link reader does with '#'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Owner's letter check shows two blue primary buttons at once",
+     "severity": "minor",
+     "what_happens": "At Step 3, 'They match' appears in blue, and the old blue 'Connect' button stays directly underneath it, along with \u2039 Back and the Stop sharing/Done foot.",
+     "why_it_fails_a_first_timer": "The owner is the one letting the friend in, and it is unclear which blue button finishes the job.",
+     "evidence": "34-owner-check-letters.png. Cause: confirmSas renders into the status under Step 2 (js/collab-ui.js:2201), and the Connect button (js/collab-ui.js:2095) is not hidden.",
+     "suggested_fix": "Hide or disable Connect once the letters step is showing.",
+     "needs_his_design_pick": false
+    }
+   ]
+  },
+  {
+   "journey": "J3: \"We're sharing \u2014 now how do I manage it and how do I TURN IT OFF?\" The owner on a phone (390x844, touch emulation, 47px notch) with a shared project. Covers who is here, changing a role, removing someone, inviting more, the banner and people chip, the app going to the background or being killed, Stop sharing (does it really stop, does it come back by itself), what \"off\" means for another project that was shared once, and the Labs switch turned off while shared. The main question: why Ezra found \"a switch to turn it on, but you can never turn it off on any project ever\".",
+   "walked": "Everything was done in the real app at http://localhost:8777 with my own CDP drivers (drv.py, common.py, pair.py, s1\u2013s17.py). They are phone-emulated Chromes that send real touch events at element centres; I checked what was under each tap with elementFromPoint. Screenshots are in /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/a967/j3/.\n1. Home, then tapped the project card to open the editor. Labs is off and there is no share button (01-home.png, 02-editor-labs-off.png).\n2. Tapped the cog (#m-settings): Canvas settings opens with a \"Friends \u00b7 Share it live with friends\" bar on top (03). Tapped \u2922: \"Work on this with friends\", one switch, and the line \"you can turn it off again in Settings \u2192 Labs\" (04).\n3. Tapped the switch. Labs came on and the block redrew as \"Share 'Untitled' \u00b7 Not shared yet \u00b7 Start sharing\". The switch count in the block went to 0 (05).\n4. Tapped Start sharing. The profile prompt appeared; I typed a name and tapped Continue. The session went live, fm.collab.host.<pid> was written, and a toast said \"Keep FreeMotion open\u2026\" (06, 07). Stop sharing is pinned in the foot at y 774\u2013818.\n5. Tapped Done. The editor looks exactly like it did before sharing (08): a 28px person+ in the stage corner, no banner. Went back to Home: the card shows a red LIVE badge (09).\n6. Two projects: shared A, created B, opened B. A paused and kept its host record. B's Friends says \"Not shared yet\" and nothing mentions A (11). Home shows A with no badge (12). Opened A from Home and it re-armed by itself with the toast \"Sharing is on again \u2014 people can reconnect\" (13). A reload re-armed it again (14).\n7. Stop: tapped the stage chip, which opens Friends big (15). Stop sharing \u2192 confirm (16) \u2192 \"Sharing stopped\" (17). The session ended and the host record was deleted. Reopening and reloading did NOT re-arm it.\n8. Labs from the editor: cog (Friends was remembered big, so App settings\u2026 measured 0\u00d70) \u2192 \u2922 on the Canvas bar \u2192 App settings\u2026 (19). The Labs switch label sits at y=4246 in a 5048px scroll with 753px visible (20). Turned it off while live: the session ended and the record was dropped, with no confirmation (21).\n9. Shared A, opened B, turned Labs off in B, relaunched the browser on the same profile, turned Labs on, opened A: A re-armed with \"Sharing is on again\" (22). Then a cold launch with A last open: the app lands on Home, and A is already live again with a LIVE badge before anything was tapped (23). The toast had already gone by the time Home showed (47).\n10. Home \u22ef menu on a live project and on a paused shared one: Open, Pin, Rename, Duplicate, \"Share live\u2026\", Earlier versions\u2026 and so on. There is no Stop sharing (24, 46). On a never-shared project, \"Share live\u2026\" armed sharing at once and opened the separate Share card (25-home-share-live-armed-card).\n11. Two devices (two Chromes, no relay): owner \"Connect with a code instead\" (26); guest Home \u2387 \u2192 Join, pasted the code, got the answer code (27); the owner pasted it and tapped Connect. The Step 3 \"They match\" button was hidden under the pinned foot and my first tap landed on Done (28). After scrolling, \"They match\" worked (28b). The guest was in: \"Sam joined\", an S face on the owner's stage (29, 31). Role menu Editor/Commenter/Viewer/Follow/Remove\u2026 (32) \u2192 Viewer: the guest got \"View only \u2014 ask for edit access\" (33). Owner hidden: the guest's E face went grey (34). Remove\u2026 \u2192 confirm (35) \u2192 the guest got a red \"removed\" banner and the link and code rotated (36, 37).\n12. Background and lock: freezing the owner page with Page.setWebLifecycleState did not break the link (inconclusive; 38\u201340). Killing the owner's Chrome, the way iOS kills a backgrounded app: after 40s the code-joined guest still said \"\u25cf Live \u00b7 shared with you\", online=true, no banner, only a grey E (41). When the owner relaunched, it re-armed and said \"people can reconnect\", but Sam had no row and never came back (42, 43).\n13. Sharing settings (gear): no off switch for the feature (44, 45).",
+   "works": [
+    "Stop sharing, once found, is solid. It is pinned in the foot of the Friends block in every view (main, the gear's settings, the code step). The confirm is plain ('Everyone here keeps their own copy\u2026'). It really stops: the session ends, fm.collab.host.<pid> is deleted, and reopening or reloading that project does NOT re-arm it (s6, 15\u201317).",
+    "The stage chip is a one-tap way to manage a live session: tapping #collab-people opens Canvas settings with Friends big, people list on top (15).",
+    "The people list and role menu work device to device. Editor/Commenter/Viewer/Follow/Remove\u2026 in one menu. Switching to Viewer reaches the guest at once, with the toast 'Ezra made you a Viewer' and the banner 'View only \u2014 ask for edit access' (32, 33).",
+    "Remove works and explains itself. The confirm says it is permanent for that device and that the link and code change. The guest gets 'You were removed\u2026', and the owner's toast says the old link and code no longer work (35\u201337).",
+    "The faces chip shows who is here: the guest's initial, a playhead marker in their colour, and a grey face when that person is away or gone (31, 34, 41).",
+    "Home's red LIVE badge on the card of the project that is live right now (09, 23).",
+    "Turning Labs off while live really ends the CURRENT session and drops its host record, so that project does not come back (21).",
+    "The connection-code exchange works between two devices with no relay, including the five-letter match check (26\u201329).",
+    "The profile prompt (name plus eight colours) is simple and appears only once (06)."
+   ],
+   "findings": [
+    {
+     "title": "The only on/off switch a phone user ever sees vanishes once it is turned on, and the way back points to a 'Settings \u2192 Labs' that does not exist",
+     "severity": "blocker",
+     "what_happens": "On a phone, the feature's switch lives in the cog \u2192 Friends (\u2922) block while Labs is off. Tapping it turns Labs on and redraws the block as 'Start sharing' with no switch (0 switches measured), on this project and every other one. The only guidance is the line 'you can turn it off again in Settings \u2192 Labs'. In the editor, 'Settings' is the cog, which opens Canvas settings. The app's Settings sits behind 'App settings\u2026', a button on the Canvas card that measures 0\u00d70 whenever Friends is the big card (the cog remembers Friends). Inside Settings the word 'Labs' appears nowhere (0 matches). The switch is the row 'Live collaboration (preview)', 22nd of 28 rows, below developer diagnostics ('Your last scrub', 'A clip with no picture'), at y=4246 in a 5048px scroll with 753px visible. That is about 4.7 screens down, reached by cog \u2192 \u2922 Canvas \u2192 App settings\u2026 \u2192 scroll.",
+     "why_it_fails_a_first_timer": "This is exactly his complaint: 'there's a switch to turn it on, but you can never turn it off'. The switch he used is gone after one tap. The instructions name a place with no heading on screen, and 'Settings' on the editor means a different panel.",
+     "evidence": "05-friends-after-switch-on.png (block after the switch: no switch), 04-friends-labs-off.png (the 'Settings \u2192 Labs' line), 19-settings-top.png, 20-settings-labs.png. Measured: switches=0 after flip; appset {w:0,h:0} with Friends big; set-body scrollHeight 5048 / clientHeight 753, label top 4246; hasLabsWord=false. Cause: js/collab-ui.js:1102-1120 (drawLabsOff is the only view with the switch), js/collab-ui.js:1065-1100 (drawFriendsIdle has none), 'Settings \u2192 Labs' strings at js/collab-ui.js:1110, 2975, 3828, 3849; js/settings.js:907-988 (Labs group placed last, no section heading); js/app.js:7059-7066 (App settings\u2026 only on the Canvas card).",
+     "suggested_fix": "Keep a 'Live collaboration' on/off row inside the Friends block (and in the gear's Sharing settings) in every state, not only when off. Give Settings a visible 'Labs' heading, or change every 'Settings \u2192 Labs' string to words that match the screen. Consider moving the Labs group above the diagnostics.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "A project shared once keeps re-arming itself on every open and every cold launch, even behind Home, until Stop sharing is pressed inside that very project",
+     "severity": "major",
+     "what_happens": "Start sharing writes fm.collab.host.<pid>. Opening another project only PAUSES that one. Home then shows its card with no badge at all, and B's Friends says 'Not shared yet' with nothing about A. The moment A is opened again it goes live by itself: toast 'Sharing is on again \u2014 people can reconnect', session live, relay started. On a cold launch the app lands on Home, and the last-open shared project is ALREADY live again (LIVE badge) before he taps anything. The 2.6s toast fires under the launch splash and had gone (0px) by the time Home was visible. Home's \u22ef menu for a live or paused shared project offers 'Share live\u2026' but no Stop sharing. The only way to stop is to open the project, which re-arms it first, then find Stop sharing in Friends.",
+     "why_it_fails_a_first_timer": "This is the other half of 'you can never turn it off on any project ever'. Nothing tells him which projects are still shared, stopping one requires switching it back on first, and the app switches it on again by itself on launch.",
+     "evidence": "12-home-two-projects-A-paused.png (no badge on the paused shared project), 13-reopened-A-rearmed.png, 14-after-reload-home.png, 23-cold-launch-home-rearmed.png (Home at cold launch, project LIVE untouched), 47-cold-launch-toast-check.png, 24-home-menu-live-project.png, 46-home-menu-paused-shared.png. STATE after reopen: session:true, toasts ['Sharing is on again \u2014 people can reconnect']. Cause: js/collab-ui.js:3715-3759 (afterReset \u2192 resumeOpen \u2192 resumeHost re-arms whenever a host record exists; comment: 'a record means he never stopped'); js/home.js:1260-1270 (collabOf badges only the ACTIVE session, not a paused record); js/home.js:1356-1362 (menu offers Share live\u2026, never Stop).",
+     "suggested_fix": "Make a paused shared project visible and stoppable from outside it: a 'SHARED \u00b7 paused' badge plus a Stop sharing item in Home's \u22ef menu that drops the record without re-arming. Do not re-arm at boot while Home is showing, or ask first ('Carry on sharing \"X\"?'). A 'Shared projects' list in Settings with Stop on each row would answer 'which of my projects are on'.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Turning Labs OFF does not turn off other projects that were shared: they come back live on the same link the next time Labs is on",
+     "severity": "major",
+     "what_happens": "Shared A, opened B (A paused, record kept), turned Labs off while in B. A's host record survived. Weeks later (relaunched browser, same storage) Labs was turned back on and A opened: A re-armed on its OLD room, link and code, with 'Sharing is on again \u2014 people can reconnect'. The code's own comment says 'AN END IS AN END\u2026 Stop sharing drops the room; so does this', but syncLabs only drops the room of the CURRENTLY active session.",
+     "why_it_fails_a_first_timer": "The Labs switch is the master 'off' and it reads as a promise. Anyone holding A's old invite link can come back into a project he believes he switched off.",
+     "evidence": "s9.py output: 'labs off in B' hostRecords still ['fm.collab.host.p_\u2026A']; after Labs back on and opening A: session:true, toast 'Sharing is on again'. Screenshot 22-A-rearms-after-labs-cycle.png. Cause: js/collab-ui.js:4070-4082 (only `if (C.active)` drops a room: dropRoom(pid) for the current session's pid); paused records under fm.collab.host.* are untouched.",
+     "suggested_fix": "When Labs goes off, drop every fm.collab.host.* record (and its offers), not just the active one. Or at least say which projects will resume and ask.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "While he is live and nobody has joined yet, the editor looks exactly as it does when nothing is shared",
+     "severity": "major",
+     "what_happens": "After Start sharing \u2192 Done, the stage shows the same 28px person+ circle it shows before sharing: the live chip wears the invite button's classes 'collab-people cp-invite'. There is no banner and no dot. The only in-editor cues are a 3.6s toast (which on first share covers the short invite code) and the Friends bar inside the cog dialog. The live state only becomes visible on Home (LIVE badge) or once somebody joins (their face).",
+     "why_it_fails_a_first_timer": "He cannot tell which projects are live from inside them. Together with the silent re-arming above, projects stay 'on' without him knowing, which feeds 'can never turn it off'.",
+     "evidence": "08-editor-while-shared.png against 05 (background) and 02: the same person+ circle. STATE: chip {w:28,h:28,cls:'collab-people cp-invite'}, banner:null. 07-sharing-live-block.png (toast over the code). Cause: js/collab-ui.js:3927-3963 (the stage invite button deliberately IS the chip at rest); U.syncBanner js/collab-ui.js:3384-3459 returns hideBanner for an owner with no peers; afterArm toast js/collab-ui.js:1043-1044.",
+     "suggested_fix": "Give the owner a persistent live marker on the stage while sharing: a red dot or a 'Live' ring on the chip, or a small 'Live \u00b7 waiting' pill. The toast should not cover the code.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Inviting by code: the Step 3 'They match' button is hidden under the pinned foot, and a tap there hits Done and silently abandons the join",
+     "severity": "major",
+     "what_happens": "In the Friends block at 390x844, when the guest's answer is pasted and Connect tapped, Step 3 appears at the bottom of the scroll body. 'They match' measured top 753 / bottom 797 while the foot [Stop sharing][Done] starts at 762, so only a 9px sliver shows. elementFromPoint at the button's centre is 'cs-done accent'. My first tap there pressed Done: the block closed, and the guest never got in and was not told. The body did not scroll to reveal the new step (scrollTop 0, scrollHeight 602, clientHeight 463).",
+     "why_it_fails_a_first_timer": "The one gate he must pass to let a friend in is covered by a button that closes the panel. The failure is silent on both phones.",
+     "evidence": "28-owner-sas.png (buttons hidden under the foot), 28b-owner-sas-scrolled.png. Measured: {yes:{top:753,bottom:797}, foot:{top:762}, hitAtYes:'cs-done accent'}. Cause: js/collab-ui.js:2164-2178 (confirmSas appends into the status line at the end of the body), js/collab-ui.js:2076-2140 (drawCodeStep), and the foot pinned by the Friends block styles.",
+     "suggested_fix": "Scroll Step 3 into view when it appears, or make the foot's Done/Stop give way to the match buttons during the check. Closing the block mid-check should say what happened.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "When the owner's phone kills or locks the app, a guest who joined with a code is never told: they stay on 'Live' with no banner, and the owner's 'people can reconnect' is untrue for them",
+     "severity": "major",
+     "what_happens": "Paired a guest by connection code, then killed the owner's browser (what iOS does to a backgrounded app). After 40s the guest still showed '\u25cf Live \u00b7 shared with you', session online=true, no banner, only a grey E face, and kept editing into nothing. The owner relaunched: the project re-armed with 'Sharing is on again \u2014 people can reconnect'. But the code-joined guest has no way back, is not even listed as an offline member in the owner's people list, and never reconnected.",
+     "why_it_fails_a_first_timer": "'What happens when my phone locks?' The app's own answer ('the session pauses', 'people can reconnect') is wrong for the code route, which is the route that works with no relay. Both people think they are still sharing.",
+     "evidence": "41-guest-owner-app-killed.png; s15 output at 5/15/40s: {online:true, people:['Ezra:off'], banner:null, fr:'\u25cf Live \u00b7 shared with you'}. 42-owner-relaunch.png / 43-owner-block-after-relaunch.png: owner list shows only 'Ezra \u00b7 You \u00b7 Owner'. Cause: liveness (6s silence \u2192 close) is switched on only for relay joins and reconnects, js/collab-ui.js:3084, 3578, 3593. The code path guestJoin js/collab-ui.js:3141-3200 never calls s.setLiveness(true) (collab-session.js:1388-1397 explains why it is needed). Freezing the page (38\u201340) could not reproduce a lock in headless Chrome, so the lock case is inferred from the kill case plus the code.",
+     "suggested_fix": "Turn liveness on for code-joined guests too, so they get the 'Offline \u2014 the live link dropped' banner within about 6s. Make the owner's resume toast and people list honest about members who cannot come back (list them as 'joined with a code \u2014 send a new code').",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Turning Labs off while live ends everyone's session with no 'are you sure' and no visible feedback",
+     "severity": "minor",
+     "what_happens": "The switch in Settings flips at once: C.end(), the room dropped, guests kicked, invite codes dead. Stop sharing asks first; this does not. No toast is seen, because Settings' scrim covers toasts.",
+     "why_it_fails_a_first_timer": "The same destructive act gets a confirm on one path and none on the other, and he gets no word that sharing stopped.",
+     "evidence": "21-labs-off-while-shared.png; s7 output after the tap: session:false, hostRecords:[] and no visible message. Cause: js/settings.js:984 (toggle applies immediately), js/collab-ui.js:4065-4086.",
+     "suggested_fix": "When a session is live, confirm first ('Turning this off stops sharing \"X\" for everyone'), and put the result on the row itself rather than in a hidden toast.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Home \u22ef 'Share live\u2026' starts sharing instantly and opens a different Share card; on a live project it still says 'Share live\u2026' and never offers Stop",
+     "severity": "minor",
+     "what_happens": "On a never-shared project, \u22ef \u2192 Share live\u2026 (then the profile prompt) armed sharing straight away (host record written, session live) and opened the separate #collab-share card rather than the Friends block. That contradicts the block's own promise 'Opening this never shares anything by itself', and phone users see two different share screens. On a project that is already live, the same menu still says 'Share live\u2026', with no Stop sharing or 'Manage sharing'.",
+     "why_it_fails_a_first_timer": "An ellipsis item that goes live without a Start step, and a menu that cannot turn off what it turned on.",
+     "evidence": "25-home-share-live-armed-card.png; s11 output: session:true, hostRecords:[pid]. 24-home-menu-live-project.png. Cause: js/home.js:1356-1362 (calls FM.collab.ui.share(), which runs armShare, js/collab-ui.js:968-994); U.openPeople js/collab-ui.js:1170-1180 avoids exactly this on the phone.",
+     "suggested_fix": "On a phone, route Home's item through U.openPeople (Friends block, Start sharing). Label it by state: 'Share live\u2026' when not shared, 'Sharing \u00b7 manage\u2026' plus 'Stop sharing' when live or paused.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Once used, the cog opens with Friends big, which hides Canvas settings and the only door to App settings",
+     "severity": "minor",
+     "what_happens": "The cog is labelled 'Canvas settings', but after he has opened Friends once it reopens with Canvas collapsed to a bar. 'App settings\u2026' then measures 0\u00d70 until he taps \u2922 on the Canvas bar.",
+     "why_it_fails_a_first_timer": "This adds a hidden step on the route to the Labs switch, and the cog no longer opens what its label says.",
+     "evidence": "18-cog-reopens-friends-big.png; s7: {big:true, appset:{w:0,h:0}}. Cause: js/app.js:8184-8215 (fm.cvPair remembered), js/app.js:7059-7066.",
+     "suggested_fix": "Keep an 'App settings\u2026' way in visible from the Friends view too (for example in its foot or header).",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Small wording and overlap problems around stopping and removing",
+     "severity": "minor",
+     "what_happens": "After Stop sharing, the block says 'Not shared yet' (odd right after sharing), and the 'Sharing stopped' toast sits on top of the 'Opening this never shares anything\u2026' line. The removed guest's phone banner is cut off: 'You were removed from this projec\u2026'.",
+     "why_it_fails_a_first_timer": "Small, but 'yet' reads as if sharing never happened, and the cut-off banner hides the half that reassures ('your copy stays on this device').",
+     "evidence": "17-after-stop.png, 37-guest-removed.png. Cause: stateLine js/collab-ui.js:401-406; the removed banner has no short phone form, js/collab-ui.js:3398-3400 (other states use `short`).",
+     "suggested_fix": "Say 'Not shared' or 'Sharing is off' after a stop. Give the removed and ended banners the short phone sentence the other states already have.",
+     "needs_his_design_pick": false
+    }
+   ]
+  },
+  {
+   "journey": "J4 \u2014 every other surface that touches sharing, on a 390x844 touch phone (v17.05): Home (\u2387 Join, card \u22ef \u2192 Share live\u2026 / Earlier versions\u2026, a live project's card, a shared copy's card), the collaboration banner in each state, the knock card, the people chip, comments, Settings \u2192 Labs (Live collaboration, Codes only, pointers/selections, Test connection), Earlier versions / save points. Two real phones were simulated as two separate headless Chromes paired with the connection-code exchange (no relays, no outside services).",
+   "walked": "All screenshots are in /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/a967/j4/. The driver is drv.py there, and each step is scripted in s1\u2013s17.py.\n1. Home with Labs off: no sharing door at all (01-home-labs-off.png). Home cog \u2192 Settings: 28 labels. \"Live collaboration (preview)\" is the 22nd, 3538px into a 3694px scroll (4.9 screens), under six diagnostic \"Your last\u2026\" report boxes. The word \"Labs\" does not appear anywhere in Settings (02, 03-settings-bottom-labs-off.png). Flipping it on shows six sub-rows (04-settings-labs-on.png).\n2. Home with Labs on: a \u2387 glyph appears left of Search (05-home-labs-on.png; zoom in 05b-home-join-glyph-zoom.png). Card \u22ef now lists Share live\u2026 and Earlier versions\u2026 (06-home-card-menu.png).\n3. Tapped \u2387: the name/colour prompt (07), then the Join sheet (08). A short code on localhost gives \"Couldn't reach the free connection service\" plus a Connect-with-a-code button (09, 10). Garbage text gives \"That does not look like an invite link or a code.\" (11).\n4. Earlier versions\u2026 on a never-shared project: \"No save points yet\" (12). Share live\u2026 from Home opens the project, then the profile prompt (13).\n5. Two devices: owner A opened the project and tapped the stage person+ \u2192 Friends block \u2192 Start sharing \u2192 Connect with a code instead. That gave the offer code (14\u201317). Guest B went Home \u2192 \u2387 \u2192 pasted it and got the answer code (18). A pasted it back, both screens showed the same 5 letters (19, 20), and A tapped They match. Result: peers 1, and both stages show a face chip (21\u201324).\n6. Guest tapped the chip \u2192 guest panel in Canvas settings (25) \u2192 Comments \u2192 posted (26, 30). The owner received it (count 1, ruler mark, playhead relabelled) with no notice (31, 32). Guest Follow \u2192 \"Following Ezra \u00d7\" banner (33). Owner changed Sam's role to Viewer (34) \u2192 guest toast plus \"View only \u2014 ask for edit access\" (35). Home while live: owner card \"LIVE \u00b7 1\" (36, 36b zoom), guest \"SHARED \u00b7 Shared by Ezra \u00b7 live now\" (37), guest \u22ef menu (38).\n7. Knock card raised through U.knock, because relays are refused on localhost: in the editor (39) and on Home (40). Earlier versions after sharing lists the save point (41). Stop sharing \u2192 confirm (42) \u2192 owner (43) \u2192 guest banner ended, truncated (44). Guest Home after the end (46). Restore \u2192 confirm \u2192 \"Saved as \u2026 on Home\" (47\u201349).\n8. Owner's browser killed \u2192 guest banner \"Offline\u2026\" truncated (50), guest panel (51), Home (52), reopen (53, 54).\n9. Settings \u2192 Test connection (55, 56). Codes only on, then Join from Settings (57).\n10. Labs switched off mid-session: by the guest (58, 59) and by the owner (62). No confirmation either time. The owner got no notice when the guest dropped (60). Guest Home afterwards (61).\n11. After Stop sharing, the owner still has the comment, but the Friends block has no Comments door (63, 64). Guest reopened the ended copy (65\u201367).\n12. Guest app relaunch (reload): banner \"Shared by Ezra \u00b7 not connected\", and the panel explains how to rejoin (68, 70). Plain Delete\u2026 on the owner's LIVE project (71, 72). Plain Delete\u2026 on the guest's live shared copy (74, 75). After that, the guest's OWN project shows a stale Offline banner, still there 15 s later (76, 77).\n13. The guest opened their own other project mid-session: dropped silently, and the stale banner appeared on their project (78). Back to the shared copy: not connected (79). The owner created and opened a new project mid-session: the guest dropped to Offline (81). The owner's Home shows no sign that the old project is still a shared room (82). Reopening it re-armed sharing with the toast \"Sharing is on again \u2014 people can reconnect\", but the guest never came back (peers 0) (83).\n14. Labs off: the Friends bar says \"Share it live with friends\" (84). Opened, it says \"you can turn it off again in Settings \u2192 Labs\" and shows an on switch (85). After switching on there is no off switch left in the dialog: 0 role=switch elements in #canvas-dialog (86).",
+   "works": [
+    "The two-phone connection-code route works end to end with no server. Owner Friends block \u2192 Start sharing \u2192 Connect with a code instead, then guest Home \u2387 \u2192 paste \u2192 answer code back \u2192 both screens show the same 5 letters \u2192 They match. Measured: peers 1, guest role editor, faces on both stages (17\u201324).",
+    "The name-and-colour prompt is short and clear, with 8 big swatches and Continue/Cancel (07). It is asked once, at the first Share or Join.",
+    "The Join sheet is plain. It has Paste and a QR scan button, error lines in plain words ('That does not look like an invite link or a code.'), and a 'Connect with a code instead' fallback that tells the person what to ask for (08\u201311).",
+    "Home badges carry real state while live. The owner's card shows 'LIVE \u00b7 1'. The guest's copy shows a SHARED badge in the owner's colour and 'Shared by Ezra \u00b7 live now' (36, 37). The guest's \u22ef menu correctly swaps Duplicate/Share/Save-as-template for 'Keep as my own copy' and 'Leave & delete' (38).",
+    "Knock card: one clear sentence ('Jordan (iPhone) wants to join as Editor.'), the five check letters, and two big buttons. It sits above everything in the editor and on Home (39, 40).",
+    "The people chip works as a door. The coloured initial appears top-left of the stage, goes grey when that person is offline, and a tap opens the right panel (guest panel for a guest, Share panel for the owner) (23, 25, 51).",
+    "Follow works and says so: the banner 'Following Ezra' has a working \u00d7 (33). A role change is told to the guest as a toast ('Ezra made you a Viewer') plus the banner, and the + and editing controls go away (35).",
+    "The comments card is good once found: paper look, 'At 0:00 on the timeline' pin, Post. The comment syncs to the owner at once, with count and ruler mark (26, 30, 31).",
+    "Earlier versions works. A save point is written when sharing starts. Restore asks first and says the result inside the row ('Saved as \u201cUntitled \u2014 26 Sept, 22:57\u201d on Home'). The copy really appears on Home (41, 47\u201349).",
+    "The not-connected panel for a code-joined copy explains exactly what to do: 'To get back in, ask Ezra for a new code \u2014 joining again starts from Ezra's copy, and what you changed here stays in this one.' (70). The phone banner 'Shared by Ezra \u00b7 not connected' fits (68).",
+    "The Stop sharing confirm is honest: 'Everyone here keeps their own copy. The codes you have handed out stop working.' (42). The guest's banner then switches to ended (44).",
+    "Settings Labs rows (Change\u2026, Join\u2026, Test) open their card on top of Settings and come back to the same scroll position (stayRow)."
+   ],
+   "findings": [
+    {
+     "title": "The Labs switch is buried and misnamed, and once it is on nothing near the feature turns it off",
+     "severity": "major",
+     "what_happens": "With Labs off, the Friends block in Canvas settings shows its own on switch and the line 'you can turn it off again in Settings \u2192 Labs' (85). After it is flipped on, the dialog has no off switch at all: 0 role=switch elements in #canvas-dialog (86). The only off switch is in app Settings, where no section or row is called 'Labs'. The switch is labelled 'Live collaboration (preview)', is the 22nd of 28 labels, and sits 3538px into a 3694px scroll (about 4.9 screens), under six diagnostic 'Your last export / playback / project open / scrub / Back / A clip with no picture' report boxes (02, 03).",
+     "why_it_fails_a_first_timer": "This is exactly Ezra's complaint: 'there's a switch to turn it on, but you can never turn it off'. The on switch sits where the feature is. The off switch is five screens down a different panel, under developer reports, and the app's own directions ('Settings \u2192 Labs') name a heading that does not exist.",
+     "evidence": "02-settings-top.png, 03-settings-bottom-labs-off.png, 85-friends-labs-off-open.png, 86-friends-after-switch-on.png. Measured: labels index 21 of 28, labTop 3538/scrollHeight 3694, 'Labs' found in panel text = false. js/settings.js:914-986 (Labs group appended last with no heading); js/collab-ui.js:1110 ('Settings \u2192 Labs' text).",
+     "suggested_fix": "Put a visible off switch where the on switch was: a 'Live sharing: On' row or switch in the Friends block while Labs is on. In Settings, give the group a real 'Labs' heading and move it above the diagnostic Reports (or move the Reports into their own collapsible section). Make the Friends-block text name the row that really exists.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Opening any other project silently drops a code-joined guest for good, and the owner is told people can reconnect when they can't",
+     "severity": "major",
+     "what_happens": "Guest case: mid-session the guest went Home and tapped their own other project. The session ended at once with no warning (active false), the owner's chip vanished with no notice (peers 0), and going back to the shared copy only shows 'Shared by Ezra \u00b7 not connected' (78, 79). Owner case: the owner created and opened 'Project 2' from Home with no warning. The guest fell to 'Offline \u2014 the live link dropped\u2026' (81). When the owner reopened the shared project, the toast said 'Sharing is on again \u2014 people can reconnect', but the guest never came back (peers 0 after 4 s and later) (83). An app relaunch on the guest's phone (iOS does this constantly) has the same result (68).",
+     "why_it_fails_a_first_timer": "Hopping between projects is normal on a phone. Nothing says it ends the live session, and there is no way back without swapping two long codes again. The owner's toast actively misleads: it promises a reconnect that only exists on the relay/link route.",
+     "evidence": "78-guest-switches-to-own-project.png, 79-guest-back-to-shared-copy.png, 81-guest-when-owner-switched-project.png, 83-owner-back-on-shared-project.png, 68-guest-home-after-app-relaunch.png. js/storage.js:2518 (onReset force on every open); js/collab-core.js:340-348 (stop('paused') + detach); js/collab-ui.js:3751 (the toast).",
+     "suggested_fix": "When a live session is running, ask before opening another project ('You're live with Sam \u2014 opening another project pauses it. Sam will need a new code to rejoin'). Word the resume toast by route: for code-joined guests say 'Sam will need a new code'. Tell the owner when someone drops ('Sam left').",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Stale red 'Offline' banner sticks on the guest's own, unshared project",
+     "severity": "major",
+     "what_happens": "After the guest leaves the shared copy by opening another project (78), or by plain Delete\u2026 on the shared copy from Home (74\u201376), their own ordinary project shows the red 'Offline \u2014 the live link dropped; yo\u2026' banner. It is still there 15 s later (77). That project has no collab record (collab: null) and there is no session (active false).",
+     "why_it_fails_a_first_timer": "It tells them their own private project is a broken live link, and nothing on screen explains or clears it.",
+     "evidence": "76-guest-own-project-after-deleting-shared-copy.png, 77-guest-own-project-15s-later.png, 78-guest-switches-to-own-project.png. Measured: {active:false, banner visible, collab:null}. Cause: js/collab-ui.js:3691 U.onDetach never calls U.syncBanner()/hideBanner(); the banner set during stop('paused') outlives the detach, and U.resumeOpen returns null for a plain project without re-syncing.",
+     "suggested_fix": "Call U.syncBanner() (or hideBanner) at the end of U.onDetach, and in resumeOpen's no-collab/no-room return path. Add a test: guest opens a non-shared project mid-session \u2192 no #collab-banner.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Ended and Offline banners are cut mid-sentence on a phone, losing the reassuring half",
+     "severity": "major",
+     "what_happens": "On a 390px phone the banner pill is 250px wide. 'This live session has ended \u2014 your\u2026' and 'Offline \u2014 the live link dropped; yo\u2026' are clipped: measured cb-text scrollWidth > clientWidth. The part that says the work is safe ('your copy stays on this device' / 'your changes are kept on this device') is the part that is lost (44, 50). Other states already have a phone-short form, and these two do not.",
+     "why_it_fails_a_first_timer": "A red pill saying only 'session has ended \u2014 your\u2026' or 'link dropped; yo\u2026' reads as 'you lost your work', at the exact moment they need reassurance.",
+     "evidence": "44-guest-home-after-owner-stopped.png, 50-guest-owner-gone-banner.png. Measured {clipped:true, w:250}. js/collab-ui.js:3410-3412 (ended/removed have no isPhoneNow short form), js/collab-ui.js:3441 (offline has no short form).",
+     "suggested_fix": "Add phone short forms like the other states, e.g. 'Session ended \u00b7 your copy is safe', 'Removed \u00b7 your copy is safe', 'Offline \u00b7 changes kept'. Better still, let a tap on the pill open the guest panel with the full sentence.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Comments are nearly impossible to find, and nobody is told when one arrives",
+     "severity": "major",
+     "what_happens": "There is no comment button anywhere in the phone editor. The only door is the people chip or person+ \u2192 Canvas settings \u2192 Friends \u2192 a 'Comments' row, and only while a session is live (25). When the guest posted, the owner got no toast or badge. The only sign was a tiny speech-bubble merged into the playhead's head on the ruler (31). After Stop sharing, the comment is still there (count 1), but the Friends block no longer has a Comments row (64). The linked-copy panel has none either (70). The only way in is tapping that ruler mark. With Labs off the comments are invisible entirely.",
+     "why_it_fails_a_first_timer": "Nobody would think to look for comments inside Canvas settings. A new comment is effectively silent, and after the session ends the comments are stranded.",
+     "evidence": "25-guest-taps-chip.png, 31-owner-sees-comment-arrive.png, 32-owner-ruler-comment-mark.png, 63-owner-after-stop-comment-still-there.png, 64-owner-friends-after-stop-no-comments-door.png. js/collab-ui.js:947 commentsRow used only in drawShare/guest panel; drawFriendsIdle js/collab-ui.js:1065 and drawLinkedPanel omit it; js/collab-comments.js:192-197 only ever toasts your own actions.",
+     "suggested_fix": "Give comments a door of their own on the phone stage or top bar, with an unread count on it. Toast or badge 'Sam commented' on arrival. Keep the Comments row in the idle and linked panels whenever the project has comments.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "The Home 'Join' button is a tiny meaningless text glyph (\u2387)",
+     "severity": "major",
+     "what_happens": "With Labs on, Home gains a round button left of Search whose face is the character U+2387, drawn as Arial text at 13px. At phone size it reads as a small squiggle like '\u233f' (05, 05b). It has no label, and it is the only door on Home for joining a friend's project. The other door is 'Join\u2026' at the very bottom of Settings.",
+     "why_it_fails_a_first_timer": "A guest who has just been sent an invite has no idea this squiggle means 'Join a live project'. Every other Home icon is a drawn SVG, so this one also looks broken. It also sits 8px from the wordmark.",
+     "evidence": "05-home-labs-on.png, 05b-home-join-glyph-zoom.png. Measured: font Arial 13.33px, rect 38x38 at x=157.7, brand right edge 149.7. js/collab-ui.js:3965-3977 (b.textContent = '\u2387').",
+     "suggested_fix": "Draw a proper icon (e.g. a person+arrow or 'enter' mark) as SVG like its neighbours, or make it a labelled pill ('Join'). Show him options at 24px first.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "A project he once shared stays a live room with no sign on Home, and re-arms itself when opened",
+     "severity": "major",
+     "what_happens": "The owner opened another project while sharing, which pauses the room but keeps it. Back on Home, the shared project's card has no badge or subtitle at all ('Untitled \u00b7 edited just now', 82). Opening it later starts sharing again by itself: relays and link come back, with the toast 'Sharing is on again \u2014 people can reconnect' (83).",
+     "why_it_fails_a_first_timer": "Nothing on Home says this project is still shared. Opening it silently makes it reachable again with the old link and code, which a first-timer would not expect and did not choose.",
+     "evidence": "82-owner-home-after-switch.png, 83-owner-back-on-shared-project.png. js/home.js:1260-1270 (collabOf only marks a CURRENT owner session or a guest copy; a kept host room is invisible); js/collab-ui.js:3740-3752 (resumeHost auto-arms).",
+     "suggested_fix": "Badge a paused room on Home ('SHARED \u00b7 paused'). Either ask on open ('Start sharing again?') or at least put a 'Stop sharing' item in that card's \u22ef menu.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Turning Labs off mid-session ends it for everyone with no warning, and nobody is told when someone leaves",
+     "severity": "major",
+     "what_happens": "The guest flipped 'Live collaboration' off in Settings mid-session: no confirmation, silently left, and no toast saying they had left (58, 59). Their Home now shows two identical 'Untitled' cards with nothing to tell them apart (61). The owner flipped it off while live: no confirmation, and the session ended for the guest at once (62). When the guest dropped, the owner's chip just vanished with no 'Sam left' (60). The switch's hint says nothing about ending live sessions.",
+     "why_it_fails_a_first_timer": "A 'preview' switch deep in Settings reads as a harmless display option. Flipping it kicks everyone out without a word, and the other side just sees a face disappear.",
+     "evidence": "58-guest-turns-labs-off-mid-session.png, 59-guest-after-labs-off.png, 60-owner-when-guest-labs-off.png, 61-guest-home-labs-off.png, 62-owner-turns-labs-off-while-live.png. js/collab-ui.js U.syncLabs (C.leave / C.end with no ask); js/settings.js:980-984 (switchRow toggles immediately). No 'left' toast exists in js/collab-ui.js or js/collab-presence.js (only 'joined' / 'is back').",
+     "suggested_fix": "When a session is live, confirm first ('This ends your live session with Sam'). Toast 'Sam left' on the owner's side and 'You left Ezra's project' on the guest's.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "The guest's Home card never says the session ended or is disconnected",
+     "severity": "minor",
+     "what_happens": "After the owner stopped sharing, or after the owner's device went away, the guest's copy still reads 'SHARED \u00b7 Shared by Ezra' with nothing after it (46, 52, 67). The \u22ef menu still offers 'Keep as my own copy' / 'Leave & delete'. An ended copy is also detached only on a later fresh open.",
+     "why_it_fails_a_first_timer": "The card looks exactly like one they could open and keep collaborating in.",
+     "evidence": "46-guest-home-after-reopen.png, 52-guest-home-after-owner-gone.png, 67-guest-home-after-reopening-ended.png. js/home.js:1308 (cx.ended ? '' \u2014 ended adds no words; seen stamp absent for a code guest).",
+     "suggested_fix": "Subtitle 'Shared by Ezra \u00b7 ended' or '\u00b7 not connected' and dim the SHARED badge.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Plain 'Delete\u2026' on a live project doesn't mention the people in it; the shared copy has two deletes",
+     "severity": "minor",
+     "what_happens": "On the owner's LIVE \u00b7 1 card, Delete\u2026 asks only 'Delete \"Untitled\"? This cannot be undone.' Confirming it silently ends the session for the guest (71, 72). On the guest's shared copy the menu shows both 'Leave & delete' and a separate 'Delete\u2026' with the generic wording (74).",
+     "why_it_fails_a_first_timer": "The owner isn't warned that deleting cuts off the person working in it, and two delete entries on one card is confusing.",
+     "evidence": "71-owner-delete-live-project-ask.png, 72-owner-after-deleting-live-project.png, 74-guest-plain-delete-on-live-shared-copy.png. js/home.js:1432-1435.",
+     "suggested_fix": "On a live card, say 'Sam is working in this now \u2014 deleting ends the session for everyone'. On a shared copy, drop the plain Delete\u2026 and keep 'Leave & delete'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "'Earlier versions\u2026' is on every project card but only ever has content for shared ones",
+     "severity": "minor",
+     "what_happens": "With Labs on, every card's \u22ef shows 'Earlier versions\u2026'. On a project that was never shared it always says 'No save points yet \u2014 they are made while you share this project.' (12).",
+     "why_it_fails_a_first_timer": "'Earlier versions' sounds like general version history. Someone who wrecked a normal project would try it and find nothing.",
+     "evidence": "06-home-card-menu.png, 12-earlier-versions-unshared.png. js/home.js:1366-1367.",
+     "suggested_fix": "Show it only when the project has save points, or rename it 'Save points from sharing\u2026'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "The LIVE \u00b7 1 badge overlaps the duration pill on the owner's Home card",
+     "severity": "minor",
+     "what_happens": "On the thumbnail, the red 'LIVE \u00b7 1' sits on top of '0:00'. Measured: duration pill right edge 67px, LIVE left edge 60px, so 7px of overlap (36b).",
+     "why_it_fails_a_first_timer": "It looks broken ('0:00LIVE \u00b7 1').",
+     "evidence": "36-owner-home-while-live.png, 36b-live-badge-zoom.png. styles.css:5054-5055 (.hm-live bottom:5px right:5px, same row as .hm-dur).",
+     "suggested_fix": "Move the owner's LIVE badge to the top-right, or stack it above the duration as the SHARED badge already does (styles.css:5058).",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Knock card doesn't say which project, and its two-minute auto-decline is invisible",
+     "severity": "minor",
+     "what_happens": "On Home the card reads 'Jordan wants to join as Viewer.' with no project name (40). It declines itself after 2 minutes with no countdown or hint.",
+     "why_it_fails_a_first_timer": "Someone with several projects, or who shared one and went Home, can't tell which project is being asked about, and a request can vanish while they read.",
+     "evidence": "39-owner-knock-card-editor.png, 40-owner-knock-card-on-home.png. js/collab-ui.js:3288 (text), 3303-3309 (silent 120 s timeout).",
+     "suggested_fix": "'Jordan wants to join \u201cUntitled\u201d as Viewer', plus a small 'asks again in 2 min' line or a shrinking bar.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Jargon in the Labs section, Test connection and the profile prompt",
+     "severity": "minor",
+     "what_happens": "The switch hint names 'relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare's address lookup' (8 lines at 390px) (03). 'Connect with codes only' assumes the reader knows what a relay is. Test connection answers '3.1 MB/s between two connections here, messages up to 256 KB', then a raw report (SDP bytes, maxMessageSize, user-agent) (55, 56). The name prompt says 'beside your cursor' on a phone (07). 'Show others' pointers' says 'mouse pointer'.",
+     "why_it_fails_a_first_timer": "None of it answers the question a first-timer has ('will this work with my friend?'), and the provider names read as scary.",
+     "evidence": "03-settings-bottom-labs-off.png, 55-labs-test-connection-result.png, 56-labs-test-connection-report.png, 07-join-tap-first-profile.png. js/settings.js:974-982; js/collab-ui.js:189.",
+     "suggested_fix": "Lead with one plain line ('Lets you and friends edit the same project from your own phones'), and move the provider list behind a 'Privacy details' link. Test result: 'Works on this phone \u2713 / Invite links: work / don't work here'. 'Beside your cursor' becomes 'next to what you're doing'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "'View only \u2014 ask for edit access' has no way to ask",
+     "severity": "minor",
+     "what_happens": "A Viewer gets a permanent banner 'View only \u2014 ask for edit access' (35). It has no button, and the guest panel has no 'Ask for edit access' action anywhere.",
+     "why_it_fails_a_first_timer": "The app tells them to do something it gives them no way to do.",
+     "evidence": "35-guest-view-only-banner.png. js/collab-ui.js:3454; grep for any request-edit action in js/collab-*.js finds none.",
+     "suggested_fix": "Add an 'Ask' action on the banner that knocks the owner ('Sam asks for edit access \u00b7 Allow / Not now'), or reword it to 'View only \u2014 Ezra can change this'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "After Stop sharing the owner's panel says 'Not shared yet', and the toast covers the card",
+     "severity": "minor",
+     "what_happens": "Straight after Stop sharing, the Friends block heads 'Share \u201cUntitled\u201d \u2014 Not shared yet', and the 'Sharing stopped' toast is painted over the card's own text (43). The guest panel on an ended copy still says 'You're an Editor.' (66), and the offline owner row still offers Follow (51).",
+     "why_it_fails_a_first_timer": "Small contradictions about what state they are in.",
+     "evidence": "43-owner-after-stop.png, 66-guest-person-plus-on-ended-copy.png, 51-guest-panel-while-offline.png. js/collab-ui.js:401-402 (stateLine 'Not shared yet' for any no-session state).",
+     "suggested_fix": "Say 'Not sharing' after a stop. Drop the role line on an ended copy, and hide Follow for an offline person.",
+     "needs_his_design_pick": false
+    }
+   ]
+  },
+  {
+   "journey": "J5 \u2014 the WORDS: every string a first-time phone user can read in live collaboration, judged for jargon, length on a 390px screen, inconsistent names, and promises the screen doesn't keep. Also checked whether anything explains the feature in 2\u20133 steps.",
+   "walked": "All runs were in the real app (v17.05, localhost:8777) at 390x844 with a notch and touch emulation, using my own CDP driver (scratchpad/a967/j5-words/drive.py). All screenshots are under /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/a967/j5-words/.\n1. Fresh device, Home (01-home-fresh.png). No word about collaboration anywhere.\n2. Home cog \u2192 Settings, scrolled to the switch (02-settings-labs-off.png). Settings has no heading called \"Labs\". The switch is labelled \"Live collaboration (preview)\" and is row 22 of 28 on Home, after the developer diagnostics. Its hint is 9 lines long.\n3. Flipped it through the real switch (03-settings-labs-on-top.png, 04-settings-labs-on-bottom.png). Five more rows appear, including \"Join a live project\", \"Test connection\" and \"Connect with codes only\".\n4. Home with the feature on (05-home-labs-on.png). The only new thing is a \u2387 glyph button beside the logo, with no words.\n5. In a project with the feature off (10-editor-labs-off.png). Cog \u2192 Canvas settings shows a \"Friends / Share it live with friends\" bar (11-canvas-dialog-labs-off.png). Opening it gives \"Work on this with friends\" (12-friends-labs-off.png).\n6. Turned it on inside that card (14-friends-idle-after-on.png). The switch disappears and the idle \"Share \u201cUntitled\u201d\" panel takes its place.\n7. Pressed the person+ on the stage (20-editor-labs-on.png, 21-personplus-opens.png), then Start sharing. The name prompt appeared (22-profile-prompt.png). Typed Ezra and got the live Share panel (23-share-live-top.png, 25-share-live-bottom.png). Relays are refused on localhost, so the relay line reads \"Couldn\u2019t reach the free connection service\"; that part is a localhost artefact, not a bug.\n8. Opened the \u2699 Sharing settings (26-sharing-settings-top.png, 27-\u2026mid, 28-\u2026bottom), then Earlier versions (29-earlier-versions.png). Opened Connect with a code instead (30-code-step-top.png, 31-code-step-bottom.png). Opened the Stop sharing confirm (32-stop-sharing-ask.png).\n9. Fresh device, Home \u2387 \u2192 name prompt (40-join-profile-first.png) \u2192 Join sheet (41-join-sheet.png). Typed a short code and pressed Join (42-join-shortcode-result.png).\n10. A real two-device join with no relay, in two separate headless Chromes, using the long connection-code exchange:\n   - The owner's Step 1 code went to the guest's Join sheet. The guest was told \"READ THIS BACK TO THEM\" above a 201-character code (50-guest-read-this-back.png).\n   - The owner pasted it back and got Step 3 (51-owner-step3-letters.png). The guest saw \"READ THESE LETTERS BACK TO THEM\" (52-guest-letters.png).\n   - Both sides pressed They match. The guest landed in the editor with only an \"E\" chip showing (53-guest-after-join.png). The owner saw only an \"S\" chip (55-owner-editor-live.png).\n   - Guest panel (56-guest-panel.png) and the Leave confirm (57-guest-leave-ask.png).\n11. Invite link with the feature off, on a non-iOS phone (63-invite-link-labs-off-android.png) \u2192 Turn on \u2192 name (64-invite-after-turn-on.png) \u2192 Join filled in (65-invite-join-prefilled.png). Also the iOS landing card (60-invite-link-ios-landing\u2026 saved as 60-invite-link-labs-off.png and 62-invite-link-ios-landing.png).\n12. The knock card, drawn in a live session by calling FM.collab.ui.knock directly rather than by a real guest (70-knock-card.png).\n13. From a project, Canvas settings \u2192 App settings\u2026 and measured the Settings scroll (80-appsettings-from-project-top.png). The switch is 3979px down a 4889px panel, 5.3 screens, row 25, with no Labs heading.\n14. Pulled every string literal (comments stripped) from collab-ui.js, collab-comments.js, collab-presence.js, collab-media.js, the Labs block in settings.js and index.html (ui-strings.txt in the same folder), and counted words in the longest ones.\nI did not run Test connection, because it may try outside lookups; its wording is judged from the code.",
+   "works": [
+    "The knock card is short and plain: 'Sam (phone) wants to join as Editor.' with Don\u2019t allow / Let in (70-knock-card.png). Keep it.",
+    "The invite LINK with the feature off is the best-worded flow in the feature. 'Turn on Live collaboration to join' \u2192 one tap Turn on \u2192 name \u2192 Join filled in with 'Tap Join to connect to this project.' (63/64/65 screenshots). This is the pattern the short-code route is missing.",
+    "The connection-code exchange numbers its steps: 'Step 1 \u00b7 send them this code', 'Step 2 \u00b7 paste the code they send back', 'Step 3 \u00b7 check\u2026' (30, 51). Numbered steps are the right shape; only the other person's half is unexplained.",
+    "The failure sentences are human and actionable, e.g. 'Couldn\u2019t connect directly. Put both devices on the same Wi-Fi, or turn off mobile data.' and 'This project is full \u2014 ask Ezra to make room.' (relayError, collab-ui.js:3219-3241). They also name the person where they can.",
+    "The Stop sharing confirm and the Leave confirm bodies are short and honest about what happens to each person's copy (32, 57).",
+    "'The short code stops working 30 minutes after you close this.' is clear and true (23-share-live-top.png).",
+    "The name prompt 'What should others see?' is short and has only one field (22-profile-prompt.png).",
+    "The Friends bar state line is a good one-glance status: '\u25cf Live \u00b7 waiting for someone' / '1 person here' / 'Not shared yet \u00b7 invite people'.",
+    "The phone-host toast 'Keep FreeMotion open \u2014 the session pauses when your screen locks' says the one thing a phone host has to know (collab-ui.js:1044)."
+   ],
+   "findings": [
+    {
+     "title": "The app says 'Settings \u2192 Labs' in four places, but Settings has no Labs. The off switch is 5 screens down under another name, and the card that turned it on stops showing a switch.",
+     "severity": "major",
+     "what_happens": "The Friends card says 'you can turn it off again in Settings \u2192 Labs'. The invite cards say 'turn it on in Settings \u2192 Labs' and '(Settings \u2192 Labs)', and a Join error says 'Codes only is on in Settings \u2192 Labs'. Settings has no Labs heading anywhere. The real switch is labelled 'Live collaboration (preview)': row 22 of 28 from Home, and row 25 at 3979px of a 4889px panel (5.3 screens) when opened from a project, below six developer diagnostics ('Your last scrub', 'Your last Back from an effects category', 'A clip with no picture'\u2026). Once it is turned on in the Friends card, the card redraws as 'Share \u201cUntitled\u201d' with no switch, so the place where you turned it on is not where you turn it off.",
+     "why_it_fails_a_first_timer": "This is exactly Ezra's complaint: 'there's a switch to turn it on, but you can never turn it off on any project ever'. The words send you to a section that doesn't exist, and the switch you used has vanished.",
+     "evidence": "collab-ui.js:1110, 2975, 3828, 3849 (the four 'Settings \u2192 Labs' strings). settings.js:164 (group() has no title) and :979-987 (the switch row). Screens 02-settings-labs-off.png, 12-friends-labs-off.png, 14-friends-idle-after-on.png (no switch after turning on), 80-appsettings-from-project-top.png (measured: scrollH 4889, switch at 3979, 25 labels before it).",
+     "suggested_fix": "(1) Keep an off switch in the Friends card itself, e.g. a quiet footer row 'Work with friends \u00b7 On [switch]' with 'Switch this off any time.' (2) Either add a real 'Labs' heading above the group in Settings, or stop saying 'Labs' and name the real path, e.g. 'Settings \u2192 Work with friends (right at the bottom)'. (3) Rename the Settings row to the same name the card uses (see the naming finding).",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Nowhere explains what live collaboration is or how it works in 2\u20133 steps",
+     "severity": "major",
+     "what_happens": "The only 'what is it' sentence is in the off-state Friends card: 'Share this project live and edit it together from your own phones or computers.' It disappears once the feature is on. The idle panel then shows 'Share \u201cUntitled\u201d / Not shared yet / You \u2014 pick the name and colour others will see / Start sharing / Opening this never shares anything by itself. / New people join as Editor \u25be'. Nothing says what Start sharing gives you, or that you then send a link, or what your friend has to do. Home's Tutorials tab says 'Tutorials are coming'. The owner is never told the friend needs FreeMotion open, or where they type a short code.",
+     "why_it_fails_a_first_timer": "Someone who has never used it doesn't know the shape of the job (turn on \u2192 send link \u2192 friend taps it \u2192 you're both in), so every screen after that is a guess. Ezra asked for it to make sense 'for someone who doesn't know how to use it'.",
+     "evidence": "collab-ui.js:1110 (the only explainer, off-state only). collab-ui.js:1071-1098 (drawFriendsIdle: no how-to). home.js:2480 ('Tutorials are coming'). Screens 12-friends-labs-off.png, 14-friends-idle-after-on.png.",
+     "suggested_fix": "Put a three-line 'How it works' in the Friends card, both before and after it's switched on, e.g.: '1. Tap Start sharing  2. Send your mate the link  3. They tap it and you're both editing, live'. Under Start sharing: 'You'll get a link to send.' Replace 'Opening this never shares anything by itself.' with 'Nothing's shared until you tap Start sharing.' Show him drawn options for where the three steps sit.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "'Code' means two different things on one card, and the guest is told to 'read back' a 201-character code",
+     "severity": "major",
+     "what_happens": "On the live Share card, 'Invite with a link or a code' means the 9-character short code (6YT-BGG-SDZ). Six rows lower, 'Connect with a code instead' means a 233-character FM1-\u2026 block. Other names for these: 'short code', 'long code', 'connection code', 'Codes only', 'Add someone with a code', 'Having trouble? Connect with a code'. In the code swap, the guest's Join sheet says 'READ THIS BACK TO THEM' above a 201-character code. The developers already knew this was wrong: the comment at collab-ui.js:1246 bans 'read out' for this blob. The SAS step says 'check these LETTERS match' for 'G8C8J', which has digits, and 'They must see the same five' without saying five what.",
+     "why_it_fails_a_first_timer": "'Use the code' is ambiguous on the very card where they choose. The guest cannot read 201 characters aloud, so they either try to and fail, or don't know to copy and message it back.",
+     "evidence": "collab-ui.js:1363 ('Invite with a link or a code'), :1243 ('Connect with a code instead'), :2640 ('Read this back to them'), :2168 and :2951 (SAS labels), :2952. Screens 25-share-live-bottom.png (both 'codes' on one screen), 50-guest-read-this-back.png, 51-owner-step3-letters.png, 52-guest-letters.png.",
+     "suggested_fix": "Two different nouns. The 9-character one is always the 'short code'. Call the long one a 'swap code' (or 'backup code'), and never the bare word 'code'. Rewrites: 'Invite with a link or a code' \u2192 'Send your mates the link' plus a row 'Or tell them this short code (works for 30 min)'. 'Connect with a code instead' \u2192 'Link not working? Swap codes instead', with the sub 'You copy a long code to them, they copy one back.' 'Read this back to them' \u2192 'Now copy this and send it back to them' (the Copy button is already there). SAS: 'Step 3 \u00b7 Check you both see the same 5 characters' / 'Different? Tap They don't match \u2014 someone else might be trying to get in.'",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "A friend given a SHORT CODE has nowhere to type it: no Join button exists until they find the hidden switch, and the one that appears is an unlabelled \u2387",
+     "severity": "major",
+     "what_happens": "The owner's card offers a short code 'somebody read you', and the Join sheet says 'type the short code they read out'. But on a device with the feature off (every new device) there is no Join anywhere. The Home \u2387 button and the Settings 'Join a live project' row only exist once the switch is on, 5 screens down in Settings. The link route has a helpful 'Turn on Live collaboration to join' card; the short-code route has nothing. Even once it's on, Join is a lone '\u2387' glyph beside the logo, with no text. Its title tooltip never shows on touch, which is why the iOS landing card has to say 'On Home, tap \u2387 (Join a live project)'. The stage invite button (person+, 28px) also has no words.",
+     "why_it_fails_a_first_timer": "The person receiving a code by voice is by definition new to this. No screen tells them where to type it, and the one button that would take it is hidden and unnamed.",
+     "evidence": "collab-ui.js:3964-3977 (makeJoinButton: '\u2387', title only), :3955 (person+ title only), settings.js:917 ('set-labs hidden' when off), collab-ui.js:3828-3829 (landing-card steps that have to describe \u2387). Screens 01-home-fresh.png (no Join), 05-home-labs-on.png (the \u2387 glyph), 60-invite-link-labs-off.png, 20-editor-labs-on.png (unlabelled person+).",
+     "suggested_fix": "Give Home a worded 'Join' pill (like 'Select') that shows even with the feature off. Tapped while it's off, it shows the same one-tap 'Turn on to join' card the link route uses. Under the short code on the owner's card, add: 'They open FreeMotion, tap Join on Home, and type it in.' Rewrite the Join sheet line to 'Tap the link your mate sent, or type the short code they told you.' Show him options for the Join pill and the person+ label before shipping.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "Networking jargon everywhere, and a 68-word privacy paragraph repeated in four places",
+     "severity": "major",
+     "what_happens": "A first-timer reads: 'relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare\u2019s address lookup', 'when a room is in use', 'anyone watching those relays', 'No relay at all', 'No free relay at all', 'Starting the relay\u2026', 'Codes only skips them all' (on the switch, before 'Codes only' has been introduced), 'the free connection service(s)', 'this device\u2019s live connections', 'this network hides this device\u2019s address', 'somebody is in the middle', 'session', 'encrypted'. The privacy paragraph is 68 words / 390 characters, 8 lines at 390px. It appears in the off-state Friends card, at the bottom of the Share card and at the bottom of Sharing settings. A 57-word variant is the 9-line hint on the Settings switch itself.",
+     "why_it_fails_a_first_timer": "People who 'know no networking' can't tell whether it's safe or what to do. The one thing they must know (your project goes phone to phone; some free helpers see your internet address) is buried in five company names. The wall of text is also the tallest thing on the first card they meet.",
+     "evidence": "collab-ui.js:1564 (PRIVACY_LINE; word count measured 68), settings.js:982 (57 words, 9 lines in 02-settings-labs-off.png), collab-ui.js:1245, 1436, 1596, 1605, 1597, 2906, 2170, 2952; settings.js:926, 974. Screens 12-friends-labs-off.png, 25-share-live-bottom.png, 28-sharing-settings-bottom.png.",
+     "suggested_fix": "Show one short line, with the full, accurate version behind 'More about privacy'. For example: 'Your project goes straight from phone to phone, locked so only you lot can see it. To find each other, the phones use a few free helpers online \u2014 they see your internet address, never your project.' Settings hint: 'Edit the same project live with friends, each on your own phone. Still being tested.' 'Starting the relay\u2026' \u2192 'Getting your link ready\u2026'. 'Couldn\u2019t reach the free connection service \u2014 use Connect with a code below.' \u2192 'Your link can\u2019t get through on this network right now \u2014 try Swap codes instead, below.' 'Connect with codes only' \u2192 'Swap codes only (no online helpers)', with the hint 'Links and short codes stop working; you swap a long code with each person instead.' 'somebody is in the middle \u2014 stop' \u2192 'someone else might be trying to get in \u2014 tap They don't match.'",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "About a dozen different names for the one feature",
+     "severity": "major",
+     "what_happens": "Names a first-timer meets for the same thing: 'Live collaboration (preview)' (Settings), 'Live collaboration' (Friends switch and invite cards), 'Live sharing is still being tested', 'Friends' (the bar), 'Work on this with friends', 'Share it live with friends', 'Share \u201cUntitled\u201d', 'Share live\u2026' (Home \u22ef menu), 'Share' (person+ aria-label, plus 'tap Share \u2192' instructions), 'Join a live project', 'live session', 'Shared with you', 'Sharing settings', plus 'Labs', 'preview', 'Being tested'. The off-state card says 'being tested' three times.",
+     "why_it_fails_a_first_timer": "When the words change on every screen, a newcomer can't tell whether 'Friends', 'Live collaboration' and 'Share' are the same thing or three things, so they can't follow instructions that use one name to point at another.",
+     "evidence": "settings.js:980; collab-ui.js:1105, 1106, 1111, 1140, 1219, 2380, 2980, 3412, 3849, 3969, 3973; home.js:1357; index.html:1036. Screens 02, 11, 12, 14, 23, 56.",
+     "suggested_fix": "Pick one family and use it everywhere, e.g. the feature is 'Work with friends', the action is 'Share live' and the other side is 'Join'. Settings row: 'Work with friends (beta)'. Friends bar: 'Friends \u00b7 Not shared yet'. Card: 'Share \u201cUntitled\u201d live'. Home \u22ef: 'Share live\u2026'. Join: 'Join a friend\u2019s project'. Say 'still being tested' once. Drop 'session', 'preview' and 'Labs' from user-facing text.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Instructions tell people to 'tap Share', but on a phone nothing is labelled Share",
+     "severity": "major",
+     "what_happens": "When the short code or link fails, the Join sheet offers 'Connect with a code instead'. Tapping it says: 'Ask them to tap Share \u2192 Connect with a code instead, then paste the long code they send you here.' With swap-codes-only on, it says 'ask them to tap Share \u2192 Add someone with a code'. On a phone the owner's doors are an unlabelled person+ icon on the stage, or cog \u2192 Canvas settings \u2192 'Friends'. No visible 'Share' label exists, and the card's own heading only says 'Share \u201cUntitled\u201d' once you're already inside.",
+     "why_it_fails_a_first_timer": "This is the recovery path when the easy route fails, so it's read by someone already stuck, and it points at a button they can't find.",
+     "evidence": "collab-ui.js:3006, 2600 (the instructions), 3969 (aria-label 'Share' on an icon-only button), 3955. Screens 42-join-shortcode-result.png, 20-editor-labs-on.png.",
+     "suggested_fix": "Name the door as it looks: 'Ask them to tap the people button at the top-left of the video (or the cog \u2192 Friends), then Swap codes instead. Paste the long code they send you here.' Better still, give the person+ a word (see the Join/person+ finding).",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "The Share card and Sharing settings are 1.7 and 2.2 screens tall inside the card on a phone",
+     "severity": "minor",
+     "what_happens": "Live Share card: the body is 770px of content in a 463px window, so it scrolls inside the card. 'Comments \u2014 Leave a note about the edit for everyone \u2014 it never stops an export' sits above the invite before anyone has joined. Sharing settings: 1052px in 479px. Long hints include 'Their device makes the video, so this only asks it not to \u2014 it can\u2019t stop a screen recording, and their copy is on their device either way.' Earlier versions: a 50-word intro. Remove member: a 46-word confirm.",
+     "why_it_fails_a_first_timer": "The one thing they came for (send the link) is buried among settings and privacy text, and everything scrolls inside a card that is itself inside a dialog.",
+     "evidence": "Measured cs-body [770, 463] live, [1052, 479] settings. Screens 23-share-live-top.png, 25-share-live-bottom.png, 26/27/28-sharing-settings-*.png, 29-earlier-versions.png. collab-ui.js:1406, 1467, 552.",
+     "suggested_fix": "Put the send-the-link row at the top and move Comments below it (or hide it until someone has joined). One-line hints, with details behind a tap. 'Viewers and commenters can export' hint \u2192 'Asks their phone not to export \u2014 can\u2019t stop a screen recording.' Earlier versions intro \u2192 'Saved every 10 minutes while you share. Restoring makes a new project \u2014 nobody\u2019s copy is touched.' Draw options before moving rows.",
+     "needs_his_design_pick": true
+    },
+    {
+     "title": "The roles (Editor, Commenter, Viewer, Owner) and 'Follow' are never explained",
+     "severity": "minor",
+     "what_happens": "'New people join as Editor \u25be' opens a menu of three bare words: Editor / Commenter / Viewer. The guest panel says 'You\u2019re an Editor.' and shows a 'Follow' button beside the owner with no hint of what following does (it drives your playhead to theirs).",
+     "why_it_fails_a_first_timer": "A newcomer picking a role doesn't know that a Viewer can't change anything, or that Follow will start moving their timeline on its own.",
+     "evidence": "collab-ui.js:41 (ROLES), 1312-1326 (the menu has labels only), 2383 ('You\u2019re an Editor.'), 495 and 2337 ('Follow'). Screen 56-guest-panel.png.",
+     "suggested_fix": "Role menu: 'Editor \u2014 can change anything', 'Commenter \u2014 can leave notes only', 'Viewer \u2014 can only watch'. Follow \u2192 'Watch along', with the sub 'Your screen follows Ezra\u2019s'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Small lines that promise the wrong thing or read as noise",
+     "severity": "minor",
+     "what_happens": "(a) The name prompt says 'show up beside your cursor', but a phone has no cursor. (b) Stop sharing says 'The codes you have handed out stop working.' The invite LINK stops working too. (c) The guest's Leave confirm button is 'Keep my own copy', not Leave, so it reads like a different choice from the Leave just tapped. (d) 'Opening this never shares anything by itself.' is a developer reassurance that makes a newcomer wonder what does. (e) 'it never stops an export' / 'never gets in the way of an export' appears three times on Comments. (f) The Settings footer 'everything stays on this device' sits right under the switch that sends the project to other phones. (g) The SAS says 'letters' but shows digits too.",
+     "why_it_fails_a_first_timer": "Each one is small, but together they make the feature feel unfinished, which is Ezra's word, 'underbaked'.",
+     "evidence": "collab-ui.js:189, 1268, 2455, 2542, 1093, 960; collab-comments.js:417; settings.js:991; collab-ui.js:2168. Screens 22-profile-prompt.png, 32-stop-sharing-ask.png, 57-guest-leave-ask.png, 14-friends-idle-after-on.png, 04-settings-labs-on-bottom.png.",
+     "suggested_fix": "(a) 'Your name and colour show next to your taps on their screen.' (b) 'Everyone keeps their own copy. Your link and code stop working.' (c) ok: 'Leave (keep my copy)'. (d) 'Nothing\u2019s shared until you tap Start sharing.' (e) Drop the export clause: 'Leave a note for everyone about the edit.' (f) With the feature on, the footer says '\u00b7 projects only leave this phone when you share live'. (g) 'the same 5 characters'.",
+     "needs_his_design_pick": false
+    },
+    {
+     "title": "Once you're in, no words say you're live: a 3-second toast, then only a one-letter chip",
+     "severity": "minor",
+     "what_happens": "After They match, the guest's card closes and a 3-second toast says 'You\u2019re in \u2014 this copy stays in sync'. After that the only sign on either phone is a round 'E' or 'S' initial in the stage corner and a coloured playhead. No 'Live' label and no names show on the editor, and the chip's name is only in its aria-label ('Here: Ezra').",
+     "why_it_fails_a_first_timer": "A newcomer can't tell whether it worked, who is in, or that the letter is the button to see people and to Leave.",
+     "evidence": "collab-ui.js:3090, 3162 (3000ms toasts); collab-presence.js:1184 (aria-label only). Screens 53-guest-after-join.png, 55-owner-editor-live.png.",
+     "suggested_fix": "Show a short 'Live with Ezra' pill beside the faces chip for the first minute, or permanently on the Friends bar, and keep the 'You\u2019re in' message until first tap. Draw options first.",
+     "needs_his_design_pick": true
+    }
+   ]
+  }
+ ],
+ "plan": {
+  "summary_for_ezra": "The hard part works. Two phones really do connect and edit the same project live, both ways. What's broken is everything around it, and on a phone that's most of what you see:\n- The only way in is the cog, which says \"Canvas settings\".\n- The switch that turns sharing on disappears after one tap. The real off switch is at the very bottom of Settings, under test reports, and the app tells you to look in a \"Labs\" section that doesn't exist.\n- A project you shared once turns itself back on the next time the app opens.\n- Nothing on the video shows you're live.\n- Your friend has no Join button until they find that buried switch, and then it's a \u2387 squiggle.\n- Swapping codes gives your friend 20 seconds, so in real life it almost always fails.\n- The words talk about relays and PeerJS.\n\nThe plan:\n1. Fix the broken parts now. Nothing changes how it looks.\n2. Draw you options for the doors: an off switch next to the on switch, a worded Join on Home, and a Live marker.\n3. Show which projects are shared, and stop them sharing again by themselves.\n4. Plain words and one name for the feature.\n5. Comments you can find.\n\nThe invite link couldn't be tested here because it needs the online relays. It needs one real test from your phone once 1 and 2 are done.",
+  "root_causes": [
+   "R1. THE ON/OFF SWITCH HAS NO HOME NEAR THE FEATURE. The Friends block shows its switch only while sharing is OFF (drawLabsOff, collab-ui.js:1102-1120). Once it's on, drawFriendsIdle/drawShare have none. The real switch is the last group of App Settings (settings.js:907-988), below seven diagnostic Reports. group() has no title (settings.js:164), so no 'Labs' heading exists, yet four sentences send people to 'Settings \u2192 Labs' (collab-ui.js:1110, 2975, 3828, 3849). Settings is 4.2\u20135.6 screens down, and from the editor it hides behind a 0\u00d70 'App settings\u2026' once Friends is remembered big (app.js:7059-7066, 8184-8215). This is his 'switch to turn it on, but you can never turn it off'.",
+   "R2. 'OFF' MEANS THREE DIFFERENT THINGS, AND A SHARED ROOM SURVIVES TWO OF THEM. Stop sharing deletes fm.collab.host.<pid>. Opening another project only pauses it. Turning the Labs switch off drops only the ACTIVE session's room, and that is deliberate per S6 (collab-ui.js:4076-4082). A kept room re-arms itself whenever that project opens, including at cold launch behind Home (afterReset \u2192 resumeOpen \u2192 resumeHost, collab-ui.js:3715-3752). Home shows no badge for a paused room (home.js:1260-1270), and its \u22ef offers 'Share live\u2026' but never Stop (home.js:1356-1362). This is his 'can never turn it off on any project ever'.",
+   "R3. \u00a723's 'NO COLLAB DOM WHILE LABS IS OFF' MEANT EVERY DOOR APPEARS ONLY AFTER THE BURIED SWITCH IS ON, AND THE DOORS THAT DO APPEAR ARE WORDLESS. On the phone there is: the cog labelled 'Canvas settings'; a 28px person+ that looks pixel-identical whether you're live or not, and is display:none whenever a layer is selected (collab-ui.js:3916-3963, styles.css:10409); and a bare '\u2387' on Home (collab-ui.js:3965-3977) that doesn't exist at all with Labs off. The Friends block can only share, not join. Nothing on the stage says 'live' for owner or guest. This is his 'you can't even send it to your friends' / 'buried it all in a deeper setting'.",
+   "R4. THE NO-RELAY CODE ROUTE WAS BUILT FOR TWO PEOPLE SIDE BY SIDE. The guest's 20-second ICE_CONNECT race starts the moment their answer code appears, before the owner can possibly paste it (collab-ui.js:3179 \u2192 openedWithin 663-672, collab-core.js:50). The screen says 'Read this back to them' over a ~200-character code (2640). Step 3 'They match' lands under the pinned foot with no scroll, and a tap there hits Done (confirmSas 2164-2176). Code-joined guests never get liveness (setLiveness only on relay paths: 3084, 3578, 3593), so they sit on 'Live' after the owner's app dies. Any project switch drops them for good while the owner is told 'people can reconnect' (3751). This is also the route the app falls back to when relays fail.",
+   "R5. THE WORDS WERE WRITTEN FOR THE BUILDER, NOT A FIRST-TIMER. A 68-word paragraph naming PeerJS/EMQX/HiveMQ/Google/Cloudflare leads the first card and repeats four times (PRIVACY_LINE 1564, settings.js:982). 'Relay', 'session' and 'address lookup' appear in status lines. 'Code' means both a 9-character short code and a 233-character FM1 block on the same card. The feature has about a dozen names. Nothing explains it in three steps. Instructions name controls the phone doesn't have: 'tap Share' (3006, 2600), 'Settings \u2192 Labs', 'beside your cursor' (189).",
+   "R6. ENDINGS ARE SILENT OR HALF-SAID. There is no '<name> left' toast anywhere (owner link.onclose 2218). The Labs switch ends everything mid-session with no confirm (settings.js:984 \u2192 syncLabs). U.onDetach never re-syncs the banner, so a stale red 'Offline' sticks on the guest's own unshared project (3691-3707). The ended, removed and offline banners have no phone short form, so the reassuring half is cut off (3398-3400, 3441). The guest's Home card never says ended or not connected (home.js:1308)."
+  ],
+  "batches": [
+   {
+    "name": "1. Core loop, part 1: make it work and make 'off' mean off (no new looks)",
+    "goal": "Turn on \u2192 send \u2192 friend gets in \u2192 turn off works end to end between two phones, including the code route. 'Off' really ends every shared project, and nothing on screen points at a place that doesn't exist. Only logic, wording that is factually wrong, and existing components (ask dialog, existing Share\u2026 button style) are used, so it can ship while Batch 2's drawings are with him.",
+    "items": [
+     {
+      "fix": "Guest code route: stop starting the 20 s ICE_CONNECT clock the moment the answer code appears. Wait without that clock until the owner's side actually begins connecting (or an outer limit of about 10 minutes, with a Cancel). Only then race ICE_CONNECT. Status while waiting: 'Waiting for <owner> to paste your code\u2026'. On a timeout, remove the dead answer code and its Copy button, and say 'Your code timed out \u2014 ask <owner> for a fresh one' rather than blaming them. Measure before and after with two separate Chromes and a 3-minute gap between the guest's answer and the owner's paste. The U._connectWait seam exists; don't rely on it for the proof. Also confirm the guest's RTCPeerConnection does not go 'failed' on its own during that wait. Measure it; don't assume.",
+      "from_findings": "J2-1 (blocker, measured: 'They did not answer' at t+23 s), J2-7 (status part)",
+      "files": "js/collab-ui.js:663-672 (openedWithin), :3141-3200 (guestJoin), :3200+ joinError; js/collab-core.js:50 (ICE_CONNECT)",
+      "severity": "blocker"
+     },
+     {
+      "fix": "Owner's Step 3 has to be reachable. When 'Check these match' appears, scroll it into view above the pinned Stop sharing/Done foot. Hide the Connect button, or disable it and ignore a second tap, once Connect has been pressed, so there is only one blue button. Closing the block mid-check says 'Not let in \u2014 they'll need a fresh code' instead of silently abandoning the join.",
+      "from_findings": "J3-5 (measured hitAtYes = 'cs-done accent'), J2-15",
+      "files": "js/collab-ui.js:2164-2176 (confirmSas), :2076-2102 (drawCodeStep: status above Connect/Back), :2179-2225 (hostConnect)",
+      "severity": "major"
+     },
+     {
+      "fix": "The Labs switch becomes a real master off. When it goes off, drop EVERY fm.collab.host.* record and its outstanding offer, not only the active session's room. This reverses the deliberate S6 choice at collab-ui.js:4081 ('A room PAUSED \u2026 is kept'), because his words are 'can never turn it off on any project ever'. When a session is live or any room is kept, confirm first through the app's ask dialog and name what stops, e.g. 'This stops sharing \u201cUntitled\u201d for Sam'. A guest gets 'This leaves Ezra's project \u2014 your copy stays' and then a 'You left' message. Say the result on the Settings row itself, because the Settings scrim covers toasts. Check the ask dialog's z-index sits above .set-scrim.",
+      "from_findings": "J3-3, J3-7, J2-9, J4-8",
+      "files": "js/collab-ui.js:4054-4090 (U.syncLabs), js/settings.js:980-984 (switch toggle), js/ask.js",
+      "severity": "major"
+     },
+     {
+      "fix": "Stop sharing is reachable from Home. A project that is live or holds a paused room gets 'Stop sharing' in its \u22ef menu instead of 'Share live\u2026'. It drops the record without ever re-arming, with the same confirm as the Friends block. On a phone, 'Share live\u2026' opens the project and then U.openPeople (the Friends block, where only Start sharing arms), so it never arms by itself. That also removes the white light-theme name card over the dark editor.",
+      "from_findings": "J3-2 (Stop half), J3-8, J1-9",
+      "files": "js/home.js:1356-1362, js/collab-ui.js:1170-1180 (U.openPeople), :968-994 (U.share / armShare), :128-131 (collab-light decided at open)",
+      "severity": "major"
+     },
+     {
+      "fix": "No sharing again behind Home at cold launch. While Home is open at boot, don't resume a kept host room. Resume only when he actually opens that project. Whether reopening should ask first is Batch 3's question. Going Home DURING a live session stays live as today; that's a different case.",
+      "from_findings": "J3-2 (cold launch: LIVE before any tap, toast gone under the splash)",
+      "files": "js/collab-ui.js:3715-3752 (afterReset / resumeOpen / resumeHost), boot-to-Home path (#942)",
+      "severity": "major"
+     },
+     {
+      "fix": "Code-joined guests learn when the link dies. Call s.setLiveness(true) when a code join completes, so they get the Offline banner within about 6 s instead of sitting on '\u25cf Live' typing into nothing. Word the owner's resume toast by what is true. Say 'people can reconnect' only when the room has link or short-code members. Otherwise say 'Sharing is on again \u2014 anyone who joined with a code needs a new one'.",
+      "from_findings": "J3-6, J4-2 (toast half)",
+      "files": "js/collab-ui.js:3141-3160 (guestJoin done), :3751 (resume toast); js/collab-session.js:1388-1397 (setLiveness)",
+      "severity": "major"
+     },
+     {
+      "fix": "Say when someone leaves. The owner gets '<name> left' (or '<name>'s connection dropped') when a member's link closes, by Leave, by the switch or by a dropped link. The guest gets 'You left <owner>'s project \u2014 your copy is kept' on every way out: Leave, the switch, or opening another project.",
+      "from_findings": "J2-9, J4-8, J4-2",
+      "files": "js/collab-ui.js:2218 (owner link.onclose), relay-route member close path, C.leave callers; js/collab-presence.js:1270 (saidWhy already has the words)",
+      "severity": "major"
+     },
+     {
+      "fix": "Clear the stale red Offline banner. Call U.syncBanner() at the end of U.onDetach and on resumeOpen's plain-project path. Add a test: a guest opens their own non-shared project mid-session, and there is no #collab-banner.",
+      "from_findings": "J4-3 (measured: active false, collab null, banner still up 15 s later)",
+      "files": "js/collab-ui.js:3691-3707 (U.onDetach), :3724-3739 (U.resumeOpen)",
+      "severity": "major"
+     },
+     {
+      "fix": "Phone banners keep the reassuring half: short phone forms like the other states already have, e.g. 'Session ended \u00b7 your copy is kept', 'Removed \u00b7 your copy is kept', 'Offline \u00b7 changes kept'. On an ended copy the guest panel drops 'You're an Editor', and Follow is hidden for a person who is offline.",
+      "from_findings": "J2-11, J3-10 (banner part), J4-4, J4-16 (role/Follow part)",
+      "files": "js/collab-ui.js:3398-3400 (ended/removed), :3441 (offline), :2377-2420 (drawGuestPanel)",
+      "severity": "major"
+     },
+     {
+      "fix": "The name prompt finishes on Return: Enter presses Continue. If he backs out of the prompt that Start sharing raised, the block says 'Add a name to start sharing' rather than nothing. The idle row's colour dot matches the colour the prompt will pre-select.",
+      "from_findings": "J1-7",
+      "files": "js/collab-ui.js:179-235 (U.profile), :1077 (idle dot PALETTE[0]) vs :198 (random pick)",
+      "severity": "minor"
+     },
+     {
+      "fix": "Invites and codes are forgiving. 'Not now', and Cancel on the name prompt or the prefilled Join sheet, keep fm.pendingJoin for its normal 24 h and say 'Tap the link again when you're ready'. After Batch 2 the Home Join door offers it again. A pasted code is read from wherever 'FM1' starts inside the text, so 'Here is the code: FM1-\u2026' works, as links already do with '#'.",
+      "from_findings": "J2-13, J2-14",
+      "files": "js/collab-ui.js:3844-3858 (labsCard onclose), :3808-3811 (resumePendingJoin cancel), drawJoin fromPending onclose; js/collab-signal.js:110-115 (fromCode / isConnCode), :758 (classify)",
+      "severity": "minor"
+     },
+     {
+      "fix": "Fix the words that point at things that are not on screen. This is a facts-only pass; the full voice pass is Batch 4.\n- The four 'Settings \u2192 Labs' lines name the real row: 'Settings \u2192 Live collaboration (at the bottom)'. Batch 2 rewrites them again once the switch moves.\n- The Join sheet's 'Connect with a code instead' becomes plain text, not a button, naming the phone door: 'Ask them to tap the round person+ on their video \u2192 Start sharing \u2192 Connect with a code instead'. The same fix applies to the Codes-only line at :2600.\n- 'Read this back to them' becomes 'Copy this and send it back to <owner> \u2014 they paste it in Step 2'.\n- 'beside your cursor' becomes 'next to what you're doing on their screen'.\n- The Settings Join hint becomes 'Paste the link or code they sent you, or type the short code'.",
+      "from_findings": "J1-2, J2-3, J2-7, J2-10, J2-12, J5-1, J5-3 (read-back part), J5-7, J1-7 (cursor), J4-14 (cursor)",
+      "files": "js/collab-ui.js:1110, :2975, :3828, :3849, :3006, :2600, :2640, :189; js/settings.js:922",
+      "severity": "major"
+     },
+     {
+      "fix": "Send the long code in one tap. Add a Share\u2026 button (navigator.share with the code as text) beside Copy code on both the owner's Step 1 code and the guest's answer code. It's the same button the invite block already has beside Copy link, so there is no new visual. Give Join and Connect a visible disabled state while they wait, reusing the existing .btn:disabled dimming. .fm-ask-ok has no :disabled rule today.",
+      "from_findings": "J1-13 (code half), J2-7 (disabled-blue part)",
+      "files": "js/collab-ui.js:2081-2083, :2640-2642, :2650 (cj-go); styles.css (add .fm-ask-ok:disabled / .cs-connect:disabled)",
+      "severity": "minor"
+     }
+    ],
+    "needs_his_design_pick": false,
+    "design_questions": []
+   },
+   {
+    "name": "2. Core loop, part 2: doors and switches he can see",
+    "goal": "A first-timer on a phone can see how to share, how to join, whether they are live, and how to turn it all off, all without Settings. Draw these as options first, rendered through the app at 390px, 24px for icons, and send the sheet before anything ships.",
+    "items": [
+     {
+      "fix": "Put an off switch where the on switch was. The Friends block keeps a 'Live sharing' on/off row in EVERY state: idle, live Share panel, guest panel, linked copy, and the gear's Sharing settings. The Labs-off card then says 'turn it off here any time' instead of pointing elsewhere. Turning it off from there goes through Batch 1's confirm.",
+      "from_findings": "J3-1 (blocker), J1-2, J4-1, J5-1",
+      "files": "js/collab-ui.js:1065-1120 (drawFriendsIdle / drawLabsOff), :1182-1250 (drawShare), :1430 (Sharing settings), :2377 (drawGuestPanel), :2518 (drawLinkedPanel)",
+      "severity": "blocker"
+     },
+     {
+      "fix": "Settings: move the Live collaboration group up out from under the diagnostics and give it a heading that uses the feature's one name (Batch 4). Fold the seven diagnostic Reports ('Your last scrub', 'A clip with no picture', \u2026) into one collapsed row at the bottom. From the editor, keep an 'App settings\u2026' way in visible while Friends is the big card.",
+      "from_findings": "J1-2, J2-2, J2-3, J4-1, J5-1, J3-9",
+      "files": "js/settings.js:164 (group has no title), :907-988 (Labs group placed last); js/app.js:7059-7066, :8184-8215 (App settings\u2026 0\u00d70 when Friends is big)",
+      "severity": "major"
+     },
+     {
+      "fix": "A share door on the phone editor that is always there. The stage person+ shows even with Labs off and opens the existing Labs-off explanation and switch. It stays reachable while a layer is selected, and gets a 44px tap area around its drawn size. This relaxes COLLAB-DESIGN \u00a723 from 'no collab DOM with Labs off' to 'one door, no network, no listeners', which the Friends bar he picked already does. Update the suite's \u00a723 check to match rather than deleting it.",
+      "from_findings": "J1-1, J1-10, J1-11",
+      "files": "js/collab-ui.js:3916-3963 (shareHost / makeShareButton), :3998-4054 (install / syncLabs); styles.css:10385, :10409-10415, :10533; COLLAB-DESIGN.md \u00a723",
+      "severity": "major"
+     },
+     {
+      "fix": "A worded Join door on Home, always, replacing \u2387. With Labs off it opens the existing one-tap 'Turn on \u2026 to join' card, then the Join sheet, and offers a kept pending invite if there is one. The iPhone landing card's step names it. Also add a 'Got an invite? Join with a link or code' row to the Friends block, both idle and Labs-off.",
+      "from_findings": "J2-2, J2-4, J2-6, J4-6, J5-4, J1-5 (\u2387 part)",
+      "files": "js/collab-ui.js:3965-3977 (makeJoinButton), :3817-3840 (landingCard steps), :1065-1120; js/home.js Home top bar",
+      "severity": "major"
+     },
+     {
+      "fix": "Make the live state visible on the stage. While he is sharing, the owner's chip carries a Live marker even with nobody in yet, so it no longer looks the same as not sharing. A guest sees who owns the project and that it's live, e.g. 'Live \u00b7 Ezra', and a tap opens the guest panel with Leave. 'You're in' stays until the first tap instead of vanishing after 3 s.",
+      "from_findings": "J1-3, J3-4, J2-8, J5-11",
+      "files": "js/collab-ui.js:3927-3963 (the invite button IS the chip at rest), :3090, :3162 (3 s toasts); js/collab-presence.js:1184 (name only in aria-label); styles.css:10385-10415",
+      "severity": "major"
+     },
+     {
+      "fix": "The friend's first screen on iPhone. When this Safari has never been used for FreeMotion (no projects, no profile), lead with 'Join now', with 'Add FreeMotion to your Home Screen' as an optional after-step. Show 'open your installed app' first only for a browser that looks like a returning user.",
+      "from_findings": "J1-5, J2-5",
+      "files": "js/collab-ui.js:3800 (landing always first on iOS), :3817-3840 (landingCard copy and button order)",
+      "severity": "major"
+     },
+     {
+      "fix": "Explain it in three steps where it's used. Add 'How it works' at the top of the Friends block, before and after it's turned on, e.g. '1 Tap Start sharing \u00b7 2 Send your friend the link \u00b7 3 They tap it and you're both editing'. Under Start sharing: 'You'll get a link, a QR and a short code to send.' Under the short code, say what the friend does: 'They open FreeMotion, tap Join, and type it in.'",
+      "from_findings": "J5-2, J1-8, J5-4 (owner half)",
+      "files": "js/collab-ui.js:1065-1120 (drawFriendsIdle / drawLabsOff), :1363 (inviteBlock)",
+      "severity": "major"
+     },
+     {
+      "fix": "Change the Share panel order so the job comes first. Put the invite block directly under the people list and move Comments below it. Put the 'Keep FreeMotion open \u2014 it pauses when your screen locks' line inside the panel instead of as a toast over the short code. When the relays are unreachable on a real network, make the code swap the lit button and stop Copy link claiming success.",
+      "from_findings": "J1-6, J1-12, J1-13 (order half), J5-8",
+      "files": "js/collab-ui.js:1182-1250 (drawShare: commentsRow at :1234 before the invite block), :1044 (afterArm toast), :1593-1625 (relay line / Copy link)",
+      "severity": "minor"
+     },
+     {
+      "fix": "Once Batches 1 and 2 are on his phone, verify the easy route on real devices. Nobody here could test the invite link and short code, because localhost refuses the public relays by design. One check only he can do: Settings \u2192 Test connection on the phone, then send himself an invite link from phone to PC and join. Say plainly that this route is unverified until then.",
+      "from_findings": "environment note in J1, J2, J5 (relay route judged from code only)",
+      "files": "js/collab-signal.js (relays, relayGate), js/collab-ui.js testConnection",
+      "severity": "major"
+     }
+    ],
+    "needs_his_design_pick": true,
+    "design_questions": [
+     "Where does the off switch live once sharing is on? A) A quiet 'Live sharing \u00b7 On' switch row at the foot of the Friends block, in every state. RECOMMENDED: it sits exactly where he turned it on. B) Only inside the gear's Sharing settings. C) Only in Settings, moved near the top.",
+     "The phone editor's always-there share door. A) The round person+ on the video's top-left corner, always shown and grown to a 44px tap area. RECOMMENDED: the phone top bar is already full (measured: the name field was cut to 'U..' when a share button went there, and the notes/cog gap is signed off, #189). B) A 'Share live with a friend' row at the top of the Export sheet (\u2191). C) Both.",
+     "Is it OK to show one sharing door while the feature is off? \u00a723 promised no collaboration buttons at all with it off. RECOMMENDED: yes, one button that only opens the explanation and switch, with no network and no listeners, the same as the Friends bar he already picked.",
+     "The Home Join door. A) A 'Join' word pill like 'Select'. RECOMMENDED: a word needs no learning. B) A drawn icon (person with an arrow going in) at 24px. C) Inside the + menu as 'Join a friend's project'.",
+     "How the video shows you're live. A) A small red '\u25cf Live' pill beside the person chip for the owner, and 'Live \u00b7 Ezra' for a guest. RECOMMENDED. B) A coloured ring around the chip. C) Nothing on the video; only the Friends bar and Home badge.",
+     "Settings layout. A) Live collaboration moves up with its own heading, and the seven diagnostic Reports fold into one collapsed 'Reports' row at the bottom. RECOMMENDED. B) Leave it at the bottom and only add a heading.",
+     "Friend opening an invite in iPhone Safari. A) A fresh Safari gets 'Join now' first, and 'open your app' comes first only when this Safari was used before. RECOMMENDED. B) Keep app-first for everyone.",
+     "Where 'How it works' sits. A) Three numbered lines at the top of the Friends block, before and after turning on. RECOMMENDED. B) A one-time explainer card the first time Friends opens.",
+     "With a layer selected. A) The stage person chip stays visible. RECOMMENDED. B) Add 'Friends' to the layer \u22ef menu instead."
+    ]
+   },
+   {
+    "name": "3. Which projects are shared, and nothing turns itself back on",
+    "goal": "From Home he can see every project that is live, paused-but-shared, ended or disconnected. A project never becomes reachable again without him choosing it, and switching projects never silently cuts a friend off.",
+    "items": [
+     {
+      "fix": "Home shows every shared state:\n- A paused room gets a badge (e.g. 'SHARED \u00b7 paused').\n- A guest's copy says '\u00b7 ended' or '\u00b7 not connected' with a dimmed badge.\n- The owner's 'LIVE \u00b7 1' badge no longer sits on top of the duration pill (7px overlap measured).",
+      "from_findings": "J3-2, J4-7, J4-9, J4-12",
+      "files": "js/home.js:1260-1280 (collabOf / liveBadge: a kept room is invisible), :1308 (ended adds no words); styles.css:5051-5058 (.hm-dur / .hm-live)",
+      "severity": "major"
+     },
+     {
+      "fix": "Reopening a project he shared before follows his pick below: ask first, or resume as today. Today it re-arms by itself on the old link and code with a 2.6 s toast.",
+      "from_findings": "J3-2, J4-7",
+      "files": "js/collab-ui.js:3724-3752 (resumeOpen / resumeHost)",
+      "severity": "major"
+     },
+     {
+      "fix": "Warn before a project switch cuts someone off. While live with anyone who joined by code (they cannot come back on their own), opening another project asks first: 'Sam joined with a code \u2014 opening another project ends it for them; they'll need a new code'. This applies on both the owner's and the guest's side.",
+      "from_findings": "J4-2",
+      "files": "js/storage.js:2518 (onReset on every open), js/collab-core.js:340-348 (stop('paused') + detach), js/home.js openProject",
+      "severity": "major"
+     },
+     {
+      "fix": "Delete on a live card says who is in it ('Sam is working in this now \u2014 deleting ends it for everyone'). A guest's shared copy has one delete, 'Leave & delete', not a second generic Delete\u2026.",
+      "from_findings": "J4-10",
+      "files": "js/home.js:1432-1435",
+      "severity": "minor"
+     },
+     {
+      "fix": "Show 'Earlier versions\u2026' only when the project has save points, or rename it so it doesn't read as general version history.",
+      "from_findings": "J4-11",
+      "files": "js/home.js:1366-1367",
+      "severity": "minor"
+     },
+     {
+      "fix": "The knock card names the project ('Jordan wants to join \u201cUntitled\u201d as Viewer') and shows its two-minute limit (a line or a shrinking bar) instead of declining silently.",
+      "from_findings": "J4-13",
+      "files": "js/collab-ui.js:3288, :3303-3309",
+      "severity": "minor"
+     }
+    ],
+    "needs_his_design_pick": true,
+    "design_questions": [
+     "Reopening a project you shared before. A) Ask 'Carry on sharing \u201cX\u201d?' with [Share again] and [Not now], where Not now stops it and kills the old link. RECOMMENDED: nothing goes live without him choosing. B) Keep today's automatic resume with a toast. C) Never resume; always Start sharing fresh, which kills old links.",
+     "A paused shared project on Home. A) A grey 'SHARED \u00b7 paused' badge where LIVE sits. RECOMMENDED. B) Nothing on the card, only 'Stop sharing' in its \u22ef menu.",
+     "The owner's LIVE badge. A) Stack it above the duration, the way the guest's SHARED badge already sits. RECOMMENDED. B) Move it to the thumbnail's top-right.",
+     "Before opening another project while live with someone who joined by code. A) Ask first. RECOMMENDED. B) Just go, and say it in a toast afterwards."
+    ]
+   },
+   {
+    "name": "4. Plain words and one name",
+    "goal": "Every sentence a first-timer reads uses one name for the feature, two clearly different names for the two codes, no networking jargon up front, and nothing that promises what the screen doesn't do. The privacy facts stay complete but go behind a tap. This batch changes words, not layout: show him a before/after words sheet and let him pick the names.",
+    "items": [
+     {
+      "fix": "Use one name family everywhere: Settings row, Friends bar, card titles, Home \u22ef, Join, banners, aria-labels. Say 'still being tested' once, and drop 'session', 'preview' and 'Labs' from user-facing text.",
+      "from_findings": "J5-6",
+      "files": "js/collab-ui.js:1105-1111, :1140, :1219, :2380, :2980, :3412, :3849, :3969, :3973; js/settings.js:980; js/home.js:1357; index.html:1036",
+      "severity": "major"
+     },
+     {
+      "fix": "Use two nouns for the two codes. The 9-character one is always the 'short code', and the long FM1 block gets its own name. Rewrites:\n- 'Invite with a link or a code' \u2192 'Send your friend the link'.\n- 'Connect with a code instead / No relay at all' \u2192 'Link not working? Swap codes instead', with sub-line 'You copy a long code to them, they copy one back'.\n- The check says 'the same 5 characters', not 'letters', and explains 'They don't match'.",
+      "from_findings": "J5-3, J1-4, J5-10(g)",
+      "files": "js/collab-ui.js:1243-1249, :1363, :2168-2170, :2951-2952",
+      "severity": "major"
+     },
+     {
+      "fix": "Privacy goes to one plain sentence first, e.g. 'Your project goes straight from phone to phone, encrypted. A few free online helpers let the phones find each other \u2014 they see your internet address, never your project.' Put the full list behind 'What gets sent? \u203a', keeping every service named, per the S6 review rule at collab-ui.js:1560-1564. Show it once per screen, not four times. The Settings switch hint becomes one line.",
+      "from_findings": "J1-4, J5-5, J2-12, J4-14",
+      "files": "js/collab-ui.js:1564 (PRIVACY_LINE) and its uses at :1112, :1249, :1436; js/settings.js:974-982",
+      "severity": "major"
+     },
+     {
+      "fix": "Take relay jargon out of status lines and Test connection. 'Starting the relay\u2026' \u2192 'Getting your link ready\u2026'. 'Couldn't reach the free connection service' \u2192 'Your link can't get through on this network \u2014 swap codes instead, below'. Test connection answers in plain yes/no ('Links work on this network \u2713'), with the numbers left in the copyable report. 'Connect with codes only' is explained in one line.",
+      "from_findings": "J1-4, J5-5, J4-14",
+      "files": "js/collab-ui.js:1593-1605 (relayLine), testConnection lines; js/settings.js:926, :972-974",
+      "severity": "minor"
+     },
+     {
+      "fix": "Explain roles and Follow where they are picked. For example: 'Editor \u2014 can change anything', 'Commenter \u2014 can leave notes only', 'Viewer \u2014 can only watch'. Follow gets a sub-line saying your screen follows theirs.",
+      "from_findings": "J5-9",
+      "files": "js/collab-ui.js:41 (ROLES), :1312-1326 (role menu), :495, :2337 (Follow), :2383",
+      "severity": "minor"
+     },
+     {
+      "fix": "Fix the small lines that promise the wrong thing:\n- 'Opening this never shares anything by itself.' \u2192 'Nothing's shared until you tap Start sharing.'\n- After a stop, 'Not shared yet' \u2192 'Not sharing'.\n- Stop sharing says the LINK stops working too.\n- The guest's Leave confirm button reads 'Leave (keep my copy)'.\n- Drop 'it never stops an export' from Comments.\n- The Settings footer stops saying 'everything stays on this device' under a switch that sends projects to other phones.\n- 'View only \u2014 ask for edit access' \u2192 'View only \u2014 <owner> can change this', until Batch 5 adds a real Ask.\n- Remove the doubled 'You' in the idle row.",
+      "from_findings": "J1-8, J3-10, J4-15 (wording), J4-16, J5-10",
+      "files": "js/collab-ui.js:401-406, :1080, :1093, :1268, :2455, :2542, :960, :3454; js/collab-comments.js:417; js/settings.js:991",
+      "severity": "minor"
+     }
+    ],
+    "needs_his_design_pick": true,
+    "design_questions": [
+     "The feature's one name. A) 'Work with friends' for the feature, 'Share live' for the action and 'Join' for the other side. RECOMMENDED: it matches the Friends bar he already picked. B) Keep 'Live collaboration'.",
+     "The long code's name. A) 'swap code'. RECOMMENDED: it says what you do with it. B) 'backup code'. C) 'long code'.",
+     "Follow's name. A) 'Watch along'. RECOMMENDED. B) Keep 'Follow'.",
+     "Privacy text. A) One plain sentence, with 'What gets sent? \u203a' opening the full list of every service by name. RECOMMENDED: the facts stay complete and stop being the tallest thing on the first card. B) Keep the full paragraph visible."
+    ]
+   },
+   {
+    "name": "5. Comments you can find, and asking for edit access",
+    "goal": "Comments are reachable from the phone editor without going through Canvas settings. A new comment is noticed, and a Viewer told to 'ask for edit access' has a way to ask.",
+    "items": [
+     {
+      "fix": "Give comments their own door on the phone, with an unread count. Toast or badge '<name> commented' when one arrives. Keep a Comments row in the idle and linked-copy panels whenever the project has comments, so they are not stranded after Stop sharing.",
+      "from_findings": "J4-5",
+      "files": "js/collab-ui.js:947-960 (commentsRow), :1065 (drawFriendsIdle has none), :2518 (drawLinkedPanel has none); js/collab-comments.js:192-197 (only toasts your own actions)",
+      "severity": "major"
+     },
+     {
+      "fix": "Viewer's 'Ask for edit access' becomes an action that raises a knock-style card on the owner's phone ('Sam asks to edit \u00b7 Allow / Not now').",
+      "from_findings": "J4-15",
+      "files": "js/collab-ui.js:3454 (banner), :3280-3310 (knock card path)",
+      "severity": "minor"
+     }
+    ],
+    "needs_his_design_pick": true,
+    "design_questions": [
+     "Where comments live on the phone. A) A speech-bubble button next to the people chip, shown only while the project has comments or is live, with a count. RECOMMENDED. B) A Comments row inside the Friends bar.",
+     "A Viewer asking for edit. A) An 'Ask' button on the View-only banner that pops a card on the owner's phone. RECOMMENDED. B) Wording only ('Ezra can change this')."
+    ]
+   }
+  ],
+  "keep_as_is": [
+   "The connection-code mechanism itself: offer \u2192 answer \u2192 5-character check \u2192 '\u25cf Live \u00b7 1 person here'. It was proven between two separate Chromes three times (J1, J2, J4). Fix only its clock, labels and Step 3 placement.",
+   "The 5-character check (SAS) as a gate the owner must pass. It is a security control documented at collab-ui.js:2152-2162. Reword it; don't weaken it.",
+   "Stop sharing: pinned in the Friends foot, a plain honest confirm ('Everyone here keeps their own copy\u2026'), and it really deletes the host record so reopening and reloading don't re-arm (J3 s6).",
+   "The Friends bar showing with Labs off, with its explanation and one-tap switch in Canvas settings. This is the right shape and was his pick (#945). Only the missing off switch needs adding.",
+   "Opening the Friends block never arms. Only Start sharing does, and the cog remembers Friends.",
+   "Copy link really copies and toasts, QR draws cleanly, and Copy link, Share\u2026, QR and the short code fit on one 390px screen.",
+   "The Android and Chrome invite-link flow with Labs off: #j= stripped at once, 'Turn on Live collaboration to join' \u2192 name \u2192 Join sheet prefilled with one tap left. It's the best-worded flow; copy its pattern for the Home Join door.",
+   "Live sync both ways in about 2 s, with the other person's selection outline and playhead in their colour.",
+   "The guest panel ('Shared with you \u00b7 Live \u00b7 You're an Editor', Follow, Comments, Leave/Done), the Leave confirm, and 'You left \u2014 this is now your own copy'.",
+   "Home badges while live: 'LIVE \u00b7 n' on the owner's card (move it off the duration only), and SHARED plus 'Shared by Ezra \u00b7 live now' on a guest's copy. The guest's \u22ef correctly swaps in 'Keep as my own copy' / 'Leave & delete'.",
+   "The role menu (Editor/Commenter/Viewer/Follow/Remove\u2026) and its device-to-device effect: 'Ezra made you a Viewer' plus the banner. Remove's confirm and the link/code rotation.",
+   "The knock card: one sentence, the five characters, two big buttons, above everything in the editor and on Home.",
+   "Follow's banner with a working \u00d7.",
+   "Earlier versions \u2192 Restore: asks first, says the result inside the row, and the copy really appears on Home.",
+   "The not-connected panel's rejoin sentence for a code-joined copy, and the phone banner 'Shared by Ezra \u00b7 not connected'.",
+   "The failure sentences in relayError (e.g. 'Put both devices on the same Wi-Fi\u2026', 'This project is full \u2014 ask Ezra to make room.').",
+   "The code reader's tolerance for line wraps, lowercase and spaces.",
+   "The profile prompt: one field, 8 big swatches, asked once. Only add Enter and fix the wording.",
+   "Toasts lifted above collab cards (body.collab-card-open #toast).",
+   "The Settings stayRow pattern: Change\u2026, Join\u2026 and Test open over Settings and return to the same scroll position.",
+   "The complete privacy disclosure (every service by name, per the S6 review). Shorten how it's shown, not what it says."
+  ],
+  "dropped_as_not_real": [
+   "The red 'Couldn't reach the free connection service' line on every share panel and join attempt (J1, J2, J4, J5). This is a localhost artefact: on a loopback page relayGate() refuses real sockets by design unless the address carries ?fmrelay=1. On his phone it reads 'Waiting for people \u00b7 the link and the code are live'. Not a bug. The separate point that Copy link still claims 'Link copied' when a REAL network blocks the relays is kept (Batch 2, Share panel item).",
+   "J5-8's '1.7 screens tall' Share card measurement is inflated by that same localhost relay-failure line. The reorder (invite block first) is kept, but the number is not a real-phone measurement.",
+   "J3's 'freezing the owner page with setWebLifecycleState did not break the link'. It is inconclusive by its own account (headless Chrome can't emulate an iOS lock) and is not a finding. The kill case, which is real, carries the liveness fix.",
+   "J2-7's objection to 'Read these letters back to them' for the 5-character check. Reading five characters aloud is fine. Only the ~150\u2013230-character answer-code label ('Read this back to them', collab-ui.js:2640) is wrong, and that is kept in Batch 1.",
+   "J1-1's premise that \u2191 is 'the iPhone Share icon'. It is the Export icon (index.html:395) and correctly opens Export. The real defect, no always-visible share door, stands and is in Batch 2. A row in Export is offered only as an option.",
+   "Duplicates merged. The buried Labs switch / no off switch / 'Settings \u2192 Labs' (J1-2, J2-2, J2-3, J3-1, J4-1, J5-1) \u2192 Batch 2 items 1\u20132 plus Batch 1's text fix. The \u2387 glyph (J2-4, J4-6, J5-4) \u2192 Batch 2 Join door. Invisible live state (J1-3, J3-4, J2-8, J5-11) \u2192 Batch 2 live marker. Silent re-arm (J3-2, J4-7) \u2192 Batch 1 cold-launch item plus Batch 3. Labs off mid-session (J2-9, J3-7, J4-8) \u2192 Batch 1 master off. Truncated banners (J2-11, J3-10, J4-4) \u2192 Batch 1 phone short forms. 'cursor' on a phone (J1-7, J2-12, J4-14, J5-10a) \u2192 Batch 1 text fix. Home 'Share live\u2026' (J1-9, J3-8) \u2192 Batch 1 Home item. 'Not shared yet' after stop (J3-10, J4-16) \u2192 Batch 4.",
+   "Not dropped, but flagged: J3-3 ('Labs off keeps paused rooms') describes deliberate S6 behaviour (collab-ui.js:4081, 'A room PAUSED \u2026 is kept'). It is kept as a real defect because it contradicts his 'can never turn it off on any project ever'. The Batch 1 fix intentionally reverses that S6 choice and should say so in its log line."
+  ]
+ }
+}

@@ -130,7 +130,8 @@ window.FM = window.FM || {};
     /* S6 (§20 ping/pong, §21 liveness): off unless the link is a real one. A LoopLink or a PostLink in the
        suite never goes quiet by itself, and a guest ticked by hand in a test would read a long pause
        between two ticks as the host going silent. The UI turns it on for the links it makes. */
-    let liveness = false, lastHeard = now(), lastPing = 0, pingN = 0;
+    let liveness = false, lastHeard = now(), lastPing = 0, pingN = 0, lastTick = 0;
+    let quiet = null;                          // #967: the link this guest went Offline on by SILENCE and kept open
 
     /* ── hot set (§9) ────────────────────────────────────────────────────────────────────────── */
     let hotLast = Object.create(null);
@@ -583,7 +584,13 @@ window.FM = window.FM || {};
       /* Any byte from the host is proof it is there — `pres` every 2 s, `bulk` during a transfer — so the
          silence clock resets on every channel, BEFORE §8.9's queue can hold the message back: an export
          must not read as the host going quiet. */
-      if (!isOwner) lastHeard = now();
+      if (!isOwner) {
+        lastHeard = now();
+        /* #967: …and a guest that went Offline on silence alone, with its link still open, is back the moment the
+           owner says anything — a pong, a presence frame, a batch. setOnline says hello again, which gets the tail
+           (or the snapshot) of whatever it missed, exactly as a reconnect does. */
+        if (quiet && quiet === link && link.open && !S.online) { quiet = null; S.setOnline(true); }
+      }
       /* §15.5's media bytes (S4). They carry no document and no ops, so they go straight to the media
          module — including while §8.9 has the document frozen, because the PARTS are inert records
          under `collab:` and only the APPLY has to wait (see collab-media.js `complete`). Holding the
@@ -1356,6 +1363,11 @@ window.FM = window.FM || {};
     /* ═══ LINKS AND LIFECYCLE ═══════════════════════════════════════════════════════════════════ */
 
     S.setLink = function (ep) {
+      /* #967: a link kept open through a silence (liveTick) is let go of the moment a reconnect brings a new one —
+         two open links to the same owner would each deliver his every message. */
+      const q = quiet;
+      quiet = null;
+      if (q && q !== ep) { q.onmessage = null; q.onclose = null; try { q.close('replaced'); } catch (e) {} }
       link = ep;
       lastHeard = now();
       if (!ep) return;
@@ -1363,7 +1375,7 @@ window.FM = window.FM || {};
       /* ⚠️ ONLY THE CURRENT LINK MAY SAY THE WIRE WENT (S6). A reconnect hands the session a NEW link while
          the old one may still be closing; its late `onclose` used to reach markOffline() and put a session
          that had just come back straight offline again, with the replacement link open and ignored. */
-      ep.onclose = function () { if (link === ep) markOffline(); };
+      ep.onclose = function () { if (link === ep) { if (quiet === ep) quiet = null; markOffline(); } };
       ep.onopen = function () { S.online = true; sendToHost(helloMsg()); };
     };
     S.hello = function (info) {
@@ -1389,11 +1401,32 @@ window.FM = window.FM || {};
        closes the link — which is what starts the reconnect. Without it a host whose phone locked leaves
        the data channel open-but-dead for the thirty-odd seconds ICE takes to call it failed, and the
        guest sits on "Live" typing into nothing. */
-    S.setLiveness = function (on) { liveness = !!on; lastHeard = now(); lastPing = 0; return liveness; };
+    S.setLiveness = function (on) { liveness = !!on; lastHeard = now(); lastPing = 0; lastTick = 0; return liveness; };
+    /* #967: SILENCE THAT IS THIS DEVICE'S OWN IS NOT THE OWNER GOING AWAY. A phone in the background runs no timers, and
+       an owner with nothing to say only speaks when pinged — so a guest who glanced at Messages for six seconds came
+       back, ticked once, found "nothing heard for 7 s" and closed a link that was fine (measured on a 7 s main-thread
+       stall with an owner answering every ping: offline, closedWhy 'silence'). A code-joined guest has no way back
+       from that but a fresh code. A gap between two ticks well over PING (the tick runs every 100-125 ms; a hidden
+       tab's is throttled to 1 s) means THIS device was paused: the clock starts again, a ping goes at once, and the
+       owner gets a whole OFFLINE_AFTER to answer it. A dead owner is still found — six seconds after that. */
+    /* #967 round 2: BEING TOLD IS NOT BEING CUT OFF. Six seconds of silence used to CLOSE the link — right for a dead
+       owner, and wrong for an owner whose phone was in Messages for ten seconds: measured with two Chromes and the
+       owner's SIGSTOPped, the friend went Offline at 6 s and stayed out for good after he came back (a code-joined
+       friend has no way back but a fresh code); v17.05, with no liveness on that route, rode the same pause out. Now
+       six seconds of silence says Offline (the banner, everyone greyed — the same markOffline as a closed link, so a
+       relay copy's reconnect starts as before) and KEEPS the link and keeps pinging; the first thing heard from the
+       owner brings it back (S.onMessage). Only a silence as long as LINK_GRACE — the same grace a 'failed' peer
+       connection gets in collab-link.js — closes it. */
+    function linkGrace() { return (C.link && C.link.grace) ? C.link.grace() : (LIM.LINK_GRACE || 120000); }
     function liveTick() {
-      if (!liveness || isOwner || !S.online || !link || !link.open) return;
+      if (!liveness || isOwner || !link || !link.open || (!S.online && quiet !== link)) { lastTick = 0; return; }
       const t = now();
-      if (t - lastHeard > LIM.OFFLINE_AFTER) { try { link.close('silence'); } catch (e) {} return; }
+      const gap = lastTick ? t - lastTick : 0;
+      lastTick = t;
+      if (gap > 2 * LIM.PING) { lastHeard = t; lastPing = t; sendToHost({ t: 'ping', n: ++pingN }); return; }
+      const silent = t - lastHeard;
+      if (silent > linkGrace()) { quiet = null; try { link.close('silence'); } catch (e) {} return; }
+      if (S.online && silent > LIM.OFFLINE_AFTER) { quiet = link; markOffline(); }
       if (t - lastPing >= LIM.PING) { lastPing = t; sendToHost({ t: 'ping', n: ++pingN }); }
     }
     /* The owner side: one endpoint per member. The mid is minted HERE and never taken from the peer —

@@ -1,0 +1,18 @@
+/* ═══ QUEUE 920 (26 Sep) — THE TOP-EDGE TAB: the one thing iOS 26 reads for the status-bar strip.
+   His words: *"when you're on the white mode … it's got a black bar at the top and like when you go in and out of
+   projects it's like changing constantly"*. iOS 26's WebKit colours the strip from the first plain background-color on
+   the FIXED element under the top centre of the viewport, 4px down, and only looks again when a fixed element is added
+   or removed; a full-screen one never replaces a colour already set. The why, the WebKit source and the measurement are
+   in js/statusbar.js, which creates this element and keeps --sb equal to the screen's top colour.
+   ⚠️ THE MASK MAKES IT PAINT NOTHING, in a way WebKit still reads. Measured in a real
+   WKWebView: mask-image and filter:opacity(0) are read; height:0 + overflow:hidden and clip-path are NOT (its hit-test
+   does not reach through a clip); opacity under 0.1 and visibility:hidden are skipped by rule.
+   ⚠️ 12px, not less: WebKit ignores a background on a box 10px thin or thinner. Full width: under 90% of the viewport
+   and WebKit skips it. Never full height, or it becomes a "viewport-sized" container that never replaces a colour.
+   ⚠️ z 214: above #home-screen (200), #app mid-push/pop (210), the push's + and toast (212/213); below the scrims (220+)
+   and the intro (10000). pointer-events:none so the top 12px of every screen still takes taps. */
+#fm-sb-tab {
+  position: fixed; top: 0; left: 0; right: 0; height: 12px; z-index: 214; pointer-events: none;
+  background-color: var(--sb, #161a21);
+  -webkit-mask-image: linear-gradient(transparent, transparent); mask-image: linear-gradient(transparent, transparent);
+}

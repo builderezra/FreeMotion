@@ -518,7 +518,7 @@ window.FM = window.FM || {};
       let st = (p && p.pr && p.pr.st === 'away') ? 'away' : 'here';
       if (silent > OFFLINE_AFTER) st = 'off';
       const ep = S.endpoint(mid);
-      if (!ep || ep.open === false) st = 'off';
+      if (!ep || ep.open === false || ep.down) st = 'off';           // #967: a 'failed' connection held for its grace
       list.push({ mid: mid, name: cleanName(m.name) || 'Someone', color: cleanColor(m.color) || GREY, role: m.role, st: st, ls: null, dup: 0 });
     });
     paletteFor(list);

@@ -196,7 +196,8 @@ window.FM = window.FM || {};
     /* S6: the wire going is also what STARTS the reconnect (§13.5) — the UI owns the relay and the
        schedule, so it is told first and the banner is drawn from what it decided. */
     onOffline: function () { if (C.ui && C.ui.onOffline) { try { C.ui.onOffline(); } catch (e) {} } syncCollabBanner(); },
-    onOnline: function () { syncCollabBanner(); },
+    /* #967: a guest back from a silence on the SAME link — the UI stands its reconnect down (collab-ui.js onOnline). */
+    onOnline: function () { if (C.ui && C.ui.onOnline) { try { C.ui.onOnline(); } catch (e) {} } syncCollabBanner(); },
     onWelcome: function () { if (C.ui && C.ui.onWelcome) { try { C.ui.onWelcome(); } catch (e) {} } syncCollabBanner(); },
     onDeny: function (why) { if (C.ui && C.ui.onDeny) { try { C.ui.onDeny(why); } catch (e) {} } syncCollabBanner(); },
     /* S7: a role change applies AT ONCE on this device — the gating classes (§16.3's UI courtesy), the

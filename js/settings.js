@@ -177,7 +177,8 @@ window.FM = window.FM || {};
     const sync = () => { const on = !!get(); sw.classList.toggle('on', on); sw.setAttribute('aria-checked', on ? 'true' : 'false'); };
     sw.setAttribute('aria-label', label);
     sw.appendChild(el('span', 'set-knob'));
-    sw.addEventListener('click', () => { toggle(); sync(); });
+    /* A press may be answered later (#967: turning Live collaboration off asks first) — the switch follows the answer. */
+    sw.addEventListener('click', () => { const r = toggle(); sync(); if (r && typeof r.then === 'function') r.then(sync, sync); });
     sync();
     row.appendChild(txt); row.appendChild(sw);
     return row;
@@ -919,7 +920,7 @@ window.FM = window.FM || {};
         me ? me.name : 'Not set yet — you are asked the first time you share or join',
         'Change…', () => ui.profile({ force: true }),
         (h) => { const p = ui.getProfile(); if (h && p && p.name) h.textContent = p.name; }));
-      kids.appendChild(stayRow('Join a live project', 'Paste an invite link, or type the short code somebody read you.', 'Join…', () => ui.join()));
+      kids.appendChild(stayRow('Join a live project', 'Paste the link or code they sent you, or type the short code.', 'Join…', () => ui.join()));   // #967: the long code is one of the three things a friend may have been sent
       /* S8 (§25.5): "Test connection". Not an actionRow — that shuts the panel, and the answer IS this row. Nothing
          is tried until the button is tapped (§23); the result is one sentence per question and the numbers behind
          them in the same copyable box the Reports use, kept as `fm.lastConnReport`. */
@@ -976,14 +977,28 @@ window.FM = window.FM || {};
          the others see of you. `apply()` is not needed: presence reads the setting on every draw. */
       kids.appendChild(toggleRow('Show others’ pointers', 'Their mouse pointer and their taps, in their colour.', 'collabCursors'));
       kids.appendChild(toggleRow('Show others’ selections', 'An outline in their colour around the layers they have selected, and a ring on those clips.', 'collabSelections'));
-      body.appendChild(group(
-        switchRow('Live collaboration (preview)',
+      /* #967: the master switch is a real OFF — it stops every project shared from this device (collab-ui.js syncLabs),
+         so turning it off while anything is shared asks first and names what stops, and the result is said HERE, on
+         the row, where he is looking. */
+      const said = el('div', 'set-hint set-labs-said hidden');
+      said.setAttribute('role', 'status');
+      const labsRow = switchRow('Live collaboration (preview)',
           /* S6 review: every third party by name — see collab-ui.js PRIVACY_LINE. */
           'Edit one project with people on other devices. Free public services — relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup — help the devices find each other. They see internet addresses and when a room is in use, never your project; then the devices talk directly, encrypted. Codes only skips them all.',
           () => !!state.collabLabs,
-          () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); }),
-        kids
-      ));
+          () => {
+            const flip = () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); };
+            if (!state.collabLabs || !ui.confirmLabsOff) { said.classList.add('hidden'); flip(); return null; }
+            return ui.confirmLabsOff().then(r => {
+              if (!r || !r.ok || !state.collabLabs) return;
+              flip();
+              said.textContent = r.said || '';
+              said.classList.toggle('hidden', !r.said);
+            });
+          });
+      const lt = labsRow.querySelector('.set-rowtext');
+      if (lt) lt.appendChild(said);
+      body.appendChild(group(labsRow, kids));
     }
 
     const foot = el('div', 'set-foot');

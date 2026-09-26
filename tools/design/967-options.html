@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>967 Collab Fixes</title>
+<!-- queue 967: batches 2-5 of the collab audit — the recommended looks drawn over the real app by 967-proto.js, and every question with its recommendation. -->
+<style>
+  :root { --bg: #0d131a; --card: #151e28; --line: #2a3a4b; --text: #eef3f8; --dim: #b4c1ce; --acc: #5cc8ef; --rec: #4fd18b; --warn: #ffcf47; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 30px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; }
+  .page { width: 900px; margin: 0 auto; padding: 44px 30px 60px; }
+  h1 { font-size: 50px; line-height: 1.1; margin: 0 0 16px; letter-spacing: -.5px; }
+  .sub { font-size: 29px; color: var(--dim); margin: 0 0 10px; }
+  .sub b { color: var(--text); }
+  .his { font-size: 27px; color: var(--warn); margin: 0 0 8px; }
+  h2 { font-size: 40px; line-height: 1.15; margin: 56px 0 10px; }
+  .opt { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 22px 20px 18px; margin: 20px 0; }
+  .opt.rec { border-color: var(--rec); box-shadow: 0 0 0 4px rgba(79, 209, 139, .2); }
+  .opt h3 { font-size: 38px; margin: 0 0 8px; }
+  .opt h3 .tag { font-size: 24px; font-weight: 800; color: #06231a; background: var(--rec); border-radius: 999px; padding: 4px 16px; vertical-align: 6px; margin-left: 8px; }
+  .opt p { margin: 0 0 16px; color: var(--dim); }
+  .opt p b { color: var(--text); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 6px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; border-radius: 12px; border: 2px solid var(--line); background: #000; }
+  figcaption { font-size: 26px; color: var(--dim); margin: 8px 2px 6px; line-height: 1.25; }
+  figcaption b { color: var(--text); }
+  .g4 figcaption { font-size: 22px; text-align: center; }
+  .q { background: var(--card); border: 2px solid var(--line); border-radius: 22px; padding: 20px 26px; margin: 16px 0; }
+  .q b { color: var(--text); }
+  .q .r { color: var(--rec); font-weight: 800; }
+  .q div { color: var(--dim); margin-top: 6px; }
+  .note { font-size: 27px; color: var(--dim); margin-top: 12px; }
+  @media (max-width: 700px) {
+    body { font-size: 16px; } .page { width: auto; padding: 22px 16px 36px; }
+    h1 { font-size: 26px; } .sub, .his, .note { font-size: 15px; } h2 { font-size: 21px; margin-top: 32px; }
+    .opt { padding: 14px; } .opt h3 { font-size: 20px; } .opt h3 .tag { font-size: 13px; padding: 2px 10px; }
+    figcaption { font-size: 14px; } .g4 figcaption { font-size: 12px; }
+  }
+  ol.qs { margin: 6px 0 0; padding-left: 38px; } ol.qs li { margin: 10px 0; color: var(--dim); } ol.qs b { color: var(--text); } ol.qs .r { color: var(--rec); font-weight: 800; }
+  .g4 { grid-template-columns: 1fr 1fr; }
+</style>
+</head>
+<body><div class="page">
+<h1>#967 — Work with friends, fixed properly</h1>
+<p class="his">You: “make sure it's all there and it's all working … and actually makes sense for someone who doesn't know how to use it”</p>
+<p class="sub">Six agents walked it on a phone. <b>The hard part works</b> — two phones really do connect and edit together. What's broken is everything around it. <b>Batch 1 is being built now</b> (no looks change): the code swap no longer dies after 20 seconds, “off” really turns off every project, Stop sharing is on Home's ⋯, nothing turns itself back on when the app opens, and it says when someone leaves.</p>
+<p class="sub">The rest changes how things look, so here are the pictures and the questions. <b>Reply “do recommended”</b>, or pick per line.</p>
+<h2>The recommended looks</h2>
+<div class="g2"><figure><img src="967/r1-friends.jpg" alt=""><figcaption><b>1.</b> How it works + a switch that stays</figcaption></figure><figure><img src="967/r2-owner.jpg" alt=""><figcaption><b>2.</b> You, sharing: ● LIVE on the video</figcaption></figure><figure><img src="967/r3-guest.jpg" alt=""><figcaption><b>3.</b> Your friend: ● Live · Ezra</figcaption></figure><figure><img src="967/r4-home.jpg" alt=""><figcaption><b>4.</b> A “Join” button on Home</figcaption></figure></div>
+<h2>Doors and switches you can see</h2><ol class="qs"><li><b>Where the off switch lives once it's on.</b> <span class=r>A — a “Work with friends” switch at the bottom of the Friends block, always</span> (picture 1). B — only in the block's settings. C — only in Settings, moved up.</li><li><b>The share door on the video.</b> <span class=r>A — the round person+ on the video's corner, always there, even before it's turned on</span> (it opens the switch). B — somewhere else.</li><li><b>OK to show that one door while the feature is off?.</b> <span class=r>Yes</span> — it only opens the explanation and switch; nothing connects.</li><li><b>The Join door on Home.</b> <span class=r>A — a “Join” word button next to Select</span> (picture 4). B — an icon. C — in the + menu.</li><li><b>How the video shows you're live.</b> <span class=r>A — a red ● LIVE pill for you, “● Live · Ezra” for your friend</span> (pictures 2 and 3). B — a coloured ring. C — nothing on the video.</li><li><b>Settings.</b> <span class=r>A — Work with friends moves up with its own heading; the seven test reports fold into one row at the bottom.</span> B — leave it at the bottom.</li><li><b>Friend opening your link in iPhone Safari.</b> <span class=r>A — “Join now” first; “add to Home Screen” is an optional step after.</span> B — keep app-first.</li><li><b>Where “How it works” sits.</b> <span class=r>A — three numbered lines at the top of the Friends block</span> (picture 1). B — a one-time explainer card.</li><li><b>With a layer selected.</b> <span class=r>A — the person chip on the video stays visible.</span> B — put Friends in the layer ⋯ menu instead.</li></ol>
+<h2>Which projects are shared</h2><ol class="qs"><li><b>Reopening a project you shared before.</b> <span class=r>A — it asks “Carry on sharing?” [Share again] [Not now]; nothing goes live without you choosing.</span> B — resume by itself with a toast. C — never resume.</li><li><b>A paused shared project on Home.</b> <span class=r>A — a grey “SHARED · paused” badge.</span> B — nothing on the card, only Stop sharing in its ⋯.</li><li><b>The LIVE badge on Home.</b> <span class=r>A — stacked above the length, off the time pill.</span> B — the thumbnail's top-right.</li><li><b>Opening another project while a friend who joined by code is in.</b> <span class=r>A — ask first (they'd need a new code).</span> B — just go, toast after.</li></ol>
+<h2>Plain words, one name</h2><ol class="qs"><li><b>The feature's one name.</b> <span class=r>A — “Work with friends” for the feature, “Share live” for the button, “Join” for your friend.</span> B — keep “Live collaboration”.</li><li><b>The long code's name (the fallback when the link won't go).</b> <span class=r>A — “swap code”.</span> B — “backup code”. C — “long code”.</li><li><b>Follow's name.</b> <span class=r>A — “Watch along”.</span> B — keep “Follow”.</li><li><b>The privacy paragraph.</b> <span class=r>A — one plain sentence, with “What gets sent? ›” opening the full list.</span> B — keep the full paragraph showing.</li></ol>
+<h2>Comments you can find</h2><ol class="qs"><li><b>Comments on the phone.</b> <span class=r>A — a speech-bubble button next to the person chip, with a count, only when there are comments or you're live.</span> B — a row in the Friends block.</li><li><b>A Viewer asking to edit.</b> <span class=r>A — an “Ask” button on their banner that pops a card on your phone.</span> B — just words.</li></ol>
+<p class="note">One thing only your phone can test: the invite link itself (this Mac can't reach the online helpers the link uses). Once batches 1 and 2 are on your phone, I'll ask you to send a link to a second phone once.</p>
+</div></body></html>

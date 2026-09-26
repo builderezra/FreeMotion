@@ -37706,7 +37706,7 @@
     });
   });
 
-  test('921 S6 six seconds with nothing from the owner closes the guest’s link — which starts the reconnect — while a guest that hears its pongs stays on', { item: '921', budgetMs: 30000 }, async function () {
+  test('921 S6 six seconds with nothing from the owner takes the guest Offline — which starts the reconnect — while a guest that hears its pongs stays on; the link is kept, the first word from the owner brings it back, and only a silence as long as the grace closes it', { item: '921', budgetMs: 30000 }, async function () {
     const C = need921S6('liveness');
     const inv = C.bridge.invariants();
     let t = 5000000;
@@ -37734,10 +37734,27 @@
     if (!loop.b.open || G.online === false) throw new Error('a guest whose pings are answered went offline after 8 s');
     /* Now the owner goes quiet: nothing is delivered. */
     t += 3000; G.tick('hot');
-    if (!loop.b.open) throw new Error('the link closed after 3 s of silence — §21 says six');
+    if (!loop.b.open || G.online === false) throw new Error('the guest gave up after 3 s of silence — §21 says six');
     t += 3500; G.tick('hot');
-    if (loop.b.open) throw new Error('6.5 s with nothing from the owner and the link is still open — the guest would sit on "Live" typing into nothing for the thirty-odd seconds ICE takes to call it failed');
-    if (G.online !== false || GA.offlineN !== 1) throw new Error('the link closed but the session was not marked offline (online ' + G.online + ', onOffline ×' + GA.offlineN + ') — the reconnect hangs off exactly that');
+    if (G.online !== false || GA.offlineN !== 1) throw new Error('6.5 s with nothing from the owner and the session is not marked offline (online ' + G.online + ', onOffline ×' + GA.offlineN + ') — the guest would sit on "Live" typing into nothing for the thirty-odd seconds ICE takes to call it failed, and the reconnect hangs off exactly that');
+    /* #967 round 2: BEING TOLD IS NOT BEING CUT OFF. The link is kept — the owner may only have his phone in Messages —
+       and pinged; the first word from him brings the guest back on it. Measured with two Chromes: an owner SIGSTOPped
+       for 10 s lost a code-joined friend for good when this closed the link. */
+    if (!loop.b.open) throw new Error('6.5 s of silence CLOSED the link — an owner in Messages for ten seconds comes back to a friend he can never reach again (#967 round 2)');
+    const pingsOff = sent.filter(function (x) { return x === 'ping'; }).length;
+    t += 2100; G.tick('hot');
+    if (sent.filter(function (x) { return x === 'ping'; }).length === pingsOff) throw new Error('an Offline guest stopped pinging — nothing would ever tell it the owner is back');
+    const hellosOff = sent.filter(function (x) { return x === 'hello'; }).length;
+    loop.settle();
+    if (G.online !== true || GA.onlineN !== 1) throw new Error('the owner answered and the guest still reads Offline (online ' + G.online + ', onOnline ×' + GA.onlineN + ')');
+    if (sent.filter(function (x) { return x === 'hello'; }).length !== hellosOff + 1) throw new Error('back online without a hello — the owner never sends what it missed');
+    /* …and an owner who is really gone: a silence as long as the grace closes it. */
+    const gr = (C.link.grace ? C.link.grace() : 120000);
+    let quietFor = 0;
+    while (loop.b.open && quietFor < gr + 5000) { t += 1000; quietFor += 1000; G.tick('hot'); }
+    if (loop.b.open) throw new Error('a silence of ' + quietFor + ' ms and the link is still open — a dead owner is never let go of');
+    if (quietFor < gr - 1000) throw new Error('the silent link was closed after ' + quietFor + ' ms — before the grace (' + gr + ' ms)');
+    if (G.online !== false) throw new Error('the silent link closed and the session reads online');
     /* …and a frame on ANY channel counts as the owner being there: presence every 2 s, no pongs at all. */
     const loop2 = C.link.LoopLink({ aTag: 'h', bTag: 'g2', mode: 'manual' });
     const mid2 = HS.addPeer(loop2.a, { role: 'editor', name: 'G2', color: '#ff9f43' });
@@ -38183,7 +38200,10 @@
     });
   });
 
-  test('921 S6 review: the iPhone landing card says how to reach Join in the app — Labs first, then the ⎇ button', { item: '921', budgetMs: 60000 }, async function () {
+  /* #967 CHANGED THIS TEST'S WORDING, ON PURPOSE: it pinned "Settings → Labs", and Settings has no Labs heading — the row is
+     "Live collaboration (preview)", at the bottom (audit J2-3 / J5-1). His words: "you can't even send it to your friends …
+     make sure it … actually makes sense for someone who doesn't know how to use it". The step now names the real row. */
+  test('921 S6 review: the iPhone landing card says how to reach Join in the app — the Live collaboration row in Settings first (#967: not “Settings → Labs”, which does not exist), then the ⎇ button', { item: '921', budgetMs: 60000 }, async function () {
     const C = need921S6('the landing card’s steps');
     const S = C.signal;
     await withLabs921(async function (ui) {
@@ -38193,7 +38213,8 @@
         ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1', maxTouchPoints: 5 }, standalone: false });
         await ui.resumePendingJoin();
         const steps = Array.prototype.map.call(document.querySelectorAll('#collab-landing .cl-steps li'), function (li) { return li.textContent; }).join(' | ');
-        if (!/Settings → Labs/.test(steps) || !/Live collaboration/.test(steps)) throw new Error('the steps never say to turn on Live collaboration — with it off (the default) the app has no Join anywhere: ' + steps);
+        if (!/Settings → Live collaboration/.test(steps)) throw new Error('the steps never say to turn on Live collaboration, by the name the row really has — with it off (the default) the app has no Join anywhere: ' + steps);
+        if (/Settings → Labs/.test(steps)) throw new Error('the steps send him to “Settings → Labs”, which Settings does not have (#967): ' + steps);
         if (!/⎇/.test(steps)) throw new Error('the steps do not say what the Join button looks like: ' + steps);
       } finally {
         ui._iosProbe(null); ui.close();
@@ -41650,7 +41671,10 @@
     });
   });
 
-  test('921 S8r Home says what is shared: LIVE on the project he is hosting, SHARED on somebody else’s copy with their name — and a copy’s ⋯ offers keep or leave, never Duplicate, template or element', { item: '921', budgetMs: 120000 }, async function () {
+  /* #967 CHANGED THIS TEST, ON PURPOSE: it pinned "Share live…" in the ⋯ of the project he is LIVE on. His words: "there's a
+     switch to turn it on, but you can never turn it off on any project ever" — a live (or paused) project's ⋯ now offers Stop
+     sharing instead, and Share live… stays on projects that are not shared (audit J3-2, J3-8). */
+  test('921 S8r Home says what is shared: LIVE on the project he is hosting (whose ⋯ offers Stop sharing, #967), SHARED on somebody else’s copy with their name — and a copy’s ⋯ offers keep or leave, never Duplicate, template or element', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S8('Home while sharing');
     await withLabs921(async function () {
       await withCollab921([layer921('A')], async function (ctx) {
@@ -41688,7 +41712,7 @@
           ['Duplicate', 'Save as template…', 'Save as element…', 'Share live…'].forEach(function (n) { if (tl.indexOf(n) >= 0) throw new Error('a shared copy’s ⋯ offers “' + n + '” (' + JSON.stringify(tl) + ')'); });
           ['Keep as my own copy', 'Leave & delete'].forEach(function (n) { if (tl.indexOf(n) < 0) throw new Error('a shared copy’s ⋯ has no “' + n + '” (' + JSON.stringify(tl) + ')'); });
           const ml = labels(mine);
-          if (ml.indexOf('Share live…') < 0) throw new Error('his own project’s ⋯ has no “Share live…” (' + JSON.stringify(ml) + ')');
+          if (ml.indexOf('Stop sharing') < 0 || ml.indexOf('Share live…') >= 0) throw new Error('the ⋯ of the project he is live on offers ' + JSON.stringify(ml) + ' — it must offer Stop sharing, not Share live… (#967)');
           if (ml.indexOf('Duplicate') < 0) throw new Error('CONTROL: his own project lost Duplicate');
           /* …and a copy made of a shared copy is nobody's linked copy. */
           const before = FM.projects.list().map(function (p) { return p.id; });
@@ -101229,6 +101253,1538 @@
       });
     }
     if (misses.length) throw new Error('these buttons are still a typed ✕ (queue 965: one drawn ✕ for the app): ' + misses.join(', '));
+  });
+
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   * #967 BATCH 1 — THE CORE LOOP: turn on → send → friend gets in → turn off, and "off" means off.
+   * His words: "the like new friends joining or like Collab feature … it's extremely extremely underbaked … you can't even
+   * send it to your friends like there's a switch to turn it on, but you can never turn it off on any project ever … make
+   * sure it's all there and it's all working and all good and actually makes sense for someone who doesn't know how to use
+   * it … It's simple". The audit is tools/design/plans/2026-09-26-collab-audit/audit.json; each test below names the
+   * finding it proves and FAILS on the code as it was at v17.05.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  function toast967() { return toasts921(); }
+  /* The link grace (collab-link.js, "'FAILED' IS NOT FINAL"): two real minutes in the app, set short here. Asked for
+     with a guard, so a build without the seam fails on the behaviour the test is about rather than on a TypeError. */
+  function grace967(C, ms) {
+    if (C.link && typeof C.link._grace === 'function') C.link._grace(ms);
+    return C.link && typeof C.link.grace === 'function' ? C.link.grace() : null;
+  }
+  function askUp967() { const a = document.getElementById('fm-ask'); return !!a && !a.classList.contains('hidden'); }
+  function hostKeys967() {
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('fm.collab.host.') === 0) out.push(k); }
+    return out;
+  }
+  /* A guest's linked copy and a guest session on it — the fixture the S3 Labs-off test uses, with a name on the owner. */
+  function guest967(C, o) {
+    const oo = o || {};
+    const D = { project: { name: 'Ezra’s film 967', width: 320, height: 240, fps: 30, duration: 3 }, layers: [layer921('Shared 967')] };
+    const gpid = FM.projects.createLinked(Object.assign({ sid: 's-967', sk: 'k-967', hostName: 'Ezra', hostColor: '#a3e635', role: 'editor', epoch: 1, seq: 0 }, oo.meta || {}), D);
+    if (!gpid) throw new Error('setup: the linked fixture project could not be created');
+    const G = C.Session({ adapter: C.bridge, role: oo.role || 'editor', mid: 'g', base: jclone921(D), epoch: 1 });
+    G.gpid = gpid; G.pid = gpid;
+    return { gpid: gpid, D: D, G: G };
+  }
+  async function dropFixture967(C, ids) {
+    try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+    C._undoHandover(false);
+    for (let i = 0; i < ids.length; i++) { try { await FM.projects.remove(ids[i]); } catch (e) {} }
+  }
+
+  test('967 1 a guest who joins with a code waits for the owner to paste it — no 20-second clock before their side starts, the peer connection does not fail on its own, and a late paste connects', { item: '967', budgetMs: 150000 }, async function () {
+    /* J2-1 (blocker): "They did not answer" at t+20 s, measured with two Chromes. Here with two REAL peer connections in the
+       page and no seam at all: the guest's answer sits for 23 s — past ICE_CONNECT — and must still be waiting, and the
+       owner's paste after that must still connect. */
+    const C = need921S3('the guest’s wait for the owner');
+    await withLabs921(async function (ui) {
+      const made = [];
+      const realLink = C.link.RtcLink;
+      C.link.RtcLink = function (o) { const l = realLink(o); made.push(l); return l; };
+      let h = null;
+      try {
+        h = realLink({ self: 'h', peer: 'g' });
+        const offer = await h.createOffer();
+        await ui.join();
+        document.querySelector('#collab-join .cj-code').value = offer;
+        document.querySelector('#collab-join .cj-go').click();
+        const back = await until921S6('the guest’s answer code', function () {
+          const b = document.querySelector('#collab-join .cj-back');
+          return b && !b.classList.contains('hidden') && /^FM1-/.test(b.querySelector('.cs-code').textContent) ? b : null;
+        }, 15000);
+        const answer = back.querySelector('.cs-code').textContent;
+        const label = back.querySelector('.cs-steplabel').textContent;
+        const st = document.querySelector('#collab-join .cj-status');
+        const said0 = st.textContent;
+        const g = made[made.length - 1];
+        await sleep((C.LIMITS.ICE_CONNECT || 20000) + 3000);
+        /* The measurement first: has the guest given up before the owner could possibly have pasted? */
+        if (!document.getElementById('collab-join')) throw new Error('the Join sheet closed by itself while the guest waited');
+        if (/did not answer|timed out|Could not|dropped/i.test(st.textContent) || g.pc.signalingState === 'closed') throw new Error((C.LIMITS.ICE_CONNECT + 3000) / 1000 + ' s after the answer appeared the guest had given up: “' + st.textContent + '” — the 20 s ICE_CONNECT race started the moment the code appeared, before the owner could possibly paste it (J2-1)');
+        if (back.classList.contains('hidden')) throw new Error('the answer code went away while the guest was still waiting');
+        if (g.pc.connectionState === 'failed' || g.pc.iceConnectionState === 'failed') throw new Error('the guest’s peer connection gave up on its own during the wait (' + g.pc.connectionState + ' / ' + g.pc.iceConnectionState + ')');
+        /* …and what the sheet says while it waits (J2-7). */
+        if (!/Waiting for them to paste your code/.test(said0) || !/Waiting for them to paste your code/.test(st.textContent)) throw new Error('while the code waits to be pasted the sheet says “' + said0 + '” then “' + st.textContent + '” — it is waiting on a person, not connecting');
+        if (/read/i.test(label) || !/send it back/.test(label) || !/Step 2/.test(label)) throw new Error('the answer code is labelled “' + label + '” — a 180-character code is copied and sent back, and the owner pastes it in Step 2 (J2-7)');
+        /* The owner pastes it now. The guest's side starts, says so, and the channels open. */
+        await h.acceptAnswer(answer);
+        const hs = C.signal.handshake(h, { side: 'host', key: h.mk, sid: 'r967', info: { nm: 'Ezra', cl: '#a3e635' }, fpLocal: h.fpLocal, fpRemote: h.fpRemote });
+        await until921S6('the late paste to connect the guest', function () { return /Checking the code|let you in/.test(st.textContent) ? 1 : 0; }, 20000)
+          .catch(function () { throw new Error('the owner’s paste after the wait did not connect — the sheet says “' + st.textContent + '”'); });
+        await hs.catch(function () {});
+      } finally {
+        C.link.RtcLink = realLink;
+        try { ui.close(); } catch (e) {}
+        if (h) h.close();
+      }
+    });
+  });
+
+  test('967 1b the guest’s wait starts its clock when the owner’s side does, and a code that times out is taken off the sheet with a sentence that does not blame the owner', { item: '967', budgetMs: 60000 }, async function () {
+    const C = need921S3('the guest’s code timeout');
+    await withLabs921(async function (ui) {
+      /* A peer connection whose state the test drives: 'connecting' until the owner pastes, then 'connected'. */
+      function fakePc() {
+        const pc = new EventTarget();
+        pc.connectionState = 'connecting';
+        pc.go = function () { pc.connectionState = 'connected'; pc.dispatchEvent(new Event('connectionstatechange')); };
+        return pc;
+      }
+      ui._connectWait(300);
+      try {
+        await withFakeLinks921(C, function () { const l = fakeLink921({ code: 'WAIT', opens: false }); l.pc = fakePc(); return l; }, async function (made) {
+          await ui.join();
+          document.querySelector('#collab-join .cj-code').value = 'FM1-ABCDE';
+          document.querySelector('#collab-join .cj-go').click();
+          await settle921(900);
+          const st = document.querySelector('#collab-join .cj-status');
+          const back = document.querySelector('#collab-join .cj-back');
+          if (!/Waiting for them to paste your code/.test(st.textContent)) throw new Error('with ICE_CONNECT at 300 ms the guest had already given up 900 ms after its code appeared: “' + st.textContent + '” — the connect clock must not run until the owner’s side starts');
+          if (made[0].closed) throw new Error('the guest’s link was closed while it waited for the owner');
+          /* The owner pastes: the peer connection turns 'connected' — the clock starts, and the sheet says Connecting. */
+          made[0].pc.go();
+          await settle921(60);
+          if (!/Connecting/.test(st.textContent)) throw new Error('once the owner’s side started the sheet says “' + st.textContent + '”, not Connecting…');
+          await settle921(600);
+          if (!/Your code timed out — ask them for a fresh one/.test(st.textContent)) throw new Error('the connect that never finished opening says “' + st.textContent + '” — it must say the code timed out, not “They did not answer”');
+          if (!back.classList.contains('hidden') || back.querySelector('.cs-code').textContent) throw new Error('the dead answer code and its Copy button are still on the sheet after it timed out');
+          if (!made[0].closed) throw new Error('the timed-out link was not closed');
+          ui.close();
+          /* …and the outer limit (ten minutes; a seam here) ends a wait the owner never starts, with the same words. */
+          if (typeof ui._pasteWait !== 'function') throw new Error('there is no outer limit on the guest’s wait to stand in for');
+          ui._pasteWait(400);
+          await ui.join();
+          document.querySelector('#collab-join .cj-code').value = 'FM1-FGHIJ';
+          document.querySelector('#collab-join .cj-go').click();
+          await settle921(900);
+          const st2 = document.querySelector('#collab-join .cj-status');
+          if (!/Your code timed out — ask them for a fresh one/.test(st2.textContent)) throw new Error('a wait the owner never started did not end at its outer limit: “' + st2.textContent + '”');
+          if (!document.querySelector('#collab-join .cj-back').classList.contains('hidden')) throw new Error('the expired answer code is still on the sheet');
+          if (!(C.LIMITS.CODE_ANSWER_WAIT >= 5 * 60000)) throw new Error('the outer wait is ' + C.LIMITS.CODE_ANSWER_WAIT + ' ms — a code has to survive being sent in a message and pasted on another phone');
+        });
+      } finally { ui._connectWait(null); if (ui._pasteWait) ui._pasteWait(null); ui.close(); }
+    });
+  });
+
+  test('967 2 on a phone the owner’s Step 3 is reachable — scrolled into view above the pinned foot, one blue button — and closing the block mid-check says the guest was not let in', { item: '967', budgetMs: 90000 }, async function () {
+    /* J3-5 (measured hitAtYes = 'cs-done accent'), J2-15. */
+    const C = need921S7('the phone Step 3');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        await with945(async function () {
+          await atSize921(390, 700, async function () {
+            await withFakeLinks921(C, function () { return fakeLink921({ code: 'SAS67' }); }, async function (made) {
+              C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M' }); };
+              const dlg = document.getElementById('canvas-dialog');
+              FM.openCanvasDialog({ block: 'friends' });
+              await entranceDone(dlg); await land945();
+              const body = document.getElementById('cv-fr-body');
+              const add = body.querySelector('.cs-add');
+              if (!add) throw new Error('setup: the live Friends block has no “Connect with a code instead”');
+              add.click(); await settle921(80);
+              body.querySelector('.cs-answer').value = 'FM1-ANSWER';
+              let answers = 0;
+              const orig = made[0].acceptAnswer;
+              made[0].acceptAnswer = function () { answers++; return orig.apply(this, arguments); };
+              const connect = body.querySelector('.cs-connect');
+              connect.click();
+              await settle921(60);
+              const offWhileConnecting = connect.disabled;
+              connect.click();                                           // a second tap: must start nothing
+              made[0].onmessage('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43' });
+              await settle921(120);
+              await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+              const yes = body.querySelector('.cs-sasyes');
+              if (!yes) throw new Error('Step 3 never came up');
+              const r = yes.getBoundingClientRect();
+              const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!at || (at !== yes && !yes.contains(at))) throw new Error('“They match” is covered — a tap at its centre lands on ' + (at && (at.className || at.id || at.tagName)) + ' (J3-5 measured cs-done: the tap pressed Done and the join was abandoned in silence)');
+              const foot = body.querySelector('.cs-foot').getBoundingClientRect();
+              if (r.bottom > foot.top + 0.5) throw new Error('“They match” runs under the pinned foot (bottom ' + r.bottom.toFixed(1) + ', foot top ' + foot.top.toFixed(1) + ')');
+              if (connect.isConnected && connect.getClientRects().length) throw new Error('Connect is still on screen beside “They match” — two blue buttons at the one step that lets a stranger in (J2-15)');
+              /* Review (first-timer, minor): Done sat blue in the pinned foot right under "They match" — two identical blue
+                 buttons stacked, and Done, the natural "I've checked" word, turned the friend away. */
+              const blues = Array.prototype.filter.call(body.querySelectorAll('button.accent'), function (b) { return b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden'; })
+                .map(function (b) { return b.className; });
+              if (blues.length !== 1 || !/cs-sasyes/.test(blues[0])) throw new Error('at Step 3 the blue buttons on screen are ' + JSON.stringify(blues) + ' — “They match” must be the only one while the letters are checked');
+              if (!offWhileConnecting) throw new Error('Connect stayed live while it was connecting');
+              if (answers !== 1) throw new Error('two taps on Connect made ' + answers + ' attempts with the one code');
+              /* He closes the block in the middle of the check. */
+              const got = toast967();
+              try {
+                FM.closeCanvasDialog();
+                await settle921(400);
+              } finally { got.restore(); }
+              if (!got.some(function (t) { return /Not let in — they’ll need a fresh code/.test(t); })) throw new Error('closing the block mid-check said nothing (' + JSON.stringify(got) + ') — the guest was silently abandoned');
+              if (!made[0].sent.some(function (m) { return m.msg && m.msg.t === 'refused'; })) throw new Error('the guest was never told it was not let in');
+              if (ui._offer()) throw new Error('the abandoned code is still live');
+              if (ctx.S.peerIds().length) throw new Error('somebody was admitted without “They match”');
+              if (ui._sasPending && ui._sasPending()) throw new Error('the check is still pending after the block closed');
+            });
+          });
+        });
+      });
+    });
+  });
+
+  test('967 3 the Labs switch in Settings is a real master off — it asks first and names what stops, the ask sits above Settings, EVERY shared project stops (a paused one too), the result is said on the row, and turning it back on shares nothing', { item: '967', budgetMs: 120000 }, async function () {
+    /* J3-3, J3-7, J4-8. Reverses S6's "a room PAUSED … is kept" — his words: "you can never turn it off on any project ever". */
+    const C = need921S6('the master off');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        let other = null;
+        try {
+          await ui.share(); ui.close();                               // A is shared: a host record
+          if (!hostKeys967().some(function (k) { return k === 'fm.collab.host.' + ctx.pid; })) throw new Error('setup: sharing wrote no host record');
+          other = await FM.projects.create({ name: 'Paused 967 B', width: 320, height: 240 });
+          await until921S6('A to pause when he opens B', function () { return !C.session; }, 6000);
+          if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('setup: opening B dropped A’s room — the pause this test is about did not happen');
+          await ui.share(); ui.close();                               // B is live now, A paused
+          if (!C.session || C.session.pid !== other) throw new Error('setup: B is not live');
+          FM.settings.open(); await sleep(350);
+          const row = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Live collaboration \(preview\)/.test(r.textContent); })[0];
+          if (!row) throw new Error('setup: no Live collaboration row in Settings');
+          row.querySelector('.set-switch').click();
+          await settle921(120);
+          if (!askUp967()) throw new Error('turning Live collaboration off while a project is shared asked nothing — Stop sharing asks, this ends everyone’s session at once (J3-7)');
+          if (!FM.settings.get('collabLabs')) throw new Error('the switch went off before he answered');
+          const msg = document.getElementById('fm-ask-msg').textContent;
+          const aName = (FM.projects.list().filter(function (p) { return p.id === ctx.pid; })[0] || {}).name || 'Untitled';
+          if (msg.indexOf('“Paused 967 B”') < 0 || msg.indexOf('“' + aName + '”') < 0) throw new Error('the question does not name both projects it stops (“Paused 967 B” and “' + aName + '”): “' + msg + '”');
+          const ok = document.querySelector('#fm-ask .fm-ask-ok');
+          const zAsk = +getComputedStyle(document.getElementById('fm-ask')).zIndex, zSet = +getComputedStyle(document.querySelector('.set-scrim')).zIndex;
+          if (!(zAsk > zSet)) throw new Error('the ask (z ' + zAsk + ') is under the Settings scrim (z ' + zSet + ')');
+          const r = ok.getBoundingClientRect();
+          const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (at !== ok) throw new Error('the Turn off button is covered by ' + (at && (at.className || at.id)));
+          ok.click();
+          await settle921(300);
+          if (FM.settings.get('collabLabs')) throw new Error('answering Turn off did not turn it off');
+          if (C.session) throw new Error('the live session is still running');
+          if (hostKeys967().length) throw new Error('Labs off kept ' + JSON.stringify(hostKeys967()) + ' — a project paused by opening another one comes back live on its old link the next time Labs is on (J3-3)');
+          const said = row.querySelector('.set-labs-said');
+          if (!said || said.classList.contains('hidden') || !/Sharing stopped/.test(said.textContent)) throw new Error('nothing on the Settings row says what happened (' + (said && said.textContent) + ')');
+          FM.settings.close(); await sleep(300);
+          /* Back on, and A opened: nothing is shared by itself. */
+          FM.settings.set('collabLabs', true); ui.syncLabs();
+          await FM.projects.open(ctx.pid);
+          await settle921(900);
+          if (C.session || ui._relay()) throw new Error('turning Labs back on and opening A re-armed it on its old room');
+          /* CONTROL: with nothing shared, the switch goes straight off — no question to answer. */
+          FM.settings.open(); await sleep(350);
+          const row2 = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (x) { return /Live collaboration \(preview\)/.test(x.textContent); })[0];
+          row2.querySelector('.set-switch').click();
+          await settle921(150);
+          if (askUp967()) throw new Error('CONTROL: with nothing shared the switch still asked');
+          if (FM.settings.get('collabLabs')) throw new Error('CONTROL: with nothing shared the switch did not go off');
+          FM.settings.close(); await sleep(300);
+          FM.settings.set('collabLabs', true); ui.syncLabs();
+        } finally {
+          if (FM.settings.isOpen()) FM.settings.close();
+          if (FM.ask.isOpen && FM.ask.isOpen()) { const c = document.querySelector('#fm-ask .fm-ask-cancel'); if (c) c.click(); }
+          if (other) { try { if (FM.projects.currentId() === other) await FM.projects.open(ctx.pid); await FM.projects.remove(other); } catch (e) {} }
+        }
+      });
+    });
+  });
+
+  test('967 3b a guest who turns Labs off is asked first (“This leaves Ezra’s project — your copy stays”) and told “You left” after', { item: '967', budgetMs: 60000 }, async function () {
+    /* J2-9, J4-8. */
+    const C = need921S3('the guest’s Labs-off door');
+    await withLabs921(async function (ui) {
+      const fx = guest967(C);
+      const got = toast967();
+      try {
+        C.attach(fx.G, { autoTick: false });
+        FM.settings.open(); await sleep(350);
+        const row = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Live collaboration \(preview\)/.test(r.textContent); })[0];
+        row.querySelector('.set-switch').click();
+        await settle921(120);
+        if (!askUp967()) throw new Error('a guest turning Live collaboration off was not asked — it leaves Ezra’s project');
+        const msg = document.getElementById('fm-ask-msg').textContent;
+        if (!/leaves Ezra’s project/.test(msg) || !/copy/.test(msg)) throw new Error('the question reads “' + msg + '”');
+        document.querySelector('#fm-ask .fm-ask-ok').click();
+        await until921S6('the “You left” toast', function () { return got.some(function (t) { return /You left Ezra’s project — your copy is kept/.test(t); }); }, 6000)
+          .catch(function () { throw new Error('the guest was never told they left (' + JSON.stringify(got) + ')'); });
+        if (C.active) throw new Error('the guest session is still running');
+        const said = row.querySelector('.set-labs-said');
+        if (!said || !/You left Ezra’s project/.test(said.textContent)) throw new Error('the Settings row does not say what happened');
+      } finally {
+        got.restore();
+        if (FM.settings.isOpen()) FM.settings.close();
+        await dropFixture967(C, FM.projects.list().filter(function (p) { return /Ezra’s film 967/.test(p.name || ''); }).map(function (p) { return p.id; }));
+      }
+    });
+  });
+
+  test('967 4 Home can stop sharing: a live or paused shared project offers Stop sharing (not Share live…) and it drops the room without opening it, and on a phone Share live… opens the Friends block and never arms', { item: '967', budgetMs: 120000 }, async function () {
+    /* J3-2 (Stop half), J3-8, J1-9. */
+    const C = need921S6('Stop sharing from Home');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        let other = null;
+        const labels = function (card) {
+          card.querySelector('.hm-card-more').click();
+          const items = Array.prototype.slice.call(document.querySelectorAll('#ctx-menu .ctx-item'));
+          return items;
+        };
+        const txt = function (items) { return items.map(function (x) { return x.textContent.trim(); }); };
+        try {
+          await ui.share(); ui.close();
+          FM.home.open(); await settle921(450);
+          let card = document.querySelector('.hm-card[data-pid="' + ctx.pid + '"]');
+          let items = labels(card);
+          if (txt(items).indexOf('Share live…') >= 0 || txt(items).indexOf('Stop sharing') < 0) { FM.contextMenu.hide(); throw new Error('a LIVE project’s ⋯ offers ' + JSON.stringify(txt(items)) + ' — it must offer Stop sharing, not Share live… (J3-8)'); }
+          items.filter(function (x) { return x.textContent.trim() === 'Stop sharing'; })[0].click();
+          (await askOk921()).click();
+          await settle921(300);
+          if (C.session) throw new Error('Stop sharing from Home left the session running');
+          if (localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('Stop sharing from Home kept the room');
+          FM.home.close(); await settle921(300);
+          /* A PAUSED room: shared, then another project opened. */
+          await ui.share(); ui.close();
+          other = await FM.projects.create({ name: 'Home 967 B', width: 320, height: 240 });
+          await until921S6('A to pause', function () { return !C.session; }, 6000);
+          if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('setup: A’s room did not survive the switch');
+          FM.home.open(); await settle921(450);
+          card = document.querySelector('.hm-card[data-pid="' + ctx.pid + '"]');
+          items = labels(card);
+          if (txt(items).indexOf('Stop sharing') < 0) { FM.contextMenu.hide(); throw new Error('a project holding a paused room offers ' + JSON.stringify(txt(items)) + ' — the only way to stop it was to open it, which shares it again first (J3-2)'); }
+          items.filter(function (x) { return x.textContent.trim() === 'Stop sharing'; })[0].click();
+          (await askOk921()).click();
+          await settle921(400);
+          if (localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('Stop sharing on a paused project kept its room');
+          if (FM.projects.currentId() !== other || C.session) throw new Error('Stop sharing on a paused project opened it, or armed something');
+          /* CONTROL: a project never shared still offers Share live…, and on a phone it opens the Friends block — no arm. */
+          card = document.querySelector('.hm-card[data-pid="' + other + '"]');
+          items = labels(card);
+          if (txt(items).indexOf('Share live…') < 0) { FM.contextMenu.hide(); throw new Error('CONTROL: an unshared project lost Share live… (' + JSON.stringify(txt(items)) + ')'); }
+          FM.contextMenu.hide();
+          await with945(async function () {
+            await atPhoneWidth(async function () {
+              FM.home.close(); FM.home.open(); await settle921(450);
+              const c2 = document.querySelector('.hm-card[data-pid="' + other + '"]');
+              const it2 = labels(c2);
+              it2.filter(function (x) { return x.textContent.trim() === 'Share live…'; })[0].click();
+              const dlg = document.getElementById('canvas-dialog');
+              await until921S6('the Friends block', function () { return !dlg.classList.contains('hidden') && dlg.classList.contains('cv-fr-big') ? 1 : 0; }, 5000)
+                .catch(function () { throw new Error('on a phone Share live… did not open the Friends block (a separate Share card, or nothing)'); });
+              await settle921(300);
+              if (C.session || localStorage.getItem('fm.collab.host.' + other)) throw new Error('on a phone Share live… STARTED SHARING by itself — only Start sharing may (J3-8)');
+              if (document.querySelector('.collab-scrim.collab-light')) throw new Error('a light-theme card was drawn over the dark editor (J1-9)');
+              if (!document.querySelector('#cv-fr-body .cs-start')) throw new Error('the Friends block does not offer Start sharing');
+            });
+          });
+        } finally {
+          try { FM.contextMenu.hide(); } catch (e) {}
+          if (FM.home.isOpen()) FM.home.close();
+          if (other) { try { if (FM.projects.currentId() === other) await FM.projects.open(ctx.pid); await FM.projects.remove(other); } catch (e) {} }
+        }
+      });
+    });
+  });
+
+  test('967 5 a kept room does not start sharing again behind Home at a REAL relaunch — the whole app opened afresh on its own origin — and it resumes when he goes into the project', { item: '967', budgetMs: 150000 }, async function () {
+    /* J3-2: at a cold launch the kept room was LIVE on the relays before he touched anything, its toast spent under the
+       splash. ⚠️ THE REAL BOOT, NOT A PICTURE OF IT (#967 review — two reviewers found it apart). The first version of
+       this test opened Home and THEN asked collab to resume, the reverse of the boot: the boot's first history.reset()
+       runs before storage.load() resolves, with Home not yet open, and its resume is asked on the next turn. So it stayed
+       green while a real relaunch still armed behind Home (measured: resumeOpen at 185 ms with Home closed, Home open at
+       204 ms, C.share at 234 ms behind it). Here: a whole FreeMotion on its own origin, shared through the Share button,
+       then opened afresh the way a phone opens it — a new session, so the boot lands on Home (#942). */
+    const R = rig921();
+    const tag = 'c967';
+    const src = 'http://c967.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag;
+    const q = function (x) { return JSON.stringify(x).replace(/"/g, "'"); };
+    try {
+      await R.bootSrc(tag, src, 900, 760);
+      const s0 = await R.rpc(tag, 'share967');
+      if (!s0.session || !s0.owner || !s0.rec || s0.homeOpen) throw new Error('setup: the instance is not sharing its project from the editor: ' + q(s0));
+      const was = R.upCount(tag);
+      await R.rpc(tag, 'newSession942');
+      await R.waitUp(tag, was + 1);
+      await R.rpc(tag, 'ready');
+      /* Watched for three seconds after the boot — the arm came 234 ms in, and stayed. */
+      let st = null;
+      for (let i = 0; i < 12; i++) {
+        st = await R.rpc(tag, 'collab967');
+        if (st.session || st.relay) break;
+        await R.sleep(250);
+      }
+      if (!st.homeOpen) throw new Error('setup: opened afresh, the instance did not land on Home (#942): ' + q(st));
+      if (st.session || st.relay) throw new Error('opened afresh, the app started sharing the kept room again BEHIND HOME before he touched anything — session ' + st.session + ', relay ' + st.relay + ', toasts ' + q(st.toasts) + ' (J3-2)');
+      const behind = (st.armed || []).filter(function (a) { return a.home; });
+      if (behind.length) throw new Error('the kept room was armed behind Home ' + behind[0].t + ' ms into the relaunch (and stood down after) — ' + q(st.armed));
+      if (!st.rec) throw new Error('waiting behind Home threw the room away');
+      if ((st.locks || []).some(function (k) { return /^fm-collab-host-/.test(k); })) throw new Error('behind Home the relaunched tab still holds the project’s host lock: ' + q(st.locks));
+      /* He goes into the project: now it resumes, and says so. */
+      await R.rpc(tag, 'homeClose967');
+      let last = null;
+      const s2 = await R.until('sharing to resume once he is in the project', async function () {
+        const x = last = await R.rpc(tag, 'collab967');
+        return x.session && x.owner && x.toasts.some(function (t) { return /^Sharing is on again/.test(t); }) ? x : null;
+      }, 15000).catch(function () { throw new Error('once Home closed onto the project, sharing did not resume (or did not say so) within 15 s: ' + q(last)); });
+      if (s2.pid !== s0.pid) throw new Error('the resume shared a different project (' + s2.pid + ', not ' + s0.pid + ')');
+      if (!s2.toasts.some(function (t) { return /anyone who joined with a code needs a new one/.test(t); })) throw new Error('with nobody who can come back by themselves the resume said ' + q(s2.toasts) + ' (J4-2)');
+    } finally { R.drop(tag); }
+  });
+
+  test('967 5b …and in the page: Home opening while a resume is in flight stops it at the last moment, nothing resumes before the boot has landed, a boot that lands in the editor still resumes, and the resume says who can come back', { item: '967', budgetMs: 120000 }, async function () {
+    /* J3-2, J3-6 / J4-2. The lock and the checkpoint the resume waits on are both asynchronous, and Home can open while
+       they run — resumeOpen's own Home check was only true when it was asked. */
+    const C = need921S6('the resume behind Home');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        const got = toast967();
+        const hostLockHeld = function () { return (ui._locks() || []).some(function (k) { return k === 'fm-collab-host-' + ctx.pid; }); };
+        try {
+          await ui.share(); ui.close();
+          if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('setup: no host record');
+          if (FM.home.isOpen()) FM.home.close();
+          await settle921(200);
+          /* (1) The resume starts with Home closed; Home opens before its lock and checkpoint have answered. */
+          C.onReset({ force: true });                       // stands the session down (synchronously) and keeps its room
+          const inFlight = ui.resumeOpen();                 // the resume, with Home closed: its lock request is now in flight
+          FM.home.open();                                   // …and Home opens before the lock or the checkpoint has answered
+          if (!inFlight || typeof inFlight.then !== 'function') throw new Error('setup: with Home closed the resume did not start (' + inFlight + ')');
+          await inFlight;
+          await settle921(600);
+          if (C.session) throw new Error('Home opened while the resume was waiting on its lock and checkpoint, and it armed BEHIND HOME anyway — the last check before C.share never asked about Home (J3-2)');
+          if (hostLockHeld()) throw new Error('the resume stood down behind Home but kept the project’s host lock — another tab could never share it');
+          if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('standing down behind Home threw the room away');
+          /* He goes into the project: now it resumes — the toast says nobody can come back by themselves. */
+          got.length = 0;
+          FM.home.close();
+          await until921S6('sharing to resume once he is in the project', function () { const s = C.session; return s && s.isOwner && s.pid === ctx.pid ? s : null; }, 8000);
+          await until921S6('the resume toast', function () { return got.some(function (t) { return /^Sharing is on again/.test(t); }); }, 4000);
+          const t1 = got.filter(function (t) { return /^Sharing is on again/.test(t); }).pop();
+          if (!/anyone who joined with a code needs a new one/.test(t1)) throw new Error('with no member who can come back by themselves the resume says “' + t1 + '” (J4-2: “people can reconnect” was untrue for everyone who joined with a code)');
+          /* (2) Before the boot has landed nothing resumes, even in the editor: the boot's first reset. */
+          ui._booted(false);
+          C.onReset({ force: true });
+          await settle921(900);
+          if (C.session || hostLockHeld()) throw new Error('a resume ran before the boot had landed (session ' + !!C.session + ', lock ' + hostLockHeld() + ') — at a cold launch that is before Home opens');
+          /* …a boot that lands IN THE EDITOR (a reload inside the session) resumes when it says it has landed… */
+          ui.afterBoot();
+          await until921S6('a boot that landed in the editor to resume', function () { return C.session && C.session.isOwner ? 1 : 0; }, 8000)
+            .catch(function () { throw new Error('a boot that landed in the editor never resumed the kept room — a refresh must still come back sharing'); });
+          /* …and one that lands on Home does not, until Home closes onto the project. */
+          ui._booted(false);
+          C.onReset({ force: true });
+          await settle921(300);
+          FM.home.open();
+          ui.afterBoot();
+          await settle921(1200);
+          if (C.session) throw new Error('a boot that landed on Home resumed the kept room behind it');
+          /* CONTROL: with a member who came in by the link, "people can reconnect" is true and is said. */
+          const rec = JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid));
+          rec.members = { r0123456789abcdef: { name: 'Sam', color: '#ff9f43', role: 'editor', tok: C.signal.b64url(C.signal.randomBytes(16)), added: Date.now() } };
+          localStorage.setItem('fm.collab.host.' + ctx.pid, JSON.stringify(rec));
+          got.length = 0;
+          FM.home.close();
+          await until921S6('sharing to resume', function () { return C.session && C.session.isOwner ? 1 : 0; }, 8000);
+          await until921S6('the resume toast', function () { return got.some(function (t) { return /^Sharing is on again/.test(t); }); }, 4000);
+          if (!got.some(function (t) { return /people can reconnect/.test(t); })) throw new Error('CONTROL: with a link member the resume says ' + JSON.stringify(got));
+        } finally {
+          if (ui._booted) ui._booted(true);
+          got.restore();
+          if (FM.home.isOpen()) FM.home.close();
+        }
+      });
+    });
+  });
+
+  test('967 6 a guest who joined with a code is told when the owner’s app dies — Offline within about six seconds instead of “● Live” typing into nothing — and the link, kept through the silence, closes once the silence has lasted the grace', { item: '967', budgetMs: 60000 }, async function () {
+    /* J3-6: measured 40 s after the owner's app was killed — online, no banner. Liveness was only ever on for relay joins.
+       Round 2 (B): six seconds of silence SAYS Offline and keeps the link — he may only be in Messages — and only a
+       silence as long as the grace closes it. The grace is shortened here (9 s; 120 s in the app). */
+    const C = need921S3('a code-joined guest’s liveness');
+    await withLabs921(async function (ui) {
+      const realJoin = C.join;
+      const ids = [];
+      grace967(C, 9000);
+      try {
+        await withFakeLinks921(C, function () { return fakeLink921({ code: 'LIVE7' }); }, async function (made) {
+          C.signal.handshake = function () { return Promise.resolve({ sas: 'Q4T7N', host: { sid: 'r967', nm: 'Ezra', cl: '#a3e635' } }); };
+          C.join = function (o) {
+            const fx = guest967(C);
+            ids.push(fx.gpid);
+            fx.G.setLink(o.link);
+            C.attach(fx.G, {});
+            return Promise.resolve({ gpid: fx.gpid, session: fx.G });
+          };
+          await ui.join();
+          document.querySelector('#collab-join .cj-code').value = 'FM1-ABCDE';
+          document.querySelector('#collab-join .cj-go').click();
+          const s = await until921S6('the guest to be in', function () { return C.session && !C.session.isOwner ? C.session : null; }, 5000);
+          /* The owner's side says nothing from here on — its app is gone. */
+          await until921S6('the silent link to be noticed', function () { return s.online === false ? 1 : 0; }, 10000)
+            .catch(function () { throw new Error('a code-joined guest still reads online ' + Math.round((C.LIMITS.OFFLINE_AFTER + 4000) / 1000) + ' s after the owner went silent — liveness was never switched on for the code route (J3-6)'); });
+          const b = await until921S6('the Offline banner', function () { const x = document.getElementById('collab-banner'); return x && /Offline/.test(x.textContent) ? x : null; }, 3000);
+          void b;
+          const offAt = Date.now();
+          if (made[0].closed || made[0].open === false) throw new Error('the silence was said (Offline) AND the link was closed with it — an owner in Messages for ten seconds loses a code-joined friend for good; the link must be kept until the silence has lasted the grace (round 2, B)');
+          await until921S6('the link to close once the silence has lasted the grace', function () { return made[0].closed ? 1 : 0; }, 8000)
+            .catch(function () { throw new Error('a dead owner’s link was never closed — ' + Math.round((Date.now() - offAt) / 1000) + ' s after Offline, with the grace at ' + grace967(C) + ' ms'); });
+          if (s.online !== false) throw new Error('the link closed and the guest reads online');
+        });
+      } finally {
+        grace967(C, null);
+        C.join = realJoin;
+        ui.close();
+        await dropFixture967(C, ids);
+      }
+    });
+  });
+
+  test('967 7 the owner is told when someone leaves — “Sam left” for a goodbye, “Mia’s connection dropped” for a dead link, nothing for his own stop or a removal — and a guest who leaves is told whose project they left', { item: '967', budgetMs: 90000 }, async function () {
+    /* J2-9, J4-8, J4-2: the chip just vanished. */
+    const C = need921S3('the left notices');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        await withFakeLinks921(C, function () { return fakeLink921({ code: 'LEFT7' }); }, async function (made) {
+          C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M' }); };
+          async function admit(name) {
+            await ui.share();
+            document.querySelector('.cs-add').click(); await settle921(60);
+            document.querySelector('.cs-connect').click(); await settle921(60);
+            made[made.length - 1].onmessage('ctl', { t: 'hello', role: 'editor', name: name, color: '#ff9f43' });
+            await settle921(60);
+            const done = document.querySelector('#collab-share .cs-foot .cs-done');
+            if (!done || done.classList.contains('accent')) throw new Error('while the letters are checked the card’s Done is still blue beside “They match” (review: one blue button)');
+            document.querySelector('.cs-sasyes').click(); await settle921(150);
+            const done2 = document.querySelector('#collab-share .cs-foot .cs-done');
+            if (!done2 || !done2.classList.contains('accent')) throw new Error('once the check was answered Done did not come back blue');
+            ui.close();
+            const mids = ctx.S.peerIds();
+            return mids[mids.length - 1];
+          }
+          const got = toast967();
+          try {
+            const sam = await admit('Sam');
+            if (!sam) throw new Error('setup: Sam was not admitted');
+            ctx.S.onMessage('ctl', { t: 'bye', why: 'left' }, sam);
+            await settle921(120);
+            if (!got.some(function (t) { return t === 'Sam left'; })) throw new Error('a guest who left said goodbye and the owner was told nothing (' + JSON.stringify(got) + ')');
+            const mia = await admit('Mia');
+            made[made.length - 1].close();                       // the link dies with no goodbye
+            await settle921(120);
+            if (!got.some(function (t) { return /^Mia’s connection dropped$/.test(t); })) throw new Error('a dropped link said nothing (' + JSON.stringify(got) + ')');
+            void mia;
+            /* A removal (review: regressions, minor — the guard was untested): he removes Rae through her row's menu, and is
+               told she was removed — never "Rae left" or "Rae’s connection dropped" on top of it. */
+            const rae = await admit('Rae');
+            got.length = 0;
+            await ui.share();
+            document.querySelector('.cs-person[data-mid="' + rae + '"] .cs-role').click();
+            const rm = Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return /Remove/.test(x.textContent); })[0];
+            if (!rm) throw new Error('setup: Rae’s row menu has no Remove');
+            rm.click();
+            (await askOk921()).click();
+            await settle921(200);
+            ui.close();
+            if (!got.some(function (t) { return /^Rae removed/.test(t); })) throw new Error('removing Rae said ' + JSON.stringify(got));
+            if (got.some(function (t) { return /left$|connection dropped/.test(t); })) throw new Error('removing Rae was ALSO reported as her leaving: ' + JSON.stringify(got));
+            if (ctx.S.peerIds().indexOf(rae) >= 0) throw new Error('Rae is still in after Remove');
+            /* CONTROL: his own Stop says "Sharing stopped" only — never "<name> left" for each person he just ended. */
+            await admit('Kai');
+            got.length = 0;
+            C.end();
+            await settle921(120);
+            if (got.some(function (t) { return /left|dropped/.test(t); })) throw new Error('his own stop was reported as people leaving: ' + JSON.stringify(got));
+          } finally { got.restore(); }
+        });
+      });
+      /* The guest's Leave names whose project it was. */
+      const fx = guest967(C);
+      const got2 = toast967();
+      try {
+        C.attach(fx.G, { autoTick: false });
+        await ui.share();                                          // a guest's Share opens the guest panel
+        document.querySelector('#collab-share .cs-stop').click();
+        (await askOk921()).click();
+        await until921S6('the Leave toast', function () { return got2.some(function (t) { return /^You left/.test(t); }); }, 8000);
+        if (!got2.some(function (t) { return /You left Ezra’s project — your copy is kept/.test(t); })) throw new Error('Leave says ' + JSON.stringify(got2.filter(function (t) { return /left/.test(t); })));
+      } finally {
+        got2.restore();
+        await dropFixture967(C, FM.projects.list().filter(function (p) { return /Ezra’s film 967/.test(p.name || ''); }).map(function (p) { return p.id; }));
+      }
+    });
+  });
+
+  test('967 7b …and the same for people who came in by the invite link: “Bob left” for a goodbye, “Ann’s connection dropped” for a link that died', { item: '967', budgetMs: 120000 }, async function () {
+    /* The relay route has its own link.onclose (admitRelay), so it is proved on its own — the first build of it shadowed the
+       knock's `who` there and silently broke the "stopped waiting" note, which only the S6 knock test caught. */
+    const C = need921S6('the left notices on the relay route');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          await ui.share(); letThemIn921(ui); ui.close();
+          const got = toast967();
+          try {
+            const gA = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Ann', mk: 'mk-ann-000000000000000' });
+            await gA.wait('welcome'); await gA.wait('snap');
+            const gB = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Bob', mk: 'mk-bob-000000000000000' });
+            await gB.wait('welcome'); await gB.wait('snap');
+            if (ctx.S.peerIds().length !== 2) throw new Error('setup: ' + ctx.S.peerIds().length + ' people in, not 2');
+            gB.link.send('ctl', { t: 'bye', why: 'left' });
+            await until921S6('“Bob left”', function () { return got.indexOf('Bob left') >= 0 ? 1 : 0; }, 6000)
+              .catch(function () { throw new Error('a member who came in by the link said goodbye and the owner was told nothing (' + JSON.stringify(got) + ')'); });
+            gB.close();
+            gA.close();                                            // Ann's link dies with no goodbye
+            await until921S6('“Ann’s connection dropped”', function () { return got.indexOf('Ann’s connection dropped') >= 0 ? 1 : 0; }, 20000)
+              .catch(function () { throw new Error('a link member’s link died and the owner was told nothing (' + JSON.stringify(got) + ')'); });
+            if (got.some(function (t) { return /^Bob’s connection dropped/.test(t); })) throw new Error('Bob said goodbye and was ALSO reported as a dropped connection');
+          } finally { got.restore(); }
+        });
+      });
+    });
+  });
+
+  test('967 8 a guest who opens their own project mid-session is told they left, and no red Offline banner follows them onto it', { item: '967', budgetMs: 90000 }, async function () {
+    /* J4-3: measured {active:false, collab:null} with the banner still up 15 s later. */
+    const C = need921S3('the stale banner');
+    await withLabs921(async function (ui) {
+      const orig = FM.projects.currentId(), wasHome = FM.home.isOpen();
+      if (wasHome) FM.home.close();
+      const fx = guest967(C);
+      const got = toast967();
+      try {
+        await FM.projects.open(fx.gpid);
+        await settle921(300);
+        C.attach(fx.G, { autoTick: false });
+        fx.G.setOnline(false);
+        await settle921(100);
+        const b = document.getElementById('collab-banner');
+        if (!b || !/Offline/.test(b.textContent)) throw new Error('setup: the offline guest shows no Offline banner (' + (b && b.textContent) + ')');
+        await FM.projects.open(orig);
+        await settle921(900);
+        if (C.active) throw new Error('setup: the session did not stand down');
+        const card = FM.projects.list().filter(function (p) { return p.id === FM.projects.currentId(); })[0];
+        if (card && card.collab) throw new Error('setup: the project opened is a shared copy');
+        const still = document.getElementById('collab-banner');
+        if (still) throw new Error('the guest’s own, unshared project shows “' + still.textContent + '” — a banner from the session it left');
+        if (!got.some(function (t) { return /You left Ezra’s project — your copy is kept/.test(t); })) throw new Error('opening another project left the session in silence (' + JSON.stringify(got) + ')');
+      } finally {
+        got.restore();
+        await dropFixture967(C, [fx.gpid]);
+        if (FM.projects.currentId() !== orig && orig) { try { await FM.projects.open(orig); } catch (e) {} }
+        if (wasHome) FM.home.open();
+      }
+    });
+  });
+
+  test('967 9 on a phone the Ended, Removed and Offline banners keep their reassuring half, and an ended copy’s panel drops the role while Follow hides for somebody offline', { item: '967', budgetMs: 60000 }, async function () {
+    /* J2-11, J3-10, J4-4, J4-16. */
+    const C = need921S3('the phone banners');
+    await withLabs921(async function (ui) {
+      const fx = guest967(C);
+      const realPeople = C.presence && C.presence.people;
+      try {
+        C.attach(fx.G, { autoTick: false });
+        await atPhoneWidth(async function () {
+          const check = async function (want, what) {
+            ui.syncBanner(); await settle921(60);
+            const b = document.getElementById('collab-banner');
+            if (!b) throw new Error(what + ': no banner');
+            const t = b.querySelector('.cb-text');
+            if (!want.test(t.textContent)) throw new Error(what + ' on a phone reads “' + t.textContent + '”');
+            if (t.scrollWidth > t.clientWidth + 1) throw new Error(what + ' is cut off on a phone (' + t.scrollWidth + ' of text in ' + t.clientWidth + ' px): “' + t.textContent + '”');
+          };
+          fx.G.ended = 'ended';
+          await check(/^Session ended · your copy is kept$/, 'the Ended banner');
+          fx.G.ended = 'removed';
+          await check(/^Removed · your copy is kept$/, 'the Removed banner');
+          fx.G.ended = null;
+          fx.G.setOnline(false);
+          await check(/^Offline · changes kept$/, 'the Offline banner');
+        }, 390);
+        /* The guest panel. */
+        if (C.presence) C.presence.people = function () { return [
+          { mid: 'o', name: 'Ezra', color: '#a3e635', role: 'owner', st: 'off' },
+          { mid: 'm3', name: 'Mia', color: '#f472b6', role: 'editor', st: 'here' }
+        ]; };
+        fx.G.ended = 'ended';
+        await ui.share();
+        let card = document.getElementById('collab-share');
+        if (card.querySelector('.cs-myrole')) throw new Error('an ended copy’s panel still says “' + card.querySelector('.cs-myrole').textContent + '” under Ended');
+        const rows = card.querySelectorAll('.cs-person[data-mid]');
+        const f = function (mid) { const r = Array.prototype.filter.call(rows, function (x) { return x.getAttribute('data-mid') === mid; })[0]; return r && r.querySelector('.cs-follow'); };
+        if (!f('o') || f('o').getClientRects().length) throw new Error('Follow is offered for Ezra, who is offline — there is nothing to follow');
+        if (!f('m3') || !f('m3').getClientRects().length) throw new Error('CONTROL: Follow is gone for Mia, who is here');
+        ui.close();
+        fx.G.ended = null;
+        await ui.share();
+        card = document.getElementById('collab-share');
+        if (!card.querySelector('.cs-myrole')) throw new Error('CONTROL: a live copy’s panel lost its role line');
+        ui.close();
+      } finally {
+        if (C.presence && realPeople) C.presence.people = realPeople;
+        await dropFixture967(C, [fx.gpid]);
+      }
+    });
+  });
+
+  test('967 10 the name prompt finishes on Return, backing out of it from Start sharing says a name is needed, and the idle row’s colour is the one the prompt picks', { item: '967', budgetMs: 60000 }, async function () {
+    /* J1-7. */
+    const C = need921S7('the name prompt');
+    await withLabs921(async function (ui) {
+      let wasProfile = null;
+      try { wasProfile = localStorage.getItem('fm.profile'); } catch (e) {}
+      const realRandom = Math.random;
+      try {
+        localStorage.removeItem('fm.profile');
+        const p = ui.profile();
+        await settle921(80);
+        const input = document.querySelector('#collab-profile .collab-name');
+        if (!input) throw new Error('setup: no name prompt');
+        const promptText = document.getElementById('collab-profile').textContent;
+        input.value = 'Mia';
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        const res = await Promise.race([p, sleep(800).then(function () { return 'still up'; })]);
+        if (res === 'still up' || !res || res.name !== 'Mia') throw new Error('Return in the name field did nothing (' + JSON.stringify(res) + ') — on an iPhone the keyboard’s return key is how you finish');
+        if (document.getElementById('collab-profile')) throw new Error('the prompt stayed up after Return');
+        if (/cursor/i.test(promptText)) throw new Error('the prompt talks about a cursor — a phone has none (J1-7)');
+        /* The idle Friends row and the prompt agree on the colour. */
+        localStorage.removeItem('fm.profile');
+        Math.random = function () { return 0.5; };
+        await editorWithShape(async function () {
+          await with945(async function () {
+            await atPhoneWidth(async function () {
+              FM.openCanvasDialog({ block: 'friends' });
+              await entranceDone(document.getElementById('canvas-dialog')); await land945();
+              const body = document.getElementById('cv-fr-body');
+              const dot = body.querySelector('.cs-person .cs-dot');
+              if (!dot) throw new Error('setup: the idle block has no row for him');
+              const idle = getComputedStyle(dot).backgroundColor;
+              body.querySelector('.cs-start').click();
+              await settle921(120);
+              const on = document.querySelector('#collab-profile .collab-swatch[aria-pressed="true"]');
+              if (!on) throw new Error('setup: the prompt pre-selected nothing');
+              const picked = getComputedStyle(on).backgroundColor;
+              if (picked !== idle) throw new Error('the idle row shows ' + idle + ' and the prompt it opens pre-selects ' + picked + ' — the preview and the pick disagree');
+              document.querySelector('#collab-profile .fm-ask-cancel').click();
+              await settle921(200);
+              const note = body.querySelector('.cs-note');
+              if (!note || !/Add a name to start sharing/.test(note.textContent)) throw new Error('backing out of the prompt Start sharing raised said nothing (' + (note && note.textContent) + ')');
+              if (C.session) throw new Error('backing out of the prompt started sharing');
+            });
+          });
+        });
+      } finally {
+        Math.random = realRandom;
+        try { if (wasProfile === null) localStorage.removeItem('fm.profile'); else localStorage.setItem('fm.profile', wasProfile); } catch (e) {}
+        ui.close();
+      }
+    });
+  });
+
+  test('967 11 an invite put away is kept for its day (Not now, Cancel on the name, Cancel on the Join sheet) and says how to come back, and a code pasted with its message around it is read', { item: '967', budgetMs: 60000 }, async function () {
+    /* J2-13, J2-14. */
+    const C = need921S6('forgiving invites');
+    const S = C.signal;
+    await withLabs921(async function (ui) {
+      const saved = localStorage.getItem('fm.pendingJoin');
+      let wasProfile = null;
+      try { wasProfile = localStorage.getItem('fm.profile'); } catch (e) {}
+      const got = toast967();
+      const probe = ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/128', maxTouchPoints: 0 }, standalone: false });
+      void probe;
+      const inv = S.newRoom();
+      const fresh = function () { localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() })); };
+      const kept = function () { const p = JSON.parse(localStorage.getItem('fm.pendingJoin') || 'null'); return p && p.j === S.inviteJ(inv) ? p : null; };
+      try {
+        /* 1. Not now on the Labs card. */
+        FM.settings.set('collabLabs', false); ui.syncLabs();
+        fresh();
+        await ui.resumePendingJoin();
+        const lc = document.getElementById('collab-labs-ask');
+        if (!lc) throw new Error('setup: no Labs card for the invite');
+        lc.querySelector('.fm-ask-cancel').click();
+        await settle921(80);
+        if (!kept()) throw new Error('“Not now” threw the invite away — with Labs off there is then nowhere to paste it later (J2-13)');
+        if (!got.some(function (t) { return /Tap the link again when you’re ready/.test(t); })) throw new Error('“Not now” said nothing about how to come back to the invite');
+        /* The next launch does not push the same card at him again… */
+        await ui.resumePendingJoin();
+        if (document.getElementById('collab-labs-ask')) throw new Error('an invite he put away came straight back at the next launch');
+        /* …and tapping the link again does. */
+        C.stashJoin({ hash: '#j=' + S.inviteJ(inv), pathname: '/FreeMotion/', search: '' }, { replaceState: function () {} });
+        await ui.resumePendingJoin();
+        if (!document.getElementById('collab-labs-ask')) throw new Error('tapping the link again did not bring the invite back');
+        ui.close();
+        /* 2. Cancel on the name prompt. */
+        FM.settings.set('collabLabs', true); ui.syncLabs();
+        localStorage.removeItem('fm.profile');
+        fresh(); got.length = 0;
+        const pp = ui.resumePendingJoin();
+        await settle921(80);
+        document.querySelector('#collab-profile .fm-ask-cancel').click();
+        await pp;
+        if (!kept()) throw new Error('Cancel on the name prompt threw the invite away');
+        if (!got.some(function (t) { return /Tap the link again/.test(t); })) throw new Error('Cancel on the name prompt said nothing');
+        ui.setProfile('Test Person', ui.PALETTE[0]);
+        /* 3. Cancel on the filled-in Join sheet. */
+        fresh(); got.length = 0;
+        await ui.resumePendingJoin();
+        const js = document.getElementById('collab-join');
+        if (!js) throw new Error('setup: no Join sheet for the invite');
+        js.querySelector('.fm-ask-cancel').click();
+        await settle921(80);
+        if (!kept()) throw new Error('Cancel on the filled-in Join sheet threw the invite away');
+        if (!got.some(function (t) { return /Tap the link again/.test(t); })) throw new Error('Cancel on the Join sheet said nothing');
+        /* 4. A code with the message around it. */
+        const code = S.toCode(S.packDesc({ v: 1, r: 'o', ufrag: 'abcd', pwd: new Array(25).join('p'), fp: (new Array(33).join('AB').match(/.{2}/g) || []).join(':'), setup: 'actpass', cands: [] }, S.randomBytes(16)));
+        const k = S.classify('Here is the code: ' + code + ' thanks!');
+        if (!k || k.kind !== 'conn') throw new Error('a code pasted with the message in front of it is not read as a code (' + JSON.stringify(k) + ') — J2-14');
+        if (k.code !== code) throw new Error('the code read out of the message is “' + k.code + '”, not the code in it');
+        if (!S.classify(code) || S.classify(code).code !== code) throw new Error('CONTROL: a bare code no longer reads as itself');
+        /* Review (regressions, minor): the three codes v17.05 read whole and the first extractor cut short — a line break
+           inside a group of five, a space inside one, and spaces where the dashes were. Judged by what they DECODE to. */
+        const want = JSON.stringify(S.decode(code));
+        const at = function (str, i, ch) { return str.slice(0, i) + ch + str.slice(i); };
+        if (code.charAt(12) === '-' || code.charAt(18) === '-') throw new Error('setup: the split points are not inside a group of five');
+        [['a line break inside a group', at(code, 12, '\n')],
+         ['a space inside a group', at(code, 18, ' ')],
+         ['spaces instead of dashes', code.replace(/-/g, ' ')],
+         ['a wrapped code inside a message', 'Here is the code:\n' + at(code, 12, '\n') + '\nthanks!']].forEach(function (c) {
+          const kk = S.classify(c[1]);
+          if (!kk || kk.kind !== 'conn') throw new Error('a code with ' + c[0] + ' is not read as a code (' + JSON.stringify(kk) + ')');
+          if (JSON.stringify(S.decode(kk.code)) !== want) throw new Error('a code with ' + c[0] + ' was cut short: read as “' + kk.code + '” (' + S.fromCode(kk.code).length + ' of ' + S.fromCode(code).length + ' bytes) — v17.05 read all of it');
+        });
+        await ui.join();
+        document.querySelector('#collab-join .cj-code').value = 'Here is the code: ' + code;
+        document.querySelector('#collab-join .cj-go').click();
+        await settle921(300);
+        const st = document.querySelector('#collab-join .cj-status').textContent;
+        if (/does not look like/.test(st)) throw new Error('the Join sheet refused a code with the message in front of it: “' + st + '”');
+        if (!/no way to connect/.test(st)) throw new Error('the Join sheet did not read the code inside the message (it says “' + st + '”)');
+      } finally {
+        got.restore();
+        ui._iosProbe(null);
+        ui.close();
+        FM.settings.set('collabLabs', true); ui.syncLabs();
+        try { if (wasProfile === null) localStorage.removeItem('fm.profile'); else localStorage.setItem('fm.profile', wasProfile); } catch (e) {}
+        if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+      }
+    });
+  });
+
+  test('967 12 nothing points at a place that is not there — no “Settings → Labs”, no “tap Share”, no cursor, no button that does nothing, and the Join hint names the long code', { item: '967', budgetMs: 90000 }, async function () {
+    /* J1-2, J2-3, J2-10, J2-12, J5-1, J5-7, J1-7, J4-14. */
+    const C = need921S6('the words');
+    const S = C.signal;
+    await withLabs921(async function (ui) {
+      const bad = function (text, where) {
+        if (/Settings → Labs/.test(text)) throw new Error(where + ' still says “Settings → Labs” — Settings has no Labs heading: “' + text.slice(0, 160) + '”');
+        if (/tap Share/.test(text)) throw new Error(where + ' says “tap Share” — nothing is labelled Share on a phone');
+      };
+      const saved = localStorage.getItem('fm.pendingJoin');
+      const inv = S.newRoom();
+      try {
+        /* The Labs card an invite shows, and the iPhone landing card's steps. */
+        FM.settings.set('collabLabs', false); ui.syncLabs();
+        localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() }));
+        ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/128', maxTouchPoints: 0 }, standalone: false });
+        await ui.resumePendingJoin();
+        const lc = document.getElementById('collab-labs-ask');
+        bad(lc.textContent, 'the invite’s Labs card');
+        if (!/Settings → Live collaboration/.test(lc.textContent)) throw new Error('the invite’s Labs card does not name the real row');
+        ui.close();
+        ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', maxTouchPoints: 5 }, standalone: false });
+        localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() }));
+        await ui.resumePendingJoin();
+        const land = document.getElementById('collab-landing');
+        bad(land.textContent, 'the iPhone landing card');
+        if (!/Settings → Live collaboration/.test(land.textContent)) throw new Error('the landing card does not name the real row');
+        ui.close();
+        ui._iosProbe(null);
+        /* The Friends block with Labs off. */
+        await editorWithShape(async function () {
+          await with945(async function () {
+            await atPhoneWidth(async function () {
+              FM.openCanvasDialog({ block: 'friends' });
+              await entranceDone(document.getElementById('canvas-dialog')); await land945();
+              const t = document.getElementById('cv-fr-body').textContent;
+              bad(t, 'the Labs-off Friends block');
+              if (!/Settings → Live collaboration \(at the bottom\)/.test(t)) throw new Error('the Friends block does not say where the off switch really is');
+            });
+          });
+        });
+        FM.settings.set('collabLabs', true); ui.syncLabs();
+        /* The name prompt. */
+        let wasProfile = localStorage.getItem('fm.profile');
+        ui.profile({ force: true });
+        await settle921(60);
+        const pr = document.getElementById('collab-profile').textContent;
+        if (/cursor/i.test(pr) || !/next to what you’re doing on their screen/.test(pr)) throw new Error('the name prompt reads “' + pr.slice(0, 120) + '”');
+        ui.close();
+        if (wasProfile !== null) localStorage.setItem('fm.profile', wasProfile);
+        /* Codes only: the Join sheet and a link refused because of it. */
+        FM.settings.set('collabCodesOnly', true); ui.syncLabs();
+        try {
+          await ui.join();
+          const sub = document.querySelector('#collab-join .collab-sub').textContent;
+          bad(sub, 'the Codes-only Join sheet');
+          if (!/round person\+/.test(sub)) throw new Error('the Codes-only Join sheet does not name the phone’s door: “' + sub + '”');
+          document.querySelector('#collab-join .cj-code').value = S.inviteLink(inv);
+          document.querySelector('#collab-join .cj-go').click();
+          await settle921(100);
+          bad(document.querySelector('#collab-join .cj-status').textContent, 'the Codes-only refusal');
+          ui.close();
+        } finally { FM.settings.set('collabCodesOnly', false); ui.syncLabs(); }
+        /* The relays unreachable: the way on is text, naming the door — not a button that does nothing. */
+        await withFakeNet921(async function (net) {
+          ['0.peerjs.com', 'broker.emqx.io', 'broker.hivemq.com'].forEach(function (h) { net.dead[h] = true; });
+          await ui.join();
+          document.querySelector('#collab-join .cj-code').value = S.inviteLink(inv);
+          document.querySelector('#collab-join .cj-go').click();
+          const st = await until921S6('the relays-down line', function () { const x = document.querySelector('#collab-join .cj-status'); return x && /free connection service/.test(x.textContent) ? x : null; }, 15000);
+          const b = Array.prototype.filter.call(st.querySelectorAll('button'), function (x) { return /code/i.test(x.textContent); })[0];
+          if (b) throw new Error('“' + b.textContent + '” is a button whose only effect is to replace itself with instructions for the other person (J2-10)');
+          bad(st.textContent, 'the relays-down line');
+          if (!/round person\+/.test(st.textContent) || !/Start sharing/.test(st.textContent) || !/Connect with a code instead/.test(st.textContent)) throw new Error('the relays-down line does not name the phone path: “' + st.textContent + '”');
+          ui.close();
+        });
+        /* Settings: the Join hint names what a friend may have been sent. */
+        FM.settings.open(); await sleep(350);
+        const jr = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Join a live project/.test(r.textContent); })[0];
+        if (!jr || !/Paste the link or code they sent you, or type the short code/.test(jr.textContent)) throw new Error('the Settings Join hint reads “' + (jr && jr.textContent) + '”');
+        FM.settings.close(); await sleep(300);
+      } finally {
+        ui._iosProbe(null);
+        ui.close();
+        if (FM.settings.isOpen()) FM.settings.close();
+        FM.settings.set('collabLabs', true); ui.syncLabs();
+        if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+      }
+    });
+  });
+
+  test('967 13 the long code goes in one tap — Share… beside Copy code on the owner’s Step 1 and on the guest’s answer, the invite block’s own button — and a button that is waiting looks it', { item: '967', budgetMs: 60000 }, async function () {
+    /* J1-13 (code half), J2-7 (the disabled-blue part). */
+    const C = need921S3('Share… for the code');
+    const had = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const shared = [];
+    Object.defineProperty(navigator, 'share', { configurable: true, value: function (d) { shared.push(d); return Promise.resolve(); } });
+    try {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function () {
+          await withFakeLinks921(C, function () { return fakeLink921({ code: 'SHR67', opens: false }); }, async function (made) {
+            await ui.share();
+            const inv = document.querySelector('#collab-share .cs-invite .cs-sharelink');
+            if (!inv) throw new Error('setup: the invite block has no Share…');
+            document.querySelector('.cs-add').click();
+            await settle921(80);
+            const code = document.getElementById('collab-offer-code').textContent;
+            const sh = document.querySelector('#collab-share .cs-sharecode');
+            if (!sh) throw new Error('the owner’s Step 1 code has only Copy — the hardest thing to send has the fewest ways to send it (J1-13)');
+            if (!sh.classList.contains('cs-sharelink') || !sh.parentNode.classList.contains('cs-linkrow') || !sh.parentNode.querySelector('.cs-copy')) throw new Error('Share… is not the invite block’s own button beside Copy code');
+            sh.click();
+            if (!shared.length || shared[shared.length - 1].text !== code) throw new Error('Share… did not hand the code to the share sheet (' + JSON.stringify(shared) + ')');
+            /* Connect, pressed: it looks waiting, and a second press starts nothing. */
+            let answers = 0;
+            const l = made[0], orig = l.acceptAnswer;
+            l.acceptAnswer = function () { answers++; return orig.apply(this, arguments); };
+            document.querySelector('.cs-answer').value = 'FM1-ANSWER';
+            const connect = document.querySelector('.cs-connect');
+            connect.click();
+            await settle921(60);
+            connect.click();
+            await settle921(60);
+            if (answers !== 1) throw new Error('two taps on Connect made ' + answers + ' attempts');
+            if (!(+getComputedStyle(connect).opacity < 0.9)) throw new Error('Connect is waiting and still looks live (opacity ' + getComputedStyle(connect).opacity + ')');
+            ui.close();
+          });
+        });
+        /* The guest's answer code. */
+        await withFakeLinks921(C, function () { return fakeLink921({ code: 'ANS67', opens: false }); }, async function () {
+          await ui.join();
+          document.querySelector('#collab-join .cj-code').value = 'FM1-ABCDE';
+          const go = document.querySelector('#collab-join .cj-go');
+          go.click();
+          await settle921(150);
+          if (!go.disabled || !(+getComputedStyle(go).opacity < 0.9)) throw new Error('Join is waiting and still looks bright blue (disabled ' + go.disabled + ', opacity ' + getComputedStyle(go).opacity + ') — J2-7');
+          const sh = document.querySelector('#collab-join .cj-back .cs-sharecode');
+          if (!sh) throw new Error('the guest’s answer code has no Share…');
+          sh.click();
+          if (shared[shared.length - 1].text !== 'FM1-ANSWER') throw new Error('Share… on the answer code shared ' + JSON.stringify(shared[shared.length - 1]));
+          ui.close();
+        });
+      });
+    } finally {
+      if (had) Object.defineProperty(navigator, 'share', had); else delete navigator.share;
+    }
+  });
+
+  /* ═══ #967 BATCH 1 REVIEW — the eight things three reviewers found in the batch (b1fix). Each test below FAILS on the
+     batch as it was first built (3c8d1d93) and passes here. ═══════════════════════════════════════════════════════════ */
+
+  test('967 6b a guest whose OWN phone was paused (seven seconds in the background) keeps its link — the owner is pinged at once and given the full six seconds — while an owner who really is silent is still found: Offline at six seconds, the link closed only at the grace', { item: '967', budgetMs: 60000 }, async function () {
+    /* Review (regressions, major): liveness could not tell the owner going silent from the guest's own page being paused.
+       Measured on a 7 s main-thread stall with an owner answering every ping within 5 ms: offline, closedWhy 'silence'.
+       A code-joined guest has no reconnect — the friend was out for good. First on a clock the test drives. */
+    const C = need921S6('liveness across the guest’s own pause');
+    const inv = C.bridge.invariants();
+    let t = 7000000;
+    const now = function () { return t; };
+    const doc = { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [] };
+    const H = C.Host({ base: jclone921(doc), invariants: inv, now: now });
+    const HS = C.Session({ adapter: plainAdapter921(jclone921(doc), inv), role: 'owner', mid: 'o', host: H, now: now });
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    const mid = HS.addPeer(loop.a, { role: 'editor', name: 'G', color: '#ff9f43' });
+    const GA = plainAdapter921(jclone921(doc), inv);
+    const G = C.Session({ adapter: GA, role: 'editor', mid: mid, base: jclone921(doc), epoch: H.epoch, now: now });
+    G.setLink(loop.b);
+    const pings = [];
+    const origB = loop.b.send;
+    loop.b.send = function (ch, m) { if (m && m.t === 'ping') pings.push(t); return origB.call(loop.b, ch, m); };
+    G.setLiveness(true);
+    for (let i = 0; i < 30; i++) { t += 100; G.tick('hot'); loop.settle(); }           // three seconds of ordinary ticking
+    if (!loop.b.open) throw new Error('setup: a guest whose pings are answered went offline in 3 s');
+    /* The phone goes to the background for seven seconds: no tick runs, and the owner — who only speaks when pinged —
+       says nothing. Then the first tick after it. */
+    t += 7000;
+    const before = pings.length;
+    G.tick('hot');
+    if (!loop.b.open || G.online === false) throw new Error('the first tick after the GUEST’S OWN 7 s pause closed a link that was fine — the owner was never given a chance to answer (review: regressions, major)');
+    if (pings.length === before || pings[pings.length - 1] !== t) throw new Error('after its own pause the guest did not ping the owner at once');
+    loop.settle();                                                                     // the owner answers
+    for (let i = 0; i < 40; i++) { t += 100; G.tick('hot'); loop.settle(); }
+    if (!loop.b.open || G.online === false) throw new Error('an owner answering every ping was dropped in the four seconds after the guest came back');
+    /* CONTROL: a pause, and then an owner who really is gone — nothing delivered any more. Still found: Offline at
+       OFFLINE_AFTER — and (round 2, B) the link KEPT through that, closed only when the silence has lasted the grace. */
+    t += 7000;
+    const back = t;
+    G.tick('hot');
+    if (!loop.b.open || G.online === false) throw new Error('CONTROL: the tick after the second pause gave up on the owner before he had a chance to answer');
+    let offAt = null;
+    for (let i = 0; i < 100 && offAt === null; i++) { t += 100; G.tick('hot'); if (G.online === false) offAt = t - back; }
+    if (offAt === null) throw new Error('an owner who never answered again was never found — ten seconds after the guest came back it still reads online');
+    if (offAt < C.LIMITS.OFFLINE_AFTER - 200 || offAt > C.LIMITS.OFFLINE_AFTER + 600) throw new Error('the silent owner was called Offline ' + offAt + ' ms after the guest came back — it should be OFFLINE_AFTER (' + C.LIMITS.OFFLINE_AFTER + ' ms)');
+    if (GA.offlineN !== 1) throw new Error('the silence was not said — onOffline ×' + GA.offlineN);
+    if (!loop.b.open) throw new Error('the silent owner was called Offline AND the link was closed at ' + offAt + ' ms — an owner in Messages for ten seconds loses a code-joined friend for good (round 2, B)');
+    const grace = grace967(C) || 120000;
+    let closedAt = null;
+    for (let i = 0; i < grace / 500 + 40 && closedAt === null; i++) { t += 500; G.tick('hot'); if (!loop.b.open) closedAt = t - back; }
+    if (closedAt === null) throw new Error('a dead owner’s link was never closed — ' + (t - back) + ' ms of silence against a grace of ' + grace + ' ms');
+    if (closedAt < grace - 200 || closedAt > grace + 700) throw new Error('the silent link was closed ' + closedAt + ' ms into the silence — it should be the grace (' + grace + ' ms)');
+    if (G.online !== false) throw new Error('the silent link closed and the session reads online');
+  });
+
+  test('967 6c …and with the real ticker: a guest who joined with a code stays online through a seven-second stall of its own page when the owner answers, goes Offline when the owner stops — keeping its link and its pings — and comes back online the moment he answers again', { item: '967', budgetMs: 90000 }, async function () {
+    /* The reviewer's probe, in the page: the session's own 100 ms ticker, the UI's code route with liveness on, and a
+       real seven-second main-thread stall standing in for a phone in the background. */
+    const C = need921S3('a code-joined guest across its own pause');
+    await withLabs921(async function (ui) {
+      const realJoin = C.join;
+      const ids = [];
+      let silent = false, pongs = 0;
+      try {
+        await withFakeLinks921(C, function () {
+          const l = fakeLink921({ code: 'PAUS7' });
+          const send = l.send;
+          l.send = function (ch, m) {
+            if (ch === 'ctl' && m && m.t === 'ping' && !silent) setTimeout(function () { pongs++; if (typeof l.onmessage === 'function') l.onmessage('ctl', { t: 'pong', n: m.n, hc: Date.now() }); }, 5);
+            return send.call(l, ch, m);
+          };
+          return l;
+        }, async function (made) {
+          C.signal.handshake = function () { return Promise.resolve({ sas: 'Q4T7N', host: { sid: 'r967', nm: 'Ezra', cl: '#a3e635' } }); };
+          C.join = function (o) {
+            const fx = guest967(C);
+            ids.push(fx.gpid);
+            fx.G.setLink(o.link);
+            C.attach(fx.G, {});
+            return Promise.resolve({ gpid: fx.gpid, session: fx.G });
+          };
+          await ui.join();
+          document.querySelector('#collab-join .cj-code').value = 'FM1-ABCDE';
+          document.querySelector('#collab-join .cj-go').click();
+          const s = await until921S6('the guest to be in', function () { return C.session && !C.session.isOwner ? C.session : null; }, 5000);
+          await settle921(2500);
+          if (s.online === false || !pongs) throw new Error('setup: before any pause the guest is ' + (s.online === false ? 'offline' : 'online') + ' with ' + pongs + ' pongs');
+          /* Seven seconds with this page doing nothing else — no tick, no timer, no message. */
+          const p0 = pongs;
+          const until = Date.now() + 7000;
+          while (Date.now() < until) { /* a phone in the background */ }
+          await settle921(1500);
+          if (s.online === false || made[0].closed) throw new Error('after a 7 s pause of the GUEST’S OWN page the link was closed although the owner answers every ping (' + (pongs - p0) + ' pongs since) — the friend is out for good, a code route has no way back (review: regressions, major)');
+          if (pongs === p0) throw new Error('after the pause the guest never pinged the owner');
+          const b0 = document.getElementById('collab-banner');
+          if (b0 && !b0.classList.contains('hidden') && /Offline/.test(b0.textContent)) throw new Error('the Offline banner came up after the guest’s own pause');
+          /* CONTROL: now the owner stops answering — his phone went to Messages, or his app has gone. */
+          silent = true;
+          const t0 = Date.now();
+          await until921S6('the silent owner to be noticed', function () { return s.online === false ? 1 : 0; }, 10000)
+            .catch(function () { throw new Error('CONTROL: an owner who stopped answering was not noticed within 10 s'); });
+          const took = Date.now() - t0;
+          if (took > C.LIMITS.OFFLINE_AFTER + 2500) throw new Error('the silent owner took ' + took + ' ms to be noticed');
+          await until921S6('the Offline banner', function () { const x = document.getElementById('collab-banner'); return x && !x.classList.contains('hidden') && /Offline/.test(x.textContent) ? x : null; }, 3000);
+          /* Round 2 (B): being told is not being cut off — the link is kept, and the pings go on. */
+          if (made[0].closed) throw new Error('the silent owner was called Offline AND the link was closed — the friend came back to nothing when he did (round 2, B; measured with two Chromes: the owner SIGSTOPped 10 s, the guest out for good)');
+          const sentAt = made[0].sent.length;
+          await settle921(2600);
+          if (!made[0].sent.slice(sentAt).some(function (x) { return x.ch === 'ctl' && x.msg && x.msg.t === 'ping'; })) throw new Error('an Offline guest stopped pinging — nothing would ever tell it the owner is back');
+          /* He is back: the next ping is answered, and that brings the guest back on the same link. */
+          const p1 = pongs, s1 = made[0].sent.length;
+          silent = false;
+          await until921S6('the guest to come back online', function () { return s.online === true ? 1 : 0; }, 4000)
+            .catch(function () { throw new Error('the owner answered again (' + (pongs - p1) + ' pongs) and the guest still reads Offline — the first word from the owner must bring it back'); });
+          if (made[0].closed || made.length !== 1) throw new Error('the guest came back on a different link, or its link was closed');
+          if (!made[0].sent.slice(s1).some(function (x) { return x.ch === 'ctl' && x.msg && x.msg.t === 'hello'; })) throw new Error('back online without saying hello — the owner never sends what it missed');
+          await settle921(300);
+          const b1 = document.getElementById('collab-banner');
+          if (b1 && !b1.classList.contains('hidden') && /Offline/.test(b1.textContent)) throw new Error('the guest is back online and the Offline banner is still up');
+        });
+      } finally {
+        C.join = realJoin;
+        ui.close();
+        await dropFixture967(C, ids);
+      }
+    });
+  });
+
+  test('967 6d an owner away ten seconds (his phone in Messages) — the guest says Offline at six, keeps its link and keeps pinging, comes back online the moment he answers, and edits sync both ways after it, the ones made while he was away included', { item: '967', budgetMs: 60000 }, async function () {
+    /* Round 2 review (major), measured with two Chromes and the owner's whole browser SIGSTOPped 8-10 s: the friend went
+       Offline at 6 s and the link was CLOSED, so when he came back nothing synced either way and the friend was out for
+       good — a code-joined friend has no way back but a fresh code. v17.05 rode the same pause out. Here on a clock the
+       test drives, over a real Host: the owner's device is "paused" by delivering nothing either way for ten seconds. */
+    const C = need921S6('liveness across the owner’s pause');
+    const inv = C.bridge.invariants();
+    let t = 9000000;
+    const now = function () { return t; };
+    const doc = { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('A 967d'), layer921('B 967d')] };
+    const H = C.Host({ base: jclone921(doc), invariants: inv, now: now });
+    const hostDoc = jclone921(doc);
+    const HS = C.Session({ adapter: plainAdapter921(hostDoc, inv), role: 'owner', mid: 'o', host: H, now: now });
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    const mid = HS.addPeer(loop.a, { role: 'editor', name: 'G', color: '#ff9f43' });
+    const gDoc = jclone921(doc);
+    const GA = plainAdapter921(gDoc, inv);
+    const G = C.Session({ adapter: GA, role: 'editor', mid: mid, base: jclone921(doc), epoch: H.epoch, now: now });
+    G.setLink(loop.b);
+    const sent = [];
+    const origB = loop.b.send;
+    loop.b.send = function (ch, m) { sent.push({ at: t, t: m && m.t }); return origB.call(loop.b, ch, m); };
+    let heardAt = t;
+    const origOn = loop.b.onmessage;
+    loop.b.onmessage = function () { heardAt = t; return origOn.apply(this, arguments); };
+    G.setLiveness(true);
+    for (let i = 0; i < 30; i++) { t += 100; G.tick('hot'); loop.settle(); }
+    if (G.online === false || !loop.b.open) throw new Error('setup: a guest whose pings are answered went offline in 3 s');
+    /* The owner's phone goes to Messages: for ten seconds nothing he would say arrives, and nothing reaches him. The
+       friend keeps working. */
+    const away = t, lastWord = heardAt;
+    let offAt = null;
+    for (let i = 0; i < 100; i++) {
+      t += 100;
+      if (i === 70) { gDoc.layers[1].name = 'guest while away 967d'; G.tick('full'); }
+      G.tick('hot');
+      if (offAt === null && G.online === false) offAt = t - lastWord;
+    }
+    if (offAt === null) throw new Error('ten seconds with nothing from the owner and the guest still reads online — it would type into nothing');
+    if (offAt < C.LIMITS.OFFLINE_AFTER - 200 || offAt > C.LIMITS.OFFLINE_AFTER + 600) throw new Error('the silent owner was called Offline ' + offAt + ' ms after the last thing heard from him — it should be OFFLINE_AFTER (' + C.LIMITS.OFFLINE_AFTER + ' ms)');
+    if (GA.offlineN !== 1) throw new Error('the silence was not said — onOffline ×' + GA.offlineN);
+    if (!loop.b.open) throw new Error('the guest said Offline AND closed its link ' + offAt + ' ms into an owner’s ten-second pause — he comes back to a friend he can never reach again (round 2, B)');
+    if (!sent.some(function (x) { return x.t === 'ping' && x.at > lastWord + offAt; })) throw new Error('an Offline guest stopped pinging — nothing would ever tell it the owner is back');
+    /* He is back: what was queued goes through, he answers, and the guest is back on the SAME link. */
+    const hellos = sent.filter(function (x) { return x.t === 'hello'; }).length;
+    loop.settle();
+    if (G.online !== true || GA.onlineN !== 1) throw new Error('the owner answered again and the guest still reads Offline (online ' + G.online + ', onOnline ×' + GA.onlineN + ')');
+    if (!loop.b.open) throw new Error('the guest came back online on a closed link');
+    if (sent.filter(function (x) { return x.t === 'hello'; }).length !== hellos + 1) throw new Error('back online without one hello — the owner is never asked for what it missed');
+    if (hostDoc.layers[1].name !== 'guest while away 967d') throw new Error('the edit the friend made while the owner was away never reached him (' + JSON.stringify(hostDoc.layers[1].name) + ')');
+    /* Edits both ways after it. */
+    hostDoc.layers[0].name = 'owner after 967d';
+    HS.tick('full'); loop.settle();
+    if (gDoc.layers[0].name !== 'owner after 967d') throw new Error('after the pause the owner’s edit did not reach the friend (' + JSON.stringify(gDoc.layers[0].name) + ')');
+    gDoc.layers[1].name = 'guest after 967d';
+    G.tick('full'); loop.settle();
+    if (hostDoc.layers[1].name !== 'guest after 967d') throw new Error('after the pause the friend’s edit did not reach the owner (' + JSON.stringify(hostDoc.layers[1].name) + ')');
+    for (let i = 0; i < 40; i++) { t += 100; G.tick('hot'); loop.settle(); }
+    if (G.online === false || !loop.b.open) throw new Error('back online, then dropped again with the owner answering');
+  });
+
+  test('967 1c the guest waiting for its code to be pasted is told softly when it loses touch with the owner — “Lost touch with them”, the code KEPT — carries on when the connection comes back, and only a loss that lasts the grace ends it with “The connection dropped while you were waiting”', { item: '967', budgetMs: 150000 }, async function () {
+    /* Review (first-timer, major): with two Chromes, the owner pressed Stop sharing, the guest's connection went 'failed'
+       from +16 s, and at +112 s the sheet still said "Waiting for them to paste your code…" with a dead code, for up to
+       ten minutes. Round 1 ended the wait on that first 'failed' — and round 2's review measured the cost: the owner
+       merely in Messages for 25 s (fetching this very code) sent the guest's connection to 'failed' the same way, the
+       sheet gave up, and his paste never connected; left alone, the connection came back and Step 3 was reached.
+       So a 'failed' is a soft line that keeps the code, a recovery takes it back, and only a 'failed' that lasts the
+       grace (shortened here; 120 s in the app) is the dropped line. First with a connection the test drives, then with
+       two real peer connections and no seam but the grace. */
+    const C = need921S3('the guest’s wait when the owner goes quiet');
+    await withLabs921(async function (ui) {
+      function fakePc() {
+        const pc = new EventTarget();
+        pc.connectionState = 'connecting';
+        pc.fail = function () { pc.connectionState = 'failed'; pc.dispatchEvent(new Event('connectionstatechange')); };
+        pc.back = function () { pc.connectionState = 'connecting'; pc.dispatchEvent(new Event('connectionstatechange')); };
+        return pc;
+      }
+      const codeOn = function () {
+        const b = document.querySelector('#collab-join .cj-back');
+        return !!b && !b.classList.contains('hidden') && /^FM1-/.test(b.querySelector('.cs-code').textContent);
+      };
+      try {
+        grace967(C, 1500);
+        await withFakeLinks921(C, function () { const l = fakeLink921({ code: 'GONE7', opens: false }); l.pc = fakePc(); return l; }, async function (made) {
+          await ui.join();
+          document.querySelector('#collab-join .cj-code').value = 'FM1-ABCDE';
+          document.querySelector('#collab-join .cj-go').click();
+          await settle921(400);
+          const st = document.querySelector('#collab-join .cj-status');
+          if (!/Waiting for them to paste your code/.test(st.textContent)) throw new Error('setup: the sheet is not waiting: “' + st.textContent + '”');
+          made[0].pc.fail();
+          await settle921(150);
+          if (/The connection dropped while you were waiting/.test(st.textContent)) throw new Error('the FIRST “failed” ended the wait — Chrome comes back out of “failed” when the owner does, and an owner fetching this code from Messages is away that long (round 2, A)');
+          if (!/Lost touch with them — this code still works if they come back/.test(st.textContent)) throw new Error('the connection failed and the sheet says “' + st.textContent + '” — it should say it lost touch, softly, and keep the code');
+          if (!codeOn()) throw new Error('the answer code was taken off the sheet at the first “failed” — it still works if they come back');
+          if (made[0].closed) throw new Error('the link was closed at the first “failed”');
+          /* It comes back: the wait carries on as before. */
+          made[0].pc.back();
+          await settle921(150);
+          if (!/Waiting for them to paste your code/.test(st.textContent)) throw new Error('the connection came back and the sheet still says “' + st.textContent + '”');
+          await settle921(1700);                                   // past the grace from the FIRST failure: nothing may end it
+          if (!/Waiting for them to paste your code/.test(st.textContent) || !codeOn() || made[0].closed) throw new Error('a wait that came back was ended by the first failure’s grace: “' + st.textContent + '”');
+          /* It fails again and stays failed: the grace, then the dropped line. */
+          made[0].pc.fail();
+          const t0 = Date.now();
+          await settle921(150);
+          if (!/Lost touch with them/.test(st.textContent)) throw new Error('the second failure was not said: “' + st.textContent + '”');
+          await until921S6('the dropped line once the failure has lasted the grace', function () { return /The connection dropped while you were waiting/.test(st.textContent) ? 1 : 0; }, 5000)
+            .catch(function () { throw new Error('a failure that outlasted the grace (' + grace967(C) + ' ms) never ended the wait: “' + st.textContent + '”'); });
+          const took = Date.now() - t0;
+          if (took < 1300) throw new Error('the wait was ended ' + took + ' ms after the failure — before the grace (' + grace967(C) + ' ms)');
+          if (codeOn()) throw new Error('the dead answer code and its buttons are still on the sheet');
+          if (!made[0].closed) throw new Error('the dead link was not closed');
+          ui.close();
+        });
+        /* Two real peer connections: the owner's side is closed while the guest waits (Stop sharing). */
+        grace967(C, 4000);
+        const made = [];
+        const realLink = C.link.RtcLink;
+        C.link.RtcLink = function (o) { const l = realLink(o); made.push(l); return l; };
+        let h = null;
+        try {
+          h = realLink({ self: 'h', peer: 'g' });
+          const offer = await h.createOffer();
+          await ui.join();
+          document.querySelector('#collab-join .cj-code').value = offer;
+          document.querySelector('#collab-join .cj-go').click();
+          await until921S6('the guest’s answer code', function () { return codeOn() ? 1 : 0; }, 15000);
+          await settle921(1500);
+          const st = document.querySelector('#collab-join .cj-status');
+          if (!/Waiting for them to paste your code/.test(st.textContent)) throw new Error('setup: the sheet is not waiting: “' + st.textContent + '”');
+          const t0 = Date.now();
+          h.close(); h = null;                                     // Stop sharing: the owner's offer is closed
+          let lostAt = null;
+          await until921S6('the sheet to say the connection dropped', function () {
+            if (lostAt === null && /Lost touch with them/.test(st.textContent)) lostAt = Date.now() - t0;
+            return /The connection dropped while you were waiting/.test(st.textContent) ? 1 : 0;
+          }, 90000).catch(function () { const g = made[made.length - 1]; throw new Error('90 s after the owner’s side closed the sheet still says “' + st.textContent + '” (guest ' + (g && g.pc ? g.pc.connectionState + ' / ' + g.pc.iceConnectionState : '?') + ')'); });
+          const took = Date.now() - t0;
+          if (lostAt === null) throw new Error('the sheet went straight to “dropped” ' + took + ' ms after the owner’s side closed — it never said it had lost touch, so an owner who was only away would have been given up on (round 2, A)');
+          if (took - lostAt < 3000) throw new Error('“Lost touch” at ' + lostAt + ' ms and “dropped” at ' + took + ' ms — the grace (' + grace967(C) + ' ms) was not given');
+          if (codeOn()) throw new Error('the dead answer code is still on the sheet');
+        } finally {
+          C.link.RtcLink = realLink;
+          if (h) h.close();
+          ui.close();
+        }
+      } finally { grace967(C, null); ui.close(); }
+    });
+  });
+
+  test('967 7c a peer connection that has FAILED is held, not closed — the owner is told “Sam’s connection dropped” and Sam greys, “Sam is back” when it recovers, and only a failure that lasts the grace takes Sam off his list, without saying it twice', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (first-timer, major), with two Chromes and the guest's Chrome killed: the owner's connection went
+       'disconnected' at 15 s and connectionState 'failed' from 27 s, the legacy iceConnectionState never 'failed' — and
+       nothing closed on that, so nobody was told. Round 1 closed on the first 'failed'; round 2's review measured the
+       cost: Sam's phone in Messages for 25 s (SIGSTOP) sent the owner's side to 'failed' at about 20 s and Sam was out
+       for good, where left open the same pause came back 'connected' and edits synced both ways. A peer cannot be
+       killed or paused inside one page, so the state is dispatched on a REAL RtcLink's peer connection; the grace is
+       shortened (120 s in the app). */
+    const C = need921S3('a failed peer connection');
+    const said = function (got, re) { return got.filter(function (t) { return re.test(t); }).length; };
+    try {
+      /* 1. The link itself: down, back, and down for good. */
+      grace967(C, 1200);
+      const pair = await rtcPair921();
+      try {
+        let why = null, st = 'failed';
+        const downs = [];
+        pair.h.onclose = function (w) { why = w; };
+        pair.h.ondown = function (d) { downs.push(d); };
+        Object.defineProperty(pair.h.pc, 'connectionState', { configurable: true, get: function () { return st; } });
+        pair.h.pc.dispatchEvent(new Event('connectionstatechange'));
+        if (!pair.h.open) throw new Error('the link was closed at the FIRST “failed” (' + why + ') — Chrome comes back out of “failed” when the other side does, and a friend in Messages for 25 s was out for good (round 2, A)');
+        if (pair.h.down !== true || downs.join() !== 'true') throw new Error('a failed link does not say it is down (down ' + pair.h.down + ', ondown ' + JSON.stringify(downs) + ')');
+        st = 'connected';
+        pair.h.pc.dispatchEvent(new Event('connectionstatechange'));
+        if (pair.h.down !== false || downs.join() !== 'true,false') throw new Error('the connection came back and the link does not say so (down ' + pair.h.down + ', ondown ' + JSON.stringify(downs) + ')');
+        await settle921(1700);
+        if (!pair.h.open) throw new Error('a link that came back was closed by the grace of the failure before it');
+        const got = nextOn921(pair.h, 'ctl', 5000, 'after the recovery');
+        pair.g.send('ctl', { t: 'x967', n: 1 });
+        await got;
+        st = 'failed';
+        pair.h.pc.dispatchEvent(new Event('connectionstatechange'));
+        const t0 = Date.now();
+        await until921S6('the link to close once the failure has lasted the grace', function () { return pair.h.open ? 0 : 1; }, 5000)
+          .catch(function () { throw new Error('a failure that outlasted the grace (' + grace967(C) + ' ms) never closed the link — a dead peer would sit in his list for ever'); });
+        const took = Date.now() - t0;
+        if (took < 1000) throw new Error('the failed link was closed ' + took + ' ms after the failure — before the grace (' + grace967(C) + ' ms)');
+        if (why !== 'ice') throw new Error('the failed link closed saying “' + why + '”');
+      } finally { pair.close(); }
+      /* 2. Through the owner's own card: Sam comes in with a code over a real connection; Sam's connection fails,
+         comes back, then fails for good. */
+      grace967(C, 2500);
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const got = toast967();
+          let g = null;
+          try {
+            await ui.share();
+            document.querySelector('.cs-add').click();
+            const offer = await until921S6('the owner’s code', function () { const c = document.getElementById('collab-offer-code'); return c && /^FM1-/.test(c.textContent) ? c.textContent : null; }, 15000);
+            g = C.link.RtcLink({ self: 'guest', peer: 'host' });
+            const answer = await g.acceptOffer(offer);
+            const gh = g.opened.then(function () { return C.signal.handshake(g, { side: 'guest', key: g.mk, mode: 'conn', fpLocal: g.fpLocal, fpRemote: g.fpRemote }); });
+            gh.catch(function () {});
+            document.querySelector('.cs-answer').value = answer;
+            document.querySelector('.cs-connect').click();
+            const yes = await until921S6('Step 3', function () { return document.querySelector('.cs-sasyes'); }, 20000);
+            await gh;
+            g.send('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43', have: { epoch: 0, seq: 0 }, proto: C.PROTO, schema: C.SCHEMA_REV });
+            await settle921(150);
+            yes.click();
+            await until921S6('Sam to be in', function () { return ctx.S.peerIds().length === 1 ? 1 : 0; }, 10000)
+              .catch(function () { throw new Error('setup: Sam was not let in over the real connection (' + JSON.stringify(got) + ')'); });
+            const mid = ctx.S.peerIds()[0];
+            const L = ctx.S._eps && ctx.S._eps[mid];
+            if (!L || !L.pc) throw new Error('setup: the owner holds no real link for Sam');
+            let st = 'failed';
+            Object.defineProperty(L.pc, 'connectionState', { configurable: true, get: function () { return st; } });
+            got.length = 0;
+            L.pc.dispatchEvent(new Event('connectionstatechange'));
+            await settle921(250);
+            if (said(got, /^Sam’s connection dropped$/) !== 1) throw new Error('Sam’s connection failed and the owner was told ' + JSON.stringify(got) + ' — it should say “Sam’s connection dropped”, once');
+            if (ctx.S.peerIds().indexOf(mid) < 0) throw new Error('Sam was taken off the owner’s list at the FIRST “failed” — a phone in Messages for 25 s comes back, and a code-joined friend has no other way in (round 2, A)');
+            if (!L.open) throw new Error('the owner’s link to Sam was closed at the first “failed”');
+            if (C.presence && C.presence.stateOf) {
+              /* The presence tick runs by hand in the suite: ask it now. Sam joined a moment ago and the owner has had
+                 no chance to call Sam silent, so the grey is the failed connection's own. */
+              await until921S6('Sam to grey', function () { try { if (C.presence.tick) C.presence.tick(); } catch (e) {} return C.presence.stateOf(mid) === 'off' ? 1 : 0; }, 4000)
+                .catch(function () { throw new Error('Sam’s connection is down and Sam is still shown ' + C.presence.stateOf(mid) + ' (presence attached ' + (C.presence.attached && C.presence.attached()) + ', people ' + JSON.stringify((C.presence.people ? C.presence.people() : []).map(function (x) { return x.mid + ':' + x.st; })) + ')'); });
+            }
+            /* It comes back. */
+            got.length = 0;
+            st = 'connected';
+            L.pc.dispatchEvent(new Event('connectionstatechange'));
+            await settle921(250);
+            if (said(got, /^Sam is back$/) !== 1) throw new Error('Sam’s connection came back and the owner was told ' + JSON.stringify(got) + ' — it should say “Sam is back”, once');
+            await settle921(2700);                                   // past the first failure's grace
+            if (!L.open || ctx.S.peerIds().indexOf(mid) < 0) throw new Error('Sam came back and was dropped anyway by the grace of the failure before');
+            /* …and fails for good: one "dropped", the grace, then off the list with nothing said twice. */
+            got.length = 0;
+            st = 'failed';
+            L.pc.dispatchEvent(new Event('connectionstatechange'));
+            const t0 = Date.now();
+            await until921S6('Sam to leave the list once the failure has lasted the grace', function () { return ctx.S.peerIds().length === 0 ? 1 : 0; }, 8000)
+              .catch(function () { throw new Error('a failure that outlasted the grace never took Sam off the list — a dead peer sits there for ever'); });
+            const took = Date.now() - t0;
+            if (took < 2200) throw new Error('Sam was taken off the list ' + took + ' ms after the failure — before the grace (' + grace967(C) + ' ms)');
+            await settle921(250);
+            if (said(got, /^Sam’s connection dropped$/) !== 1) throw new Error('a connection that failed for good was said ' + JSON.stringify(got) + ' — once when it dropped, and not again when the grace ran out');
+            if (document.querySelector('.cs-person[data-mid="' + mid + '"]')) throw new Error('Sam’s row is still on the owner’s card');
+          } finally {
+            got.restore();
+            if (g) g.close();
+            ui.close();
+          }
+        });
+      });
+    } finally { grace967(C, null); }
+  });
+
+  test('967 4b Stop sharing from Home while ANOTHER TAB is the one sharing the project says so and drops nothing — and stops it once that tab has let go', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (arming, minor): Home's Stop sharing ended only THIS tab's session and dropped the record, said "Sharing
+       stopped" — and the other tab's session went on running on the relays, writing the record straight back. The tab
+       holding the project's host lock is the one sharing it; here that tab is the test runner's page, which is another
+       client on the same origin, holding the same lock. */
+    const C = need921S6('Stop sharing from another tab');
+    const LM = (window.parent && window.parent !== window && window.parent.navigator && window.parent.navigator.locks) || navigator.locks;
+    if (!LM || typeof LM.request !== 'function') throw new Error('setup: this browser has no Web Locks — there is no other tab to stand in for');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        let other = null, release = null;
+        const got = toast967();
+        const labels = function (card) {
+          card.querySelector('.hm-card-more').click();
+          return Array.prototype.slice.call(document.querySelectorAll('#ctx-menu .ctx-item'));
+        };
+        try {
+          await ui.share(); ui.close();
+          other = await FM.projects.create({ name: 'Home 967 4b', width: 320, height: 240 });
+          await until921S6('A to pause', function () { return !C.session; }, 6000);
+          if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('setup: A’s room did not survive the switch');
+          await settle921(300);
+          /* Another tab picks A up and shares it: it holds A's host lock. */
+          await new Promise(function (res) {
+            LM.request('fm-collab-host-' + ctx.pid, function () { return new Promise(function (r) { release = r; res(); }); });
+          });
+          FM.home.open(); await settle921(450);
+          let card = document.querySelector('.hm-card[data-pid="' + ctx.pid + '"]');
+          let items = labels(card);
+          const stop = items.filter(function (x) { return x.textContent.trim() === 'Stop sharing'; })[0];
+          if (!stop) { FM.contextMenu.hide(); throw new Error('setup: A’s ⋯ has no Stop sharing'); }
+          got.length = 0;
+          stop.click();
+          const ok = await askOk921();
+          const ask = document.getElementById('fm-ask').textContent;
+          if (!/another FreeMotion tab/.test(ask) || /Stop sharing\?/.test(ask)) throw new Error('with another tab sharing A, Stop sharing from Home asked “' + ask.slice(0, 160) + '” — it can only stop THIS tab’s session, so it must say where A is being shared from');
+          if (!/stop it there/.test(ask)) throw new Error('the other-tab message does not say where to stop it: “' + ask.slice(0, 160) + '”');
+          ok.click();
+          await settle921(300);
+          if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('Stop sharing dropped A’s room while another tab is sharing it — that tab goes on running and writes it straight back');
+          if (got.some(function (t) { return /Sharing stopped/.test(t); })) throw new Error('it said “Sharing stopped” while the other tab is still sharing');
+          /* CONTROL: the other tab lets go — now Home can stop it. */
+          release(); release = null;
+          await settle921(200);
+          card = document.querySelector('.hm-card[data-pid="' + ctx.pid + '"]');
+          items = labels(card);
+          items.filter(function (x) { return x.textContent.trim() === 'Stop sharing'; })[0].click();
+          const ok2 = await askOk921();
+          if (!/Stop sharing\?/.test(document.getElementById('fm-ask').textContent)) throw new Error('CONTROL: with no other tab, Stop sharing did not ask its own question');
+          ok2.click();
+          await settle921(400);
+          if (localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('CONTROL: with no other tab sharing it, Stop sharing kept the room');
+        } finally {
+          if (release) release();
+          got.restore();
+          try { FM.contextMenu.hide(); } catch (e) {}
+          if (FM.home.isOpen()) FM.home.close();
+          if (other) { try { if (FM.projects.currentId() === other) await FM.projects.open(ctx.pid); await FM.projects.remove(other); } catch (e) {} }
+        }
+      });
+    });
+  });
+
+  test('967 4c the Labs switch in a tab while ANOTHER TAB is sharing a project says so and drops nothing — the switch stays on — and turns off as before once that tab has let go', { item: '967', budgetMs: 90000 }, async function () {
+    /* Round 2 review (arming-off, minor), measured with two tabs on one profile: tab 2's switch asked "This stops sharing
+       “Untitled”…", said "Sharing stopped — “Untitled” is no longer shared" on the row and deleted the record, while
+       tab 1's session, relay and host lock ran on — and tab 1 wrote the record back the next time its Friends block drew.
+       The same check as Stop sharing from Home (967 4b): the tab holding the project's host lock is the one sharing it.
+       Here that other tab is the test runner's page, another client on the same origin, holding the same lock. */
+    const C = need921S6('Labs off while another tab shares');
+    const LM = (window.parent && window.parent !== window && window.parent.navigator && window.parent.navigator.locks) || navigator.locks;
+    if (!LM || typeof LM.request !== 'function') throw new Error('setup: this browser has no Web Locks — there is no other tab to stand in for');
+    const labsRow = function () { return Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Live collaboration \(preview\)/.test(r.textContent); })[0]; };
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        let other = null, release = null;
+        try {
+          await ui.share(); ui.close();
+          other = await FM.projects.create({ name: 'Labs 967 4c', width: 320, height: 240 });
+          await until921S6('A to pause', function () { return !C.session; }, 6000);
+          if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('setup: A’s room did not survive the switch');
+          await settle921(300);
+          /* Another tab picks A up and shares it: it holds A's host lock. */
+          await new Promise(function (res) {
+            LM.request('fm-collab-host-' + ctx.pid, function () { return new Promise(function (r) { release = r; res(); }); });
+          });
+          FM.settings.open(); await sleep(350);
+          const row = labsRow();
+          if (!row) throw new Error('setup: no Live collaboration row in Settings');
+          row.querySelector('.set-switch').click();
+          const ok = await askOk921();
+          const ask = document.getElementById('fm-ask').textContent;
+          if (!/another FreeMotion tab/.test(ask) || /Turn off live collaboration\?/.test(ask)) throw new Error('with another tab sharing A, the Labs switch asked “' + ask.slice(0, 180) + '” — it cannot stop that tab’s session, so it must say where A is being shared from');
+          if (!/stop it there/.test(ask)) throw new Error('the other-tab message does not say where to stop it: “' + ask.slice(0, 180) + '”');
+          ok.click();
+          await settle921(350);
+          if (!FM.settings.get('collabLabs')) throw new Error('the switch went off while another tab is still sharing A');
+          if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('the Labs switch dropped A’s room while another tab is sharing it — that tab goes on running and writes it straight back');
+          const said = row.querySelector('.set-labs-said');
+          if (said && !said.classList.contains('hidden') && /no longer shared|Sharing stopped/.test(said.textContent)) throw new Error('the row says “' + said.textContent + '” while the other tab is still sharing');
+          if (!row.querySelector('.set-switch').classList.contains('on')) throw new Error('the switch shows off');
+          /* CONTROL: the other tab lets go — now the switch asks its own question and stops it. */
+          release(); release = null;
+          await settle921(250);
+          row.querySelector('.set-switch').click();
+          const ok2 = await askOk921();
+          if (!/Turn off live collaboration\?/.test(document.getElementById('fm-ask').textContent)) throw new Error('CONTROL: with no other tab, the switch did not ask its own question: “' + document.getElementById('fm-ask').textContent.slice(0, 160) + '”');
+          ok2.click();
+          await settle921(400);
+          if (FM.settings.get('collabLabs')) throw new Error('CONTROL: Turn off did not turn it off');
+          if (localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('CONTROL: with no other tab sharing it, Labs off kept A’s room');
+          FM.settings.close(); await sleep(300);
+          FM.settings.set('collabLabs', true); ui.syncLabs();
+        } finally {
+          if (release) release();
+          if (FM.settings.isOpen()) FM.settings.close();
+          if (FM.ask.isOpen && FM.ask.isOpen()) { const c = document.querySelector('#fm-ask .fm-ask-cancel'); if (c) c.click(); }
+          if (!FM.settings.get('collabLabs')) { FM.settings.set('collabLabs', true); ui.syncLabs(); }
+          if (other) { try { if (FM.projects.currentId() === other) await FM.projects.open(ctx.pid); await FM.projects.remove(other); } catch (e) {} }
+        }
+      });
+    });
+  });
+
+
+  test('967 7d a note about one session’s people never silences the next session — a friend who drops later is still announced', { item: '967', budgetMs: 90000 }, async function () {
+    /* Found shipping v17.06: '967 7' was green in every slice and red in the full suite. The "already told she dropped" note
+       is keyed by the member's mid, mids are reused from session to session, and a note from a session that ENDED while
+       somebody's link was down outlived it — so the next session's "<name>’s connection dropped" for that mid was never said. */
+    const C = need921S3('per-session people notes');
+    await withLabs921(async function (ui) {
+      if (!ui._saidDown || !ui._saidGone) throw new Error('setup: the collab UI has no _saidDown/_saidGone seams');
+      const got = toasts921();
+      try {
+        await withCollab921([layer921('A')], async function () {
+          const s1 = C.session;
+          if (!s1) throw new Error('setup: no first session');
+          ui._saidDown(s1, 'm967x', 'Mia', true);                  // her link is down, and he has been told
+          if (!got.some(function (t) { return /^Mia’s connection dropped$/.test(t); })) throw new Error('setup: the first drop was not said (' + JSON.stringify(got) + ')');
+          C.end();                                                 // …and the session ends while it is down
+          await settle921(60);
+        });
+        if (ui._peerNotes && (ui._peerNotes().downSaid || ui._peerNotes().leftWhy || ui._peerNotes().removing)) throw new Error('the ended session left per-person notes behind: ' + JSON.stringify(ui._peerNotes()));
+        got.length = 0;
+        await withCollab921([layer921('B')], async function () {
+          const s2 = C.session;
+          if (!s2) throw new Error('setup: no second session');
+          ui._saidGone(s2, 'm967x', 'Sam');                         // somebody else, same mid, drops in the NEW session
+          await settle921(60);
+          if (!got.some(function (t) { return /^Sam’s connection dropped$/.test(t); })) throw new Error('a friend who dropped in a later session was not announced — a note from the ended session silenced it (' + JSON.stringify(got) + ')');
+          C.end();
+        });
+      } finally { got.restore(); }
+    });
   });
 
 })();

@@ -113,6 +113,39 @@ window.FM = window.FM || {};
     return b32decode(s.slice(3));
   }
   S.isConnCode = function (s) { return /^\s*FM1[-\s]?/i.test(String(s == null ? '' : s)); };
+  /* #967: A CODE PASTED WITH ITS MESSAGE AROUND IT. Copying the whole chat bubble — "Here is the code: FM1-…" — is the
+     natural gesture in most messaging apps, and the Join sheet answered "That does not look like an invite link or a
+     code". An invite link inside text already worked (the reader looks for the `#`); a code is now read from wherever
+     `FM1` starts.
+     ⚠️ READ AS MUCH AS DECODES, NOT A SHAPE (#967 review). The first version took only the dash-grouped run toCode()
+     writes, and cut short three codes v17.05 had read whole: a line break or a space inside a group of five (a wrapped
+     message leaves one) and spaces where the dashes were — each came back as its first group, "That code did not
+     read". fromCode() itself ignores spaces, dashes, underscores and dots, so the run it is handed is everything from
+     `FM1` that could be part of a code; it is tried whole, then with its last word taken off, again and again, and
+     the SHORTEST run that still decodes to a real description is the code — so a "thanks" after it does not count.
+     (Words after a code can decode too: fromCode() only ever appends bytes past the code's own, which the reader
+     ignores. A run cut INSIDE the code never decodes — every byte of it is read — so the first failure after a
+     success ends the search.) Nothing decodes: the dash-grouped run, as before, and the sheet says the code did
+     not read. */
+  S.connCodeIn = function (text) {
+    const t = String(text == null ? '' : text);
+    const r = /FM1[0-9A-Za-z\s\-_.]*/i.exec(t);
+    if (!r) return null;
+    let run = r[0].replace(/[\s\-_.]+$/, ''), best = null;
+    for (let guard = 0; guard < 512 && run.length > 3; guard++) {
+      if (S.decode(run)) best = run;
+      else if (best) break;
+      const cut = run.search(/\s\S*$/);
+      if (cut < 0) break;
+      run = run.slice(0, cut).replace(/[\s\-_.]+$/, '');
+    }
+    if (best) return best;
+    const m = /FM1(?:\s*-\s*[0-9A-Za-z]{1,5})+(?![0-9A-Za-z])/i.exec(t);
+    if (m) return m[0];
+    /* A code whose dashes were taken out is one run of letters and digits — read to its end. */
+    const u = /FM1[\s-]*[0-9A-Za-z]+/i.exec(t);
+    return u ? u[0] : null;
+  };
 
   /* ═══ THE MINIMAL-SDP CODEC (§14.5) ═══════════════════════════════════════════════════════════
    *
@@ -762,7 +795,8 @@ window.FM = window.FM || {};
     if (inv) return { kind: 'link', sid: inv.sid, sk: inv.sk, j: inv.j };
     const rc = S.normRoomCode(s);
     if (rc) return { kind: 'code', code: rc };
-    if (S.isConnCode(s)) return { kind: 'conn', code: s };
+    const cc = S.connCodeIn(s);                  // #967: "Here is the code: FM1-…" reads as the code in it
+    if (cc && S.isConnCode(cc)) return { kind: 'conn', code: cc };
     return null;
   };
 

@@ -240,6 +240,11 @@ window.FM = window.FM || {};
      buffer until the tab died. Both are free to send and neither is visible as an error. So a frame
      count and a total are checked before anything is kept, and a message over either limit is dropped
      whole — §21's own TX caps are 4 MB / 5000 ops, so nothing legitimate is anywhere near these. */
+  /* #967: how long a link whose peer connection has 'failed' is held before it is closed (see RtcLink, "'FAILED' IS
+     NOT FINAL"). The session's silence rule and the guest's code wait use the same number. `_grace` is the suite's
+     seam — two real minutes is not a thing a test waits out. */
+  let graceMs = null;
+  function linkGrace() { return graceMs != null ? graceMs : ((C.LIMITS && C.LIMITS.LINK_GRACE) || 120000); }
   const MAX_FRAMES = 65536;
   const MAX_REASSEMBLE = { ctl: 16 * 1024 * 1024, pres: 256 * 1024, bulk: 64 * 1024 * 1024 };
 
@@ -257,7 +262,7 @@ window.FM = window.FM || {};
     };
 
     const chans = Object.create(null);
-    let closed = false, openedResolve = null, openedReject = null, msgId = 0;
+    let closed = false, openedResolve = null, openedReject = null, msgId = 0, downT = null;
 
     ep.opened = new Promise(function (res, rej) { openedResolve = res; openedReject = rej; });
     /* An unhandled rejection on a link nobody awaited is a console error on a feature behind a Labs
@@ -462,15 +467,62 @@ window.FM = window.FM || {};
       if (closed) return;
       closed = true;
       ep.open = false;
+      clearTimeout(downT); downT = null;
       CHANNELS.forEach(function (n) { try { chans[n].dc.close(); } catch (e) {} });
       try { pc.close(); } catch (e) {}
       if (openedReject) { openedReject({ why: why || 'closed' }); openedResolve = null; openedReject = null; }
       if (typeof ep.onclose === 'function') ep.onclose(why || 'closed');
     };
 
-    pc.oniceconnectionstatechange = function () {
-      if (pc.iceConnectionState === 'failed') ep.close('ice');
-    };
+    /* ═══ #967 · 'FAILED' IS NOT FINAL — A GRACE, THEN THE CLOSE ═══════════════════════════════════════════════════
+     * A peer that vanished shows as connectionState 'failed' (Chrome leaves the legacy iceConnectionState at
+     * 'disconnected' — measured with two Chromes, the guest's app killed: 'disconnected' at 15 s, 'failed' from 27 s,
+     * ice never 'failed'), and nothing used to close on it, so the owner was never told. The first fix closed on the
+     * FIRST 'failed' — and that was wrong the other way: Chrome comes back out of 'failed' when the other side does.
+     * A phone in Messages for 25 s (its whole browser SIGSTOPped) sent the owner's side to 'failed' at about 20 s and
+     * the link was closed for good; left open, the same pause came back 'connected' and edits synced both ways. A
+     * code-joined friend has no way back from a closed link but a fresh code, and a phone goes to the background all
+     * the time.
+     * So 'failed' is DOWN, not gone: `ep.down` is set and `ep.ondown(true)` says so (the owner greys the person and
+     * says "<name>'s connection dropped"); coming back out of it clears it and says `ep.ondown(false)` ("<name> is
+     * back"); and only a 'failed' that lasts the whole LINK_GRACE closes the link — 'closed' at once.
+     * 📐 WHY THE GRACE IS 120 s. Measured with two Chromes, the friend's whole browser SIGSTOPped with the grace out of
+     * the way: after 25 s, 60 s AND 120 s the connection came back 'connected' about a second after it resumed and
+     * edits synced both ways — so the browser is not the limit anywhere in the 60-120 s range, and the grace is only
+     * a question of how long to wait for a person. A code-joined friend has no reconnect (a closed link means a fresh
+     * code), so every second of grace is a phone break survived — a reply in Messages, a notification read — and the
+     * code wait needs it most: the guest's connection 'failed' 16-20 s after the owner left for Messages to fetch its
+     * code, so 120 s gives him well over two minutes to come back and paste. Holding a dead link costs nothing he
+     * can see: the person is greyed and "<name>'s connection dropped" is said the moment it fails, the guest reads
+     * Offline within 6 s, and the only thing that waits is the row leaving the list (and its place in a full room). 
+     * ONE EXCEPTION, kept from before: a connection that NEVER had a working path (ICE never reached 'connected') and
+     * whose ICE says 'failed' has nothing to come back to — that is "Couldn't connect directly" on a relay join, and it
+     * is said at once, as it always was. */
+    ep.down = false;
+    ep.ondown = null;
+    let everUp = false;
+    function failedNow() { return pc.connectionState === 'failed' || pc.iceConnectionState === 'failed'; }
+    function sayDown(on) {
+      if (ep.down === on) return;
+      ep.down = on;
+      if (typeof ep.ondown === 'function') { try { ep.ondown(on); } catch (e) {} }
+    }
+    function watchState() {
+      if (closed) return;
+      const ice = pc.iceConnectionState;
+      if (ice === 'connected' || ice === 'completed' || pc.connectionState === 'connected') everUp = true;
+      if (pc.connectionState === 'closed') { ep.close('ice'); return; }
+      if (!failedNow()) {
+        if (downT) { clearTimeout(downT); downT = null; }
+        sayDown(false);
+        return;
+      }
+      if (!everUp && ice === 'failed') { ep.close('ice'); return; }
+      if (!downT) downT = setTimeout(function () { downT = null; if (!closed && failedNow()) ep.close('ice'); else watchState(); }, linkGrace());
+      sayDown(true);
+    }
+    pc.addEventListener('iceconnectionstatechange', watchState);
+    pc.addEventListener('connectionstatechange', watchState);
 
     /* ⚠️ NON-TRICKLE, CAPPED (§14.4). There is no signalling channel to trickle candidates down — the
        whole description has to fit in one code a person reads out — so gathering is waited for. The cap
@@ -544,6 +596,8 @@ window.FM = window.FM || {};
     return ep;
   }
 
-  C.link = { CHANNELS: CHANNELS, LoopLink: LoopLink, PostLink: PostLink, RtcLink: RtcLink, CH_ID: CH_ID, BULK_HIGH: BULK_HIGH, CTL_HIGH: CTL_HIGH };
+  C.link = { CHANNELS: CHANNELS, LoopLink: LoopLink, PostLink: PostLink, RtcLink: RtcLink, CH_ID: CH_ID, BULK_HIGH: BULK_HIGH, CTL_HIGH: CTL_HIGH,
+    grace: linkGrace,
+    _grace: function (ms) { graceMs = (ms == null ? null : ms); return linkGrace(); } };
 
 })(window.FM);

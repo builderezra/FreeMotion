@@ -6819,6 +6819,8 @@ window.FM = window.FM || {};
       // because init() had never built it). Whatever the cause, land on Home and say so.
       try { console.error('FreeMotion: project load failed', err); } catch (e) {}
       if (FM.home) { try { FM.home.init(); FM.home.open(); } catch (e) {} }
+      /* #967: the boot has landed (on Home) — live collaboration holds every resume until it is told so. */
+      if (FM.collab && FM.collab.ui && FM.collab.ui.markBooted) { try { FM.collab.ui.markBooted(); } catch (e) {} }
       // …and only SAY they are back at their projects if they actually are. init()/open() can throw
       // in their own right (a load that dies before FM.scene is usable takes home.init() with it),
       // and a toast that claims the screen is there when it is not sends someone hunting for a way

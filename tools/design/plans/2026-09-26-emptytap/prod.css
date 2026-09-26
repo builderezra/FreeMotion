@@ -1,0 +1,27 @@
+/* ---- THE EMPTY AREA ANSWERS A PRESS (queue 964) — drawn and removed by areaFx in js/timeline.js ----------------
+   Replaces #571's .tl-tapburst and #600's resting :hover/:focus-within box. These are EVENT layers: created on
+   pointerdown in #timeline-panel (outside the scroller, so no scroll offset can move them), sized to the area below
+   the ruler row, and removed on a timer. z-index 8 puts them over #tl-rulerrow (7), whose opaque background is what
+   hid the old box's top edge. pointer-events: none throughout — feedback must never eat the tap it answers. */
+.tl-areafx { position: absolute; pointer-events: none; z-index: 8; }
+.tl-areafx--pulse svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+/* screen: the colour ADDS light to the dark wash instead of greying it, and white stays white (the caption). */
+.tl-areafx--press { overflow: hidden; contain: layout paint; mix-blend-mode: screen; }
+.tl-areafx--press > div { position: absolute; left: 0; top: 0; border-radius: 50%; will-change: transform, opacity; }
+.tl-areafx--press > .fx-tint { border-radius: 0; will-change: opacity; }
+/* The JS picks the calm version itself; this is the second lock, as #571 had — either alone is one point of failure. */
+@media (prefers-reduced-motion: reduce) {
+  .tl-areafx--pulse, .tl-areafx--press { display: none; }
+}
+/* THE ROW-SIZED #616 PULSE IS OFF ON THE EMPTY SCREEN (clause 6). There the row is a 300px box mid-area, and its
+   band lights both sides and the whole top at once — the second, wrong-sized box. The area pulse replaces it; the
+   slim row (a project with layers) keeps #616 exactly as approved. timeline.js also stops arming it there. */
+#timeline-panel.tl-empty-start .tl-addrow-pulse { display: none; }
+/* KEYBOARD ONLY: a real ring while the row has :focus-visible — never on a tap (a finger focus does not match
+   :focus-visible). Same box as the pulse: --tl-area-top is the ruler row's bottom, published by applyEmptyStart. */
+#timeline-panel.tl-empty-start:has(.tl-addrow:focus-visible)::after {
+  content: ""; position: absolute; pointer-events: none; z-index: 8;
+  left: 4px; right: 4px; bottom: 4px; top: calc(var(--tl-area-top, 0px) + 4px);
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px rgba(150, 232, 255, .9), 0 0 16px rgba(90, 199, 237, .45);
+}

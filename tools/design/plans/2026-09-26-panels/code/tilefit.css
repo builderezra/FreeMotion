@@ -1,0 +1,75 @@
+/* ---- ONE SHRINK SYSTEM FOR THE ADD MENU AND THE LAYER INSPECTOR (queue 963) -------------------------------------------
+   Ezra: *"the dynamics of the add layer and the inspector layer are both very different … have a big look through that"*.
+   js/tilefit.js plans BOTH panels' grids from their real box and writes the result onto the element holding the grid:
+   `data-rung` = the tile's shape (stack / row / icon, or ico for the Shape tab's art) and `--tf-*` = its sizes. These
+   rules are the only place either panel's tiles are laid out on PC, so the two cannot drift apart again.
+   Scoped to #inspector-panel (so the phone's #add-sheet can never match) and to min-width 701px (so the phone's property
+   sheet cannot either) — two independent reasons, the same as queue 50's. */
+@media (min-width: 701px) {
+  /* THE GRID. Stated column width, stated row height, centred in the measured box (the slack becomes an even margin,
+     never a block of nothing under the last row). */
+  #inspector-panel .cat-wrap[data-rung],
+  #inspector-panel .addmenu[data-rung] .addmenu-page .addmenu-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--tf-cols), var(--tf-cw));
+    grid-auto-rows: var(--tf-row);
+    gap: var(--tf-gap);
+    justify-content: center;
+    align-content: center;
+  }
+  #inspector-panel .cat-wrap[data-rung] { height: var(--tf-box); }
+  #inspector-panel .addmenu[data-rung] .addmenu-page .addmenu-grid { height: 100%; }   /* fills its page, so align-content can centre it */
+  /* The inspector builds its cards in two rows (3 + the rest) for the PHONE's layout; on PC they are one grid. */
+  #inspector-panel .cat-wrap[data-rung] > .cat-grid { display: contents; }
+
+  /* EVERY TILE, both panels */
+  #inspector-panel [data-rung] :is(.cat-card, .addmenu-card) {
+    height: 100%; width: auto; min-width: 0; box-sizing: border-box; flex: none;
+    padding: var(--tf-pad); gap: var(--tf-icogap);
+  }
+  #inspector-panel [data-rung] :is(.cat-card > .cat-ico, .addmenu-card > .addmenu-ic),
+  #inspector-panel [data-rung] :is(.cat-card > .cat-ico, .addmenu-card > .addmenu-ic) svg { width: var(--tf-ico); height: var(--tf-ico); flex: none; }
+  #inspector-panel [data-rung] .addmenu-card .add-emoji { font-size: var(--tf-ico); line-height: 1; }
+  #inspector-panel [data-rung] :is(.cat-card > .cat-label, .addmenu-card > .addmenu-lbl) {
+    font-size: var(--tf-fs); line-height: var(--tf-lh); max-width: none; white-space: normal; flex: none;
+  }
+
+  /* STACK — icon over name. Two whole lines are reserved; a word a hair wider than its tile spills into the gutter
+     rather than being cut to "Capti…" (the add menu's rule since v5.69, now the inspector's too). */
+  #inspector-panel [data-rung="stack"] :is(.cat-card > .cat-label, .addmenu-card > .addmenu-lbl) {
+    overflow: visible; text-overflow: clip; max-height: var(--tf-lblh);
+  }
+
+  /* ROW — the chip: icon on the left, the name beside it, left-aligned, at most --tf-lines lines. */
+  #inspector-panel [data-rung="row"] :is(.cat-card, .addmenu-card) {
+    flex-direction: row; justify-content: flex-start; align-items: center;
+  }
+  #inspector-panel [data-rung="row"] :is(.cat-card > .cat-label, .addmenu-card > .addmenu-lbl) {
+    flex: 1 1 auto; min-width: 0; max-height: none; text-align: left; overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--tf-lines); overflow-wrap: normal;
+  }
+  /* The key-number badge steps out of a chip: top-left it sits on the icon, and on the right it costs the 12px that
+     "Customise" needs at 1280 wide (a chip there is 85px: 5 + 16 icon + 5 + 54 of words + 5). The keys still work — the
+     badge is a hint, and the stacked and icon tiles still show it. */
+  #inspector-panel [data-rung="row"] .cat-num { display: none; }
+
+  /* ICON — the picture alone. The name stays the tile's title and aria-label (hover shows it). */
+  #inspector-panel [data-rung="icon"] :is(.cat-card > .cat-label, .addmenu-card > .addmenu-lbl) { display: none; }
+  #inspector-panel [data-rung="icon"] .cat-num { top: 3px; left: 5px; font-size: 9px; }
+
+  /* THE ADD MENU'S TABS FOLLOW THE SAME RULE. They give their words up at ONE panel size, the same for every tab: when,
+     with the words kept, the Elements tab could not have comfortable stacked tiles on one page (js/addmenu.js,
+     tabsSettled). The 64px row becomes 32px of icons, each still titled with its name — 32, not 36, because those 4px are
+     what let a 150px band (the drag's floor) keep one row of tiles AND its page arrows. */
+  #inspector-panel .addmenu--tabs-ico .addmenu-tab { padding-top: 4px; padding-bottom: 4px; gap: 0; }   /* 32px: 22 icon + 8 + border */
+  #inspector-panel .addmenu--tabs-ico .addmenu-tab .addmenu-lbl { display: none; }
+
+  /* An EMPTY pinned strip (every tab but Media/Audio with imports) is still a flex item in `.addmenu-main`, so it cost a
+     second 9px gap between the tabs and the tiles — measured: the body started 18px under the tab row, not 9. On PC it
+     leaves the flow until it has something to pin; the tabs' word rule (tabsSettled) measures from the tab row + one gap. */
+  #inspector-panel .addmenu-pinned:not(.is-on) { display: none; }
+
+  /* The home view's quick-row holds only buttons PC hides (qr-nudge, qr-trim — rules above), so on PC it was 16px of
+     padding above the cards: 10% of a 150px band. Gone while it has nothing to show. */
+  #inspector > .quick-row:not(:has(> :not(.qr-nudge, .qr-trim))) { display: none; }
+}

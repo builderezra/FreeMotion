@@ -248,6 +248,30 @@
       let v = null; try { v = localStorage.getItem('fm.view'); } catch (e) {}
       return { homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), view: v, cur: FM.projects.currentId(), first: window.FM_FIRST_LOAD };
     },
+    /* #967: share the open project through the real Share button (Labs on, a name), so it holds a kept room — then the
+       state a relaunch is judged by. The boot is watched from its first script: `__fm967` (below) records every
+       C.share and whether Home was up at that moment, because a room armed behind Home and stopped a second later would
+       leave no trace in a snapshot taken afterwards. */
+    share967: async function () {
+      FM.settings.set('collabLabs', true); C.ui.syncLabs();
+      C.ui.setProfile('Cold 967', C.ui.PALETTE[0]);
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(400);
+      await C.ui.share();
+      C.ui.close();
+      await sleep(300);
+      return ACTS.collab967();
+    },
+    collab967: function () {
+      const S = C.session, pid = FM.projects.currentId();
+      let rec = false; try { rec = !!localStorage.getItem('fm.collab.host.' + pid); } catch (e) {}
+      return {
+        pid: pid, homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), session: !!S, owner: !!(S && S.isOwner),
+        relay: !!(C.ui._relay && C.ui._relay()), rec: rec, locks: C.ui._locks ? C.ui._locks() : null,
+        first: window.FM_FIRST_LOAD, agentBeforeApp: !!window.__fmAgentBeforeApp, armed: (window.__fm967 || []).slice(), toasts: (window.__fm967t || []).slice()
+      };
+    },
+    homeClose967: async function () { if (FM.home && FM.home.isOpen()) FM.home.close(); await sleep(50); return true; },
     /* a NEW session: what a phone does when the app was closed and is opened again (sessionStorage is per session) */
     newSession942: function () {
       try { sessionStorage.clear(); } catch (e) {}
@@ -419,6 +443,37 @@
     for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * hz * i / rate) * 24000), true);
     return new Blob([buf], { type: 'audio/wav' });
   }
+
+  /* #967: every arm from here on, and whether Home was on screen when it happened; and every toast. Recorded only — both
+     calls go straight through — so a relaunch can be judged by what happened during it, not only by what is left. */
+  window.__fm967 = []; window.__fm967t = [];
+  (function () {
+    const realShare = C.share;
+    if (typeof realShare === 'function') {
+      C.share = function () {
+        try { window.__fm967.push({ t: Math.round(performance.now()), home: !!(FM.home && FM.home.isOpen && FM.home.isOpen()) }); } catch (e) {}
+        return realShare.apply(this, arguments);
+      };
+    }
+    /* ⚠️ THIS SCRIPT MAY RUN BEFORE js/app.js HAS DEFINED FM.toast. It is inserted by collab-core.js, which comes
+       earlier in index.html, and a dynamic script runs as soon as it arrives — so the recorder must not depend on the
+       order. Wrapped now if FM.toast is there, otherwise the moment app.js assigns it (after which it is a plain
+       property again, so anything that wraps it later wraps the recorder like any other function). Found while
+       chasing one red of "967 5" at 380 px (a resume toast never seen); ten loads measured the agent running AFTER
+       app.js every time, so that red is not proven to be this — `__fmAgentBeforeApp` says which it was. */
+    const recorded = function (f) {
+      return function (m) { try { window.__fm967t.push(String(m)); } catch (e) {} return f.apply(this, arguments); };
+    };
+    window.__fmAgentBeforeApp = typeof FM.toast !== 'function';
+    if (typeof FM.toast === 'function') FM.toast = recorded(FM.toast);
+    else {
+      try {
+        Object.defineProperty(FM, 'toast', { configurable: true, enumerable: true,
+          get: function () { return undefined; },
+          set: function (f) { Object.defineProperty(FM, 'toast', { configurable: true, enumerable: true, writable: true, value: typeof f === 'function' ? recorded(f) : f }); } });
+      } catch (e) {}
+    }
+  })();
 
   window.addEventListener('message', function (e) {
     const d = e && e.data;

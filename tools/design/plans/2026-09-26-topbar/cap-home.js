@@ -1,0 +1,4 @@
+for (let i = 0; i < 120 && document.getElementById('splash'); i++) await new Promise(r => setTimeout(r, 100));
+const __f = document.createElement('style'); __f.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}'; document.head.appendChild(__f);
+await new Promise(r => setTimeout(r, 500));
+const __t = document.getElementById('fm-sb-tab'); return { splash: !!document.getElementById('splash'), home: document.body.classList.contains('home-open'), dh: document.documentElement.getAttribute('data-home'), html: getComputedStyle(document.documentElement).backgroundColor, body: getComputedStyle(document.body).backgroundColor, tab: __t ? [__t.getBoundingClientRect().height, getComputedStyle(__t).zIndex, getComputedStyle(__t).maskImage || getComputedStyle(__t).webkitMaskImage, getComputedStyle(__t).backgroundColor] : null };

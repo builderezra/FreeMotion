@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Sep at v17.05
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Sep at v17.06
 >
-> **State:** v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -32623,7 +32623,7 @@ re-opened #480, which I had marked done and had not fixed.
       3. [x] ✅ picture sent 22 Sep (Rename light · Delete light · Delete dark, 380) — Show him a picture before it ships.
 
 - [ ] **920 — THE FADED BAR AT THE TOP IS STILL THERE: a white bar on the light screen / a black bar, fading onto the screen at the top. "Pretty much the same as the screenshots I sent you before."** (22 Sep, his words, from the same message as #921:)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       > *"And also the faded white bar is still at the top of the screen, all black bar, like it fades onto the screen, like that's still a thing. You haven't fixed that yet. Um, it's pretty much the same as the screenshots I sent you before. So don't ask me to send more screenshots. Just log that and keep going."*
       **Do NOT ask him for screenshots** — his explicit instruction. The screenshots are the ones behind #883 (white bar at the top inside a project), #903 (v16.18 turned his white bar into a black one; the Home top bar's white veil) and #6bb7f072 v16.19 (the fade at the top, on both screens). Those entries are ticked done; he says it is still there, so they did not fix what he sees. Read #883 / #903 in full, and the memory note "He names the place, not the cause" — the fault may be BEHIND the bar (the page colour, a gradient veil, a safe-area inset, the status-bar theme-color), not the bar itself. #883 clause 2 was left because an iOS standalone web app could not be run here — that is probably where it lives.
       1. [x] ✅ 22 Sep — FOUND, and it is not the page: tools/shot.py now fakes the iPhone safe area (--safe-top 47, Chrome's Emulation.setSafeAreaInsetsOverride), and with it the page's own top is clean on Home light/dark and in a project. Since iOS 26 an installed web app running UNDER the status bar (our black-translucent + viewport-fit=cover, since v5.49) gets the system Liquid Glass scroll-edge fade over its top ~45pt — white over light, black over dark: his words exactly. Same report from other apps: github.com/MrClit/fin-app/issues/411, github.com/amir20/dozzle/pull/5222. Find what he sees: the fade at the very top, on his phone, as an installed app (standalone), on Home (light AND dark) and inside a project.
@@ -32682,6 +32682,12 @@ re-opened #480, which I had marked done and had not fixed.
       10. [ ] Going in and out of projects no longer changes it.
       ⏳ PLAN PENDING: the logging chat is researching iOS 26's status-bar sampling for this (its 17:46 note): wait for its plan block (`tools/design/plans/2026-09-26-…/plan.md`) before building; do NOT ask him for screenshots (#920's standing rule).
       JUMPED: waiting on the logging chat's plan block for this (its 17:46 note: "don't start building any of them until its plan block has landed") — #945 (his answer, fully built) ships ahead of it in v17.04. Take this line off when the plan lands.
+      ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
+      - **#920 (top fade / black bar):** `2026-09-26-topbar/plan.md`. RESEARCHED in WebKit's source and TESTED in real WebKit (a WKWebView probe reading WebKit's own sampled top colour):
+        - iOS takes the top colour from the first full-screen fixed layer it sees, and by WebKit's rule (commit 8b209a7, iOS 26.0) a later one cannot replace it. It re-samples only when a fixed/sticky element is added or removed, and no colour means the blur.
+        - Today the light Home kept #111111 (the intro's black) for a whole session. That is his black bar. Inside a project there is nothing to sample, which is the blur.
+        - **Fix A (recommended; decided):** one invisible masked top-edge tab, refreshed on every screen switch. It changed zero pixels and needs no reinstall.
+        - Say plainly in the release that it is unverified on an actual iPhone. Do not ask him for screenshots.
 
 - [ ] **921 — LIVE COLLABORATION: two or more people editing the SAME project at the same time, seeing each other live, like Google Docs / Sheets.** (22 Sep, his words IN FULL, verbatim — he said "I don't want you to miss out any details":)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -33371,7 +33377,7 @@ re-opened #480, which I had marked done and had not fixed.
       BUILT OUT UNTIL HE answers the questions on the page at the link above (his answers come back through the inbox as their own blocks).
 
 - [ ] **957 — Home: the drawn arrow's tip lands INSIDE the + button; and in an empty project the “Tap +” text goes, replaced by a clapperboard that claps** (26 Sep, via INBOX — his words)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:26 AWST — Two things from his phone at v17.02: (A) the Home arrow's tip lands INSIDE the + button; (B) the empty-project text goes, and the clapperboard gets a clap animation
 
@@ -33413,9 +33419,13 @@ re-opened #480, which I had marked done and had not fixed.
       3. [ ] Instead, the clapperboard does a little animation: open, then it slams down.
       4. [ ] The slam has a small effect — lines coming out of it, to show it was clapped.
       5. [ ] (his standing design rule, #545 — not waived) the clapper's options drawn and shown to him before it ships.
+      ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
+      - **#957 (arrow + clapper)**
+        - (A) Arrow: `2026-09-26-arrow-and-addmenu/plan.md` §A. MEASURED: `draw()` runs 278–288ms into the intro, while the + is still in its 545ms delay (read as 49.9px wide and 18px low). The tip settles 25.3px from the centre of a 29px +, which is inside it; drawn at rest it lands at 41px. **Fix A1:** draw after the + has landed, with a backup timer. It appears ~0.8s later and stops 12px clear. Decided, not asked.
+        - (B) Clapper: `2026-09-26-clapper/plan.md`. The full new SVG and CSS; the phone line goes; it stops behind Home and when a layer is added. ❓ his picks: timing **A (recommended: claps when the empty project opens, then every 6s)** / B once / C non-stop; impact lines **cyan (recommended)** / grey; PC sentence **keep (recommended)**. Not checked on WebKit: the plan's §8 has the fallback.
 
 - [ ] **958 — PC: the separately-draggable Add menu must drag right up to the top of the screen, whatever height the timeline is** (26 Sep, via INBOX — his words)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:33 AWST — PC: the separately-draggable Add menu stops short. It should drag up to the top of the screen whatever height the timeline is at
 
@@ -33446,9 +33456,11 @@ re-opened #480, which I had marked done and had not fixed.
       2. [ ] It is no longer bound to how high the timeline is.
       3. [ ] It drags up to the top of the screen, covering the whole side.
       4. [ ] That holds no matter where the timeline is.
+      ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
+      - **#958 (PC Add menu height):** `2026-09-26-arrow-and-addmenu/plan.md` §B. MEASURED with real synthetic drags at 1280×800, 1920×1080 and 900×800, with the timeline at min, default and max. The menu stops at exactly the timeline's own `0.72·vh` ceiling in every case. There is no other limiter, and **PC has no top bar in the way**, so the "cover the top bar?" ask is moot. **Fix B1 (recommended; decided):** it drags to the top at any timeline height, with the handle just above its edge. One existing test gets a one-line retune.
 
 - [ ] **959 — PC: the three layer-action buttons lose their background and outline, for two fading corner lines (top-right and bottom-left)** (26 Sep, via INBOX — his words)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:35 AWST — PC: the three layer-action buttons lose their background and outline, and get two fading corner lines instead (top-right and bottom-left)
 
@@ -33483,9 +33495,11 @@ re-opened #480, which I had marked done and had not fixed.
       3. [ ] Two corner lines instead: top-right and bottom-left.
       4. [ ] Each is solid at the corner and slowly fades out along both edges.
       5. [ ] (his standing design rule, #545) rendered and shown to him before it ships.
+      ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
+      - **#959 (corner lines):** `2026-09-26-corners/plan.md`. CSS only; the group stays 126×36 and the corners follow it at 206px when two layers are selected. ❓ his pick: **A white, as he drew it (recommended)** / B accent blue / C short bold brackets. Four old tests that expect the outline get retuned.
 
 - [ ] **960 — Import media and Import audio match: both get the shiny look, and “Import” is renamed “Import media”** (26 Sep, via INBOX — his words)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:42 AWST — The Import (media) and Import audio buttons should match: both get the shiny look, and "Import" is renamed "Import media"
 
@@ -33513,9 +33527,11 @@ re-opened #480, which I had marked done and had not fixed.
       1. [ ] The Import media and Import audio buttons stop looking different from each other.
       2. [ ] Both get the shiny look the Import media button has.
       3. [ ] The Import media button, now just “Import”, is renamed “Import media”.
+      ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
+      - **#960 (Import buttons):** `2026-09-26-import/plan.md`. The difference is the arrow (media has the white gradient from #270, audio is plain grey). On PC, Import audio is also 60px tall against Import's 43px. ⚠️ **The rename alone breaks the PC Media tab's fit at 1280**, so the plan includes a small PC sizing fix. ❓ his pick: **A (recommended: same arrow, rename, same size)** / B (A plus a lit top edge).
 
 - [ ] **961 — The Car shape needs to be improved** (26 Sep, via INBOX — his words)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:42 AWST — The Car shape needs to be improved
 
@@ -33532,9 +33548,11 @@ re-opened #480, which I had marked done and had not fixed.
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
       1. [ ] The Car shape is improved (options traced from real pictograms, shown big and at the 34px icon size — #545).
+      ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
+      - **#961 (Car):** `2026-09-26-car/plan.md`. MEASURED at the 34px icon: the current hub is 2.19px (4.1px² open), so it reads as dots. ❓ his pick: **A Material Design Icons side view, Apache-2.0 (recommended)**: 3.34px hubs, same proportions, so saved projects keep their footprint / B Phosphor side view (MIT) / C AIGA front view (public domain). ⚠️ A and B need a licence notice in a public release; add them to BEFORE-PUBLISHING.md.
 
 - [ ] **962 — The Eye shape needs to be HEAVILY improved (and a standing steer to the logging chat: PLAN, don't just log)** (26 Sep, via INBOX — his words)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:43 AWST — The Eye shape needs to be HEAVILY improved; and a standing steer for the logging chat: PLAN, don't just log
 
@@ -33552,9 +33570,11 @@ re-opened #480, which I had marked done and had not fixed.
       Clauses (his):
       1. [ ] The Eye shape is heavily improved (options shown big and at 34px — #545).
       2. [ ] (standing, for the logging chat — done there) each request gets a ready-to-build plan; the builder follows it.
+      ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
+      - **#962 (Eye):** `2026-09-26-eye/plan.md`. The pupil is stretched 1.66:1 because the shape spawns in a 5:3 box. ⚠️ **Found along the way: the Shape menu has never drawn any icon at its real proportions** (#159's "make them 1-1" never reached the menu; Key, Envelope, Banner and Eye are the worst). The plan fixes that in the same release, or the new eye's icon comes out wrong. ❓ his pick: A Classic / **B Almond + catchlight (recommended)** / C Lashes.
 
 - [ ] **963 — PC: the Add menu and the layer inspector shrink well — drop the text when too small, or a better dynamic — and behave as ONE system** (26 Sep, via INBOX — his words)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:44 AWST — PC: when the Add menu or the layer inspector is shrunk, the tiles bunch up. Make both shrink well (drop the text when too small, or a better dynamic), and make the two behave as ONE system
 
@@ -33590,9 +33610,11 @@ re-opened #480, which I had marked done and had not fixed.
       - the Add menu / inspector shrink system (both panels captured at many sizes; one shared design)
 
       Each plan was reviewed by a second reader and lands as a follow-up block linking `tools/design/plans/2026-09-26-<name>/plan.md`, with his picks recorded once he makes them. Log these blocks as normal, **but don't start building any of them until its plan block has landed.** They are at the back of the queue anyway.
+      ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
+      - **#963 (panel shrinking):** `2026-09-26-panels/plan.md`. The inspector is forced to 3 columns (12px icons at common laptop sizes); the Add menu collapses to a sliver, and at 1440 it splits the nine Elements over 2 pages when they fit on one. One shared rule for both, "tilefit" (CSS + JS in the plan). ❓ his pick: A names drop / B names always stay / **C tiles → chips → icons (recommended)**. The phone is unchanged.
 
 - [ ] **964 — Empty project, phone: tapping the big add area is glitchy — the blue outline misses the top edge and gets stuck; a far better, colourful, whole-area tap animation; the outline PULSES round and goes** (26 Sep, ~20:29 AWST, via INBOX — his words)
-      **STATUS: ⏳ PLAN PENDING — the logging chat is drawing the plan**
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~20:29 AWST — Empty project, phone: tapping the big add area is glitchy. The blue outline misses the top edge and gets stuck; the tap animation needs a far better, colourful, whole-area version; the outline should PULSE around and then go
 
@@ -33627,6 +33649,30 @@ re-opened #480, which I had marked done and had not fixed.
       5. [ ] The blue lines look good and GO AWAY.
       6. [ ] They PULSE, travelling all the way round the edge — not all appearing at once.
       7. [ ] (#545) options drawn and shown to him before it ships.
+      ✅ PLAN LANDED (26 Sep ~23:38, via INBOX) — the logging chat's block, whole:
+      ### 26 Sep 2026, ~23:38 AWST — PLAN READY for #964 (empty-project tap area: the outline misses the top and gets stuck; the tap colour; the pulse)
+
+      **Logger's plan (not his words). Full plan: `tools/design/plans/2026-09-26-emptytap/plan.md`.** It was reviewed by a second reader ("ready after fixes", fixes applied) and comes with the exact code (`prod-areafx.js`, `prod.css`, `prod-press-BC.js`), six proposed tests (`tests-proposed.js`) and the sheets.
+
+      - **Measured (tools/shot.py, phone emulation, v17.04/v17.05, 380 and 440):**
+        - **Top line missing (clause 1):** the outline is an inset shadow on `#timeline`, and `#tl-rulerrow` (22px, opaque, sticky, z-index 7, the first child of `#tl-inner`) paints over its whole top edge. `elementFromPoint` just inside the top edge hits the ruler at every sample point.
+        - **Stuck (clause 2):** the box is drawn by `:focus-within`/`:hover`. The row keeps focus after the add menu opens and closes, so the box stays painted, and on iOS `:hover` sticks as well.
+        - **"All at once" (clause 6):** on the empty screen, #616's row-sized pulse lights both sides and the top together.
+        - The add sheet covers 98% of the area 100ms after lift, so today any press animation is visible for only ~150ms.
+      - **Fix:**
+        - **Outline:** a one-off SVG layer in `#timeline-panel`, above the ruler, sized to the visible area. On pointerdown two lights race from the bottom-middle up both sides and meet at the top-centre, then fade. It is removed by a timer at 1.25s.
+        - **Old states:** delete the `:focus-within`/`:hover` rule, and turn #616's pulse off on the empty screen only.
+        - **Keyboard ring:** `:focus-visible` only.
+        - **Colour:** a whole-area press replaces #571's 104px burst. It keeps "comes from the finger" and "colour depends on where", has a reduced-motion version, is capped at 3 live layers and is removed on a timer.
+        - Cache-busters: `styles.css` 727→728, `timeline.js` 257→258. Re-check these against your tree, since they may have moved.
+      - **Tests:** six new tests, all failing on HEAD in a stand-in. The builder's `prove.sh` run is the first real check.
+        - Delete '571 clause 3'; its checks move into the new colour test. Put the exact `DROPS TEST:` line from the plan in the commit.
+        - Limit '616' to the slim row.
+      - **His picks, sent to him in the logging chat as `send-pick-and-timing.jpg`. PENDING:**
+        - ❓ASK 1, the colour: **A Aurora (recommended)**, B Rings and sparks, or C Key ripple.
+        - ❓ASK 2, the menu: open it 300ms after the press, with a quicker 360ms lap, so the lights meet at the top before the sheet covers it (**recommended**). Or 300/620, or no hold.
+        - ❓ASK 3, where the lights start: **bottom-middle, meeting at the top (recommended)**, or the edge nearest the finger.
+        - **What can ship without him:** the outline fix (top edge, not sticking, the travelling pulse) and removing the stuck states. Per #545, the COLOUR option waits for his pick unless he says "do recommended". His picks come back as their own block.
 
 - [x] **965 — Settings: redesign the close ✕ (use the search ✕'s drawn design) — and, his yes, the same drawn ✕ on every close button in the app** (26 Sep, ~20:57 AWST, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -33709,6 +33755,7 @@ re-opened #480, which I had marked done and had not fixed.
       Builder's note: ✅ v17.05 — the structural half is in: next.sh prints an IDLE STEER line (his words, the starting menu, the #545 reminder) whenever nothing is ACTIONABLE, and LOOP.md's empty-queue rule points at it.
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
       His words, verbatim, in full: *"I hope the like new friends joining or like Collab feature isn’t finished because it’s extremely extremely underbaked from what I’ve seen on my phone like there’s just 1 million things that are missing that you can’t do like you can’t even send it to your friends like there’s a switch to turn it on, but you can never turn it off on any project ever like it just doesn’t seem finished at all and I saw you doing a lot of stuff so I feel like it should be finished like you have all you’ve built the things for it. I feel like it’s just that there’s no way to use them at the moment. I don’t know if you’ve buried it all in a deeper setting or something like I don’t know what’s going on with this but just make sure you actually pull it up and make sure it’s all there and it’s all working and all good and actually makes sense for someone who doesn’t know how to use it to use it like how to use actually use it doesn’t make sense. It’s simple like you know all that stuff."*
       Clauses (his):
       1. [ ] On his phone the collaboration ("friends joining") feature is "extremely extremely underbaked" — "1 million things that are missing that you can't do".
@@ -33717,4 +33764,149 @@ re-opened #480, which I had marked done and had not fixed.
       4. [ ] "I saw you doing a lot of stuff … you've built the things for it … there's no way to use them at the moment … buried it all in a deeper setting" — surface what was built; nothing useful buried.
       5. [ ] "pull it up and make sure it's all there and it's all working and all good" — an end-to-end check of every part on a phone.
       6. [ ] "actually makes sense for someone who doesn't know how to use it … It's simple" — a first-timer can use it without help.
+      🔎 **26 Sep — THE AUDIT HE ASKED FOR, DONE** (a 6-agent workflow: five walked a journey each in the real app at 390×844 — share, join, live-and-off, every other surface, the words — 485 real actions incl. a two-Chrome connection-code join proven end to end; one merged, checked against the code and ranked). Full reports + plan: `tools/design/plans/2026-09-26-collab-audit/audit.json` (screenshots were in the session scratchpad).
+      **Summary, as sent to him:** The hard part works. Two phones really do connect and edit the same project live, both ways. What's broken is everything around it, and on a phone that's most of what you see: - The only way in is the cog, which says "Canvas settings". - The switch that turns sharing on disappears after one tap. The real off switch is at the very bottom of Settings, under test reports, and the app tells you to look in a "Labs" section that doesn't exist. - A project you shared once turns itself back on the next time the app opens. - Nothing on the video shows you're live. - Your friend has no Join button until they find that buried switch, and then it's a ⎇ squiggle. - Swapping codes gives your friend 20 seconds, so in real life it almost always fails. - The words talk about relays and PeerJS.  The plan: 1. Fix the broken parts now. Nothing changes how it looks. 2. Draw you options for the doors: an off switch next to the on switch, a worded Join on Home, and a Live marker. 3. Show which projects are shared, and stop them sharing again by themselves. 4. Plain words and one name for the feature. 5. Comments you can find.  The invite link couldn't be tested here because it needs the online relays. It needs one real test from your phone once 1 and 2 are done.
+      **Root causes:**
+      - R1. THE ON/OFF SWITCH HAS NO HOME NEAR THE FEATURE. The Friends block shows its switch only while sharing is OFF (drawLabsOff, collab-ui.js:1102-1120). Once it's on, drawFriendsIdle/drawShare have none. The real switch is the last group of App Settings (settings.js:907-988), below seven diagnostic Reports. group() has no title (settings.js:164), so no 'Labs' heading exists, yet four sentences send people to 'Settings → Labs' (collab-ui.js:1110, 2975, 3828, 3849). Settings is 4.2–5.6 screens down, and from the editor it hides behind a 0×0 'App settings…' once Friends is remembered big (app.js:7059-7066, 8184-8215). This is his 'switch to turn it on, but you can never turn it off'.
+      - R2. 'OFF' MEANS THREE DIFFERENT THINGS, AND A SHARED ROOM SURVIVES TWO OF THEM. Stop sharing deletes fm.collab.host.<pid>. Opening another project only pauses it. Turning the Labs switch off drops only the ACTIVE session's room, and that is deliberate per S6 (collab-ui.js:4076-4082). A kept room re-arms itself whenever that project opens, including at cold launch behind Home (afterReset → resumeOpen → resumeHost, collab-ui.js:3715-3752). Home shows no badge for a paused room (home.js:1260-1270), and its ⋯ offers 'Share live…' but never Stop (home.js:1356-1362). This is his 'can never turn it off on any project ever'.
+      - R3. §23's 'NO COLLAB DOM WHILE LABS IS OFF' MEANT EVERY DOOR APPEARS ONLY AFTER THE BURIED SWITCH IS ON, AND THE DOORS THAT DO APPEAR ARE WORDLESS. On the phone there is: the cog labelled 'Canvas settings'; a 28px person+ that looks pixel-identical whether you're live or not, and is display:none whenever a layer is selected (collab-ui.js:3916-3963, styles.css:10409); and a bare '⎇' on Home (collab-ui.js:3965-3977) that doesn't exist at all with Labs off. The Friends block can only share, not join. Nothing on the stage says 'live' for owner or guest. This is his 'you can't even send it to your friends' / 'buried it all in a deeper setting'.
+      - R4. THE NO-RELAY CODE ROUTE WAS BUILT FOR TWO PEOPLE SIDE BY SIDE. The guest's 20-second ICE_CONNECT race starts the moment their answer code appears, before the owner can possibly paste it (collab-ui.js:3179 → openedWithin 663-672, collab-core.js:50). The screen says 'Read this back to them' over a ~200-character code (2640). Step 3 'They match' lands under the pinned foot with no scroll, and a tap there hits Done (confirmSas 2164-2176). Code-joined guests never get liveness (setLiveness only on relay paths: 3084, 3578, 3593), so they sit on 'Live' after the owner's app dies. Any project switch drops them for good while the owner is told 'people can reconnect' (3751). This is also the route the app falls back to when relays fail.
+      - R5. THE WORDS WERE WRITTEN FOR THE BUILDER, NOT A FIRST-TIMER. A 68-word paragraph naming PeerJS/EMQX/HiveMQ/Google/Cloudflare leads the first card and repeats four times (PRIVACY_LINE 1564, settings.js:982). 'Relay', 'session' and 'address lookup' appear in status lines. 'Code' means both a 9-character short code and a 233-character FM1 block on the same card. The feature has about a dozen names. Nothing explains it in three steps. Instructions name controls the phone doesn't have: 'tap Share' (3006, 2600), 'Settings → Labs', 'beside your cursor' (189).
+      - R6. ENDINGS ARE SILENT OR HALF-SAID. There is no '<name> left' toast anywhere (owner link.onclose 2218). The Labs switch ends everything mid-session with no confirm (settings.js:984 → syncLabs). U.onDetach never re-syncs the banner, so a stale red 'Offline' sticks on the guest's own unshared project (3691-3707). The ended, removed and offline banners have no phone short form, so the reassuring half is cut off (3398-3400, 3441). The guest's Home card never says ended or not connected (home.js:1308).
+      **Build batches** (in order; ⭐ = needs his pick on drawn options first):
+      - 1. Core loop, part 1: make it work and make 'off' mean off (no new looks) — Turn on → send → friend gets in → turn off works end to end between two phones, including the code route. 'Off' really ends every shared project, and nothing on screen points at a place that doesn't exist. Only logic, wording that is factually wrong, and existing components (ask dialog, existing Share… button style) are used, so it can ship while Batch 2's drawings are with him.
+      - ⭐ 2. Core loop, part 2: doors and switches he can see — A first-timer on a phone can see how to share, how to join, whether they are live, and how to turn it all off, all without Settings. Draw these as options first, rendered through the app at 390px, 24px for icons, and send the sheet before anything ships.
+      - ⭐ 3. Which projects are shared, and nothing turns itself back on — From Home he can see every project that is live, paused-but-shared, ended or disconnected. A project never becomes reachable again without him choosing it, and switching projects never silently cuts a friend off.
+      - ⭐ 4. Plain words and one name — Every sentence a first-timer reads uses one name for the feature, two clearly different names for the two codes, no networking jargon up front, and nothing that promises what the screen doesn't do. The privacy facts stay complete but go behind a tap. This batch changes words, not layout: show him a before/after words sheet and let him pick the names.
+      - ⭐ 5. Comments you can find, and asking for edit access — Comments are reachable from the phone editor without going through Canvas settings. A new comment is noticed, and a Viewer told to 'ask for edit access' has a way to ask.
+      Batch 1 has no new looks — building now. Batches 2–5: an options sheet goes to him first (#545).
+      **26 Sep — the Batch 2–5 options sheet SENT** (`tools/design/967-options.html`, pictures in `tools/design/967/` drawn over the real app by the throwaway `tools/design/967-proto.js`): four pictures of the recommended looks (How it works + a switch that stays in the Friends block; ● LIVE on the owner's video; ● Live · Ezra for a guest; a worded Join on Home) and 19 questions, each with a recommendation.
+      ❓ASK: the 19 picks on the #967 sheet — "do recommended", or per line. (Batch 1 needs none of them and is being built.)
+      ✅ **v17.06 — BATCH 1 SHIPPED** (queue 967 partial). Built in a worktree by a workflow agent, reviewed three ways (regressions / arming & off / does it fix the first-timer findings), fixed, re-reviewed with two real Chromes, fixed again (a phone going to the background must not cut a friend off), re-checked: "ship". What changed, in his terms:
+      - the code swap no longer dies after 20 s — measured with two Chromes and a 3-minute gap: before, the friend's sheet gave up at 20.2 s; after, in at 182.8 s. A friend's own phone or the owner's going to the background keeps the link (Offline shows, it comes back); a dead phone is still said ("<name>'s connection dropped"), and the row goes after a 120 s grace.
+      - Step 3 ("They match") scrolls into view and is the only blue button; closing mid-check says "Not let in — they'll need a fresh code".
+      - OFF means off: the Live collaboration switch ends EVERY shared project (asks first, names what stops, says the result on the row; refuses honestly when another tab is sharing); Home ⋯ on a shared project says "Stop sharing"; nothing re-arms behind Home at launch (it resumes only when he opens that project).
+      - endings are said: "<name> left", "You left <owner>'s project — your copy is kept"; the stale Offline banner clears; phone banners keep "your copy is kept".
+      - smaller: Return finishes the name prompt; a put-away invite keeps 24 h; a code pasted inside a message reads; Share… beside Copy code; no line points at a "Settings → Labs" that isn't there.
+      Tests: 20+ new "967 …" (each failed on the base first), 3 renamed 921 tests (declared in the commit). 967 26/26 and 921 253/253 at 900 and 380 in the worktree.
+      Shipping caught one more (the full suite, not any slice): the per-person "already told she dropped" notes are keyed by mid, mids are reused across sessions, and a note from an ended session silenced the next session's "<name>'s connection dropped" — now cleared when a session starts or ends (967 7d, proven by mutation).
+      Follow-up logged below: an edit made while a friend's phone is paused can take up to ~a minute to reach them after (data channel retransmit backoff; no data lost).
+      ⏭ Next for #967: batches 2–5 wait on his picks on the sheet (or "do recommended").
       Builder's context (not his words): at v17.02 on his phone the only door to sharing was a small person+ on the stage, and only with Settings → Labs on — nothing in Canvas settings, no Stop sharing he could find once Labs was on. v17.04 (shipped today) added the Friends block in Canvas settings on the phone (Start sharing / Stop sharing, the Labs switch in place). This entry is the end-to-end audit he is asking for, done as a first-time user on a phone, and whatever it finds.
+
+- [ ] **968 — Notes and the Help menu open SMALL by default, and remember their size PER PROJECT (a new project starts small again)** (26 Sep, ~22:40–22:41 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole — two blocks; the second CORRECTS the first (Help, not Settings; remembered per project), and its plan REPLACES the first's:
+      ### 26 Sep 2026, ~22:40 AWST — Notes and Shortcuts/tips (the panels that can go BIG) open SMALL when you start a new project
+
+      **His words (verbatim):** "Make it so that the notepad and like Settings menu I guess the ones that are like able to be made really big like when you start a new project they default to being the short version"
+
+      His clauses:
+      1. The panels that can be made really big (he names the notepad, and "like Settings menu I guess"; the ones with #927's small/BIG grip)…
+      2. …default to the short (small) version when you start a new project.
+
+      **Logger's plan (not his words). Ready to build:**
+      - Which panels: the ones with the grip are exactly **Notes** (`js/notepad.js` ~147) and **Shortcuts/tips** (`js/shortcuts.js` ~144), both via `FM.panelSize.attach(card, { key: 'notes' | 'shortcuts', … })`. Settings has no BIG state, so "Settings menu I guess" means the Shortcuts/tips panel. Clearing the whole store also covers any panel that gets the grip later.
+      - Today: `js/panelsize.js` remembers BIG per panel in localStorage `fm.panelBig` (~35, `{notes: true, shortcuts: true}`, a key present only while big). #927 clause: "every time you open it up and close it it'll remember what you last had it like". **Keep that remembering. Only a NEW project resets it.**
+      - Decided (not asked): reset on a brand-new project; don't make it per-project. That is the literal reading of his words, and it keeps #927's remembering while you work.
+      - Build:
+        - In `js/panelsize.js`, add `function resetAll() { try { localStorage.removeItem(STORE); } catch (e) {} }` and export it in `FM.panelSize` (~420) as `resetAll: resetAll`.
+        - Call `if (FM.panelSize && FM.panelSize.resetAll) FM.panelSize.resetAll();` right after a successful create:
+          - (a) `js/home.js` ~2792 `newProjectDialog`, after `if (!pid) return;` and before `FM.home.close(…)`. This is his "start a new project".
+          - (b) the template → new project path, `js/storage.js` ~3170, after its `FM.projects.create` returns a pid.
+        - NOT on imports of an existing project file, element drafts or template drafts. Those are not starting a new project.
+        - Bump `?v=` for `js/panelsize.js`, `js/home.js` and `js/storage.js` in `index.html`.
+      - Test:
+        - Set `localStorage['fm.panelBig'] = '{"notes":true,"shortcuts":true}'`, run the New-project path (the function behind the dialog's Create), then open Notes and Shortcuts: neither card has `.pb-big`. Fails on HEAD.
+        - **Positive control in the same test:** with the store set and NO new project (reopen the current one), Notes opens BIG. That proves the remembering still works and the reset is not just "never big".
+        - Re-run the `927` tests (`?only=927`).
+      - Verify at 380/440 and on PC: make Notes big, go Home, start a new project, open Notes → small. Make it big, close and reopen → still big.
+
+      ### 26 Sep 2026, ~22:41 AWST — CORRECTION to the block above: it is NOTES and the HELP menu, and the size is remembered PER PROJECT (this plan REPLACES the one above)
+
+      **His words (verbatim):** "Oh wait, it's not the Settings menu. It's the Help menu yeah so the menu on the menu both need to default a small but they remember When it's in the same project so like basically if I'm in a project and I make it bigger and then go back and it will still be big but then if I start a new project, it'll be small again"
+
+      His clauses (these replace the block above's):
+      1. The two panels are **Notes** and the **Help menu**, not Settings. Help is the Shortcuts/tips panel that opens from the ? button (`js/shortcuts.js` ~144, `key: 'shortcuts'`, `button: helpButton`).
+      2. Both default to SMALL.
+      3. They remember their size **within the same project**: make it big in a project, go back to it, and it is still big.
+      4. Start a new project and they are small again.
+
+      **Logger's plan (not his words). Ready to build. It REPLACES the reset-on-create plan above, so do not add `resetAll` hooks:**
+      - Remember per project instead of globally. A new project has a new id and therefore no entry, so it opens small with no hook in any create path. Switching between existing projects gives each its own size. That matches "when it's in the same project" exactly.
+      - `js/panelsize.js`:
+        - (a) New store key `const STORE = 'fm.panelBigByProject';`, shaped `{ "<projectId>": { notes: true, shortcuts: true }, … }`. Leave the old flat `fm.panelBig` unread: everything starts small once after the update, which is harmless.
+        - (b) `function pid() { try { return (FM.projects && FM.projects.currentId && FM.projects.currentId()) || '_none'; } catch (e) { return '_none'; } }`. `FM.projects.currentId()` is at `js/storage.js` ~2399.
+        - (c) `remembered(key)` → `const p = readStore()[pid()]; return !!(p && p[key] === true);`.
+        - (d) `remember(key, big)`: read the store, take `o[pid()] || {}`, set or delete `[key]`, and delete the project's object when it is empty. Cap the store at the 40 most recently written projects: re-insert the current id last, then drop the oldest keys past 40, so storage cannot grow forever.
+        - (e) Export `_setBig(key, big)` as a suite seam, so tests stop writing the storage format by hand.
+      - No changes are needed in the panels:
+        - Notes re-attaches on every open (`js/notepad.js` ~147, detached at ~189), so it re-reads `remembered`.
+        - Help calls `sizer.sync()` on every show (`js/shortcuts.js` ~203), which re-reads it too.
+        - Verify both pick up a project switch.
+      - Bump `?v=` for `js/panelsize.js` in `index.html`.
+      - Tests:
+        - NEW: in project A, make Notes and Help big, close them and reopen: both are big (the positive control for clause 3). Then create a new project B (the New-project path): both open small (clauses 2 and 4). Back to A: both big again (clause 3, per project). It fails on HEAD at B, because the global store keeps them big.
+        - UPDATE the 927 tests that read or write raw `fm.panelBig` (`tests/tests.js` ~100053, ~100252, ~100288, ~100305) to use `FM.panelSize.isBig` / `_setBig`. Record them as retuned, not removed.
+        - Re-run `?only=927`.
+      - Verify at 380/440 and on PC.
+
+      Clauses (his, as corrected):
+      1. [ ] The two panels are Notes and the Help menu (the ? Shortcuts/tips panel).
+      2. [ ] Both default to SMALL.
+      3. [ ] They remember their size within the same project: make it big, go back, still big.
+      4. [ ] A new project: small again.
+
+- [ ] **969 — Phone: the SMALL Help menu must actually be small (today there is no visible difference from big)** (26 Sep, ~22:41 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 26 Sep 2026, ~22:41 AWST — Phone: the SMALL Help menu is not actually small; there is no visible difference from big
+
+      **His words (verbatim):** "Also on mobile make it so that the small version for the Help menu is actually small because right now it's like there is no difference"
+
+      His clauses:
+      1. On mobile, the small version of the Help menu (the ? Shortcuts/tips panel) should actually be small.
+      2. Right now there is no visible difference between small and big.
+
+      **Logger's plan (not his words). Cause worked out from the CSS; options are being rendered through the app and follow as their own block:**
+      - Why there is no difference: small Help is `.shortcuts-card` (`styles.css` ~3656) with `width: min(440px, calc(100vw - 24px))` and `max-height: min(86vh, 86dvh)`. Its content (a long list) always fills that max-height.
+        - On a 380×800 phone, small is therefore **356 × ~688** against big (`--pb-w/--pb-h`, ~10736, phone: `100vw − 20px` × `100dvh − 20px − insets`) of **360 × ~780**. That is 4px narrower and ~12% shorter, which reads as the same card.
+        - Notes does not have this problem only because its content is short.
+        - These numbers are computed from the rules and not yet measured. The rendering run measures them.
+      - Fix direction: on phones only (`@media (max-width: 700px)`), give SMALL Help its own clearly smaller box. For example `.shortcuts-card:not(.pb-big) { width: calc(100vw - 56px); max-height: min(52dvh, 460px); }`, with the list scrolling inside (`.shortcuts-scroll` already has `min-height: 0`). Small then reads as a card with the app visible around it, and big as the whole screen.
+        - Recommended starting point, A: ~52% of the screen height, 28px margins each side.
+        - Alternative, B: ~40%.
+        - Renders of both at 380 and 440 follow. Keep PC unchanged.
+      - Test: at phone width, open Help small and then big. Small's height must be ≤ 60% of big's and its width ≤ big's − 30px. It fails on HEAD (~88% and 4px). Re-run `?only=927`.
+
+      ✅ PLAN LANDED (~23:20):
+      ### 26 Sep 2026, ~23:20 AWST — PLAN READY: phone small Help menu (the "no difference" block above)
+
+      **Logger's plan (not his words). Full plan: `tools/design/plans/2026-09-26-help-small/plan.md`. Renders: `help-small-380.png` and `help-small-440.png` in the same folder (NOW small | NOW big | A | B).**
+      - MEASURED with tools/shot.py (touch + `hover: none`), in a project and over Home:
+        - At 380×800: small is **356×688** against big **360×780**, 88% of the height and 4px narrower.
+        - At 440×956: **416×822** against **420×936**.
+        - The list is ~1040px of rows, so small always fills its 86% max-height.
+      - **Recommended A**: centred, about half the screen, 28px margins. It gives 324×416 at 380 and 384×460 at 440, and still shows 7–10 shortcuts. The list scrolls inside, Tutorials and Close stay whole and hit-testable, and the grip switches to big and back to the same box.
+        - B (40%) shows only 3–4 rows.
+        - **His pick: pending.** It was sent to him as the 440 render. If no answer has arrived when you reach this, build A.
+      - CSS for A, in `styles.css` directly after the `.pb-card.pb-big` rule (~10743), inside `@media (max-width: 700px)`: `.shortcuts-card:not(.pb-big) { width: calc(100vw - 56px); min-width: 0; max-height: clamp(min(300px, 86vh), 52vh, 460px); max-height: clamp(min(300px, 86dvh), 52dvh, 460px); }`.
+        - ⚠️ **`min-width: 0` is load-bearing.** Without it the base rule's `min-width: min(360px, 100vw - 24px)` wins and small stays as wide as before (measured 336 against 340 at 360). The sketch in the block above left it out.
+        - Bump `styles.css?v=` in `index.html`. No JS is needed.
+      - The proving test is written out in full in the plan. It checks small ≤ 60% of big's height and ≥ 30px narrower, at phone width, in a project and over Home. Its controls are that big still fills the screen, small is still usable, and PC keeps its 440px card. Its assertions were run by hand at 360×760: FAIL on HEAD, PASS with A. Re-run `?only=927` (desktop and `--width 380`) plus 'only the list scrolls', '690 on the phone a tap outside' and '912 the shortcuts sheet'.
+
+      Clauses (his):
+      1. [ ] On mobile the small Help menu is actually small.
+      2. [ ] …a clear difference from big.
+      3. [ ] (#545) his pick on the render (A recommended, ~half the screen) — build A if no answer has come (the plan's own rule).
+
+- [ ] **970 — PC ~1160–1386px wide, two layers selected: the ⋯ layer-options button sits under the version chip and cannot be clicked (hunt MEDIUM #970)** (26 Sep, found by the logging chat's corners planner — NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      - **NEW, found by the corners planner, already on HEAD (hunt MEDIUM):** on a PC window about 1160–~1386px wide with TWO layers selected, the ⋯ layer-options button sits under the version chip and cannot be clicked. The picture is `2026-09-26-corners/finding-1280-two-selected-overlap.png`. Log it as its own hunt item.
+      1. [ ] With two layers selected at any PC width, ⋯ is fully clickable (nothing covers it).
+
+- [ ] **971 — Collab: an edit made while a friend's phone is paused can take up to ~a minute to reach them after they come back (hunt LOW #971)** (27 Sep — found by #967's two-Chrome re-check; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Measured (2 of 9 runs, two Chromes, the guest's Chrome SIGSTOPped 25 s while the owner added a layer 3 s in): the guest came back online, then went Offline again and stayed so until ~60 s, while both sides read 'connected' and the owner's send buffer grew (ctl 205→1584, pres 168→9772) — then everything flushed at once and caught up, no data lost. Looks like the SCTP data channel's retransmit backoff after a long outage, not app logic. With no edit during the pause it never happened (3/3).
+      Suggested fix (the reviewer's): don't send ctl batches or presence to a member while its link is disconnected/down; flush when it recovers — so no reliable data is queued into a backed-off channel.
+      1. [ ] An edit made while a friend's phone is paused reaches them within a few seconds of their coming back.
