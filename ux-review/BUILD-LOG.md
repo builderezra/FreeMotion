@@ -29,3 +29,21 @@ those at merge time, and it is right to: a missed buster serves the old file.
 - **Already fixed on main (v16.94):** #10.
 - **Waiting on you (visual changes, so pictures first):** #4 a play glyph in the time pill, #12 a TEMPLATE / ELEMENT chip in the header, and the motion path while dragging (#2).
 - **Retracted:** the old #6 (effects library "won't scroll"), a bug in the review's own test browser.
+
+## Full suite, branch against main (26 Sep)
+Whole suite in headless Chromium at 1280, both copies: **branch 1775/1829, main 1777/1821**. Most of the
+reds on both are this Linux browser (no H.264 encoder, no BarcodeDetector, a 45-minute run's timing), and
+they are the same on both. 13 failed only on the branch, and the branch was at fault for three of them:
+- **My #9 toast broke `915.5Br two different tiles copying at once`.** The first tile to land in an empty
+  project said "Canvas set to … to match this clip" over the top of the shared "Preparing…", while the
+  second tile was still copying. A sticky progress toast (shown with no timeout) now wins: `FM.toastBusy()`
+  is true while one is up, and the canvas note steps aside. Proven: fails on 13e63df, passes after.
+- **Two of my tests left state behind.** The GIF export in the #7 test left "gif" as the remembered export
+  format (`fm.exportPrefs`), so a later test's export dialog opened on GIF and had no audio to warn about
+  (`the export dialog warns about a silent export BEFORE the render`). The #9 test left "Custom" as the
+  remembered New project tile (`fm.newproj`), so a later dialog opened with no Resolution row
+  (`917.15 … dropdowns share one left edge`). Both reproduced by running my tests then theirs; both now
+  put the memory back, and the tests that change the project size resize the canvas back too.
+- The other ten pass alone, and pass run straight after all eight of my tests (18/18 at 1280, 19/19 at
+  380 with the Preparing test added). Three different tests failed only on main in the same comparison,
+  so these late-suite reds move around between runs; they are not this branch's.

@@ -1235,6 +1235,7 @@ window.FM = window.FM || {};
     t.classList.remove('hidden');
     const my = ++toastSeq;
     if (ms === undefined) ms = 2200;
+    t._fmSticky = !ms;   // a progress message ('Preparing…') that stays until its job says otherwise — see FM.toastBusy
     /* …and it must not vanish out from under someone who is on their way to pressing it. Nine seconds
        is generous for a tap and short for a switch device, so while the toast HAS FOCUS the countdown
        waits. Escape (above) and Tab are the ways out. */
@@ -1388,7 +1389,14 @@ window.FM = window.FM || {};
 
   FM.hideToast = function () {
     const t = document.getElementById('toast');
-    if (t) { t.classList.add('hidden'); t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap', 'toast-in'); }
+    if (t) { t._fmSticky = false; t.classList.add('hidden'); t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap', 'toast-in'); }
+  };
+  /* True while a STICKY toast is up: something still working ('Preparing…' while a library tile is copied)
+     that will take itself down when it is done. A passing remark — "Canvas set to…" when the first clip lands —
+     must not replace it, or the screen says the job is over while a second tile is still copying. */
+  FM.toastBusy = function () {
+    const t = document.getElementById('toast');
+    return !!(t && t._fmSticky && !t.classList.contains('hidden'));
   };
 
   // Benchmarks = timeline markers. Tap the timecode to drop one at the playhead (tap again to remove it).
@@ -2730,7 +2738,7 @@ window.FM = window.FM || {};
       // Say so rather than quietly disagreeing with the file — a capped project is a real choice the
       // app made on his behalf, and Canvas settings is where to undo it.
       if (fit.capped && FM.toast) FM.toast('Project set to ' + fit.w + '\u00d7' + fit.h + ' — ' + rec.width + '\u00d7' + rec.height + ' is bigger than any preset. Change it in Canvas settings.', 4600);
-      else if ((fit.w !== w0 || fit.h !== h0) && FM.toast) FM.toast('Canvas set to ' + fit.w + '\u00d7' + fit.h + ' to match this clip. Change it in Canvas settings.', 4200);
+      else if ((fit.w !== w0 || fit.h !== h0) && FM.toast && !(FM.toastBusy && FM.toastBusy())) FM.toast('Canvas set to ' + fit.w + '\u00d7' + fit.h + ' to match this clip. Change it in Canvas settings.', 4200);
       resizeCanvas();
     }
     // Use the clip's FULL length — never cap it to the existing composition. A still has no length

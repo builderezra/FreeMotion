@@ -48259,6 +48259,7 @@
       FM.toast = toast0;
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       P.duration = dur0; P.width = w0; P.height = h0; FM.time = t0;
+      if (FM.resizeCanvas) FM.resizeCanvas();   // the first photo resized the canvas to itself; refreshAll does not undo that
       FM.refreshAll();
     }
   });
@@ -48270,7 +48271,7 @@
      * card (queue 141 part 4) and is not what this is about. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (typeof FM._runExport !== 'function') throw new Error('FM._runExport is not reachable, so the Export button cannot be driven');
-    const saved = { scene: FM.scene, time: FM.time, toast: FM.toast };
+    const saved = { scene: FM.scene, time: FM.time, toast: FM.toast, prefs: localStorage.getItem('fm.exportPrefs') };
     const fmtEl = document.getElementById('exp-format'), resEl = document.getElementById('exp-res'), rangeEl = document.getElementById('exp-range');
     const fmt0 = fmtEl && fmtEl.value, res0 = resEl && resEl.value, range0 = rangeEl && rangeEl.value;
     const msgs = [];
@@ -48300,8 +48301,10 @@
       FM.toast = saved.toast;
       if (fmtEl && fmt0 != null) fmtEl.value = fmt0; if (resEl && res0 != null) resEl.value = res0; if (rangeEl && range0 != null) rangeEl.value = range0;
       const ov = document.getElementById('export-overlay'); if (ov) ov.classList.add('hidden');
+      // An export REMEMBERS its format (queue 139's prefs): left as "gif", the next export dialog opened on GIF.
+      try { if (saved.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', saved.prefs); } catch (e) {}
       FM.scene = saved.scene; FM.time = saved.time;
-      try { FM.refreshAll(); } catch (e) {}
+      try { if (FM.resizeCanvas) FM.resizeCanvas(); FM.refreshAll(); } catch (e) {}
     }
   });
 
@@ -48370,7 +48373,7 @@
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const img = (w, h) => new Promise(res => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').fillRect(0, 0, w, h); c.toBlob(b => res(new File([b], 'land.png', { type: 'image/png' })), 'image/png'); });
     const P = FM.scene.project, layers0 = FM.scene.layers.slice();
-    const saved = { w: P.width, h: P.height, keep: P.keepSize, toast: FM.toast, create: FM.projects && FM.projects.create, homeOpen: FM.home && FM.home.isOpen && FM.home.isOpen() };
+    const saved = { w: P.width, h: P.height, keep: P.keepSize, toast: FM.toast, create: FM.projects && FM.projects.create, homeOpen: FM.home && FM.home.isOpen && FM.home.isOpen(), newp: localStorage.getItem('fm.newproj') };
     const toasts = [];
     try {
       FM.toast = function (m) { toasts.push(String(m)); return saved.toast.apply(this, arguments); };
@@ -48412,6 +48415,9 @@
       try { if (!saved.homeOpen && FM.home) FM.home.close(); } catch (e) {}
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       P.width = saved.w; P.height = saved.h; if (saved.keep === undefined) delete P.keepSize; else P.keepSize = saved.keep;
+      // The dialog remembers the last tile: left on Custom, the next New project opened with no Resolution row.
+      try { if (saved.newp == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', saved.newp); } catch (e) {}
+      if (FM.resizeCanvas) FM.resizeCanvas();   // step 2's photo resized the canvas to itself
       FM.refreshAll();
     }
   });
@@ -48465,6 +48471,7 @@
       try { const d = document.querySelector('.te-done'); if (FM.textEdit.isActive && FM.textEdit.isActive() && d) d.click(); } catch (e) {}
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       P.width = w0; P.height = h0;
+      if (FM.resizeCanvas) FM.resizeCanvas();
       try { FM.selectLayer(sel0); } catch (e) {}
       FM.refreshAll();
     }
@@ -48481,6 +48488,15 @@
     const cv = document.getElementById('preview');
     if (!cv) throw new Error('#preview is missing');
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time, toast0 = FM.toast, allowed0 = FM._canvasTipsAllowed;
+    const vp0 = { x: FM.viewport.x, y: FM.viewport.y, scale: FM.viewport.scale }, gc0 = FM.groupContext;
+    /* What the earlier tests left behind, recorded BEFORE this test tidies it: in a full run the pick tip once
+       showed zero times while it passed alone and in a slice, so a failure has to say what it inherited. */
+    const inherited = (function () {
+      const r = cv.getBoundingClientRect(); let store = 'writable';
+      try { localStorage.setItem('fm.tip.probe', '1'); localStorage.removeItem('fm.tip.probe'); } catch (e) { store = 'THROWS (' + e.name + ')'; }
+      return 'viewport ' + JSON.stringify(vp0) + ', groupContext ' + gc0 + ', preview ' + Math.round(r.width) + 'x' + Math.round(r.height) +
+        ', home ' + !!(FM.home && FM.home.isOpen && FM.home.isOpen()) + ', localStorage ' + store + ', pointers ' + (FM._vpPointerCount ? FM._vpPointerCount() : '?');
+    })();
     const saved = {}; Object.keys(T.tips).forEach(k => { saved[k] = localStorage.getItem(T.tips[k].key); localStorage.removeItem(T.tips[k].key); });
     const seen = [];
     const at = () => { const r = cv.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
@@ -48489,6 +48505,7 @@
       FM._canvasTipsAllowed = true;
       FM.toast = function (m) { seen.push(String(m)); return toast0.apply(this, arguments); };
       if (FM._resetVpPointers) FM._resetVpPointers();
+      FM.groupContext = null; FM.viewport.reset();
       FM.scene.layers.length = 0;
       const P = FM.scene.project;
       const L = FM.makeLayer('shape', { name: 'Big', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width * 0.8, shapeH: P.height * 0.8, fill: '#e33', start: 0, duration: 5 });
@@ -48498,7 +48515,7 @@
       for (let i = 0; i < 4; i++) { const p = at(); ev('pointerdown', p.x, p.y); ev('pointerup', p.x, p.y, window); await sleep(20); }
       if (FM.scene.selectedId) throw new Error('a tap on the preview SELECTED a layer — his v2.93 rule is that the preview never selects');
       const picks = seen.filter(m => m === T.tips.pick.text).length;
-      if (picks === 0) throw new Error('four taps on a layer in the preview selected nothing and said nothing about where layers are picked');
+      if (picks === 0) throw new Error('four taps on a layer in the preview selected nothing and said nothing about where layers are picked (toasts: ' + JSON.stringify(seen) + '; inherited: ' + inherited + ')');
       if (picks !== T.max) throw new Error('the pick tip showed ' + picks + ' times in four taps; it must stop at ' + T.max);
 
       // #2 — a drag on an ANIMATED layer shifts every key (his rule, kept) and now says so.
@@ -48519,7 +48536,8 @@
       { const p = at(); ev('pointerdown', p.x, p.y); for (let i = 1; i <= 6; i++) { await sleep(12); ev('pointermove', p.x + i * 8, p.y, window); } ev('pointerup', p.x + 48, p.y, window); await sleep(40); }
       if (seen.includes(T.tips.whole.text)) throw new Error('dragging a layer with no keyframes claimed to move a whole animation');
     } finally {
-      FM.toast = toast0; FM._canvasTipsAllowed = allowed0;
+      FM.toast = toast0; FM._canvasTipsAllowed = allowed0; FM.groupContext = gc0;
+      FM.viewport.x = vp0.x; FM.viewport.y = vp0.y; FM.viewport.scale = vp0.scale; FM.viewport.apply();
       Object.keys(T.tips).forEach(k => { if (saved[k] == null) localStorage.removeItem(T.tips[k].key); else localStorage.setItem(T.tips[k].key, saved[k]); });
       if (FM._resetVpPointers) FM._resetVpPointers();
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
