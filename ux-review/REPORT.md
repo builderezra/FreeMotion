@@ -1,33 +1,33 @@
 # FreeMotion UX review (v16.90, 24-25 Sep 2026)
 
-88 findings: 14 high, 56 medium, 16 low, 18 of them bugs found by accident.
+86 findings: 12 high, 56 medium, 16 low, 17 of them bugs found by accident.
 Review bots used the app like a person, mostly on a 390px phone, plus desktop and five other screen sizes. Nobody read the code. Every fix keeps the feature.
 
 ## Start here
 
 1. **Tapping a layer on the preview doesn't select it, and a stray drag pans the whole canvas** (high · Checked by Claude + 2 bots (phone touch, desktop mouse))
-   Tapping a shape, photo or text on the preview does nothing, so the only way to select anything is to find its row in the timeline. With nothing selected, a one-finger drag slides the whole canvas out of frame.
-   *Fix:* Tap selects the top layer under your finger, a second tap cycles to the one underneath, and tapping empty canvas deselects. Pan with two fingers. Double-tap fits the canvas.
+   Tapping a layer on the preview does nothing and nothing says why, so a new user thinks the app is broken. That's by your design (v2.93: layers are picked from the timeline); what's missing is the hint.
+   *Fix:* Keep the rule. The first few times a preview tap does nothing, show "Pick layers from the timeline below" and pulse the rows.
 
 2. **Dragging an animated layer on the preview moves the whole animation, not the keyframe you're on** (high · Found by 2 bots (phone and desktop))
-   With position keyframes, dragging the layer on the preview shifts every keyframe by the same amount, so "slide in from off-screen" ends up as a layer that sits still. The swipe pad in the panel does the right thing.
-   *Fix:* Make the preview drag work like the pad: edit the keyframe at the playhead, or add one there. Keep "move whole path" as a visible toggle and toast which one happened.
+   Dragging an animated layer on the preview moves its whole animation, as you chose in v3.00. Both bots expected it to edit the keyframe at the playhead, and nothing on screen says which one happened.
+   *Fix:* Keep the rule. Show the motion path while dragging, and toast "Moved the whole animation (2 keyframes)" with a pointer to Move & Transform.
 
 3. **The big keyframe button (and the small X/Y diamonds) show stale state after the playhead moves** (high · Checked by Claude + 1 bot)
    The big keyframe diamond keeps its old state until the panel redraws. At 1:07, with the only keyframe at 0:00, it showed gold "Remove keyframe", and tapping it added one. The opposite case deletes a keyframe you meant to keep.
    *Fix:* Refresh the diamond's colour, fill and label on every playhead change: scrub, play, typed time and the skip buttons.
 
 4. **There is no play button; play/pause hides behind tapping the time readout** (high · Checked by Claude + 1 bot)
-   Play/pause only works by tapping the 00:00:00 time pill, and nothing on a phone explains that. While playing, the only change is the pill's outline colour. The project length isn't shown anywhere.
-   *Fix:* Put a play/pause triangle inside the time pill and show "current / total". Tap and double-tap keep working as they do now.
+   Play lives in the 00:00:00 time pill, as you asked in queue 364. Nothing on a phone says the pill is tappable, and the project length isn't shown anywhere.
+   *Fix:* Your call, with pictures first: a small play/pause glyph inside the pill, plus "current / total".
 
 5. **Moving a clip in time needs a hold nobody tells you about (a quick drag scrubs or trims instead)** (high · Checked by Claude on phone and desktop)
    A quick drag on a clip scrubs the playhead on a phone, and trims the clip's end with a mouse. Holding for about 0.7 s first does move it. Two bots decided clips can't be moved at all, which shows how hidden the hold is.
    *Fix:* Show "Hold, then drag to move" after the first quick drag, and lift the clip visibly when the hold kicks in. On desktop, let a plain drag on the body move the clip.
 
-6. **The effects library's main screen (New/Recents/Faves/Categories) does not scroll at all** (high · Checked by Claude + 1 bot)
-   On a 390px phone the Categories row (Colouring 43, Blur 19, Warping 29 and more) sits almost entirely below the screen, and swiping up does nothing. Search and the New row still work, but browsing by category is how new users explore.
-   *Fix:* Make that screen scroll like the category pages already do. Until then, add a "See all categories" button above the fold.
+6. **Importing several photos at once stacks them all at 0:00 instead of one after another** (high · Confirmed by a 2nd bot)
+   Picking several photos in one go drops them all at 0:00, stacked on top of each other, so a 3-photo slideshow starts with 14 steps of trimming and moving.
+   *Fix:* Lay them end to end in the order picked, and offer "Stack them instead?" in the toast.
 
 7. **A finished export gives you nothing: no toast, no "done", no file name, no way to know it worked** (high · Confirmed by a 2nd bot)
    The "Exporting... NN%" box disappears at 100% with no tick, no file name and no "saved", so a finished export looks exactly like a failed one.
@@ -215,7 +215,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Where:** Editor preview (canvas), phone layout
 - **What happened:** Phone (390px, touch): tapped the photo, video, text and star on the preview with a tap, a double-tap and a long-press. Nothing selects. If a layer is already selected, tapping a different one only deselects it. With nothing selected, a one-finger drag slides the canvas about 75 px down behind the toolbar, and double-tap doesn't bring it back. Desktop (mouse): the same. Clicking never selects, and dragging an unselected layer pans the view. Claude reproduced it on a fresh circle: tapping empty canvas deselects fine, tapping the circle itself does nothing.
 - **Why it matters:** On a phone the preview is where your eyes and thumb are. Every other editor people know (Alight Motion, CapCut, Canva) selects what you tap. Here, moving the star you can see means: close panel, find the star row, tap it, then drag. And the "wrong" gesture silently moves the canvas, which reads as "the app broke".
-- **Suggested fix:** Tap on the preview selects the top-most visible layer under the finger (recommended). Tapping the same spot again cycles to the layer underneath, and tapping empty canvas deselects. Keep canvas panning, but on two fingers (or Space+drag / middle-drag on desktop), so a missed tap can never shift the framing. Double-tap the preview = fit canvas to screen. On desktop, press-and-drag on an unselected layer selects and moves it in one go.
+- **Suggested fix:** Keep your rule that the preview never selects. What's missing is the explanation: the first few times a tap on the preview does nothing, show a one-line hint ("Pick layers from the timeline below") and briefly pulse the timeline rows (recommended). If you ever want to revisit the rule itself, the other option is a Settings switch, "Tap the preview to select", off by default. Separately, a stray one-finger drag panning the canvas out of frame could get a double-tap-to-fit.
 - **Screenshots:** [main-13-tap-circle.webp](shots/main-13-tap-circle.webp), [B-build-73-drag-star-nosel.webp](shots/B-build-73-drag-star-nosel.webp), [F-desk-51-drag-unselected.webp](shots/F-desk-51-drag-unselected.webp)
 
 ### There is no play button; play/pause hides behind tapping the time readout
@@ -223,7 +223,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Where:** Bar under the preview, centre readout "00:00:00"
 - **What happened:** Looked for a play button for my 10 s video. The bar has 9 controls (sliders, copy, a pill, ||, two circular arrows, a "fullscreen" frame) and none is a play triangle. Playing only works by tapping the "00:00:00" pill; the only hint is its tooltip ("Tap: play / pause - double-click: type"), which a phone never shows. While playing, the only state change is the pill's outline turning cyan (compare B-build-87 vs B-build-95-pb). Double-tapping it turns it into a text box showing "10.97" (seconds) while the pill itself showed "00:10:29" (seconds:frames), so the same time is written two different ways. The project length is nowhere on screen: "total 0:10" only exists in the tooltip.
 - **Why it matters:** Play is the most-used control in any editor. A new user will hunt for it, and even Ezra's own muscle memory would not transfer to another device. "00:10:29" reads as ten and a bit seconds, not 10.97 s.
-- **Suggested fix:** Put a real play/pause icon inside the readout pill (triangle on the left, "0:03.2 / 0:10" on the right) so the pill still toggles on tap and still opens the type-a-time box on double-tap (recommended). Show "current / total". Use the same format in the edit box as in the display (either both "10.97 s" or both "0:10.29f"), and consider a Settings choice for frames vs decimals.
+- **Suggested fix:** Keep the time pill as the play button, as you asked. The open question is only whether the pill should also show a small play/pause glyph so a first-time user knows it's tappable, plus the project length ("0:03 / 0:10"). That's a visual change, so per your rule it needs pictures of options first, not a build.
 - **Screenshots:** [B-build-03-editor-empty.webp](shots/B-build-03-editor-empty.webp), [B-build-87-playing.webp](shots/B-build-87-playing.webp)
 
 ### Moving a clip in time needs a hold nobody tells you about (a quick drag scrubs or trims instead)
@@ -321,7 +321,7 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Where:** Editor, layer selected, Position / Scale panel open, layer has position keyframes; dragging the shape on the preview
 - **What happened:** Square with X keyframes at 0s (X=144) and 1s (X=515). Playhead ON the 0s keyframe (panel says "Remove keyframe at playhead"). Dragged the square 80px left on the canvas. Result: X at 0s = -335 AND X at 1s = 36, i.e. both keyframes shifted by -479. Did the same with the swipe pad instead: only the keyframe at the playhead changed (0s = 144, 1s stayed 515). Also with a single keyframe at 0s, dragging on the canvas at 1s silently rewrote the 0s value instead of creating a 1s keyframe. When all keyframes hold the same value (the normal state right after you tap the diamond at a second time), dragging the shape at the new keyframe moves both, so "slide in from off-screen" never animates: I got X=515 at 0s and 1s and a square that just sits there. Nothing on screen says "moved the whole path". The desktop bot got the same result 3 times with the mouse, including when dragging exactly on the crosshair handle and with the Position panel closed.
 - **Why it matters:** Dragging the object is THE phone gesture for setting a position, and every motion app (Alight Motion, After Effects, CapCut) treats it as "set the value at this keyframe". Here the most natural move quietly does something else, so the first keyframe animation a user tries fails and they don't know why.
-- **Suggested fix:** Make canvas drag behave like the pad: on a keyframe, edit that keyframe; off a keyframe on an animated property, add a keyframe (the pad already does exactly this, see next finding). Keep "move the whole animation" as an explicit option: (a) two-finger drag or long-press-then-drag on the canvas, or (b) a "Move path" toggle next to the Motion path button (recommended: b, visible and discoverable). Whichever mode is active, flash a one-line toast the first time ("Moved all 2 keyframes" / "Set keyframe at 0:01").
+- **Suggested fix:** Keep your rule that a preview drag moves the whole animation. Make it visible instead: when the dragged layer has keyframes, show the motion path while dragging and a one-line toast after ("Moved the whole animation, 2 keyframes. To change one keyframe, use Move & Transform") (recommended). The two bots that hit this both expected a drag to edit the keyframe at the playhead, so the hint is what stops the surprise.
 - **Screenshots:** [C-anim-68-canvas0.webp](shots/C-anim-68-canvas0.webp), [C-anim-69-canvas-then1.webp](shots/C-anim-69-canvas-then1.webp), [F-desk-84-at0-after.webp](shots/F-desk-84-at0-after.webp)
 
 ### The big keyframe button (and the small X/Y diamonds) show stale state after the playhead moves
@@ -397,22 +397,6 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Why it matters:** Escape-to-dismiss is muscle memory on a PC. Here it does the opposite, and a menu you can't see can act on your project.
 - **Suggested fix:** Escape (and the back gesture) closes the top-most thing first: the menu, then the panel, then the selection (recommended). A menu that is no longer visible must never receive a tap.
 - **Screenshots:** [D-look-1b-07-more-open.webp](shots/D-look-1b-07-more-open.webp), [D-look-1b-08-after-escape.webp](shots/D-look-1b-08-after-escape.webp), [F-desk-59-esc-menu-repro.webp](shots/F-desk-59-esc-menu-repro.webp)
-
-### The blend-mode list in Mixing doesn't scroll, so an opened category pushes later ones off-screen
-- **Impact:** HIGH · 2 bots, partly confirmed
-- **Where:** Layer > Mixing (blending modes list: Normal, Cutout, Brighten, Deepen, Punch, each a collapsible group of sub-modes)
-- **What happened:** Re-test: the categories are an accordion (one open at a time), but even with one open the later categories are cut off and neither a swipe nor the mouse wheel scrolls the list. Original report: At rest, all 5 top-level groups (Normal/Cutout/Brighten/Deepen/Punch) just barely fit in the 390x844 viewport, with Punch's row already clipped a few px past the bottom edge (its centre reports at y=828, i.e. row bottom ~849, past the 844 viewport), still tappable only because a sliver remains on-screen. Expanding "Brighten" pushes "Brightest Colour" (its 3rd sub-item) to a row centred at y=846, i.e. almost entirely below the visible area; only a 1-2 px strip at y=843 was tappable, found by trial. Expanding a second category ("Cutout") on top of that pushes "Deepen" to y=863 and "Punch" further still, both now completely off-screen with nothing tappable at all. I tried both drag and touchdrag (up-swipes) inside the panel to scroll and neither moved the list at all; the panel does not scroll.
-- **Why it matters:** Blending modes are core to compositing layers, and this is a touch-only phone build. A user who opens two categories to compare options (an entirely reasonable thing to do) loses access to every mode below them with zero feedback that content still exists, no scrollbar, no fade-out edge, no "more below" hint, and no gesture recovers it short of remembering to collapse a category above.
-- **Suggested fix:** Make the Mixing panel's blend-mode list its own scrollable region (recommended) so expanding any category simply reveals more scrollable content instead of pushing later categories past the fold. Alternative: accordion behaviour where opening one category auto-collapses the others, so at most one is expanded at a time and the list can't grow taller than the screen.
-- **Screenshots:** [D-look-1b-17-mixing-scroll.webp](shots/D-look-1b-17-mixing-scroll.webp), [D-look-1b-19-brightest-selected.webp](shots/D-look-1b-19-brightest-selected.webp)
-
-### The effects library's main screen (New/Recents/Faves/Categories) does not scroll at all
-- **Impact:** HIGH (BUG) · Checked by Claude + 1 bot
-- **Where:** Layer > Effects > "+ Add Effect" (the library landing screen, before opening a category)
-- **What happened:** The landing screen shows NEW (horizontal card carousel with real thumbnail previews), RECENTS, a FAVES pill, and CATEGORIES (colour tiles: Colouring 43, Blur 19, Warping 29, and more per see). Only a ~29 px sliver of the category tiles' top edge is visible at the bottom of a 390x844 viewport; the rest (queried at y=873, tile height 115px) is below the fold. Tried scrolling with touchdrag (up-swipes from three different starting points, including one that started well clear of the NEW carousel) and with wheel (a real wheel event, not touch), neither moved the page; every attempt only advanced the NEW carousel horizontally instead. The category tiles ARE technically tappable, but only by hitting that same ~29 px sliver (verified: tapping at y=830 on "Colouring" opened it correctly). Once inside a category (e.g. Colouring, 43 effects), that grid scrolls normally with wheel, so scrolling itself works elsewhere in the same picker, just not on this landing screen.
-- **Why it matters:** Categories are the main way to browse the effects library beyond what's new/recent/faved, and this task explicitly asks "can a normal user find what they want", here they can't unless they know to hunt for an unlabelled sliver of colour at the very bottom edge of the screen. A real thumb has no reason to try tapping a 29 px strip that looks like a barely-visible edge, not a button.
-- **Suggested fix:** Make the landing screen's outer container scrollable (recommended), it is the odd one out, since the category-detail screen one level in already scrolls correctly with the same input. Until fixed, shrink the NEW/RECENTS rows or add a "See all categories" button above the fold as a stopgap.
-- **Screenshots:** [main-21-effects-landing.webp](shots/main-21-effects-landing.webp), [main-22-effects-after-swipe.webp](shots/main-22-effects-after-swipe.webp), [D-look-1b-27-categories.webp](shots/D-look-1b-27-categories.webp)
 
 ### Text toolbar colour chip goes stale after using the eyedropper
 - **Impact:** MEDIUM (BUG) · Found by 1 bot
@@ -797,6 +781,8 @@ Review bots used the app like a person, mostly on a 390px phone, plus desktop an
 - **Corrected:** "Audio clips have no waveform anywhere" is half wrong. A faint waveform shows on the full timeline, and it disappears when the clip is selected. Downgraded to medium.
 - **Left out:** The tap-count bot said shapes have no Width/Height fields. They do, behind the Scale toggle in Position / Scale, so that claim isn't in the report.
 - **Re-tested:** A second bot re-did the 9 high-impact claims that only one bot had made, each from a fresh project. 6 confirmed. Keyframe diamonds and the blend-mode list were partly confirmed. The Undo double-revert wasn't reproduced, so it dropped to medium and out of the top 12.
+- **Retracted:** "The effects library won't scroll" (top pick #6) and "the blend-mode list won't scroll" were false. The review's test browser had a bug: its real window was 720px tall under a 844px phone screen, so swipes starting in the bottom 124px went nowhere while taps still worked. With that fixed, both lists scroll from anywhere. Removed from the report.
+- **Your decisions:** Three top picks turned out to be things you asked for: preview taps never select (v2.93), a preview drag moves the whole animation (v3.00), and the time pill is the play button (queue 364). They're labelled on the page, and their fixes now keep your rule and only add the missing explanation.
 
 ## Not covered yet
 
