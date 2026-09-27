@@ -348,7 +348,15 @@ window.FM = window.FM || {};
       { label: 'Parallelogram', icon: ico('<path d="M8 5h13l-5 14H3z"/>'), add: shp('parallelogram') },
       { label: 'Line', icon: ico('<path d="M4 12h16"/>'), add: shp('line') },
       { label: 'Polygon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/><circle cx="12" cy="12" r="1.6"/>'), add: shp('polygon') },
-    ].concat(LIB_SHAPES.map(function (s) { return { label: s[1], icon: icoPoly(s[0]), add: shp(s[0], { name: s[1] }) }; })) },
+    ].concat(LIB_SHAPES.map(function (s) {
+      /* A GETTER, or #159 never reaches the menu (queue 962). This array is built when addmenu.js loads, and index.html loads
+         addmenu.js BEFORE app.js — which is where FM.SHAPE_ASPECT is defined — so icoPoly read undefined, fell back to [1, 1],
+         and every shape icon was drawn in a SQUARE from the day #159 shipped: the Eye tile measured "M3.99 12.00 … 12.00 5.79",
+         an 18x18 box, against the 18x10.8 its own aspect gives (Key was 2.06x too tall, Banner 0.44x too thin). The probe that
+         checked #159 (tests/_shapedrift.html) re-implements icoPoly instead of reading the menu, so it never saw this.
+         card() reads item.icon at render time, long after app.js has run. */
+      return { label: s[1], get icon() { return icoPoly(s[0]); }, add: shp(s[0], { name: s[1] }) };
+    })) },
     { key: 'media', label: 'Media', icon: icoMulti(
       /* A little PICTURE, filled, rather than an outline sketch. Ezra: "I want the whole bottom line,
          rn it looks tacky, maybe try also filling in the green hills solid green and make the

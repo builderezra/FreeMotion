@@ -15823,42 +15823,41 @@
     });
   });
 
-  test('the car shape is car-shaped: level wheels, open holes, nothing below the ground line', { item: 'car-shape' }, function () {
-    // v5.33. Rejected twice by eye, so this pins the properties that were actually wrong rather than
-    // the look. The old shape had rings printed on a blobby body with the floor line running straight
-    // through them, tyres below the floor, and an ink box that was literally square (57x58) — which is
-    // why all three judges called it a bubble-van blob.
+  test('the car shape is car-shaped: level wheels, open holes, the wheels part of the silhouette', { item: 'car-shape' }, function () {
+    // v5.33, retuned for queue 961. Still pins the properties that were actually wrong in the car he rejected
+    // twice (a square blob, rings printed on a body, a floor line through the tyres) — but the tyres are no longer
+    // separate rings sitting in arches. Every published car pictogram draws the tyre AS PART OF the silhouette, a
+    // round bump below the body, with the hub as the hole: that is what keeps the wheel legible at icon size, where
+    // the old 0.023 arch gap closed up.
     const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.car;
-    if (!car || car.length < 5) throw new Error('FM.SHAPE_POLYS.car is missing or too simple');
-    const bbox = sub => sub.reduce((a, p) => ({
-      x0: Math.min(a.x0, p[0]), x1: Math.max(a.x1, p[0]),
-      y0: Math.min(a.y0, p[1]), y1: Math.max(a.y1, p[1]),
-    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
-    const area = sub => {   // signed — the sign IS the winding, which decides whether a hole fills in
-      let s = 0;
-      for (let i = 0; i < sub.length; i++) { const a = sub[i], b = sub[(i + 1) % sub.length]; s += a[0] * b[1] - b[0] * a[1]; }
-      return s / 2;
+    if (!car || car.length < 4) throw new Error('FM.SHAPE_POLYS.car is missing or too simple');
+    const H = carHubs(car), b = H.body;
+    if ((b.x1 - b.x0) < (b.y1 - b.y0) * 1.4) {
+      throw new Error('the car is ' + (b.x1 - b.x0).toFixed(2) + ' wide by ' + (b.y1 - b.y0).toFixed(2) + ' tall — a car in profile is a WIDE shape; this is the blob the old one was');
+    }
+    if (H.holes < 3) throw new Error('only ' + H.holes + ' sub-paths wind against the body — the windows/hubs would fill in solid');
+    if (H.hubs.length !== 2) throw new Error('could not find two round wheel hubs in the shape (found ' + H.hubs.length + ')');
+    const [w1, w2] = H.hubs;
+    if (Math.abs(w1.cy - w2.cy) > 0.005) throw new Error('the wheels are not level (hub centres at y ' + w1.cy.toFixed(3) + ' and ' + w2.cy.toFixed(3) + ')');
+    if (Math.abs(w1.r - w2.r) > 0.005) throw new Error('the two wheels are different sizes');
+    if (w1.cx - w1.r < b.x0 || w2.cx + w2.r > b.x1) throw new Error('a wheel pokes outside the body outline');
+    // The tyre is the silhouette: under each hub the BODY outline reaches well below where it runs between the wheels.
+    // (read off the outline's on-curve points joined straight — plenty for "is the bottom here or there")
+    const lowestAt = xq => {
+      let m = -1;
+      const o = car[0];
+      for (let i = 0; i < o.length; i++) {
+        const p = o[i], q = o[(i + 1) % o.length];
+        if (p[0] === q[0] || (p[0] - xq) * (q[0] - xq) > 0) continue;
+        m = Math.max(m, p[1] + (q[1] - p[1]) * (xq - p[0]) / (q[0] - p[0]));
+      }
+      return m;
     };
-    const body = bbox(car[0]);
-    if ((body.x1 - body.x0) < (body.y1 - body.y0) * 1.4) {
-      throw new Error('the car is ' + (body.x1 - body.x0).toFixed(2) + ' wide by ' + (body.y1 - body.y0).toFixed(2) + ' tall — a car in profile is a WIDE shape; this is the blob the old one was');
-    }
-    // Holes must wind against the body, or nonzero fill paints them solid.
-    const bodyWind = Math.sign(area(car[0]));
-    const holes = car.slice(1).filter(sub => Math.sign(area(sub)) !== bodyWind);
-    if (holes.length < 3) throw new Error('only ' + holes.length + ' sub-paths wind against the body — the windows/hubs would fill in solid');
-    // The two tyres: same size, same centre line.
-    const rings = car.slice(1).map(bbox).filter(b => (b.x1 - b.x0) > 0.12 && Math.abs((b.x1 - b.x0) - (b.y1 - b.y0)) < 0.02);
-    if (rings.length < 2) throw new Error('could not find two round wheels in the shape');
-    const [w1, w2] = rings.slice(0, 2);
-    const cy1 = (w1.y0 + w1.y1) / 2, cy2 = (w2.y0 + w2.y1) / 2;
-    if (Math.abs(cy1 - cy2) > 0.005) throw new Error('the wheels are not level (centres at y ' + cy1.toFixed(3) + ' and ' + cy2.toFixed(3) + ')');
-    if (Math.abs((w1.x1 - w1.x0) - (w2.x1 - w2.x0)) > 0.01) throw new Error('the two wheels are different sizes');
-    // Tyres sit IN arches: they reach below the body's underside, and stay inside its width.
-    if (!(Math.max(w1.y1, w2.y1) > body.y1)) throw new Error('the tyres do not reach below the body — they are discs laid on a slab, not wheels in arches');
-    if (Math.min(w1.x0, w2.x0) < body.x0 - 0.001 || Math.max(w1.x1, w2.x1) > body.x1 + 0.001) {
-      throw new Error('a wheel pokes outside the body outline');
-    }
+    const between = lowestAt((w1.cx + w2.cx) / 2);
+    [w1, w2].forEach((w, j) => {
+      const under = lowestAt(w.cx);
+      if (!(under - between > w.r)) throw new Error('the ' + (j ? 'front' : 'rear') + ' tyre is not part of the silhouette: the body reaches y ' + under.toFixed(3) + ' under its hub against ' + between.toFixed(3) + ' between the wheels — a separate ring in an arch, which closes up at icon size');
+    });
   });
 
   test('camera focus blur is symmetric about the focus plane', { item: 'cam-focus' }, function () {
@@ -20213,12 +20212,10 @@
 
 
   test('shapes: an added Car renders with ROUND wheels', { item: 'car-aspect' }, function () {
-    // v5.65: SHAPE_ASPECT.car still carried [1.76, 0.57] from the v3.96 image trace, but the v5.33
-    // redraw carries its own proportion inside the unit box (ink 0.9576 x 0.5200 of it) and draws
-    // both tyres as true circles there. The box only scales that drawing, so a non-square box turned
-    // every wheel into an ellipse by exactly the box ratio - 3.09:1, "really wide and streched out".
-    // Measured in PIXELS, not read off the declaration: the two tyres are separate ink blobs from the
-    // body (the arch cavity is open at the bottom), so each wheel's bbox comes off the rendered image.
+    // v5.65, retuned for queue 961. SHAPE_ASPECT.car must stay [1, 1]: the drawing carries its own proportion
+    // inside the unit box, so any other box stretches the wheels by exactly the box ratio ("really wide and
+    // streched out"). The v5.33 car's tyres were separate ink blobs; the rebuilt car's tyre is part of the
+    // silhouette, so the wheel is measured by its HUB — the round hole — off the rendered image.
     var savedScene = FM.scene, commit = FM.history.commit, autosave = FM.storage.autosave,
         save = FM.storage.save, dirty = FM.storage.markDirty;
     FM.history.commit = function () {}; FM.storage.autosave = function () {};
@@ -20233,48 +20230,54 @@
       FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
     }
     if (!L || L.shape !== 'car') throw new Error('FM.addShapeLayer("car") did not add a car layer');
-    // Same box ratio, rendered big enough that the 0.023-normalized tyre/arch gap survives even when
-    // the aspect is wrong (so a failure reports the ellipse, not "could not find the wheels").
-    var k = 600 / Math.max(L.shapeW, L.shapeH), S = 680;
-    // position lives in layer.transform, NOT on the layer - a top-level x/y here is silently ignored
-    // and the car renders half off the canvas (which is how this test first failed, on a good fix)
-    var cl = Object.assign({}, L, { start: 0, duration: 5, fill: '#ffffff',
-      transform: Object.assign({}, L.transform, { x: S / 2, y: S / 2 }),
-      shapeW: Math.round(L.shapeW * k), shapeH: Math.round(L.shapeH * k) });
-    var c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
-    FM.renderScene(x, scene([cl], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
-    var d = x.getImageData(0, 0, S, S).data, n = S * S, mask = new Uint8Array(n), i;
-    for (i = 0; i < n; i++) mask[i] = d[i * 4] > 127 ? 1 : 0;
-    var lab = new Int32Array(n).fill(-1), st = new Int32Array(n), blobs = [];
-    for (var p = 0; p < n; p++) {
-      if (!mask[p] || lab[p] >= 0) continue;
-      var id = blobs.length, sp = 0, cnt = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
-      st[sp++] = p; lab[p] = id;
-      while (sp > 0) {
-        var q = st[--sp], qx = q % S, qy = (q / S) | 0;
-        cnt++;
-        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
-        if (qx > 0     && mask[q - 1] && lab[q - 1] < 0) { lab[q - 1] = id; st[sp++] = q - 1; }
-        if (qx < S - 1 && mask[q + 1] && lab[q + 1] < 0) { lab[q + 1] = id; st[sp++] = q + 1; }
-        if (qy > 0     && mask[q - S] && lab[q - S] < 0) { lab[q - S] = id; st[sp++] = q - S; }
-        if (qy < S - 1 && mask[q + S] && lab[q + S] < 0) { lab[q + S] = id; st[sp++] = q + S; }
+    var S = 680;
+    function hubsAt(w, h) {
+      // position lives in layer.transform, NOT on the layer - a top-level x/y here is silently ignored
+      var cl = Object.assign({}, L, { start: 0, duration: 5, fill: '#ffffff',
+        transform: Object.assign({}, L.transform, { x: S / 2, y: S / 2 }), shapeW: w, shapeH: h });
+      var c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([cl], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
+      var d = x.getImageData(0, 0, S, S).data, n = S * S, bg = new Uint8Array(n), i;
+      for (i = 0; i < n; i++) bg[i] = d[i * 4] <= 127 ? 1 : 0;
+      for (i = 0; i < S; i++) {
+        if (!bg[i] || !bg[(S - 1) * S + i] || !bg[i * S] || !bg[i * S + S - 1])
+          throw new Error('the car render touches the canvas edge at ' + w + 'x' + h + ' - it is clipped, refusing to measure it');
       }
-      if (cnt > 40) blobs.push({ n: cnt, x0: x0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
+      // the HOLES: background not reachable from the border
+      var lab = new Int32Array(n).fill(-1), st = new Int32Array(n), sp = 0, holes = [], id, p, q, qx, qy;
+      var flood = function (seed, tag, rec) {
+        sp = 0; st[sp++] = seed; lab[seed] = tag;
+        while (sp > 0) {
+          q = st[--sp]; qx = q % S; qy = (q / S) | 0;
+          if (rec) { rec.n++; if (qx < rec.x0) rec.x0 = qx; if (qx > rec.x1) rec.x1 = qx; if (qy < rec.y0) rec.y0 = qy; if (qy > rec.y1) rec.y1 = qy; }
+          if (qx > 0     && bg[q - 1] && lab[q - 1] < 0) { lab[q - 1] = tag; st[sp++] = q - 1; }
+          if (qx < S - 1 && bg[q + 1] && lab[q + 1] < 0) { lab[q + 1] = tag; st[sp++] = q + 1; }
+          if (qy > 0     && bg[q - S] && lab[q - S] < 0) { lab[q - S] = tag; st[sp++] = q - S; }
+          if (qy < S - 1 && bg[q + S] && lab[q + S] < 0) { lab[q + S] = tag; st[sp++] = q + S; }
+        }
+      };
+      flood(0, 0, null);
+      for (p = 0; p < n; p++) {
+        if (!bg[p] || lab[p] >= 0) continue;
+        var rec = { n: 0, x0: 1e9, y0: 1e9, x1: -1, y1: -1 };
+        flood(p, holes.length + 1, rec);
+        if (rec.n > 40) holes.push({ n: rec.n, x0: rec.x0, w: rec.x1 - rec.x0 + 1, h: rec.y1 - rec.y0 + 1, cy: (rec.y0 + rec.y1) / 2 });
+      }
+      // the hubs are the two holes lowest in the picture (the windows are above them)
+      return holes.sort(function (a, b) { return b.cy - a.cy; }).slice(0, 2).sort(function (a, b) { return a.x0 - b.x0; });
     }
-    if (!blobs.length) throw new Error('the car rendered nothing at ' + cl.shapeW + 'x' + cl.shapeH);
-    // never measure a clipped picture: any ink on the border means part of the car is off-canvas
-    for (i = 0; i < S; i++) {
-      if (mask[i] || mask[(S - 1) * S + i] || mask[i * S] || mask[i * S + S - 1])
-        throw new Error('the car render touches the canvas edge - it is clipped, refusing to measure it');
-    }
-    if (blobs.length !== 3) throw new Error('expected 3 ink blobs (body + 2 tyres), got ' + blobs.length +
-      ' at box ' + cl.shapeW + 'x' + cl.shapeH + ' - the wheels cannot be isolated, which itself means the car is distorted');
-    blobs.sort(function (a, b) { return b.n - a.n; });
-    blobs.slice(1).sort(function (a, b) { return a.x0 - b.x0; }).forEach(function (wl, j) {
-      if (Math.abs(wl.w - wl.h) > 1)
-        throw new Error((j ? 'front' : 'rear') + ' wheel is ' + wl.w + 'x' + wl.h + 'px (' + (wl.w / wl.h).toFixed(2) +
+    var k = 600 / Math.max(L.shapeW, L.shapeH);
+    var hubs = hubsAt(Math.round(L.shapeW * k), Math.round(L.shapeH * k));
+    if (hubs.length !== 2) throw new Error('could not find the two wheel hubs as holes in the rendered car');
+    hubs.forEach(function (hb, j) {
+      if (Math.abs(hb.w - hb.h) > 1)
+        throw new Error((j ? 'front' : 'rear') + ' hub is ' + hb.w + 'x' + hb.h + 'px (' + (hb.w / hb.h).toFixed(2) +
           ':1), not a circle - SHAPE_ASPECT.car must stay square, but a Car spawned at ' + L.shapeW + 'x' + L.shapeH);
     });
+    // CONTROL: the same measure on a car deliberately stretched 3:2 must SEE the ellipse, or the check above proves nothing.
+    var bad = hubsAt(600, 400);
+    if (bad.length !== 2 || Math.abs(bad[0].w - bad[0].h) < 4)
+      throw new Error('control failed: a car stretched to 600x400 still measured round hubs (' + (bad[0] ? bad[0].w + 'x' + bad[0].h : 'none') + ') — this measurement cannot see a stretched wheel');
   });
 
   /* ---- queue 45 (v5.70) — one options layout for every layer ------------------------------------
@@ -101229,6 +101232,163 @@
       });
     }
     if (misses.length) throw new Error('these buttons are still a typed ✕ (queue 965: one drawn ✕ for the app): ' + misses.join(', '));
+  });
+
+  /* ---- the Car, rebuilt from a published pictogram (queue 961) ---------------------------------------------------
+     Ezra, 26 Sep: "The car shape needs to be improved." Rebuilt the way the people finally landed (#929): traced from a
+     real published pictogram instead of drawn from landmarks — Pictogrammers Material Design Icons `car-side`,
+     Apache-2.0 — through the plan's converter into this format. Three tests: the new proof (the wheels read at the
+     menu's 34px), and the two older car tests retuned to the new construction, where the tyre is PART of the
+     silhouette and the hub is the hole, exactly as every published car pictogram draws it. ---- */
+
+  // Shared by the three: the car's two wheel hubs, found in the DATA — the round holes in the lower half.
+  function carHubs(car) {
+    const bbox = sub => sub.reduce((a, p) => ({
+      x0: Math.min(a.x0, p[0]), x1: Math.max(a.x1, p[0]), y0: Math.min(a.y0, p[1]), y1: Math.max(a.y1, p[1]),
+    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
+    const area = sub => {   // signed — the sign IS the winding, which decides whether a hole fills in
+      let s = 0;
+      for (let i = 0; i < sub.length; i++) { const a = sub[i], b = sub[(i + 1) % sub.length]; s += a[0] * b[1] - b[0] * a[1]; }
+      return s / 2;
+    };
+    const body = bbox(car[0]), wind = Math.sign(area(car[0])), midY = (body.y0 + body.y1) / 2;
+    const hubs = car.slice(1).filter(sub => Math.sign(area(sub)) !== wind).map(bbox)
+      .filter(b => Math.abs((b.x1 - b.x0) - (b.y1 - b.y0)) < 0.01 && (b.y0 + b.y1) / 2 > midY)
+      .map(b => ({ cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, r: (b.x1 - b.x0) / 2 }))
+      .sort((a, b) => a.cx - b.cx);
+    return { body: body, hubs: hubs, holes: car.slice(1).filter(sub => Math.sign(area(sub)) !== wind).length };
+  }
+
+  test('961 — the Car reads as a car at the Shape menu\'s 34px: open hubs, wheels below the body', { item: '961' }, function () {
+    /* The v17.02 car's own comment named its weak point: the tyre-to-arch gap is 0.023 of the box, 0.59px at the
+       menu's icon, so the tyre ring runs into the body and the wheels read as small dots. Measured for the plan,
+       FM.renderScene at 1x into the icon's own 25.5px box: the v17.02 hubs are 2.19px across, 4.1px² of open area
+       each; the MDI car's are 3.34px, 7.9px². 6px² sits between them. Measured at 1x on purpose — at arm's length a
+       CSS pixel is about what an eye resolves, whatever the screen's DPR. */
+    const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.car;
+    if (!car || !FM.renderScene || !FM.makeLayer) throw new Error('seams missing: SHAPE_POLYS.car / renderScene / makeLayer');
+    // The menu icon's box, as js/addmenu.js icoPoly builds it: the longer side of SHAPE_ASPECT fills 18 of the
+    // 24-unit viewBox, and the tile shows that viewBox at 34px.
+    const asp = (FM.SHAPE_ASPECT && FM.SHAPE_ASPECT.car) || [1, 1];
+    const S = 34, k = (18 / Math.max(asp[0], asp[1])) * S / 24, bw = asp[0] * k, bh = asp[1] * k;
+    const ox = (S - bw) / 2, oy = (S - bh) / 2;
+    const c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
+    const L = FM.makeLayer('shape', { shape: 'car', name: 'Car', x: S / 2, y: S / 2, shapeW: bw, shapeH: bh, fill: '#ffffff', start: 0, duration: 5 });
+    FM.renderScene(x, scene([L], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
+    const d = x.getImageData(0, 0, S, S).data, ink = (px, py) => d[(py * S + px) * 4] / 255;
+    let total = 0;
+    for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) total += ink(px, py);
+    if (total < 60) throw new Error('the car drew only ' + total.toFixed(1) + 'px² of ink at 34px — nothing to measure');
+    const H = carHubs(car);
+    if (H.hubs.length !== 2) throw new Error('expected two round wheel hubs (holes in the lower half of the car), found ' + H.hubs.length);
+    const bottom = col => { let b = -1; for (let py = 0; py < S; py++) if (ink(col, py) >= 0.5) b = py; return b + 1; };
+    const mid = Math.floor(ox + ((H.hubs[0].cx + H.hubs[1].cx) / 2) * bw);
+    H.hubs.forEach((h, j) => {
+      const cx = ox + h.cx * bw, cy = oy + h.cy * bh, r = h.r * bw, which = j ? 'front' : 'rear';
+      let open = 0, ring = 0, ringN = 0;
+      for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+        const dist = Math.hypot(px + 0.5 - cx, py + 0.5 - cy);
+        if (dist <= r + 0.75) open += 1 - ink(px, py);
+        else if (dist <= r + 1.4) { ring += ink(px, py); ringN++; }
+      }
+      // CONTROL: the hole must be IN ink. A hub located off the car would read as wide open and pass for nothing.
+      if (!ringN || ring / ringN < 0.5) throw new Error('the ' + which + ' hub is not surrounded by tyre at 34px (ring ink ' + (ringN ? (ring / ringN).toFixed(2) : 'none') + ') — the measurement is not looking at a wheel');
+      if (open < 6) throw new Error('the ' + which + ' wheel\'s hub is ' + open.toFixed(1) + 'px² of open space at the menu\'s 34px (' + (2 * r).toFixed(2) + 'px across) — it reads as a dot, not a wheel; 6px² is the line (v17.02 measured 4.1, the MDI car 7.9)');
+      const hang = bottom(Math.floor(cx)) - bottom(mid);
+      if (hang < 2) throw new Error('the ' + which + ' wheel hangs ' + hang + 'px below the body at 34px — the wheels have to stand proud of the underside to read (v17.02: 2, the MDI car: 4)');
+    });
+  });
+
+  /* ═══ QUEUE 962 — THE EYE, TRACED FROM A REAL PICTOGRAM, AND THE SHAPE MENU AT ITS REAL PROPORTIONS ════════════════════════
+     His words, 26 Sep: *"the eye shape needs to be heavily improved."* The old eye was a thin almond ring around a pupil drawn as a
+     circle in the UNIT box — and the box it spawns in is 1.5 x 0.9 (SHAPE_ASPECT.eye), so the pupil rendered as a 1.66:1 ellipse and
+     the white beside it was 3.2x wider than the white above it (512x307: pupil 174x105, white 94px beside vs 29px above). Now it is
+     Bootstrap Icons' "eye-fill" (MIT) with a catchlight, drawn so that its circles are circles in the SPAWNED box.
+     The menu half: the Shape tab's icons were built when addmenu.js loads, before app.js defines FM.SHAPE_ASPECT, so every shape icon
+     was drawn in a square (queue 159 never reached the real menu). The new eye, drawn for 5:3, would have come out TALL there. */
+  function eyeParts(w, h) {
+    const f = figMask('eye', w, h), m = f.m, N = w * h, lab = new Int32Array(N), st = new Int32Array(N), boxes = [];
+    for (let i = 0; i < N; i++) {
+      if (!m[i] || lab[i]) continue;
+      const id = boxes.length + 1, b = { x0: w, y0: h, x1: -1, y1: -1 };
+      let sp = 0; st[sp++] = i; lab[i] = id;
+      while (sp) {
+        const p = st[--sp], x = p % w, y = (p - x) / w;
+        if (x < b.x0) b.x0 = x; if (x > b.x1) b.x1 = x; if (y < b.y0) b.y0 = y; if (y > b.y1) b.y1 = y;
+        [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1].forEach(function (q) {
+          if (q >= 0 && m[q] && !lab[q]) { lab[q] = id; st[sp++] = q; }
+        });
+      }
+      boxes.push(b);
+    }
+    // the pupil is the SMALLEST ink part whose box holds the centre of the shape's box
+    const holding = boxes.filter(function (b) { return b.x0 <= w / 2 && b.x1 >= w / 2 && b.y0 <= h / 2 && b.y1 >= h / 2; })
+      .sort(function (a, b) { return (a.x1 - a.x0) * (a.y1 - a.y0) - (b.x1 - b.x0) * (b.y1 - b.y0); });
+    const P = holding.length > 1 ? holding[0] : null, topo = figTopo(f);
+    if (!P) return { topo: topo, P: null };
+    const cx = Math.round((P.x0 + P.x1) / 2), cy = Math.round((P.y0 + P.y1) / 2);
+    let y = P.y0 - 1; while (y >= 0 && !m[y * w + cx]) y--;
+    let x = P.x1 + 1; while (x < w && !m[cy * w + x]) x++;
+    return { topo: topo, P: P, pw: P.x1 - P.x0 + 1, ph: P.y1 - P.y0 + 1, gapTop: P.y0 - 1 - y, gapSide: x - P.x1 - 1 };
+  }
+
+  test('962 the eye has a round pupil in an even white ring, with a catchlight — in the box it spawns and at the menu-icon size', { item: '962' }, function () {
+    const box = figSpawnBox('eye');
+    /* The icon: the Shape tab's svg is 34px and icoPoly draws the eye in 18 of its 24 units at SHAPE_ASPECT, so at the phone's 2x
+       the eye's box is 51x31 device pixels (measured 26 Sep: svg 34x34 at 380 and 440 wide). Tolerances from measurement:
+       the new eye reads 1.008:1 and 1.00x at the spawn box and exactly 1:1 / 1.0x at 51x31; the old one 1.657:1 / 3.24x and 1.55:1 / 3.0x. */
+    [[box.w, box.h, 'a ' + box.w + 'x' + box.h + ' render of the ' + box.raw + ' box it spawns in', 0.05, 1.3], [51, 31, 'the 51x31 menu icon', 0.2, 1.6]].forEach(function (c) {
+      const s = eyeParts(c[0], c[1]), where = c[2];
+      // POSITIVE CONTROL: a pupil standing clear of the lids inside an enclosed white. Without it the ratios below could pass on a
+      // drawing that has no pupil at all.
+      if (s.topo.components < 2 || s.topo.holes < 1 || !s.P) throw new Error('at ' + where + ' the eye renders ' + s.topo.components + ' ink part(s) and ' + s.topo.holes + ' enclosed white(s) — the pupil does not stand clear of the lids');
+      const asp = s.pw / s.ph;
+      if (Math.abs(asp - 1) > c[3]) throw new Error('at ' + where + ' the pupil renders ' + s.pw + 'x' + s.ph + ' (' + asp.toFixed(2) + ':1) — an ellipse, so it was drawn round in the unit box and stretched by SHAPE_ASPECT.eye');
+      if (!(s.gapTop > 0) || s.gapSide / s.gapTop > c[4]) throw new Error('at ' + where + ' the white beside the pupil is ' + s.gapSide + 'px and above it ' + s.gapTop + 'px (' + (s.gapSide / Math.max(1, s.gapTop)).toFixed(2) + 'x) — the iris is not an even ring');
+      // B: the catchlight is a second enclosed white, and it survives at the icon size (measured: 2 holes at 51x31)
+      if (s.topo.holes < 2) throw new Error('at ' + where + ' the eye has ' + s.topo.holes + ' enclosed white(s) — the catchlight in the pupil is missing or has closed up');
+    });
+  });
+
+  test('962 every Shape-menu icon is drawn at the proportions its shape spawns at — the #159 aspect reaches the real menu', { item: '962' }, async function () {
+    /* Measured 26 Sep: the real Eye tile's path began "M3.99 12.00 C3.99 12.00 9.33 5.79 12.00 5.79" — mapped into an 18x18 SQUARE,
+       because addmenu.js built the Shape tab's icons when it loaded, before app.js had defined FM.SHAPE_ASPECT. The labels below are
+       the library shapes whose SHAPE_ASPECT is not square; Gear is square on purpose — THE CONTROL, which agrees before and after,
+       so a disagreement elsewhere is the menu and not this measurement. */
+    const KIND = { 'Banner': 'banner', 'Silk ribbon': 'ribbon', 'Cloud': 'cloud', 'Check': 'check', 'Thumbs up': 'thumbsup',
+      'Pointing hand': 'pointhand', 'Envelope': 'envelope', 'Key': 'key', 'Crown': 'crown', 'Eye': 'eye', 'Map pin': 'pin',
+      'Lock': 'lock', 'Music note': 'note', 'Gear': 'gear' };
+    const inkAsp = function (draw, w, h) {
+      const c = offscreen(w, h), g = c.getContext('2d'); draw(g);
+      const d = g.getImageData(0, 0, w, h).data; let x0 = w, x1 = -1, y0 = h, y1 = -1;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 127) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      return x1 < 0 ? NaN : (x1 - x0 + 1) / (y1 - y0 + 1);
+    };
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    const bad = [], seen = [];
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(80);
+      const tb = host.querySelector('.addmenu-tab[data-key="shape"]');
+      if (!tb) throw new Error('the Add menu has no Shape tab to read');
+      tb.click(); await sleep(80);
+      [].slice.call(host.querySelectorAll('button')).forEach(function (b) {
+        const kind = KIND[b.title]; if (!kind) return;
+        const path = b.querySelector('.addmenu-ic svg path'); if (!path) return;
+        // 40x: a thin icon (Banner is 41px tall at 10x) quantises by up to 5% at 10x; at 40x it is under 1.5%
+        const icon = inkAsp(function (g) { g.scale(40, 40); g.fill(new Path2D(path.getAttribute('d'))); }, 960, 960);
+        const box = figSpawnBox(kind);
+        const real = inkAsp(function (g) { FM.traceShapePath(g, { shape: kind }, 0, 0, box.w, box.h); g.fillStyle = '#000'; g.fill(); }, box.w, box.h);
+        seen.push(b.title);
+        // 3%: measured 26 Sep, at their aspect every icon agrees within 0.6%; the nearest wrong one (Thumbs up, drawn square) is 7.9% off
+        if (!(Math.abs(icon / real - 1) <= 0.03)) bad.push(b.title + ' (icon ' + icon.toFixed(2) + ':1, spawns ' + real.toFixed(2) + ':1)');
+      });
+    } finally { host.remove(); }
+    if (seen.length < 12 || seen.indexOf('Eye') < 0 || seen.indexOf('Gear') < 0) throw new Error('only found ' + seen.length + ' of the shape tiles (' + seen.join(', ') + ') — the labels moved, so this is not measuring the menu');
+    if (bad.some(function (s) { return /^Gear /.test(s); })) throw new Error('the CONTROL disagrees — Gear is square both ways, so the measurement is broken, not the menu: ' + bad.join(' | '));
+    if (bad.length) throw new Error('these Shape-menu icons are not drawn at the proportions the shape spawns at: ' + bad.join(' | '));
   });
 
 })();

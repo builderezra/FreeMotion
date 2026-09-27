@@ -3121,12 +3121,13 @@ window.FM = window.FM || {};
     // these six come from traced references, so their aspect IS the reference's aspect
     check: [1.11, 0.9], thumbsup: [1.04, 0.96], pointhand: [0.94, 1.07],
     envelope: [1.33, 0.75], key: [0.7, 1.44],
-    // CAR IS NOT ONE OF THEM ANY MORE — it must stay SQUARE. The v5.33 redraw stopped being a trace:
-    // it is a landmark polyline carrying its OWN proportion inside the unit box (ink measures
-    // 0.9576 x 0.5200 of it, i.e. 1.841:1) and it draws both tyres as true circles there. The box only
-    // SCALES that drawing, so anything but 1:1 turns every wheel into an ellipse by exactly the box
-    // ratio. The stale 1.76 x 0.57 left from the v3.96 trace is 3.093:1, which stretched the car to
-    // 5.695:1 of ink and the wheels to 3.1:1 — Ezra: "really wide and streched out".
+    // CAR IS NOT ONE OF THEM — it must stay SQUARE. Since queue 961 the car is traced from Material Design
+    // Icons `car-side`, but it is placed at its OWN proportion INSIDE the unit box (ink 0.9600 x 0.5236 of
+    // it, i.e. 1.833:1) with the hubs as true circles there — the v5.33 car did the same at 1.841:1, which is
+    // why every Car already saved in a project keeps round wheels. The box only SCALES that drawing, so
+    // anything but 1:1 turns every wheel into an ellipse by exactly the box ratio. The stale 1.76 x 0.57
+    // left from the v3.96 trace is 3.093:1, which stretched the car to 5.695:1 of ink and the wheels to
+    // 3.1:1 — Ezra: "really wide and streched out".
     // To draw a BIGGER car, scale both numbers together (e.g. [1.4, 1.4]); never one of them.
     car: [1, 1],
     // added shapes

@@ -152,6 +152,15 @@ proportions that read well but not the exact contour. Everything else in the sha
 original geometry and is fine. The tracing pipeline itself is in the v3.96 commit message if it's
 useful again on assets we own.
 
+**The car is no longer one of them (queue 961).** It was redrawn from landmarks in v5.33 and is now traced from
+Pictogrammers Material Design Icons `car-side`, **Apache License 2.0**: free to ship, but a public release must carry
+the notice — "Material Design Icons by Pictogrammers, Apache License 2.0" plus the licence text, in the app's
+credits/about or a NOTICE file.
+
+**The eye (queue 962)** is traced from Bootstrap Icons `eye-fill`, **MIT** (the catchlight's placement follows Fluent
+Emoji's `Eye`, also MIT): the same kind of notice belongs beside the car's — the copyright line from Bootstrap Icons'
+LICENSE file and the MIT text. (The people from #929 are AIGA/US DOT symbol signs, public domain — nothing owed.)
+
 ## 9. Launch readiness — not about identity, still a blocker
 
 Everything above is "don't look like theirs". This section is "don't lose the people who show up".
