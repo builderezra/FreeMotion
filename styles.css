@@ -5612,50 +5612,89 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
    from the children it is sizing. */
 @media (min-width: 701px) {
   .addmenu--fit .addmenu-body { flex: 0 0 auto; }
-  .addmenu--fit .addmenu-pager { height: var(--am-pager); }
-  /* --am-pager is the WHOLE measured box now, not the height of the rows the plan drew, and the
-     grid centres itself inside it. Two reasons, one each way:
-       · vertically, the leftover used to fall out as a single block of nothing beneath the last
-         row — up to 70px while the tab was still paging. Centring splits it, so what is left reads
-         as margin rather than as a panel that stopped early.
-       · horizontally, `repeat(var(--am-cols), 1fr)` stretched every column to fill, which meant a
-         tile could not stay at its maxW: the grid grew the cards until a further column fitted and
-         then snapped them all narrower. Stating the column width and centring the track is what
-         lets planGrid clamp a tile at 118px and hand the slack back as an even margin. */
-  .addmenu--fit .addmenu-page .addmenu-grid,
-  .addmenu--fit .addmenu-page .addmenu-grid--ico {
-    grid-template-columns: repeat(var(--am-cols), var(--am-cw));
-    grid-auto-rows: var(--am-row);
-    gap: var(--am-gap);
-    height: 100%;
+  /* the pager takes the whole measured box (see the note above). Kept HERE, at this weight, on purpose: the empty-tab rule
+     near the end of the file (`.addmenu--fit .addmenu-pager:has(> .addmenu-page > .am-empty) { height: auto }`) must still
+     outrank it, and an id-weighted copy in the shared block would silently beat that and cut "No templates yet" in half. */
+  .addmenu--fit .addmenu-pager { height: var(--tf-box); }
+  /* Everything else this block used to hold — the grid, the tile, icon and label sizes — is the shared
+     [data-rung] block below (queue 963), on --tf-* instead of --am-*, so the Add menu and the inspector are drawn by one
+     set of rules. The notes above still describe what those rules do and why. */
+}
+
+/* ---- ONE SHRINK SYSTEM FOR THE ADD MENU AND THE LAYER INSPECTOR (queue 963) -------------------------------------------
+   Ezra: *"the dynamics of the add layer and the inspector layer are both very different … have a big look through that"*.
+   js/tilefit.js plans BOTH panels' grids from their real box and writes the result onto the element holding the grid:
+   `data-rung` = the tile's shape (stack / row / icon, or ico for the Shape tab's art) and `--tf-*` = its sizes. These
+   rules are the only place either panel's tiles are laid out on PC, so the two cannot drift apart again.
+   Scoped to #inspector-panel (so the phone's #add-sheet can never match) and to min-width 701px (so the phone's property
+   sheet cannot either) — two independent reasons, the same as queue 50's. */
+@media (min-width: 701px) {
+  /* THE GRID. Stated column width, stated row height, centred in the measured box (the slack becomes an even margin,
+     never a block of nothing under the last row). */
+  #inspector-panel .cat-wrap[data-rung],
+  #inspector-panel .addmenu[data-rung] .addmenu-page .addmenu-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--tf-cols), var(--tf-cw));
+    grid-auto-rows: var(--tf-row);
+    gap: var(--tf-gap);
     justify-content: center;
     align-content: center;
   }
-  .addmenu--fit .addmenu-card { padding: var(--am-pad); gap: var(--am-icogap); height: 100%; box-sizing: border-box; }
-  .addmenu--fit .addmenu-card .addmenu-ic,
-  .addmenu--fit .addmenu-card .addmenu-ic svg { width: var(--am-ico); height: var(--am-ico); }
-  .addmenu--fit .addmenu-card .add-emoji { font-size: var(--am-ico); line-height: 1; }
-  /* The label gets its OWN reserved band, and the icon is sized from what is left — that is what
-     stops the fit from being bought by squeezing the text out of the card. Two lines is the budget
-     planGrid() reserves; only user-supplied names (a clip's filename) can reach the clip, and those
-     have the tooltip, exactly as before. (This used to credit tests/_addfit.html with asserting it.
-     That file does not exist and never did. Measured instead, top-level in headless Chrome across
-     classic 800x600 / 1024x640 / 1280x720 / 1440x900 and studio 1280x720 / 1920x1080 / 2560x1440:
-     zero ellipsed labels, and zero labels whose painted box leaves its card vertically.) */
-  /* overflow VISIBLE and max-width NONE, both copied deliberately from the non-fit rule above.
-     The base `.addmenu-lbl` carries `overflow:hidden; text-overflow:ellipsis`, and every panel
-     rule since v5.05 has undone it — because a word that is a hair wider than its tile is far
-     more readable spilling a few px into the 8px gutter than cut to "Capti…". The first cut of
-     the fit re-imposed hidden/100%, and at the 45px tiles this size actually draws that turned
-     Captions -> "Capti…", Freehand Drawing -> "Freeh…/Drawi…", Adjustment -> "Adjus…" and Custom
-     elements -> "Custom elem…" — five of the nine Elements tiles, all of which pristine HEAD
-     renders in full at the very same 45px width. Screenshotted at 1024x640 classic, both trees.
-     The vertical budget is still real: planGrid() reserves `lines` of label and sizes the icon
-     from what is left, and the probe asserts no label is ellipsed AND none overruns its band. */
-  .addmenu--fit .addmenu-card .addmenu-lbl {
-    font-size: var(--am-fs); line-height: 1.2; white-space: normal; max-width: none;
-    max-height: var(--am-lblh); overflow: visible; text-overflow: clip;
+  #inspector-panel .cat-wrap[data-rung] { height: var(--tf-box); }
+  #inspector-panel .addmenu[data-rung] .addmenu-page .addmenu-grid { height: 100%; }   /* fills its page, so align-content can centre it */
+  /* The inspector builds its cards in two rows (3 + the rest) for the PHONE's layout; on PC they are one grid. */
+  #inspector-panel .cat-wrap[data-rung] > .cat-grid { display: contents; }
+
+  /* EVERY TILE, both panels */
+  #inspector-panel [data-rung] :is(.cat-card, .addmenu-card) {
+    height: 100%; width: auto; min-width: 0; box-sizing: border-box; flex: none;
+    padding: var(--tf-pad); gap: var(--tf-icogap);
   }
+  #inspector-panel [data-rung] :is(.cat-card > .cat-ico, .addmenu-card > .addmenu-ic),
+  #inspector-panel [data-rung] :is(.cat-card > .cat-ico, .addmenu-card > .addmenu-ic) svg { width: var(--tf-ico); height: var(--tf-ico); flex: none; }
+  #inspector-panel [data-rung] .addmenu-card .add-emoji { font-size: var(--tf-ico); line-height: 1; }
+  #inspector-panel [data-rung] :is(.cat-card > .cat-label, .addmenu-card > .addmenu-lbl) {
+    font-size: var(--tf-fs); line-height: var(--tf-lh); max-width: none; white-space: normal; flex: none;
+  }
+
+  /* STACK — icon over name. Two whole lines are reserved; a word a hair wider than its tile spills into the gutter
+     rather than being cut to "Capti…" (the add menu's rule since v5.69, now the inspector's too). */
+  #inspector-panel [data-rung="stack"] :is(.cat-card > .cat-label, .addmenu-card > .addmenu-lbl) {
+    overflow: visible; text-overflow: clip; max-height: var(--tf-lblh);
+  }
+
+  /* ROW — the chip: icon on the left, the name beside it, left-aligned, at most --tf-lines lines. */
+  #inspector-panel [data-rung="row"] :is(.cat-card, .addmenu-card) {
+    flex-direction: row; justify-content: flex-start; align-items: center;
+  }
+  #inspector-panel [data-rung="row"] :is(.cat-card > .cat-label, .addmenu-card > .addmenu-lbl) {
+    flex: 1 1 auto; min-width: 0; max-height: none; text-align: left; overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--tf-lines); overflow-wrap: normal;
+  }
+  /* The key-number badge steps out of a chip: top-left it sits on the icon, and on the right it costs the 12px that
+     "Customise" needs at 1280 wide (a chip there is 85px: 5 + 16 icon + 5 + 54 of words + 5). The keys still work — the
+     badge is a hint, and the stacked and icon tiles still show it. */
+  #inspector-panel [data-rung="row"] .cat-num { display: none; }
+
+  /* ICON — the picture alone. The name stays the tile's title and aria-label (hover shows it). */
+  #inspector-panel [data-rung="icon"] :is(.cat-card > .cat-label, .addmenu-card > .addmenu-lbl) { display: none; }
+  #inspector-panel [data-rung="icon"] .cat-num { top: 3px; left: 5px; font-size: 9px; }
+
+  /* THE ADD MENU'S TABS FOLLOW THE SAME RULE. They give their words up at ONE panel size, the same for every tab: when,
+     with the words kept, the Elements tab could not have comfortable stacked tiles on one page (js/addmenu.js,
+     tabsSettled). The 64px row becomes 32px of icons, each still titled with its name — 32, not 36, because those 4px are
+     what let a 150px band (the drag's floor) keep one row of tiles AND its page arrows. */
+  #inspector-panel .addmenu--tabs-ico .addmenu-tab { padding-top: 4px; padding-bottom: 4px; gap: 0; }   /* 32px: 22 icon + 8 + border */
+  #inspector-panel .addmenu--tabs-ico .addmenu-tab .addmenu-lbl { display: none; }
+
+  /* An EMPTY pinned strip (every tab but Media/Audio with imports) is still a flex item in `.addmenu-main`, so it cost a
+     second 9px gap between the tabs and the tiles — measured: the body started 18px under the tab row, not 9. On PC it
+     leaves the flow until it has something to pin; the tabs' word rule (tabsSettled) measures from the tab row + one gap. */
+  #inspector-panel .addmenu-pinned:not(.is-on) { display: none; }
+
+  /* The home view's quick-row holds only buttons PC hides (qr-nudge, qr-trim — rules above), so on PC it was 16px of
+     padding above the cards: 10% of a 150px band. Gone while it has nothing to show. */
+  #inspector > .quick-row:not(:has(> :not(.qr-nudge, .qr-trim))) { display: none; }
 }
 
 /* ---- Freehand / Vector drawing overlay + toolbar (v2.39) ---- */
@@ -8611,126 +8650,9 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #inspector-panel .addmenu-card.has-thumb { background: rgba(var(--am-tint, 41, 217, 187), .10); }
 }
 
-/* ---- The layer buttons shrink with the band (queue 285) ---------------------------------------
-   Ezra: "the layer edit pannels buttons should shrink if you make the timeline too small, so the button
-   all stay fitting on screen."
-   The tiles were a fixed size — 101px tall, from 17px of padding plus a 26px icon plus a label — so
-   shortening the band did not shrink them, it pushed the bottom row under the fold and gave the panel a
-   scrollbar. Measured at 1280x800 before this: the inspector needed 74px of scroll at a 300px band, 134
-   at 240 and 194 at 180.
-   Sized off `--tl-h` rather than off a media query or a second fixed size, because the band is
-   DRAGGABLE — its height is a continuous number the user chooses, and any breakpoint would be wrong on
-   one side of itself. The same reasoning as the add-menu sheet's row floor: the tile has a floor it will
-   not go below, a ceiling that is exactly what it looks like today, and it slides between them.
-   The flex layout is left alone on purpose. `.cat-grid` is flex-wrap, and the note on it records that
-   the `.cat-span2/3` classes set `grid-column` and are inert here — switching to a real grid to get
-   flexible rows would silently bring those back to life and re-flow the panel. */
-@media (min-width: 701px) {
-  body #inspector-panel {
-    /* THE TILE HEIGHT IS SOLVED, not mapped. The first attempt scaled padding and the icon off the band
-       and shrank the tiles nicely while STILL leaving ~50px of scroll at every height, because the
-       three rows are not the only things in the panel: there is a 33px title and a 16px quick-row above
-       them, and the sum has to fit, not merely get smaller. So the row height is what the arithmetic
-       says is left — (band − 88px of chrome) ÷ 3 rows — with a floor it will not go under and a ceiling
-       that is exactly today's size, and the paddings and icon below simply keep the CONTENTS inside
-       whatever box that gives.
-       The 88 is measured, not guessed: title 33 + quick-row 16 + the wrap's own gaps and padding, which
-       came to a further 20 that a first pass at this arithmetic missed and left as a constant 20px of
-       scroll at every band height. */
-    /* ⚠️ …AND ANYTHING ELSE THE PANEL HAPPENS TO BE CARRYING (queue 518). Ezra, with a text layer
-       selected: "The menu when you have text selected is really bugged out and looks weird."
-       The 88 above is title + quick-row + gaps, and it is right — for most layers. A TEXT layer adds a
-       48px "Text to Voice" row that no other type has, and the solver had no idea it was there, so the
-       arithmetic handed the three rows more height than the panel had left. Measured with a text layer
-       on an 820px window: title 33 + tts 48 + quick-row 16 + grid 162, i.e. **46px past the panel** —
-       which is that row, near enough exactly.
-       Named as a variable rather than folded into the constant, so the next per-type row that appears
-       here has an obvious place to declare itself. The test that guards this walks EVERY layer type
-       rather than the one he happened to report, because the constant being wrong is the bug, not the
-       particular row that exposed it. */
-    --insp-extra: 0px;
-    --cat-h: clamp(40px, calc((var(--tl-h, 264px) - 88px - var(--insp-extra, 0px)) / 3), 101px);
-    --cat-pad: clamp(4px, calc((var(--tl-h, 264px) - 120px - var(--insp-extra, 0px)) / 12), 17px);
-    /* ⚠️ THE ICON IS SIZED FROM WHAT IS LEFT AFTER THE LABEL, NOT FROM THE BAND (queue 672).
-       📐 MEASURED at 1280x800, where the card is 50.7px tall: padding took 20, the icon 21.4 and the
-       gap 7.5 — 48.9 of 50.7 — leaving **1.8px for the label**. The label is a shrinkable flex child,
-       so it did not crop, it COLLAPSED TO ZERO, and every one of the eight cards rendered as an
-       unlabelled icon. Confirmed at 1440x900 too; 1920x1080 was fine, which is why nobody saw it — and
-       the 380px pass every release runs cannot see it either, because the phone has its own layout.
-       The old form asked "how tall is the band" and hoped the rest fitted. This asks "what is left
-       once the label has its line" and gives the icon that, so the label can never be squeezed out by
-       construction rather than by a number that happens to work. 15px is the worst-case line box
-       (11.5px at 1.3). Verified across the range: unchanged 26px at a full band, 12-15px at the floor. */
-    --cat-ico: clamp(12px, calc(var(--cat-h) - 2 * var(--cat-pad) - var(--cat-inner-gap) - 15px), 26px);
-    --cat-inner-gap: clamp(2px, calc((var(--tl-h, 264px) - 120px) / 16), 9px);
-    /* The gap BETWEEN tiles comes down too. Three rows means two of them, and at the floor they were
-       costing more height than the padding inside a tile. */
-    --cat-gap: clamp(4px, calc((var(--tl-h, 264px) - 120px) / 16), 9px);
-  }
-  /* queue 807: WHILE FLOATING THE PANEL IS --am-h TALL, NOT --tl-h. The formula above asks the band
-     floor how much room there is, so a panel raised by 250px kept 48px cards and 266px of nothing under
-     them (measured 1280x800). Same formula, the panel's own height in. */
-  body.am-floating #inspector-panel {
-    --cat-h: clamp(40px, calc((var(--am-h, 264px) - 88px - var(--insp-extra, 0px)) / 3), 101px);
-    --cat-pad: clamp(4px, calc((var(--am-h, 264px) - 120px - var(--insp-extra, 0px)) / 12), 17px);
-  }
-  /* ⚠️ THE CLIP MOVED OFF THE CARD AND ONTO THE LABEL (queue 517). Ezra: "all of the outlines look
-     really bad. Like, I think they're kinda glitching underneath the buttons."
-     `overflow: hidden` was here to stop a long label pushing the tile taller — a real job, kept below —
-     but it also clipped the card's OWN colour ring, because that ring is a `::before` at `inset: -1px`,
-     i.e. one pixel OUTSIDE the padding box, and a descendant is exactly what overflow clips. The ring is
-     also drawn at `border-radius: 11px` against a 10px clip, so the corners were cut square while the
-     edges survived — which is why it read as a rendering fault rather than as a missing glow.
-     Clipping the LABEL instead does the job it was added for and leaves the ring alone. */
-  body #inspector-panel .cat-card {
-    height: var(--cat-h); box-sizing: border-box;
-    padding: var(--cat-pad) 8px; gap: var(--cat-inner-gap);
-  }
-  /* `flex: none` is the other half of queue 672: `overflow: hidden` was meant to CROP a long label, but
-     a flex child shrinks to zero before overflow ever gets a say, so it vanished instead. Now it keeps
-     its line and the icon yields, which is the right way round — the label is the information and the
-     icon is the decoration. */
-  /* `flex: none` is the other half of queue 672: `overflow: hidden` was meant to CROP a long label, but
-     a flex child shrinks to zero before overflow ever gets a say, so it VANISHED instead. Now it keeps
-     its line and the icon yields, which is the right way round — the label is the information and the
-     icon is the decoration.
-     …and `max-height` is what finally makes the old comment true. With `flex: none` a label that WRAPS
-     ("Outline & Shadows" goes to two lines) would take its full 22px and spill out of a card that is a
-     fixed height by design. Bounded to exactly the room left after the padding, gap and icon, it shows
-     the first line and crops the second — which is what "a long label crops" always claimed and never
-     did. One readable line beats a silent nothing, and beats text hanging outside its own card.
-     ⚠️ …BUT THAT BOUND WAS NEVER A WHOLE NUMBER OF LINES (queue 918.3). Measured at 1280x900: the room
-     left was 13.5px and a line is 12px, so "Outline & Shadows" read "Outline &" with the TOPS of
-     "Shadows" showing as stray marks under it, and at 1280x700 the room (9.2px) was less than ONE line,
-     so every descender went — "Colourina", "Mixina". Two causes. The line-height clamp below mixed a
-     number (1.05) with a length (the calc), which is invalid, so it silently fell back to `normal` and
-     nobody knew how tall a line was. And the bound only counted the CONTENT box: the card is a centred
-     flex column, so the padding either side is room a label can use without leaving its card.
-     So: a line is a stated length (--cat-lh), and the bound is the room inside the card's border
-     (height − icon − gap − 2px each side) ROUNDED DOWN TO WHOLE LINES, at least one, at most two. A
-     label that wraps shows both lines wherever they fit — they fit at every band the 672 sweep drives —
-     and nothing ever shows a sliver of a line. */
-  body #inspector-panel .cat-label {
-    overflow: hidden; flex: none;
-    max-height: var(--cat-lh);   /* one whole line where round() is missing (Safari < 15.4, Chrome < 125) */
-  }
-  @supports (max-height: round(down, 10px, 3px)) {
-    body #inspector-panel .cat-label {
-      max-height: clamp(var(--cat-lh), round(down, calc(var(--cat-h) - var(--cat-ico) - var(--cat-inner-gap) - 4px), var(--cat-lh)), calc(2 * var(--cat-lh)));
-    }
-  }
-  body #inspector-panel .cat-ico svg { width: var(--cat-ico); height: var(--cat-ico); }
-  /* The label follows, or a 14px icon sits under text as tall as it is. Its line-height tightens with
-     it — at three rows, 1.3 line-height is another 10px of nothing.
-     queue 918.3: the line-height is a LENGTH now, so the bound above can count lines. 1.15 is about what
-     `normal` was measuring (the invalid clamp's silent fallback), so a one-line label sits where it did. */
-  body #inspector-panel .cat-label {
-    --cat-fs: clamp(9.5px, calc((var(--tl-h, 264px) - 120px) / 12.5), 11.5px);
-    --cat-lh: calc(var(--cat-fs) * 1.15);
-    font-size: var(--cat-fs);
-    line-height: var(--cat-lh);
-  }
-}
+/* The layer buttons used to shrink by arithmetic on --tl-h here (queues 285 / 518 / 672 / 807 / 918.3). Since queue 963 they
+   are planned from their real box by js/tilefit.js — the same planner as the Add menu — and drawn by the [data-rung] block
+   after the add menu's fit rules. */
 
 /* ---- The add menu drags independently, over the canvas (queue 244) ----------------------------
    Only in the Studio layout, and only while the add menu is what the band is showing — anywhere else
@@ -9791,7 +9713,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
    templates yet" sat ABOVE the pager's top edge (title 532-550, pager from 548 at 900x700), where no
    scroll can ever reach, and the last paragraph was cut through the middle at the bottom.
    Why the box was that short: the empty tab returns before any fit plan is made, so it kept the TILE tab's
-   pager height (`--am-pager`, a grid with a dots row) it was switched from.
+   pager height (`--tf-box` since queue 963, `--am-pager` before; a grid with a dots row) it was switched from.
    The sheet's rule above (nothing scrolls) is the PHONE's; the PC panel already scrolls whenever its
    content outgrows it (the add menu's body, queue 542). So here the box grows to its words, starts at the
    top when it overflows (`safe center` still centres it whenever it fits), the type is a step tighter,
