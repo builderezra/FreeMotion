@@ -1282,6 +1282,12 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 @media (max-width: 360px) {
   .addmenu--sheet .addmenu-tab, .addmenu--sheet .addmenu-card { padding-left: 3px; padding-right: 3px; }
 }
+/* "Import media" (queue 960) is 61.3px at 10.5px; under ~326px the Media strip's tile leaves 60px of label room even
+   with the 3px padding above, so it cut to "Import me…" at 320 (measured). At 10px it is 58.4px — measured whole at
+   320 (4.6px spare each side) and at 340 (7.1px). Only the pinned strip's own words; library names keep their size. */
+@media (max-width: 340px) {
+  .addmenu--sheet .addmenu-pinned .addmenu-card .addmenu-lbl { font-size: 10px; }
+}
 /* ============ QUEUE 145 — a button that CHANGES SECTION must not look like one that ADDS A THING.
    Ezra: "make the background of all the buttons like elements shape etc a different colour to the
    ones in inside each section, like text etc. so it shows the difference in action, and then you can
@@ -5656,6 +5662,23 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
     font-size: var(--am-fs); line-height: 1.2; white-space: normal; max-width: none;
     max-height: var(--am-lblh); overflow: visible; text-overflow: clip;
   }
+  /* THE PINNED STRIP HAS ITS OWN SIZE, THE SAME ON BOTH TABS (queue 960). Two faults, one cause — the rules above are
+     not scoped to .addmenu-page, so Media's and Audio's pinned buttons wore the fit variables planned for the LIBRARY
+     grid under them, and each tab plans its own library:
+       · "they both look different" was true in SIZE on PC, not only in colour — measured at 1280x900, Import was
+         64x43 with a 19px arrow and Import audio 87x60 with a 27px arrow (Media planned 2c1r, Audio 1c1r);
+       · renaming "Import" to "Import media" made the label ~63px in a 58px tile at the fitted 10.8px; it wrapped,
+         the strip grew, and the Media tab dropped out of the fit altogether (tiles 43→64px, library in the fallback).
+         `nowrap` alone was measured too: at 1024x640 it spilled the label 4.1px outside the tile.
+     So the strip is sized from the PANEL'S WIDTH (container units), never from a tab's library: 22px arrow and a 10px
+     label at 1024–1280 (50px tiles), 28px and 11.9px at 1920 (58px), one line always. Measured stable over five
+     visits at all three sizes, with "Import media" 1.7–8.7px inside its tile. The paged grid below is untouched,
+     and the phone never reaches this (.addmenu--fit is PC-only, and so is this media block). */
+  .addmenu--fit .addmenu-pinned { container-type: inline-size; }
+  .addmenu--fit .addmenu-pinned .addmenu-card { padding: 5px 3px; gap: 4px; height: auto; }
+  .addmenu--fit .addmenu-pinned .addmenu-card .addmenu-ic,
+  .addmenu--fit .addmenu-pinned .addmenu-card .addmenu-ic svg { width: clamp(22px, 7.5cqi, 34px); height: clamp(22px, 7.5cqi, 34px); }
+  .addmenu--fit .addmenu-pinned .addmenu-card .addmenu-lbl { font-size: clamp(10px, 3.2cqi, 12px); line-height: 1.2; white-space: nowrap; max-height: none; }
 }
 
 /* ---- Freehand / Vector drawing overlay + toolbar (v2.39) ---- */

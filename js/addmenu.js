@@ -19,6 +19,23 @@ window.FM = window.FM || {};
   function icoMulti(inner) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
   }
+  /* ONE DRAWING FOR BOTH IMPORT TILES (queue 960). Ezra: "The import media button and the import audio button both have
+     some discrepancies. Like they both look different. I think you should make them both have like the shiny look that
+     the import media button has."
+     Measured before the change (1280x900 and 380x820, computed styles): the two tiles already shared everything else —
+     one grey --am-tint (150, 160, 176), one class list, the same background, border, radius and inset shadow. The one
+     difference in the tile was the arrow: Media's (#270) strokes with a white-to-55%-white gradient, Audio's with
+     currentColor, i.e. the grey. #270 left Audio grey on purpose and said "say if you want the audio one to match".
+     So the drawing lives here and both tiles call it — they cannot drift apart again. Each passes its OWN id: a
+     duplicate gradient id silently steals the paint from whichever element asks for it second.
+     importIcon('fm-ic-imp') is byte-identical to the markup the Media tile shipped with (checked in the browser by
+     serialising both), so the Media tile does not change at all. */
+  function importIcon(gid) {
+    return icoMulti('<defs><linearGradient id="' + gid + '" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset="1" stop-color="#ffffff" stop-opacity=".55"/></linearGradient></defs>'
+      + '<path d="M12 16V4M7 9l5-5 5 5" stroke="url(#' + gid + ')"/>'
+      + '<path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="url(#' + gid + ')"/>');
+  }
   // The one file input is shared, so narrow `accept` to what this entry is actually asking for and put
   // it back afterwards. Two reasons this matters on a phone: a picker limited to audio doesn't bury
   // songs among the camera roll, and — the actual bug Ezra hit — iOS greys audio out in Files when the
@@ -391,11 +408,11 @@ window.FM = window.FM || {};
            So the icon gets its own paint server, exactly as Sound effects does — a CSS colour cannot
            override one, which is the whole reason #267 took two attempts. Namespaced id: a duplicate
            silently steals the paint from whichever element asked for it second. */
-        { label: 'Import', icon: icoMulti(
-          '<defs><linearGradient id="fm-ic-imp" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">'
-          + '<stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset="1" stop-color="#ffffff" stop-opacity=".55"/></linearGradient></defs>'
-          + '<path d="M12 16V4M7 9l5-5 5 5" stroke="url(#fm-ic-imp)"/>'
-          + '<path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="url(#fm-ic-imp)"/>'), add: fileImport },
+        /* "IMPORT MEDIA", NOT "IMPORT" (queue 960). His words: "rename the import media button to import media because
+           right now it's just called import just so then it feels a bit more thought out and less slack". The PC empty
+           canvas already said "click Import media" (index.html) about a button called "Import"; now they agree.
+           BY_LABEL below is keyed by this exact text. The icon is importIcon() above — shared with Import audio. */
+        { label: 'Import media', icon: importIcon('fm-ic-imp'), add: fileImport },
         /* SAMPLE CLIP — a real clapperboard (queue 543). Ezra: "fix up the sample clip icon because
            the lines are going through it", and he was describing the geometry exactly. The old art was
            `rect x=4 w=16` with `M4 9.5h16` across it and two ticks starting at `y=5`: the crossbar ran
@@ -449,7 +466,8 @@ window.FM = window.FM || {};
       // a song like adding media it stays in the audios section"). They used to land in Media, mixed
       // in among the video thumbnails with no artwork to tell them apart.
       return [
-        { label: 'Import audio', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: audioImport },
+        // The same white-gradient arrow as Import media, under its own id (queue 960 — "make them both have like the shiny look")
+        { label: 'Import audio', icon: importIcon('fm-ic-impau'), add: audioImport },
         /* Record voice… sits BESIDE Import rather than replacing it, and second rather than first:
            importing is still the commoner move, and the tile you have always tapped should not
            change position under your finger.
@@ -897,8 +915,8 @@ window.FM = window.FM || {};
    * grey is specified at all, so it must survive any later repaint. */
   var BY_LABEL = {
     // "a basic grey" / "basic grey" — the neutral, everyday action. Deliberately colourless so the
-    // buttons that create something stand out against it.
-    'Import': '150, 160, 176',
+    // buttons that create something stand out against it. ('Import' left with its tile — queue 960 renamed it
+    // "Import media", which already had a key; a dead key outlives everyone who remembers why.)
     'Import audio': '150, 160, 176',
     'Import media': '150, 160, 176',
     'AI Scene': '240, 200, 90',          // "just a yellow colour for the background that isn't obnoxious"
