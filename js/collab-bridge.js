@@ -237,9 +237,9 @@ window.FM = window.FM || {};
          nothing brings back: what ended, and what to ask for (collab-ui.js U.beforePause). */
       const owner = (C.session && typeof C.session.hostName === 'string' && C.session.hostName) || 'The owner';
       if (FM.toast) FM.toast(why === 'removed'
-        ? 'You were removed from the live project — your copy stays on this device'
-        : why === 'switched' ? owner + ' opened another project — ask them for a new code to join again. Your copy stays on this device'
-        : 'The owner ended the live session — your copy stays on this device', 4200);
+        ? 'You were removed from the project — your copy stays on this device'
+        : why === 'switched' ? owner + ' opened another project — ask them for a new swap code to join again. Your copy stays on this device'
+        : owner + ' stopped sharing — your copy stays on this device', 4200);   // #967 B4: no "session"
       syncCollabBanner();
     },
 

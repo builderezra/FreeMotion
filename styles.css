@@ -10604,6 +10604,19 @@ body.text-editing .collab-people { display: none; }
 .cs-rowhint { flex: 1 1 100%; font-size: 11.5px; color: var(--text-dim); margin-top: -4px; }
 .cs-body > .cs-add { margin-top: 14px; }
 .cs-privacy { font-size: 11.5px; line-height: 1.45; color: var(--text-dim); margin: 12px 2px 0; }
+/* #967 B4 (J1-4, J5-5): one plain sentence, and every service by name behind "What gets sent? ›" (collab-ui.js privacyBlock). */
+.cs-privplain { font-size: 12px; }
+.cs-privmore {
+  display: inline-block; margin: 2px 0 0; padding: 8px 0; min-height: 36px; border: 0; background: transparent;
+  color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; text-align: left;
+}
+.cs-privfull { margin: 0 0 4px; padding: 0 0 0 16px; }
+.cs-privfull[hidden] { display: none; }
+.cs-privfull li { margin: 0 0 5px; overflow-wrap: anywhere; }
+.cs-watchhint { margin: 2px 0 10px; font-size: 12px; }
+.set-privrow { display: block; padding: 0 0 10px; }
+.set-row + .set-privrow { border-top: 0; }
+.set-privrow .cs-privacy { margin: 0; }
 /* §14.6 on the relay: the letters are offered, in a line, not a step. */
 .ck-sas { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; overflow-wrap: anywhere; }
 .ck-sas b, .cj-softsas b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; letter-spacing: 1.5px; color: var(--text); }

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plain words sheet</title>
+<style>
+  :root { --bg: #0b0e14; --panel: #131a24; --line: #243044; --text: #e8edf5; --dim: #93a0b4; --old: #ff9a9a; --new: #7ee2a8; --accent: #5bc8ec; }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) { --bg: #f5f7fb; --panel: #ffffff; --line: #d8dfea; --text: #10151f; --dim: #5a6478; --old: #b3261e; --new: #0f7a43; --accent: #0a7fb0; }
+  }
+  :root[data-theme="light"] { --bg: #f5f7fb; --panel: #ffffff; --line: #d8dfea; --text: #10151f; --dim: #5a6478; --old: #b3261e; --new: #0f7a43; --accent: #0a7fb0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lede { color: var(--dim); margin: 0 0 18px; }
+  .picks { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0 0 22px; }
+  .picks b { color: var(--accent); }
+  .picks ul { margin: 6px 0 0; padding-left: 18px; }
+  h2 { font-size: 16px; margin: 26px 0 8px; color: var(--accent); }
+  .row { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 8px; }
+  .o, .n { display: block; overflow-wrap: anywhere; }
+  .o { color: var(--old); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .n { color: var(--new); margin-top: 4px; }
+  .n::before { content: "→ "; color: var(--dim); }
+  .why { display: block; color: var(--dim); font-size: 12.5px; margin-top: 4px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 0 0 8px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); display: block; }
+  .shots figcaption { font-size: 12px; color: var(--dim); margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>#967 batch 4 — plain words and one name</h1>
+  <p class="lede">Every line a first-timer reads, old → new, grouped by screen. Words only — nothing moved. Built to the recommended pick of each question.</p>
+  <div class="picks">
+    <b>The four picks (all A, recommended):</b>
+    <ul>
+      <li>The feature is <b>Work with friends</b>, the button is <b>Share live</b>, the other side is <b>Join</b>. “Still being tested” is said once, on the Settings switch.</li>
+      <li>The 9-character code is always the <b>short code</b>; the long FM1 block is the <b>swap code</b>. Neither is ever just “code”.</li>
+      <li>Follow is <b>Watch along</b>, with a line saying your screen follows theirs.</li>
+      <li>Privacy is <b>one plain sentence</b>; <b>What gets sent? ›</b> opens the full list, every service still named. Once per screen.</li>
+    </ul>
+  </div>
+
+  <h2>The screens, at 390 × 844</h2>
+  <div class="shots">
+    <figure><img src="friends-off.png" alt="Friends block, off"><figcaption>Friends block, off</figcaption></figure>
+    <figure><img src="friends-idle.png" alt="Friends block, not sharing"><figcaption>Friends block, not sharing</figcaption></figure>
+    <figure><img src="share-live.png" alt="Share panel, live"><figcaption>Share panel, live</figcaption></figure>
+    <figure><img src="share-live-bottom.png" alt="Share panel, live, scrolled"><figcaption>…scrolled: the swap door and privacy</figcaption></figure>
+    <figure><img src="swap-step.png" alt="The swap-code step"><figcaption>The swap-code step</figcaption></figure>
+    <figure><img src="swap-check.png" alt="Step 3, the 5-character check"><figcaption>Step 3 — the 5-character check</figcaption></figure>
+    <figure><img src="settings-switch.png" alt="Settings, Work with friends"><figcaption>Settings — the switch row</figcaption></figure>
+    <figure><img src="privacy-open.png" alt="What gets sent, opened"><figcaption>“What gets sent? ›” opened</figcaption></figure>
+    <figure><img src="join-sheet.png" alt="The Join sheet"><figcaption>The Join sheet</figcaption></figure>
+  </div>
+
+  <h2>Settings</h2>
+  <div class="row"><span class="o">Live collaboration (preview)</span><span class="n">Work with friends</span></div>
+  <div class="row"><span class="o">Edit one project with people on other devices. Free public services — relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup — help the devices find each other. They see internet addresses and when a room is in use, never your project; then the devices talk directly, encrypted. Codes only skips them all.</span><span class="n">Edit a project together, live, each on your own phone — still being tested.</span><span class="why">…with the privacy sentence and “What gets sent? ›” under it (below).</span></div>
+  <div class="row"><span class="o">Join a live project — Paste the link or code they sent you, or type the short code.</span><span class="n">Join a friend’s project — Paste the link, short code or swap code they sent you.</span></div>
+  <div class="row"><span class="o">Test connection — Tries the free connection services and this device’s live connections, then says plainly what works on this network.</span><span class="n">Test connection — Checks whether links work on this network and whether friends elsewhere can reach you.</span></div>
+  <div class="row"><span class="o">Connect with codes only — No free relay at all: nothing but the two devices. Invite links and short codes stop working — you swap a long code with each person instead.</span><span class="n">Swap codes only — No online helpers — links and short codes stop working, and you swap codes with each person instead.</span></div>
+  <div class="row"><span class="o">FreeMotion v17.09 · everything stays on this device</span><span class="n">FreeMotion v17.09 · projects only leave this device when you share live</span><span class="why">With the switch on. Off, the old line is true again and comes back.</span></div>
+  <div class="row"><span class="o">Turn off live collaboration? … The links and codes you handed out stop working, and everyone keeps their own copy.</span><span class="n">Turn off Work with friends? … Your links and short codes stop working, and everyone keeps their own copy.</span></div>
+
+  <h2>Privacy — on the Friends block, the Share panel, Sharing settings and Settings (once each)</h2>
+  <div class="row"><span class="o">Free public services help the devices find each other: relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup. They see your internet address and when a room is in use, and so can anyone watching those relays; anyone with the link or code can see the address of each device that connects. They never see your project — it goes straight between devices, encrypted.</span><span class="n">Your project goes straight from phone to phone, encrypted. A few free online helpers let the phones find each other — they see your internet address, never your project. <b>What gets sent? ›</b></span></div>
+  <div class="row"><span class="n">What gets sent? › opens: Your project — every edit and every clip — goes straight between the devices, encrypted. The helpers below never see your project. · To find each other, the devices use free public services: PeerJS, EMQX and HiveMQ pass the first hello between them, and Google and Cloudflare tell each device its internet address. · Those services see your internet address and when a project is being shared — and so can anyone watching those services. · Anyone with your link or short code can see the internet address of each device that joins. · Swap codes only skips them all: links and short codes stop working, and you swap codes with each person instead.</span><span class="why">Every service is still named — the S6 review’s rule — one tap down.</span></div>
+
+  <h2>Friends block — off</h2>
+  <div class="row"><span class="o">Share it live with friends</span><span class="n">Share live with friends</span><span class="why">The bar above the card.</span></div>
+  <div class="row"><span class="o">Work on this with friends · Still being tested</span><span class="n">Work with friends · Off</span></div>
+  <div class="row"><span class="o">Share this project live and edit it together from your own phones or computers. It is still being tested, so it stays off until you turn it on — and you can turn it off here any time.</span><span class="n">Share this project live and edit it together, each on your own phone or computer. It stays off until you turn it on — and you can turn it off here any time.</span></div>
+
+  <h2>Friends block — not sharing</h2>
+  <div class="row"><span class="o">Share “Untitled” · Not shared yet</span><span class="n">Share “Untitled” live · Not sharing</span><span class="why">“Yet” read, after a stop, as if it never happened. The bar says “Not sharing · invite people”.</span></div>
+  <div class="row"><span class="o">You / You — pick the name and colour others will see</span><span class="n">You / Pick the name and colour others will see</span></div>
+  <div class="row"><span class="o">You’ll get a link, a QR and a short code to send. Nothing is shared until you tap it.</span><span class="n">You’ll get a link, a QR and a short code to send. Nothing’s shared until you tap Start sharing.</span></div>
+
+  <h2>Share panel — live</h2>
+  <div class="row"><span class="o">Invite with a link or a code</span><span class="n">Send your friend the link</span></div>
+  <div class="row"><span class="o">They open FreeMotion, tap Join, and type it in.</span><span class="n">That’s the short code — they open FreeMotion, tap Join, and type it in.</span></div>
+  <div class="row"><span class="o">Starting the relay…</span><span class="n">Getting your link ready…</span></div>
+  <div class="row"><span class="o">Waiting for people · the link and the code are live</span><span class="n">Waiting for people · your link and short code are live</span></div>
+  <div class="row"><span class="o">Reconnecting to the free connection service… the link and the code work again once it’s back.</span><span class="n">Reconnecting… your link and short code work again once it’s back.</span></div>
+  <div class="row"><span class="o">Couldn’t reach the free connection service — use Connect with a code below.</span><span class="n">Your link can’t get through on this network — swap codes instead, below.</span></div>
+  <div class="row"><span class="o">Copied — but the link won’t work until the free connection service can be reached. Use Connect with a code.</span><span class="n">Copied — but the link won’t work on this network right now. Swap codes instead, below.</span></div>
+  <div class="row"><span class="o">Reset link and code</span><span class="n">Reset link and short code</span></div>
+  <div class="row"><span class="o">Connect with a code instead — No relay at all — you send them a long code and they send one back</span><span class="n">Link not working? Swap codes instead — You copy a swap code to them, they copy one back</span></div>
+  <div class="row"><span class="o">Codes only on: Add someone with a code — No account, no server — you send them a code and they send one back</span><span class="n">Swap codes with someone — No online helpers — you copy a swap code to them, they copy one back</span></div>
+  <div class="row"><span class="o">Codes only is on — The link and the short code need the free relay, which this device is set not to use. People join by swapping connection codes instead.</span><span class="n">Swap codes only is on — Links and short codes need the online helpers, which this device is set not to use. People join by swapping codes with you instead.</span></div>
+  <div class="row"><span class="o">Comments — Leave a note about the edit for everyone — it never stops an export</span><span class="n">Comments — Leave a note about the edit for everyone</span><span class="why">And the empty Comments card drops “it never gets in the way of an export” too.</span></div>
+  <div class="row"><span class="o">Role menu: Editor · Commenter · Viewer</span><span class="n">Editor — can change anything · Commenter — can leave notes only · Viewer — can only watch</span><span class="why">In “New people join as” and in each person’s menu. The button still shows the short word.</span></div>
+  <div class="row"><span class="o">Follow · Stop following</span><span class="n">Watch along — your screen follows theirs · Stop watching along</span></div>
+  <div class="row"><span class="o">Stop sharing? — Everyone here keeps their own copy. The codes you have handed out stop working.</span><span class="n">Stop sharing? — Everyone keeps their own copy. Your link and short code stop working.</span></div>
+
+  <h2>Sharing settings (the gear)</h2>
+  <div class="row"><span class="o">Codes only — nothing but the devices themselves</span><span class="n">Swap codes only — no online helpers, just the devices</span></div>
+  <div class="row"><span class="o">Having trouble? Connect with a code</span><span class="n">Link not working? Swap codes instead</span></div>
+
+  <h2>Swapping codes — his side</h2>
+  <div class="row"><span class="o">Step 1 · send them this code · Making a code… · Copy code</span><span class="n">Step 1 · send them this swap code · Making a swap code… · Copy swap code</span></div>
+  <div class="row"><span class="o">Step 2 · paste the code they send back</span><span class="n">Step 2 · paste the swap code they send back</span></div>
+  <div class="row"><span class="o">Step 3 · check these letters match theirs — Ask them to read out what their screen shows. If it is different, somebody is in the middle — stop.</span><span class="n">Step 3 · check you both see the same 5 characters — Ask them to read out the 5 characters on their screen. Different? Tap They don’t match — someone else might be trying to get in.</span></div>
+  <div class="row"><span class="o">Stopped — those letters did not match. That code is used up; add them again for a fresh one.</span><span class="n">Stopped — the 5 characters didn’t match. That swap code is used up; swap codes again for a fresh one.</span></div>
+  <div class="row"><span class="o">Not let in — they’ll need a fresh code.</span><span class="n">Not let in — they’ll need a fresh swap code.</span></div>
+  <div class="row"><span class="o">That code is for a different session.</span><span class="n">That swap code didn’t check out — swap codes again for a fresh one.</span></div>
+
+  <h2>Joining — the friend’s side</h2>
+  <div class="row"><span class="o">Join a live project</span><span class="n">Join a friend’s project</span></div>
+  <div class="row"><span class="o">Paste the invite link they sent, or type the short code they read out. A long code from “Connect with a code” works here too.</span><span class="n">Paste the link they sent, or type their short code. A swap code works here too.</span></div>
+  <div class="row"><span class="o">Copy this and send it back to them — they paste it in Step 2 · Copy code</span><span class="n">Now copy this swap code and send it back to them — they paste it in Step 2 · Copy swap code</span></div>
+  <div class="row"><span class="o">Read these letters back to them — They must see the same five. If they don’t, somebody is in the middle — stop.</span><span class="n">Check you both see the same 5 characters — Read them out to them. If theirs are different, they’ll tap They don’t match — someone else might be trying to get in.</span></div>
+  <div class="row"><span class="o">Waiting for them to paste your code… · Lost touch with them — this code still works if they come back</span><span class="n">Waiting for them to paste your swap code… · Lost touch with them — this swap code still works if they come back</span></div>
+  <div class="row"><span class="o">Couldn’t reach the free connection service. Ask them to tap … Connect with a code instead, then paste the long code they send you here.</span><span class="n">Your link can’t get through on this network. Ask them to tap the round person+ on their video → Start sharing → Swap codes, then paste the swap code they send you here.</span></div>
+  <div class="row"><span class="o">Codes only is on in Settings → Live collaboration (at the bottom), so invite links and short codes cannot connect. Ask them for a connection code, or turn Codes only off.</span><span class="n">Swap codes only is on in Settings → Work with friends, so links and short codes can’t connect. Ask them to swap codes with you, or turn Swap codes only off.</span></div>
+  <div class="row"><span class="o">You are already in a live session — leave it first.</span><span class="n">You’re already in a friend’s project — leave it first. (Sharing one of your own: “You’re sharing a project right now — stop sharing it first.”)</span></div>
+  <div class="row"><span class="o">That live session has ended.</span><span class="n">Ezra stopped sharing that project.</span></div>
+  <div class="row"><span class="o">Check the code — a short code works for 30 minutes</span><span class="n">Check the short code — it works for 30 minutes</span></div>
+  <div class="row"><span class="o">Your code timed out — ask them for a fresh one.</span><span class="n">Your swap code timed out — ask them for a fresh one.</span></div>
+  <div class="row"><span class="o">Somebody sent you an invite to a live project. Work with friends is still being tested, so it stays off until you turn it on.</span><span class="n">A friend sent you an invite to their project. Work with friends stays off until you turn it on.</span></div>
+
+  <h2>The friend’s panel</h2>
+  <div class="row"><span class="o">You’re an Editor.</span><span class="n">You’re an Editor — you can change anything.</span></div>
+  <div class="row"><span class="o">[Follow] beside each person</span><span class="n">[Watch along] — and under the people: “Watch along: your screen follows theirs — where they are in the video, and what they play.”</span></div>
+  <div class="row"><span class="o">Leave this project? … [Keep my own copy]</span><span class="n">Leave this project? … [Leave (keep my copy)]</span></div>
+  <div class="row"><span class="o">Not enough room to keep a copy … [Stay in the session]</span><span class="n">… [Stay]</span></div>
+  <div class="row"><span class="o">Not connected — you have left this live session</span><span class="n">Not connected — you left this project</span></div>
+  <div class="row"><span class="o">View only — you can watch, play and follow</span><span class="n">View only — you can watch and play it</span></div>
+
+  <h2>Banners and toasts</h2>
+  <div class="row"><span class="o">Following Sam · × Stop following · Stopped following — Sam left</span><span class="n">Watching along with Sam · × Stop watching along · Stopped watching along — Sam left</span></div>
+  <div class="row"><span class="o">Session ended · your copy is kept (phone) / This live session has ended — your copy stays on this device</span><span class="n">Sharing ended · your copy is kept / Sharing has ended — your copy stays on this device</span></div>
+  <div class="row"><span class="o">Session ended · ask for a new code</span><span class="n">Ended · ask for a new swap code</span></div>
+  <div class="row"><span class="o">The owner ended the live session — your copy stays on this device</span><span class="n">Ezra stopped sharing — your copy stays on this device</span></div>
+  <div class="row"><span class="o">Update ready — it applies when you leave the session</span><span class="n">Update ready — it applies once sharing ends</span></div>
+  <div class="row"><span class="o">Sam joined with a code — opening another project ends it for them; they’ll need a new code.</span><span class="n">Sam joined with a swap code — opening another project ends it for them; they’ll need a new swap code.</span></div>
+  <div class="row"><span class="o">Sharing is on again — anyone who joined with a long code needs a new one</span><span class="n">Sharing is on again — anyone who joined with a swap code needs a new one</span></div>
+
+  <h2>Test connection — yes or no; the numbers stay in the copyable report</h2>
+  <div class="row"><span class="o">Invite links and short codes work here — reached PeerJS, EMQX (HiveMQ didn’t answer).</span><span class="n">Links work on this network ✓</span></div>
+  <div class="row"><span class="o">Couldn’t reach the free connection service on this network — invite links and short codes won’t work here. Connect with a code instead.</span><span class="n">Links don’t work on this network — swap codes instead. ✕</span></div>
+  <div class="row"><span class="o">Other networks: this device found its public address, so someone on a different network can usually connect.</span><span class="n">Friends on other networks can usually reach you ✓</span></div>
+  <div class="row"><span class="o">Other networks: this network hides this device’s address. Put both devices on the same Wi-Fi, or turn off mobile data.</span><span class="n">Friends on other networks may not reach you — put both devices on the same Wi-Fi, or turn off mobile data. ✕</span></div>
+  <div class="row"><span class="o">This device: live connections work — 3.1 MB/s between two connections here, messages up to 256 KB.</span><span class="n">Live editing works on this device ✓</span></div>
+
+  <h2>Home</h2>
+  <div class="row"><span class="o">Delete “…”? It is shared — deleting it stops sharing, and the link and code stop working.</span><span class="n">…and the link and short code stop working.</span></div>
+  <div class="row"><span class="o">The person+ on the video, read aloud: “Share”</span><span class="n">“Share live”</span></div>
+</main>
+</body>
+</html>

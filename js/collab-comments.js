@@ -414,7 +414,7 @@ window.FM = window.FM || {};
     if (title) title.textContent = open.length ? 'Comments · ' + open.length + ' open' : 'Comments';
     const keepScroll = listEl.scrollTop;
     listEl.textContent = '';
-    if (!all.length) listEl.appendChild(el('div', 'cc-empty', CM.canWrite() ? 'No comments yet. Say something about the edit below — it never gets in the way of an export.' : 'No comments yet.'));
+    if (!all.length) listEl.appendChild(el('div', 'cc-empty', CM.canWrite() ? 'No comments yet. Say something about the edit below.' : 'No comments yet.'));
     open.forEach(function (c) { listEl.appendChild(thread(c)); });
     if (done.length) {
       listEl.appendChild(btn('cc-resolved', done.length + ' resolved — ' + (showResolved ? 'hide' : 'show'), function () { showResolved = !showResolved; render(); }));
