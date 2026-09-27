@@ -399,6 +399,7 @@ window.FM = window.FM || {};
   let _onClose = null;   // queue 930: FM.settings.openAt(…, { onClose }) — who to hand back to when Settings closes
 
   function build() {
+    let footWords = () => {};                 // #967 B4: the footer's words follow the Work with friends switch (set below)
     scrim = el('div', 'set-scrim');
     panel = el('aside', 'set-panel');
     panel.setAttribute('role', 'dialog');
@@ -469,7 +470,7 @@ window.FM = window.FM || {};
      * the app IS". Measured on his phone: 4.2–5.6 screens down, while four sentences sent people to a "Settings → Labs" that
      * had no heading at all. His words: "buried it all in a deeper setting". His pick A (the options sheet, 26 Sep): it moves
      * up, right under the open project's own rows, with a heading in the feature's one name, and the reports fold into one
-     * row at the bottom. The switch's own label stays until batch 4 renames the feature everywhere.
+     * row at the bottom. #967 batch 4 gave the switch the same one name, and put the privacy facts behind one tap.
      * The two sub-rows are built either way and hidden by a class rather than built only when the switch is on: rebuilding this panel from inside one of its own rows means
      * closing and reopening it, and open() rebinds Escape without unbinding while a close in the same
      * frame as an open is the exact null-scrim crash the guard on open() below records. */
@@ -481,7 +482,7 @@ window.FM = window.FM || {};
         me ? me.name : 'Not set yet — you are asked the first time you share or join',
         'Change…', () => ui.profile({ force: true }),
         (h) => { const p = ui.getProfile(); if (h && p && p.name) h.textContent = p.name; }));
-      kids.appendChild(stayRow('Join a live project', 'Paste the link or code they sent you, or type the short code.', 'Join…', () => ui.join()));   // #967: the long code is one of the three things a friend may have been sent
+      kids.appendChild(stayRow('Join a friend’s project', 'Paste the link, short code or swap code they sent you.', 'Join…', () => ui.join()));   // #967: a link, a short code or a swap code — the field takes all three
       /* S8 (§25.5): "Test connection". Not an actionRow — that shuts the panel, and the answer IS this row. Nothing
          is tried until the button is tapped (§23); the result is one sentence per question and the numbers behind
          them in the same copyable box the Reports use, kept as `fm.lastConnReport`. */
@@ -489,7 +490,7 @@ window.FM = window.FM || {};
         const cw = el('div', 'set-row set-conn'); cw.id = 'set-conn';   // not .set-perf (#967 batch 2): the group sits above "What’s slow" now, whose checks find the first .set-perf
         const ch = el('div', 'set-rowtext');
         ch.appendChild(el('div', 'set-label', 'Test connection'));
-        ch.appendChild(el('div', 'set-hint', 'Tries the free connection services and this device’s live connections, then says plainly what works on this network. Nothing about your projects is sent.'));
+        ch.appendChild(el('div', 'set-hint', 'Checks whether links work on this network and whether friends elsewhere can reach you. Nothing about your projects is sent.'));
         const cb = el('div', 'set-perf-btns');
         const tb = el('button', 'set-action set-conn-go', 'Test'); tb.type = 'button';
         const cc = el('button', 'set-action', 'Copy'); cc.type = 'button';
@@ -533,7 +534,7 @@ window.FM = window.FM || {};
       }
       /* S6 (§19.8): Codes only. toggleRow → `apply()` → `syncLabs()`, which stops any relay already running
          the moment it goes on — the switch is a promise about sockets, not about the next session. */
-      kids.appendChild(toggleRow('Connect with codes only', 'No free relay at all: nothing but the two devices. Invite links and short codes stop working — you swap a long code with each person instead.', 'collabCodesOnly'));
+      kids.appendChild(toggleRow('Swap codes only', ui.CODES_ONLY_HINT || 'No online helpers — links and short codes stop working, and you swap codes with each person instead.', 'collabCodesOnly'));
       /* S5: the two §19.8 display switches. Local to this device — they change what YOU see, never what
          the others see of you. `apply()` is not needed: presence reads the setting on every draw. */
       kids.appendChild(toggleRow('Show others’ pointers', 'Their mouse pointer and their taps, in their colour.', 'collabCursors'));
@@ -543,12 +544,14 @@ window.FM = window.FM || {};
          the row, where he is looking. */
       const said = el('div', 'set-hint set-labs-said hidden');
       said.setAttribute('role', 'status');
-      const labsRow = switchRow('Live collaboration (preview)',
-          /* S6 review: every third party by name — see collab-ui.js PRIVACY_LINE. */
-          'Edit one project with people on other devices. Free public services — relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup — help the devices find each other. They see internet addresses and when a room is in use, never your project; then the devices talk directly, encrypted. Codes only skips them all.',
+      /* #967 B4 (J5-6, J5-5): the feature's one name, and the ONE place that says it is still being tested; the hint is one
+         line. The privacy facts are the block under it — one plain sentence, and every third party by name behind
+         "What gets sent? ›" (collab-ui.js privacyBlock: the S6 review's rule, kept one tap down). */
+      const labsRow = switchRow('Work with friends',
+          'Edit a project together, live, each on your own phone — still being tested.',
           () => !!state.collabLabs,
           () => {
-            const flip = () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); };
+            const flip = () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); footWords(); };
             if (!state.collabLabs || !ui.confirmLabsOff) { said.classList.add('hidden'); flip(); return null; }
             return ui.confirmLabsOff().then(r => {
               if (!r || !r.ok || !state.collabLabs) return;
@@ -559,7 +562,9 @@ window.FM = window.FM || {};
           });
       const lt = labsRow.querySelector('.set-rowtext');
       if (lt) lt.appendChild(said);
-      const fg = group(labsRow, kids);
+      let privRow = null;
+      if (ui.privacyBlock) { privRow = el('div', 'set-row set-privrow'); privRow.appendChild(ui.privacyBlock('set-privacy')); }
+      const fg = group(labsRow, privRow, kids);
       fg.id = 'set-friends';
       fg.insertBefore(el('div', 'set-grouptitle', 'Work with friends'), fg.firstChild);
       body.appendChild(fg);
@@ -1029,7 +1034,10 @@ window.FM = window.FM || {};
 
     const foot = el('div', 'set-foot');
     const ver = document.querySelector('.ver');
-    foot.textContent = 'FreeMotion ' + (ver ? ver.textContent.trim() : '') + ' · everything stays on this device';
+    /* #967 B4 (J5-10f): "everything stays on this device" sat right under a switch that sends projects to other phones. With it
+       on, the footer says when a project leaves; with it off, the old promise is true again. Said again at every flip. */
+    footWords = () => { foot.textContent = 'FreeMotion ' + (ver ? ver.textContent.trim() : '') + (state.collabLabs ? ' · projects only leave this device when you share live' : ' · everything stays on this device'); };
+    footWords();
     body.appendChild(foot);
 
     panel.appendChild(head); panel.appendChild(body);

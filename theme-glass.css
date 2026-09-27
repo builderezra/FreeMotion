@@ -1166,6 +1166,10 @@ html[data-home="light"] body.home-open .set-action.danger:not(:disabled):hover {
 /* #967 batch 2: a group's heading ("Work with friends") and the folded Reports row. #1780b4 is the light Home's accent ink
    (4.6:1 on the card); the dark theme's cyan is 2:1 on white. */
 html[data-home="light"] body.home-open .set-grouptitle { color: #1780b4; }
+/* #967 B4/B5 review: "What gets sent? ›" under the switch — the only way to the list that names every service (the S6 rule),
+   and 1.9:1 in the dark theme's cyan on this card. #0f6f9e is the light Home's accent TEXT ink (.hm-aspect.active, 5.5:1 on
+   white) — #1780b4 is a fill, 4.4:1 as 12.5 px text. The Share card on the light Home has the same link (below). */
+html[data-home="light"] body.home-open .set-panel .cs-privmore { color: #0f6f9e; }
 html[data-home="light"] body.home-open .set-reports-body { border-top-color: rgba(16, 30, 52, .08); }
 html[data-home="light"] body.home-open .set-reports-chev { border-color: #5a6478; }
 /* The report boxes: a quiet well inside the white card, with ink that still reads at 11px. */
@@ -1298,6 +1302,7 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cl-after { background-color: rgba(16, 30, 52, .035); border-color: rgba(16, 30, 52, .12); }
 .collab-scrim.collab-light .cl-after-t { color: #10151f; }
 .collab-scrim.collab-light .cs-slink { color: #1780b4; }
+.collab-scrim.collab-light .cs-privmore { color: #0f6f9e; }   /* #967 B4/B5 review: see .set-panel .cs-privmore above */
 .collab-scrim.collab-light .cs-linkrow .cs-copylink.accent,
 .collab-scrim.collab-light .cj-alt.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
 .collab-scrim.collab-light .cs-relay,

@@ -627,6 +627,7 @@ window.FM = window.FM || {};
           }
           return;
         }
+        case 'ask': return onAsk(mid, msg);
         case 'resync':
           /* Only a member is owed a copy of the document — and only as fast as `catchUp` allows (S8). */
           if (!host.members[mid]) { strangerNote(mid, 'resync'); return; }
@@ -645,6 +646,7 @@ window.FM = window.FM || {};
           delete peers[mid];
           delete grants[mid];
           delete catchBudget[mid];
+          askGone(mid);                    // #967 B5: an ask to edit leaves with its asker
           if (C.media && C.media.forget) C.media.forget(S, mid);
           /* S8 review: the UI owns the room's member table, and a member who LEFT is not coming back on that
              token (their copy became their own). `paused` and a dropped link are not this. */
@@ -665,6 +667,56 @@ window.FM = window.FM || {};
       const m = host && mid != null ? host.members[mid] : null;
       return !!m && m.role === 'editor';
     }
+
+    /* ═══ #967 BATCH 5 · ASKING FOR EDIT (J4-15, his pick A) ══════════════════════════════════════════════════════════
+     * A Viewer's banner said "ask for edit access" and there was no way to ask. Now there is — a message from another
+     * phone, so it is treated like one (§14.9):
+     *  · it carries NOTHING the owner reads. The name on his card is the one his own member table holds (set when he let
+     *    them in); a `name` or `role` in the message is ignored, and `w` must be exactly 'edit';
+     *  · only a MEMBER who is a Viewer or a Commenter may ask — a stranger's is counted and dropped, an Editor's ignored;
+     *  · it never changes a role. It raises a card (A.onAsk), and only the owner's Allow changes anything, through
+     *    `setPeerRole` — the same call as his role menu;
+     *  · one open ask per member, and after Not now none for ASK_COOLDOWN. A flood from a hostile phone costs one card,
+     *    and one `ask-no` per cooldown for somebody asking again too soon, so an honest phone that lost track (a reload)
+     *    is still told rather than left waiting on nothing.
+     * The cooldown outlives a dropped link on purpose: a member keeps its mid when it comes back (addPeer), so dropping
+     * and rejoining is not a way round it. */
+    const asks = Object.create(null);             // mid -> {open, noUntil, told}
+    function onAsk(mid, msg) {
+      const m = host.members[mid];
+      if (!m) { strangerNote(mid, 'ask'); return; }
+      if (msg.w !== 'edit') return;
+      if (m.role !== 'viewer' && m.role !== 'commenter') return;
+      const a = asks[mid] || (asks[mid] = { open: false, noUntil: 0, told: false });
+      if (a.open) return;
+      if (now() < a.noUntil) {
+        if (!a.told) { a.told = true; sendTo(mid, { t: 'ask-no' }); }
+        return;
+      }
+      if (!A.onAsk) return;
+      a.open = true;
+      /* `false` back means nothing could show it (no UI) — then it is not open, or every later ask would be swallowed. */
+      try { if (A.onAsk(mid, { name: typeof m.name === 'string' ? m.name.slice(0, LIM.NAME) : '', role: m.role }) === false) a.open = false; }
+      catch (e) { a.open = false; C.lastError = e; }
+    }
+    /* The owner's answer: 'yes' (the caller has made them an Editor, or is about to), 'no' (Not now — told, and held
+       off), 'timeout' (nobody answered — told, and free to ask again), anything else (called off: they left, the
+       session stood down) says nothing. */
+    S.answerAsk = function (mid, how) {
+      const a = isOwner ? asks[mid] : null;
+      if (!a || !a.open) return false;
+      a.open = false;
+      if (how === 'no') { a.noUntil = now() + LIM.ASK_COOLDOWN; a.told = false; sendTo(mid, { t: 'ask-no' }); }
+      else if (how === 'timeout') sendTo(mid, { t: 'ask-no', why: 'timeout' });
+      return true;
+    };
+    function askGone(mid) {
+      const a = asks[mid];
+      if (!a || !a.open) return;
+      a.open = false;
+      if (A.onAskCancel) { try { A.onAskCancel(mid); } catch (e) {} }
+    }
+    S._asks = function () { return asks; };        // suite seam: the cooldown is not a thing a suite waits out
 
     function onHello(mid, msg) {
       /* ⚠️ A HELLO NEVER MAKES A MEMBER, AND NEVER NAMES ITS OWN ROLE (queue 921 S8, found by the adversarial
@@ -820,9 +872,18 @@ window.FM = window.FM || {};
         /* S6: the owner's answer to a RECONNECT's hello can be a refusal (§14.7's version gate, removed,
            full). The app decides what it means — stop trying, or try again later. */
         case 'deny': if (A.onDeny) { try { A.onDeny(typeof msg.why === 'string' ? msg.why.slice(0, 16) : 'auth'); } catch (e) {} } return;
+        /* #967 B5: the owner's answer to an ask to edit — Not now, or nobody answered. Only two shapes mean anything, and
+           the UI ignores one that answers nothing it asked (collab-ui.js U.onAskAnswer). */
+        case 'ask-no': if (A.onAskAnswer) { try { A.onAskAnswer(msg.why === 'timeout' ? 'timeout' : 'no'); } catch (e) {} } return;
         default: return;
       }
     }
+    /* #967 B5: a Viewer's or a Commenter's ask to edit — one message with nothing in it but what it is. */
+    S.askEdit = function () {
+      if (isOwner || !S.active || S.ended) return false;
+      if (S.role !== 'viewer' && S.role !== 'commenter') return false;
+      return !!sendToHost({ t: 'ask', w: 'edit' });
+    };
 
     function onBatch(b) {
       flushBefore();
@@ -1460,6 +1521,7 @@ window.FM = window.FM || {};
     S.setPeerRole = function (mid, role) {
       if (!isOwner || !host.members[mid]) return false;
       host.setRole(mid, role);
+      askGone(mid);                    // #967 B5: his own role change is the answer to an ask still on screen
       const now_ = host.members[mid].role;
       sendTo(mid, { t: 'role', role: now_ });
       /* S7: what the settings say depends on the role — an Editor gets the invite when he allows it, and
@@ -1493,6 +1555,7 @@ window.FM = window.FM || {};
     S._settingsFor = settingsFor;
     S.dropPeer = function (mid) {
       host.part(mid); delete peers[mid]; delete grants[mid]; delete catchBudget[mid];
+      askGone(mid);
       if (C.media && C.media.forget) C.media.forget(S, mid);     // S8: nothing keyed by a member outlives it
     };
     S.peerIds = function () { return Object.keys(peers); };

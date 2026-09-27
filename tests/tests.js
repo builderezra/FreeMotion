@@ -31021,6 +31021,16 @@
       };
       return await fn(ctx);
     } finally {
+      /* #967 B3: THE THROWAWAY PROJECT'S KEPT ROOM GOES WITH IT. A test that switched projects mid-share leaves the fixture's
+         room kept (paused, by design), and standing this session down then reopened onto it and asked “Carry on sharing
+         “Untitled”?” — about a project deleted a moment later, the card still up in the NEXT test (found by prove: 967 B4 1
+         read it as its turn-off question). Dropped first, so no resume finds a room to ask about — and a question the test
+         itself raised by reopening the fixture (and left unanswered) is put away with it, not carried into the next test. */
+      try { if (made921[0]) localStorage.removeItem('fm.collab.host.' + made921[0]); } catch (e) {}
+      try {
+        const q921 = document.getElementById('fm-ask'), t921 = q921 && q921.querySelector('.fm-ask-title');
+        if (q921 && !q921.classList.contains('hidden') && t921 && /^Carry on sharing/.test(t921.textContent)) q921.querySelector('.fm-ask-cancel').click();
+      } catch (e) {}
       try { C.end(); } catch (e) {}
       try { C.detach(); } catch (e) {}
       C._undoHandover(false);
@@ -35303,7 +35313,7 @@
         if (!C.presence.follow(g.mid)) throw new Error('follow() refused a person who is in the session');
         if (Math.abs(FM.time - 2) > 0.4) throw new Error('following Sam (at 2 s) left the playhead at ' + FM.time);
         const banner = document.getElementById('collab-banner');
-        if (!banner || !/Following Sam/.test(banner.textContent)) throw new Error('the banner does not say “Following Sam” (' + (banner ? JSON.stringify(banner.textContent) : 'no banner') + ')');
+        if (!banner || !/Watching along with Sam/.test(banner.textContent)) throw new Error('the banner does not say “Watching along with Sam” (' + (banner ? JSON.stringify(banner.textContent) : 'no banner') + ')');
         g.pr({ ph: 5.3 });
         k.step(100); C.presence.tick();
         if (Math.abs(FM.time - 5.3) > 0.4) throw new Error('Sam moved to 5.3 s and the follower is at ' + FM.time + ' — more than 0.4 s behind');
@@ -35836,7 +35846,7 @@
         /* §22: silent past six seconds is offline, and Follow says so as it stops. */
         k.step(3000); C.presence.tick();
         if (C.presence.following()) throw new Error('Sam has been silent for 6.5 s (§22: offline) and Follow is still on');
-        if (!toasts.some(function (t) { return /Stopped following — Sam Lee went offline/.test(t); })) throw new Error('Follow ended without a word — toasts: ' + JSON.stringify(toasts));
+        if (!toasts.some(function (t) { return /Stopped watching along — Sam Lee went offline/.test(t); })) throw new Error('Follow ended without a word — toasts: ' + JSON.stringify(toasts));
         const b = document.getElementById('collab-banner');
         if (b && /Following/.test(b.textContent)) throw new Error('Follow ended and the banner still says ' + JSON.stringify(b.textContent));
       } finally { FM.setTime = realSet; FM.toast = realToast; C.presence.unfollow(); if (FM.playing) FM.pause(); }
@@ -35905,7 +35915,7 @@
         if (g.G.online !== false) throw new Error('CONTROL: the guest did not go offline');
         k.step(100); C.presence.tick(); C.presence._draw();
         if (C.presence.following()) throw new Error('the live link dropped and Follow is still obeying the owner’s last frame');
-        if (!toasts.some(function (t) { return /Stopped following — the live link dropped/.test(t); })) throw new Error('Follow ended without saying why — toasts: ' + JSON.stringify(toasts));
+        if (!toasts.some(function (t) { return /Stopped watching along — the live link dropped/.test(t); })) throw new Error('Follow ended without saying why — toasts: ' + JSON.stringify(toasts));
         if (document.querySelector('#tl-tracks .clip[data-id="' + tid + '"] .peer-lock')) throw new Error('offline, the lock from the last roster is still painted on Title — a lock nobody behind it is holding');
         toasts.length = 0;
         FM.textEdit.start(tid);
@@ -36090,13 +36100,16 @@
         if (!b0 || !/View only/.test(b0.textContent)) throw new Error('CONTROL: a Viewer’s banner does not say View only (' + (b0 ? b0.textContent : 'none') + ')');
         if (!C.presence.follow('o')) throw new Error('CONTROL: a Viewer could not follow the owner');
         const b = document.getElementById('collab-banner');
-        if (!b || !/Following Ezra/.test(b.textContent)) throw new Error('a Viewer is following Ezra and the banner says ' + JSON.stringify(b && b.textContent) + ' — the playhead is moving by itself and nothing on screen says why');
+        /* #967 B4/B5 review: a phone says it shorter beside “View only” — “Watching Ezra” — so the row keeps its words. */
+        if (!b || !/Watching (along with )?Ezra/.test(b.textContent)) throw new Error('a Viewer is following Ezra and the banner says ' + JSON.stringify(b && b.textContent) + ' — the playhead is moving by itself and nothing on screen says why');
         const x = b.querySelector('.cb-x');
         if (!x) throw new Error('a Viewer following has no × to stop following');
         x.click();
         if (C.presence.following()) throw new Error('the × did not stop Follow');
         const b2 = document.getElementById('collab-banner');
-        if (!b2 || b2.textContent !== 'View only — ask for edit access') throw new Error('after Follow stopped the banner reads ' + JSON.stringify(b2 && b2.textContent) + ', not the View only line');
+        /* #967 B5: the View only line is "View only" with an “Ask to edit” button now (J4-15) — the words and the button. */
+        const b2t = b2 && b2.querySelector('.cb-text'), b2a = b2 && b2.querySelector('.cb-act');
+        if (!b2 || !b2t || b2t.textContent !== 'View only' || !b2a || b2a.textContent !== 'Ask to edit') throw new Error('after Follow stopped the banner reads ' + JSON.stringify(b2 && b2.textContent) + ', not the View only line');
       } finally { C.presence.unfollow(); C.presence._clock(null); }
     });
   });
@@ -36245,7 +36258,7 @@
           gs.send('ctl', rosterMsg921([]));
           k.step(100); C.presence.tick();
           if (C.presence.following()) throw new Error('CONTROL: Sam left and Follow is still on');
-          if (!toasts.some(function (t) { return /Stopped following — Sam Lee left/.test(t); })) throw new Error('Sam left and Follow simply stopped — the banner vanished without a word: ' + JSON.stringify(toasts));
+          if (!toasts.some(function (t) { return /Stopped watching along — Sam Lee left/.test(t); })) throw new Error('Sam left and Follow simply stopped — the banner vanished without a word: ' + JSON.stringify(toasts));
           /* 2. A Follow on somebody who left while the panel was open. */
           const kai = { mid: 'm9', name: 'Kai', color: '#a78bfa', role: 'editor', st: 'here', ls: null };
           gs.send('ctl', rosterMsg921([kai]));
@@ -37595,7 +37608,7 @@
             await settle921(600);
             if (built || net.constructed) throw new Error('sharing with Codes only on built ' + built + ' WebSocket(s)');
             const box = document.querySelector('#collab-share .cs-invite');
-            if (!box || !/Codes only is on/.test(box.textContent)) throw new Error('the Share panel does not say the link needs the relay: ' + (box && box.textContent));
+            if (!box || !/Swap codes only is on/.test(box.textContent)) throw new Error('the Share panel does not say the link needs the relay: ' + (box && box.textContent));
             if (document.querySelector('.cs-copylink') || document.getElementById('collab-room-code')) throw new Error('a link or a short code is offered that cannot work with Codes only on');
             if (!document.querySelector('.cs-add')) throw new Error('the connection-code way in is missing with Codes only on — it is the only way in');
             ui.close();
@@ -37616,7 +37629,7 @@
           document.querySelector('.cj-go').click();
           await settle921(400);
           if (built) throw new Error('joining by link with Codes only on built ' + built + ' WebSocket(s)');
-          if (!/Codes only/.test(document.querySelector('.cj-status').textContent)) throw new Error('the Join sheet did not say why the link cannot connect: "' + document.querySelector('.cj-status').textContent + '"');
+          if (!/Swap codes only/.test(document.querySelector('.cj-status').textContent)) throw new Error('the Join sheet did not say why the link cannot connect: "' + document.querySelector('.cj-status').textContent + '"');
           ui.close();
           /* A copy with everything it needs to reconnect, OPENED: no reconnect, no socket. */
           const inv = S.newRoom();
@@ -37660,7 +37673,8 @@
           if (!document.querySelector('.cs-copylink')) throw new Error('there is no [Copy link]');
           /* S6 review: every third party by name, and what anybody watching can see — not "the free relay". */
           const priv = (document.querySelector('.cs-privacy') || {}).textContent || '';
-          ['PeerJS', 'EMQX', 'HiveMQ', 'Google', 'Cloudflare', 'anyone watching those relays', 'anyone with the link or code', 'never see your project'].forEach(function (w) {
+          /* #967 B4: behind “What gets sent? ›” now, and with no “relay” in it — still every service by name, and who sees what. */
+          ['PeerJS', 'EMQX', 'HiveMQ', 'Google', 'Cloudflare', 'anyone watching those services', 'Anyone with your link or short code', 'never see your project'].forEach(function (w) {
             if (priv.indexOf(w) < 0) throw new Error('the privacy line does not say “' + w + '”: "' + priv + '" — it names one relay and understates who sees what');
           });
           const relayLine = document.getElementById('collab-relay-status');
@@ -38168,7 +38182,7 @@
           document.querySelector('.cj-go').click();
           const st = await until921S6('the “waiting” line', function () { const x = document.querySelector('.cj-status'); return x && /Waiting for/.test(x.textContent) ? x : null; }, 20000);
           if (/them’s/.test(st.textContent)) throw new Error('the sheet reads "' + st.textContent + '"');
-          if (!/their device/.test(st.textContent) || !/check the code/.test(st.textContent)) throw new Error('the waiting line for a short code reads "' + st.textContent + '" — it should say “their device” and to check the code');
+          if (!/their device/.test(st.textContent) || !/check the short code/.test(st.textContent)) throw new Error('the waiting line for a short code reads "' + st.textContent + '" — it should say “their device” and to check the code');
         } finally { ui.close(); }
       });
     });
@@ -38947,7 +38961,7 @@
             card.querySelector('.cs-gear').click();
             const menu = document.getElementById('collab-share');
             const labels = Array.prototype.map.call(menu.querySelectorAll('.cs-slabel'), function (n) { return n.textContent; });
-            ['Editors can invite others', 'Viewers and commenters can export', 'Most people at once', 'Show others’ pointers', 'Show others’ selections', 'Connect with codes only'].forEach(function (want) {
+            ['Editors can invite others', 'Viewers and commenters can export', 'Most people at once', 'Show others’ pointers', 'Show others’ selections', 'Swap codes only'].forEach(function (want) {
               if (labels.indexOf(want) < 0) throw new Error('the settings menu has no “' + want + '” (has ' + JSON.stringify(labels) + ')');
             });
             if (!menu.querySelector('.cs-versions-nav') || !menu.querySelector('.cs-profile') || !menu.querySelector('.cs-stop')) throw new Error('the menu is missing Earlier versions, name and colour, or Stop sharing');
@@ -39448,7 +39462,7 @@
           if (!document.querySelector('#collab-share .cs-privacy')) throw new Error('CONTROL: with the relay on, the settings do not name the relays');
           FM.settings.set('collabCodesOnly', true);
           ui.share({ keepStep: true });
-          if (!/Codes only/.test(document.querySelector('#collab-share .cs-sstatus').textContent)) throw new Error('CONTROL: the Connection line does not say Codes only');
+          if (!/Swap codes only/.test(document.querySelector('#collab-share .cs-sstatus').textContent)) throw new Error('CONTROL: the Connection line does not say Swap codes only');
           const p = document.querySelector('#collab-share .cs-privacy');
           if (p) throw new Error('under Codes only the settings still say: “' + p.textContent.slice(0, 80) + '…”');
           ui.close();
@@ -40886,11 +40900,12 @@
           net.dead['broker.hivemq.com'] = true;
           let L = await run(row);
           if (L.length !== 3) throw new Error('the test answered in ' + L.length + ' lines: ' + JSON.stringify(L));
-          if (L[0].st !== 'ok' || !/work here/.test(L[0].text) || !/PeerJS/.test(L[0].text) || !/EMQX/.test(L[0].text) || !/HiveMQ didn’t answer/.test(L[0].text)) throw new Error('with two of three relays up the first line says: ' + L[0].text);
-          if (L[1].st !== 'ok' || !/public address/.test(L[1].text)) throw new Error('with a server-reflexive candidate the second line says: ' + L[1].text);
-          if (L[2].st !== 'ok' || !/live connections work/.test(L[2].text) || !/MB\/s/.test(L[2].text)) throw new Error('this device’s own connections: ' + L[2].text);
+          /* #967 B4 (J4-14): each line is a plain yes or no; which helpers answered, and the speeds, are the report's. */
+          if (L[0].st !== 'ok' || !/Links work on this network/.test(L[0].text)) throw new Error('with two of three relays up the first line says: ' + L[0].text);
+          if (L[1].st !== 'ok' || !/Friends on other networks can usually reach you/.test(L[1].text)) throw new Error('with a server-reflexive candidate the second line says: ' + L[1].text);
+          if (L[2].st !== 'ok' || !/Live editing works on this device/.test(L[2].text)) throw new Error('this device’s own connections: ' + L[2].text);
           const rep = localStorage.getItem('fm.lastConnReport') || '';
-          ['PeerJS up', 'HiveMQ down', 'srflx 1', 'maxMessageSize', 'offer SDP', 'MB/s'].forEach(function (w) { if (rep.indexOf(w) < 0) throw new Error('the report does not record “' + w + '” (§25.5): ' + rep); });
+          ['PeerJS up', 'EMQX up', 'HiveMQ down', 'srflx 1', 'maxMessageSize', 'offer SDP', 'MB/s'].forEach(function (w) { if (rep.indexOf(w) < 0) throw new Error('the report does not record “' + w + '” (§25.5): ' + rep); });
           if (row.querySelector('.set-perf-out').textContent !== rep) throw new Error('the report on screen is not the one kept');
           if (row.querySelector('.set-conn-go').textContent !== 'Test again') throw new Error('the button does not offer to test again');
           /* …and it cleaned up: every socket closed, every peer connection closed. */
@@ -40904,7 +40919,7 @@
           net.dead['0.peerjs.com'] = true; net.dead['broker.emqx.io'] = true;
           types = ['host', 'host'];
           L = await run(row);
-          if (L[0].st !== 'no' || !/Couldn’t reach the free connection service/.test(L[0].text) || !/Connect with a code/.test(L[0].text)) throw new Error('with no relay reachable the first line says: ' + L[0].text);
+          if (L[0].st !== 'no' || !/Links don’t work on this network/.test(L[0].text) || !/swap codes/.test(L[0].text)) throw new Error('with no relay reachable the first line says: ' + L[0].text);
           if (L[1].st !== 'no' || !/same Wi-Fi/.test(L[1].text)) throw new Error('with no public address the second line says: ' + L[1].text);
 
           /* 3. Codes only: no relay, no address lookup — not one socket, not one STUN request. */
@@ -40913,7 +40928,7 @@
           const sockets = net.constructed, stuns = stunMade.length;
           L = await run(row);
           if (net.constructed !== sockets || stunMade.length !== stuns) throw new Error('with Codes only on the test opened ' + (net.constructed - sockets) + ' socket(s) and ' + (stunMade.length - stuns) + ' STUN lookup(s)');
-          if (L[0].st !== 'skip' || !/codes only/i.test(L[0].text) || L[1].st !== 'skip' || !/Codes only/.test(L[1].text)) throw new Error('with Codes only on the test says: ' + JSON.stringify(L));
+          if (L[0].st !== 'skip' || !/codes only/i.test(L[0].text) || L[1].st !== 'skip' || !/codes only/i.test(L[1].text)) throw new Error('with Codes only on the test says: ' + JSON.stringify(L));
           if (L[2].st !== 'ok') throw new Error('Codes only stopped the test of this device’s own connections, which need no server: ' + L[2].text);
           FM.settings.set('collabCodesOnly', wasCodes);
 
@@ -41770,7 +41785,7 @@
         await ui.share();
         const txt = document.getElementById('collab-share').textContent;
         if (/sent when you’re back in touch/.test(txt)) throw new Error('the panel of a copy with no way back promises its changes are “sent when you’re back in touch”');
-        if (!/new code/.test(txt)) throw new Error('the panel does not say a new code is the way back: ' + txt.slice(0, 240));
+        if (!/new swap code/.test(txt)) throw new Error('the panel does not say a new swap code is the way back: ' + txt.slice(0, 240));
         ui.close();
       } finally {
         await q915aCleanup([lc.gpid], orig, wasHome, [], [], []);
@@ -41784,7 +41799,7 @@
     const t = C.ui._relayError({ why: 'no-host', kind: 'link' }, 'Ezra');
     if (!/reset the link|removed someone/.test(t) || !/new one|new link/.test(t)) throw new Error('an invite link that is never answered says only: “' + t + '” — after Reset or a Remove the old link reaches nobody, and the person holding it is sent to wait on a device that is right there');
     const code = C.ui._relayError({ why: 'no-host', kind: 'code' }, 'Ezra');
-    if (!/Check the code/.test(code)) throw new Error('CONTROL: the short-code sentence changed: ' + code);
+    if (!/Check the short code/.test(code)) throw new Error('CONTROL: the short-code sentence changed: ' + code);
   });
 
   test('921 S8r “Most people at once” holds after the knock: two knocks that each saw one place left cannot both be let in', { item: '921', budgetMs: 240000 }, async function () {
@@ -100928,9 +100943,9 @@
           const fb = fr.getBoundingClientRect();
           if (!(fb.width > 0 && fb.height > 0)) throw new Error('the Friends bar has no box on a phone');
           const card = dlg.querySelector('.export-card').getBoundingClientRect();
-          /* What the bar says depends on Labs (the suite runs with it off): off, it offers live sharing; on, "Not shared yet". */
+          /* What the bar says depends on Labs (the suite runs with it off): off, it offers live sharing; on, "Not sharing" (#967 B4). */
           const labs = !!(FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn());
-          const want = labs ? /Not shared yet/ : /Share it live with friends/;
+          const want = labs ? /Not sharing/ : /Share live with friends/;
           if (!/Friends/.test(fr.textContent) || !want.test(document.getElementById('cv-fr-sub').textContent)) throw new Error('the bar does not say Friends / ' + want + ': "' + fr.textContent.trim().slice(0, 80) + '"');
           if (fb.bottom > card.top + 0.5) throw new Error('the Friends bar is not above the canvas card (bar bottom ' + fb.bottom.toFixed(1) + ', card top ' + card.top.toFixed(1) + ')');
           const tb = document.getElementById('topbar-m').getBoundingClientRect();
@@ -101143,7 +101158,8 @@
               const bodyEl = document.getElementById('cv-fr-body');
               const sws = bodyEl.querySelectorAll('[role=switch]');
               if (sws.length !== 1) throw new Error('with Labs off the block shows ' + sws.length + ' switch(es), not the one that turns live sharing on');
-              if (!/being tested/i.test(bodyEl.textContent)) throw new Error('with Labs off the block does not say live sharing is being tested');
+              /* #967 B4: "still being tested" is said once, on the Settings switch — the block says what live sharing IS. */
+              if (!/Share this project live and edit it together/.test(bodyEl.textContent)) throw new Error('with Labs off the block does not say what live sharing is');
               if (bodyEl.querySelector('.cs-start')) throw new Error('with Labs off the block offers Start sharing');
               doors23('the Labs-off Friends block');   // #967 batch 2: the two doors, and nothing else (§23 as relaxed)
               if (C.ui.isInstalled()) throw new Error('the collab UI installed itself with Labs off');
@@ -101373,12 +101389,12 @@
         if (back.classList.contains('hidden')) throw new Error('the answer code went away while the guest was still waiting');
         if (g.pc.connectionState === 'failed' || g.pc.iceConnectionState === 'failed') throw new Error('the guest’s peer connection gave up on its own during the wait (' + g.pc.connectionState + ' / ' + g.pc.iceConnectionState + ')');
         /* …and what the sheet says while it waits (J2-7). */
-        if (!/Waiting for them to paste your code/.test(said0) || !/Waiting for them to paste your code/.test(st.textContent)) throw new Error('while the code waits to be pasted the sheet says “' + said0 + '” then “' + st.textContent + '” — it is waiting on a person, not connecting');
+        if (!/Waiting for them to paste your swap code/.test(said0) || !/Waiting for them to paste your swap code/.test(st.textContent)) throw new Error('while the code waits to be pasted the sheet says “' + said0 + '” then “' + st.textContent + '” — it is waiting on a person, not connecting');
         if (/read/i.test(label) || !/send it back/.test(label) || !/Step 2/.test(label)) throw new Error('the answer code is labelled “' + label + '” — a 180-character code is copied and sent back, and the owner pastes it in Step 2 (J2-7)');
         /* The owner pastes it now. The guest's side starts, says so, and the channels open. */
         await h.acceptAnswer(answer);
         const hs = C.signal.handshake(h, { side: 'host', key: h.mk, sid: 'r967', info: { nm: 'Ezra', cl: '#a3e635' }, fpLocal: h.fpLocal, fpRemote: h.fpRemote });
-        await until921S6('the late paste to connect the guest', function () { return /Checking the code|let you in/.test(st.textContent) ? 1 : 0; }, 20000)
+        await until921S6('the late paste to connect the guest', function () { return /Checking the swap code|let you in/.test(st.textContent) ? 1 : 0; }, 20000)
           .catch(function () { throw new Error('the owner’s paste after the wait did not connect — the sheet says “' + st.textContent + '”'); });
         await hs.catch(function () {});
       } finally {
@@ -101408,14 +101424,14 @@
           await settle921(900);
           const st = document.querySelector('#collab-join .cj-status');
           const back = document.querySelector('#collab-join .cj-back');
-          if (!/Waiting for them to paste your code/.test(st.textContent)) throw new Error('with ICE_CONNECT at 300 ms the guest had already given up 900 ms after its code appeared: “' + st.textContent + '” — the connect clock must not run until the owner’s side starts');
+          if (!/Waiting for them to paste your swap code/.test(st.textContent)) throw new Error('with ICE_CONNECT at 300 ms the guest had already given up 900 ms after its code appeared: “' + st.textContent + '” — the connect clock must not run until the owner’s side starts');
           if (made[0].closed) throw new Error('the guest’s link was closed while it waited for the owner');
           /* The owner pastes: the peer connection turns 'connected' — the clock starts, and the sheet says Connecting. */
           made[0].pc.go();
           await settle921(60);
           if (!/Connecting/.test(st.textContent)) throw new Error('once the owner’s side started the sheet says “' + st.textContent + '”, not Connecting…');
           await settle921(600);
-          if (!/Your code timed out — ask them for a fresh one/.test(st.textContent)) throw new Error('the connect that never finished opening says “' + st.textContent + '” — it must say the code timed out, not “They did not answer”');
+          if (!/Your swap code timed out — ask them for a fresh one/.test(st.textContent)) throw new Error('the connect that never finished opening says “' + st.textContent + '” — it must say the code timed out, not “They did not answer”');
           if (!back.classList.contains('hidden') || back.querySelector('.cs-code').textContent) throw new Error('the dead answer code and its Copy button are still on the sheet after it timed out');
           if (!made[0].closed) throw new Error('the timed-out link was not closed');
           ui.close();
@@ -101427,7 +101443,7 @@
           document.querySelector('#collab-join .cj-go').click();
           await settle921(900);
           const st2 = document.querySelector('#collab-join .cj-status');
-          if (!/Your code timed out — ask them for a fresh one/.test(st2.textContent)) throw new Error('a wait the owner never started did not end at its outer limit: “' + st2.textContent + '”');
+          if (!/Your swap code timed out — ask them for a fresh one/.test(st2.textContent)) throw new Error('a wait the owner never started did not end at its outer limit: “' + st2.textContent + '”');
           if (!document.querySelector('#collab-join .cj-back').classList.contains('hidden')) throw new Error('the expired answer code is still on the sheet');
           if (!(C.LIMITS.CODE_ANSWER_WAIT >= 5 * 60000)) throw new Error('the outer wait is ' + C.LIMITS.CODE_ANSWER_WAIT + ' ms — a code has to survive being sent in a message and pasted on another phone');
         });
@@ -101449,7 +101465,7 @@
               await entranceDone(dlg); await land945();
               const body = document.getElementById('cv-fr-body');
               const add = body.querySelector('.cs-add');
-              if (!add) throw new Error('setup: the live Friends block has no “Connect with a code instead”');
+              if (!add) throw new Error('setup: the live Friends block has no “Link not working? Swap codes instead”');
               add.click(); await settle921(80);
               body.querySelector('.cs-answer').value = 'FM1-ANSWER';
               let answers = 0;
@@ -101484,7 +101500,7 @@
                 FM.closeCanvasDialog();
                 await settle921(400);
               } finally { got.restore(); }
-              if (!got.some(function (t) { return /Not let in — they’ll need a fresh code/.test(t); })) throw new Error('closing the block mid-check said nothing (' + JSON.stringify(got) + ') — the guest was silently abandoned');
+              if (!got.some(function (t) { return /Not let in — they’ll need a fresh swap code/.test(t); })) throw new Error('closing the block mid-check said nothing (' + JSON.stringify(got) + ') — the guest was silently abandoned');
               if (!made[0].sent.some(function (m) { return m.msg && m.msg.t === 'refused'; })) throw new Error('the guest was never told it was not let in');
               if (ui._offer()) throw new Error('the abandoned code is still live');
               if (ctx.S.peerIds().length) throw new Error('somebody was admitted without “They match”');
@@ -101511,8 +101527,8 @@
           await ui.share(); ui.close();                               // B is live now, A paused
           if (!C.session || C.session.pid !== other) throw new Error('setup: B is not live');
           FM.settings.open(); await sleep(350);
-          const row = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Live collaboration \(preview\)/.test(r.textContent); })[0];
-          if (!row) throw new Error('setup: no Live collaboration row in Settings');
+          const row = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /^Work with friends/.test(r.textContent); })[0];
+          if (!row) throw new Error('setup: no Work with friends switch row in Settings');
           row.querySelector('.set-switch').click();
           await settle921(120);
           if (!askUp967()) throw new Error('turning Live collaboration off while a project is shared asked nothing — Stop sharing asks, this ends everyone’s session at once (J3-7)');
@@ -101541,7 +101557,7 @@
           if (C.session || ui._relay()) throw new Error('turning Labs back on and opening A re-armed it on its old room');
           /* CONTROL: with nothing shared, the switch goes straight off — no question to answer. */
           FM.settings.open(); await sleep(350);
-          const row2 = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (x) { return /Live collaboration \(preview\)/.test(x.textContent); })[0];
+          const row2 = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (x) { return /^Work with friends/.test(x.textContent); })[0];
           row2.querySelector('.set-switch').click();
           await settle921(150);
           if (askUp967()) throw new Error('CONTROL: with nothing shared the switch still asked');
@@ -101566,7 +101582,7 @@
       try {
         C.attach(fx.G, { autoTick: false });
         FM.settings.open(); await sleep(350);
-        const row = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Live collaboration \(preview\)/.test(r.textContent); })[0];
+        const row = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /^Work with friends/.test(r.textContent); })[0];
         row.querySelector('.set-switch').click();
         await settle921(120);
         if (!askUp967()) throw new Error('a guest turning Live collaboration off was not asked — it leaves Ezra’s project');
@@ -101708,7 +101724,7 @@
       if (s2.pid !== s0.pid) throw new Error('the resume shared a different project (' + s2.pid + ', not ' + s0.pid + ')');
       /* #967 B3 review: the LONG code — the question just promised the same link and SHORT code. An app that died while
          sharing cannot know who was in by a long code, so it says it. */
-      if (!s2.toasts.some(function (t) { return /anyone who joined with a long code needs a new one/.test(t); })) throw new Error('with nobody who can come back by themselves the resume said ' + q(s2.toasts) + ' (J4-2)');
+      if (!s2.toasts.some(function (t) { return /anyone who joined with a swap code needs a new one/.test(t); })) throw new Error('with nobody who can come back by themselves the resume said ' + q(s2.toasts) + ' (J4-2)');
     } finally { R.drop(tag); }
   });
 
@@ -101988,7 +102004,7 @@
             if (t.scrollWidth > t.clientWidth + 1) throw new Error(what + ' is cut off on a phone (' + t.scrollWidth + ' of text in ' + t.clientWidth + ' px): “' + t.textContent + '”');
           };
           fx.G.ended = 'ended';
-          await check(/^Session ended · your copy is kept$/, 'the Ended banner');
+          await check(/^Sharing ended · your copy is kept$/, 'the Ended banner');
           fx.G.ended = 'removed';
           await check(/^Removed · your copy is kept$/, 'the Removed banner');
           fx.G.ended = null;
@@ -102237,17 +102253,17 @@
           await ui.join();
           document.querySelector('#collab-join .cj-code').value = S.inviteLink(inv);
           document.querySelector('#collab-join .cj-go').click();
-          const st = await until921S6('the relays-down line', function () { const x = document.querySelector('#collab-join .cj-status'); return x && /free connection service/.test(x.textContent) ? x : null; }, 15000);
+          const st = await until921S6('the relays-down line', function () { const x = document.querySelector('#collab-join .cj-status'); return x && /can’t get through on this network/.test(x.textContent) ? x : null; }, 15000);
           const b = Array.prototype.filter.call(st.querySelectorAll('button'), function (x) { return /code/i.test(x.textContent); })[0];
           if (b) throw new Error('“' + b.textContent + '” is a button whose only effect is to replace itself with instructions for the other person (J2-10)');
           bad(st.textContent, 'the relays-down line');
-          if (!/round person\+/.test(st.textContent) || !/Start sharing/.test(st.textContent) || !/Connect with a code instead/.test(st.textContent)) throw new Error('the relays-down line does not name the phone path: “' + st.textContent + '”');
+          if (!/round person\+/.test(st.textContent) || !/Start sharing/.test(st.textContent) || !/Swap codes/.test(st.textContent)) throw new Error('the relays-down line does not name the phone path: “' + st.textContent + '”');
           ui.close();
         });
         /* Settings: the Join hint names what a friend may have been sent. */
         FM.settings.open(); await sleep(350);
-        const jr = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Join a live project/.test(r.textContent); })[0];
-        if (!jr || !/Paste the link or code they sent you, or type the short code/.test(jr.textContent)) throw new Error('the Settings Join hint reads “' + (jr && jr.textContent) + '”');
+        const jr = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Join a friend’s project/.test(r.textContent); })[0];
+        if (!jr || !/Paste the link, short code or swap code they sent you/.test(jr.textContent)) throw new Error('the Settings Join hint reads “' + (jr && jr.textContent) + '”');
         if (!Array.prototype.some.call(document.querySelectorAll('.set-panel .set-grouptitle'), function (h) { return h.textContent.trim() === 'Work with friends'; })) throw new Error('the Labs card names “Settings → Work with friends” and Settings has no such heading');
         FM.settings.close(); await sleep(300);
       } finally {
@@ -102535,19 +102551,19 @@
           document.querySelector('#collab-join .cj-go').click();
           await settle921(400);
           const st = document.querySelector('#collab-join .cj-status');
-          if (!/Waiting for them to paste your code/.test(st.textContent)) throw new Error('setup: the sheet is not waiting: “' + st.textContent + '”');
+          if (!/Waiting for them to paste your swap code/.test(st.textContent)) throw new Error('setup: the sheet is not waiting: “' + st.textContent + '”');
           made[0].pc.fail();
           await settle921(150);
           if (/The connection dropped while you were waiting/.test(st.textContent)) throw new Error('the FIRST “failed” ended the wait — Chrome comes back out of “failed” when the owner does, and an owner fetching this code from Messages is away that long (round 2, A)');
-          if (!/Lost touch with them — this code still works if they come back/.test(st.textContent)) throw new Error('the connection failed and the sheet says “' + st.textContent + '” — it should say it lost touch, softly, and keep the code');
+          if (!/Lost touch with them — this swap code still works if they come back/.test(st.textContent)) throw new Error('the connection failed and the sheet says “' + st.textContent + '” — it should say it lost touch, softly, and keep the code');
           if (!codeOn()) throw new Error('the answer code was taken off the sheet at the first “failed” — it still works if they come back');
           if (made[0].closed) throw new Error('the link was closed at the first “failed”');
           /* It comes back: the wait carries on as before. */
           made[0].pc.back();
           await settle921(150);
-          if (!/Waiting for them to paste your code/.test(st.textContent)) throw new Error('the connection came back and the sheet still says “' + st.textContent + '”');
+          if (!/Waiting for them to paste your swap code/.test(st.textContent)) throw new Error('the connection came back and the sheet still says “' + st.textContent + '”');
           await settle921(1700);                                   // past the grace from the FIRST failure: nothing may end it
-          if (!/Waiting for them to paste your code/.test(st.textContent) || !codeOn() || made[0].closed) throw new Error('a wait that came back was ended by the first failure’s grace: “' + st.textContent + '”');
+          if (!/Waiting for them to paste your swap code/.test(st.textContent) || !codeOn() || made[0].closed) throw new Error('a wait that came back was ended by the first failure’s grace: “' + st.textContent + '”');
           /* It fails again and stays failed: the grace, then the dropped line. */
           made[0].pc.fail();
           const t0 = Date.now();
@@ -102576,7 +102592,7 @@
           await until921S6('the guest’s answer code', function () { return codeOn() ? 1 : 0; }, 15000);
           await settle921(1500);
           const st = document.querySelector('#collab-join .cj-status');
-          if (!/Waiting for them to paste your code/.test(st.textContent)) throw new Error('setup: the sheet is not waiting: “' + st.textContent + '”');
+          if (!/Waiting for them to paste your swap code/.test(st.textContent)) throw new Error('setup: the sheet is not waiting: “' + st.textContent + '”');
           const t0 = Date.now();
           h.close(); h = null;                                     // Stop sharing: the owner's offer is closed
           let lostAt = null;
@@ -102780,7 +102796,7 @@
     const C = need921S6('Labs off while another tab shares');
     const LM = (window.parent && window.parent !== window && window.parent.navigator && window.parent.navigator.locks) || navigator.locks;
     if (!LM || typeof LM.request !== 'function') throw new Error('setup: this browser has no Web Locks — there is no other tab to stand in for');
-    const labsRow = function () { return Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Live collaboration \(preview\)/.test(r.textContent); })[0]; };
+    const labsRow = function () { return Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /^Work with friends/.test(r.textContent); })[0]; };
     await withLabs921(async function (ui) {
       await withCollab921([layer921('A')], async function (ctx) {
         let other = null, release = null;
@@ -102796,11 +102812,11 @@
           });
           FM.settings.open(); await sleep(350);
           const row = labsRow();
-          if (!row) throw new Error('setup: no Live collaboration row in Settings');
+          if (!row) throw new Error('setup: no Work with friends switch row in Settings');
           row.querySelector('.set-switch').click();
           const ok = await askOk921();
           const ask = document.getElementById('fm-ask').textContent;
-          if (!/another FreeMotion tab/.test(ask) || /Turn off live collaboration\?/.test(ask)) throw new Error('with another tab sharing A, the Labs switch asked “' + ask.slice(0, 180) + '” — it cannot stop that tab’s session, so it must say where A is being shared from');
+          if (!/another FreeMotion tab/.test(ask) || /Turn off Work with friends\?/.test(ask)) throw new Error('with another tab sharing A, the Labs switch asked “' + ask.slice(0, 180) + '” — it cannot stop that tab’s session, so it must say where A is being shared from');
           if (!/stop it there/.test(ask)) throw new Error('the other-tab message does not say where to stop it: “' + ask.slice(0, 180) + '”');
           ok.click();
           await settle921(350);
@@ -102814,7 +102830,7 @@
           await settle921(250);
           row.querySelector('.set-switch').click();
           const ok2 = await askOk921();
-          if (!/Turn off live collaboration\?/.test(document.getElementById('fm-ask').textContent)) throw new Error('CONTROL: with no other tab, the switch did not ask its own question: “' + document.getElementById('fm-ask').textContent.slice(0, 160) + '”');
+          if (!/Turn off Work with friends\?/.test(document.getElementById('fm-ask').textContent)) throw new Error('CONTROL: with no other tab, the switch did not ask its own question: “' + document.getElementById('fm-ask').textContent.slice(0, 160) + '”');
           ok2.click();
           await settle921(400);
           if (FM.settings.get('collabLabs')) throw new Error('CONTROL: Turn off did not turn it off');
@@ -104170,7 +104186,7 @@
               await land945();
               const body = document.getElementById('cv-fr-body');
               const sw = body.querySelector('[role=switch]');
-              if (!sw || sw.getAttribute('aria-checked') !== 'false' || !/being tested/i.test(body.textContent)) throw new Error('the door did not open the explanation and its switch: “' + body.textContent.slice(0, 140) + '”');
+              if (!sw || sw.getAttribute('aria-checked') !== 'false' || !/edit it together/i.test(body.textContent)) throw new Error('the door did not open the explanation and its switch: “' + body.textContent.slice(0, 140) + '”');
               if (net.constructed !== c0) throw new Error('the door opened ' + (net.constructed - c0) + ' socket(s) with the feature off');
               if (C.ui.isInstalled() || C.bridge.installed() || (C.presence && C.presence.attached && C.presence.attached())) throw new Error('the door installed the collaboration UI, the bridge or presence with the feature off');
               if (document.querySelector('.collab-scrim')) throw new Error('the door put a card over the editor instead of opening the Friends block');
@@ -104287,8 +104303,9 @@
               for (const on of [true, false]) {
                 FM.settings.set('collabLabs', on); C.ui.syncLabs();
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
-                const row = Array.prototype.filter.call(document.querySelectorAll('#cv-fr-body button'), function (b) { return /Got an invite\? Join with a link or code/.test(b.textContent); })[0];
-                if (!row) throw new Error('the Friends block' + (on ? '' : ' with the feature off') + ' can only share — there is no “Got an invite? Join with a link or code” (J2-4)');
+                /* #967 B4/B5 review: never a bare “code” — “Join with what your friend sent”. */
+                const row = Array.prototype.filter.call(document.querySelectorAll('#cv-fr-body button'), function (b) { return /Got an invite\? Join with what your friend sent/.test(b.textContent); })[0];
+                if (!row) throw new Error('the Friends block' + (on ? '' : ' with the feature off') + ' can only share — there is no “Got an invite? Join with what your friend sent” (J2-4)');
                 row.scrollIntoView({ block: 'nearest' }); await settle921(60);
                 box967(row, document.getElementById('cv-friends'), '“Got an invite?”');
                 row.click();
@@ -104423,7 +104440,7 @@
         const head = Array.prototype.filter.call(p.querySelectorAll('.set-grouptitle'), function (h) { return h.textContent.trim() === 'Work with friends'; })[0];
         if (!head) throw new Error('Settings has no “Work with friends” heading — the switch is an untitled group at the very bottom (J2-3)');
         const g = head.closest('.set-group');
-        if (!g || !/Live collaboration/.test(g.textContent)) throw new Error('the heading is not on the group that holds the switch');
+        if (!g || !Array.prototype.some.call(g.querySelectorAll('.set-switch[role=switch]'), function (x) { return x.getAttribute('aria-label') === 'Work with friends'; })) throw new Error('the heading is not on the group that holds the switch');
         const hr = head.getBoundingClientRect(), br = body.getBoundingClientRect();
         if (hr.top > br.bottom - 40) throw new Error('from Home, “Work with friends” starts ' + Math.round(hr.top - br.top) + ' px down a ' + Math.round(br.height) + ' px panel — not on the first screen (J1-2)');
         const fold = document.getElementById('set-reports');
@@ -104582,7 +104599,7 @@
               if (!(invite.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('Comments sits above the invite');
               const code = fr.querySelector('.cs-roomrow');
               const how2 = code && code.nextElementSibling;
-              if (!how2 || how2.textContent.trim() !== 'They open FreeMotion, tap Join, and type it in.') throw new Error('under the short code: “' + (how2 && how2.textContent) + '” — it should say what the friend does (J5-4)');
+              if (!how2 || how2.textContent.trim() !== 'That’s the short code — they open FreeMotion, tap Join, and type it in.') throw new Error('under the short code: “' + (how2 && how2.textContent) + '” — it should say what the friend does (J5-4)');
             }, 390);
           } finally {
             got.restore();
@@ -104909,7 +104926,7 @@
     });
   });
 
-  test('967 B3 4 opening another project while a friend who joined with a code is in asks first — the owner: “Sam joined with a code — opening another project ends it for them; they’ll need a new code”, from a card and from New project; Stay keeps Sam in; the friend’s side is asked the same; a friend who joined by the link is not asked about', { item: '967', budgetMs: 150000 }, async function () {
+  test('967 B3 4 opening another project while a friend who joined with a swap code is in asks first — the owner: “Sam joined with a swap code — opening another project ends it for them; they’ll need a new swap code”, from a card and from New project; Stay keeps Sam in; the friend’s side is asked the same; a friend who joined by the link is not asked about', { item: '967', budgetMs: 150000 }, async function () {
     /* J4-2 (pick 4, A): any project switch dropped a code-joined friend for good, with no word to either side. */
     const C = need921S3('the ask before a switch');
     await withLabs921(async function (ui) {
@@ -104939,7 +104956,7 @@
             const q = await until921S6('the question before the switch', ask967b3, 5000).catch(function () {
               throw new Error('opening another project while Sam (who joined with a code) is in asked nothing — ' + (FM.projects.currentId() === other ? 'it switched, and Sam is gone for good' : 'and nothing happened') + ' (J4-2)');
             });
-            if (!/^Sam joined with a code — opening another project ends it for them; they’ll need a new code/.test(q.msg)) throw new Error('the question says “' + q.title + ' / ' + q.msg + '”');
+            if (!/^Sam joined with a swap code — opening another project ends it for them; they’ll need a new swap code/.test(q.msg)) throw new Error('the question says “' + q.title + ' / ' + q.msg + '”');
             q.cancel.click();
             await settle921(500);
             if (FM.projects.currentId() !== ctx.pid) throw new Error('Stay switched project anyway');
@@ -104954,7 +104971,7 @@
             const q2 = await until921S6('the question before New project', ask967b3, 5000).catch(function () {
               throw new Error('New project while Sam (code) is in asked nothing — ' + (FM.projects.list().length > n0 ? 'a project was made and Sam cut off' : 'nothing happened') + ' (J4-2: “the owner created and opened Project 2 from Home with no warning”)');
             });
-            if (!/^Sam joined with a code/.test(q2.msg)) throw new Error('New project asked “' + q2.msg + '”');
+            if (!/^Sam joined with a swap code/.test(q2.msg)) throw new Error('New project asked “' + q2.msg + '”');
             q2.cancel.click();
             await settle921(500);
             if (FM.projects.list().length !== n0 || FM.projects.currentId() !== ctx.pid || C.session !== s) throw new Error('Stay on New project made a project or ended the session anyway');
@@ -104974,7 +104991,7 @@
           const g = await until921S6('the friend’s question', ask967b3, 5000).catch(function () {
             throw new Error('a friend who joined with a code opened another project with no question — the session ended and their way back with it (J4-2)');
           });
-          if (!/^You joined Ezra’s project with a code — opening another project ends it for you; you’ll need a new code/.test(g.msg)) throw new Error('the friend is asked “' + g.msg + '”');
+          if (!/^You joined Ezra’s project with a swap code — opening another project ends it for you; you’ll need a new swap code/.test(g.msg)) throw new Error('the friend is asked “' + g.msg + '”');
           g.cancel.click();
           await settle921(400);
           if (C.session !== fx.G || !C.active || FM.projects.currentId() !== fx.gpid) throw new Error('Stay took the friend out of the session anyway');
@@ -105256,7 +105273,7 @@
           await until921S6('the resume', function () { const s = C.session; return s && s.isOwner && s.pid === ctx.pid ? 1 : 0; }, 8000);
           await until921S6('the resume toast', function () { return got.some(function (t) { return /^Sharing is on again/.test(t); }); }, 4000);
           const t1 = got.filter(function (t) { return /^Sharing is on again/.test(t); }).pop();
-          if (!/anyone who joined with a long code needs a new one/.test(t1)) throw new Error('Sam had joined with a long code when the room stood down, and Share again says only “' + t1 + '”');
+          if (!/anyone who joined with a swap code needs a new one/.test(t1)) throw new Error('Sam had joined with a long code when the room stood down, and Share again says only “' + t1 + '”');
           /* The friend's side: the owner's `switched` arrives. */
           const fx = guest967(C); madeCopies.push(fx.gpid);
           await FM.projects.open(fx.gpid);
@@ -105269,10 +105286,10 @@
           if (fx.G.ended !== 'switched') throw new Error('the friend did not take the end (ended: ' + fx.G.ended + ')');
           const bn = document.getElementById('collab-banner');
           const btxt = bn && !bn.classList.contains('hidden') ? bn.textContent : '';
-          if (!/new code/.test(btxt) || /Offline/.test(btxt)) throw new Error('after the owner opened another project the friend’s banner reads “' + btxt + '” — it has to say it ended, and to ask for a new code');
+          if (!/new swap code/.test(btxt) || /Offline/.test(btxt)) throw new Error('after the owner opened another project the friend’s banner reads “' + btxt + '” — it has to say it ended, and to ask for a new code');
           const bt = bn.querySelector('.cb-text');
           if (bt && bt.scrollWidth > bt.clientWidth + 1) throw new Error('“' + btxt + '” is cut off in its banner (' + bt.scrollWidth + ' px in ' + bt.clientWidth + ') — the half that says what to do is the half that goes');
-          if (!got.some(function (t) { return /^Ezra opened another project — ask them for a new code/.test(t); })) throw new Error('nothing told the friend the owner had opened another project (' + JSON.stringify(got) + ')');
+          if (!got.some(function (t) { return /^Ezra opened another project — ask them for a new swap code/.test(t); })) throw new Error('nothing told the friend the owner had opened another project (' + JSON.stringify(got) + ')');
           const sa = ui.switchAsk();
           if (sa) throw new Error('the friend is still asked “' + sa.message + '” about a session that has ended');
         } finally {
@@ -105423,6 +105440,1355 @@
           const a = ask967b3(); if (a) a.cancel.click();
         }
       });
+    });
+  });
+
+  /* ═══ #967 BATCH 4 — PLAIN WORDS AND ONE NAME ═══════════════════════════════════════════════════════════════════════════
+   * His words: "actually makes sense for someone who doesn't know how to use it … It's simple". The audit's R5: the words were
+   * written for the builder — about a dozen names for one feature, "code" meaning both a 9-character short code and a
+   * 233-character FM1 block on one card, a 68-word privacy paragraph naming five companies four times, and "relay", "session",
+   * "preview" and "Labs" in the lines a first-timer reads. Built to the RECOMMENDED pick of every question on the options sheet
+   * (tools/design/967-options.html): A "Work with friends" / "Share live" / "Join"; A "swap code"; A "Watch along"; A one plain
+   * sentence with "What gets sent? ›". Words, not layout. Each test below fails on v17.09.
+   * ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+  const JARGON967B4 = /\bsessions?\b|\bpreview\b|\bLabs\b|\brelays?\b|free connection service|address lookup/i;
+  /* What a person can read in a box — innerText, so what is hidden (the privacy list before its tap) is not counted. */
+  function seen967b4(el) { return el ? String(el.innerText || '').replace(/\s+/g, ' ').trim() : ''; }
+  function jargon967b4(el, where) {
+    const t = seen967b4(el);
+    if (!t) throw new Error('setup: ' + where + ' shows nothing');
+    const m = JARGON967B4.exec(t);
+    if (m) throw new Error(where + ' says “' + m[0] + '” — “…' + t.slice(Math.max(0, m.index - 70), m.index + 60) + '…” (R5 / J5-5, J5-6)');
+    return t;
+  }
+  /* The two codes have two nouns: every “code” a person reads is a short code, a swap code or a QR code (J5-3). */
+  function bareCode967b4(t, where) {
+    const rest = String(t).replace(/\b(?:swap|short) codes?\b/gi, '').replace(/\bQR codes?\b/gi, '');
+    const m = /\bcodes?\b/i.exec(rest);
+    if (m) throw new Error(where + ' says a bare “' + m[0] + '” — which of the two? “…' + rest.slice(Math.max(0, m.index - 70), m.index + 40) + '…” (J5-3)');
+  }
+  function menuLabels967b4() { return Array.prototype.map.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return x.textContent.trim(); }); }
+
+  test('967 B4 1 one name — the Settings switch is “Work with friends” and is the one place that says it is still being tested; the Friends block, its bar, the Join sheet, the person+ on the video, the Share card and the turn-off question all use the same family; and no screen says session, preview, Labs or relay', { item: '967', budgetMs: 180000 }, async function () {
+    /* J5-6 (major): "Live collaboration (preview)", "Work on this with friends", "Share it live with friends", "Join a live project",
+       "Turn off live collaboration?", an aria-label of plain "Share", and "being tested" three times on the off card. */
+    const C = need921S7('one name');
+    const tested = function (t) { return (String(t).match(/still being tested/ig) || []).length; };
+    let report = null;
+    try { report = localStorage.getItem('fm.lastConnReport'); localStorage.removeItem('fm.lastConnReport'); } catch (e) {}
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen();
+        try {
+          /* 1 · Settings. */
+          if (wasHome) FM.home.close();
+          FM.settings.open(); await sleep(350);
+          const g = document.getElementById('set-friends');
+          if (!g) throw new Error('setup: Settings has no Work with friends group');
+          const sw = g.querySelector('.set-switch[role=switch]');
+          const srow = sw && sw.closest('.set-row');
+          const lab = srow && srow.querySelector('.set-label');
+          if (!lab || lab.textContent.trim() !== 'Work with friends') throw new Error('the Settings switch is labelled “' + (lab && lab.textContent) + '” — the feature has one name (J5-6)');
+          if (sw.getAttribute('aria-label') !== 'Work with friends') throw new Error('the switch is announced as “' + sw.getAttribute('aria-label') + '”');
+          jargon967b4(g, 'Settings’ Work with friends group');
+          const inPanel = tested(seen967b4(document.querySelector('.set-panel'))), onRow = tested(seen967b4(srow));
+          if (inPanel !== 1 || onRow !== 1) throw new Error('Settings says “still being tested” ' + inPanel + ' time(s), ' + onRow + ' on the switch’s own row — once, there');
+          const jr = Array.prototype.filter.call(g.querySelectorAll('.set-row'), function (r) { return /Join…/.test(r.textContent); })[0];
+          const jl = jr && jr.querySelector('.set-label');
+          if (!jl || jl.textContent.trim() !== 'Join a friend’s project') throw new Error('Settings’ Join row reads “' + (jl && jl.textContent) + '” — the other side is Join, and it is a friend’s project');
+          FM.settings.close(); await sleep(300);
+          /* 2 · the Friends block and its bar — off, then idle. */
+          await with945(async function () {
+            await editorWithShape(async function () {
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body'), bar = document.getElementById('cv-fr-sub');
+                FM.settings.set('collabLabs', false); ui.syncLabs();
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                const off = jargon967b4(fr, 'the Friends block, off');
+                const t0 = fr.querySelector('.fm-ask-title');
+                if (!t0 || t0.textContent.trim() !== 'Work with friends') throw new Error('off, the block is titled “' + (t0 && t0.textContent) + '”');
+                if (tested(off)) throw new Error('off, the Friends block says “still being tested” ' + tested(off) + ' time(s) — it is said once, on the Settings switch: “' + off.slice(0, 220) + '”');
+                if (bar.textContent.trim() !== 'Share live with friends') throw new Error('off, the Friends bar reads “' + bar.textContent + '” — the action is Share live');
+                fr.querySelector('.cs-offrow [role=switch]').click(); await settle921(200);
+                if (!FM.settings.get('collabLabs')) throw new Error('setup: the block’s switch did not turn it on');
+                const idle = jargon967b4(fr, 'the Friends block, idle');
+                const t1 = fr.querySelector('.fm-ask-title').textContent;
+                if (!/^Share “.+” live$/.test(t1)) throw new Error('idle, the block is titled “' + t1 + '” — the action is Share live');
+                if (tested(idle)) throw new Error('idle, the Friends block says “still being tested”');
+                FM.closeCanvasDialog(); await settle921(80);
+              }, 390);
+            });
+            /* 3 · live: the Share panel, Sharing settings, the swap step, and the person+ on the video. */
+            await withCollab921([layer921('A')], async function () {
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+                await until921S6('the link to be up', function () { const r = C.ui._relay(); return r && r.status === 'up' ? 1 : 0; }, 12000);
+                await settle921(80);
+                jargon967b4(fr, 'the live Share panel');
+                const t2 = fr.querySelector('.fm-ask-title').textContent;
+                if (!/^Share “.+” live$/.test(t2)) throw new Error('live, the block is titled “' + t2 + '”');
+                const b = document.getElementById('btn-share');
+                if (!b || b.getAttribute('aria-label') !== 'Share live') throw new Error('the person+ on the video is announced as “' + (b && b.getAttribute('aria-label')) + '” — the action is Share live');
+                fr.querySelector('.cs-gear').click(); await settle921(100);
+                if (!fr.querySelector('.cs-sgroup')) throw new Error('setup: the gear did not open Sharing settings');
+                jargon967b4(fr, 'Sharing settings');
+                fr.querySelector('.cs-gear').click(); await settle921(100);
+                fr.querySelector('.cs-body > .cs-add').click(); await settle921(100);
+                if (!fr.querySelector('.cs-answer')) throw new Error('setup: the swap door did not open the swap step');
+                jargon967b4(fr, 'the swap step');
+                FM.closeCanvasDialog(); await settle921(80);
+              }, 390);
+            });
+          });
+          /* 4 · the Join sheet. */
+          await ui.join();
+          const js = document.getElementById('collab-join');
+          const jt = js && js.querySelector('.fm-ask-title');
+          if (!jt || jt.textContent !== 'Join a friend’s project' || js.getAttribute('aria-label') !== 'Join a friend’s project') throw new Error('the Join sheet is called “' + (js && js.getAttribute('aria-label')) + '” / “' + (jt && jt.textContent) + '”');
+          jargon967b4(js, 'the Join sheet');
+          ui.close();
+          /* 5 · the PC Share card, and the question the switch there asks. */
+          await withCollab921([layer921('A')], async function () {
+            await atWideWidth(async function () {
+              await ui.share(); await settle921(300);
+              const card = document.getElementById('collab-share');
+              if (!card || card.getAttribute('aria-label') !== 'Share this project live') throw new Error('the PC Share card is announced as “' + (card && card.getAttribute('aria-label')) + '”');
+              jargon967b4(card, 'the PC Share card');
+              offRow967(card).sw.click();
+              const q = await until921S6('the turn-off question', ask967b3, 3000);
+              if (q.title !== 'Turn off Work with friends?') throw new Error('turning it off asks “' + q.title + '” — the feature has one name');
+              if (JARGON967B4.test(q.msg)) throw new Error('the turn-off question says “' + q.msg + '”');
+              q.cancel.click(); await settle921(150);
+              ui.close();
+            }, 1280);
+          });
+        } finally {
+          if (FM.settings.isOpen()) FM.settings.close();
+          const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+          if (wasHome && !FM.home.isOpen()) FM.home.open();
+          try { if (report !== null) localStorage.setItem('fm.lastConnReport', report); } catch (e) {}
+        }
+      });
+    });
+  });
+
+  test('967 B4 2 two codes, two nouns — the 9-character one is the “short code” and the FM1 block the “swap code”: “Send your friend the link”, “Link not working? Swap codes instead” (you copy a swap code to them, they copy one back), both steps and the friend’s answer say swap code, and the check says “the same 5 characters” and what “They don’t match” is for', { item: '967', budgetMs: 120000 }, async function () {
+    /* J5-3 (major), J1-4, J5-10(g): "Invite with a link or a code" meant the short code and "Connect with a code instead", six rows
+       lower, the 233-character block; "check these letters match" over G8C8J, and "the same five" without saying five what. */
+    const C = need921S7('the two codes');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function () {
+        await with945(async function () {
+          await atSize921(390, 700, async function () {
+            await withFakeLinks921(C, function () { return fakeLink921({ code: 'B4SW' }); }, async function (made) {
+              C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M' }); };
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+              const lab = fr.querySelector('.cs-invite > .cs-rowlabel');
+              if (!lab || lab.textContent !== 'Send your friend the link') throw new Error('the invite is headed “' + (lab && lab.textContent) + '” — “a link or a code” is the short code here and the swap code six rows down');
+              const how = fr.querySelector('.cs-invite .cs-codehow');
+              if (!how || !/^That’s the short code — they open FreeMotion, tap Join, and type it in\.$/.test(how.textContent)) throw new Error('under the 9 characters: “' + (how && how.textContent) + '” — it should name them the short code');
+              const add = fr.querySelector('.cs-body > .cs-add');
+              const main = add && add.firstChild && add.firstChild.nodeType === 3 ? add.firstChild.textContent : '';
+              const sub = add && add.querySelector('.cs-add-sub') ? add.querySelector('.cs-add-sub').textContent : '';
+              if (main !== 'Link not working? Swap codes instead' || sub !== 'You copy a swap code to them, they copy one back') throw new Error('the swap door reads “' + main + '” / “' + sub + '”');
+              bareCode967b4(seen967b4(fr.querySelector('.cs-body')), 'the live Share panel');
+              /* The swap step. */
+              add.click(); await settle921(100);
+              const steps = Array.prototype.map.call(fr.querySelectorAll('.cs-body .cs-steplabel'), function (x) { return x.textContent; });
+              if (steps[0] !== 'Step 1 · send them this swap code' || steps[1] !== 'Step 2 · paste the swap code they send back') throw new Error('the swap step reads ' + JSON.stringify(steps));
+              const copy = fr.querySelector('.cs-body .cs-copy');
+              if (!copy || copy.textContent !== 'Copy swap code') throw new Error('the swap step’s copy button reads “' + (copy && copy.textContent) + '”');
+              bareCode967b4(seen967b4(fr.querySelector('.cs-body')), 'the swap step');
+              /* Step 3, reached for real: the answer pasted, Connect, the friend's hello. */
+              fr.querySelector('.cs-answer').value = 'FM1-ANSWER';
+              fr.querySelector('.cs-connect').click();
+              await settle921(60);
+              made[0].onmessage('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43' });
+              await settle921(150);
+              const st = document.getElementById('collab-code-status');
+              const s3 = st && st.querySelector('.cs-steplabel');
+              if (!s3 || s3.textContent !== 'Step 3 · check you both see the same 5 characters') throw new Error('Step 3 reads “' + (s3 && s3.textContent) + '” — H7K2M has digits in it, and “five” said five what?');
+              const s3t = seen967b4(st);
+              if (/letters|same five/i.test(s3t)) throw new Error('Step 3 still says “letters” or “the same five”: “' + s3t + '”');
+              if (!/They don’t match/.test(s3t.replace(/They don’t match They match$/, '')) || !/someone else might be trying to get in/.test(s3t)) throw new Error('Step 3 does not say what “They don’t match” is for: “' + s3t + '”');
+              bareCode967b4(s3t, 'Step 3');
+              fr.querySelector('.cs-sasno').click(); await settle921(300);
+              const note = fr.querySelector('.cs-head .cs-note');
+              if (!note || !/swap code/.test(note.textContent) || /letters/.test(note.textContent)) throw new Error('after They don’t match the block says “' + (note && note.textContent) + '”');
+              bareCode967b4(note.textContent, 'the line after They don’t match');
+              FM.closeCanvasDialog(); await settle921(80);
+            });
+          });
+        });
+      });
+      /* The friend's side of the same swap. */
+      const realJoin = C.join;
+      await withFakeLinks921(C, function () { return fakeLink921({ code: 'B4G' }); }, async function () {
+        C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M', host: { nm: 'Ezra' } }); };
+        C.join = function () { return new Promise(function () {}); };            // stands at "let you in" — the network is not what is read here
+        try {
+          await ui.join();
+          const js = document.getElementById('collab-join');
+          const sub = js.querySelector('.collab-sub').textContent;
+          if (!/short code/.test(sub) || !/swap code/.test(sub)) throw new Error('the Join sheet says “' + sub + '” — it should name both things a friend may have been sent');
+          bareCode967b4(sub, 'the Join sheet');
+          js.querySelector('.cj-code').value = 'FM1-ABCDE';
+          js.querySelector('.cj-go').click();
+          const box = await until921S6('the friend’s check', function () { const b = js.querySelector('.cj-sas'); return b && !b.classList.contains('hidden') && b.querySelector('.cs-sas') ? b : null; }, 5000);
+          const back = js.querySelector('.cj-back');
+          const bl = back.querySelector('.cs-steplabel').textContent;
+          if (!/^Now copy this swap code and send it back to them/.test(bl)) throw new Error('the friend’s answer is labelled “' + bl + '”');
+          if (back.querySelector('.cs-copy').textContent !== 'Copy swap code') throw new Error('the friend’s copy button reads “' + back.querySelector('.cs-copy').textContent + '”');
+          const sl = box.querySelector('.cs-steplabel').textContent;
+          if (sl !== 'Check you both see the same 5 characters') throw new Error('the friend’s check reads “' + sl + '”');
+          const bt = seen967b4(box);
+          if (/letters|same five/i.test(bt) || !/They don’t match/.test(bt)) throw new Error('the friend’s check says “' + bt + '”');
+          bareCode967b4(seen967b4(js), 'the friend’s Join sheet');
+        } finally { C.join = realJoin; ui.close(); }
+      });
+    });
+  });
+
+  test('967 B4 3 privacy is one plain sentence and “What gets sent? ›” opens the full list, every service named — once on each screen: the Friends block off, the Share panel, Sharing settings, and Settings, whose switch hint is one line', { item: '967', budgetMs: 120000 }, async function () {
+    /* J1-4, J5-5 (major), J2-12, J4-14: a 68-word paragraph naming PeerJS/EMQX/HiveMQ/Google/Cloudflare led the first card, and a
+       57-word variant was the Settings switch's hint. The S6 review rule stays true behind the tap: every service is named. */
+    const C = need921S7('the privacy line');
+    const PLAIN = 'Your project goes straight from phone to phone, encrypted. A few free online helpers let the phones find each other — they see your internet address, never your project.';
+    const NAMES = ['PeerJS', 'EMQX', 'HiveMQ', 'Google', 'Cloudflare'];
+    async function check(root, where) {
+      const all = root.querySelectorAll('.cs-privacy');
+      if (all.length !== 1) throw new Error(where + ' has ' + all.length + ' privacy blocks — once per screen (J5-5)');
+      const p = all[0];
+      const plain = p.querySelector('.cs-privplain');
+      if (!plain || plain.textContent !== PLAIN) throw new Error(where + ': the privacy line reads “' + (plain ? plain.textContent : p.textContent.slice(0, 240)) + '” — one plain sentence first');
+      const before = seen967b4(p);
+      NAMES.forEach(function (n) { if (before.indexOf(n) >= 0) throw new Error(where + ': ' + n + ' is on show before any tap — the full list goes behind “What gets sent? ›”: “' + before.slice(0, 200) + '”'); });
+      const more = p.querySelector('.cs-privmore');
+      if (!more || more.textContent.trim() !== 'What gets sent? ›' || more.getAttribute('aria-expanded') !== 'false') throw new Error(where + ': no closed “What gets sent? ›” (' + (more ? more.textContent + ' / ' + more.getAttribute('aria-expanded') : 'none') + ')');
+      more.click(); await settle921(60);
+      const list = p.querySelector('.cs-privfull');
+      if (more.getAttribute('aria-expanded') !== 'true' || !list || !list.getClientRects().length) throw new Error(where + ': “What gets sent? ›” opened nothing');
+      const open = seen967b4(list);
+      NAMES.concat(['internet address', 'never see your project', 'encrypted']).forEach(function (w) {
+        if (open.indexOf(w) < 0) throw new Error(where + ': the full list does not say “' + w + '” — every service stays named (S6 review): “' + open + '”');
+      });
+      if (/\brelays?\b/i.test(open)) throw new Error(where + ': the full list still says “relay”: “' + open + '”');
+      more.click(); await settle921(60);
+      if (list.getClientRects().length || more.getAttribute('aria-expanded') !== 'false') throw new Error(where + ': a second tap did not fold the list away');
+    }
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen();
+        try {
+          await with945(async function () {
+            await editorWithShape(async function () {
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                FM.settings.set('collabLabs', false); ui.syncLabs();
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                await check(fr, 'the Friends block, off');
+                FM.closeCanvasDialog(); await settle921(80);
+                FM.settings.set('collabLabs', true); ui.syncLabs();
+              }, 390);
+            });
+            await withCollab921([layer921('A')], async function () {
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+                await check(fr, 'the Share panel');
+                fr.querySelector('.cs-gear').click(); await settle921(100);
+                await check(fr, 'Sharing settings');
+                FM.closeCanvasDialog(); await settle921(80);
+              }, 390);
+            });
+          });
+          if (wasHome) FM.home.close();
+          FM.settings.open(); await sleep(350);
+          const panel = document.querySelector('.set-panel');
+          await check(panel, 'Settings');
+          const g = document.getElementById('set-friends');
+          if (!g || !g.querySelector('.cs-privacy')) throw new Error('Settings’ privacy line is not in the Work with friends group');
+          const sw = g.querySelector('.set-switch[role=switch]');
+          const hint = sw.closest('.set-row').querySelector('.set-hint');
+          const h = hint ? hint.textContent : '';
+          if (!h || (h.match(/[.!?](\s|$)/g) || []).length !== 1 || h.length > 110 || NAMES.some(function (n) { return h.indexOf(n) >= 0; }) || JARGON967B4.test(h)) throw new Error('the Settings switch hint is “' + h + '” — one plain line (J5-5: it was 57 words naming five companies)');
+          FM.settings.close(); await sleep(300);
+        } finally {
+          if (FM.settings.isOpen()) FM.settings.close();
+          if (wasHome && !FM.home.isOpen()) FM.home.open();
+        }
+      });
+    });
+  });
+
+  test('967 B4 4 no relay words in the status lines or Test connection — “Getting your link ready…”, “Your link can’t get through on this network — swap codes instead, below”, Test connection answers yes or no with the numbers left in the report, and Swap codes only says what it does in one line', { item: '967', budgetMs: 150000 }, async function () {
+    /* J1-4, J5-5, J4-14: "Starting the relay…", "Couldn’t reach the free connection service", Test connection's "3.1 MB/s between two
+       connections here, messages up to 256 KB", and "Connect with codes only" / "No free relay at all". */
+    const C = need921S8('plain status lines');
+    /* 1 · the first line, then up. */
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function () {
+          const said = [];
+          const mo = new MutationObserver(function () { const n = document.getElementById('collab-relay-status'); if (n && said[said.length - 1] !== n.textContent) said.push(n.textContent); });
+          mo.observe(document.body, { childList: true, subtree: true, characterData: true });
+          try {
+            await ui.share();
+            await until921S6('the link to be up', function () { const r = C.ui._relay(); return r && r.status === 'up' ? 1 : 0; }, 12000);
+            await settle921(120);
+          } finally { mo.disconnect(); }
+          if (said[0] !== 'Getting your link ready…') throw new Error('while the link is being made the panel says “' + said[0] + '” (' + JSON.stringify(said) + ')');
+          said.forEach(function (t) { if (JARGON967B4.test(t)) throw new Error('the status line said “' + t + '”'); });
+          const up = document.getElementById('collab-relay-status').textContent;
+          if (up !== 'Waiting for people · your link and short code are live') throw new Error('with the link up the panel says “' + up + '”');
+          ui.close();
+        });
+      });
+    });
+    /* 2 · down: on this loopback page every helper is refused, as a network that blocks them would. */
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function () {
+        await ui.share();
+        await until921S6('the link to be unreachable', function () { const r = C.ui._relay(); return r && r.status === 'unreachable' ? 1 : 0; }, 12000);
+        await settle921(120);
+        const t = document.getElementById('collab-relay-status').textContent;
+        if (t !== 'Your link can’t get through on this network — swap codes instead, below.') throw new Error('with the link unreachable the panel says “' + t + '”');
+        ui.close();
+      });
+    });
+    /* 3 · Test connection, tapped in Settings. */
+    let prev = null;
+    try { prev = localStorage.getItem('fm.lastConnReport'); } catch (e) {}
+    const wasHome = FM.home.isOpen();
+    try {
+      await withFakeNet921(async function (net) {
+        await withLabs921(async function (ui) {
+          ui._connOpts = { relayWait: 2500, stunWait: 2000, iceServers: [{ urls: 'stun:stun.example.invalid:3478' }], stunPC: fakeStunPC921(['host', 'srflx'], []) };
+          if (wasHome) FM.home.close();
+          const panel = async function () {
+            if (FM.settings.isOpen()) FM.settings.close();
+            FM.settings.open();
+            return until921S6('the Test connection row', function () { return document.getElementById('set-conn'); }, 4000);
+          };
+          const run = async function (row) {
+            const go = row.querySelector('.set-conn-go');
+            go.click();
+            await until921S6('the test to finish', function () { return !go.disabled ? 1 : 0; }, 30000);
+            return Array.prototype.map.call(row.querySelectorAll('.set-conn-lines li'), function (li) { return { st: li.firstChild.className, text: li.lastChild.textContent }; });
+          };
+          let row = await panel();
+          const hint = row.querySelector('.set-hint').textContent;
+          if (JARGON967B4.test(hint)) throw new Error('Test connection’s hint says “' + hint + '”');
+          let L = await run(row);
+          if (L.length !== 3) throw new Error('the test answered in ' + L.length + ' lines: ' + JSON.stringify(L));
+          if (L[0].st !== 'ok' || L[0].text !== 'Links work on this network') throw new Error('with the helpers up the first line says “' + L[0].text + '” — a plain yes');
+          if (L[1].st !== 'ok' || !/^Friends on other networks/.test(L[1].text)) throw new Error('with a public address found the second line says “' + L[1].text + '”');
+          if (L[2].st !== 'ok' || L[2].text !== 'Live editing works on this device') throw new Error('this device’s own connections: “' + L[2].text + '”');
+          L.forEach(function (x) { if (/\d|MB\/s|KB|PeerJS|EMQX|HiveMQ/.test(x.text) || JARGON967B4.test(x.text)) throw new Error('a Test connection answer carries numbers or names: “' + x.text + '” — they belong in the copyable report'); });
+          const rep = localStorage.getItem('fm.lastConnReport') || '';
+          ['PeerJS up', 'MB/s', 'maxMessageSize'].forEach(function (w) { if (rep.indexOf(w) < 0) throw new Error('the numbers left the report too — it has no “' + w + '”: ' + rep); });
+          ['0.peerjs.com', 'broker.emqx.io', 'broker.hivemq.com'].forEach(function (h) { net.dead[h] = true; });
+          L = await run(row);
+          if (L[0].st !== 'no' || L[0].text !== 'Links don’t work on this network — swap codes instead.') throw new Error('with no helper reachable the first line says “' + L[0].text + '” — a plain no, and what to do');
+          /* 4 · Swap codes only, in one line. */
+          const co = Array.prototype.filter.call(document.querySelectorAll('#set-friends .set-row'), function (r) { const l = r.querySelector('.set-label'); return l && /codes only/i.test(l.textContent); })[0];
+          const cl = co && co.querySelector('.set-label').textContent, ch = co && co.querySelector('.set-hint').textContent;
+          if (cl !== 'Swap codes only' || !ch || JARGON967B4.test(ch) || (ch.match(/[.!?](\s|$)/g) || []).length !== 1 || !/swap codes/.test(ch)) throw new Error('the codes-only switch reads “' + cl + '” / “' + ch + '” — one line that says what it does');
+          FM.settings.close(); await sleep(250);
+          ui._connOpts = null;
+        });
+      });
+    } finally {
+      if (C.ui) C.ui._connOpts = null;
+      if (FM.settings.isOpen()) FM.settings.close();
+      try { if (prev === null) localStorage.removeItem('fm.lastConnReport'); else localStorage.setItem('fm.lastConnReport', prev); } catch (e) {}
+      if (wasHome && !FM.home.isOpen()) FM.home.open();
+    }
+  });
+
+  test('967 B4 5 roles and Watch along are explained where they are picked — “Editor — can change anything”, “Commenter — can leave notes only”, “Viewer — can only watch” in every role menu; Follow is “Watch along”, with a line saying your screen follows theirs, and the banner says “Watching along with Sam Lee”', { item: '967', budgetMs: 120000 }, async function () {
+    /* J5-9: three bare words in the role menu, and a Follow with no hint of what it does (it drives your playhead to theirs). */
+    const C = need921S5('roles and Watch along');
+    const ROLES = [/^Editor — can change anything/, /^Commenter — can leave notes only/, /^Viewer — can only watch/];
+    const roles = function (items, where) {
+      ROLES.forEach(function (re) { if (!items.some(function (t) { return re.test(t); })) throw new Error(where + ' offers ' + JSON.stringify(items) + ' — no “' + re.source.slice(1) + '”'); });
+    };
+    await withLabs921(async function (ui) {
+      /* The owner: the link's role menu, and a person's menu. */
+      await withCollab921([layer921('A')], async function (c) {
+        const k = clock921(C);
+        const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+        g.pr({});
+        k.step(100); C.presence.tick(); C.presence._draw();
+        await ui.share();
+        const card = document.getElementById('collab-share');
+        card.querySelector('.cs-joinas').click(); await settle921(60);
+        roles(menuLabels967b4(), '“New people join as”');
+        FM.contextMenu.hide(); await settle921(60);
+        const row = card.querySelector('.cs-person[data-mid="' + g.mid + '"]');
+        if (!row) throw new Error('setup: Sam has no row in the Share panel');
+        row.querySelector('.cs-role').click(); await settle921(60);
+        const items = menuLabels967b4();
+        roles(items, 'Sam’s menu');
+        if (items.indexOf('Watch along — your screen follows theirs') < 0 || items.some(function (t) { return /^Follow\b/.test(t); })) throw new Error('Sam’s menu offers ' + JSON.stringify(items) + ' — Follow is “Watch along — your screen follows theirs”');
+        FM.contextMenu.hide(); await settle921(60);
+        ui.close();
+      });
+      /* A friend: the panel's Watch along, its line, and what the banner says. */
+      await withCollab921([layer921('A')], async function () {
+        const gs = guest921S5(C);
+        const k = clock921(C);
+        const sam = { mid: 'm8', name: 'Sam Lee', color: '#f472b6', role: 'editor', st: 'here', ls: null };
+        gs.send('ctl', rosterMsg921([sam]));
+        gs.send('pres', { t: 'PR', n: 1, full: 1, m: { o: prOf921(), m8: prOf921() } });
+        k.step(100); C.presence.tick(); C.presence._draw();
+        await ui.share();
+        let card = document.getElementById('collab-share');
+        const mine = card.querySelector('.cs-myrole');
+        if (!mine || mine.textContent !== 'You’re an Editor — you can change anything.') throw new Error('the friend’s role line reads “' + (mine && mine.textContent) + '”');
+        const f = card.querySelector('.cs-person[data-mid="m8"] .cs-follow');
+        if (!f || f.textContent !== 'Watch along' || f.getAttribute('aria-label') !== 'Watch along with Sam Lee') throw new Error('Sam’s button reads “' + (f && f.textContent) + '” / “' + (f && f.getAttribute('aria-label')) + '”');
+        const hint = card.querySelector('.cs-watchhint');
+        if (!hint || !hint.getClientRects().length || !/your screen follows theirs/.test(hint.textContent)) throw new Error('nothing under the people says what Watch along does (' + (hint ? '“' + hint.textContent + '”' : 'no line') + ')');
+        f.click(); await settle921(80);
+        if (C.presence.following() !== 'm8') throw new Error('setup: Watch along did not start');
+        const b = document.getElementById('collab-banner');
+        const bt = b && b.querySelector('.cb-text') ? b.querySelector('.cb-text').textContent : '';
+        if (bt !== 'Watching along with Sam Lee') throw new Error('while watching along the banner says “' + bt + '”');
+        const x = b.querySelector('.cb-x');
+        if (!x || x.getAttribute('aria-label') !== 'Stop watching along') throw new Error('the banner’s × is announced as “' + (x && x.getAttribute('aria-label')) + '”');
+        await ui.share();
+        card = document.getElementById('collab-share');
+        const f2 = card.querySelector('.cs-person[data-mid="m8"] .cs-follow');
+        if (!f2 || f2.textContent !== 'Watching' || f2.getAttribute('aria-pressed') !== 'true') throw new Error('while watching along Sam’s button reads “' + (f2 && f2.textContent) + '”');
+        f2.click(); await settle921(80);
+        if (C.presence.following()) throw new Error('a second tap did not stop watching along');
+        ui.close();
+      });
+    });
+  });
+
+  test('967 B4 6 the small lines say what is true — “Nothing’s shared until you tap Start sharing.”, “Not sharing” after a stop, Stop sharing says the link stops too, a friend’s Leave is “Leave (keep my copy)”, Comments drop the export clause, Settings’ footer stops promising everything stays here once the switch is on, and the idle row says You once', { item: '967', budgetMs: 150000 }, async function () {
+    /* J1-8, J3-10, J4-16, J5-10 (b)(c)(d)(e)(f). */
+    const C = need921S7('the small lines');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen();
+        try {
+          await with945(async function () {
+            const wasHome0 = FM.home.isOpen(), orig0 = FM.projects.currentId();
+            if (wasHome0) FM.home.close();
+            const made0 = [await FM.projects.create({ name: 'B4 967 small lines', width: 320, height: 240 })];
+            try {
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                /* The idle row, with no name set up yet: "You" once. */
+                localStorage.removeItem('fm.profile');
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                const pn = fr.querySelector('.cs-people .cs-pname'), pr = fr.querySelector('.cs-people .cs-prole');
+                if (!pn || pn.textContent !== 'You' || !pr || /^You\b/.test(pr.textContent)) throw new Error('the idle row reads “' + (pn && pn.textContent) + '” / “' + (pr && pr.textContent) + '” — You twice (J1-8)');
+                const hint = fr.querySelector('.cs-fr-hint');
+                if (!hint || hint.textContent !== 'You’ll get a link, a QR and a short code to send. Nothing’s shared until you tap Start sharing.') throw new Error('under Start sharing: “' + (hint && hint.textContent) + '”');
+                FM.closeCanvasDialog(); await settle921(80);
+                ui.setProfile('Test Person', ui.PALETTE[0]);
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                fr.querySelector('.cs-start').click();
+                await until921S6('the Share panel', function () { return C.session && fr.querySelector('.cs-stop') ? 1 : 0; }, 8000)
+                  .catch(function () { throw new Error('setup: Start sharing did not bring up the Share panel'); });
+                await settle921(150);
+                /* Comments: no export clause on the row, or in the empty card behind it. */
+                const cr = fr.querySelector('.cs-comments');
+                if (!cr) throw new Error('setup: no Comments row in the live panel');
+                if (/export/i.test(cr.textContent)) throw new Error('the Comments row says “' + cr.textContent + '” (J5-10e)');
+                cr.click();
+                const empty = await until921S6('the empty Comments card', function () { return document.querySelector('.cc-empty'); }, 3000);
+                if (/export/i.test(empty.textContent)) throw new Error('the empty Comments card says “' + empty.textContent + '” (J5-10e)');
+                C.comments.close(); await settle921(80);
+                /* Stop sharing names the link. */
+                if (!dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await settle921(80); }
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                fr.querySelector('.cs-stop').click();
+                const q = await until921S6('Stop sharing?', ask967b3, 3000);
+                if (!/\blink\b/.test(q.msg) || !/stop working/.test(q.msg)) throw new Error('Stop sharing asks “' + q.msg + '” — the LINK stops working too (J5-10b)');
+                q.ok.click();
+                await until921S6('sharing to stop', function () { return !C.session ? 1 : 0; }, 4000);
+                await settle921(200);
+                const state = fr.querySelector('.cs-head .cs-state');
+                if (!state || state.textContent !== 'Not sharing') throw new Error('after Stop sharing the block says “' + (state && state.textContent) + '” — “yet” reads as if it never happened (J3-10)');
+                const bar = document.getElementById('cv-fr-sub').textContent;
+                if (/yet/.test(bar) || !/^Not sharing/.test(bar)) throw new Error('after Stop sharing the Friends bar says “' + bar + '”');
+                FM.closeCanvasDialog(); await settle921(80);
+              }, 390);
+            } finally {
+              try { if (C.comments && C.comments.close) C.comments.close(); } catch (e) {}
+              try { C.end(); } catch (e) {}
+              try { localStorage.removeItem('fm.collab.host.' + made0[0]); } catch (e) {}
+              ui.close();
+              await q915aCleanup(made0, orig0, wasHome0, [], [], []);
+            }
+            /* A friend's Leave, live and on a shared copy with no connection. */
+            const fx = guest967(C);
+            const wasHome1 = FM.home.isOpen();
+            try {
+              C.attach(fx.G, { autoTick: false });
+              if (wasHome1) FM.home.close();
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                if (!/Shared with you/.test(fr.textContent)) throw new Error('setup: the block is not the friend’s panel');
+                fr.querySelector('.cs-foot .cs-stop').click();
+                const q = await until921S6('Leave this project?', ask967b3, 3000);
+                if (q.ok.textContent.replace(/\u00a0/g, ' ') !== 'Leave (keep my copy)') throw new Error('the friend’s Leave question answers “' + q.ok.textContent + '” — it reads like a different choice from the Leave just tapped (J5-10c)');
+                q.cancel.click(); await settle921(120);
+                FM.closeCanvasDialog(); await settle921(80);
+              }, 390);
+            } finally { await dropFixture967(C, [fx.gpid]); if (wasHome1 && !FM.home.isOpen()) FM.home.open(); }
+            const wasHome2 = FM.home.isOpen(), orig = FM.projects.currentId();
+            const lc = linkedCopy921(C, { meta: {} });
+            try {
+              if (wasHome2) FM.home.close();
+              await FM.projects.open(lc.gpid);
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                fr.querySelector('.cs-foot .cs-stop').click();
+                const q = await until921S6('Leave this project? (a shared copy)', ask967b3, 3000);
+                if (q.ok.textContent.replace(/\u00a0/g, ' ') !== 'Leave (keep my copy)') throw new Error('a shared copy’s Leave question answers “' + q.ok.textContent + '”');
+                q.cancel.click(); await settle921(120);
+                FM.closeCanvasDialog(); await settle921(80);
+              }, 390);
+            } finally { await q915aCleanup([lc.gpid], orig, wasHome2, [], [], []); }
+          });
+          /* Settings' footer follows the switch — tapped in Settings itself. */
+          if (FM.home.isOpen()) FM.home.close();
+          FM.settings.set('collabLabs', false); ui.syncLabs();
+          FM.settings.open(); await sleep(350);
+          const foot = function () { return (document.querySelector('.set-panel .set-foot') || {}).textContent || ''; };
+          if (!/everything stays on this device/.test(foot())) throw new Error('CONTROL: with the switch off the footer reads “' + foot() + '”');
+          document.querySelector('#set-friends .set-switch[role=switch]').click(); await settle921(200);
+          if (!FM.settings.get('collabLabs')) throw new Error('setup: the Settings switch did not turn it on');
+          if (/everything stays on this device/.test(foot()) || !/projects only leave this device when you share live/.test(foot())) throw new Error('with the switch on the footer still reads “' + foot() + '” — right under a switch that sends projects to other phones (J5-10f)');
+          FM.settings.close(); await sleep(300);
+        } finally {
+          if (FM.settings.isOpen()) FM.settings.close();
+          const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+          if (wasHome && !FM.home.isOpen()) FM.home.open();
+        }
+      });
+    });
+  });
+
+  /* ═══ #967 BATCH 5 — COMMENTS YOU CAN FIND, AND ASKING FOR EDIT ACCESS ═════════════════════════════════════════════════
+   * His recommended picks on the options sheet (tools/design/967-options.html, “Comments you can find”): A — a speech-bubble
+   * button next to the person chip, with a count, only when there are comments or it is live; A — an “Ask” button on a
+   * Viewer's banner that pops a card on the owner's phone. Audit findings J4-5 (major) and J4-15. Pictures: tools/design/967/b5.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+  function cmtDoor967b5() { const b = document.getElementById('collab-cmt'); return b && b.getClientRects().length ? b : null; }
+  function cmtCount967b5() {
+    const b = cmtDoor967b5();
+    const n = b && b.querySelector('.ccm-n');
+    return n && n.getClientRects().length ? n.textContent : '';
+  }
+  function knock967b5() { const k = document.getElementById('collab-knock'); return k && k.getClientRects().length ? k : null; }
+  function askMsgs967b5(list) { return list.filter(function (m) { return m && m.t === 'ask'; }); }
+
+  test('967 B5 1 on a phone comments have a door on the video — a speech bubble beside LIVE while he shares, counting what is new; “Sam commented” when one arrives from someone else (the name printed as text); tapping it opens them and clears the count; his own comment and one he watched arrive count nothing; after Stop sharing it stays while the project has comments, and goes when they do', { item: '967', budgetMs: 120000 }, async function () {
+    /* J4-5 (major): the only way in was the chip → Canvas settings → Friends → Comments, only while live, and a friend's comment
+       arrived in silence — the owner got no toast and no badge (collab-comments.js only ever toasted your own actions). */
+    const C = need921S7('the comments door');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A', { duration: 6 })], async function (ctx) {
+        const got = toasts921();
+        try {
+          await atPhoneWidth(async function () {
+            ui.syncBanner(); await settle921(150);
+            const door = cmtDoor967b5();
+            if (!door) throw new Error('while he shares, nothing on the video leads to the comments — the only way in is Canvas settings → Friends → Comments (J4-5)');
+            const live = document.getElementById('collab-live');
+            if (!live || !live.getClientRects().length) throw new Error('setup: no LIVE pill on the video');
+            const dr = door.getBoundingClientRect(), lr = live.getBoundingClientRect();
+            if (dr.left < lr.right - 0.5 || dr.left - lr.right > 14 || Math.abs((dr.top + dr.height / 2) - (lr.top + lr.height / 2)) > 4) throw new Error('the comments bubble is not beside LIVE (bubble at ' + Math.round(dr.left) + ',' + Math.round(dr.top) + ', LIVE ends at ' + Math.round(lr.right) + ')');
+            if (dr.width < 24 || dr.height < 24) throw new Error('the comments bubble is ' + Math.round(dr.width) + '×' + Math.round(dr.height) + ' — under a 24 px target');
+            if (!/comment/i.test(door.getAttribute('aria-label') || '')) throw new Error('the bubble’s label is “' + door.getAttribute('aria-label') + '”');
+            if (cmtCount967b5()) throw new Error('with no comments the bubble already counts “' + cmtCount967b5() + '”');
+            /* Sam comments from his phone — the first comment in a project with none is the whole list. */
+            const EVIL = 'Sam <img src=x>';
+            const S = rawWire921(ctx, 'commenter', EVIL);
+            const a1 = S.tx([{ o: 's', p: ['P', 'comments'], v: [{ id: 'c_b5a', text: 'The logo lands late', replies: [] }] }]);
+            if (!a1 || a1.rej.length) throw new Error('setup: Sam’s comment was refused ' + JSON.stringify(a1 && a1.rej));
+            await settle921(150);
+            if (!(FM.scene.project.comments || []).some(function (c) { return c.id === 'c_b5a'; })) throw new Error('setup: Sam’s comment did not reach his screen');
+            if (got.indexOf(EVIL + ' commented') < 0) throw new Error('a comment from Sam arrived in silence — no “Sam commented” (J4-5); toasts: ' + JSON.stringify(got));
+            const t = document.getElementById('toast');
+            if (t.querySelector('img')) throw new Error('Sam’s name was parsed as HTML in the toast');
+            if (cmtCount967b5() !== '1') throw new Error('after Sam’s comment the bubble counts “' + cmtCount967b5() + '”, not 1');
+            if (!/1 new/.test(cmtDoor967b5().getAttribute('aria-label'))) throw new Error('the bubble’s label does not say what is new: “' + cmtDoor967b5().getAttribute('aria-label') + '”');
+            const a2 = S.tx([{ o: 'ai', p: ['P', 'comments'], k: '#i:c_b5b', a: '#i:c_b5a', v: { id: 'c_b5b', text: 'And the title', replies: [] } }]);
+            if (!a2 || a2.rej.length) throw new Error('setup: Sam’s second comment was refused ' + JSON.stringify(a2 && a2.rej));
+            await settle921(150);
+            if (cmtCount967b5() !== '2') throw new Error('after Sam’s second comment the bubble counts “' + cmtCount967b5() + '”, not 2');
+            /* A real tap on it opens the comments, and the count is spent. */
+            await onScreen924(async function () { await hd5Tap(cmtDoor967b5(), 'the comments bubble'); });
+            const cc = await until921S6('the comments card', function () { return document.getElementById('collab-comments'); }, 3000)
+              .catch(function () { throw new Error('tapping the comments bubble opened nothing'); });
+            if (!cc.querySelector('.cc-c[data-cid="c_b5b"]')) throw new Error('the card the bubble opened does not show Sam’s comments');
+            C.comments.close(); await settle921(80);
+            if (cmtCount967b5()) throw new Error('after opening the comments the bubble still counts “' + cmtCount967b5() + '”');
+            /* His own comment is not news to him. */
+            const before = got.length;
+            C.comments.add('Moving it now', { pin: false });
+            await settle921(320); ctx.S.tick('hot');   // the tick the suite's session does not run by itself: past §8.8's quiet, his own change is let go of
+            if (cmtCount967b5()) throw new Error('his own comment counted as new: “' + cmtCount967b5() + '”');
+            if (got.slice(before).some(function (x) { return /commented|replied/.test(x); })) throw new Error('his own comment was announced to him: ' + JSON.stringify(got.slice(before)));
+            /* …nor is one he watched arrive on the open card. */
+            C.comments.open();
+            S.tx([{ o: 'ai', p: ['P', 'comments'], k: '#i:c_b5c', a: '#i:c_b5b', v: { id: 'c_b5c', text: 'Seen it', replies: [] } }]);
+            await settle921(150);
+            if (!document.querySelector('#collab-comments .cc-c[data-cid="c_b5c"]')) throw new Error('setup: Sam’s third comment did not reach the open card');
+            C.comments.close(); await settle921(80);
+            if (cmtCount967b5()) throw new Error('a comment that arrived on the card he was reading counted as new: “' + cmtCount967b5() + '”');
+            /* A reply from Sam counts too. */
+            S.tx([{ o: 'ai', p: ['P', 'comments', '#i:c_b5a', 'replies'], k: '#i:r_b5', a: null, v: { id: 'r_b5', text: 'I mean at 0:02' } }]);
+            await settle921(150);
+            if (cmtCount967b5() !== '1') throw new Error('Sam’s reply did not count (the bubble reads “' + cmtCount967b5() + '”)');
+            /* Stop sharing: the comments are still there, and so is the way to them. */
+            C.end(); ui.syncBanner(); await settle921(150);
+            if (document.getElementById('collab-live') && document.getElementById('collab-live').getClientRects().length) throw new Error('setup: LIVE is still up after the session ended');
+            const after = cmtDoor967b5();
+            if (!after) throw new Error('after Stop sharing the comments bubble went, and the project’s comments with it (J4-5 “stranded”)');
+            const chip = [document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) { return n && n.getClientRects().length; })[0];
+            if (!chip) throw new Error('setup: no person chip after the stop');
+            const ar = after.getBoundingClientRect(), chr = chip.getBoundingClientRect();
+            if (ar.left < chr.right - 0.5 || ar.left - chr.right > 14) throw new Error('after the stop the bubble is not beside the person+ (it starts at ' + Math.round(ar.left) + ', the person+ ends at ' + Math.round(chr.right) + ')');
+            /* …and once there are none, not live, it goes (the positive control is everything above). */
+            C.comments.list().forEach(function (c) { C.comments.remove(c.id); });
+            await settle921(120);
+            if (C.comments.list().length) throw new Error('setup: the comments could not be deleted');
+            if (cmtDoor967b5()) throw new Error('with no comments and nothing shared, the bubble is still on the video');
+          }, 390);
+          /* A PC keeps its own comment surfaces — no bubble on the video. */
+          await atWideWidth(async function () {
+            C.comments.add('On the PC', { pin: false }); await settle921(120);
+            if (cmtDoor967b5()) throw new Error('a PC shows the phone’s comments bubble on the video');
+          }, 1280);
+        } finally { got.restore(); try { C.comments.close(); } catch (e) {} }
+      });
+    });
+  });
+
+  test('967 B5 2 comments are not stranded — after Stop sharing the Friends block keeps a Comments row that opens them, a shared copy with no connection has one too, neither shows one when there are none, and a friend is told “Ezra commented” and sees the count', { item: '967', budgetMs: 150000 }, async function () {
+    /* J4-5: after Stop sharing the comment was still there (count 1) and the Friends block had no Comments row (64); the
+       linked-copy panel had none either (70). */
+    const C = need921S7('the Comments row after a stop');
+    await withLabs921(async function (ui) {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const fr = function () { return document.getElementById('cv-fr-body'); };
+        const openFr = async function () {
+          if (!dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await settle921(80); }
+          FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+        };
+        /* 1 · his own project, after a stop. */
+        await withCollab921([layer921('A')], async function () {
+          await atPhoneWidth(async function () {
+            C.end(); ui.syncBanner(); await settle921(120);
+            await openFr();
+            if (!fr().querySelector('.cs-start')) throw new Error('setup: the block is not the idle panel after the stop: “' + fr().textContent.slice(0, 120) + '”');
+            if (fr().querySelector('.cs-comments')) throw new Error('CONTROL: with no comments the idle block already has a Comments row');
+            FM.closeCanvasDialog(); await settle921(80);
+            C.comments.add('Tighten the cut', { pin: false });
+            await openFr();
+            const row = fr().querySelector('.cs-comments');
+            if (!row) throw new Error('after Stop sharing the Friends block has no Comments row — the project’s comments are stranded (J4-5)');
+            if (!/Comments · 1 open/.test(row.textContent)) throw new Error('the idle block’s Comments row reads “' + row.textContent + '”');
+            row.click();
+            await until921S6('the comments card from the idle block', function () { return document.getElementById('collab-comments'); }, 3000)
+              .catch(function () { throw new Error('the idle block’s Comments row opened nothing'); });
+            C.comments.close(); await settle921(80);
+          }, 390);
+        });
+        /* 2 · a shared copy with no connection: with comments, and without. */
+        const mk = function (withComments) {
+          const D = { project: { name: 'Ezra’s film B5', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('Shared B5')] };
+          if (withComments) D.project.comments = [{ id: 'c_lcb5', by: { mid: 'o', name: 'Ezra', color: '#ff9f43' }, at: Date.now() - 60000, text: 'Check the audio', replies: [] }];
+          const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'editor', epoch: 'e-b5', seq: 0, name: 'Tester' }, D);
+          if (!gpid) throw new Error('setup: could not make the shared copy');
+          return gpid;
+        };
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        const made = [mk(false), mk(true)];
+        try {
+          if (wasHome) FM.home.close();
+          await atPhoneWidth(async function () {
+            await FM.projects.open(made[0]);
+            await openFr();
+            if (!/Shared with you/.test(fr().textContent)) throw new Error('setup: the block on a shared copy is not its panel');
+            if (fr().querySelector('.cs-comments')) throw new Error('CONTROL: a shared copy with no comments already has a Comments row');
+            FM.closeCanvasDialog(); await settle921(80);
+            await FM.projects.open(made[1]);
+            await openFr();
+            if (!/Shared with you/.test(fr().textContent)) throw new Error('setup: the block on the second shared copy is not its panel');
+            const row = fr().querySelector('.cs-comments');
+            if (!row) throw new Error('a shared copy with comments has no Comments row — Ezra’s comments on it are stranded (J4-5)');
+            row.click();
+            const cc = await until921S6('the comments card from the shared copy', function () { return document.getElementById('collab-comments'); }, 3000)
+              .catch(function () { throw new Error('the shared copy’s Comments row opened nothing'); });
+            if (!cc.querySelector('.cc-c[data-cid="c_lcb5"]')) throw new Error('the card from the shared copy does not show Ezra’s comment');
+            C.comments.close(); await settle921(80);
+            if (!cmtDoor967b5()) throw new Error('a shared copy with comments has no comments bubble on the video');
+          }, 390);
+        } finally { try { C.comments.close(); } catch (e) {} await q915aCleanup(made, orig, wasHome, [], [], []); }
+        /* 3 · a friend is told when the owner comments. */
+        await withGuestApp921('commenter', [layer921('A')], async function (g) {
+          const got = toasts921();
+          try {
+            await atPhoneWidth(async function () {
+              ui.syncBanner(); await settle921(120);
+              if (!cmtDoor967b5()) throw new Error('a friend who is in has no comments bubble on the video');
+              g.hdoc.project.comments = [{ id: 'c_ezb5', by: { mid: 'o', name: 'Ezra', color: '#ff9f43' }, at: Date.now(), text: 'Try the blue', replies: [] }];
+              g.HS.tick('hot'); g.settle(); await settle921(150);
+              if (!(FM.scene.project.comments || []).some(function (c) { return c.id === 'c_ezb5'; })) throw new Error('setup: Ezra’s comment did not reach the friend');
+              if (got.indexOf('Ezra commented') < 0) throw new Error('Ezra’s comment reached the friend in silence: ' + JSON.stringify(got));
+              if (cmtCount967b5() !== '1') throw new Error('the friend’s bubble counts “' + cmtCount967b5() + '” after Ezra’s comment');
+            }, 390);
+          } finally { got.restore(); }
+        });
+      });
+    });
+  });
+
+  test('967 B5 3 a Viewer’s “View only” banner has “Ask to edit” — one tap sends one ask, the banner says it was asked, “Ezra said not now” holds it off for a while, “didn’t answer” lets them ask again, Allow makes them an Editor, a Commenter can ask too, and an answer to nothing asked is ignored', { item: '967', budgetMs: 120000 }, async function () {
+    /* J4-15: “View only — ask for edit access” with nothing to press, and no request-edit action anywhere. */
+    const C = need921S7('asking for edit');
+    await withLabs921(async function (ui) {
+      await withGuestApp921('viewer', [layer921('A')], async function (g) {
+        const asked = [];
+        g.HA.onAsk = function (mid, info) { asked.push({ mid: mid, info: info }); };
+        const got = toasts921();
+        const sent = function () { return askMsgs967b5(g.hostGot.filter(function (x) { return x.ch === 'ctl'; }).map(function (x) { return x.msg; })); };
+        const banner = function () {
+          const b = document.getElementById('collab-banner');
+          if (!b) return { text: '', act: null };
+          const tx = b.querySelector('.cb-text'), a = b.querySelector('.cb-act');
+          return { el: b, text: tx ? tx.textContent : '', act: a && a.getClientRects().length ? a : null };
+        };
+        try {
+          await atPhoneWidth(async function () {
+            ui.syncBanner(); await settle921(150);
+            let b = banner();
+            if (!/^View only/.test(b.text)) throw new Error('setup: a Viewer’s banner reads “' + b.text + '”');
+            if (!b.act) throw new Error('a Viewer’s banner has nothing to press — “ask for edit access” with no way to ask (J4-15): “' + (b.el ? b.el.textContent : 'no banner') + '”');
+            if (b.act.textContent !== 'Ask to edit') throw new Error('the banner’s button reads “' + b.act.textContent + '”');
+            const ar = b.act.getBoundingClientRect(), br = b.el.getBoundingClientRect();
+            if (ar.right > br.right + 0.5 || ar.right > window.innerWidth || ar.height < 20) throw new Error('“Ask to edit” is cut or tiny on a 390 phone (' + JSON.stringify([Math.round(ar.left), Math.round(ar.right), Math.round(ar.height), Math.round(br.right)]) + ')');
+            const hit = document.elementFromPoint(ar.left + ar.width / 2, ar.top + ar.height / 2);
+            if (hit !== b.act && !b.act.contains(hit)) throw new Error('“Ask to edit” is covered by ' + (hit ? hit.id || hit.className : 'nothing'));
+            const tx = b.el.querySelector('.cb-text');
+            if (tx.scrollWidth > tx.clientWidth + 1) throw new Error('the banner’s words are cut: “' + tx.textContent + '”');
+            /* One real tap: one ask on the wire, and the banner says so. */
+            await onScreen924(async function () { await hd5Tap(b.act, 'Ask to edit'); });
+            g.settle(); await settle921(120);
+            const s1 = sent();
+            if (s1.length !== 1 || s1[0].w !== 'edit') throw new Error('Ask to edit sent ' + JSON.stringify(s1) + ' — one {t:"ask", w:"edit"} expected');
+            if (asked.length !== 1 || asked[0].mid !== g.mid || asked[0].info.name !== 'Guest') throw new Error('the owner’s side was not asked, or asked with the wrong name: ' + JSON.stringify(asked));
+            if (!got.some(function (x) { return /^Asked Ezra to let you edit/.test(x); })) throw new Error('the tap said nothing: ' + JSON.stringify(got));
+            b = banner();
+            if (b.act || !/asked Ezra/.test(b.text)) throw new Error('after asking the banner reads “' + b.text + '”' + (b.act ? ' and still offers “' + b.act.textContent + '”' : ''));
+            if (ui.askEdit()) throw new Error('a second ask went while the first was open');
+            if (sent().length !== 1) throw new Error('an open ask was sent again');
+            /* Not now: said, and it holds off for a while. */
+            if (!g.HS.answerAsk(g.mid, 'no')) throw new Error('setup: the owner’s side could not answer the ask');
+            g.settle(); await settle921(120);
+            if (got.indexOf('Ezra said not now') < 0) throw new Error('“Not now” reached the friend in silence: ' + JSON.stringify(got));
+            b = banner();
+            if (b.act || !/Ezra said not now/.test(b.text)) throw new Error('after Not now the banner reads “' + b.text + '”' + (b.act ? ' and offers “' + b.act.textContent + '” at once' : ''));
+            if (ui.askEdit()) throw new Error('the friend could ask again straight after Not now');
+            /* The wait is over (both sides' clocks, through their seams): Ask is back. */
+            ui._askState().until = Date.now() - 1;
+            g.HS._asks()[g.mid].noUntil = 0;
+            ui.syncBanner(); await settle921(80);
+            b = banner();
+            if (!b.act) throw new Error('once the wait is over “Ask to edit” did not come back: “' + b.text + '”');
+            /* Nobody answers: the friend is told, and may ask again at once. */
+            b.act.click(); g.settle(); await settle921(80);
+            if (sent().length !== 2 || asked.length !== 2) throw new Error('setup: the second ask did not go (' + sent().length + ' sent, ' + asked.length + ' seen)');
+            g.HS.answerAsk(g.mid, 'timeout'); g.settle(); await settle921(120);
+            if (!got.some(function (x) { return /^Ezra didn’t answer/.test(x); })) throw new Error('an ask nobody answered ended in silence: ' + JSON.stringify(got));
+            b = banner();
+            if (!b.act) throw new Error('after no answer “Ask to edit” is not offered again: “' + b.text + '”');
+            /* Allow: the owner's role change, the same path as his role menu. */
+            b.act.click(); g.settle(); await settle921(80);
+            g.HS.answerAsk(g.mid, 'yes'); g.HS.setPeerRole(g.mid, 'editor'); g.settle(); await settle921(150);
+            if (g.G.role !== 'editor') throw new Error('setup: Allow did not make the friend an Editor');
+            b = banner();
+            if (/View only/.test(b.text)) throw new Error('an Editor still sees “' + b.text + '”');
+            if (!got.some(function (x) { return /Ezra made you an Editor/.test(x); })) throw new Error('becoming an Editor was not said: ' + JSON.stringify(got));
+            /* An answer to nothing asked changes nothing and says nothing. */
+            const n0 = got.length;
+            g.loop.a.send('ctl', { t: 'ask-no' }); g.settle(); await settle921(80);
+            if (got.slice(n0).some(function (x) { return /not now|answer/.test(x); })) throw new Error('an answer to nothing the friend asked was shown: ' + JSON.stringify(got.slice(n0)));
+            /* A Commenter can ask too — the banner says what a Commenter can do. */
+            g.HS.setPeerRole(g.mid, 'commenter'); g.settle(); await settle921(120);
+            b = banner();
+            if (!/^Comments only/.test(b.text) || !b.act) throw new Error('a Commenter’s banner reads “' + b.text + '”' + (b.act ? '' : ' with nothing to press'));
+          }, 390);
+        } finally { got.restore(); }
+      });
+    });
+  });
+
+  test('967 B5 4 the owner gets “Sam asks to edit “Beach B5”” as a card — Not now tells Sam and holds further asks off, Allow makes Sam an Editor through the role change, no answer tells Sam; a flood raises one card; an Editor’s, a stranger’s or a malformed ask raises none, and no ask ever changes a role by itself', { item: '967', budgetMs: 120000 }, async function () {
+    /* J4-15, from the owner's side. The ask is a new message from an untrusted phone: only a member who is a Viewer or a
+       Commenter may send it, the name on the card is the one his own member table holds, and only his Allow changes a role. */
+    const C = need921S7('the ask-to-edit card');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        FM.projects.rename(ctx.pid, 'Beach B5');
+        const got = toasts921();
+        try {
+          await atPhoneWidth(async function () {
+            const EVIL = 'Sam <img src=x>';
+            const V = rawWire921(ctx, 'viewer', EVIL);
+            V.say({ t: 'ask', w: 'edit' });
+            await settle921(100);
+            const card = knock967b5();
+            if (!card) throw new Error('a Viewer’s ask raised nothing on the owner’s phone (J4-15)');
+            const txt = card.querySelector('.ck-text').textContent;
+            if (txt !== EVIL + ' asks to edit “Beach B5”.') throw new Error('the ask card reads “' + txt + '”');
+            if (card.querySelector('img')) throw new Error('the asker’s name was parsed as HTML on the card');
+            const yes = card.querySelector('.ck-yes'), no = card.querySelector('.ck-no');
+            if (!yes || yes.textContent !== 'Allow' || !no || no.textContent !== 'Not now') throw new Error('the ask card’s buttons read ' + JSON.stringify([no && no.textContent, yes && yes.textContent]));
+            if (!/Editor/.test(card.textContent)) throw new Error('the card does not say what Allow does: “' + card.textContent + '”');
+            const cr = card.getBoundingClientRect();
+            if (cr.left < 0 || cr.right > window.innerWidth + 0.5) throw new Error('the ask card runs off a 390 screen');
+            /* A flood, junk and people who may not ask: still one card, and nobody's role moved. */
+            for (let i = 0; i < 25; i++) V.say({ t: 'ask', w: 'edit' });
+            const E = rawWire921(ctx, 'editor', 'Ed');
+            E.say({ t: 'ask', w: 'edit' });
+            const V2 = rawWire921(ctx, 'viewer', 'Vi');
+            [{ t: 'ask' }, { t: 'ask', w: 'owner' }, { t: 'ask', w: { a: 1 } }, { t: 'ask', w: 'edit'.repeat(9) }, { t: 'ask', w: ['edit'] }].forEach(function (m) { V2.say(m); });
+            const X = rawWire921(ctx, 'viewer', 'Gone');
+            ctx.S.dropPeer(X.mid);
+            X.say({ t: 'ask', w: 'edit' });
+            await settle921(120);
+            if (ui._knocks() !== 1) throw new Error('a flood, an Editor, a malformed ask or a stranger raised ' + ui._knocks() + ' cards — one expected');
+            if (ctx.S.host.members[V.mid].role !== 'viewer' || ctx.S.host.members[V2.mid].role !== 'viewer') throw new Error('an ask changed a role by itself');
+            if (V.got.some(function (m) { return m.t === 'role'; })) throw new Error('the asker was sent a role before anybody answered');
+            /* Not now — a real tap. */
+            await onScreen924(async function () { await hd5Tap(no, 'Not now'); });
+            await settle921(120); V.loop.settle();
+            if (knock967b5()) throw new Error('Not now left the card up');
+            const nos = V.got.filter(function (m) { return m.t === 'ask-no'; });
+            if (nos.length !== 1 || nos[0].why) throw new Error('Not now sent the asker ' + JSON.stringify(nos));
+            if (ctx.S.host.members[V.mid].role !== 'viewer') throw new Error('Not now changed the role');
+            /* Held off: asking straight away raises nothing. */
+            V.say({ t: 'ask', w: 'edit' }); await settle921(100);
+            if (knock967b5() || ui._knocks()) throw new Error('an ask straight after Not now raised another card');
+            /* V2's malformed ones raised nothing; a well-formed one from V2 does — the positive control for the junk above. It
+               CLAIMS a name and a role; the card reads the name the owner's member table holds, and the role is untouched. */
+            V2.say({ t: 'ask', w: 'edit', name: 'Ezra', role: 'editor' }); await settle921(100);
+            const c2 = knock967b5();
+            if (!c2) throw new Error('CONTROL: a well-formed ask from the second Viewer raised no card, so “the junk raised none” proved nothing');
+            if (c2.querySelector('.ck-text').textContent !== 'Vi asks to edit “Beach B5”.') throw new Error('the card took the name the ask CLAIMED: “' + c2.querySelector('.ck-text').textContent + '”');
+            if (ctx.S.host.members[V2.mid].role !== 'viewer') throw new Error('an ask claiming role:editor changed the role before anybody answered');
+            c2.querySelector('.ck-yes').click(); await settle921(150); V2.loop.settle();
+            if (ctx.S.host.members[V2.mid].role !== 'editor') throw new Error('Allow did not make the asker an Editor (role ' + ctx.S.host.members[V2.mid].role + ')');
+            if (!V2.got.some(function (m) { return m.t === 'role' && m.role === 'editor'; })) throw new Error('the asker was not told they are an Editor now');
+            if (!got.some(function (x) { return /^Vi can edit now/.test(x); })) throw new Error('Allow said nothing to the owner: ' + JSON.stringify(got));
+            if (knock967b5()) throw new Error('Allow left the card up');
+            /* An Editor now: asking again raises nothing. */
+            V2.say({ t: 'ask', w: 'edit' }); await settle921(80);
+            if (ui._knocks()) throw new Error('an Editor’s ask raised a card');
+            /* Nobody answers: the asker is told, and nothing moved. */
+            ui._knockWait(300);
+            const W = rawWire921(ctx, 'commenter', 'Wes');
+            W.say({ t: 'ask', w: 'edit' });
+            await until921S6('the Commenter’s ask card', function () { return knock967b5(); }, 2000)
+              .catch(function () { throw new Error('a Commenter’s ask raised no card'); });
+            await until921S6('the unanswered ask to end', function () { W.loop.settle(); return !knock967b5() && W.got.some(function (m) { return m.t === 'ask-no'; }) ? 1 : 0; }, 3000)
+              .catch(function () { throw new Error('an ask nobody answered did not tell the asker: ' + JSON.stringify(W.got.map(function (m) { return m.t; }))); });
+            const wn = W.got.filter(function (m) { return m.t === 'ask-no'; })[0];
+            if (wn.why !== 'timeout') throw new Error('an unanswered ask was sent as ' + JSON.stringify(wn) + ' — a Not now would hold them off for something he never said');
+            if (ctx.S.host.members[W.mid].role !== 'commenter') throw new Error('an unanswered ask changed the role');
+            ui._knockWait(null);
+            /* Somebody who leaves takes their ask with them. */
+            const Y = rawWire921(ctx, 'viewer', 'Yan');
+            Y.say({ t: 'ask', w: 'edit' }); await settle921(80);
+            if (!knock967b5()) throw new Error('setup: Yan’s ask raised no card');
+            Y.say({ t: 'bye', why: 'left' }); await settle921(120);
+            if (knock967b5() || ui._knocks()) throw new Error('the card stayed up after the asker left');
+          }, 390);
+        } finally {
+          got.restore();
+          ui._knockWait(null);
+          const kc = document.getElementById('collab-knock'); if (kc) { const n = kc.querySelector('.ck-no'); if (n) n.click(); }
+        }
+      });
+    });
+  });
+
+  /* ═══ #967 BATCHES 4–5 · THE REVIEW'S FINDINGS ═══════════════════════════════════════════════════════════════════════════
+   * Three lenses read the combined build (ba5d8d2a): two real Chromes paired by swap code at 380 and 390, a first-timer
+   * reading every word, and a PC pass. Each test below fails on that build and passes with its fix. */
+  function banner967r() {
+    const b = document.getElementById('collab-banner');
+    if (!b) return null;
+    const tx = b.querySelector('.cb-text'), a = b.querySelector('.cb-act'), x = b.querySelector('.cb-x');
+    return { el: b, text: tx ? tx.textContent : '', tx: tx, act: a && a.getClientRects().length ? a : null, x: x && x.getClientRects().length ? x : null,
+      cut: !!tx && tx.scrollWidth > tx.clientWidth + 1 };
+  }
+  function uncut967r(b, what) {
+    if (!b) throw new Error(what + ': no banner at all');
+    if (b.cut) throw new Error(what + ': the banner’s words are cut — “' + b.text + '” needs ' + b.tx.scrollWidth + ' px and has ' + b.tx.clientWidth);
+    const r = b.el.getBoundingClientRect();
+    if (r.left < -0.5 || r.right > window.innerWidth + 0.5) throw new Error(what + ': the banner runs off the screen (' + Math.round(r.left) + '–' + Math.round(r.right) + ' of ' + window.innerWidth + ')');
+    [b.act, b.x].forEach(function (n) {
+      if (!n) return;
+      const q = n.getBoundingClientRect();
+      if (q.right > r.right + 0.5 || q.left < r.left - 0.5) throw new Error(what + ': “' + (n.getAttribute('aria-label') || n.textContent) + '” is cut by the banner’s edge');
+    });
+  }
+  function asks967r(got) { return got.filter(function (m) { return m.ch === 'ctl' && m.msg && m.msg.t === 'ask'; }); }
+
+  test('967 B4 7 on a 380 phone Watch along keeps its words — a Viewer watching “Christopher” reads “View only · Watching Christopher” uncut and still has “Ask to edit” (a Commenter too, the button saying just “Ask” when it must), a real tap asks and keeps the watching, the × reaches past its 22 px, and an Editor’s “Watching along with Christopher” is uncut too', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (two Chromes at 380 and 390, a real tap on Watch along): the rename made the line ten characters longer, and the
+       banner's own row under the chip, LIVE and the bubble kept the FIRST row's cap (100% − 140 px, 240 at 380) — “View only ·
+       Watching along w…” even for “Ezra”, and an Editor's “Watching along with Christopher” cut too. The watch-along line
+       also replaced the ask banner whole, so a Viewer watching had nothing to press; and its × was a 22 px target. */
+    const C = need921S5('Watch along on a phone');
+    const chris = { mid: 'm8', name: 'Christopher', color: '#f472b6', role: 'editor', st: 'here', ls: null };
+    const startWatching = async function (ui, gs, k) {
+      gs.send('ctl', rosterMsg921([chris]));
+      gs.send('pres', { t: 'PR', n: 1, full: 1, m: { o: prOf921(), m8: prOf921() } });
+      k.step(100); C.presence.tick(); C.presence._draw();
+      await ui.share(); await settle921(150);
+      const f = document.querySelector('.cs-person[data-mid="m8"] .cs-follow');
+      if (!f || f.textContent !== 'Watch along') throw new Error('setup: Christopher’s row has no Watch along (' + (f && f.textContent) + ')');
+      await hd5Tap(f, 'Watch along');
+      await settle921(150);
+      if (C.presence.following() !== 'm8') throw new Error('setup: a real tap on Watch along did not start watching along');
+      ui.close(); ui.syncBanner(); await settle921(150);
+    };
+    await withLabs921(async function (ui) {
+      /* A Viewer, and a Commenter — whose longer lead leaves the button less room (it may say just “Ask”, never cut words). */
+      for (const role of ['viewer', 'commenter']) {
+        const lead = role === 'viewer' ? 'View only' : 'Comments only';
+        await withCollab921([layer921('A')], async function () {
+          const gs = guest921S5(C, role);
+          const k = clock921(C);
+          try {
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () {
+                await startWatching(ui, gs, k);
+                let b = banner967r();
+                uncut967r(b, 'a ' + role + ' watching along with Christopher at 380');
+                if (b.text !== lead + ' · Watching Christopher') throw new Error('a ' + role + ' watching along reads “' + b.text + '” on a phone');
+                if (!b.act || !/^Ask( to edit)?$/.test(b.act.textContent)) throw new Error('a ' + role + ' watching along has nothing to press but the × — “Ask to edit” is gone while they watch: “' + b.el.textContent + '”');
+                if (role === 'viewer' && b.act.textContent !== 'Ask to edit') throw new Error('a Viewer’s button says “' + b.act.textContent + '” where “Ask to edit” fits');
+                if (!b.x || b.x.getAttribute('aria-label') !== 'Stop watching along') throw new Error('setup: the watch-along banner has no ×');
+                /* The × reaches past its 22 px drawing, as “Ask to edit” beside it does. */
+                const xr = b.x.getBoundingClientRect(), cx = xr.left + xr.width / 2, cy = xr.top + xr.height / 2;
+                [[cx, xr.top - 2, '2 px above'], [xr.right + 2, cy, '2 px right of'], [xr.left - 1, cy, '1 px left of']].forEach(function (p) {
+                  const hit = document.elementFromPoint(p[0], p[1]);
+                  if (hit !== b.x && !b.x.contains(hit)) throw new Error('a finger ' + p[2] + ' the 22 px × lands on ' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing') + ' — a target under 24 px');
+                });
+                /* One real tap on Ask: one ask on the wire, and still watching along. */
+                const n0 = asks967r(gs.got).length;
+                await hd5Tap(b.act, 'Ask (while watching along, ' + role + ')');
+                gs.loop.pump(); await settle921(150);
+                const asks = asks967r(gs.got);
+                if (asks.length !== n0 + 1 || asks[asks.length - 1].msg.w !== 'edit') throw new Error('Ask while watching along sent ' + JSON.stringify(asks.map(function (m) { return m.msg; })));
+                if (C.presence.following() !== 'm8') throw new Error('tapping Ask on the banner stopped the watching along');
+                b = banner967r();
+                uncut967r(b, 'after asking, still watching along');
+                if (b.act || b.text !== lead + ' · Watching Christopher') throw new Error('after asking the banner reads “' + b.text + '”' + (b.act ? ' and still offers “' + b.act.textContent + '”' : ''));
+              });
+            }, 380);
+          } finally { C.presence.unfollow(); C.presence._clock(null); }
+        });
+      }
+      /* An Editor: the full words, uncut on their own row. */
+      await withCollab921([layer921('A')], async function () {
+        const gs = guest921S5(C);
+        const k = clock921(C);
+        try {
+          await atPhoneWidth(async function () {
+            await onScreen924(async function () {
+              await startWatching(ui, gs, k);
+              const b = banner967r();
+              uncut967r(b, 'an Editor watching along with Christopher at 380');
+              if (b.text !== 'Watching along with Christopher') throw new Error('an Editor watching along reads “' + b.text + '”');
+            });
+          }, 380);
+        } finally { C.presence.unfollow(); C.presence._clock(null); }
+      });
+    });
+  });
+
+  test('967 B4 8 Stop sharing says what really stops — with Swap codes only on it names the swap code he sent (there is no link or short code), and Sharing settings offers “Swap codes with someone” rather than “Link not working?”; with links on it names the link, the short code and any swap code', { item: '967', budgetMs: 150000 }, async function () {
+    /* Review (a real Chrome, Swap codes only on): the question said “Your link and short code stop working.” under a panel
+       saying links and short codes need the online helpers this device does not use — and left out the swap code he had
+       sent, which is what really stops. The Connection group offered “Link not working?” with no link in sight. */
+    const C = need921S7('what Stop sharing says');
+    const wasCO = FM.settings.get('collabCodesOnly');
+    const WANT = {
+      true: { door: 'Swap codes with someone', msg: 'Everyone keeps their own copy. Any swap code you sent stops working.' },
+      false: { door: 'Link not working? Swap codes instead', msg: 'Everyone keeps their own copy. Your link, short code and any swap code you sent stop working.' }
+    };
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        try {
+          await with945(async function () {
+            for (const co of [true, false]) {
+              FM.settings.set('collabCodesOnly', co);
+              await withCollab921([layer921('A')], async function () {
+                await atPhoneWidth(async function () {
+                  const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                  FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                  if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+                  fr.querySelector('.cs-gear').click(); await settle921(100);
+                  const door = fr.querySelector('.cs-slink');
+                  if (!door) throw new Error('setup: Sharing settings has no swap-codes door');
+                  if (door.textContent !== WANT[co].door) throw new Error('with Swap codes only ' + (co ? 'ON' : 'off') + ' Sharing settings offers “' + door.textContent + '”');
+                  fr.querySelector('.cs-gear').click(); await settle921(100);
+                  fr.querySelector('.cs-stop').click();
+                  const q = await until921S6('Stop sharing?', ask967b3, 3000);
+                  if (q.title !== 'Stop sharing?') throw new Error('CONTROL: the question is “' + q.title + '”');
+                  if (q.msg !== WANT[co].msg) throw new Error('with Swap codes only ' + (co ? 'ON' : 'off') + ' Stop sharing asks “' + q.msg + '”');
+                  q.cancel.click(); await settle921(100);
+                  FM.closeCanvasDialog(); await settle921(80);
+                }, 390);
+              });
+            }
+          });
+        } finally {
+          FM.settings.set('collabCodesOnly', !!wasCO);
+          const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+        }
+      });
+    });
+  });
+
+  test('967 B4 9 the words agree with themselves — a Viewer’s panel says “you can watch, not change the edit” above the line that says they can play and export it, and no door a friend reads says a bare “code”: the Join field, “Got an invite?”, the turn-on card and Home’s Join', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (a first-timer's reading): “You’re a Viewer — you can only watch.” then “…You can export a video of it”; and the
+       words sheet's rule “Neither is ever just ‘code’” broken in four places a friend holding a swap code reads. */
+    const C = need921S7('the words');
+    const bare = function (t) { return /\bcodes?\b/i.test(String(t || '').replace(/\b(short|swap) codes?\b/gi, '')); };
+    await withLabs921(async function (ui) {
+      await withGuestApp921('viewer', [layer921('A')], async function () {
+        await ui.share(); await settle921(120);
+        const mine = document.querySelector('.cs-myrole'), hint = document.querySelector('.cs-rolehint');
+        if (!hint || !/export a video/.test(hint.textContent)) throw new Error('CONTROL: the Viewer’s panel no longer says they can export (' + (hint && hint.textContent) + ')');
+        if (!mine || mine.textContent !== 'You’re a Viewer — you can watch, not change the edit.') throw new Error('a Viewer’s panel says “' + (mine && mine.textContent) + '” and then “' + hint.textContent + '”');
+        ui.close(); await settle921(80);
+      });
+      await with945(async function () {
+        await editorWithShape(async function () {
+          await atPhoneWidth(async function () {
+            const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            const row = fr.querySelector('.cs-joinlink');
+            if (!row) throw new Error('setup: the Friends block has no “Got an invite?”');
+            if (!/^Got an invite\?/.test(row.textContent) || bare(row.textContent)) throw new Error('the Friends block’s way in reads “' + row.textContent + '” — a bare “code”');
+            FM.closeCanvasDialog(); await settle921(80);
+          }, 390);
+        });
+      });
+      await atPhoneWidth(async function () {
+        await ui.join(); await settle921(150);
+        const input = document.querySelector('#collab-join .cj-code');
+        if (!input) throw new Error('setup: no Join field');
+        if (!input.placeholder || bare(input.placeholder)) throw new Error('the Join field says “' + input.placeholder + '” — a friend holding a swap code reads a bare “code”');
+        /* …and the words fit the field on a phone (the first fix, “Link, short code or swap code”, was cut at 390). */
+        const cs = getComputedStyle(input), cx = document.createElement('canvas').getContext('2d');
+        cx.font = cs.font;
+        const need = cx.measureText(input.placeholder).width, have = input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        if (!(have > 40)) throw new Error('setup: the Join field measures ' + have + ' px inside');
+        if (need > have + 0.5) throw new Error('the Join field’s “' + input.placeholder + '” needs ' + Math.round(need) + ' px and the field has ' + Math.round(have) + ' at 380 — it is cut');
+        ui.close(); await settle921(80);
+      }, 380);
+      const hj = document.getElementById('hm-join-btn');
+      if (!hj) throw new Error('setup: Home has no Join');
+      if (bare(hj.title)) throw new Error('Home’s Join says “' + hj.title + '”');
+      FM.settings.set('collabLabs', false); ui.syncLabs();
+      try {
+        ui.joinDoor(); await settle921(150);
+        const card = document.getElementById('collab-labs-ask');
+        if (!card) throw new Error('setup: Join with the feature off did not ask to turn it on');
+        if (!/Turn on Work with friends/.test(card.textContent)) throw new Error('CONTROL: the turn-on card reads “' + card.textContent.slice(0, 120) + '”');
+        if (bare(card.textContent)) throw new Error('the turn-on card says “' + card.querySelector('.collab-sub').textContent + '” — a bare “code”');
+        ui.close(); await settle921(80);
+      } finally { FM.settings.set('collabLabs', true); ui.syncLabs(); }
+    });
+  });
+
+  test('967 B4 10 the role menus open whole — at 390 “New people join as” and a person’s menu keep every item on one line and sit inside the screen, not squeezed flush against its edge', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (390, 380 and a PC at 1280): “Editor — can change anything” and “Watch along — your screen follows theirs” wrapped
+       onto two lines each, the menu flush against the right edge. contextMenu measured the menu while it sat at the button's
+       left edge, where a fixed box can only be as wide as what is left of the screen. */
+    const C = need921S5('the role menus');
+    const whole = async function (where) {
+      const m = document.getElementById('ctx-menu');
+      if (!m || m.classList.contains('hidden')) throw new Error('setup: ' + where + ' did not open');
+      /* Measured at rest: the hinge overshoots its scale for a moment on the way in. */
+      await Promise.race([Promise.all(m.getAnimations().map(function (a) { return a.finished.catch(function () {}); })), sleep(1000)]);
+      const items = Array.prototype.slice.call(m.querySelectorAll('.ctx-item'));
+      if (items.length < 3) throw new Error('setup: ' + where + ' has ' + items.length + ' items');
+      items.forEach(function (it) {
+        const rg = document.createRange(); rg.selectNodeContents(it);
+        const tops = {};
+        Array.prototype.forEach.call(rg.getClientRects(), function (r) { if (r.width > 0) tops[Math.round(r.top)] = 1; });
+        const n = Object.keys(tops).length;
+        if (n > 1) throw new Error(where + ': “' + it.textContent + '” wraps onto ' + n + ' lines (the menu is ' + Math.round(m.getBoundingClientRect().width) + ' px wide at x ' + Math.round(m.getBoundingClientRect().left) + ')');
+      });
+      const r = m.getBoundingClientRect();
+      if (r.right > window.innerWidth - 5.5 || r.left < 5.5) throw new Error(where + ' sits at ' + Math.round(r.left) + '–' + Math.round(r.right) + ' of ' + window.innerWidth + ' — flush against the edge');
+    };
+    await withLabs921(async function (ui) {
+      await with945(async function () {
+        await withCollab921([layer921('A')], async function (c) {
+          const k = clock921(C);
+          const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+          g.pr({});
+          k.step(100); C.presence.tick(); C.presence._draw();
+          try {
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              const ja = fr.querySelector('.cs-joinas');
+              if (!ja) throw new Error('setup: no “New people join as”');
+              ja.click(); await settle921(80);
+              await whole('“New people join as”');
+              FM.contextMenu.hide(); await settle921(60);
+              const row = fr.querySelector('.cs-person[data-mid="' + g.mid + '"]');
+              if (!row) throw new Error('setup: Sam has no row');
+              row.querySelector('.cs-role').click(); await settle921(80);
+              await whole('Sam’s menu');
+              FM.contextMenu.hide(); await settle921(60);
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally { C.presence._clock(null); try { FM.contextMenu.hide(); } catch (e) {} }
+        });
+      });
+    });
+  });
+
+  test('967 B4 11 “Leave (keep my copy)” keeps its brackets together on a 390 phone — it breaks before the bracket, never as “Leave (keep my / copy)”', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (390, a real tap on Leave): the confirm button is 151 px and the label wrapped inside its brackets. */
+    const C = need921S7('the Leave button’s label');
+    await withLabs921(async function () {
+      await with945(async function () {
+        const fx = guest967(C);
+        const wasHome = FM.home.isOpen();
+        try {
+          C.attach(fx.G, { autoTick: false });
+          if (wasHome) FM.home.close();
+          await atPhoneWidth(async function () {
+            const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            fr.querySelector('.cs-foot .cs-stop').click();
+            const q = await until921S6('Leave this project?', ask967b3, 3000);
+            await settle921(120);
+            const t = q.ok.textContent;
+            if (t.replace(/ /g, ' ') !== 'Leave (keep my copy)') throw new Error('setup: the answer reads “' + t + '”');
+            const node = Array.prototype.filter.call(q.ok.childNodes, function (n) { return n.nodeType === 3 && n.nodeValue.indexOf('(') >= 0; })[0];
+            if (!node) throw new Error('setup: the label is not one text node');
+            const rg = document.createRange();
+            rg.setStart(node, node.nodeValue.indexOf('(')); rg.setEnd(node, node.nodeValue.indexOf(')') + 1);
+            const tops = {};
+            Array.prototype.forEach.call(rg.getClientRects(), function (r) { if (r.width > 0) tops[Math.round(r.top)] = 1; });
+            if (Object.keys(tops).length !== 1) throw new Error('“(keep my copy)” breaks across ' + Object.keys(tops).length + ' lines on the ' + Math.round(q.ok.getBoundingClientRect().width) + ' px button — it reads “Leave (keep my / copy)”');
+            q.cancel.click(); await settle921(120);
+            FM.closeCanvasDialog(); await settle921(80);
+          }, 390);
+        } finally {
+          const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+          await dropFixture967(C, [fx.gpid]);
+          if (wasHome && !FM.home.isOpen()) FM.home.open();
+        }
+      });
+    });
+  });
+
+  test('967 B5 5 on a 380 phone the ask banner keeps the answer — with an owner called “Christopher” a Viewer and a Commenter read “asked Christopher” and “Christopher said not now” uncut, and a 20-letter name gives way to “asked · waiting” and “not now · ask again later”', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (two Chromes, the owner named Christopher, real taps on Ask to edit and Not now): “View only · Christopher sai…”
+       and “Comments only · Christopher sai…” — the words that say where the ask stands were the ones cut, and “said not now”
+       stays on the banner for two minutes while its toast lasts three seconds. */
+    const C = need921S7('the ask banner on a phone');
+    await withLabs921(async function (ui) {
+      await withGuestApp921('viewer', [layer921('A')], async function (g) {
+        g.G.hostName = 'Christopher';
+        g.HA.onAsk = function () { return true; };   // the owner's side shows each ask (his card is B5 4's business)
+        const got = toasts921();
+        const cycle = async function (lead, who, asked, notNow) {
+          g.G.hostName = who;                        // (a role change from the owner re-sends his name — this is the one under test)
+          ui.syncBanner(); await settle921(150);
+          let b = banner967r();
+          if (!b || !b.act || b.text !== lead) throw new Error('setup: the ' + lead + ' banner reads “' + (b && b.text) + '”' + (b && b.act ? '' : ' with nothing to press'));
+          await hd5Tap(b.act, 'Ask to edit (' + lead + ', owner ' + who + ')');
+          g.settle(); await settle921(150);
+          b = banner967r();
+          if (!b || b.text !== asked) throw new Error('after asking, the ' + lead + ' banner reads “' + (b && b.text) + '” (owner ' + who + ')');
+          uncut967r(b, lead + ', asked, owner ' + who);
+          if (!g.HS.answerAsk(g.mid, 'no')) throw new Error('setup: the owner’s side could not answer');
+          g.settle(); await settle921(150);
+          b = banner967r();
+          if (!b || b.text !== notNow) throw new Error('after Not now, the ' + lead + ' banner reads “' + (b && b.text) + '” (owner ' + who + ')');
+          uncut967r(b, lead + ', not now, owner ' + who);
+          /* The wait is over on both sides (their seams), so the next round can ask. */
+          ui._askState().until = Date.now() - 1;
+          g.HS._asks()[g.mid].noUntil = 0;
+        };
+        try {
+          await atPhoneWidth(async function () {
+            await onScreen924(async function () {
+              await cycle('View only', 'Christopher', 'View only · asked Christopher', 'View only · Christopher said not now');
+              g.HS.setPeerRole(g.mid, 'commenter'); g.settle(); await settle921(150);
+              if (g.G.role !== 'commenter') throw new Error('setup: the friend did not become a Commenter');
+              await cycle('Comments only', 'Christopher', 'Comments only · asked Christopher', 'Comments only · Christopher said not now');
+              await cycle('Comments only', 'Alexandra Montgomery', 'Comments only · asked · waiting', 'Comments only · not now · ask again later');
+            });
+          }, 380);
+        } finally { got.restore(); }
+      });
+    });
+  });
+
+  test('967 B5 6 “What gets sent? ›” can be read on the light Settings panel — at least 4.5:1 against its card, where the dark theme’s cyan was 1.9:1', { item: '967', budgetMs: 60000 }, async function () {
+    /* Review (Settings over the light Home): the one way to the list that names every service (the S6 rule) was
+       rgb(90,199,237) at 12.5 px on white. The heading above it is the control that the light rules are applying. */
+    const C = need921S7('the privacy link on light Settings');
+    const lum = function (css) {
+      const m = /rgba?\(([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(css || '');
+      if (!m) throw new Error('could not read the colour ' + css);
+      const v = [+m[1], +m[2], +m[3]].map(function (x) { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+      return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+    };
+    /* What the link sits on: every translucent layer under it, laid over the light Home's white. */
+    const under = function (node) {
+      const chain = [];
+      for (let n = node.parentElement; n; n = n.parentElement) chain.push(getComputedStyle(n).backgroundColor);
+      let c = [255, 255, 255];
+      chain.reverse().forEach(function (bg) {
+        const m = /rgba?\(([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/.exec(bg || '');
+        if (!m) return;
+        const a = m[4] == null ? 1 : +m[4];
+        c = [0, 1, 2].map(function (i) { return c[i] * (1 - a) + (+m[i + 1]) * a; });
+      });
+      return 'rgb(' + c.map(Math.round).join(', ') + ')';
+    };
+    const root = document.documentElement, had = root.getAttribute('data-home');
+    const wasHome = FM.home.isOpen();
+    await withLabs921(async function () {
+      try {
+        root.setAttribute('data-home', 'light');
+        if (!FM.home.isOpen()) FM.home.open();
+        FM.settings.open(); await sleep(400);
+        const head = document.querySelector('#set-friends .set-grouptitle') || document.querySelector('.set-panel .set-grouptitle');
+        if (!head || getComputedStyle(head).color !== 'rgb(23, 128, 180)') throw new Error('CONTROL: the light Settings rules are not applying (the heading is ' + (head ? getComputedStyle(head).color : 'missing') + ')');
+        const more = document.querySelector('.set-panel .cs-privmore');
+        if (!more) throw new Error('setup: Settings has no “What gets sent? ›”');
+        const fg = getComputedStyle(more).color, bg = under(more);
+        const l1 = lum(fg), l2 = lum(bg);
+        const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+        if (ratio < 4.5) throw new Error('“What gets sent? ›” is ' + fg + ' on ' + bg + ' — ' + ratio.toFixed(2) + ':1, under 4.5:1 for 12.5 px text, on the one way to the list that names every service');
+      } finally {
+        if (FM.settings.isOpen()) FM.settings.close();
+        await sleep(300);
+        if (had == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', had);
+        if (!wasHome && FM.home.isOpen()) FM.home.close();
+      }
+    });
+  });
+
+  test('967 B5 7 a comment he has not opened survives Leave — Ezra comments, the friend is told and sees 1 on the bubble, taps Leave → “Leave (keep my copy)”, and the copy (a new project) still counts 1 until the comments are opened', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (two Chromes): Sam saw “1” and the toast, tapped Leave → Leave (keep my copy), and the badge went — the copy has a
+       new id, which the count read as another project. Only opening the comments may spend it. */
+    const C = need921S7('the count across Leave');
+    await withLabs921(async function (ui) {
+      await with945(async function () {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        const D = { project: { name: 'Ezra’s film B45', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('Shared B45')] };
+        const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-b45', seq: 0, name: 'Sam' }, D);
+        if (!gpid) throw new Error('setup: could not make the shared copy');
+        const made = [gpid];
+        const got = toasts921();
+        try {
+          if (wasHome) FM.home.close();
+          await FM.projects.open(gpid);
+          const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+          const inv = C.bridge.invariants();
+          const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+          const HS = C.Session({ adapter: plainAdapter921(hdoc, inv), role: 'owner', mid: 'o', host: H });
+          const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+          const mid = HS.addPeer(loop.a, { role: 'viewer', name: 'Sam', color: '#a3e635' });
+          const G = C.Session({ adapter: C.bridge, role: 'viewer', mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+          G.gpid = gpid; G.pid = gpid; G.hostName = 'Ezra';
+          G.setLink(loop.b); G.bs = H.seq;
+          C.attach(G, { autoTick: false });
+          await atPhoneWidth(async function () {
+            ui.syncBanner(); await settle921(150);
+            hdoc.project.comments = [{ id: 'c_b45lv', by: { mid: 'o', name: 'Ezra', color: '#ff9f43' }, at: Date.now(), text: 'Keep the wide shot', replies: [] }];
+            HS.tick('hot'); loop.settle(); await settle921(150);
+            if (got.indexOf('Ezra commented') < 0 || cmtCount967b5() !== '1') throw new Error('CONTROL: Ezra’s comment did not arrive as news (' + JSON.stringify(got) + ', count “' + cmtCount967b5() + '”)');
+            const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            fr.querySelector('.cs-foot .cs-stop').click();
+            const q = await until921S6('Leave this project?', ask967b3, 3000);
+            q.ok.click();
+            const nid = await until921S6('the copy to become his own', function () {
+              const id = FM.projects.currentId();
+              return id && id !== gpid && !FM.projects.list().some(function (p) { return p.id === gpid; }) && (FM.scene.project.comments || []).length ? id : null;
+            }, 10000);
+            made.push(nid);
+            await settle921(300);
+            if (C.session) throw new Error('setup: the session is still attached after Leave');
+            if (!(FM.scene.project.comments || []).some(function (c) { return c.id === 'c_b45lv'; })) throw new Error('setup: the copy does not carry Ezra’s comment');
+            const door = cmtDoor967b5();
+            if (cmtCount967b5() !== '1') throw new Error('Leave (keep my copy) spent a comment he never opened — the bubble on his copy counts “' + cmtCount967b5() + '” (' + (door ? door.getAttribute('aria-label') : 'no bubble') + ')');
+            /* …and opening them spends it, as ever. */
+            door.click(); await settle921(150);
+            C.comments.close(); await settle921(100);
+            if (cmtCount967b5() !== '') throw new Error('opening the comments on the copy did not spend the count (“' + cmtCount967b5() + '”)');
+          }, 390);
+        } finally {
+          got.restore();
+          try { C.comments.close(); } catch (e) {}
+          const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+          try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+          if (FM.closeCanvasDialog) FM.closeCanvasDialog();
+          await q915aCleanup(made, orig, wasHome, [], [], []);
+        }
+      });
+    });
+  });
+
+  test('967 B5 8 an ask lets go of its session — once the friend has asked (and again after “Not now”), the session ending drops the ask with it, so an ended project is not held in memory by the banner', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (a PC pass, read and reproduced): the ask state kept a reference to the guest Session and nothing cleared it —
+       not the end of the session, not a detach, not turning the feature off — so the ended session's document, outbox and
+       link stayed reachable until some later ask. */
+    const C = need921S7('the ask state’s lifetime');
+    await withLabs921(async function (ui) {
+      for (const how of ['open', 'cool']) {
+        await withGuestApp921('viewer', [layer921('A')], async function (g) {
+          g.HA.onAsk = function () { return true; };   // the owner's side shows the ask, so it can answer it
+          ui.syncBanner(); await settle921(100);
+          const b = banner967r();
+          if (!b || !b.act) throw new Error('setup: no Ask to edit');
+          b.act.click(); g.settle(); await settle921(100);
+          if (how === 'cool') { g.HS.answerAsk(g.mid, 'no'); g.settle(); await settle921(100); }
+          const a = ui._askState();
+          if (!a || a.s !== g.G || a.state !== how) throw new Error('CONTROL: the friend’s ask is not recorded as ' + how + ' (' + (a ? a.state : 'none') + ')');
+          g.G.stop('left'); C.detach(); await settle921(60);
+          const left = ui._askState();
+          if (left) throw new Error('after the session ended the ' + how + ' ask still holds it (' + left.state + ', the ended Session ' + (left.s === g.G ? 'itself' : 'or another') + ' kept alive)');
+        });
+      }
     });
   });
 

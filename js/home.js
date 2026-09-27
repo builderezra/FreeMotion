@@ -1518,7 +1518,7 @@ window.FM = window.FM || {};
         { label: 'Delete…', danger: true, action: async () => {
           const sh = sharedOf([p.id]), who = sh.who, shared = sh.ids.length > 0;
           const message = who.length ? namesOf(who) + (who.length === 1 ? ' is' : ' are') + ' working in this now — deleting ends it for everyone. This cannot be undone.'
-            : shared ? 'Delete "' + (p.name || 'Untitled') + '"? It is shared — deleting it stops sharing, and the link and code stop working. This cannot be undone.'
+            : shared ? 'Delete "' + (p.name || 'Untitled') + '"? It is shared — deleting it stops sharing, and the link and short code stop working. This cannot be undone.'
             : 'Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.';
           if (!await FM.ask({ title: 'Delete project', message: message, ok: 'Delete', danger: true })) return;
           if (shared) endSharedFor(p.id);
@@ -1797,7 +1797,7 @@ window.FM = window.FM || {};
       const liveName = sh.live ? ((FM.projects.list() || []).find(x => x.id === sh.live) || {}).name || 'Untitled' : '';
       const onlyName = sh.ids.length === 1 ? ((FM.projects.list() || []).find(x => x.id === sh.ids[0]) || {}).name || 'Untitled' : '';
       const shareNote = sh.who.length ? ' ' + namesOf(sh.who) + (sh.who.length === 1 ? ' is' : ' are') + ' working in “' + liveName + '” now — deleting ends it for everyone.'
-        : sh.ids.length ? ' ' + (sh.ids.length === 1 ? '“' + onlyName + '” is shared' : sh.ids.length + ' of them are shared') + ' — deleting stops sharing, and the link and code stop working.'
+        : sh.ids.length ? ' ' + (sh.ids.length === 1 ? '“' + onlyName + '” is shared' : sh.ids.length + ' of them are shared') + ' — deleting stops sharing, and the link and short code stop working.'
         : '';
       if (!await FM.ask({ title: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's'), message: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's') + '?' + shareNote + ' This cannot be undone.', ok: 'Delete', danger: true })) return;
       if (FM.toast) FM.toast('Deleting ' + ids.length + '…');

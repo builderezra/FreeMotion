@@ -63,6 +63,9 @@ window.FM = window.FM || {};
     UNDO_STEPS: 120,
     CKPT_EVERY: 600000, CKPT_KEEP: 10,
     KNOCK_TIMEOUT: 120000, PENDING_JOIN: 24 * 3600 * 1000,
+    /* #967 B5: after the owner's "Not now" to an ask to edit, how long before the same person may ask again. The host
+       keeps it (collab-session.js onAsk) — a phone that ignores its own copy still cannot put a second card up. */
+    ASK_COOLDOWN: 120000,
     /* ⚠️ ONE NUMBER, NOT TWO (queue 921 S3 review). The joining device's wait and the owner's knock
        card were separate constants — 30 s against 120 s — so an owner who took 40 seconds to pick up his
        phone answered a guest that had already given up and closed its connection: `addPeer` then ran

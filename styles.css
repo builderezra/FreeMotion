@@ -10604,6 +10604,19 @@ body.text-editing .collab-people { display: none; }
 .cs-rowhint { flex: 1 1 100%; font-size: 11.5px; color: var(--text-dim); margin-top: -4px; }
 .cs-body > .cs-add { margin-top: 14px; }
 .cs-privacy { font-size: 11.5px; line-height: 1.45; color: var(--text-dim); margin: 12px 2px 0; }
+/* #967 B4 (J1-4, J5-5): one plain sentence, and every service by name behind "What gets sent? ›" (collab-ui.js privacyBlock). */
+.cs-privplain { font-size: 12px; }
+.cs-privmore {
+  display: inline-block; margin: 2px 0 0; padding: 8px 0; min-height: 36px; border: 0; background: transparent;
+  color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; text-align: left;
+}
+.cs-privfull { margin: 0 0 4px; padding: 0 0 0 16px; }
+.cs-privfull[hidden] { display: none; }
+.cs-privfull li { margin: 0 0 5px; overflow-wrap: anywhere; }
+.cs-watchhint { margin: 2px 0 10px; font-size: 12px; }
+.set-privrow { display: block; padding: 0 0 10px; }
+.set-row + .set-privrow { border-top: 0; }
+.set-privrow .cs-privacy { margin: 0; }
 /* §14.6 on the relay: the letters are offered, in a line, not a step. */
 .ck-sas { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; overflow-wrap: anywhere; }
 .ck-sas b, .cj-softsas b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; letter-spacing: 1.5px; color: var(--text); }
@@ -10666,6 +10679,32 @@ body.text-editing .collab-people { display: none; }
 .collab-live.clv-guest .clv-dot { background: #4fd18b; }
 body.text-editing .collab-live, #stage:has(> #collab-people.cp-hidden) > .collab-live { display: none; }
 @media (min-width: 701px) { .collab-live { display: none; } }
+/* #967 BATCH 5 — COMMENTS HAVE A DOOR ON THE VIDEO (his pick A): a speech bubble in the chip's own glass, just past LIVE (or
+   past the chip / person+ when nothing is live — placed by collab-ui.js placeCmt), shown while the project is live or has
+   comments. The count is what arrived since he last looked, in the app's accent so it does not read as a second LIVE. The
+   hairline is the friend's LIVE pill's: an icon alone in dark glass vanished against a black video (b5/owner-comments). */
+.collab-cmt {
+  position: absolute; top: 6px; left: 42px; z-index: 22; width: 28px; height: 28px; box-sizing: border-box;
+  display: grid; place-items: center; padding: 0; margin: 0; border: 1px solid rgba(255, 255, 255, .18); border-radius: 14px;
+  background: rgba(10, 12, 16, .62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.collab-cmt::before { content: ""; position: absolute; inset: -8px -3px; }   /* 44 px tall to hit; 3 px each side clears LIVE's */
+.collab-cmt svg { width: 17px; height: 17px; }
+.collab-cmt .ccm-n {
+  position: absolute; top: -5px; right: -7px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 8px; background: var(--accent); color: #0b0e14; text-align: center;
+  font: 800 10px/16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-shadow: 0 0 0 2px rgba(10, 12, 16, .9);
+}
+body.text-editing .collab-cmt, #stage:has(> #collab-people.cp-hidden) > .collab-cmt { display: none; }
+@media (min-width: 701px) { .collab-cmt { display: none; } }
+/* #967 B5: the banner's "Ask to edit" is a 22 px pill on a 28 px banner — its hit area is the banner's full height and more. */
+.collab-banner .cb-act { position: relative; }
+.collab-banner .cb-act::before { content: ""; position: absolute; inset: -11px -4px; }
+/* B4/B5 review: the × that stops Watch along is 22×22 — under a 24 px target, and the one beside it had been given more.
+   The same reach (the banner's overflow keeps it to the banner's own 28 px height, and 30 px across). */
+.collab-banner .cb-x { position: relative; }
+.collab-banner .cb-x::before { content: ""; position: absolute; inset: -11px -4px; }
 /* The Friends block (and the Share card): how it works in three lines, the switch that stays at the foot, and the way in
    for a friend. */
 .cs-how { list-style: none; margin: 2px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 7px; }

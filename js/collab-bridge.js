@@ -222,6 +222,11 @@ window.FM = window.FM || {};
     /* S8 review: a guest said `bye` — the UI keeps the room's member table, and a guest who LEFT is not coming back
        on that token. */
     onPeerLeft: function (mid, why) { if (C.ui && C.ui.onPeerLeft) { try { C.ui.onPeerLeft(mid, why); } catch (e) {} } },
+    /* #967 B5: asking for edit. The owner's side: a member asked (the card), or their ask was called off (they left, or he
+       changed their role himself). The friend's side: his answer — Not now, or nobody answered. */
+    onAsk: function (mid, info) { return !!(C.ui && C.ui.onAsk) && C.ui.onAsk(mid, info) !== false; },   // false: nothing to show it on
+    onAskCancel: function (mid) { if (C.ui && C.ui.onAskCancel) { try { C.ui.onAskCancel(mid); } catch (e) {} } },
+    onAskAnswer: function (how) { if (C.ui && C.ui.onAskAnswer) { try { C.ui.onAskAnswer(how); } catch (e) {} } syncCollabBanner(); },
     deleteLayer: function (id) { if (FM.deleteLayer && FM.layerById && FM.layerById(FM.scene, id)) FM.deleteLayer(id); },
     onEnd: function (why) {
       /* S5 review: presence goes with the session, here and now. `C.detach` is not called on this path
@@ -237,9 +242,9 @@ window.FM = window.FM || {};
          nothing brings back: what ended, and what to ask for (collab-ui.js U.beforePause). */
       const owner = (C.session && typeof C.session.hostName === 'string' && C.session.hostName) || 'The owner';
       if (FM.toast) FM.toast(why === 'removed'
-        ? 'You were removed from the live project — your copy stays on this device'
-        : why === 'switched' ? owner + ' opened another project — ask them for a new code to join again. Your copy stays on this device'
-        : 'The owner ended the live session — your copy stays on this device', 4200);
+        ? 'You were removed from the project — your copy stays on this device'
+        : why === 'switched' ? owner + ' opened another project — ask them for a new swap code to join again. Your copy stays on this device'
+        : owner + ' stopped sharing — your copy stays on this device', 4200);   // #967 B4: no "session"
       syncCollabBanner();
     },
 
