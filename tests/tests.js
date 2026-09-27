@@ -106792,4 +106792,104 @@
     });
   });
 
+  /* ═══ 969 — ON A PHONE, THE SMALL HELP IS ACTUALLY SMALL ═════════════════════════════════════════════════════════════════
+     Ezra, 26 Sep: *"Also on mobile make it so that the small version for the Help menu is actually small because right now it's
+     like there is no difference"*. Measured before the fix at 380×800: small 356×688, big 360×780 — 4px narrower, 12% shorter,
+     because the list fills small's 86% cap (and the base rule's min-width kept it as wide as big). Asserted as RATIOS against
+     big at the same width, so the test says what he said ("no difference") rather than pinning pixels; and against a big that
+     is proven to still fill the screen, so the ratio cannot pass by shrinking big. Opened in a project (a real tap on the phone
+     bar's ?) and over Home (Settings › Keyboard shortcuts' own call), which are the two ways in; small → big → small is a real
+     finger on the grip, the way he switches it. */
+  test('969 phone — the small Help (Shortcuts/tips) is clearly smaller than big: at most 60% of its height and 30px narrower, still usable small, big still fills the screen, and PC is unchanged', { item: '969', budgetMs: 120000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    tidy927();
+    function sheet() { const o = document.getElementById('shortcuts-overlay'); return o && !o.classList.contains('hidden') ? o.querySelector('.shortcuts-card') : null; }
+    async function tap(el, what) {
+      const q = rect927(el);
+      hitIs927(q.cx, q.cy, el, what);
+      await realInput924([{ t: 'touchStart', x: q.cx, y: q.cy, ms: 70 }, { t: 'touchEnd', x: q.cx, y: q.cy, ms: 0 }], what);
+    }
+    function mustBeSmall(card, where) {
+      if (!card || !card._panelSize) throw new Error(where + ': setup: the Help sheet did not open with its size grip');
+      if (card.classList.contains('pb-big')) throw new Error(where + ': setup: it opened BIG — the remembered size was not cleared, so this would measure big twice');
+      return card;
+    }
+    async function phone(where, open) {
+      await open(); await sleep927(650);
+      const card = mustBeSmall(sheet(), where);
+      const small = rect927(card);
+      /* still USABLE small: the list scrolls inside, the foot is whole and both its buttons take a press, the grip is reachable,
+         and enough rows show to be worth opening */
+      const sc = card.querySelector('.shortcuts-scroll'), foot = card.querySelector('.shortcuts-foot');
+      if (!(sc.scrollHeight > sc.clientHeight + 4)) throw new Error(where + ': small, the list does not scroll inside the card (' + sc.scrollHeight + ' in ' + sc.clientHeight + ') — the rest of the shortcuts are unreachable');
+      const f = rect927(foot);
+      if (f.t < small.t - 0.5 || f.b > small.b + 0.5 || f.b > innerHeight) throw new Error(where + ': small, Tutorials/Close are cut off (' + fmt927(f) + ' in a card at ' + fmt927(small) + ')');
+      [].forEach.call(foot.querySelectorAll('.btn'), b => { const q = rect927(b); hitIs927(q.cx, q.cy, b, where + ': ' + (b.textContent || '').trim()); });
+      if (small.l < 0 || small.t < 0 || small.r > innerWidth || small.b > innerHeight) throw new Error(where + ': small runs off the screen (' + fmt927(small) + ')');
+      const sb = rect927(sc);
+      const rows = [].filter.call(card.querySelectorAll('.shortcut-row'), r => { const q = r.getBoundingClientRect(); return q.height > 0 && q.top >= sb.t - 1 && q.bottom <= sb.b + 1; }).length;
+      if (rows < 4) throw new Error(where + ': small shows only ' + rows + ' shortcuts without scrolling — too small to be worth opening');
+      /* a real finger on the grip: small → big */
+      await tap(grip927(card), where + ': a tap on the grip of small');
+      await sleep927(650);
+      if (!card.classList.contains('pb-big')) throw new Error(where + ': a tap on the grip did not make it big');
+      const big = rect927(card);
+      /* THE CONTROL: big still fills the phone. Without it, "small is 60% of big" could pass by breaking big. */
+      if (!(big.w >= innerWidth * 0.9 && big.h >= innerHeight * 0.85)) throw new Error(where + ': control: big is ' + fmt927(big) + ' in a ' + innerWidth + '×' + innerHeight + ' screen — it should fill it');
+      if (!(small.h <= big.h * 0.6)) throw new Error(where + ': small is ' + fmt927(small) + ' and big ' + fmt927(big) + ' — small is ' + Math.round(small.h / big.h * 100) + '% of big’s height. He said "there is no difference"; on a phone small must be 60% of big or less');
+      if (!(small.w <= big.w - 30)) throw new Error(where + ': small is only ' + Math.round(big.w - small.w) + 'px narrower than big (' + Math.round(small.w) + ' against ' + Math.round(big.w) + ') — it should sit clear of the screen edges, 30px narrower or more');
+      if (small.h < innerHeight * 0.3 || small.w < innerWidth * 0.7) throw new Error(where + ': small went too far — ' + fmt927(small) + ' in a ' + innerWidth + '×' + innerHeight + ' screen');
+      /* and back: a second tap returns it to the same small box */
+      await tap(grip927(card), where + ': a tap on the grip of big');
+      await sleep927(650);
+      if (card.classList.contains('pb-big')) throw new Error(where + ': a second tap on the grip did not make it small again');
+      if (!near927(rect927(card), small, 2)) throw new Error(where + ': back to small at ' + fmt927(rect927(card)) + ', not where it was (' + fmt927(small) + ')');
+      /* and Close, pressed for real, still closes it at the new size */
+      const closeBtn = [].find.call(foot.querySelectorAll('.btn'), b => /close/i.test(b.textContent || ''));
+      if (!closeBtn) throw new Error(where + ': setup: no Close in the foot');
+      await tap(closeBtn, where + ': Close on small');
+      await sleep927(700);
+      if (sheet()) throw new Error(where + ': a real tap on Close did not close the small Help');
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+          await phone('phone, in a project', async function () {
+            const q = document.getElementById('m-help');
+            if (!q || !(q.getBoundingClientRect().width > 0)) throw new Error('setup: the phone bar has no ? (#m-help) on screen');
+            await tap(q, 'the phone bar’s ?');
+          });
+          FM.home.open(); await sleep927(400);
+          await phone('phone, over Home', async function () { FM.shortcuts.show(); });
+          FM.home.close(); await sleep927(300);
+        });
+      }, 360);
+      /* PC is not what he asked about: small there keeps its 440px card AND its 86%-of-the-window height. Width alone
+         cannot see a leak — the base rule's max-width: 440px caps the phone width too — so over Home, where the card is
+         centred with no popFrom cap, a list that scrolls must mean the card has reached its PC cap (86%), not the
+         phone's ~half. Checked by moving the phone rule out of its media query: the width check alone stayed green. */
+      await atWideWidth(async function () {
+        if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+        FM.shortcuts.show(); await sleep927(650);
+        let card = mustBeSmall(sheet(), 'PC, in a project');
+        let w = card.getBoundingClientRect().width;
+        if (!(w >= 420)) throw new Error('PC, in a project: small Help is ' + Math.round(w) + 'px wide — the phone rule leaked onto PC (it is 440 there)');
+        FM.shortcuts.hide({ now: true }); await sleep927(150);
+        FM.home.open(); await sleep927(400);
+        FM.shortcuts.show(); await sleep927(650);
+        card = mustBeSmall(sheet(), 'PC, over Home');
+        const r = rect927(card), sc = card.querySelector('.shortcuts-scroll');
+        if (!(r.w >= 420)) throw new Error('PC, over Home: small Help is ' + Math.round(r.w) + 'px wide — the phone rule leaked onto PC (it is 440 there)');
+        if (sc.scrollHeight > sc.clientHeight + 4 && !(r.h >= innerHeight * 0.8)) throw new Error('PC, over Home: small Help is ' + fmt927(r) + ' in a ' + innerWidth + '×' + innerHeight + ' window with its list scrolling — it stopped short of its 86% cap, so the phone’s half-height rule leaked onto PC');
+        FM.shortcuts.hide({ now: true }); await sleep927(150);
+        FM.home.close(); await sleep927(300);
+      }, 1280);
+    } finally {
+      tidy927();
+      try { if (hadHome && !FM.home.isOpen()) FM.home.open(); else if (!hadHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep927(120);
+    }
+  });
+
 })();

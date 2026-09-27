@@ -10926,6 +10926,23 @@ body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
 }
 /* `flex: none`: the scrim is a flex row, and a flex item shrinks to its container by default — big must not. */
 .pb-card.pb-big { flex: none; width: var(--pb-w); height: var(--pb-h); max-width: none; max-height: none; min-width: 0; }
+/* A phone's SMALL Help is really small (queue 969). Ezra: "Also on mobile make it so that the small version for the Help menu
+   is actually small because right now it's like there is no difference". Measured at 380×800 before this: small 356×688,
+   big 360×780 — 4px narrower and 12% shorter, because the list is long enough to fill small's 86% cap. Small is now about
+   half the screen with a 28px margin each side (324×416 at 380×800, 384×460 at 440×956), centred like every other phone
+   card, and the list scrolls inside it. min-width: 0 is load-bearing: the base rule's min-width (min(360px, 100vw − 24px)
+   = 356px at 380) beats a smaller width, and without it the card stays exactly as wide as before.
+   The floor (300px, or 86% of a shorter screen) keeps a landscape phone from getting a sliver (measured 440×300 at
+   667×375, five rows showing; without it, about two).
+   :not(.pb-big) so big keeps --pb-w/--pb-h; .pb-morph's !important caps still win while it animates between the two. */
+@media (max-width: 700px) {
+  .shortcuts-card:not(.pb-big) {
+    width: calc(100vw - 56px);
+    min-width: 0;
+    max-height: clamp(min(300px, 86vh), 52vh, 460px);     /* where dvh is missing */
+    max-height: clamp(min(300px, 86dvh), 52dvh, 460px);
+  }
+}
 
 /* While the frame animates between the two sizes nothing may clamp it — the shortcuts card's 440px max-width
    would otherwise stop a shrinking panel dead at 440 and then jump. !important so popfrom's inline cap loses too. */
