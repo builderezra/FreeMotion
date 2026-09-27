@@ -37773,7 +37773,11 @@
     if (!loop2.b.open || G2.online === false) throw new Error('a guest hearing the owner’s presence every 2 s still timed out after 12 s — silence is silence on every channel, not only on ctl');
   });
 
-  test('921 S6 reopening a project he is sharing starts sharing again on the same link, and a phone that hosts holds a wake lock until sharing stops', { item: '921', budgetMs: 180000 }, async function () {
+  /* #967 B3 CHANGED THIS TEST, ON PURPOSE (his pick 1, A — “nothing goes live without him choosing”): reopening the project
+     used to start sharing again by itself; now it asks “Carry on sharing?” and Share again is what resumes it — on the same
+     link, which is what this test pins. Renamed from '921 S6 reopening a project he is sharing starts sharing again on the
+     same link, and a phone that hosts holds a wake lock until sharing stops'. */
+  test('921 S6 reopening a project he is sharing asks “Carry on sharing?” (#967 B3), and Share again starts sharing again on the same link, and a phone that hosts holds a wake lock until sharing stops', { item: '921', budgetMs: 180000 }, async function () {
     const C = need921S6('the resume and the wake lock');
     const had = Object.getOwnPropertyDescriptor(navigator, 'wakeLock');
     const locks = [];
@@ -37799,7 +37803,8 @@
               await until921S6('the session to stand down when he switches project', function () { return !C.session && !ui._relay(); }, 8000);
               if (net.live().length) throw new Error('switching project left ' + net.live().length + ' relay socket(s) open');
               await FM.projects.open(ctx.pid);
-              const s = await until921S6('sharing to come back by itself', function () { const x = C.session; return x && x.isOwner && x.pid === ctx.pid ? x : null; }, 10000);
+              (await askOk921()).click();                   // #967 B3: “Carry on sharing?” — Share again
+              const s = await until921S6('sharing to come back after Share again', function () { const x = C.session; return x && x.isOwner && x.pid === ctx.pid ? x : null; }, 10000);
               const r = await until921S6('its relay', function () { const x = ui._relay(); return x && x.status === 'up' && x.rooms ? x : null; }, 12000);
               if (r.sid !== H.rec.sid || r.rooms[0].keys.topic !== H.relay.rooms[0].keys.topic) throw new Error('the resumed share listens on a different room — the link he sent no longer works');
               const g = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'After' });
@@ -38031,7 +38036,8 @@
             await until921S6('the knock card to go with its session', function () { return !knock(); }, 4000).catch(function () { throw new Error('the knock card stayed on screen over another project, for a session that is no longer running'); });
             gS.close();
             await FM.projects.open(ctx.pid);
-            await until921S6('sharing to come back', function () { const x = C.session; return x && x.isOwner && ui._relay() && ui._relay().status === 'up' ? x : null; }, 12000);
+            (await askOk921()).click();                     // #967 B3: “Carry on sharing?” — Share again
+            await until921S6('sharing to come back after Share again', function () { const x = C.session; return x && x.isOwner && ui._relay() && ui._relay().status === 'up' ? x : null; }, 12000);
           } finally { await FM.projects.remove(other).catch(function () {}); }
           /* Tia knocks and gives up before he answers. */
           const gT = await relayGuest921(C, H.room, { key: H.room.keys.auth, mode: 'link', name: 'Tia', mk: 'mk-tia-000000000000000' });
@@ -39367,9 +39373,12 @@
           const gA = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Ann', mk: 'mk-ann-111111111111111' });
           const wA = await gA.wait('welcome'); await gA.wait('snap');
           gS.close(); gA.close();
-          /* He switches project and back: the session pauses, and comes back on the same room. */
+          /* He switches project and back: the session pauses, and comes back on the same room (after “Carry on sharing?”
+             — Share again, #967 B3). */
           C.session.stop('paused'); C.detach();
-          await ui.resumeOpen();
+          const back = ui.resumeOpen();
+          (await askOk921()).click();
+          await back;
           if (!C.session) throw new Error('CONTROL: reopening did not resume sharing');
           await until921S6('the relay to come back', function () { const x = ui._relay(); return x && x.status === 'up' && x.rooms ? x : null; }, 12000);
           const gX = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Alex', mk: 'mk-alex-11111111111111' });
@@ -39605,10 +39614,13 @@
         if (after.indexOf(arm) < 0) throw new Error('twelve save points later, the one from when sharing started is gone — the trim deletes the oldest, which is the one he needs');
         if (after.length > 10) throw new Error(after.length + ' save points kept, more than ten');
         const newest = after[after.length - 1];
-        /* He switches project and back with nothing changed: the resume writes nothing. */
+        /* He switches project and back with nothing changed: the resume writes nothing (after “Carry on sharing?” — Share
+           again, #967 B3). */
         C.session.stop('paused'); C.detach();
         t += 5000;
-        await ui.resumeOpen();
+        const back = ui.resumeOpen();
+        (await askOk921()).click();
+        await back;
         if (!C.session) throw new Error('CONTROL: reopening did not resume sharing');
         const after2 = await keys();
         if (after2[after2.length - 1] !== newest || after2.indexOf(arm) < 0) throw new Error('reopening the shared project with nothing changed wrote a save point (' + after.length + ' → ' + after2.length + ', newest ' + after2[after2.length - 1] + ')');
@@ -101641,7 +101653,10 @@
     });
   });
 
-  test('967 5 a kept room does not start sharing again behind Home at a REAL relaunch — the whole app opened afresh on its own origin — and it resumes when he goes into the project', { item: '967', budgetMs: 150000 }, async function () {
+  /* #967 B3 CHANGED THIS TEST, ON PURPOSE (his pick 1, A — “nothing goes live without him choosing”): going into the project
+     after the relaunch used to resume it by itself with a toast; now it asks “Carry on sharing?” first, and Share again is
+     what resumes it. Renamed from '967 5 … and it resumes when he goes into the project'. */
+  test('967 5 a kept room does not start sharing again behind Home at a REAL relaunch — the whole app opened afresh on its own origin — and when he goes into the project it asks “Carry on sharing?” before anything is live, and Share again resumes it', { item: '967', budgetMs: 150000 }, async function () {
     /* J3-2: at a cold launch the kept room was LIVE on the relays before he touched anything, its toast spent under the
        splash. ⚠️ THE REAL BOOT, NOT A PICTURE OF IT (#967 review — two reviewers found it apart). The first version of
        this test opened Home and THEN asked collab to resume, the reverse of the boot: the boot's first history.reset()
@@ -101674,13 +101689,22 @@
       if (behind.length) throw new Error('the kept room was armed behind Home ' + behind[0].t + ' ms into the relaunch (and stood down after) — ' + q(st.armed));
       if (!st.rec) throw new Error('waiting behind Home threw the room away');
       if ((st.locks || []).some(function (k) { return /^fm-collab-host-/.test(k); })) throw new Error('behind Home the relaunched tab still holds the project’s host lock: ' + q(st.locks));
-      /* He goes into the project: now it resumes, and says so. */
+      /* He goes into the project: now it ASKS (#967 B3), and nothing is live while it does. */
       await R.rpc(tag, 'homeClose967');
+      const qa = await R.until('the Carry on sharing question once he is in the project', async function () {
+        const a = await R.rpc(tag, 'ask967');
+        return a.up ? a : null;
+      }, 15000).catch(function () { throw new Error('once Home closed onto the project, nothing asked “Carry on sharing?” within 15 s (#967 B3)'); });
+      if (!/^Carry on sharing “/.test(qa.title) || qa.ok !== 'Share again' || qa.cancel !== 'Not now') throw new Error('the relaunch asked ' + q(qa));
+      await R.sleep(600);
+      const mid = await R.rpc(tag, 'collab967');
+      if (mid.session || mid.relay) throw new Error('the project went live while “Carry on sharing?” was still up: ' + q(mid));
+      await R.rpc(tag, 'ask967', { answer: 'ok' });
       let last = null;
-      const s2 = await R.until('sharing to resume once he is in the project', async function () {
+      const s2 = await R.until('sharing to resume after Share again', async function () {
         const x = last = await R.rpc(tag, 'collab967');
         return x.session && x.owner && x.toasts.some(function (t) { return /^Sharing is on again/.test(t); }) ? x : null;
-      }, 15000).catch(function () { throw new Error('once Home closed onto the project, sharing did not resume (or did not say so) within 15 s: ' + q(last)); });
+      }, 15000).catch(function () { throw new Error('after Share again, sharing did not resume (or did not say so) within 15 s: ' + q(last)); });
       if (s2.pid !== s0.pid) throw new Error('the resume shared a different project (' + s2.pid + ', not ' + s0.pid + ')');
       if (!s2.toasts.some(function (t) { return /anyone who joined with a code needs a new one/.test(t); })) throw new Error('with nobody who can come back by themselves the resume said ' + q(s2.toasts) + ' (J4-2)');
     } finally { R.drop(tag); }
@@ -101688,7 +101712,11 @@
 
   test('967 5b …and in the page: Home opening while a resume is in flight stops it at the last moment, nothing resumes before the boot has landed, a boot that lands in the editor still resumes, and the resume says who can come back', { item: '967', budgetMs: 120000 }, async function () {
     /* J3-2, J3-6 / J4-2. The lock and the checkpoint the resume waits on are both asynchronous, and Home can open while
-       they run — resumeOpen's own Home check was only true when it was asked. */
+       they run — resumeOpen's own Home check was only true when it was asked.
+       #967 B3 CHANGED THIS TEST (his pick 1, A): a room he left by opening another project now ASKS “Carry on sharing?”
+       before it resumes, so each resume below is answered Share again — and the resume in flight is the one Share again
+       starts. “A boot that lands in the editor” is a refresh in the middle of sharing: the page went away with the room
+       LIVE, so nothing marked it paused (a stand-down here does, so the mark is taken off to be that page). */
     const C = need921S6('the resume behind Home');
     await withLabs921(async function (ui) {
       await withCollab921([layer921('A')], async function (ctx) {
@@ -101701,17 +101729,19 @@
           await settle921(200);
           /* (1) The resume starts with Home closed; Home opens before its lock and checkpoint have answered. */
           C.onReset({ force: true });                       // stands the session down (synchronously) and keeps its room
-          const inFlight = ui.resumeOpen();                 // the resume, with Home closed: its lock request is now in flight
-          FM.home.open();                                   // …and Home opens before the lock or the checkpoint has answered
+          const inFlight = ui.resumeOpen();                 // the resume, with Home closed: it asks first (#967 B3)…
           if (!inFlight || typeof inFlight.then !== 'function') throw new Error('setup: with Home closed the resume did not start (' + inFlight + ')');
+          (await askOk921()).click();                       // …Share again: its lock request is now in flight
+          FM.home.open();                                   // …and Home opens before the lock or the checkpoint has answered
           await inFlight;
           await settle921(600);
           if (C.session) throw new Error('Home opened while the resume was waiting on its lock and checkpoint, and it armed BEHIND HOME anyway — the last check before C.share never asked about Home (J3-2)');
           if (hostLockHeld()) throw new Error('the resume stood down behind Home but kept the project’s host lock — another tab could never share it');
           if (!localStorage.getItem('fm.collab.host.' + ctx.pid)) throw new Error('standing down behind Home threw the room away');
-          /* He goes into the project: now it resumes — the toast says nobody can come back by themselves. */
+          /* He goes into the project: it asks, and Share again resumes — the toast says nobody can come back by themselves. */
           got.length = 0;
           FM.home.close();
+          (await askOk921()).click();
           await until921S6('sharing to resume once he is in the project', function () { const s = C.session; return s && s.isOwner && s.pid === ctx.pid ? s : null; }, 8000);
           await until921S6('the resume toast', function () { return got.some(function (t) { return /^Sharing is on again/.test(t); }); }, 4000);
           const t1 = got.filter(function (t) { return /^Sharing is on again/.test(t); }).pop();
@@ -101722,6 +101752,9 @@
           await settle921(900);
           if (C.session || hostLockHeld()) throw new Error('a resume ran before the boot had landed (session ' + !!C.session + ', lock ' + hostLockHeld() + ') — at a cold launch that is before Home opens');
           /* …a boot that lands IN THE EDITOR (a reload inside the session) resumes when it says it has landed… */
+          const live0 = JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid));
+          delete live0.paused;                              // the page went away LIVE: nothing stood it down (#967 B3)
+          localStorage.setItem('fm.collab.host.' + ctx.pid, JSON.stringify(live0));
           ui.afterBoot();
           await until921S6('a boot that landed in the editor to resume', function () { return C.session && C.session.isOwner ? 1 : 0; }, 8000)
             .catch(function () { throw new Error('a boot that landed in the editor never resumed the kept room — a refresh must still come back sharing'); });
@@ -101739,6 +101772,7 @@
           localStorage.setItem('fm.collab.host.' + ctx.pid, JSON.stringify(rec));
           got.length = 0;
           FM.home.close();
+          (await askOk921()).click();
           await until921S6('sharing to resume', function () { return C.session && C.session.isOwner ? 1 : 0; }, 8000);
           await until921S6('the resume toast', function () { return got.some(function (t) { return /^Sharing is on again/.test(t); }); }, 4000);
           if (!got.some(function (t) { return /people can reconnect/.test(t); })) throw new Error('CONTROL: with a link member the resume says ' + JSON.stringify(got));
@@ -104660,6 +104694,401 @@
       live.slice().forEach(function (a) { try { realRemove.call(document, a.type, a.fn, a.cap); } catch (e) {} });
       if (FM.hideToast) FM.hideToast();
     }
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   * #967 BATCH 3 — WHICH PROJECTS ARE SHARED, AND NOTHING TURNS ITSELF BACK ON.
+   * His words: "there's a switch to turn it on, but you can never turn it off on any project ever … it just doesn't seem
+   * finished at all". Built to the RECOMMENDED pick of each question on tools/design/967-options.html ("Which projects are
+   * shared"): (1) reopening a project he shared before asks “Carry on sharing?” [Share again] [Not now]; (2) a grey
+   * “SHARED · paused” badge on Home; (3) the LIVE badge stacked above the duration; (4) opening another project while a
+   * friend who joined by code is in asks first. Plus the batch's minor items. Audit: plan.batches[2] (R2, J3-2, J4-2,
+   * J4-7, J4-9, J4-10, J4-11, J4-12, J4-13). Each test below FAILS on v17.08.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  /* The app's own question card (ask.js), when it is up: its words and its two buttons. */
+  function ask967b3() {
+    const a = document.getElementById('fm-ask');
+    if (!a || a.classList.contains('hidden')) return null;
+    return { title: a.querySelector('.fm-ask-title').textContent, msg: a.querySelector('.fm-ask-msg').textContent,
+      ok: a.querySelector('.fm-ask-ok'), cancel: a.querySelector('.fm-ask-cancel') };
+  }
+  function card967b3(pid) { return document.querySelector('#home-screen .hm-card[data-pid="' + pid + '"]'); }
+  /* A card's ⋯ menu, opened and read, then put away — the rows as the person sees them. */
+  function menu967b3(pid) {
+    const c = card967b3(pid);
+    if (!c) throw new Error('setup: no card on Home for ' + pid);
+    c.querySelector('.hm-card-more').click();
+    return Array.prototype.slice.call(document.querySelectorAll('#ctx-menu .ctx-item'));
+  }
+  function labels967b3(items) { return items.map(function (x) { return x.textContent.trim(); }); }
+
+  test('967 B3 1 reopening a project he shared before asks “Carry on sharing “Beach film”?” — nothing is live while it is up, Share again carries on on the same link, Not now stops it and the old link and code with it, and nothing is asked behind Home', { item: '967', budgetMs: 120000 }, async function () {
+    /* J3-2 / J4-7 (pick 1, A): opening it again re-armed it by itself on the old link, with a 2.6 s toast. */
+    const C = need921S6('the Carry on sharing question');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        const got = toast967();
+        let other = null;
+        try {
+          FM.projects.rename(ctx.pid, 'Beach film B3');
+          await ui.share(); ui.close();
+          const rec0 = hostRec921(ctx.pid);
+          if (!rec0) throw new Error('setup: sharing wrote no room');
+          other = await FM.projects.create({ name: 'Other B3 1', width: 320, height: 240 });
+          await until921S6('the shared project to pause', function () { return !C.session; }, 6000);
+          if (!hostRec921(ctx.pid)) throw new Error('setup: the room did not survive the switch');
+          /* He goes Home, and taps the card of the project he shared. */
+          FM.home.open(); await settle921(450);
+          if (ask967b3()) throw new Error('a question is up on Home before he has opened anything');
+          card967b3(ctx.pid).click();
+          const q = await until921S6('the Carry on sharing question', ask967b3, 8000).catch(function () {
+            throw new Error('reopening a project he shared before asked nothing — ' + (C.session ? 'it went LIVE on the old link by itself' : 'and nothing happened') + ' (toasts ' + JSON.stringify(got) + ') (J3-2: nothing may go live without him choosing)');
+          });
+          if (FM.home.isOpen()) throw new Error('the question came up while Home was still showing');
+          if (q.title !== 'Carry on sharing “Beach film B3”?') throw new Error('the question says “' + q.title + '” — it must name the project');
+          if (q.ok.textContent.trim() !== 'Share again' || q.cancel.textContent.trim() !== 'Not now') throw new Error('the answers are [' + q.cancel.textContent + '] [' + q.ok.textContent + '], not [Not now] [Share again]');
+          if (!/old link and code/.test(q.msg)) throw new Error('the question does not say what Not now does to the link and code: “' + q.msg + '”');
+          await settle921(500);
+          if (C.session || ui._relay()) throw new Error('the project went live while the question was still up — before he chose');
+          /* Share again: live again, on the same room — the link he sent still works. */
+          q.ok.click();
+          const s1 = await until921S6('sharing to carry on after Share again', function () { const x = C.session; return x && x.isOwner && x.pid === ctx.pid ? x : null; }, 8000);
+          void s1;
+          const rec1 = hostRec921(ctx.pid);
+          if (!rec1 || rec1.sid !== rec0.sid) throw new Error('Share again started a NEW room — the link he had sent stops working');
+          /* Away again, and back: Not now. */
+          await FM.projects.open(other);
+          await until921S6('the project to pause again', function () { return !C.session; }, 6000);
+          got.length = 0;
+          FM.home.open(); await settle921(450);
+          card967b3(ctx.pid).click();
+          const q2 = await until921S6('the question, the second time', ask967b3, 8000);
+          q2.cancel.click();
+          await settle921(600);
+          if (C.session || ui._relay()) throw new Error('Not now shared it anyway');
+          if (hostRec921(ctx.pid)) throw new Error('Not now kept the room — the old link and code still reach it (pick 1: Not now stops it, the same as Stop sharing)');
+          if (!got.some(function (t) { return /^Sharing stopped/.test(t); })) throw new Error('Not now said nothing (' + JSON.stringify(got) + ')');
+          if (ask967b3()) throw new Error('the question came back after Not now');
+          /* CONTROL: with nothing kept, opening it asks nothing and just opens — so the question above is the room's. */
+          await FM.projects.open(other);
+          FM.home.open(); await settle921(450);
+          card967b3(ctx.pid).click();
+          await settle921(900);
+          if (ask967b3()) throw new Error('CONTROL: a project that is not shared any more still asks “' + ask967b3().title + '”');
+          if (FM.projects.currentId() !== ctx.pid || FM.home.isOpen()) throw new Error('CONTROL: tapping the card did not open the project');
+        } finally {
+          got.restore();
+          const a = ask967b3(); if (a) a.cancel.click();
+          if (FM.home.isOpen()) FM.home.close();
+          if (other) { try { if (FM.projects.currentId() === other) await FM.projects.open(ctx.pid); await FM.projects.remove(other); } catch (e) {} }
+        }
+      });
+    });
+  });
+
+  test('967 B3 2 a refresh inside a live share still comes back sharing by itself, but a room he had left by opening another project asks first — a reload never puts it live without him', { item: '967', budgetMs: 90000 }, async function () {
+    /* J3-2, pick 1 A. The boot that lands in the editor (a reload inside the same session) resumed any kept room. Batch 1
+       kept that on purpose for a refresh mid-share — and it still holds for a room that was LIVE when the page went. A room
+       stood down by opening another project is a room he left, and a reload must not be the thing that re-arms it. */
+    const C = need921S6('the resume at a reload');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        try {
+          await ui.share(); ui.close();
+          if (!hostRec921(ctx.pid)) throw new Error('setup: no room');
+          if (FM.home.isOpen()) FM.home.close();
+          /* Stood down the way opening another project stands it down — and the page reloads onto it. */
+          ui._booted(false);
+          C.onReset({ force: true });
+          await settle921(300);
+          if (C.session) throw new Error('setup: the session did not stand down');
+          ui.afterBoot();
+          const q = await until921S6('the question after a reload onto a room he had left', ask967b3, 6000).catch(function () {
+            throw new Error('a reload onto a project whose sharing he had left ' + (C.session ? 'put it LIVE again by itself' : 'asked nothing') + ' (J3-2)');
+          });
+          if (!/^Carry on sharing “/.test(q.title)) throw new Error('the reload asked “' + q.title + '”');
+          await settle921(400);
+          if (C.session) throw new Error('the reload armed it while the question was still up');
+          q.ok.click();
+          await until921S6('Share again to resume it', function () { return C.session && C.session.isOwner ? 1 : 0; }, 8000);
+          /* CONTROL: a page that went away WHILE LIVE — nothing stood the session down, so the room carries no pause — comes
+             back sharing by itself, as a refresh mid-share always has (967 5b). */
+          ui._booted(false);
+          C.onReset({ force: true });
+          await settle921(300);
+          const rec = hostRec921(ctx.pid);
+          delete rec.paused;
+          localStorage.setItem('fm.collab.host.' + ctx.pid, JSON.stringify(rec));
+          ui.afterBoot();
+          await until921S6('a refresh mid-share to come back sharing', function () { return C.session && C.session.isOwner ? 1 : 0; }, 8000)
+            .catch(function () { throw new Error('CONTROL: a refresh in the middle of a live share no longer comes back sharing' + (ask967b3() ? ' — it asks “' + ask967b3().title + '”' : '')); });
+          if (ask967b3()) throw new Error('CONTROL: a refresh mid-share asked “' + ask967b3().title + '” as well as resuming');
+        } finally {
+          ui._booted(true);
+          const a = ask967b3(); if (a) a.cancel.click();
+        }
+      });
+    });
+  });
+
+  test('967 B3 3 Home shows every shared state — the LIVE badge stacked above the duration, a grey “SHARED · paused” on a project whose room is kept, and a friend’s copy says “· ended” or “· not connected” with a dimmed badge — none covering the duration or the OPEN badge, on PC and at 390', { item: '967', budgetMs: 120000 }, async function () {
+    /* J3-2, J4-7, J4-9, J4-12 (picks 2 and 3, A). */
+    const C = need921S6('Home’s shared states');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+      if (wasHome) FM.home.close();
+      const made = [];
+      try {
+        made.push(await FM.projects.create({ name: 'Paused B3 3', width: 320, height: 240 }));
+        const paused = made[0];
+        await ui.share(); ui.close();
+        if (!hostRec921(paused)) throw new Error('setup: no room for the project to pause');
+        made.push(await FM.projects.create({ name: 'Live B3 3', width: 320, height: 240 }));
+        const live = made[1];
+        await until921S6('the first project to pause', function () { return !C.session; }, 6000);
+        await ui.share(); ui.close();
+        const s = await until921S6('the second project to be live', function () { const x = C.session; return x && x.isOwner && x.pid === live ? x : null; }, 6000);
+        const ep = { open: true, send: function () { return true; }, close: function () { ep.open = false; } };
+        if (!s.addPeer(ep, { role: 'editor', name: 'Sam', color: '#ff9f43' })) throw new Error('setup: Sam could not be added');
+        const ended = linkedCopy921(C, { meta: {} }).gpid; made.push(ended);
+        FM.projects.patchCollab(ended, { ended: 'ended' });
+        const away = linkedCopy921(C, { meta: {} }).gpid; made.push(away);
+        const rgb = function (n) { return (getComputedStyle(n).backgroundColor.match(/[\d.]+/g) || []).map(Number); };
+        const check = async function (where) {
+          FM.home.open(); await settle921(500);
+          const card = function (pid) { const c = card967b3(pid); if (!c) throw new Error('setup: no card for ' + pid + ' ' + where); return c; };
+          const badge = function (pid) { return card(pid).querySelector('.hm-live'); };
+          const sub = function (pid) { return card(pid).querySelector('.hm-sub').textContent; };
+          const lb = badge(live), pb = badge(paused);
+          if (!lb || lb.textContent.trim() !== 'LIVE · 1') throw new Error(where + ': the live project says “' + (lb && lb.textContent) + '”');
+          if (!pb) throw new Error(where + ': a project whose room is kept shows nothing on Home — nothing says it is shared, and it comes back when opened (J4-7)');
+          if (pb.textContent.trim() !== 'SHARED · paused') throw new Error(where + ': the paused project’s badge says “' + pb.textContent + '”, not “SHARED · paused”');
+          const pc = rgb(pb), lc = rgb(lb);
+          if (!(lc[0] - lc[2] > 80)) throw new Error('CONTROL: the LIVE badge is not red (' + lc + '), so the grey check below proves nothing');
+          if (!(Math.abs(pc[0] - pc[2]) < 40 && Math.abs(pc[0] - pc[1]) < 40)) throw new Error(where + ': the paused badge is not grey (' + pc + ') — it reads as LIVE');
+          if (!/Shared by Ezra · ended$/.test(sub(ended))) throw new Error(where + ': a copy whose owner ended it says “' + sub(ended) + '” (J4-9)');
+          if (!/Shared by Ezra · not connected$/.test(sub(away))) throw new Error(where + ': a copy with no live link says “' + sub(away) + '” (J4-9)');
+          [ended, away].forEach(function (pid) {
+            const b = badge(pid);
+            if (!b || !/SHARED/.test(b.textContent)) throw new Error(where + ': the copy lost its SHARED badge');
+            if (!(parseFloat(getComputedStyle(b).opacity) < 0.8)) throw new Error(where + ': the SHARED badge of a copy that is ' + (pid === ended ? 'ended' : 'not connected') + ' is not dimmed (opacity ' + getComputedStyle(b).opacity + ')');
+          });
+          if (!(parseFloat(getComputedStyle(lb).opacity) > 0.95) || !(parseFloat(getComputedStyle(pb).opacity) > 0.95)) throw new Error('CONTROL: the LIVE or paused badge is dimmed too, so “dimmed” above proves nothing');
+          [live, paused, ended, away].forEach(function (pid) {
+            const c = card(pid), b = badge(pid), th = c.querySelector('.hm-thumb').getBoundingClientRect(), r = b.getBoundingClientRect();
+            if (r.left < th.left - 0.5 || r.right > th.right + 0.5 || r.top < th.top - 0.5 || r.bottom > th.bottom + 0.5) throw new Error(where + ': “' + b.textContent + '” sticks out of its thumbnail');
+            if (b.scrollWidth > b.clientWidth + 1) throw new Error(where + ': the words of “' + b.textContent + '” run past its badge (' + b.scrollWidth + ' px in ' + b.clientWidth + ') — cut off by the thumbnail’s edge');
+            Array.prototype.forEach.call(c.querySelectorAll('.hm-dur, .hm-open-badge, .hm-pin'), function (o) {
+              const q = o.getBoundingClientRect();
+              if (r.left < q.right && q.left < r.right && r.top < q.bottom && q.top < r.bottom) throw new Error(where + ': “' + b.textContent + '” covers “' + o.textContent + '” (J4-12: 7 px over the duration)');
+            });
+            const d = c.querySelector('.hm-dur').getBoundingClientRect();
+            if (r.bottom > d.top + 0.5) throw new Error(where + ': “' + b.textContent + '” is not stacked above the duration (badge ' + Math.round(r.top) + '–' + Math.round(r.bottom) + ', duration from ' + Math.round(d.top) + ')');
+          });
+          FM.home.close(); await settle921(200);
+        };
+        await check('on PC');
+        await atPhoneWidth(function () { return check('at 390'); }, 390);
+      } finally {
+        try { if (FM.home.isOpen()) FM.home.close(); } catch (e) {}
+        try { if (C.session) C.end(); } catch (e) {}
+        try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+        for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+        if (wasHome) FM.home.open();
+      }
+    });
+  });
+
+  test('967 B3 4 opening another project while a friend who joined with a code is in asks first — the owner: “Sam joined with a code — opening another project ends it for them; they’ll need a new code”, from a card and from New project; Stay keeps Sam in; the friend’s side is asked the same; a friend who joined by the link is not asked about', { item: '967', budgetMs: 150000 }, async function () {
+    /* J4-2 (pick 4, A): any project switch dropped a code-joined friend for good, with no word to either side. */
+    const C = need921S3('the ask before a switch');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        let other = null;
+        const madeCopies = [];
+        try {
+          other = await FM.projects.create({ name: 'Other B3 4', width: 320, height: 240 });
+          await FM.projects.open(ctx.pid);
+          await settle921(300);
+          const stray = ask967b3(); if (stray) stray.cancel.click();          // nothing was being shared here: nothing to carry on
+          await ui.share(); ui.close();
+          await withFakeLinks921(C, function () { return fakeLink921({ code: 'B3SW' }); }, async function (made) {
+            C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M' }); };
+            await ui.share();
+            document.querySelector('.cs-add').click(); await settle921(60);
+            document.querySelector('.cs-connect').click(); await settle921(60);
+            made[made.length - 1].onmessage('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43' });
+            await settle921(60);
+            document.querySelector('.cs-sasyes').click(); await settle921(150);
+            ui.close();
+            const s = C.session, sam = s && s.peerIds()[0];
+            if (!sam) throw new Error('setup: Sam was not let in with the code');
+            /* From a card. */
+            FM.home.open(); await settle921(450);
+            card967b3(other).click();
+            const q = await until921S6('the question before the switch', ask967b3, 5000).catch(function () {
+              throw new Error('opening another project while Sam (who joined with a code) is in asked nothing — ' + (FM.projects.currentId() === other ? 'it switched, and Sam is gone for good' : 'and nothing happened') + ' (J4-2)');
+            });
+            if (!/^Sam joined with a code — opening another project ends it for them; they’ll need a new code/.test(q.msg)) throw new Error('the question says “' + q.title + ' / ' + q.msg + '”');
+            q.cancel.click();
+            await settle921(500);
+            if (FM.projects.currentId() !== ctx.pid) throw new Error('Stay switched project anyway');
+            if (C.session !== s || !C.active || s.peerIds().indexOf(sam) < 0) throw new Error('Stay still cut Sam off');
+            if (!FM.home.isOpen()) throw new Error('Stay left Home — he chose to stay where he was');
+            /* From New project. */
+            const n0 = FM.projects.list().length;
+            document.getElementById('hm-new').click(); await settle921(250);
+            const create = document.querySelector('#hm-dialog #hm-create');
+            if (!create) throw new Error('setup: New project has no Create');
+            create.click();
+            const q2 = await until921S6('the question before New project', ask967b3, 5000).catch(function () {
+              throw new Error('New project while Sam (code) is in asked nothing — ' + (FM.projects.list().length > n0 ? 'a project was made and Sam cut off' : 'nothing happened') + ' (J4-2: “the owner created and opened Project 2 from Home with no warning”)');
+            });
+            if (!/^Sam joined with a code/.test(q2.msg)) throw new Error('New project asked “' + q2.msg + '”');
+            q2.cancel.click();
+            await settle921(500);
+            if (FM.projects.list().length !== n0 || FM.projects.currentId() !== ctx.pid || C.session !== s) throw new Error('Stay on New project made a project or ended the session anyway');
+            /* Open anyway: it goes, as he chose. */
+            card967b3(other).click();
+            (await until921S6('the question once more', ask967b3, 5000)).ok.click();
+            await until921S6('the switch after Open anyway', function () { return FM.projects.currentId() === other && !C.session ? 1 : 0; }, 8000);
+          });
+          if (FM.home.isOpen()) FM.home.close();
+          /* The friend's side: a copy joined with a code (no member token — nothing brings it back). */
+          const fx = guest967(C); madeCopies.push(fx.gpid);
+          await FM.projects.open(fx.gpid);
+          await settle921(300);
+          C.attach(fx.G, { autoTick: false });
+          FM.home.open(); await settle921(450);
+          card967b3(other).click();
+          const g = await until921S6('the friend’s question', ask967b3, 5000).catch(function () {
+            throw new Error('a friend who joined with a code opened another project with no question — the session ended and their way back with it (J4-2)');
+          });
+          if (!/^You joined Ezra’s project with a code — opening another project ends it for you; you’ll need a new code/.test(g.msg)) throw new Error('the friend is asked “' + g.msg + '”');
+          g.cancel.click();
+          await settle921(400);
+          if (C.session !== fx.G || !C.active || FM.projects.currentId() !== fx.gpid) throw new Error('Stay took the friend out of the session anyway');
+          FM.home.close(); await settle921(200);
+          try { C.session.stop('left'); C.detach(); } catch (e) {}
+          /* CONTROL: a friend who joined by the link keeps a member token and comes back by itself — nothing to ask. */
+          const S = C.signal;
+          const fl = guest967(C, { meta: { rid: 'r0123456789abcdef', tok: S.b64url(S.randomBytes(16)), hub: S.b64url(S.randomBytes(16)) } }); madeCopies.push(fl.gpid);
+          await FM.projects.open(fl.gpid);
+          await settle921(300);
+          C.attach(fl.G, { autoTick: false });
+          FM.home.open(); await settle921(450);
+          card967b3(other).click();
+          await settle921(900);
+          if (ask967b3()) throw new Error('CONTROL: a friend who joined by the link is asked “' + ask967b3().msg + '” — they come back by themselves');
+          if (FM.projects.currentId() !== other) throw new Error('CONTROL: the link friend’s tap did not open the project');
+        } finally {
+          const a = ask967b3(); if (a) a.cancel.click();
+          if (FM.home.isOpen()) FM.home.close();
+          await dropFixture967(C, madeCopies);
+          if (other) { try { if (FM.projects.currentId() === other) await FM.projects.open(ctx.pid); await FM.projects.remove(other); } catch (e) {} }
+        }
+      });
+    });
+  });
+
+  test('967 B3 5 Delete on a live card says who is in it and ends it for everyone; a friend’s copy has one delete, Leave & delete; and “Earlier versions…” is only on a project that has save points', { item: '967', budgetMs: 120000 }, async function () {
+    /* J4-10, J4-11. */
+    const C = need921S6('the ⋯ of shared cards');
+    await withLabs921(async function (ui) {
+      void ui;
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+      if (wasHome) FM.home.close();
+      const plain = await FM.projects.create({ name: 'Plain B3 5', width: 320, height: 240 });
+      const lc = linkedCopy921(C, { meta: {} });
+      try {
+        await withCollab921([layer921('A')], async function (ctx) {
+          FM.projects.rename(ctx.pid, 'Live B3 5');
+          const g = ctx.addGuest({ name: 'Sam' });
+          await FM.storage.collabPut('collab:ckpt:' + ctx.pid + ':' + Date.now(), JSON.stringify({ project: {}, layers: [] }));
+          FM.home.open(); await settle921(600);
+          /* Earlier versions… on the project with save points; not on the plain one. */
+          let it = menu967b3(ctx.pid);
+          if (labels967b3(it).indexOf('Earlier versions…') < 0) { FM.contextMenu.hide(); throw new Error('CONTROL: a project WITH save points has no “Earlier versions…” (' + JSON.stringify(labels967b3(it)) + ')'); }
+          FM.contextMenu.hide();
+          it = menu967b3(plain);
+          if (labels967b3(it).indexOf('Earlier versions…') >= 0) { FM.contextMenu.hide(); throw new Error('a project that was never shared offers “Earlier versions…”, which can only ever say there are none (J4-11)'); }
+          /* CONTROL: the plain project's Delete… keeps its plain words. */
+          it.filter(function (x) { return x.textContent.trim() === 'Delete…'; })[0].click();
+          const q0 = await until921S6('the plain delete question', ask967b3, 3000);
+          if (/working in this/.test(q0.msg)) throw new Error('CONTROL: an unshared project’s delete talks about people');
+          q0.cancel.click(); await settle921(150);
+          /* A friend's copy: one delete — Leave & delete. */
+          const tl = labels967b3(menu967b3(lc.gpid));
+          FM.contextMenu.hide();
+          if (tl.indexOf('Leave & delete') < 0) throw new Error('CONTROL: the friend’s copy lost Leave & delete (' + JSON.stringify(tl) + ')');
+          if (tl.indexOf('Delete…') >= 0) throw new Error('a friend’s copy has two deletes — Leave & delete AND a plain Delete… (J4-10): ' + JSON.stringify(tl));
+          /* The live card's Delete… names Sam, and deleting ends it for him too. */
+          it = menu967b3(ctx.pid);
+          it.filter(function (x) { return x.textContent.trim() === 'Delete…'; })[0].click();
+          const q = await until921S6('the live delete question', ask967b3, 3000);
+          if (!/^Sam is working in this now — deleting ends it for everyone/.test(q.msg)) throw new Error('deleting the project Sam is working in says only “' + q.msg + '” (J4-10)');
+          void g;
+          q.ok.click();
+          await until921S6('the project to go', function () { return FM.projects.list().some(function (p) { return p.id === ctx.pid; }) ? 0 : 1; }, 6000);
+          if (C.session && C.session.pid === ctx.pid) throw new Error('deleting the live project left its session running');
+          if (hostRec921(ctx.pid)) throw new Error('deleting the live project kept its room');
+          if (ctx.S.stopWhy !== 'ended') throw new Error('deleting the live project told Sam it had “' + ctx.S.stopWhy + '” — it has ended, for everyone');
+        });
+      } finally {
+        try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+        const a = ask967b3(); if (a) a.cancel.click();
+        if (FM.home.isOpen()) FM.home.close();
+        try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig); } catch (e) {}
+        for (const id of [plain, lc.gpid]) { try { await FM.projects.remove(id); } catch (e) {} }
+        if (wasHome) FM.home.open();
+      }
+    });
+  });
+
+  test('967 B3 6 the knock card names the project and shows its two-minute limit, fits a 390 phone, and a knock nobody answers says so instead of declining in silence', { item: '967', budgetMs: 60000 }, async function () {
+    /* J4-13. */
+    const C = need921S6('the knock card');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        FM.projects.rename(ctx.pid, 'Beach B3 6');
+        const got = toast967();
+        try {
+          await atPhoneWidth(async function () {
+            const k = ui.knock({ name: 'Jordan', role: 'viewer' });
+            const card = await until921S6('the knock card', function () { return document.getElementById('collab-knock'); }, 3000);
+            const txt = card.querySelector('.ck-text').textContent;
+            if (txt !== 'Jordan wants to join “Beach B3 6” as Viewer.') throw new Error('the knock card says “' + txt + '” — it does not say WHICH project (J4-13)');
+            const lim = card.querySelector('.ck-limit');
+            if (!lim || !/2 minutes/.test(lim.textContent)) throw new Error('the knock card does not show its two-minute limit (' + (lim ? '“' + lim.textContent + '”' : 'no line') + ') — it declines itself with no warning (J4-13)');
+            const bar = card.querySelector('.ck-bar');
+            if (!bar || !(bar.getBoundingClientRect().width > 40)) throw new Error('the knock card has no time bar you can see');
+            const cr = card.getBoundingClientRect();
+            if (cr.left < 0 || cr.right > window.innerWidth + 0.5 || cr.bottom > window.innerHeight) throw new Error('the knock card runs off a 390 screen (' + JSON.stringify([cr.left, cr.right, cr.bottom]) + ')');
+            [lim, card.querySelector('.ck-text')].forEach(function (n) { if (n.scrollWidth > n.clientWidth + 1) throw new Error('“' + n.textContent + '” is cut off on the knock card'); });
+            Array.prototype.forEach.call(card.querySelectorAll('.ck-acts button'), function (b) {
+              const r = b.getBoundingClientRect();
+              if (r.height < 24 || r.width < 24) throw new Error('“' + b.textContent + '” is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' — under a 24 px target');
+            });
+            card.querySelector('.ck-no').click();
+            if ((await k) !== false) throw new Error('setup: Don’t allow did not answer the knock');
+          }, 390);
+          /* Nobody answers: it declines itself — and SAYS so, with the Share panel shut. */
+          ui._knockWait(300);
+          got.length = 0;
+          const k2 = ui.knock({ name: 'Jordan', role: 'viewer' });
+          const r2 = await k2;
+          await settle921(150);
+          if (r2 !== false) throw new Error('setup: the unanswered knock answered ' + r2);
+          if (document.getElementById('collab-knock')) throw new Error('the knock card stayed up after it declined itself');
+          if (!got.some(function (t) { return /^Jordan asked to join and was not let in — the request timed out/.test(t); })) throw new Error('a knock nobody answered was declined in silence (' + JSON.stringify(got) + ') (J4-13)');
+        } finally {
+          ui._knockWait(null);
+          got.restore();
+          const kc = document.getElementById('collab-knock'); if (kc) { const no = kc.querySelector('.ck-no'); if (no) no.click(); }
+        }
+      });
+    });
   });
 
 })();

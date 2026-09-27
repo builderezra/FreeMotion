@@ -66,6 +66,8 @@ window.FM = window.FM || {};
   let versionNote = null;                    // guest: the owner refused a reconnect on version — { why }
   let resumeT = null;
   let booted = false;                        // #967: the boot has landed (Home or the editor) — see resumeOpen
+  let bootResume = false;                    // #967 B3: the next resume is the boot's own (a reload landing in the editor)
+  let resumeAsk = null;                      // #967 B3: { pid, p } while “Carry on sharing?” is being asked for that project
   let otherTab = null;                       // S8 review: the linked copy another tab is already reconnecting
   let docWatch = false;                      // visibilitychange + online, only while a relay or a reconnect runs
   /* ── S7 ── */
@@ -1195,6 +1197,8 @@ window.FM = window.FM || {};
   /* §12.1 arming steps 8 and on, in one place for the Share button and for the resume on reopen. */
   function afterArm() {
     forgetPeerNotes();                       // #967: notes from a session that ended are not this one's
+    /* #967 B3: live again — the room no longer carries the mark of the switch that paused it (see U.onDetach). */
+    if (hostRoom && hostRoom.paused) { delete hostRoom.paused; saveRoom(hostRoomPid || currentPid(), hostRoom); }
     ridMid = Object.create(null);
     hostOlder = null;
     startHostRelay();
@@ -1533,14 +1537,16 @@ window.FM = window.FM || {};
     return { title: 'Stop sharing?', danger: true, ok: 'Stop sharing',
       message: 'Everyone here keeps their own copy. The codes you have handed out stop working.' };
   }
-  function stopSharingNow(pid) {
+  function stopSharingNow(pid, o) {
     if (!pid) return false;
     const s = C.session;
     const live = !!(s && s.isOwner && (s.pid || currentPid()) === pid);
     if (live) {
       /* §12.1 "ending": a final save point, BEFORE the room goes — the last picture of the project as the
-         people in it left it. Not awaited: IndexedDB takes its own time and the stop must not wait on it. */
-      checkpoint(pid, 'stop');
+         people in it left it. Not awaited: IndexedDB takes its own time and the stop must not wait on it.
+         #967 B3: not for a project being DELETED — its save points go with it, and one landing after the delete
+         would be kept for a project that no longer exists. */
+      if (!(o && o.deleting)) checkpoint(pid, 'stop');
       C.end();
     }
     /* …and the code he read out a minute ago really does stop working — the offer belongs to the live session (or to
@@ -1551,6 +1557,20 @@ window.FM = window.FM || {};
     U.syncBanner();
     return true;
   }
+  /* #967 B3: DELETE ON A SHARED CARD ENDS IT FOR EVERYONE, AND SAYS WHO THAT IS. The people in the live session on this
+     project (the Delete question names them), and the stop Delete makes before the project goes — `ended`, which is what it
+     is for them, never the `paused` the switch to another project would have said. */
+  function nameOfMid(s, mid) {
+    const m = s && s.host && s.host.members ? s.host.members[mid] : null;
+    const pz = presenceOf(mid);
+    return cleanName((pz && pz.name) || (m && m.name)) || 'Someone';
+  }
+  U.peopleIn = function (pid) {
+    const s = C.session;
+    if (!pid || !s || !s.isOwner || !C.active || s.pid !== pid) return [];
+    return (s.peerIds ? s.peerIds() : []).map(function (mid) { return nameOfMid(s, mid); });
+  };
+  U.endForDelete = function (pid) { return U.isSharing(pid) ? stopSharingNow(pid, { deleting: true }) : false; };
   /* Is this project shared from this device — live now, or holding a kept room that would come back when opened? */
   U.isSharing = function (pid) {
     const s = C.session;
@@ -1568,7 +1588,9 @@ window.FM = window.FM || {};
     if (locks[hostLock(pid)]) return Promise.resolve(false);
     const L = navigator.locks;
     if (!L || typeof L.query !== 'function') return Promise.resolve(false);
-    return L.query().then(function (q) {
+    /* #967 B3: a lock THIS tab has just let go of (the switch that paused it, then straight back — the “Carry on sharing?”
+       question) is released asynchronously, and a query before that has gone through finds it held — by this tab. */
+    return (releasing[hostLock(pid)] || Promise.resolve()).then(function () { return L.query(); }).then(function (q) {
       return ((q && q.held) || []).some(function (h) { return h && h.name === hostLock(pid); });
     }, function () { return false; });
   }
@@ -2293,6 +2315,7 @@ window.FM = window.FM || {};
         noteMidTop(s);
         if (relay && !member) syncMemberRooms(relay);         // their reconnect is recognised from now on
         ridMid[rid] = mid;
+        delete byCode[mid];                  // #967 B3: a member with a token comes back by itself
         s._eps = s._eps || Object.create(null);
         s._eps[mid] = link;
         const leaver = rec.name;             // #967: NOT `who` — that name is the knock's, above, and a second one here shadowed it into its TDZ
@@ -2630,7 +2653,8 @@ window.FM = window.FM || {};
         s._eps = s._eps || Object.create(null);
         s._eps[mid] = link;
         delete downSaid[mid];
-        link.onclose = function () { try { s.dropPeer(mid); } catch (e) {} saidGone(s, mid, who); redrawShare(); };
+        byCode[mid] = who;
+        link.onclose = function () { if (byCode[mid] === who) delete byCode[mid]; try { s.dropPeer(mid); } catch (e) {} saidGone(s, mid, who); redrawShare(); };
         link.ondown = function (down) { saidDown(s, mid, who, down); };
         /* Replay the hello that started all this, now that the member exists — the host answers it with
            the welcome and the snapshot, exactly as it would any other. */
@@ -2698,13 +2722,16 @@ window.FM = window.FM || {};
   const leftWhy = Object.create(null);       // mid → the `bye` reason its session reported
   const removing = Object.create(null);      // mid → he is removing them right now
   const downSaid = Object.create(null);      // mid → "<name>'s connection dropped" said for a link still held (its grace)
+  /* #967 B3: mid → the name of somebody let in with a CONNECTION CODE. They hold no member token, so nothing brings them
+     back by themselves once this session stands down — opening another project asks first (U.switchAsk). */
+  const byCode = Object.create(null);
   /* ⚠️ PER SESSION, NOT FOR EVER (found shipping v17.06: the full suite went red where every slice was green). These three
      are keyed by the member's mid, and mids are reused from session to session — so a note left by a session that ended
      while somebody's link was down (or mid-goodbye) silenced the NEXT session's "<name>'s connection dropped" for whoever
      got that mid. In use: one session where a friend dropped, and a friend in a later one could drop unannounced.
      Cleared whenever a session starts (afterArm) or ends (U.onDetach). */
   function forgetPeerNotes() {
-    [leftWhy, removing, downSaid].forEach(function (m) { Object.keys(m).forEach(function (k) { delete m[k]; }); });
+    [leftWhy, removing, downSaid, byCode].forEach(function (m) { Object.keys(m).forEach(function (k) { delete m[k]; }); });
   }
   U._peerNotes = function () { return { leftWhy: Object.keys(leftWhy).length, removing: Object.keys(removing).length, downSaid: Object.keys(downSaid).length }; };
   /* #967 round 2: A 'FAILED' CONNECTION IS SAID AT ONCE AND HELD (collab-link.js, "'FAILED' IS NOT FINAL"). The person is
@@ -3826,7 +3853,9 @@ window.FM = window.FM || {};
     host.id = 'collab-knock';
     host.setAttribute('role', 'alertdialog');
     const who = (cleanName(k.info.name) || 'Someone') + (k.info.dev ? ' (' + cleanName(k.info.dev) + ')' : '');
-    host.appendChild(el('div', 'ck-text', who + ' wants to join as ' + labelFor(k.info.role) + '.'));
+    /* #967 B3 (J4-13): WHICH project — on Home, or with two shared, "wants to join" named nothing he could check. */
+    const sp = C.session && C.session.isOwner ? (C.session.pid || currentPid()) : currentPid();
+    host.appendChild(el('div', 'ck-text', who + ' wants to join “' + nameOfPid(sp) + '” as ' + labelFor(k.info.role) + '.'));
     /* S6: on the relay, the five letters this leg of the handshake derived (§14.6). Somebody holding the
        link could sit between a real joiner and this device; the joiner's screen shows the same five only
        when nobody does. Offered, not demanded — the link's promise is one tap — and in plain words. */
@@ -3837,17 +3866,32 @@ window.FM = window.FM || {};
       line.appendChild(document.createTextNode(k.info.via === 'code' ? ' · came in with the short code' : ''));
       host.appendChild(line);
     }
+    /* #967 B3 (J4-13): ITS LIMIT, SAID AND SHOWN. It declined itself after two minutes with nothing on the card to say
+       so — a line, and a bar that runs down over the same time (standing still under reduced motion: the line says it). */
+    const wait = knockWait != null ? knockWait : ((C.LIMITS && C.LIMITS.KNOCK_TIMEOUT) || 120000);
+    const mins = Math.round(wait / 60000);
+    const span = wait >= 60000 ? mins + (mins === 1 ? ' minute' : ' minutes') : Math.max(1, Math.round(wait / 1000)) + ' seconds';
+    host.appendChild(el('div', 'ck-limit', 'No answer in ' + span + ' turns them away.'));
+    const bar = el('div', 'ck-bar'), fill = el('i');
+    bar.setAttribute('aria-hidden', 'true');
+    bar.appendChild(fill);
+    host.appendChild(bar);
     const acts = el('div', 'ck-acts');
     acts.appendChild(btn('ck-no', 'Don’t allow', function () { answer(false); }));
     acts.appendChild(btn('ck-yes accent', 'Let in', function () { answer(true); }));
     host.appendChild(acts);
     document.body.appendChild(host);
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!still && fill.animate) { try { fill.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: wait, easing: 'linear', fill: 'forwards' }); } catch (e) {} }
     const t = setTimeout(function () {
-      /* §19.3: a request nobody answers declines itself, with a quiet note where he will look next. */
+      /* §19.3: a request nobody answers declines itself, with a quiet note where he will look next — and, #967 B3, said
+         at once when the Share panel is not open to hold that note (on Home, or in the editor with it shut). */
       shareNote = (cleanName(k.info.name) || 'Someone') + ' asked to join and was not let in — the request timed out.';
+      const said = shareNote;
       answer(false);
       redrawShare();
-    }, knockWait != null ? knockWait : ((C.LIMITS && C.LIMITS.KNOCK_TIMEOUT) || 120000));
+      if (!panelRoot() && FM.toast) FM.toast(said, 3600);
+    }, wait);
     function answer(yes) {
       if (k.done) return;
       k.done = true;
@@ -4250,6 +4294,14 @@ window.FM = window.FM || {};
   };
   U.onDetach = function (s) {
     forgetPeerNotes();                         // #967: per-person notes die with the session (see forgetPeerNotes)
+    /* #967 B3: A ROOM LEFT BY OPENING ANOTHER PROJECT SAYS SO. The switch stands the session down `paused` and keeps the
+       room; the mark is what tells a later reload onto this project (the boot landing in the editor) that he had LEFT it —
+       so it asks “Carry on sharing?” — from a page that went away while the room was live, which carries no mark and comes
+       back sharing as a refresh always has. Cleared when the room is live again (afterArm). */
+    if (s && s.isOwner && s.pid && s.stopWhy === 'paused' && hasRoom(s.pid)) {
+      const r = useRoom(s.pid, false);
+      if (r) { r.paused = Date.now(); saveRoom(s.pid, r); }
+    }
     applyRoleClasses();                        // S7: no session, no role — the editor is his again
     if (s && s.isOwner && s.pid) dropLock(hostLock(s.pid));
     if (s && !s.isOwner && s.gpid && !(recon && recon.gpid === s.gpid && !recon.stopped)) dropLock(guestLock(s.gpid));
@@ -4293,6 +4345,8 @@ window.FM = window.FM || {};
        at 185 ms with Home closed, Home open at 204 ms, C.share at 234 ms behind it, LIVE on the relays before a tap). The
        boot says when it has landed (U.afterBoot, or U.markBooted when the load failed), and asks again from there. */
     if (!booted) return null;
+    const fromBoot = bootResume;               // #967 B3: this resume is the boot's own — see the room below
+    bootResume = false;
     const pid = currentPid();
     if (recon && recon.mode === 'reopen' && recon.gpid !== pid) stopRecon();
     /* S8 review: …nor while a Leave is still copying this project into his own — the card is already marked
@@ -4312,10 +4366,97 @@ window.FM = window.FM || {};
        session never stood down, so there is nothing to resume. */
     if (FM.home && FM.home.isOpen && FM.home.isOpen() && hasRoom(pid)) return null;
     const room = loadRoom(pid);
-    if (room) return resumeHost(pid, room);
+    /* #967 B3 (his pick, A): A PROJECT HE SHARED BEFORE ASKS — “Carry on sharing?” [Share again] [Not now]. It re-armed by
+       itself on the old link with a 2.6 s toast, which is half of "you can never turn it off on any project ever". The
+       one resume that does not ask is a reload that lands back in the editor onto a room that was LIVE when the page went
+       (no pause mark): a refresh in the middle of sharing is not reopening anything, and it still comes back sharing. */
+    if (room) return (fromBoot && !room.paused) ? resumeHost(pid, room) : askResume(pid);
     U.syncBanner();                            // #967: a plain project of his own — no banner from the one before it
     return null;
   };
+  /* “Carry on sharing “<name>”?” — once per opening, never behind Home, and never for a project another tab is sharing
+     (that tab's sharing is not this one's to carry on or stop: said the way the resume always said it). Share again is
+     the resume as it was; Not now is Stop sharing — the room goes, and the old link and code with it. A question that
+     another ask REPLACED (ask.js answers it null, with the new one already up) chose nothing, and nothing changes. */
+  function askResume(pid) {
+    if (resumeAsk && resumeAsk.pid === pid) return resumeAsk.p;
+    if (!U.getProfile()) return null;
+    const still = function () {
+      return U.labsOn() && !C.session && currentPid() === pid && hasRoom(pid) && !(FM.home && FM.home.isOpen && FM.home.isOpen());
+    };
+    const a = { pid: pid, p: null };
+    a.p = sharedElsewhere(pid).then(function (away) {
+      if (away) { if (FM.toast) FM.toast(OTHER_TAB + ' — this one is not sharing', 3600); return null; }
+      /* Another question already up is not replaced by this one (ask.js answers the one it replaces as Cancel): the room
+         stays as it is — kept, not live, SHARED · paused on Home — and the next opening asks. */
+      if (!still() || (FM.ask.isOpen && FM.ask.isOpen())) return null;
+      return FM.ask({
+        title: 'Carry on sharing “' + nameOfPid(pid) + '”?',
+        message: 'Share again lets people back in with the same link and code. Not now stops sharing — the old link and code stop working.',
+        ok: 'Share again', cancel: 'Not now'
+      }).then(function (yes) {
+        if (yes) {
+          const r = still() ? loadRoom(pid) : null;
+          return r ? resumeHost(pid, r) : null;
+        }
+        if (FM.ask.isOpen && FM.ask.isOpen()) return null;
+        if (!hasRoom(pid) || (C.session && C.session.isOwner && C.session.pid === pid)) return null;
+        stopSharingNow(pid);
+        if (fhostLive()) U.renderFriends(fhost);
+        if (FM.toast) FM.toast('Sharing stopped — the old link and code no longer work', 2800);
+        return false;
+      });
+    });
+    resumeAsk = a;
+    const done = function () { if (resumeAsk === a) resumeAsk = null; };
+    a.p.then(done, done);
+    return a.p;
+  }
+  /* ═══ #967 B3 · ASK BEFORE A SWITCH CUTS SOMEBODY OFF (his pick 4, A) ═══════════════════════════════════════════════
+   * Opening another project stands the session down. People who came in by the link or the short code hold a member token
+   * and come back by themselves when it resumes; somebody let in with a CONNECTION CODE holds nothing — for them the switch
+   * is the end, and they need a new code. So while such a person is in, Home asks before it opens another project; and a
+   * friend who joined that way is asked the same about their own side. The question, or null when there is nothing to ask. */
+  function namesOf(list) {
+    return list.length <= 1 ? list.join('') : list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
+  }
+  U.switchAsk = function () {
+    if (!U.labsOn()) return null;
+    const s = C.session;
+    if (!s || !C.active || s.active === false) return null;
+    const q = { title: 'Open another project?', ok: 'Open anyway', cancel: 'Stay', danger: true };
+    if (s.isOwner) {
+      const who = (s.peerIds ? s.peerIds() : []).filter(function (mid) { return Object.prototype.hasOwnProperty.call(byCode, mid); })
+        .map(function (mid) { return nameOfMid(s, mid); });
+      if (!who.length) return null;
+      q.message = namesOf(who) + ' joined with a code — opening another project ends it for them; they’ll need a new code.';
+      return q;
+    }
+    if (s.ended) return null;
+    const card = cardOf(s.gpid);
+    if (reconTarget(card) && !C.signal.codesOnly()) return null;   // a member: the copy finds its owner again by itself
+    const host = cleanName(card && card.collab && card.collab.hostName);
+    q.message = 'You joined ' + (host ? host + '’s' : 'this') + ' project with a code — opening another project ends it for you; you’ll need a new code.';
+    return q;
+  };
+  /* Resolves true to go ahead. Home's every way into another project asks this first (home.js leaveOk). */
+  U.confirmSwitch = function () {
+    const q = U.switchAsk();
+    return q ? FM.ask(q).then(function (yes) { return !!yes; }) : Promise.resolve(true);
+  };
+  /* #967 B3 (J4-11): the projects that have save points, for Home's “Earlier versions…” — shown only where there is one. */
+  U.versionPids = function () {
+    if (!FM.storage || !FM.storage.collabKeys) return Promise.resolve(new Set());
+    return FM.storage.collabKeys('collab:ckpt:').then(function (keys) {
+      const out = new Set();
+      (keys || []).forEach(function (k) {
+        const rest = String(k).slice('collab:ckpt:'.length), i = rest.lastIndexOf(':');
+        if (i > 0) out.add(rest.slice(0, i));
+      });
+      return out;
+    }, function () { return new Set(); });
+  };
+
   /* Home closed onto a project (home.js close): a kept room that waited behind Home resumes now. Nothing with Labs off,
      and nothing unless this project really has a kept room and no session is running. */
   U.afterHomeClose = function () {
@@ -4400,6 +4541,7 @@ window.FM = window.FM || {};
      when the boot landed in the editor, and behind Home it waits for Home to close onto the project. */
   U.afterBoot = function () {
     booted = true;
+    bootResume = U.labsOn();                   // #967 B3: the resume this asks for is the boot's (resumeOpen) — none with Labs off
     try { return U.resumePendingJoin(); }
     finally { U.afterReset(); }
   };
@@ -4769,12 +4911,7 @@ window.FM = window.FM || {};
     if (s && C.active && !s.isOwner && !s.ended) plan.guestOf = hostNameOf(s);
     if (s && C.active && s.isOwner) {
       plan.live = s.pid || currentPid();
-      const ms = (s.host && s.host.members) || {};
-      (s.peerIds ? s.peerIds() : []).forEach(function (mid) {
-        const m = ms[mid];
-        const pz = presenceOf(mid);
-        plan.people.push(cleanName((pz && pz.name) || (m && m.name)) || 'Someone');
-      });
+      (s.peerIds ? s.peerIds() : []).forEach(function (mid) { plan.people.push(nameOfMid(s, mid)); });
     }
     hostRoomKeys().forEach(function (k) {
       const pid = k.slice('fm.collab.host.'.length);
