@@ -49,7 +49,8 @@ window.FM = window.FM || {};
                              // the timeline. Desktop only: the CSS is gated behind (min-width: 701px), so a
                              // phone keeps its sheet layout whatever this says.
     /* ⚠️ OFF, AND OFF IS A PROMISE (queue 921 S3, spec §19.8 / §23). With this false there is no
-       collaboration DOM in the page at all — no share button, no Join button, no card — and nothing in
+       collaboration DOM in the page but the two doors #967 batch 2 allows (the phone's person+ on the video and Home's
+       worded Join — one button each, no network, no listeners; COLLAB-DESIGN.md §23) — no card — and nothing in
        js/collab-*.js runs beyond defining its namespace. It is the switch the whole feature hangs off,
        so it starts where a solo user cannot feel it. The three sibling keys §4.2 lists —
        collabCursors, collabSelections, collabCodesOnly — arrive with the stages that READ them (S5
@@ -133,7 +134,7 @@ window.FM = window.FM || {};
     touchRipples(state.showTouches);
     /* queue 921 S3: the Labs switch owns every piece of collaboration DOM there is, so it is applied
        here — the one place that runs at boot AND on every change — rather than from the row that flips
-       it. `syncLabs` builds nothing when the switch is off, and ENDS a live session if it goes off
+       it. `syncLabs` builds nothing but the two doors when the switch is off, and ENDS a live session if it goes off
        while one is running (a connection behind a hidden UI is worse than no switch). */
     if (FM.collab && FM.collab.ui) { try { FM.collab.ui.syncLabs(); } catch (e) {} }
     listeners.forEach(fn => { try { fn(state); } catch (e) {} });
@@ -458,9 +459,110 @@ window.FM = window.FM || {};
       jumpHead.appendChild(el('div', 'set-label', 'Reports from this device'));
       jumpHead.appendChild(el('div', 'set-hint', 'Your last playback, export, project open, scrub and blank clip — the reports the unblock list asks you to copy.'));
       const jumpBtn = el('button', 'set-action', 'Show'); jumpBtn.type = 'button';
-      jumpBtn.addEventListener('click', () => { const r = document.getElementById('set-reports'); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+      jumpBtn.addEventListener('click', () => { const r = document.getElementById('set-reports'); if (r && r._open) r._open(true); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); });   // #967 batch 2: the reports are one folded row — it opens first
       jump.append(jumpHead, jumpBtn);
       body.appendChild(group(jump));
+    }
+
+    /* ═══ WORK WITH FRIENDS — THE LABS GROUP (queue 921 S3, §19.8; moved up and titled by #967 batch 2) ═════════════════
+     * 📐 IT USED TO BE LAST, UNDER SEVEN DIAGNOSTIC REPORTS AND WITH NO TITLE — "the one group whose rows can change what
+     * the app IS". Measured on his phone: 4.2–5.6 screens down, while four sentences sent people to a "Settings → Labs" that
+     * had no heading at all. His words: "buried it all in a deeper setting". His pick A (the options sheet, 26 Sep): it moves
+     * up, right under the open project's own rows, with a heading in the feature's one name, and the reports fold into one
+     * row at the bottom. The switch's own label stays until batch 4 renames the feature everywhere.
+     * The two sub-rows are built either way and hidden by a class rather than built only when the switch is on: rebuilding this panel from inside one of its own rows means
+     * closing and reopening it, and open() rebinds Escape without unbinding while a close in the same
+     * frame as an open is the exact null-scrim crash the guard on open() below records. */
+    if (FM.collab && FM.collab.ui) {
+      const ui = FM.collab.ui;
+      const me = ui.getProfile();
+      const kids = el('div', 'set-labs' + (state.collabLabs ? '' : ' hidden'));
+      kids.appendChild(stayRow('Your name and colour',
+        me ? me.name : 'Not set yet — you are asked the first time you share or join',
+        'Change…', () => ui.profile({ force: true }),
+        (h) => { const p = ui.getProfile(); if (h && p && p.name) h.textContent = p.name; }));
+      kids.appendChild(stayRow('Join a live project', 'Paste the link or code they sent you, or type the short code.', 'Join…', () => ui.join()));   // #967: the long code is one of the three things a friend may have been sent
+      /* S8 (§25.5): "Test connection". Not an actionRow — that shuts the panel, and the answer IS this row. Nothing
+         is tried until the button is tapped (§23); the result is one sentence per question and the numbers behind
+         them in the same copyable box the Reports use, kept as `fm.lastConnReport`. */
+      if (ui.testConnection) {
+        const cw = el('div', 'set-row set-conn'); cw.id = 'set-conn';   // not .set-perf (#967 batch 2): the group sits above "What’s slow" now, whose checks find the first .set-perf
+        const ch = el('div', 'set-rowtext');
+        ch.appendChild(el('div', 'set-label', 'Test connection'));
+        ch.appendChild(el('div', 'set-hint', 'Tries the free connection services and this device’s live connections, then says plainly what works on this network. Nothing about your projects is sent.'));
+        const cb = el('div', 'set-perf-btns');
+        const tb = el('button', 'set-action set-conn-go', 'Test'); tb.type = 'button';
+        const cc = el('button', 'set-action', 'Copy'); cc.type = 'button';
+        const lines = el('ul', 'set-conn-lines');
+        const cout = el('pre', 'set-perf-out');
+        let last = '';
+        try { last = localStorage.getItem('fm.lastConnReport') || ''; } catch (e) {}
+        cout.textContent = last || 'Nothing yet — tap Test.';
+        cc.disabled = !last;
+        tb.addEventListener('click', () => {
+          tb.disabled = true; tb.textContent = 'Testing…';
+          lines.textContent = '';
+          const wait = el('li'); wait.appendChild(el('span', 'skip', '…')); wait.appendChild(el('span', null, 'Trying — this takes up to ten seconds.'));
+          lines.appendChild(wait);
+          ui.testConnection().then(r => {
+            lines.textContent = '';
+            r.lines.forEach(x => {
+              const li = el('li');
+              li.appendChild(el('span', x.st, x.st === 'ok' ? '✓' : x.st === 'no' ? '✕' : '–'));
+              li.appendChild(el('span', null, x.text));
+              lines.appendChild(li);
+            });
+            cout.textContent = r.report; cc.disabled = false;
+          }, e => { lines.textContent = ''; const li = el('li'); li.appendChild(el('span', 'no', '✕')); li.appendChild(el('span', null, 'The test itself failed: ' + ((e && e.message) || e))); lines.appendChild(li); })
+            .then(() => { tb.disabled = false; tb.textContent = 'Test again'; });
+        });
+        /* S8 review: the answer is SAID ON THE BUTTON. A toast from this panel is painted under .set-scrim (see the
+           Clear buttons above), so "Copied" was never seen and a tap looked like it did nothing. */
+        let ccT = 0;
+        const ccSay = (t) => { clearTimeout(ccT); cc.textContent = t; ccT = setTimeout(() => { cc.textContent = 'Copy'; }, 1800); };
+        cc.addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(cout.textContent); ccSay('Copied ✓'); }
+          catch (e) {
+            ccSay('Select it ↓');
+            try { const rg = document.createRange(); rg.selectNodeContents(cout); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); } catch (e2) {}
+          }
+        });
+        cb.append(tb, cc);
+        cw.append(ch, cb, lines, cout);
+        kids.appendChild(cw);
+      }
+      /* S6 (§19.8): Codes only. toggleRow → `apply()` → `syncLabs()`, which stops any relay already running
+         the moment it goes on — the switch is a promise about sockets, not about the next session. */
+      kids.appendChild(toggleRow('Connect with codes only', 'No free relay at all: nothing but the two devices. Invite links and short codes stop working — you swap a long code with each person instead.', 'collabCodesOnly'));
+      /* S5: the two §19.8 display switches. Local to this device — they change what YOU see, never what
+         the others see of you. `apply()` is not needed: presence reads the setting on every draw. */
+      kids.appendChild(toggleRow('Show others’ pointers', 'Their mouse pointer and their taps, in their colour.', 'collabCursors'));
+      kids.appendChild(toggleRow('Show others’ selections', 'An outline in their colour around the layers they have selected, and a ring on those clips.', 'collabSelections'));
+      /* #967: the master switch is a real OFF — it stops every project shared from this device (collab-ui.js syncLabs),
+         so turning it off while anything is shared asks first and names what stops, and the result is said HERE, on
+         the row, where he is looking. */
+      const said = el('div', 'set-hint set-labs-said hidden');
+      said.setAttribute('role', 'status');
+      const labsRow = switchRow('Live collaboration (preview)',
+          /* S6 review: every third party by name — see collab-ui.js PRIVACY_LINE. */
+          'Edit one project with people on other devices. Free public services — relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup — help the devices find each other. They see internet addresses and when a room is in use, never your project; then the devices talk directly, encrypted. Codes only skips them all.',
+          () => !!state.collabLabs,
+          () => {
+            const flip = () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); };
+            if (!state.collabLabs || !ui.confirmLabsOff) { said.classList.add('hidden'); flip(); return null; }
+            return ui.confirmLabsOff().then(r => {
+              if (!r || !r.ok || !state.collabLabs) return;
+              flip();
+              said.textContent = r.said || '';
+              said.classList.toggle('hidden', !r.said);
+            });
+          });
+      const lt = labsRow.querySelector('.set-rowtext');
+      if (lt) lt.appendChild(said);
+      const fg = group(labsRow, kids);
+      fg.id = 'set-friends';
+      fg.insertBefore(el('div', 'set-grouptitle', 'Work with friends'), fg.firstChild);
+      body.appendChild(fg);
     }
 
     body.appendChild(group(
@@ -690,6 +792,22 @@ window.FM = window.FM || {};
       perfWrap.append(perfHead, perfBtns, perfOut);
       body.appendChild(group(perfWrap));
     }
+    /* ═══ THE REPORTS FOLD INTO ONE ROW AT THE BOTTOM (#967 batch 2, his pick A) ═══════════════════════════════════════════
+     * Seven readouts he pastes when asked — valuable, and seven screens of monospace between him and everything below them.
+     * They are one "Reports" row now, closed until tapped, and still built on every open (queue 785: from Home too), so the
+     * jump row at the top opens it and scrolls there. #set-reports moved from the first readout to the fold itself. */
+    const repFold = el('div', 'set-group set-reports'); repFold.id = 'set-reports';
+    const repTog = el('button', 'set-row set-reports-toggle');
+    repTog.type = 'button';
+    const repTxt = el('span', 'set-rowtext');
+    repTxt.appendChild(el('span', 'set-label', 'Reports'));
+    repTxt.appendChild(el('span', 'set-hint', 'Your last playback, export, project open, scrub and blank clip — open this when you’re asked to copy one.'));
+    repTog.append(repTxt, el('span', 'set-reports-chev'));
+    const rep = el('div', 'set-reports-body');
+    const repOpen = (on) => { rep.classList.toggle('hidden', !on); repTog.setAttribute('aria-expanded', on ? 'true' : 'false'); repFold.classList.toggle('open', on); };
+    repTog.addEventListener('click', () => repOpen(rep.classList.contains('hidden')));
+    repFold._open = repOpen;
+    repOpen(false);
     /* ---- THE DEVICE REPORTS ARE HERE WHETHER OR NOT A PROJECT IS OPEN (queue 785, 5 Sep). Every readout below is a
        record the app wrote about HIS DEVICE — the last playback, export, project open, scrub, blank clip — and twelve
        open items wait on him pasting one of them. They sat inside `if (inProject)` with the Measure button, so from the
@@ -707,7 +825,7 @@ window.FM = window.FM || {};
        * five drop reasons fired, whether the browser even HAS an AudioEncoder, and what the mix peaked
        * at. Same shape as "What's slow" above, for the same reason — that one is the only thing that
        * ever moved the lag reports along. */
-      const expWrap = el('div', 'set-row set-perf'); expWrap.id = 'set-reports';   // the jump row's target (queue 785)
+      const expWrap = el('div', 'set-row set-perf');   // (#set-reports, the jump row's target since queue 785, is the fold now)
       const expOut = el('pre', 'set-perf-out');
       let expText = '';
       try { expText = localStorage.getItem('fm.lastExportReport') || ''; } catch (e) {}
@@ -730,7 +848,7 @@ window.FM = window.FM || {};
       const expBtns = el('div', 'set-perf-btns');
       expBtns.append(expCopy);
       expWrap.append(expHead, expBtns, expOut);
-      body.appendChild(group(expWrap));
+      rep.appendChild(expWrap);
 
       /* ═══ "YOUR LAST PLAYBACK" — the number three entries have been waiting weeks for ═══════════
        * #95 ("the audios don't play smoothly"), #96 ("adding a SONG… sometimes will not play at all")
@@ -771,7 +889,7 @@ window.FM = window.FM || {};
         const errBtns = el('div', 'set-perf-btns');
         errBtns.append(errCopy, errClear);
         errWrap.append(errHead, errBtns, errOut);
-        body.appendChild(group(errWrap));
+        rep.appendChild(errWrap);
       }
 
       const audWrap = el('div', 'set-row set-perf');
@@ -797,7 +915,7 @@ window.FM = window.FM || {};
       const audBtns = el('div', 'set-perf-btns');
       audBtns.append(audCopy);
       audWrap.append(audHead, audBtns, audOut);
-      body.appendChild(group(audWrap));
+      rep.appendChild(audWrap);
 
       /* ═══ "YOUR LAST PROJECT OPEN" (queue 508) ═══════════════════════════════════════
        * The open-project transition measures smooth on this machine and he says it is janky on his
@@ -826,7 +944,7 @@ window.FM = window.FM || {};
       const opBtns = el('div', 'set-perf-btns');
       opBtns.append(opCopy);
       opWrap.append(opHead, opBtns, opOut);
-      body.appendChild(group(opWrap));
+      rep.appendChild(opWrap);
 
       /* ═══ "YOUR LAST SCRUB" (queue 768) — the scrub probe's report, same shape as the row above. */
       const scWrap = el('div', 'set-row set-perf');
@@ -848,7 +966,7 @@ window.FM = window.FM || {};
       const scBtns = el('div', 'set-perf-btns');
       scBtns.append(scCopy);
       scWrap.append(scHead, scBtns, scOut);
-      body.appendChild(group(scWrap));
+      rep.appendChild(scWrap);
 
       /* ═══ "YOUR LAST BACK FROM AN EFFECTS CATEGORY" (queue 712) ═══ the phone answers the one question only it could. */
       const bkWrap = el('div', 'set-row set-perf');
@@ -870,7 +988,7 @@ window.FM = window.FM || {};
       const bkBtns = el('div', 'set-perf-btns');
       bkBtns.append(bkCopy);
       bkWrap.append(bkHead, bkBtns, bkOut);
-      body.appendChild(group(bkWrap));
+      rep.appendChild(bkWrap);
 
       /* ═══ "A CLIP WITH NO PICTURE" (queue 129) ═════════════════════════════════════════════════
        * That entry's last question is put to HIM — "what does the FILE say, .mov or .mp4? A .mov
@@ -903,103 +1021,11 @@ window.FM = window.FM || {};
       const bcBtns = el('div', 'set-perf-btns');
       bcBtns.append(bcCopy);
       bcWrap.append(bcHead, bcBtns, bcOut);
-      body.appendChild(group(bcWrap));
+      rep.appendChild(bcWrap);
     }
 
-    /* ═══ LABS (queue 921 S3, §19.8) ═════════════════════════════════════════════════════════════════════════
-     * Last but for the version line, because it is the one group whose rows can change what the app IS
-     * rather than how it looks. The two sub-rows are built either way and hidden by a class rather than
-     * built only when the switch is on: rebuilding this panel from inside one of its own rows means
-     * closing and reopening it, and open() rebinds Escape without unbinding while a close in the same
-     * frame as an open is the exact null-scrim crash the guard on open() below records. */
-    if (FM.collab && FM.collab.ui) {
-      const ui = FM.collab.ui;
-      const me = ui.getProfile();
-      const kids = el('div', 'set-labs' + (state.collabLabs ? '' : ' hidden'));
-      kids.appendChild(stayRow('Your name and colour',
-        me ? me.name : 'Not set yet — you are asked the first time you share or join',
-        'Change…', () => ui.profile({ force: true }),
-        (h) => { const p = ui.getProfile(); if (h && p && p.name) h.textContent = p.name; }));
-      kids.appendChild(stayRow('Join a live project', 'Paste the link or code they sent you, or type the short code.', 'Join…', () => ui.join()));   // #967: the long code is one of the three things a friend may have been sent
-      /* S8 (§25.5): "Test connection". Not an actionRow — that shuts the panel, and the answer IS this row. Nothing
-         is tried until the button is tapped (§23); the result is one sentence per question and the numbers behind
-         them in the same copyable box the Reports use, kept as `fm.lastConnReport`. */
-      if (ui.testConnection) {
-        const cw = el('div', 'set-row set-perf set-conn'); cw.id = 'set-conn';
-        const ch = el('div', 'set-rowtext');
-        ch.appendChild(el('div', 'set-label', 'Test connection'));
-        ch.appendChild(el('div', 'set-hint', 'Tries the free connection services and this device’s live connections, then says plainly what works on this network. Nothing about your projects is sent.'));
-        const cb = el('div', 'set-perf-btns');
-        const tb = el('button', 'set-action set-conn-go', 'Test'); tb.type = 'button';
-        const cc = el('button', 'set-action', 'Copy'); cc.type = 'button';
-        const lines = el('ul', 'set-conn-lines');
-        const cout = el('pre', 'set-perf-out');
-        let last = '';
-        try { last = localStorage.getItem('fm.lastConnReport') || ''; } catch (e) {}
-        cout.textContent = last || 'Nothing yet — tap Test.';
-        cc.disabled = !last;
-        tb.addEventListener('click', () => {
-          tb.disabled = true; tb.textContent = 'Testing…';
-          lines.textContent = '';
-          const wait = el('li'); wait.appendChild(el('span', 'skip', '…')); wait.appendChild(el('span', null, 'Trying — this takes up to ten seconds.'));
-          lines.appendChild(wait);
-          ui.testConnection().then(r => {
-            lines.textContent = '';
-            r.lines.forEach(x => {
-              const li = el('li');
-              li.appendChild(el('span', x.st, x.st === 'ok' ? '✓' : x.st === 'no' ? '✕' : '–'));
-              li.appendChild(el('span', null, x.text));
-              lines.appendChild(li);
-            });
-            cout.textContent = r.report; cc.disabled = false;
-          }, e => { lines.textContent = ''; const li = el('li'); li.appendChild(el('span', 'no', '✕')); li.appendChild(el('span', null, 'The test itself failed: ' + ((e && e.message) || e))); lines.appendChild(li); })
-            .then(() => { tb.disabled = false; tb.textContent = 'Test again'; });
-        });
-        /* S8 review: the answer is SAID ON THE BUTTON. A toast from this panel is painted under .set-scrim (see the
-           Clear buttons above), so "Copied" was never seen and a tap looked like it did nothing. */
-        let ccT = 0;
-        const ccSay = (t) => { clearTimeout(ccT); cc.textContent = t; ccT = setTimeout(() => { cc.textContent = 'Copy'; }, 1800); };
-        cc.addEventListener('click', async () => {
-          try { await navigator.clipboard.writeText(cout.textContent); ccSay('Copied ✓'); }
-          catch (e) {
-            ccSay('Select it ↓');
-            try { const rg = document.createRange(); rg.selectNodeContents(cout); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); } catch (e2) {}
-          }
-        });
-        cb.append(tb, cc);
-        cw.append(ch, cb, lines, cout);
-        kids.appendChild(cw);
-      }
-      /* S6 (§19.8): Codes only. toggleRow → `apply()` → `syncLabs()`, which stops any relay already running
-         the moment it goes on — the switch is a promise about sockets, not about the next session. */
-      kids.appendChild(toggleRow('Connect with codes only', 'No free relay at all: nothing but the two devices. Invite links and short codes stop working — you swap a long code with each person instead.', 'collabCodesOnly'));
-      /* S5: the two §19.8 display switches. Local to this device — they change what YOU see, never what
-         the others see of you. `apply()` is not needed: presence reads the setting on every draw. */
-      kids.appendChild(toggleRow('Show others’ pointers', 'Their mouse pointer and their taps, in their colour.', 'collabCursors'));
-      kids.appendChild(toggleRow('Show others’ selections', 'An outline in their colour around the layers they have selected, and a ring on those clips.', 'collabSelections'));
-      /* #967: the master switch is a real OFF — it stops every project shared from this device (collab-ui.js syncLabs),
-         so turning it off while anything is shared asks first and names what stops, and the result is said HERE, on
-         the row, where he is looking. */
-      const said = el('div', 'set-hint set-labs-said hidden');
-      said.setAttribute('role', 'status');
-      const labsRow = switchRow('Live collaboration (preview)',
-          /* S6 review: every third party by name — see collab-ui.js PRIVACY_LINE. */
-          'Edit one project with people on other devices. Free public services — relays run by PeerJS, EMQX and HiveMQ, and Google and Cloudflare’s address lookup — help the devices find each other. They see internet addresses and when a room is in use, never your project; then the devices talk directly, encrypted. Codes only skips them all.',
-          () => !!state.collabLabs,
-          () => {
-            const flip = () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); };
-            if (!state.collabLabs || !ui.confirmLabsOff) { said.classList.add('hidden'); flip(); return null; }
-            return ui.confirmLabsOff().then(r => {
-              if (!r || !r.ok || !state.collabLabs) return;
-              flip();
-              said.textContent = r.said || '';
-              said.classList.toggle('hidden', !r.said);
-            });
-          });
-      const lt = labsRow.querySelector('.set-rowtext');
-      if (lt) lt.appendChild(said);
-      body.appendChild(group(labsRow, kids));
-    }
+    repFold.append(repTog, rep);
+    body.appendChild(repFold);
 
     const foot = el('div', 'set-foot');
     const ver = document.querySelector('.ver');

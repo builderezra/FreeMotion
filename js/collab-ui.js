@@ -20,6 +20,13 @@
  * markup in index.html, and opening it with Labs off draws — into THAT block, with no collab id, no scrim, no listener and
  * no timer — one explanation and the one switch that turns live sharing on (U.renderFriends → drawLabsOff).
  *
+ * 📐 …AND TWO DOORS, SINCE #967 BATCH 2 (§23 relaxed, his pick). Asked "is it OK to show one sharing door while the
+ * feature is off?", the recommended answer he builds by was yes: one button that only opens the explanation and the
+ * switch, with no network and no listeners. So with Labs off there is the phone's person+ on the video (#btn-share on
+ * #stage, `.cs-door`, hidden above 700px) and Home's worded Join (#hm-join-btn) — each ONE button with its own click and
+ * nothing else — built by syncDoors() from syncLabs(). Everything below still waits for the switch. The suite's rule for
+ * it is `doors23` in tests/tests.js.
+ *
  * ⚠️ EVERY PIECE OF TEXT THAT CAME FROM ANOTHER DEVICE GOES IN AS `textContent` (§14.9). Names and
  * colours are chosen on someone else's phone. There is no `innerHTML` in this file with peer data in
  * it — there is no `innerHTML` in this file at all — and the colour is matched against the palette
@@ -1011,6 +1018,7 @@ window.FM = window.FM || {};
    * words, so a Viewer is never left pressing things that do nothing. None of this is the lock — that is
    * the host, and the backstop in collab-session.js — it is what keeps a Viewer from feeling locked out. */
   function applyRoleClasses() {
+    syncLive();                                  // #967 batch 2: every place the session's state is re-read re-reads LIVE too
     const b = document.body;
     const r = C.myRole ? C.myRole() : 'owner';
     const ro = installed && (r === 'viewer' || r === 'commenter');
@@ -1027,6 +1035,56 @@ window.FM = window.FM || {};
     if (note.textContent !== t) note.textContent = t;
   }
   U.applyRoleClasses = applyRoleClasses;
+
+  /* ═══ #967 BATCH 2 · LIVE ON THE VIDEO (his pick A — tools/design/967/r2-owner.jpg, r3-guest.jpg) ═══════════════════
+     While he shared with nobody in, the person+ on the stage was pixel-identical to not sharing (J1-3), and a friend saw
+     nothing that said whose project it was or that it was live (J3-4 — the owner's name lived only in an aria-label). So:
+     a red "● LIVE" pill right of the chip for him, and "● Live · <owner>" for a friend, the name as TEXT (§14.9). A tap is
+     the chip's own door (U.openPeople): his Share panel, or their panel with Leave. Offline, ended or off, it goes — the
+     banner says those. Re-read from applyRoleClasses, which attach, detach, a role change and every syncBanner run. */
+  let liveEl = null;
+  function syncLive() {
+    const s = C.session, st = document.getElementById('stage');
+    let text = null, guest = false;
+    if (installed && st && s && C.active && !s.ended) {
+      if (s.isOwner) text = 'LIVE';
+      else if (s.online !== false) { text = 'Live · ' + hostNameOf(s); guest = true; }
+    }
+    if (!text) {
+      if (liveEl && liveEl.parentNode) liveEl.parentNode.removeChild(liveEl);
+      liveEl = null;
+      return;
+    }
+    if (!liveEl) {
+      liveEl = el('button', 'collab-live');
+      liveEl.id = 'collab-live';
+      liveEl.type = 'button';
+      liveEl.appendChild(el('i', 'clv-dot'));
+      liveEl.appendChild(el('span', 'clv-txt'));
+      liveEl.addEventListener('click', function (e) { e.stopPropagation(); U.openPeople(); });
+    }
+    if (liveEl.parentNode !== st) st.appendChild(liveEl);
+    liveEl.classList.toggle('clv-guest', guest);
+    const t = liveEl.querySelector('.clv-txt');
+    if (t.textContent !== text) t.textContent = text;
+    liveEl.setAttribute('aria-label', guest ? 'Live — ' + hostNameOf(s) + '’s project. See who is here, or leave' : 'Live — you are sharing this project. See who is here');
+    placeLive();
+  }
+  /* Just past the chip, whose width is whatever the faces make it — the banner's own rule (placeBanner) in the other
+     direction. The chip is #collab-people once a session draws it, the person+ before. */
+  function placeLive() {
+    const p = liveEl;
+    if (!p || !p.parentNode) return;
+    const stage = p.parentNode;
+    const chip = [document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) {
+      return n && n.parentNode === stage && n.offsetWidth;
+    })[0];
+    const sr = stage.getBoundingClientRect();
+    const left = chip ? Math.round(chip.getBoundingClientRect().right - sr.left + 6) : 8;
+    if (p.style.left !== left + 'px') p.style.left = left + 'px';
+    p.style.maxWidth = Math.max(60, Math.round(sr.width) - left - 46) + 'px';
+  }
+
   function roleWords(r) { return r === 'viewer' ? 'a Viewer' : r === 'commenter' ? 'a Commenter' : 'an Editor'; }
   /* The owner changed this device's role: said, applied, and every open surface redrawn — now, not at
      the next thing the person tries (§16.3 "live role changes update these classes immediately"). */
@@ -1150,8 +1208,8 @@ window.FM = window.FM || {};
     watchDoc();
     takeWake();
     /* §22: a phone that hosts has to stay awake — iOS drops every connection soon after the screen locks,
-       and a wake lock only holds while the app is on screen. Said once, when he starts. */
-    if (isPhoneNow() && FM.toast) FM.toast('Keep FreeMotion open — the session pauses when your screen locks', 3600);
+       and a wake lock only holds while the app is on screen. #967 batch 2: SAID IN THE PANEL (drawShare's `.cs-keepopen`),
+       not as a toast — the toast rose over the short code at the very moment he was reading it out (J1-13). */
     U.syncBanner();
   }
 
@@ -1179,6 +1237,7 @@ window.FM = window.FM || {};
     head.appendChild(el('div', 'cs-state', stateLine(null)));
     /* #967: the one-shot line — what just happened (Stop sharing from Home, a name prompt he backed out of). */
     if (shareNote) { head.appendChild(el('div', 'cs-note', shareNote)); shareNote = null; }
+    head.appendChild(howItWorks());
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
@@ -1205,33 +1264,92 @@ window.FM = window.FM || {};
       }, function () { start.disabled = false; });
     });
     body.appendChild(start);
-    body.appendChild(el('div', 'cs-fr-hint', 'Opening this never shares anything by itself.'));
+    /* #967 batch 2 (J1-8): what the tap gets him, said before he taps — and still that opening this shares nothing. */
+    body.appendChild(el('div', 'cs-fr-hint', 'You’ll get a link, a QR and a short code to send. Nothing is shared until you tap it.'));
     body.appendChild(joinAsRow({ pending: true }));
+    body.appendChild(joinLinkRow());
+    c.appendChild(offRow(host));
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
     c.appendChild(foot);
     return c;
   }
   /* With Labs off the bar still shows (his pick) — and opened, it says what live sharing is and offers the one switch.
-     The privacy line is the Labs switch's own, because turning it on here is turning on exactly that. */
+     The privacy line is the Labs switch's own, because turning it on here is turning on exactly that.
+     #967 batch 2: the switch is the same "Work with friends" row the block keeps in every state, at the same foot — so it is
+     turned on where it will be turned off, and the words say so instead of pointing at Settings (J3-1, his pick A). */
   function drawLabsOff(host) {
     const c = mountHost(host);
     const head = el('div', 'cs-head');
     head.appendChild(el('h2', 'fm-ask-title', 'Work on this with friends'));
-    head.appendChild(el('div', 'cs-state', 'Live sharing is still being tested'));
+    head.appendChild(el('div', 'cs-state', 'Still being tested'));
+    /* Kept, not used up: turning it off draws this block twice (C.end → onDetach, then syncLabs' own redraw — and for a
+       guest a third time when C.leave settles), and a one-shot line spent on the first draw left the owner with silence.
+       It goes when the block closes (U.friendsClosed) or the feature comes back on (U.syncLabs). */
+    if (offNote) head.appendChild(el('div', 'cs-note', offNote));
+    head.appendChild(howItWorks(true));
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
-    body.appendChild(el('div', 'collab-sub', 'Share this project live and edit it together from your own phones or computers. It is still being tested, so it stays off until you turn it on — and you can turn it off again in Settings → Live collaboration (at the bottom).'));
-    body.appendChild(switchRow('Live collaboration', 'Being tested', false, function () {
-      if (FM.settings && FM.settings.set) FM.settings.set('collabLabs', true);
-      if (fhost === host && host.isConnected) U.renderFriends(host);
-    }));
+    body.appendChild(el('div', 'collab-sub', 'Share this project live and edit it together from your own phones or computers. It is still being tested, so it stays off until you turn it on — and you can turn it off here any time.'));
+    body.appendChild(joinLinkRow());
     body.appendChild(el('div', 'cs-privacy', PRIVACY_LINE));
+    c.appendChild(offRow(host));
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
     c.appendChild(foot);
     return c;
+  }
+
+  /* ═══ #967 BATCH 2 · WHAT THE BLOCK SAYS IN EVERY STATE ═══════════════════════════════════════════════════════════
+     His words: "there's a switch to turn it on, but you can never turn it off on any project ever … make sure it … actually
+     makes sense for someone who doesn't know how to use it". Three pieces, each his recommended pick (tools/design/967/r1). */
+  let offNote = null;            // the Labs-off view's line: what turning it off just stopped (from offRow); kept until the block closes or it is on again
+  /* HOW IT WORKS, in three numbered lines at the top of the block — before and after turning it on (pick A of "where
+     'How it works' sits"). The numbers are drawn, not typed into the text, so the line reads as the step.
+     With the feature off there is no Start sharing to tap yet — the one thing that moves him on is the switch at the foot —
+     so step 1 names that first (review: a first-timer following "Tap Start sharing" found nothing to tap). */
+  function howItWorks(off) {
+    const ol = el('ol', 'cs-how');
+    [['1', off ? 'Turn on Work with friends below, then tap Start sharing' : 'Tap Start sharing'], ['2', 'Send your friend the link'], ['3', 'They tap it — you’re both editing']].forEach(function (x) {
+      const li = el('li');
+      li.appendChild(el('b', null, x[0]));
+      li.appendChild(document.createTextNode(x[1]));
+      ol.appendChild(li);
+    });
+    return ol;
+  }
+  /* THE WAY IN FOR A FRIEND, from the block that could only share (J2-4): the same door as Home's Join. */
+  function joinLinkRow() {
+    const b = btn('cs-navrow cs-joinlink', 'Got an invite? Join with a link or code', function () { closeAny(); U.joinDoor(); });
+    b.appendChild(el('span', 'cs-add-sub', 'Paste what your friend sent you, or type their short code'));
+    return b;
+  }
+  /* THE OFF SWITCH THAT STAYS (J3-1, blocker — pick A: "a quiet switch row at the foot of the Friends block, in every
+     state; it sits exactly where he turned it on"). Pinned between the scrolling body and the foot, so it is on screen
+     whatever the body holds. On is the setting's own; off goes through Batch 1's confirm (U.confirmLabsOff), which names
+     what stops and for whom, and its sentence is said where he is looking — the block's own head, or a toast when the
+     card it was in closes with the switch. */
+  function offRow(host) {
+    const on = U.labsOn();
+    const s = on ? C.session : null;
+    const hint = !on ? 'Off — turn it on here, and off again any time'
+      : (s && !s.isOwner && !s.ended) ? 'On — turning it off leaves ' + hostNameOf(s) + '’s project'
+        : (s && s.isOwner) ? 'On — turning it off stops sharing every project'
+          : 'On — turn it off here any time';
+    const row = switchRow('Work with friends', hint, on, function (v) {
+      if (!FM.settings || !FM.settings.set) return;
+      if (v) { FM.settings.set('collabLabs', true); return; }   // → syncLabs, which redraws the block to what is true
+      Promise.resolve(U.confirmLabsOff ? U.confirmLabsOff() : { ok: true, said: null }).then(function (r) {
+        if (!r || !r.ok || !U.labsOn()) return;
+        const inBlock = !!host && fhost === host && host.isConnected;
+        if (inBlock) offNote = r.said || null;
+        FM.settings.set('collabLabs', false);                   // → syncLabs: every room dropped, the block redrawn off
+        if (!inBlock && r.said && FM.toast) FM.toast(r.said, 3200);
+      });
+    });
+    row.classList.add('cs-offrow');
+    return row;
   }
   /* Everything the block holds, let go — at every close of the dialog, and by the observer at a bare hide. */
   U.friendsClosed = function () {
@@ -1242,6 +1360,7 @@ window.FM = window.FM || {};
     if (b) b.textContent = '';
     fhost = null;
     pendingLinkRole = null;
+    offNote = null;                             // said once, where he was looking — not again at the next opening
     U.friendsBar();
   };
   /* THE BAR: what is true in one line, and who is here. Names and colours came from other devices: textContent, and the
@@ -1346,13 +1465,15 @@ window.FM = window.FM || {};
     else if (shareStep === 'versions') drawVersionsStep(body);
     else {
       body.appendChild(memberRows(s));
-      /* S7 (§17.1 entry points): the comments, one tap from the people — the same row the guest panel has. */
-      if (C.comments && C.comments.installed && C.comments.installed()) body.appendChild(commentsRow());
       /* S6 (§19.1 "General access"): the link, the QR and the 9-character code, then who gets asked. The
          connection-code exchange stays — it is the way in that needs no relay at all — but as the second
-         choice rather than the only one. */
+         choice rather than the only one.
+         #967 batch 2 (J1-6): THE JOB COMES FIRST — the invite straight under the people; Comments moved below it all. */
       const relayOn = !C.signal.codesOnly();
       body.appendChild(inviteBlock());
+      /* #967 batch 2 (J1-13): §22's "keep it open" is said HERE, under the code, where it stays — it was a toast that rose
+         over the short code at the moment he was reading it out. A phone's line only: a PC does not lock mid-session. */
+      if (isPhoneNow()) body.appendChild(el('div', 'cs-relay cs-keepopen', 'Keep FreeMotion open — it pauses when your screen locks.'));
       if (relayOn) body.appendChild(askRow());
       /* S7 (§19.1 "They join as [Editor ▾]"): Docs puts the role a link grants right beside the link. */
       body.appendChild(joinAsRow());
@@ -1361,9 +1482,16 @@ window.FM = window.FM || {};
         ? 'No relay at all — you send them a long code and they send one back'
         : 'No account, no server — you send them a code and they send one back' /* queue 921 S3: NOT "read out": the codes-only code is a ~250-character block you copy into a message. A short code you could read aloud needs the relay (S6), and saying "read" of a 250-char blob is a promise the screen does not keep. */));
       body.appendChild(addBtn);
+      paintRelayDoors(body);                     // J5-8: with the relays unreachable the code swap is the lit one
+      /* S7 (§17.1 entry points): the comments, one tap from the people — the same row the guest panel has. Below the
+         invite since #967 batch 2 (J1-6): he opens this panel to get somebody in. */
+      if (C.comments && C.comments.installed && C.comments.installed()) body.appendChild(commentsRow());
       /* §14.9's privacy line, word for word, wherever the relay is in use. */
       if (relayOn) body.appendChild(el('div', 'cs-privacy', PRIVACY_LINE));
     }
+    /* #967 batch 2: the switch that stays — on the Share panel and the gear's Sharing settings alike. Not in the code step,
+       whose one lit button ("They match") has to keep the room above the pinned foot (967 2). */
+    if (shareStep !== 'code') c.appendChild(offRow(host));
 
     /* 📐 S7: THE FOOT IS [⚙] [Stop sharing] [Done], and "Comments" is a row in the body. §19.1 lists four
        things for the foot — ⚙ · "Comments (3)" · [Stop sharing] · [Done] — and at 380 px they do not fit:
@@ -1742,7 +1870,7 @@ window.FM = window.FM || {};
 
   function isPhoneNow() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
 
-  function copyPlain(text, said, near) {
+  function copyPlain(text, said, near, ms) {
     const t = String(text || '');
     if (!t) return;
     /* S8 review: "select it and copy it yourself" — and there was nothing to select: the invite block shows
@@ -1763,7 +1891,7 @@ window.FM = window.FM || {};
       try { f.focus(); f.select(); } catch (e) {}
     }
     try {
-      navigator.clipboard.writeText(t).then(function () { if (FM.toast) FM.toast(said || 'Copied', 1800); }, fallback);
+      navigator.clipboard.writeText(t).then(function () { if (FM.toast) FM.toast(said || 'Copied', ms || 1800); }, fallback);
     } catch (e) { fallback(); }
   }
 
@@ -1784,7 +1912,23 @@ window.FM = window.FM || {};
   function relayWarn() { return !!relay && (relay.status === 'unreachable' || relay.status === 'reconnecting'); }
   function paintRelayLine() {
     const n = document.getElementById('collab-relay-status');
-    if (n) { const t = relayLine(); if (n.textContent !== t) n.textContent = t; n.classList.toggle('warn', relayWarn()); }
+    if (n) { const t = relayLine(); if (n.textContent !== t) n.textContent = t; n.classList.toggle('warn', relayWarn()); paintRelayDoors(n.closest('.cs-body')); }
+  }
+  /* #967 batch 2 (J5-8): WITH EVERY RELAY UNREACHABLE THE LINK AND THE SHORT CODE CANNOT REACH HIM — measured, Copy link was
+     still the one lit button and said "Link copied", and the line under the short code sent the friend to type a code that
+     could not work. So the lit button becomes the code swap (it needs no relay), Copy link goes quiet, and that line goes.
+     Repainted with the relay line, because the relay's answer arrives after the panel is drawn. Reconnecting is not down:
+     the link works again the moment it is back. */
+  function relayDown() { return !!relay && relay.status === 'unreachable'; }
+  function paintRelayDoors(root) {
+    if (!root) return;
+    const down = relayDown();
+    const cl = root.querySelector('.cs-invite .cs-copylink');
+    if (cl) cl.classList.toggle('accent', !down);
+    const add = root.querySelector(':scope > .cs-add');   // the main view's Connect with a code, never a row's sub-line
+    if (add) add.classList.toggle('accent', down);
+    const how = root.querySelector('.cs-invite .cs-codehow');
+    if (how) how.style.display = down ? 'none' : '';
   }
 
   function inviteBlock() {
@@ -1799,7 +1943,10 @@ window.FM = window.FM || {};
     const code = hostRoom ? C.signal.fmtRoomCode(hostRoom.code) : '';
     box.appendChild(el('div', 'cs-rowlabel', 'Invite with a link or a code'));
     const row = el('div', 'cs-linkrow');
-    const cl = btn('cs-copylink accent', 'Copy link', function () { copyPlain(link, 'Link copied', cl); });
+    const cl = btn('cs-copylink accent', 'Copy link', function () {
+      if (relayDown()) copyPlain(link, 'Copied — but the link won’t work until the free connection service can be reached. Use Connect with a code.', cl, 4200);
+      else copyPlain(link, 'Link copied', cl);
+    });
     row.appendChild(cl);
     if (navigator.share) {
       row.appendChild(btn('cs-sharelink', 'Share…', function () {
@@ -1819,6 +1966,9 @@ window.FM = window.FM || {};
     const cc = btn('cs-copycode', 'Copy', function () { copyPlain(code, 'Code copied', cc); });
     codeRow.appendChild(cc);
     box.appendChild(codeRow);
+    /* #967 batch 2 (J5-4, the owner's half): what the friend DOES with the code, right under it — Home's worded Join is
+       there for them whether or not their feature is on yet. */
+    box.appendChild(el('div', 'cs-relay cs-codehow', 'They open FreeMotion, tap Join, and type it in.'));
     /* The relay line's own style (spacing, size, light-Home ink), so the hint needs no CSS of its own. */
     box.appendChild(el('div', 'cs-relay cs-codehint', 'The short code stops working ' + Math.round(codeTtlMs() / 60000) + ' minutes after you close this.'));
     const st = el('div', 'cs-relay', relayLine());
@@ -2776,6 +2926,7 @@ window.FM = window.FM || {};
         : (s.hostName || 'The owner') + ' still says yes to each new person.'));
       body.appendChild(box);
     }
+    c.appendChild(offRow(host));   // #967 batch 2: the switch that stays — for a friend it says it leaves the owner's project
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
       /* ⚠️ IT SAID "or delete it from this device" AND HAD NO DELETE BUTTON (queue 921 S3 review).
@@ -2874,6 +3025,7 @@ window.FM = window.FM || {};
       ? 'This copy could not be made your own yet — the device may be full. It will not reconnect; Leave tries again.'
       : findable ? 'This is ' + who + '’s project. Your changes are kept on this device and sent when you’re back in touch.'
         : 'This is ' + who + '’s project. To get back in, ask ' + who + ' for a new code — joining again starts from ' + who + '’s copy, and what you changed here stays in this one.'));
+    c.appendChild(offRow(host));   // #967 batch 2: the switch that stays, on a shared copy too
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
       FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device as a project of your own.', ok: 'Keep my own copy', cancel: 'Cancel' })
@@ -3434,7 +3586,7 @@ window.FM = window.FM || {};
         if (card) card._joined = true;
         closeCard();
         showEditor();
-        if (FM.toast) FM.toast('You’re in — this copy stays in sync with ' + hostLabel, 3000);
+        toastTillTap('You’re in — this copy stays in sync with ' + hostLabel);   // #967 batch 2: until the first tap (J2-8)
         return r;
       }
       function lateFail(e) { try { res.link.close(); } catch (x) {} fail(Object.assign({ after: true }, e || {})); }
@@ -3462,6 +3614,32 @@ window.FM = window.FM || {};
   function showEditor() {
     try { if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
   }
+  /* #967 batch 2 — "YOU'RE IN" STAYS UNTIL THE FIRST TAP (J2-8, J5-11). Three seconds was gone before a first-timer had
+     looked up from the Join sheet to the video it opened onto. Sticky, and the next press anywhere puts it away — a
+     one-shot capture listener that exists only between a join and that press (a session is running: §23 is not in play),
+     and that leaves alone any newer toast which has taken its place.
+     Review fix: a KEY puts it away too (a keyboard-only PC never presses a pointer, so it sat on the video all session),
+     and the listener is kept here so U.uninstall can take it — turning the feature off leaves no collab listener behind. */
+  let tillTapOff = null;
+  function toastTillTap(msg) {
+    if (!FM.toast) return;
+    if (tillTapOff) tillTapOff();
+    FM.toast(msg, 0);
+    const t = document.getElementById('toast');
+    const off = function () {
+      if (tillTapOff === off) tillTapOff = null;
+      document.removeEventListener('pointerdown', off, true);
+      document.removeEventListener('keydown', off, true);
+      if (t && t.textContent === msg && !t.classList.contains('hidden') && FM.hideToast) FM.hideToast();
+    };
+    tillTapOff = off;
+    setTimeout(function () {                   // not the tap that joined — and not at all if it was put away meanwhile
+      if (tillTapOff !== off) return;
+      document.addEventListener('pointerdown', off, true);
+      document.addEventListener('keydown', off, true);
+    }, 0);
+  }
+  U._toastTillTap = toastTillTap;     // suite seam: the sticky "You're in", without a whole join
 
   /* ⚠️ §12.2's TWO ANSWERS, WHICH `C.join` HAS ALWAYS IMPLEMENTED AND NOTHING COULD ASK FOR (queue 921
      S3 review). The sheet hardcoded `onConflict:'refuse'` and turned the refusal into one dead-end
@@ -3513,7 +3691,7 @@ window.FM = window.FM || {};
       if (card) card._joined = true;
       closeCard();
       showEditor();
-      if (FM.toast) FM.toast('You’re in — this copy stays in sync', 3000);
+      toastTillTap('You’re in — this copy stays in sync');   // #967 batch 2: until the first tap (J2-8)
     }
     function fail(e) {
       try { link.close(); } catch (x) {}
@@ -3725,14 +3903,24 @@ window.FM = window.FM || {};
      just past the chip instead, and may run to 46 px from the right edge (the view bar is 40) to keep
      its words. Presence calls this whenever the chip changes; `U.banner` whenever the words do. */
   U.placeBanner = function () {
+    placeLive();                                 // #967 batch 2: the LIVE pill follows the chip first; the banner clears both
     const b = bannerEl;
     if (!b || !b.parentNode) return;
-    b.style.left = ''; b.style.transform = ''; b.style.maxWidth = '';
-    const chip = document.getElementById('collab-people');
-    if (!chip || chip.parentNode !== b.parentNode || !chip.offsetWidth) return;
-    const sr = b.parentNode.getBoundingClientRect(), cr = chip.getBoundingClientRect(), br = b.getBoundingClientRect();
-    const minL = cr.right - sr.left + 6;
-    if (br.left - sr.left >= minL || cr.bottom <= br.top || cr.top >= br.bottom) return;
+    b.style.left = ''; b.style.transform = ''; b.style.maxWidth = ''; b.style.top = '';
+    const corner = [document.getElementById('collab-people'), liveEl].filter(function (n) { return n && n.parentNode === b.parentNode && n.offsetWidth; });
+    if (!corner.length) return;
+    const sr = b.parentNode.getBoundingClientRect(), br = b.getBoundingClientRect();
+    let minL = 0, cTop = Infinity, cBot = -Infinity;
+    corner.forEach(function (n) { const r = n.getBoundingClientRect(); minL = Math.max(minL, r.right - sr.left + 6); cTop = Math.min(cTop, r.top); cBot = Math.max(cBot, r.bottom); });
+    if (br.left - sr.left >= minL || cBot <= br.top || cTop >= br.bottom) return;
+    /* #967 batch 2: with the LIVE pill beside the chip the row can be too short for the sentence — then the banner takes a
+       row of its own under them, centred, rather than being cut (the phone short forms were written to keep their words). */
+    if (liveEl && corner.indexOf(liveEl) >= 0) {
+      b.style.maxWidth = 'none';
+      const need = b.getBoundingClientRect().width;
+      b.style.maxWidth = '';
+      if (need > sr.width - 46 - minL) { b.style.top = Math.round(cBot - sr.top + 6) + 'px'; return; }
+    }
     b.style.transform = 'none';
     b.style.left = minL + 'px';
     b.style.maxWidth = Math.max(60, sr.width - 46 - minL) + 'px';
@@ -4252,20 +4440,25 @@ window.FM = window.FM || {};
 
   /* §19.7. Safari and the installed app are two storages on an iPhone: a join here makes a copy the app
      never sees. So the card offers the app first — copy the invite, open the app, paste — and Safari
-     second. It is shown whether or not Labs is on HERE: the question is which app, not which setting. */
-  function landingCard(link, o) {
+     second. It is shown whether or not Labs is on HERE: the question is which app, not which setting.
+     📐 …UNLESS THIS SAFARI HAS NEVER BEEN USED FOR FREEMOTION (#967 batch 2, his pick A — J1-5, J2-5). The friend he sends
+     a link to has usually never heard of the app, and was told to copy an invite into an app they do not have. A Safari
+     with no name set up and no project with anything in it leads with Join now; adding FreeMotion to the Home Screen is an
+     optional step AFTER; and "I already have the app" is one tap away (a Safari can look fresh beside an installed app —
+     the two storages are exactly the point of this card). `opts.app` forces the app card. */
+  function landingCard(link, o, opts) {
+    if (!(opts && opts.app) && freshBrowser()) return freshLandingCard(link, o);
     const c = openCard('collab-landing', { label: 'Open this invite in the FreeMotion app' });
     c.appendChild(el('h2', 'fm-ask-title', 'Open this in your FreeMotion app'));
     const lb = bodyOf(c);
     lb.appendChild(el('div', 'collab-sub', 'Joining in Safari keeps this copy separate from your FreeMotion app.'));
     /* ⚠️ STEP 3 USED TO BE "Tap Join, then Paste" (S6 review) — in an installed app with Labs off, which is
-       the default, there is no Join anywhere until Live collaboration is on, and the invite in Safari's
-       storage is invisible to the app. So the steps say how to get to it, and what the button looks like. */
+       the default, there was no Join anywhere until Live collaboration was on. #967 batch 2: there is now — Home's Join is a
+       word, there with the feature off too, and it asks to turn it on itself — so the Settings step is gone. */
     const steps = el('ol', 'cl-steps');
     steps.appendChild(el('li', null, 'Tap Copy invite'));
     steps.appendChild(el('li', null, 'Open FreeMotion from your Home Screen'));
-    steps.appendChild(el('li', null, 'If Live collaboration is off, turn it on in Settings → Live collaboration (at the bottom)'));
-    steps.appendChild(el('li', null, 'On Home, tap ⎇ (Join a live project), then Paste'));
+    steps.appendChild(el('li', null, 'On Home, tap Join, then Paste'));
     lb.appendChild(steps);
     const acts = el('div', 'fm-ask-actions cl-acts');
     acts.appendChild(btn('fm-ask-cancel cl-here', 'Join here in Safari instead', function () {
@@ -4277,22 +4470,66 @@ window.FM = window.FM || {};
     c.appendChild(acts);
     return c;
   }
+  function freshLandingCard(link, o) {
+    const c = openCard('collab-landing', { label: 'Join your friend’s project' });
+    c.classList.add('cl-fresh');
+    let going = false;
+    c._onclose = function () { if (!going) putAwayPendingJoin(); };   // Not now keeps it for its day, and says how to come back
+    c.appendChild(el('h2', 'fm-ask-title', 'Join your friend’s project'));
+    const lb = bodyOf(c);
+    lb.appendChild(el('div', 'collab-sub', 'You’ve been invited to edit a FreeMotion project together, live. Tap Join now to open it right here in Safari.'));
+    if (!U.labsOn()) lb.appendChild(el('div', 'collab-sub cl-small', 'Joining turns on Work with friends in this browser — you can turn it off any time.'));
+    const after = el('div', 'cl-after');
+    after.appendChild(el('div', 'cl-after-t', 'Optional, afterwards'));
+    after.appendChild(el('div', 'collab-sub', 'Add FreeMotion to your Home Screen: Safari’s share menu, then Add to Home Screen. What you join here stays in Safari.'));
+    lb.appendChild(after);
+    lb.appendChild(btn('cs-slink cl-haveapp', 'I already have the FreeMotion app', function () { going = true; landingCard(link, o, { app: true }); }));
+    const acts = el('div', 'fm-ask-actions cl-acts');
+    acts.appendChild(btn('fm-ask-cancel cl-later', 'Not now', function () { closeCard(); }));
+    acts.appendChild(btn('fm-ask-ok accent cl-joinnow', 'Join now', function () {
+      going = true;
+      closeCard();
+      /* The tap on Join now IS the one-tap "turn it on" (the card says so) — a first-timer is not asked twice. */
+      if (!U.labsOn() && FM.settings && FM.settings.set) FM.settings.set('collabLabs', true);
+      U.resumePendingJoin(Object.assign({}, o || {}, { here: true }));
+    }));
+    c.appendChild(acts);
+    return c;
+  }
+  /* Fresh = no name set up here, and no project that holds anything (a fresh start makes none — queue 936 — and one blank
+     one is still nobody's work). Pure, so the suite can ask it about shapes a real Safari would have. */
+  U._freshBrowser = function (list, profile) {
+    const l = Array.isArray(list) ? list : [];
+    if (profile || l.length > 1) return false;
+    return !l.some(function (p) { return p && +p.layers > 0; });
+  };
+  function freshBrowser() {
+    if (iosProbe && typeof iosProbe.fresh === 'boolean') return iosProbe.fresh;   // test seam
+    let list = [];
+    try { list = (FM.projects && FM.projects.list && FM.projects.list()) || []; } catch (e) {}
+    return U._freshBrowser(list, U.getProfile());
+  }
 
   /* §12.2 check 1: "Turn on Live collaboration to join" [Turn on]. An invite is the one thing that may put
-     a card on screen with Labs off — he tapped a link to get here. */
+     a card on screen with Labs off — he tapped a link to get here.
+     #967 batch 2: …and Home's Join and the Friends block's "Got an invite?" (`o.join`), which exist with the feature off
+     now: the same one tap, then the Join sheet. Only an invite is put away by Not now — a bare Join has nothing to keep. */
   function labsCard(o) {
-    const c = openCard('collab-labs-ask', { label: 'Turn on live collaboration' });
+    const oo = o || {};
+    const c = openCard('collab-labs-ask', { label: 'Turn on Work with friends' });
     let keep = false;
-    c._onclose = function () { if (!keep) putAwayPendingJoin(); };   // #967: Not now keeps it (see putAwayPendingJoin)
-    c.appendChild(el('h2', 'fm-ask-title', 'Turn on Live collaboration to join'));
-    bodyOf(c).appendChild(el('div', 'collab-sub', 'Somebody sent you an invite to a live project. Live collaboration is still a preview, so it is off until you turn it on (Settings → Live collaboration, at the bottom).'));
+    c._onclose = function () { if (!keep && !oo.join) putAwayPendingJoin(); };   // #967: Not now keeps it (see putAwayPendingJoin)
+    c.appendChild(el('h2', 'fm-ask-title', 'Turn on Work with friends to join'));
+    bodyOf(c).appendChild(el('div', 'collab-sub', (oo.join ? 'Join a friend’s project with the link or code they sent you, and edit it together, live. '
+      : 'Somebody sent you an invite to a live project. ') +
+      'Work with friends is still being tested, so it stays off until you turn it on. You can turn it off again any time — right where you share, or in Settings → Work with friends.'));
     const acts = el('div', 'fm-ask-actions');
     acts.appendChild(btn('fm-ask-cancel', 'Not now', function () { closeCard(); }));
     acts.appendChild(btn('fm-ask-ok accent cl-turnon', 'Turn on', function () {
       keep = true;
       closeCard();
       if (FM.settings && FM.settings.set) FM.settings.set('collabLabs', true);
-      U.resumePendingJoin(o);
+      if (oo.join) U.join(); else U.resumePendingJoin(o);
     }));
     c.appendChild(acts);
     return c;
@@ -4363,8 +4600,11 @@ window.FM = window.FM || {};
   }
 
   const INVITE_SVG = 'M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M19 8v6M16 11h6';
-  function makeShareButton() {
-    const at = shareHost();
+  /* `door` (#967 batch 2): the Labs-off door — always on the video, whatever the width (a PC's CSS hides it, so no width
+     listener is needed with the feature off), wearing `.cs-door` so an install knows to take it back and re-home it. */
+  function makeShareButton(door) {
+    const st = document.getElementById('stage');
+    const at = door ? (st ? { before: null, parent: st, phone: true, stage: true } : null) : shareHost();
     let b = document.getElementById('btn-share');
     if (!at) return b || null;
     if (!b) {
@@ -4396,26 +4636,47 @@ window.FM = window.FM || {};
     }
     /* The stage version wears the people chip's own classes, so it IS that chip at rest: the same size,
        place and glass, and the same rules hide it (text editing, a phone selection). */
-    b.className = at.stage ? 'collab-people cp-invite cs-stagebtn' : 'btn icon-btn';
+    b.className = at.stage ? 'collab-people cp-invite cs-stagebtn' + (door ? ' cs-door' : '') : 'btn icon-btn';
     if (b.parentNode !== at.parent || (at.before ? b.nextSibling !== at.before : false)) at.parent.insertBefore(b, at.before);
     return b;
   }
 
+  /* 📐 #967 BATCH 2 — HOME'S JOIN IS A WORD, AND IT IS ALWAYS THERE (his pick A: "a word needs no learning"; picture
+     tools/design/967/r4-home.jpg). It was a bare ⎇ before the search button, and with the feature off it did not exist at
+     all — a friend who had been sent a code had nowhere to type it (J2-2, J1-5). Select's own pill, right before Select. */
   function makeJoinButton() {
     const already = document.getElementById('hm-join-btn');
     if (already) return already;
     const search = document.getElementById('hm-search-btn');
     if (!search || !search.parentNode) return null;
-    const b = el('button', 'hm-search-btn');
+    const b = el('button', 'hm-select-btn hm-join-btn', 'Join');
     b.id = 'hm-join-btn';
     b.type = 'button';
-    b.title = 'Join a live project';
-    b.setAttribute('aria-label', 'Join a live project');
-    b.textContent = '⎇';
-    b.addEventListener('click', function () { U.join(); });
-    search.parentNode.insertBefore(b, search);
+    b.title = 'Join a friend’s project with the link or code they sent you';
+    b.setAttribute('aria-label', 'Join a friend’s project');
+    b.addEventListener('click', function () { U.joinDoor(); });
+    const sel = document.getElementById('hm-select-btn');   // Home builds Select at its first render — before or after this
+    search.parentNode.insertBefore(b, sel && sel.parentNode === search.parentNode ? sel : search.nextSibling);
     return b;
   }
+  /* THE TWO DOORS WITH THE FEATURE OFF (§23 as relaxed — see the note at the top of this file). One button each, a click and
+     nothing else: no listener on the document, no timer, no socket. */
+  function syncDoors() {
+    shareBtn = makeShareButton(true);
+    if (!joinBtn || !joinBtn.isConnected) joinBtn = makeJoinButton();
+  }
+  /* The one way in for a friend — Home's Join and the Friends block's "Got an invite?". An invite he was sent and put away
+     (or never got to) is offered first, filled in; with the feature off, the one-tap card asks to turn it on first. */
+  U.joinDoor = function () {
+    const pj = readPendingJoin();
+    const lim = (C.LIMITS && C.LIMITS.PENDING_JOIN) || 86400000;
+    if (pj && !C.session && Date.now() - pj.at >= -60000 && Date.now() - pj.at < lim) {
+      const r = U.resumePendingJoin({ again: true, here: true });
+      if (r) return r;
+    }
+    if (!U.labsOn()) return labsCard({ join: true });
+    return U.join();
+  };
 
   /* ⚠️ AN ENSURE, NOT A ONE-SHOT. `.hm-top` is built the first time Home renders, which on a cold boot
      into the editor is AFTER Labs has been synced — a one-shot install would leave the Join button
@@ -4463,12 +4724,13 @@ window.FM = window.FM || {};
     cancelKnocks('ended');
     /* BY ID, NOT BY THE REMEMBERED NODE. `pcTransportTeardown` can delete the button and a later
        install re-create it, so the module's own reference goes stale — and §23's promise is about what
-       is IN THE PAGE, not about what this file remembers putting there. (queue 921 S3) */
-    ['btn-share', 'hm-join-btn'].forEach(function (id) {
-      const n = document.getElementById(id);
-      if (n && n.parentNode) n.parentNode.removeChild(n);
-    });
-    shareBtn = null; joinBtn = null;
+       is IN THE PAGE, not about what this file remembers putting there. (queue 921 S3)
+       #967 batch 2: the bar's Share goes (a node the transport row borrowed must never come back — pcTransportTeardown
+       skips a detached one); the person+ on the video and Home's Join STAY, as the two doors syncDoors keeps with Labs off. */
+    const sb = document.getElementById('btn-share');
+    if (sb && sb.parentNode && sb.parentNode.id !== 'stage') sb.parentNode.removeChild(sb);
+    shareBtn = null;
+    if (tillTapOff) tillTapOff();               // #967 batch 2 review: the sticky "You're in"'s listener goes with the switch
     if (widthWatch && onWidth) {
       if (widthWatch.removeEventListener) widthWatch.removeEventListener('change', onWidth);
       else if (widthWatch.removeListener) widthWatch.removeListener(onWidth);
@@ -4566,6 +4828,7 @@ window.FM = window.FM || {};
      worse than no switch, and he can read the promise off the label. */
   U.syncLabs = function () {
     if (U.labsOn()) {
+      offNote = null;                            // on again: what the last "off" stopped is no longer the news
       const r = U.install();
       /* S5: this is also the one call every settings change makes, so the pointer and selection switches
          take effect here, on the next frame, rather than at the next thing somebody else does. */
@@ -4615,6 +4878,7 @@ window.FM = window.FM || {};
     hostRoomKeys().forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
     hostRoom = null; hostRoomPid = null;
     const r = U.uninstall();
+    syncDoors();                                 // #967 batch 2: the person+ on the video and Home's Join stay (§23 as relaxed)
     if (fhost) U.renderFriends(fhost);           // queue 945: the block shows the Labs-off view, never stale live content
     U.friendsBar();
     return r;
