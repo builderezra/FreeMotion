@@ -107030,4 +107030,100 @@
     } finally { probe.remove(); }
   });
 
+  /* #972 review: when the browser REFUSES the clipboard, Copy puts the text in a read-only field under the button (the S8
+     review's "copy it yourself" field). Beside a frosted code that field printed the whole short code — or most of the
+     invite link — in plain text, which is the one thing the frost is for. The field is frosted with the invite: its text
+     is there (so it can still be selected and copied) but nothing of it is painted until one tap, which shows it all. */
+  function copyField972(root, where, want) {
+    const f = root.querySelector('.cs-copyfield');
+    if (!f) throw new Error('setup: no copy-yourself field ' + where);
+    if (f.value !== want) throw new Error('setup: the copy-yourself field ' + where + ' holds “' + f.value + '”, not “' + want + '”');
+    return f;
+  }
+  function fieldHidden972(f, where) {
+    const cs = getComputedStyle(f), sel = getComputedStyle(f, '::selection');
+    if (alpha972(cs.color) !== 0 || alpha972(cs.webkitTextFillColor) !== 0) {
+      throw new Error('the copy-yourself field ' + where + ' prints “' + f.value + '” for anyone watching his stream to read (colour ' + cs.color + ', fill ' + cs.webkitTextFillColor + ')');
+    }
+    /* It is put there SELECTED — a selection painted in its own ink would print it too. */
+    if (alpha972(sel.color) !== 0 && alpha972(sel.webkitTextFillColor) !== 0) throw new Error('the frosted field ' + where + ' paints its selected text ' + sel.color);
+    const w = f.closest('.cs-copywrap');
+    const say = w ? getComputedStyle(w, '::after').content : 'none';
+    if (say !== '"Tap to show"') throw new Error('the frosted copy-yourself field ' + where + ' does not say “Tap to show” (' + say + ') — it just looks empty');
+  }
+  function fieldShown972(f, where) {
+    const cs = getComputedStyle(f);
+    if (alpha972(cs.color) < 0.5 || alpha972(cs.webkitTextFillColor) < 0.5) throw new Error('the copy-yourself field is still frosted ' + where + ' (colour ' + cs.color + ', fill ' + cs.webkitTextFillColor + ') — he cannot see what he is meant to copy');
+    const w = f.closest('.cs-copywrap');
+    if (w && getComputedStyle(w, '::after').content !== 'none') throw new Error('the shown copy-yourself field ' + where + ' still says “Tap to show”');
+  }
+
+  test('972 a Copy the browser refuses beside the frosted invite puts the short code or the link in a frosted field — nothing of it painted, one real tap on it shows everything, once shown the field reads plainly, and reopening frosts it again; the Editor’s Copy link too', { item: '972', budgetMs: 150000 }, async function () {
+    need921S7('a refused copy beside the frosted invite');
+    const had = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const refuse = function () { const e = new Error('Write permission denied.'); e.name = 'NotAllowedError'; return Promise.reject(e); };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: refuse, readText: refuse } });
+    try {
+      await withFakeNet921(async function () {
+        await withLabs921(async function (ui) {
+          await withCollab921([layer921('A')], async function (ctx) {
+            const rec = function () { return JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid)); };
+            const card = function () { return document.getElementById('collab-share'); };
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () {
+                await ui.share(); await settle921(300);
+                const code = frosted972(card(), 'when the Share card opens', rec().code).textContent;
+                await tap972(card().querySelector('.cs-copycode'), 'Copy beside the frosted code (refused)');
+                await until921S6('the copy-yourself field', function () { return card().querySelector('.cs-copyfield'); }, 3000);
+                let f = copyField972(card(), 'after a refused Copy', code);
+                fieldHidden972(f, 'after a refused Copy beside the frosted code');
+                frosted972(card(), 'after the refused Copy', rec().code);
+                await tap972(card().querySelector('.cs-copylink'), 'Copy link (refused)');
+                await until921S6('the link in the field', function () { const n = card().querySelector('.cs-copyfield'); return n && /#j=/.test(n.value) ? n : null; }, 3000);
+                f = card().querySelector('.cs-copyfield');
+                fieldHidden972(f, 'after a refused Copy link');
+                /* One real tap on the frosted field shows it — and the code, as one tap on either always has. */
+                await tap972(f, 'the frosted copy-yourself field');
+                fieldShown972(f, 'after one tap on it');
+                shown972(card(), 'after one tap on the frosted field', rec().code);
+                /* CONTROL: shown, a refused Copy puts the code in a field anyone can read — the frost above is the veil, not a broken field. */
+                await tap972(card().querySelector('.cs-copycode'), 'Copy beside the shown code (refused)');
+                await until921S6('the code in the field', function () { const n = card().querySelector('.cs-copyfield'); return n && n.value === code ? n : null; }, 3000);
+                fieldShown972(copyField972(card(), 'after a refused Copy with the code shown', code), 'after a refused Copy with the code shown');
+                /* Closed and opened again: frosted again, and so is the field. */
+                ui.close(); await settle921(150);
+                await ui.share(); await settle921(300);
+                frosted972(card(), 'when the Share card is opened again', rec().code);
+                await tap972(card().querySelector('.cs-copycode'), 'Copy beside the frosted code again (refused)');
+                await until921S6('the copy-yourself field again', function () { return card().querySelector('.cs-copyfield'); }, 3000);
+                fieldHidden972(copyField972(card(), 'after reopening', code), 'after the Share card was opened again');
+                ui.close(); await settle921(150);
+              });
+            }, 380);
+          });
+          /* An Editor allowed to invite has the link under the same frost — its refused Copy link too. */
+          await withGuestApp921('editor', [layer921('A')], async function (g) {
+            const link = 'https://example.test/FreeMotion/#j=' + 'A'.repeat(44);
+            g.HS.setRoomSettings({ roExport: true, editorsInvite: true, max: 8, link: link, ask: true });
+            g.settle();
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () {
+                await ui.share(); await settle921(250);
+                const box = document.querySelector('#collab-share .cs-guestinvite');
+                if (!box) throw new Error('CONTROL: the Editor’s panel has no invite');
+                await tap972(box.querySelector('.cs-copylink'), 'the Editor’s Copy link (refused)');
+                await until921S6('the Editor’s copy-yourself field', function () { return box.querySelector('.cs-copyfield'); }, 3000);
+                const f = copyField972(box, 'after the Editor’s refused Copy link', link);
+                fieldHidden972(f, 'after the Editor’s refused Copy link');
+                await tap972(f, 'the Editor’s frosted field');
+                fieldShown972(f, 'after one tap on the Editor’s field');
+                ui.close(); await settle921(150);
+              });
+            }, 380);
+          });
+        });
+      });
+    } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
+  });
+
 })();

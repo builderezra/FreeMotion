@@ -2022,7 +2022,11 @@ window.FM = window.FM || {};
        the link as buttons only. On a refusal the text is put in a read-only field beside the button that
        asked, already selected, so the sentence is true. */
     function fallback() {
-      if (FM.toast) FM.toast('Could not copy — it is selected below, copy it yourself', 2800);
+      /* #972 review: beside a FROSTED invite this field printed the whole short code (or most of the link) in plain text —
+         the one thing the frost is for. So it is frosted with the invite (paintVeil): the text is in it, selected, and
+         nothing of it is painted until one tap on it shows the invite. */
+      const box = near && near.closest ? near.closest('.cs-invite') : null;
+      if (FM.toast) FM.toast(veiled(box) ? 'Could not copy — tap the box below to show it, then copy it yourself' : 'Could not copy — it is selected below, copy it yourself', 2800);
       const at = near && near.parentNode;
       if (!at) return;
       let f = at.parentNode ? at.parentNode.querySelector('.cs-copyfield') : null;
@@ -2030,9 +2034,13 @@ window.FM = window.FM || {};
         f = el('input', 'fm-ask-input cs-copyfield');
         f.type = 'text'; f.readOnly = true;
         f.setAttribute('aria-label', 'Copy this yourself');
-        at.parentNode.insertBefore(f, at.nextSibling);
+        const wrap = el('div', 'cs-copywrap');      // holds the "Tap to show" pill — an input draws no ::after of its own
+        wrap.appendChild(f);
+        at.parentNode.insertBefore(wrap, at.nextSibling);
+        if (box) onVeilTap(box, f);
       }
       f.value = t;
+      paintVeil(box);
       try { f.focus(); f.select(); } catch (e) {}
     }
     try {
@@ -2200,6 +2208,14 @@ window.FM = window.FM || {};
       const fr = qr.querySelector('.cs-qrframe');
       veilButton(fr, on, 'QR code hidden, tap to show');
       if (fr && !on) fr.removeAttribute('aria-label');
+    }
+    /* A refused copy's field (copyPlain) is frosted with the rest. Already a field a keyboard reaches, so no role here. */
+    const cf = box.querySelector('.cs-copyfield');
+    if (cf) {
+      const w = cf.closest('.cs-copywrap');
+      if (w) w.classList.toggle('cs-veiled', on);
+      cf.setAttribute('aria-label', on ? 'Hidden, tap to show, then copy it yourself' : 'Copy this yourself');
+      if (!on && document.activeElement === cf) { try { cf.select(); } catch (e) {} }   // shown by a tap on it: ready to copy
     }
   }
   function onVeilTap(box, n) {

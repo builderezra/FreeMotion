@@ -10607,7 +10607,8 @@ body.text-editing .collab-people { display: none; }
 .cs-qr.cs-veiled .cs-qrframe { cursor: pointer; overflow: hidden; }
 .cs-qr.cs-veiled .cs-qrimg { filter: blur(12px); }
 .cs-roomcode.cs-veiled::after,
-.cs-qr.cs-veiled .cs-qrframe::after {
+.cs-qr.cs-veiled .cs-qrframe::after,
+.cs-copywrap.cs-veiled::after {
   content: 'Tap to show'; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   padding: 6px 12px; border-radius: 999px; background: rgba(11, 14, 20, .78);
   font: 700 13px/1.2 system-ui, -apple-system, sans-serif; letter-spacing: 0; white-space: nowrap;
@@ -10877,6 +10878,16 @@ body.collab-card-open #toast { z-index: 225; }
 body.set-open #toast { z-index: 225; }   /* queue 930 review: a toast raised from Settings (Key saved / forgotten) was painted under it */
 /* …and a copy the browser refused is put in a field under the button that asked, selected (collab-ui.js copyPlain). */
 .cs-copyfield { display: block; width: 100%; box-sizing: border-box; margin-top: 8px; font-size: 12px; }
+/* #972 review: …in a wrap that carries the frost's "Tap to show" (an input draws no ::after). Beside a frosted invite the
+   field's text is there and selected, and none of it is painted — its ink, its selection and its caret are transparent. */
+.cs-copywrap { position: relative; margin-top: 8px; }
+.cs-copywrap > .cs-copyfield { margin-top: 0; }
+.cs-copywrap.cs-veiled > .cs-copyfield { cursor: pointer; caret-color: transparent; }
+.cs-copywrap.cs-veiled > .cs-copyfield,
+.cs-copywrap.cs-veiled > .cs-copyfield::selection {
+  color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important;
+}
+.cs-copywrap.cs-veiled > .cs-copyfield::selection { background: transparent; }
 body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
 /* A TOAST THAT ONLY SAYS SOMETHING NEVER TAKES A TAP (found shipping v16.95, #935). It sits over the middle of the phone
    timeline for a second or two after nearly every action — "Keyframe added", "Camera hidden" — and it caught the next
