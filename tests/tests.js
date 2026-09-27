@@ -100138,7 +100138,7 @@
     document.querySelectorAll('.pop-tail').forEach(n => n.remove());
     document.querySelectorAll('.pop-src').forEach(n => n.classList.remove('pop-src'));
     document.documentElement.removeAttribute('data-pb-cursor');
-    try { localStorage.removeItem('fm.panelBig'); } catch (e) {}
+    try { localStorage.removeItem('fm.panelBig'); localStorage.removeItem('fm.panelBigByProject'); } catch (e) {}   // #968: the size is kept per project now
     if (FM.panelSize) FM.panelSize._reduce = false;
   }
   function mouseDrag927(x0, y0, dx, dy, n) {
@@ -100337,8 +100337,8 @@
           if (right < rows.length * 0.35 || right > rows.length * 0.65) throw new Error('the two columns are lopsided: ' + (rows.length - right) + ' rows on the left, ' + right + ' on the right');
           const sc = card.querySelector('.shortcuts-scroll');
           if (sc.scrollHeight > sc.clientHeight + 2) throw new Error('big shortcuts still scroll (' + sc.scrollHeight + ' in ' + sc.clientHeight + ') in an 800-tall window — all ' + rows.length + ' should fit');
-          let stored = null; try { stored = JSON.parse(localStorage.getItem('fm.panelBig') || 'null'); } catch (e) {}
-          if (!stored || stored.shortcuts !== true || stored.notes) throw new Error('what is remembered is ' + JSON.stringify(stored) + ' — it should be shortcuts big, notes untouched');
+          /* #968: remembered for THIS project, read through the module rather than the store's shape */
+          if (!FM.panelSize.isBig('shortcuts') || FM.panelSize.isBig('notes')) throw new Error('what is remembered is shortcuts ' + (FM.panelSize.isBig('shortcuts') ? 'big' : 'small') + ', notes ' + (FM.panelSize.isBig('notes') ? 'big' : 'small') + ' — it should be shortcuts big, notes untouched');
 
           /* a real click on Close: it is closed at once (a second ? would open it) but still on screen, folding */
           const close = [].slice.call(card.querySelectorAll('.shortcuts-foot .btn')).find(b => !b.classList.contains('shortcuts-tut'));
@@ -100373,8 +100373,7 @@
           FM.shortcuts.show(); await sleep927(450);
           if (card.classList.contains('pb-big')) throw new Error('closed small and reopened: it came back big');
           if (!near927(rect927(card), small, 2)) throw new Error('reopened small at ' + fmt927(rect927(card)) + ', not ' + fmt927(small));
-          stored = null; try { stored = JSON.parse(localStorage.getItem('fm.panelBig') || 'null'); } catch (e) {}
-          if (stored && stored.shortcuts) throw new Error('small was not remembered: ' + JSON.stringify(stored));
+          if (FM.panelSize.isBig('shortcuts')) throw new Error('small was not remembered: the shortcuts are still remembered big');
         });
       }, 1100);
     } finally {
@@ -100390,7 +100389,7 @@
     tidy927();
     async function once(where, kind, notesBtnId) {
       if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
-      try { localStorage.setItem('fm.panelBig', JSON.stringify({ notes: true })); } catch (e) {}
+      FM.panelSize._setBig('notes', true);   // #968: remembered big for THIS project
       FM.notepad.open(); await sleep927(700);
       const scrim = document.querySelector('.np-scrim'), card = scrim && scrim.querySelector('.np-card');
       if (!card || !card.classList.contains('pb-big')) throw new Error(where + ': setup: the notepad did not open big from the remembered size');
@@ -106790,6 +106789,157 @@
         });
       }
     });
+  });
+
+
+  /* ═══ 968 — NOTES AND THE HELP MENU OPEN SMALL, AND REMEMBER THEIR SIZE PER PROJECT ═══════════════════════════════════
+   * Ezra, 26 Sep, in full in REQUESTS.md #968: "It's the Help menu yeah so the menu on the menu both need to default a small
+   * but they remember When it's in the same project so like basically if I'm in a project and I make it bigger and then go
+   * back and it will still be big but then if I start a new project, it'll be small again". Driven at a phone width with a
+   * REAL finger (tests/_cdp.py's __fmWantInput): the panels open from the phone top bar's Notes and ? buttons, go big from a
+   * tap on their grip, close from Done / Close, and the new project is made the way he makes one — + on Home, then Create —
+   * and project A is reopened by its card. The CONTROL for "B opens small" is A: the same checks see BIG there, before B is
+   * made and again after coming back, so a check that could never see big cannot pass. */
+  async function tap968(el, what) {
+    if (!el) throw new Error('setup: nothing to tap for ' + what);
+    /* never tap a moving target: Home hands over to the editor with a slide that runs for about 900ms after the card is
+       tapped (measured at 360: the top bar's Notes button travels from x 599 to 239), and a tap aimed during it lands on the button
+       that has slid under the finger — the Canvas settings cog, twice in six runs */
+    let r = el.getBoundingClientRect();
+    for (const end = Date.now() + 3000; ;) {
+      await sleep927(120);
+      const q = el.getBoundingClientRect();
+      if (Math.abs(q.left - r.left) < 0.5 && Math.abs(q.top - r.top) < 0.5 && Math.abs(q.width - r.width) < 0.5) break;
+      if (Date.now() > end) throw new Error('setup: ' + what + ' was still moving after 3s');
+      r = q;
+    }
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0) || x < 0 || y < 0 || x > 370 || y > 750) throw new Error('setup: ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
+    hitIs927(x, y, el, what);
+    await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+  }
+  function notesCard968() { return document.querySelector('.np-scrim:not(.np-closing) .np-card'); }
+  function helpCard968() { const o = document.getElementById('shortcuts-overlay'); return o && !o.classList.contains('hidden') && !o.classList.contains('pb-closing') ? o.querySelector('.shortcuts-card') : null; }
+  /* open a panel with a real tap on its phone button; answer whether it came up BIG */
+  async function open968(which, where) {
+    await tap968(document.getElementById(which === 'notes' ? 'm-notes' : 'm-help'), where + ': a tap on the phone ' + (which === 'notes' ? 'Notes button' : '? (Help)'));
+    await sleep927(700);
+    const card = which === 'notes' ? notesCard968() : helpCard968();
+    if (!card) throw new Error(where + ': a real tap on the phone ' + (which === 'notes' ? 'Notes button' : '? (Help)') + ' did not open it');
+    return card.classList.contains('pb-big');
+  }
+  /* close it the way he does — Done on the notes, Close on the help — and let a big one finish folding */
+  async function close968(which, where) {
+    const card = which === 'notes' ? notesCard968() : helpCard968();
+    if (!card) throw new Error(where + ': setup: ' + which + ' is not open to close');
+    const btn = which === 'notes' ? card.querySelector('.np-done') : [].slice.call(card.querySelectorAll('.shortcuts-foot .btn')).find(b => !b.classList.contains('shortcuts-tut'));
+    await tap968(btn, where + ': a tap on ' + (which === 'notes' ? 'Done' : 'Close'));
+    await sleep927(950);
+    const still = which === 'notes' ? !!document.querySelector('.np-scrim') : !document.getElementById('shortcuts-overlay').classList.contains('hidden');
+    if (still) throw new Error(where + ': ' + which + ' was still on screen 950ms after ' + (which === 'notes' ? 'Done' : 'Close'));
+  }
+
+  test('968 Notes and the Help menu: made big in one project they stay big there, a new project made from Home opens both small, and going back to the first they are big again', { item: '968', budgetMs: 150000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let newp = null; try { newp = localStorage.getItem('fm.newproj'); } catch (e) {}
+    tidy927();
+    try {
+      if (wasOpen) { FM.home.close(); await sleep927(300); }
+      const a = await FM.projects.create({ name: '968 Beach house', width: 1080, height: 1920 });
+      if (!a) throw new Error('setup: project A could not be made');
+      made.push(a);
+      hcShape('968 title', '#f4a261');
+      await FM.storage.save();
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+          if (FM.storage.openProjectId() !== a) throw new Error('setup: the editor is not on project A');
+
+          /* in A: both open small, a tap on the grip makes each big, and closed and reopened they are STILL big */
+          for (const which of ['notes', 'help']) {
+            const name = which === 'notes' ? 'Notes' : 'Help';
+            if (await open968(which, 'A')) throw new Error('A: ' + name + ' opened BIG in a project where it was never made big — the default is small');
+            const card = which === 'notes' ? notesCard968() : helpCard968();
+            await tap968(grip927(card), 'A: a tap on the grip of ' + name);
+            await sleep927(700);
+            if (!card.classList.contains('pb-big')) throw new Error('CONTROL: A: a real tap on the grip of ' + name + ' did not make it big — nothing below would mean anything');
+            await close968(which, 'A (' + name + ' big)');
+            if (!(await open968(which, 'A, reopened'))) throw new Error('A: ' + name + ' was made big, closed and reopened in the SAME project — it came back small (clause 3: "if I … make it bigger and then go back … it will still be big")');
+            await close968(which, 'A, reopened');
+          }
+
+          /* + on Home, then Create: a NEW project B — both small */
+          await tap968(document.getElementById('m-back'), 'a tap on the phone back arrow (to Home)');
+          await hcUntil('Home to open', () => FM.home.isOpen(), 4000);
+          await sleep927(700);
+          const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+          if (tab && !tab.classList.contains('active')) { await tap968(tab, 'a tap on the Projects tab'); await sleep927(400); }
+          await tap968(document.getElementById('hm-new'), 'a tap on + (new project)');
+          await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden'); }, 4000);
+          await sleep927(400);
+          await tap968(document.getElementById('hm-create'), 'a tap on Create');
+          const b = await hcUntil('the new project to open in the editor', () => { const id = FM.storage.openProjectId(); return !FM.home.isOpen() && id && id !== a ? id : null; }, 8000);
+          made.push(b);
+          await sleep927(600);
+          for (const which of ['notes', 'help']) {
+            const name = which === 'notes' ? 'Notes' : 'Help';
+            if (await open968(which, 'B')) throw new Error('B: made big in project A, then a NEW project was made from Home (+ then Create) — and ' + name + ' opened BIG in it (clause 4: "if I start a new project, it\'ll be small again")');
+            await close968(which, 'B');
+          }
+
+          /* back to A by its card: both big again — the size belongs to the project */
+          await tap968(document.getElementById('m-back'), 'a tap on the phone back arrow (to Home, again)');
+          await hcUntil('Home to open again', () => FM.home.isOpen(), 4000);
+          await sleep927(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep927(150);
+          const cardA = hcCard(a);
+          if (!cardA) throw new Error('setup: project A has no card on Home');
+          await tap968(cardA.querySelector('.hm-thumb') || cardA, 'a tap on the card of project A');
+          await hcUntil('project A to open in the editor', () => !FM.home.isOpen() && FM.storage.openProjectId() === a, 8000);
+          await sleep927(600);
+          for (const which of ['notes', 'help']) {
+            const name = which === 'notes' ? 'Notes' : 'Help';
+            if (!(await open968(which, 'A again'))) throw new Error('back in project A after B: ' + name + ' opened small — it was left big in A, and the size is remembered per project (clause 3)');
+            await close968(which, 'A again');
+          }
+        });
+      }, 360);
+    } finally {
+      try { if (FM.notepad) FM.notepad.close({ now: true }); } catch (e) {}
+      tidy927();
+      try { const d = document.getElementById('hm-dialog'); if (d) d.classList.add('hidden'); } catch (e) {}
+      try { if (newp == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', newp); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('968 the per-project sizes are kept for the 40 projects written most recently, and a project with nothing big is not kept at all', { item: '968' }, async function () {
+    tidy927();
+    const K = 'fm.panelBigByProject';
+    try {
+      if (!FM.panelSize || typeof FM.panelSize._setBig !== 'function') throw new Error('FM.panelSize._setBig is missing — the size is not remembered per project (#968)');
+      const me = FM.storage.openProjectId() || '_none';
+      const seed = {};
+      for (let i = 0; i < 45; i++) seed['p_old' + String(i).padStart(2, '0')] = { notes: true };
+      localStorage.setItem(K, JSON.stringify(seed));
+      if (FM.panelSize.isBig('notes')) throw new Error('setup: 45 OTHER projects are big and this one reads big too — the size is not per project');
+      FM.panelSize._setBig('notes', true);
+      if (!FM.panelSize.isBig('notes')) throw new Error('CONTROL: after _setBig the notes do not read big for this project');
+      let o = JSON.parse(localStorage.getItem(K) || '{}');
+      const ids = Object.keys(o);
+      if (ids.length !== 40) throw new Error('the store holds ' + ids.length + ' projects after a write — it should keep the 40 written most recently');
+      if (ids[ids.length - 1] !== me) throw new Error('the project just written is not the newest entry (' + ids[ids.length - 1] + ', not ' + me + ')');
+      const gone = ['p_old00', 'p_old05'].filter(k => k in o), kept = ['p_old06', 'p_old44'].filter(k => !(k in o));
+      if (gone.length || kept.length) throw new Error('the wrong projects were dropped: still there ' + JSON.stringify(gone) + ', missing ' + JSON.stringify(kept) + ' — the six OLDEST should go');
+      FM.panelSize._setBig('notes', false);
+      o = JSON.parse(localStorage.getItem(K) || '{}');
+      if (me in o) throw new Error('with nothing big, this project still has an entry (' + JSON.stringify(o[me]) + ') — the store would fill with empty projects');
+      if (FM.panelSize.isBig('notes')) throw new Error('made small again, the notes still read big');
+    } finally {
+      tidy927();
+    }
   });
 
 })();
