@@ -101706,7 +101706,9 @@
         return x.session && x.owner && x.toasts.some(function (t) { return /^Sharing is on again/.test(t); }) ? x : null;
       }, 15000).catch(function () { throw new Error('after Share again, sharing did not resume (or did not say so) within 15 s: ' + q(last)); });
       if (s2.pid !== s0.pid) throw new Error('the resume shared a different project (' + s2.pid + ', not ' + s0.pid + ')');
-      if (!s2.toasts.some(function (t) { return /anyone who joined with a code needs a new one/.test(t); })) throw new Error('with nobody who can come back by themselves the resume said ' + q(s2.toasts) + ' (J4-2)');
+      /* #967 B3 review: the LONG code — the question just promised the same link and SHORT code. An app that died while
+         sharing cannot know who was in by a long code, so it says it. */
+      if (!s2.toasts.some(function (t) { return /anyone who joined with a long code needs a new one/.test(t); })) throw new Error('with nobody who can come back by themselves the resume said ' + q(s2.toasts) + ' (J4-2)');
     } finally { R.drop(tag); }
   });
 
@@ -101745,7 +101747,9 @@
           await until921S6('sharing to resume once he is in the project', function () { const s = C.session; return s && s.isOwner && s.pid === ctx.pid ? s : null; }, 8000);
           await until921S6('the resume toast', function () { return got.some(function (t) { return /^Sharing is on again/.test(t); }); }, 4000);
           const t1 = got.filter(function (t) { return /^Sharing is on again/.test(t); }).pop();
-          if (!/anyone who joined with a code needs a new one/.test(t1)) throw new Error('with no member who can come back by themselves the resume says “' + t1 + '” (J4-2: “people can reconnect” was untrue for everyone who joined with a code)');
+          /* #967 B3 review: this stand-down was seen here, with nobody in by a long code — so after Share again, under “the same
+             link and short code”, the resume says only that it is on. (With somebody who was: '967 B3 9'.) */
+          if (t1 !== 'Sharing is on again') throw new Error('with no member who can come back by themselves, and nobody who joined with a long code, the resume says “' + t1 + '” — ' + (/reconnect/.test(t1) ? '“people can reconnect” is untrue (J4-2)' : 'a line about codes to a room nobody joined reads as contradicting the question he just answered (#967 B3 review)'));
           /* (2) Before the boot has landed nothing resumes, even in the editor: the boot's first reset. */
           ui._booted(false);
           C.onReset({ force: true });
@@ -104748,7 +104752,7 @@
           if (FM.home.isOpen()) throw new Error('the question came up while Home was still showing');
           if (q.title !== 'Carry on sharing “Beach film B3”?') throw new Error('the question says “' + q.title + '” — it must name the project');
           if (q.ok.textContent.trim() !== 'Share again' || q.cancel.textContent.trim() !== 'Not now') throw new Error('the answers are [' + q.cancel.textContent + '] [' + q.ok.textContent + '], not [Not now] [Share again]');
-          if (!/old link and code/.test(q.msg)) throw new Error('the question does not say what Not now does to the link and code: “' + q.msg + '”');
+          if (!/old link and short code/.test(q.msg)) throw new Error('the question does not say what Not now does to the link and short code: “' + q.msg + '”');
           await settle921(500);
           if (C.session || ui._relay()) throw new Error('the project went live while the question was still up — before he chose');
           /* Share again: live again, on the same room — the link he sent still works. */
@@ -105086,6 +105090,332 @@
           ui._knockWait(null);
           got.restore();
           const kc = document.getElementById('collab-knock'); if (kc) { const no = kc.querySelector('.ck-no'); if (no) no.click(); }
+        }
+      });
+    });
+  });
+
+  /* ═══ #967 B3 REVIEW — one test per confirmed finding of the review of the batch-3 build (three lenses: two real
+   * Chromes, a first-timer at 390, safety on PC). Each FAILS on the build as the review found it (f935b7b7).
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  /* A tap on the dim area around the question — the whole gesture, the way ask.js reads one (the press starts there). */
+  function scrimTap967b3() {
+    const sc = document.getElementById('fm-ask');
+    sc.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }));
+    sc.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+    sc.click();
+  }
+  function escape967b3() { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); }
+
+  test('967 B3 7 a tap outside “Carry on sharing?”, or Escape, is no answer — the room and its link and short code are kept and still paused, nothing goes live, and the next opening asks again; only the Not now button stops it', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (all three lenses): ask.js answers Cancel, a tap on the dim area and Escape alike with null, and every null was
+       Not now — the room, and every link and code he had handed out, gone for good by the gesture that puts any other
+       pop-up away. On a phone the dim area is most of the screen. */
+    const C = need921S6('dismissing “Carry on sharing?”');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        const got = toast967();
+        let other = null;
+        try {
+          FM.projects.rename(ctx.pid, 'Beach B3 7');
+          await ui.share(); ui.close();
+          const rec0 = hostRec921(ctx.pid);
+          if (!rec0) throw new Error('setup: sharing wrote no room');
+          other = await FM.projects.create({ name: 'Other B3 7', width: 320, height: 240 });
+          await until921S6('the shared project to pause', function () { return !C.session; }, 6000);
+          FM.home.open(); await settle921(450);
+          const ways = [['a tap on the dim area', scrimTap967b3], ['Escape', escape967b3]];
+          for (const w of ways) {
+            got.length = 0;
+            if (!FM.home.isOpen()) { FM.home.open(); await settle921(450); }
+            card967b3(ctx.pid).click();
+            await until921S6('the question (then ' + w[0] + ')', ask967b3, 8000);
+            w[1]();
+            await settle921(600);
+            if (ask967b3()) throw new Error(w[0] + ' did not put the question away');
+            const rec = hostRec921(ctx.pid);
+            if (!rec) throw new Error(w[0] + ' outside “Carry on sharing?” STOPPED SHARING — the room is gone, and the link and short code he handed out with it (toasts ' + JSON.stringify(got) + ')');
+            if (rec.sid !== rec0.sid) throw new Error(w[0] + ' swapped the room — the link he sent no longer reaches it');
+            if (!rec.paused) throw new Error('after ' + w[0] + ' the room is not marked paused — a reload onto it would put it live by itself');
+            if (C.session || ui._relay()) throw new Error(w[0] + ' put it live — he chose nothing');
+            if (got.some(function (t) { return /Sharing stopped|Sharing is on/.test(t); })) throw new Error(w[0] + ' said ' + JSON.stringify(got) + ' — it was no answer');
+            FM.home.open(); await settle921(450);
+            const b = card967b3(ctx.pid).querySelector('.hm-live');
+            if (!b || b.textContent.trim() !== 'SHARED · paused') throw new Error('after ' + w[0] + ' Home says “' + (b && b.textContent) + '”, not SHARED · paused');
+          }
+          /* The next opening asks again — and the Not now BUTTON is what stops it. */
+          card967b3(ctx.pid).click();
+          const q = await until921S6('the question once more', ask967b3, 8000).catch(function () { throw new Error('after a dismissal the next opening asked nothing'); });
+          got.length = 0;
+          q.cancel.click();
+          await settle921(600);
+          if (hostRec921(ctx.pid)) throw new Error('CONTROL: the Not now button kept the room — so “kept” above proves nothing');
+          if (!got.some(function (t) { return /^Sharing stopped/.test(t); })) throw new Error('CONTROL: Not now said nothing (' + JSON.stringify(got) + ')');
+        } finally {
+          got.restore();
+          const a = ask967b3(); if (a) a.cancel.click();
+          if (FM.home.isOpen()) FM.home.close();
+          if (other) { try { if (FM.projects.currentId() === other) await FM.projects.open(ctx.pid); await FM.projects.remove(other); } catch (e) {} }
+        }
+      });
+    });
+  });
+
+  test('967 B3 8 a reload while “Carry on sharing?” is up asks again — even for a room that was live when the app died — and never puts it live by itself', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (logic, two real Chromes, measured): share, the app dies while sharing, relaunch, open the project — the
+       question — the page reloads before he answers: LIVE on the old link with no question. Only a switch marked the room
+       paused, so a room that was live when the app went came back from the reload unmarked, read as a refresh in the middle
+       of sharing, and resumed by itself. */
+    const C = need921S6('a reload under the question');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        try {
+          await ui.share(); ui.close();
+          if (FM.home.isOpen()) FM.home.close();
+          /* The app dies while sharing: the session goes, and nothing marks the room. */
+          ui._booted(false);
+          C.onReset({ force: true });
+          await settle921(300);
+          if (C.session) throw new Error('setup: the session did not stand down');
+          const rec = hostRec921(ctx.pid);
+          if (!rec) throw new Error('setup: no room kept');
+          delete rec.paused; delete rec.coded;
+          localStorage.setItem('fm.collab.host.' + ctx.pid, JSON.stringify(rec));
+          ui._booted(true);
+          /* He opens it after the relaunch, and the question is up… */
+          ui.resumeOpen();
+          const q = await until921S6('the question on opening it', ask967b3, 6000);
+          if (!/^Carry on sharing “/.test(q.title)) throw new Error('setup: opening it asked “' + q.title + '”');
+          /* …and the page goes before he answers. A question that replaces it stands in for the page going: unanswered,
+             in the code before this review and after it alike. */
+          const standIn = FM.ask({ title: 'stand-in' });
+          await settle921(100);
+          const o = ask967b3(); if (o) o.cancel.click();
+          await standIn;
+          await settle921(200);
+          if (C.session) throw new Error('setup: the question going away unanswered put it live');
+          ui._booted(false);
+          ui.afterBoot();                                 // the reload lands back in the editor, on this project
+          await settle921(1500);
+          if (C.session || ui._relay()) throw new Error('a reload while “Carry on sharing?” was up put the project LIVE on the old link without him choosing (review: nothing may go live without him)');
+          const again = ask967b3();
+          if (!again || !/^Carry on sharing “/.test(again.title)) throw new Error('after the reload nothing asked “Carry on sharing?” again');
+        } finally {
+          ui._booted(true);
+          const a = ask967b3(); if (a) a.cancel.click();
+        }
+      });
+    });
+  });
+
+  test('967 B3 9 after Open anyway, a friend who joined with a code is told it ENDED — not “paused”, which promises the owner back — their banner says to ask for a new code instead of Offline for good, nothing asks them about a session that is over, and Share again tells the owner they need a new one', { item: '967', budgetMs: 150000 }, async function () {
+    /* Review (logic, two real Chromes): after Open anyway the friend sat on “Offline · changes kept” for 142 s and counting,
+       still editing, the sticky “You’re in” still up — then was asked “you joined with a code…” about a session that had
+       already ended. `paused` promises the owner back; for a long code nothing brings anybody back. */
+    const C = need921S3('the end a switch makes for a code-joined friend');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        let other = null;
+        const madeCopies = [];
+        const got = toast967();
+        try {
+          other = await FM.projects.create({ name: 'Other B3 9', width: 320, height: 240 });
+          await FM.projects.open(ctx.pid);
+          await settle921(300);
+          const stray = ask967b3(); if (stray) stray.cancel.click();
+          await ui.share(); ui.close();
+          await withFakeLinks921(C, function () { return fakeLink921({ code: 'B3EN' }); }, async function (made) {
+            C.signal.handshake = function () { return Promise.resolve({ mode: 'conn', sas: 'H7K2M' }); };
+            await ui.share();
+            document.querySelector('.cs-add').click(); await settle921(60);
+            document.querySelector('.cs-connect').click(); await settle921(60);
+            const samLink = made[made.length - 1];
+            samLink.onmessage('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43' });
+            await settle921(60);
+            document.querySelector('.cs-sasyes').click(); await settle921(150);
+            ui.close();
+            if (!C.session || !C.session.peerIds().length) throw new Error('setup: Sam was not let in with the code');
+            FM.home.open(); await settle921(450);
+            card967b3(other).click();
+            (await until921S6('the question before the switch', ask967b3, 5000)).ok.click();
+            await until921S6('the switch after Open anyway', function () { return FM.projects.currentId() === other && !C.session ? 1 : 0; }, 8000);
+            const byes = samLink.sent.filter(function (x) { return x.msg && x.msg.t === 'bye'; }).map(function (x) { return x.msg.why; });
+            if (byes[0] !== 'switched') throw new Error('after Open anyway Sam, who joined with a code, was told ' + JSON.stringify(byes) + ' — “paused” promises him the owner will be back, and nothing brings him back');
+          });
+          if (FM.home.isOpen()) FM.home.close();
+          /* Share again tells HIM too: somebody was in by a long code when it stood down, and needs a new one. */
+          got.length = 0;
+          await FM.projects.open(ctx.pid);
+          (await until921S6('Carry on sharing?', ask967b3, 8000)).ok.click();
+          await until921S6('the resume', function () { const s = C.session; return s && s.isOwner && s.pid === ctx.pid ? 1 : 0; }, 8000);
+          await until921S6('the resume toast', function () { return got.some(function (t) { return /^Sharing is on again/.test(t); }); }, 4000);
+          const t1 = got.filter(function (t) { return /^Sharing is on again/.test(t); }).pop();
+          if (!/anyone who joined with a long code needs a new one/.test(t1)) throw new Error('Sam had joined with a long code when the room stood down, and Share again says only “' + t1 + '”');
+          /* The friend's side: the owner's `switched` arrives. */
+          const fx = guest967(C); madeCopies.push(fx.gpid);
+          await FM.projects.open(fx.gpid);
+          await settle921(300);
+          fx.G.hostName = 'Ezra';                           // what the owner's welcome says (collab-session.js)
+          C.attach(fx.G, { autoTick: false });
+          got.length = 0;
+          fx.G.onMessage('ctl', { t: 'bye', why: 'switched' });
+          await settle921(200);
+          if (fx.G.ended !== 'switched') throw new Error('the friend did not take the end (ended: ' + fx.G.ended + ')');
+          const bn = document.getElementById('collab-banner');
+          const btxt = bn && !bn.classList.contains('hidden') ? bn.textContent : '';
+          if (!/new code/.test(btxt) || /Offline/.test(btxt)) throw new Error('after the owner opened another project the friend’s banner reads “' + btxt + '” — it has to say it ended, and to ask for a new code');
+          const bt = bn.querySelector('.cb-text');
+          if (bt && bt.scrollWidth > bt.clientWidth + 1) throw new Error('“' + btxt + '” is cut off in its banner (' + bt.scrollWidth + ' px in ' + bt.clientWidth + ') — the half that says what to do is the half that goes');
+          if (!got.some(function (t) { return /^Ezra opened another project — ask them for a new code/.test(t); })) throw new Error('nothing told the friend the owner had opened another project (' + JSON.stringify(got) + ')');
+          const sa = ui.switchAsk();
+          if (sa) throw new Error('the friend is still asked “' + sa.message + '” about a session that has ended');
+        } finally {
+          got.restore();
+          const a = ask967b3(); if (a) a.cancel.click();
+          if (FM.home.isOpen()) FM.home.close();
+          await dropFixture967(C, madeCopies);
+          if (other) { try { if (FM.projects.currentId() === other) await FM.projects.open(ctx.pid); await FM.projects.remove(other); } catch (e) {} }
+        }
+      });
+    });
+  });
+
+  test('967 B3 10 Select → Delete on the project Sam is working in names him and ends it for everyone — as the card’s ⋯ Delete… does — not the plain question and a “paused” that tells him the owner will be back', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (logic and first-timer, both measured): Home's second door to deleting, Select → Delete, asked only “Delete 1
+       project? This cannot be undone.” and the switch away from the deleted project told Sam `paused`. */
+    const C = need921S6('Select → Delete on a live card');
+    await withLabs921(async function (ui) {
+      void ui;
+      const wasHome = FM.home.isOpen();
+      try {
+        await withCollab921([layer921('A')], async function (ctx) {
+          FM.projects.rename(ctx.pid, 'Live B3 10');
+          ctx.addGuest({ name: 'Sam' });
+          FM.home.open(); await settle921(500);
+          FM.home._setSelection([ctx.pid]); FM.home._render('projects'); await settle921(300);
+          const del = document.querySelector('#home-screen .hm-selbtn.danger');
+          if (!del || del.disabled) throw new Error('setup: Select mode shows no Delete to press');
+          del.click();
+          const q = await until921S6('the Select → Delete question', ask967b3, 3000);
+          if (!/Sam is working in “Live B3 10” now — deleting ends it for everyone/.test(q.msg)) throw new Error('Select → Delete on the project Sam is working in asks only “' + q.msg + '” — the ⋯ Delete… names him, this door did not');
+          q.ok.click();
+          await until921S6('the project to go', function () { return FM.projects.list().some(function (p) { return p.id === ctx.pid; }) ? 0 : 1; }, 6000);
+          if (C.session && C.session.pid === ctx.pid) throw new Error('deleting the live project left its session running');
+          if (hostRec921(ctx.pid)) throw new Error('deleting the live project kept its room');
+          if (ctx.S.stopWhy !== 'ended') throw new Error('Select → Delete told Sam the session had “' + ctx.S.stopWhy + '” — “paused” says the owner will be back, about a project that no longer exists');
+        });
+      } finally {
+        const a = ask967b3(); if (a) a.cancel.click();
+        try { if (FM.home._selectionState().selectMode) { FM.home.close(); FM.home.open(); } } catch (e) {}
+        if (FM.home.isOpen() && !wasHome) FM.home.close();
+      }
+    });
+  });
+
+  test('967 B3 11 a project another FreeMotion tab is sharing right now says “LIVE · other tab” on this tab’s Home, not “SHARED · paused” — while this tab’s own live project and a really paused one keep theirs', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (logic and safety, both measured): the installed app live with people in it, a browser tab beside it, and that
+       tab's Home badged the project “SHARED · paused”. The tab holding a project's host lock is the one sharing it. */
+    const C = need921S6('Home beside another tab');
+    if (!navigator.locks || typeof navigator.locks.request !== 'function') throw new Error('this browser has no Web Locks — another tab cannot be told apart, so there is nothing to measure');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+      if (wasHome) FM.home.close();
+      const made = [];
+      let release = null;
+      try {
+        made.push(await FM.projects.create({ name: 'Away B3 11', width: 320, height: 240 }));
+        const away = made[0];
+        await ui.share(); ui.close();
+        made.push(await FM.projects.create({ name: 'Paused B3 11', width: 320, height: 240 }));
+        const paused = made[1];
+        await until921S6('the first project to stand down', function () { return !C.session; }, 6000);
+        await ui.share(); ui.close();
+        made.push(await FM.projects.create({ name: 'Here B3 11', width: 320, height: 240 }));
+        const here = made[2];
+        await until921S6('the second project to stand down', function () { return !C.session; }, 6000);
+        await ui.share(); ui.close();
+        await until921S6('the third to be live in this tab', function () { const s = C.session; return s && s.isOwner && s.pid === here ? s : null; }, 6000);
+        await settle921(300);                                  // this tab's release of Away's lock has gone through
+        /* Another tab picks Away up and shares it: it holds Away's host lock. */
+        const held = await new Promise(function (res) {
+          navigator.locks.request('fm-collab-host-' + away, { ifAvailable: true }, function (lock) {
+            if (!lock) { res(false); return null; }
+            return new Promise(function (r) { release = r; res(true); });
+          });
+        });
+        if (!held) throw new Error('setup: could not hold Away’s host lock the way another tab would');
+        const badge = function (pid) { const c = card967b3(pid); return c ? c.querySelector('.hm-live') : null; };
+        const words = function (pid) { const b = badge(pid); return b ? b.textContent.trim() : null; };
+        const check = async function (where) {
+          FM.home.open(); await settle921(700);
+          if (words(away) !== 'LIVE · other tab') throw new Error(where + ': a project another tab is sharing right now says “' + words(away) + '” on this tab’s Home — it is live there, not paused');
+          if (words(paused) !== 'SHARED · paused') throw new Error(where + ': CONTROL — the really paused project says “' + words(paused) + '”');
+          if (!/^LIVE/.test(words(here)) || words(here) === 'LIVE · other tab') throw new Error(where + ': CONTROL — this tab’s own live project says “' + words(here) + '”');
+          const c = (getComputedStyle(badge(away)).backgroundColor.match(/[\d.]+/g) || []).map(Number);
+          if (!(c[0] - c[2] > 80)) throw new Error(where + ': “LIVE · other tab” is not red (' + c + ')');
+          const b = badge(away), th = card967b3(away).querySelector('.hm-thumb').getBoundingClientRect(), r = b.getBoundingClientRect();
+          if (r.right > th.right + 0.5 || r.left < th.left - 0.5 || b.scrollWidth > b.clientWidth + 1) throw new Error(where + ': “LIVE · other tab” does not fit its thumbnail');
+          const d = card967b3(away).querySelector('.hm-dur').getBoundingClientRect();
+          if (r.bottom > d.top + 0.5) throw new Error(where + ': “LIVE · other tab” is not stacked above the duration');
+          FM.home.close(); await settle921(200);
+        };
+        await check('on PC');
+        await atPhoneWidth(function () { return check('at 390'); }, 390);
+        /* The other tab stops: here, Away is a kept room again — paused. */
+        release(); release = null;
+        await settle921(200);
+        FM.home.open(); await settle921(700);
+        if (words(away) !== 'SHARED · paused') throw new Error('once the other tab let go, Away says “' + words(away) + '”');
+      } finally {
+        if (release) release();
+        try { if (FM.home.isOpen()) FM.home.close(); } catch (e) {}
+        try { if (C.session) C.end(); } catch (e) {}
+        try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+        for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+        if (wasHome) FM.home.open();
+      }
+    });
+  });
+
+  test('967 B3 12 a long project name is named whole on the knock card and in “Carry on sharing?” — not cut at the 32 characters a person’s name gets — and one past 60 says it was cut', { item: '967', budgetMs: 60000 }, async function () {
+    /* Review (first-timer, 320 px): “Jordan (iPhone) wants to join “Our long summer skate edit — fin” as Viewer.” —
+       cleanName's 32 is §14.9's limit for a PERSON, and it read as a wrong name, not a shortened one. */
+    const C = need921S6('a long project name');
+    const LONG = 'Our long summer skate edit — final cut v2';        // 41: past a person's 32
+    const HUGE = 'A'.repeat(40) + ' — ' + 'B'.repeat(40);              // 83: past the 60 a card holds whole
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        try {
+          FM.projects.rename(ctx.pid, LONG);
+          await atPhoneWidth(async function () {
+            const k = ui.knock({ name: 'Jordan', role: 'viewer' });
+            const card = await until921S6('the knock card', function () { return document.getElementById('collab-knock'); }, 3000);
+            const t = card.querySelector('.ck-text');
+            if (t.textContent !== 'Jordan wants to join “' + LONG + '” as Viewer.') throw new Error('the knock card says “' + t.textContent + '” — the project’s name cut as if it were a person’s');
+            if (t.scrollWidth > t.clientWidth + 1) throw new Error('the whole name runs off the knock card at 390');
+            card.querySelector('.ck-no').click();
+            await k;
+          }, 390);
+          FM.projects.rename(ctx.pid, HUGE);
+          const k2 = ui.knock({ name: 'Jordan', role: 'viewer' });
+          const card2 = await until921S6('the second knock card', function () { return document.getElementById('collab-knock'); }, 3000);
+          const t2 = card2.querySelector('.ck-text').textContent;
+          if (!/“A{40} — B+…” as Viewer\.$/.test(t2) || t2.length > 'Jordan wants to join “” as Viewer.'.length + 60) throw new Error('a name past 60 characters reads “' + t2 + '” — cut without saying so, or not cut at all');
+          card2.querySelector('.ck-no').click();
+          await k2;
+          /* The question that names it. */
+          FM.projects.rename(ctx.pid, LONG);
+          await ui.share(); ui.close();
+          C.onReset({ force: true });
+          await settle921(300);
+          if (C.session) throw new Error('setup: the session did not stand down');
+          ui.resumeOpen();
+          const q = await until921S6('Carry on sharing?', ask967b3, 6000);
+          if (q.title !== 'Carry on sharing “' + LONG + '”?') throw new Error('the question reads “' + q.title + '”');
+        } finally {
+          const kc = document.getElementById('collab-knock'); if (kc) { const no = kc.querySelector('.ck-no'); if (no) no.click(); }
+          const a = ask967b3(); if (a) a.cancel.click();
         }
       });
     });

@@ -1198,7 +1198,7 @@ window.FM = window.FM || {};
   function afterArm() {
     forgetPeerNotes();                       // #967: notes from a session that ended are not this one's
     /* #967 B3: live again — the room no longer carries the mark of the switch that paused it (see U.onDetach). */
-    if (hostRoom && hostRoom.paused) { delete hostRoom.paused; saveRoom(hostRoomPid || currentPid(), hostRoom); }
+    if (hostRoom && (hostRoom.paused || hostRoom.coded != null)) { delete hostRoom.paused; delete hostRoom.coded; saveRoom(hostRoomPid || currentPid(), hostRoom); }
     ridMid = Object.create(null);
     hostOlder = null;
     startHostRelay();
@@ -4005,8 +4005,12 @@ window.FM = window.FM || {};
     /* #967: THE PHONE KEEPS THE REASSURING HALF. The pill is ~250 px on a phone and these two were cut mid-sentence —
        "This live session has ended — your…" — losing exactly the half that says the work is safe. Same facts, fewer
        words, as the other states already had. */
+    /* #967 B3 review: `switched` — the owner opened another project and this copy joined with a long code (U.beforePause):
+       it has ended, and a new code is the way back. */
     if (s.ended) return U.banner(s.ended === 'removed'
       ? (isPhoneNow() ? 'Removed · your copy is kept' : 'You were removed from this project — your copy stays on this device')
+      : s.ended === 'switched'
+      ? (isPhoneNow() ? 'Session ended · ask for a new code' : hostNameOf(s) + ' opened another project — your copy is kept; ask for a new code to rejoin')
       : (isPhoneNow() ? 'Session ended · your copy is kept' : 'This live session has ended — your copy stays on this device'), { warn: true });
     /* §13.1 (S8 review): "Too many offline changes to hold — [Save my version as a copy]". */
     if (!s.isOwner && s.outboxFull) {
@@ -4292,15 +4296,35 @@ window.FM = window.FM || {};
     }
     /* full / declined / busy: the owner closes this link in a moment and the reconnect carries on. */
   };
+  /* #967 B3 review: A SWITCH ENDS IT FOR SOMEBODY WHO JOINED WITH A LONG CODE — SO THEY ARE TOLD IT ENDED. collab-core.js
+     asks this just before a project switch stands the session down `paused`. `paused` means "back when he reopens it",
+     and for a member with a token that is true; for somebody let in with a connection code it never is — nothing brings
+     them back, and after his Open anyway they sat on "Offline · changes kept" for good (measured 142 s), still editing,
+     their sticky "You're in" still up. So they get the end the question promised them, with its reason (`switched`,
+     collab-bridge.js says it), and the count goes on the room for the resume's toast (U.onDetach, resumeHost). */
+  let pauseCoded = null;
+  U.beforePause = function (s) {
+    pauseCoded = null;
+    if (!s || !s.isOwner || !C.active || s.active === false) return;
+    let n = 0;
+    (s.peerIds ? s.peerIds() : []).forEach(function (mid) {
+      if (!Object.prototype.hasOwnProperty.call(byCode, mid)) return;
+      n++;
+      try { if (s.sendMsg) s.sendMsg(mid, { t: 'bye', why: 'switched' }); } catch (e) {}
+    });
+    pauseCoded = n;
+  };
   U.onDetach = function (s) {
     forgetPeerNotes();                         // #967: per-person notes die with the session (see forgetPeerNotes)
     /* #967 B3: A ROOM LEFT BY OPENING ANOTHER PROJECT SAYS SO. The switch stands the session down `paused` and keeps the
        room; the mark is what tells a later reload onto this project (the boot landing in the editor) that he had LEFT it —
        so it asks “Carry on sharing?” — from a page that went away while the room was live, which carries no mark and comes
        back sharing as a refresh always has. Cleared when the room is live again (afterArm). */
+    const coded = pauseCoded; pauseCoded = null;
     if (s && s.isOwner && s.pid && s.stopWhy === 'paused' && hasRoom(s.pid)) {
       const r = useRoom(s.pid, false);
-      if (r) { r.paused = Date.now(); saveRoom(s.pid, r); }
+      /* …and (review) how many were in by a long code when it stood down — the resume's toast says it to them only. */
+      if (r) { r.paused = Date.now(); if (coded != null) r.coded = coded; else delete r.coded; saveRoom(s.pid, r); }
     }
     applyRoleClasses();                        // S7: no session, no role — the editor is his again
     if (s && s.isOwner && s.pid) dropLock(hostLock(s.pid));
@@ -4364,7 +4388,12 @@ window.FM = window.FM || {};
        spent under the splash. A kept room resumes when he actually OPENS that project — Home closing onto it
        (U.afterHomeClose) — never while Home is what he is looking at. Going Home DURING a session is not this: that
        session never stood down, so there is nothing to resume. */
-    if (FM.home && FM.home.isOpen && FM.home.isOpen() && hasRoom(pid)) return null;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen() && hasRoom(pid)) {
+      /* #967 B3 review: a boot that lands on Home is an app opened afresh, not a refresh in the middle of sharing — the
+         room is marked, so no later reload onto this project can put it live without the question (markPaused). */
+      if (fromBoot) markPaused(pid);
+      return null;
+    }
     const room = loadRoom(pid);
     /* #967 B3 (his pick, A): A PROJECT HE SHARED BEFORE ASKS — “Carry on sharing?” [Share again] [Not now]. It re-armed by
        itself on the old link with a 2.6 s toast, which is half of "you can never turn it off on any project ever". The
@@ -4377,7 +4406,21 @@ window.FM = window.FM || {};
   /* “Carry on sharing “<name>”?” — once per opening, never behind Home, and never for a project another tab is sharing
      (that tab's sharing is not this one's to carry on or stop: said the way the resume always said it). Share again is
      the resume as it was; Not now is Stop sharing — the room goes, and the old link and code with it. A question that
-     another ask REPLACED (ask.js answers it null, with the new one already up) chose nothing, and nothing changes. */
+     another ask REPLACED (ask.js answers it null, with the new one already up) chose nothing, and nothing changes.
+     #967 B3 review — TWO WAYS THE QUESTION WAS ANSWERED WITHOUT HIM:
+     1. A reload while it was up put the project LIVE by itself. Only a switch marked the room paused, so a room that was
+        live when the app died (then relaunched, opened, asked) came back from the reload unmarked — read as a refresh in
+        the middle of sharing, and resumed. Putting the question up marks the room: a reload asks again.
+     2. A tap on the dim area, or Escape, counted as Not now — the room and every link and code he had handed out, gone
+        for good, by the gesture that puts any other pop-up away. Only the Not now BUTTON stops sharing now (ask.js
+        `cancelValue`); a dismissal is no answer: the room stays kept and paused, and the next opening asks again. */
+  function markPaused(pid) {
+    const r = loadRoom(pid);                 // the record on disk is what a reload reads — not a copy held in memory
+    if (!r || r.paused) return;
+    r.paused = Date.now();
+    saveRoom(pid, r);
+    if (hostRoom && hostRoomPid === pid) hostRoom.paused = r.paused;
+  }
   function askResume(pid) {
     if (resumeAsk && resumeAsk.pid === pid) return resumeAsk.p;
     if (!U.getProfile()) return null;
@@ -4389,17 +4432,21 @@ window.FM = window.FM || {};
       if (away) { if (FM.toast) FM.toast(OTHER_TAB + ' — this one is not sharing', 3600); return null; }
       /* Another question already up is not replaced by this one (ask.js answers the one it replaces as Cancel): the room
          stays as it is — kept, not live, SHARED · paused on Home — and the next opening asks. */
-      if (!still() || (FM.ask.isOpen && FM.ask.isOpen())) return null;
+      if (!still()) return null;
+      markPaused(pid);                         // review 1: from here on, a reload onto it asks — it never resumes by itself
+      if (FM.ask.isOpen && FM.ask.isOpen()) return null;
+      /* “Short code”, not “code”: the resume's own toast talks about the LONG codes people swap one to one, which do not
+         carry over — one word for each, or the two sentences read as contradicting each other (review). */
       return FM.ask({
         title: 'Carry on sharing “' + nameOfPid(pid) + '”?',
-        message: 'Share again lets people back in with the same link and code. Not now stops sharing — the old link and code stop working.',
-        ok: 'Share again', cancel: 'Not now'
+        message: 'Share again lets people back in with the same link and short code. Not now stops sharing — the old link and short code stop working.',
+        ok: 'Share again', cancel: 'Not now', cancelValue: false
       }).then(function (yes) {
-        if (yes) {
+        if (yes === true) {
           const r = still() ? loadRoom(pid) : null;
           return r ? resumeHost(pid, r) : null;
         }
-        if (FM.ask.isOpen && FM.ask.isOpen()) return null;
+        if (yes !== false) return null;        // review 2: the dim area, Escape, or a replacing ask — no answer, nothing changes
         if (!hasRoom(pid) || (C.session && C.session.isOwner && C.session.pid === pid)) return null;
         stopSharingNow(pid);
         if (fhostLive()) U.renderFriends(fhost);
@@ -4456,6 +4503,23 @@ window.FM = window.FM || {};
       return out;
     }, function () { return new Set(); });
   };
+  /* #967 B3 review: the projects ANOTHER FreeMotion tab or window is sharing right now — the tab holding a project's host
+     lock is the one sharing it (sharedElsewhere). Home read every kept room as “SHARED · paused”, so a project live in the
+     installed app, with people in it, was badged paused in a browser tab beside it. Locks this tab holds, or is still
+     letting go of, are this tab's. */
+  U.sharedAway = function () {
+    const L = navigator.locks;
+    if (!L || typeof L.query !== 'function') return Promise.resolve(new Set());
+    const letting = Object.keys(releasing).map(function (k) { return releasing[k]; });
+    return Promise.all(letting).then(function () { return L.query(); }).then(function (q) {
+      const out = new Set(), pre = hostLock('');
+      ((q && q.held) || []).forEach(function (h) {
+        const n = h && h.name;
+        if (typeof n === 'string' && n.indexOf(pre) === 0 && !locks[n]) out.add(n.slice(pre.length));
+      });
+      return out;
+    }, function () { return new Set(); });
+  };
 
   /* Home closed onto a project (home.js close): a kept room that waited behind Home resumes now. Nothing with Labs off,
      and nothing unless this project really has a kept room and no session is running. */
@@ -4484,14 +4548,21 @@ window.FM = window.FM || {};
         if (!(C.session && C.session.isOwner && C.session.pid === pid)) dropLock(hostLock(pid));   // not if that session is the one holding it
         return null;
       }
+      /* #967 B3 review: read before afterArm takes the pause mark off — how many had joined with a long code when a switch
+         stood this room down (U.beforePause). A number only when this app saw the switch; otherwise nobody knows. */
+      const coded = typeof room.coded === 'number' ? room.coded : null;
       C.share({ ownerInfo: { name: p.name, color: p.color }, sid: room.sid, midFloor: room.midTop || 0 });
       afterArm();
       /* #967: "people can reconnect" is true only of people who came in by the link or the short code — they have a
          member token and come back through the hub. Somebody who joined with a connection code has neither, and was
-         told nothing while this promised they could come back. */
+         told nothing while this promised they could come back.
+         #967 B3 review: …and after Share again, right under “the same link and short code”, a line about codes to a room
+         nobody had joined read as the question contradicting itself. It names the LONG code, and it is said when somebody
+         had joined with one — or when nobody can know (a refresh, an app that died while sharing). */
       const back = Object.keys(room.members || {}).length;
       if (FM.toast) FM.toast(back ? 'Sharing is on again — people can reconnect'
-        : 'Sharing is on again — anyone who joined with a code needs a new one', 2600);
+        : coded === 0 ? 'Sharing is on again'
+        : 'Sharing is on again — anyone who joined with a long code needs a new one', 2600);
       return C.session;
     });
   }
@@ -4901,9 +4972,13 @@ window.FM = window.FM || {};
     const q = names.map(function (n) { return '“' + n + '”'; });
     return q.length <= 1 ? q.join('') : q.slice(0, -1).join(', ') + ' and ' + q[q.length - 1];
   }
+  /* #967 B3 review: A PROJECT'S NAME IS NOT A PERSON'S. cleanName cuts at 32 — §14.9's limit for a person — so the knock
+     card and “Carry on sharing?” named “Our long summer skate edit — fin”, a wrong name rather than a shortened one. Control
+     characters go the same way; the name is whole up to 60, and past that it says it was cut (both cards wrap). */
   function nameOfPid(pid) {
     const c = cardOf(pid);
-    return cleanName((c && c.name) || '') || 'Untitled';
+    const n = String((c && c.name) || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
+    return !n ? 'Untitled' : n.length > 60 ? n.slice(0, 59).trim() + '…' : n;
   }
   U.labsOffPlan = function () {
     const s = C.session;

@@ -233,8 +233,12 @@ window.FM = window.FM || {};
       if (C.ui && C.ui.onEnded) { try { C.ui.onEnded(why); } catch (e) {} }
       /* “The owner ended this” is NOT an offline state and must not read as one — offline implies it
          comes back, and S3 has no reconnect. Said once, as a toast, and then held in the banner. */
+      /* #967 B3 review: `switched` — the owner opened another project, and this device joined with a long code, which
+         nothing brings back: what ended, and what to ask for (collab-ui.js U.beforePause). */
+      const owner = (C.session && typeof C.session.hostName === 'string' && C.session.hostName) || 'The owner';
       if (FM.toast) FM.toast(why === 'removed'
         ? 'You were removed from the live project — your copy stays on this device'
+        : why === 'switched' ? owner + ' opened another project — ask them for a new code to join again. Your copy stays on this device'
         : 'The owner ended the live session — your copy stays on this device', 4200);
       syncCollabBanner();
     },

@@ -1269,18 +1269,64 @@ window.FM = window.FM || {};
     }
     /* #967 B3 (J3-2, J4-7): a project he shared and then left for another keeps its room, and nothing on its card said so
        — it was invisible, and reopening it re-armed it. Now it says SHARED · paused (his pick 2, A). */
-    if (C.ui.isSharing && C.ui.isSharing(p.id)) return { kind: 'paused' };
+    if (C.ui.isSharing && C.ui.isSharing(p.id)) return awayPids.has(p.id) ? { kind: 'away' } : { kind: 'paused' };
     return null;
+  }
+  /* #967 B3 review: a kept room that ANOTHER FreeMotion tab or window is sharing right now is live there, not paused — it
+     says LIVE · other tab (red, stacked like paused). The locks are read when Home draws, and a card whose answer changed
+     by the time they come back is redrawn in place. */
+  let awayPids = new Set();
+  function readAwayPids() {
+    const U = FM.collab && FM.collab.ui;
+    if (!U || !U.sharedAway || !U.labsOn || !U.labsOn()) { awayPids = new Set(); return; }
+    U.sharedAway().then(function (set) {
+      const was = awayPids;
+      awayPids = set;
+      const moved = [...set].filter(function (x) { return !was.has(x); }).concat([...was].filter(function (x) { return !set.has(x); }));
+      moved.forEach(function (pid) {
+        const card = grid && grid.querySelector('.hm-card[data-pid="' + (window.CSS && CSS.escape ? CSS.escape(pid) : pid) + '"]');
+        const th = card && card.querySelector('.hm-thumb');
+        const p = th && (FM.projects.list() || []).find(function (x) { return x.id === pid; });
+        if (!p) return;
+        const old = th.querySelector('.hm-live'), cx = collabOf(p);
+        if (old) old.remove();
+        if (cx) th.appendChild(liveBadge(cx));
+      });
+    });
   }
   function liveBadge(cx) {
     const dim = cx.kind === 'shared' && !cx.now;   // #967 B3 (J4-9): ended, or not connected — its line says which
-    const b = el('span', 'hm-live' + (cx.kind === 'shared' ? ' hm-shared' : '') + (cx.kind === 'paused' ? ' hm-paused' : '') + (dim ? ' hm-dim' : ''));
+    const b = el('span', 'hm-live' + (cx.kind === 'shared' ? ' hm-shared' : '') + (cx.kind === 'paused' ? ' hm-paused' : '') + (cx.kind === 'away' ? ' hm-away' : '') + (dim ? ' hm-dim' : ''));
     if (cx.kind === 'shared' && cx.color) { const d = el('span', 'hm-live-dot'); d.style.background = cx.color; b.appendChild(d); }
     /* "SHARED · paused" is 88 px on one line and the thumbnail has 76 — so it stands on two, SHARED over paused (the dot
        is kept in the words, hidden by the stack). */
-    if (cx.kind === 'paused') { b.appendChild(el('span', null, 'SHARED')); b.appendChild(el('span', 'hm-live-sep', ' · ')); b.appendChild(el('span', 'hm-live-q', 'paused')); }
+    if (cx.kind === 'paused' || cx.kind === 'away') {
+      b.appendChild(el('span', null, cx.kind === 'away' ? 'LIVE' : 'SHARED')); b.appendChild(el('span', 'hm-live-sep', ' · '));
+      b.appendChild(el('span', 'hm-live-q', cx.kind === 'away' ? 'other tab' : 'paused'));
+    }
     else b.appendChild(document.createTextNode(cx.kind === 'live' ? (cx.n ? 'LIVE · ' + cx.n : 'LIVE') : 'SHARED'));
     return b;
+  }
+  /* #967 B3 (J4-10) + review: WHAT DELETING A SHARED PROJECT DOES, for both doors to it — the card's ⋯ Delete… and Select →
+     Delete. The second one had been missed: it asked the plain "Delete 1 project?" about the project Sam was working in,
+     and the switch away from it told him `paused` — "the owner will be back" — about a project that no longer existed.
+     The shared ones among `ids`, the people in the live one, and which project that is; and the end said to them first. */
+  function sharedOf(ids) {
+    const U = FM.collab && FM.collab.ui;
+    const out = { ids: [], who: [], live: null };
+    if (!U || !U.isSharing || !U.labsOn || !U.labsOn()) return out;
+    ids.forEach(function (id) {
+      if (!U.isSharing(id)) return;
+      out.ids.push(id);
+      const here = U.peopleIn ? U.peopleIn(id) : [];
+      if (here.length) { out.live = id; here.forEach(function (n) { out.who.push(n); }); }
+    });
+    return out;
+  }
+  function namesOf(list) { return list.length <= 1 ? list.join('') : list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1]; }
+  function endSharedFor(id) {
+    const U = FM.collab && FM.collab.ui;
+    if (U && U.endForDelete) { try { U.endForDelete(id); } catch (e) {} }
   }
   /* #967 B3 (J4-11): the projects with save points, read when Home draws — "Earlier versions…" shows on those only. */
   let ckptPids = null;
@@ -1470,15 +1516,12 @@ window.FM = window.FM || {};
         ...(cx && cx.kind === 'shared' ? [] : [
         { sep: true },
         { label: 'Delete…', danger: true, action: async () => {
-          const U = FM.collab && FM.collab.ui;
-          const shared = !!(cx && (cx.kind === 'live' || cx.kind === 'paused'));
-          const who = shared && U && U.peopleIn ? U.peopleIn(p.id) : [];
-          const names = who.length <= 1 ? who.join('') : who.slice(0, -1).join(', ') + ' and ' + who[who.length - 1];
-          const message = who.length ? names + (who.length === 1 ? ' is' : ' are') + ' working in this now — deleting ends it for everyone. This cannot be undone.'
+          const sh = sharedOf([p.id]), who = sh.who, shared = sh.ids.length > 0;
+          const message = who.length ? namesOf(who) + (who.length === 1 ? ' is' : ' are') + ' working in this now — deleting ends it for everyone. This cannot be undone.'
             : shared ? 'Delete "' + (p.name || 'Untitled') + '"? It is shared — deleting it stops sharing, and the link and code stop working. This cannot be undone.'
             : 'Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.';
           if (!await FM.ask({ title: 'Delete project', message: message, ok: 'Delete', danger: true })) return;
-          if (shared && U && U.endForDelete) { try { U.endForDelete(p.id); } catch (e) {} }
+          if (shared) endSharedFor(p.id);
           await FM.projects.remove(p.id); render();
         } }]),
       ], { right: r.right, above: r.top });
@@ -1749,7 +1792,14 @@ window.FM = window.FM || {};
     del.disabled = !n;
     del.addEventListener('click', async () => {
       if (!n) return; let ids = [...selected];
-      if (!await FM.ask({ title: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's'), message: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's') + '? This cannot be undone.', ok: 'Delete', danger: true })) return;
+      /* #967 B3 review: the shared projects among them — said, and ended for the people in them first (sharedOf). */
+      const sh = K.noun === 'project' ? sharedOf(ids) : { ids: [], who: [], live: null };
+      const liveName = sh.live ? ((FM.projects.list() || []).find(x => x.id === sh.live) || {}).name || 'Untitled' : '';
+      const onlyName = sh.ids.length === 1 ? ((FM.projects.list() || []).find(x => x.id === sh.ids[0]) || {}).name || 'Untitled' : '';
+      const shareNote = sh.who.length ? ' ' + namesOf(sh.who) + (sh.who.length === 1 ? ' is' : ' are') + ' working in “' + liveName + '” now — deleting ends it for everyone.'
+        : sh.ids.length ? ' ' + (sh.ids.length === 1 ? '“' + onlyName + '” is shared' : sh.ids.length + ' of them are shared') + ' — deleting stops sharing, and the link and code stop working.'
+        : '';
+      if (!await FM.ask({ title: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's'), message: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's') + '?' + shareNote + ' This cannot be undone.', ok: 'Delete', danger: true })) return;
       if (FM.toast) FM.toast('Deleting ' + ids.length + '…');
       if (K.noun === 'project') {
         // delete the CURRENTLY-OPEN project LAST: remove() does a full project-switch (media decode +
@@ -1766,7 +1816,7 @@ window.FM = window.FM || {};
       const draftIds = new Set((FM.projects.list() || []).filter(x => x.elementDraft || x.templateDraft).map(x => x.id));
       for (const id of ids) {
         if (draftIds.has(id)) await FM.projects.discardDraftAnyway(id);
-        else await K.store.remove(id);
+        else { if (sh.ids.indexOf(id) >= 0) endSharedFor(id); await K.store.remove(id); }
       }
       exitSelect();
     });
@@ -2463,6 +2513,7 @@ window.FM = window.FM || {};
   function render() {
     if (!grid) return;
     readVersionPids();    // #967 B3: which projects have save points, for their ⋯ (read in the background)
+    readAwayPids();       // #967 B3 review: which kept rooms another tab is sharing right now (their badges say so)
     ensureStaticTile();   // one-time; the CSS vars it sets are what #hm-grain draws
     /* Give the background its pair of fields to dissolve between (queue 157). Two DIFFERENT tiles, or
        the cross-fade has nothing to cross to and the grain sits perfectly still. */

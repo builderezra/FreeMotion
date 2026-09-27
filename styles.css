@@ -5131,10 +5131,13 @@ body:not(.home-open) #hm-grain::after { animation-play-state: paused; }
 .hm-live { position: absolute; left: 5px; bottom: 25px; display: inline-flex; align-items: center; gap: 4px; max-width: calc(100% - 10px); font-size: 8px; font-weight: 800; letter-spacing: .6px; line-height: 1; color: #fff; background: rgba(8, 11, 17, .78); border-radius: 6px; padding: 3px 6px; white-space: nowrap; }
 .hm-live:not(.hm-shared) { background: rgba(224, 49, 49, .88); }
 /* #967 B3 (his pick 2, A): a project he shared whose room is kept — grey, "SHARED · paused": shared, not live. On one
-   line it is 88 px and the 86 px thumbnail leaves 76, so it stacks: SHARED, and "paused" under it. */
-.hm-live.hm-paused { flex-direction: column; align-items: flex-start; gap: 2px; background: rgba(104, 110, 122, .92); color: #eef0f4; }
-.hm-live.hm-paused .hm-live-sep { display: none; }
-.hm-live.hm-paused .hm-live-q { font-weight: 700; letter-spacing: .3px; }
+   line it is 88 px and the 86 px thumbnail leaves 76, so it stacks: SHARED, and "paused" under it.
+   (Review) A kept room ANOTHER tab or window is sharing right now is `hm-away`: stacked the same way, but red like LIVE —
+   "LIVE" over "other tab". */
+.hm-live.hm-paused, .hm-live.hm-away { flex-direction: column; align-items: flex-start; gap: 2px; }
+.hm-live.hm-paused { background: rgba(104, 110, 122, .92); color: #eef0f4; }
+.hm-live.hm-paused .hm-live-sep, .hm-live.hm-away .hm-live-sep { display: none; }
+.hm-live.hm-paused .hm-live-q, .hm-live.hm-away .hm-live-q { font-weight: 700; letter-spacing: .3px; }
 /* …and a friend's copy that is ended or not connected: the same SHARED badge, dimmed (its line says which). */
 .hm-live.hm-dim { opacity: .55; }
 .hm-live-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35) inset; }
