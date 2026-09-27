@@ -1266,6 +1266,8 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
   background-color: rgba(16, 30, 52, .05); border-color: rgba(16, 30, 52, .14); color: #10151f;
 }
 .collab-scrim.collab-light .cs-add { border-style: dashed; }
+.collab-scrim.collab-light .cs-add.accent { background-color: #1780b4; border: 1px solid #1780b4; color: #ffffff; }   /* #967 J5-8 */
+.collab-scrim.collab-light .cs-add.accent .cs-add-sub { color: rgba(255, 255, 255, .85); }
 .collab-scrim.collab-light .cs-add-sub { color: #5a6478; }
 .collab-scrim.collab-light .cs-back { color: #5a6478; }
 .collab-scrim.collab-light .cs-seg { border-color: rgba(16, 30, 52, .14); }

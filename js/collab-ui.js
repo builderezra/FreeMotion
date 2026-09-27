@@ -1283,8 +1283,11 @@ window.FM = window.FM || {};
     const head = el('div', 'cs-head');
     head.appendChild(el('h2', 'fm-ask-title', 'Work on this with friends'));
     head.appendChild(el('div', 'cs-state', 'Still being tested'));
-    if (offNote) { head.appendChild(el('div', 'cs-note', offNote)); offNote = null; }
-    head.appendChild(howItWorks());
+    /* Kept, not used up: turning it off draws this block twice (C.end → onDetach, then syncLabs' own redraw — and for a
+       guest a third time when C.leave settles), and a one-shot line spent on the first draw left the owner with silence.
+       It goes when the block closes (U.friendsClosed) or the feature comes back on (U.syncLabs). */
+    if (offNote) head.appendChild(el('div', 'cs-note', offNote));
+    head.appendChild(howItWorks(true));
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
@@ -1301,12 +1304,14 @@ window.FM = window.FM || {};
   /* ═══ #967 BATCH 2 · WHAT THE BLOCK SAYS IN EVERY STATE ═══════════════════════════════════════════════════════════
      His words: "there's a switch to turn it on, but you can never turn it off on any project ever … make sure it … actually
      makes sense for someone who doesn't know how to use it". Three pieces, each his recommended pick (tools/design/967/r1). */
-  let offNote = null;            // the Labs-off view's one-shot line: what turning it off just stopped (from offRow)
+  let offNote = null;            // the Labs-off view's line: what turning it off just stopped (from offRow); kept until the block closes or it is on again
   /* HOW IT WORKS, in three numbered lines at the top of the block — before and after turning it on (pick A of "where
-     'How it works' sits"). The numbers are drawn, not typed into the text, so the line reads as the step. */
-  function howItWorks() {
+     'How it works' sits"). The numbers are drawn, not typed into the text, so the line reads as the step.
+     With the feature off there is no Start sharing to tap yet — the one thing that moves him on is the switch at the foot —
+     so step 1 names that first (review: a first-timer following "Tap Start sharing" found nothing to tap). */
+  function howItWorks(off) {
     const ol = el('ol', 'cs-how');
-    [['1', 'Tap Start sharing'], ['2', 'Send your friend the link'], ['3', 'They tap it — you’re both editing']].forEach(function (x) {
+    [['1', off ? 'Turn on Work with friends below, then tap Start sharing' : 'Tap Start sharing'], ['2', 'Send your friend the link'], ['3', 'They tap it — you’re both editing']].forEach(function (x) {
       const li = el('li');
       li.appendChild(el('b', null, x[0]));
       li.appendChild(document.createTextNode(x[1]));
@@ -1355,6 +1360,7 @@ window.FM = window.FM || {};
     if (b) b.textContent = '';
     fhost = null;
     pendingLinkRole = null;
+    offNote = null;                             // said once, where he was looking — not again at the next opening
     U.friendsBar();
   };
   /* THE BAR: what is true in one line, and who is here. Names and colours came from other devices: textContent, and the
@@ -1476,6 +1482,7 @@ window.FM = window.FM || {};
         ? 'No relay at all — you send them a long code and they send one back'
         : 'No account, no server — you send them a code and they send one back' /* queue 921 S3: NOT "read out": the codes-only code is a ~250-character block you copy into a message. A short code you could read aloud needs the relay (S6), and saying "read" of a 250-char blob is a promise the screen does not keep. */));
       body.appendChild(addBtn);
+      paintRelayDoors(body);                     // J5-8: with the relays unreachable the code swap is the lit one
       /* S7 (§17.1 entry points): the comments, one tap from the people — the same row the guest panel has. Below the
          invite since #967 batch 2 (J1-6): he opens this panel to get somebody in. */
       if (C.comments && C.comments.installed && C.comments.installed()) body.appendChild(commentsRow());
@@ -1863,7 +1870,7 @@ window.FM = window.FM || {};
 
   function isPhoneNow() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
 
-  function copyPlain(text, said, near) {
+  function copyPlain(text, said, near, ms) {
     const t = String(text || '');
     if (!t) return;
     /* S8 review: "select it and copy it yourself" — and there was nothing to select: the invite block shows
@@ -1884,7 +1891,7 @@ window.FM = window.FM || {};
       try { f.focus(); f.select(); } catch (e) {}
     }
     try {
-      navigator.clipboard.writeText(t).then(function () { if (FM.toast) FM.toast(said || 'Copied', 1800); }, fallback);
+      navigator.clipboard.writeText(t).then(function () { if (FM.toast) FM.toast(said || 'Copied', ms || 1800); }, fallback);
     } catch (e) { fallback(); }
   }
 
@@ -1905,7 +1912,23 @@ window.FM = window.FM || {};
   function relayWarn() { return !!relay && (relay.status === 'unreachable' || relay.status === 'reconnecting'); }
   function paintRelayLine() {
     const n = document.getElementById('collab-relay-status');
-    if (n) { const t = relayLine(); if (n.textContent !== t) n.textContent = t; n.classList.toggle('warn', relayWarn()); }
+    if (n) { const t = relayLine(); if (n.textContent !== t) n.textContent = t; n.classList.toggle('warn', relayWarn()); paintRelayDoors(n.closest('.cs-body')); }
+  }
+  /* #967 batch 2 (J5-8): WITH EVERY RELAY UNREACHABLE THE LINK AND THE SHORT CODE CANNOT REACH HIM — measured, Copy link was
+     still the one lit button and said "Link copied", and the line under the short code sent the friend to type a code that
+     could not work. So the lit button becomes the code swap (it needs no relay), Copy link goes quiet, and that line goes.
+     Repainted with the relay line, because the relay's answer arrives after the panel is drawn. Reconnecting is not down:
+     the link works again the moment it is back. */
+  function relayDown() { return !!relay && relay.status === 'unreachable'; }
+  function paintRelayDoors(root) {
+    if (!root) return;
+    const down = relayDown();
+    const cl = root.querySelector('.cs-invite .cs-copylink');
+    if (cl) cl.classList.toggle('accent', !down);
+    const add = root.querySelector(':scope > .cs-add');   // the main view's Connect with a code, never a row's sub-line
+    if (add) add.classList.toggle('accent', down);
+    const how = root.querySelector('.cs-invite .cs-codehow');
+    if (how) how.style.display = down ? 'none' : '';
   }
 
   function inviteBlock() {
@@ -1920,7 +1943,10 @@ window.FM = window.FM || {};
     const code = hostRoom ? C.signal.fmtRoomCode(hostRoom.code) : '';
     box.appendChild(el('div', 'cs-rowlabel', 'Invite with a link or a code'));
     const row = el('div', 'cs-linkrow');
-    const cl = btn('cs-copylink accent', 'Copy link', function () { copyPlain(link, 'Link copied', cl); });
+    const cl = btn('cs-copylink accent', 'Copy link', function () {
+      if (relayDown()) copyPlain(link, 'Copied — but the link won’t work until the free connection service can be reached. Use Connect with a code.', cl, 4200);
+      else copyPlain(link, 'Link copied', cl);
+    });
     row.appendChild(cl);
     if (navigator.share) {
       row.appendChild(btn('cs-sharelink', 'Share…', function () {
@@ -3591,17 +3617,29 @@ window.FM = window.FM || {};
   /* #967 batch 2 — "YOU'RE IN" STAYS UNTIL THE FIRST TAP (J2-8, J5-11). Three seconds was gone before a first-timer had
      looked up from the Join sheet to the video it opened onto. Sticky, and the next press anywhere puts it away — a
      one-shot capture listener that exists only between a join and that press (a session is running: §23 is not in play),
-     and that leaves alone any newer toast which has taken its place. */
+     and that leaves alone any newer toast which has taken its place.
+     Review fix: a KEY puts it away too (a keyboard-only PC never presses a pointer, so it sat on the video all session),
+     and the listener is kept here so U.uninstall can take it — turning the feature off leaves no collab listener behind. */
+  let tillTapOff = null;
   function toastTillTap(msg) {
     if (!FM.toast) return;
+    if (tillTapOff) tillTapOff();
     FM.toast(msg, 0);
     const t = document.getElementById('toast');
     const off = function () {
+      if (tillTapOff === off) tillTapOff = null;
       document.removeEventListener('pointerdown', off, true);
+      document.removeEventListener('keydown', off, true);
       if (t && t.textContent === msg && !t.classList.contains('hidden') && FM.hideToast) FM.hideToast();
     };
-    setTimeout(function () { document.addEventListener('pointerdown', off, true); }, 0);   // not the tap that joined
+    tillTapOff = off;
+    setTimeout(function () {                   // not the tap that joined — and not at all if it was put away meanwhile
+      if (tillTapOff !== off) return;
+      document.addEventListener('pointerdown', off, true);
+      document.addEventListener('keydown', off, true);
+    }, 0);
   }
+  U._toastTillTap = toastTillTap;     // suite seam: the sticky "You're in", without a whole join
 
   /* ⚠️ §12.2's TWO ANSWERS, WHICH `C.join` HAS ALWAYS IMPLEMENTED AND NOTHING COULD ASK FOR (queue 921
      S3 review). The sheet hardcoded `onConflict:'refuse'` and turned the refusal into one dead-end
@@ -4692,6 +4730,7 @@ window.FM = window.FM || {};
     const sb = document.getElementById('btn-share');
     if (sb && sb.parentNode && sb.parentNode.id !== 'stage') sb.parentNode.removeChild(sb);
     shareBtn = null;
+    if (tillTapOff) tillTapOff();               // #967 batch 2 review: the sticky "You're in"'s listener goes with the switch
     if (widthWatch && onWidth) {
       if (widthWatch.removeEventListener) widthWatch.removeEventListener('change', onWidth);
       else if (widthWatch.removeListener) widthWatch.removeListener(onWidth);
@@ -4789,6 +4828,7 @@ window.FM = window.FM || {};
      worse than no switch, and he can read the promise off the label. */
   U.syncLabs = function () {
     if (U.labsOn()) {
+      offNote = null;                            // on again: what the last "off" stopped is no longer the news
       const r = U.install();
       /* S5: this is also the one call every settings change makes, so the pointer and selection switches
          take effect here, on the next frame, rather than at the next thing somebody else does. */

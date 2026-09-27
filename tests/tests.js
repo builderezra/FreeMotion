@@ -87240,7 +87240,11 @@
       await sleep(250);
       const sc = scroller(b);
       if (!sc) throw new Error(where + ': could not find the Settings scroller around the Join row');
-      if (!(sc.scrollTop > 40)) throw new Error(where + ': setup: Settings did not need scrolling to reach Labs (scrollTop ' + sc.scrollTop + ') — the case he describes is not being made');
+      /* #967 batch 2 moved "Work with friends" up to Settings' first screen, so centring its Join row no longer scrolls at
+         all (scrollTop 0 at 1100). The promise here is "comes back where he was", and that needs a "where" that is not the
+         top — so the row is scrolled up to near the top edge, the place a scroll down to it leaves him. */
+      if (!(sc.scrollTop > 40)) { sc.scrollTop += b.getBoundingClientRect().top - sc.getBoundingClientRect().top - 40; await sleep(250); }
+      if (!(sc.scrollTop > 40)) throw new Error(where + ': setup: Settings could not be scrolled away from its top with the Join row in view (scrollTop ' + sc.scrollTop + ') — the case he describes is not being made');
       const top0 = sc.scrollTop, c = centre(b);
       if (c.x > 370 || c.y > 740 || c.y < 0) throw new Error(where + ': setup: the Join button is at ' + Math.round(c.x) + ',' + Math.round(c.y) + ', out of reach of real input');
       const tap = (x, y) => kind === 'touch' ? [{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 60 }]
@@ -102926,6 +102930,16 @@
               await settle921(150);
               if (C.session) throw new Error('turning it off from the block left the session running');
               row('after turning it off from the block', false);
+              /* Review fix: THE ENDING IS SAID. syncLabs draws the block twice (C.end → onDetach, then its own redraw), and the
+                 first draw used up the one-shot sentence, so the owner got silence — no note, and no toast (he is in the block).
+                 Read after a further wait, so a late redraw cannot pass this by being slow. */
+              await settle921(300);
+              const said = fr().querySelector('.cs-head .cs-note');
+              if (!said || !/^Sharing stopped — .+ no longer shared\.$/.test(said.textContent.trim()))
+                throw new Error('turning it off from the block while sharing said nothing afterwards — the head reads “' + (said ? said.textContent : 'no note') + '”; Stop sharing says it, so this must too');
+              FM.closeCanvasDialog(); await settle921(80);
+              await openFr();
+              if (fr().querySelector('.cs-head .cs-note')) throw new Error('the “Sharing stopped” sentence came back on the next opening of the block — it is said once, where he was looking');
               FM.closeCanvasDialog(); await settle921(80);
               FM.settings.set('collabLabs', true); ui.syncLabs();
             }, 390);
@@ -103077,22 +103091,29 @@
         const jr = j.getBoundingClientRect(), sr = sel.getBoundingClientRect();
         if (Math.abs(jr.height - sr.height) > 1 || Math.abs(jr.top - sr.top) > 1) throw new Error('Join is ' + Math.round(jr.height) + ' px tall at ' + Math.round(jr.top) + ' and Select ' + Math.round(sr.height) + ' px at ' + Math.round(sr.top) + ' — they should be the same pill');
         if (getComputedStyle(j).borderTopLeftRadius !== getComputedStyle(sel).borderTopLeftRadius || getComputedStyle(j).fontWeight !== getComputedStyle(sel).fontWeight) throw new Error('Join is not styled like Select');
-        await atPhoneWidth(async function () {
-          await settle921(120);
-          const top = document.querySelector('.hm-top').getBoundingClientRect();
-          const parts = ['.hm-brand', '#hm-search-btn', '#hm-join-btn', '#hm-select-btn', '#hm-settings-btn'].map(function (q) {
-            const n = document.querySelector(q);
-            if (!n) throw new Error('setup: no ' + q);
-            return { q: q, r: n.getBoundingClientRect() };
-          });
-          parts.forEach(function (p, i) {
-            if (p.r.left < top.left - 0.5 || p.r.right > top.right + 0.5) throw new Error('at 380 px ' + p.q + ' runs off the top bar (' + Math.round(p.r.left) + '–' + Math.round(p.r.right) + ' in ' + Math.round(top.left) + '–' + Math.round(top.right) + ')');
-            if (i && p.r.left < parts[i - 1].r.right - 0.5) throw new Error('at 380 px ' + p.q + ' overlaps ' + parts[i - 1].q);
-            if (i && (p.r.width < 24 || p.r.height < 24)) throw new Error('at 380 px ' + p.q + ' is ' + Math.round(p.r.width) + '×' + Math.round(p.r.height));
-          });
-          const jn = document.getElementById('hm-join-btn');
-          if (jn.scrollWidth > jn.clientWidth + 1) throw new Error('at 380 px “Join” is cut off inside its pill');
-        }, 380);
+        /* …and fits a narrow phone WITHOUT squeezing the wordmark (review fix): Join took its room from the FreeMotion
+           wordmark, measured 43 px wide at 320 and 83 at 360 (135 at full size) while every check here stayed green. */
+        for (const w of [320, 360, 380]) {
+          await atPhoneWidth(async function () {
+            await settle921(120);
+            const top = document.querySelector('.hm-top').getBoundingClientRect();
+            const parts = ['.hm-brand', '#hm-search-btn', '#hm-join-btn', '#hm-select-btn', '#hm-settings-btn'].map(function (q) {
+              const n = document.querySelector(q);
+              if (!n) throw new Error('setup: no ' + q);
+              return { q: q, r: n.getBoundingClientRect() };
+            });
+            parts.forEach(function (p, i) {
+              if (p.r.left < top.left - 0.5 || p.r.right > top.right + 0.5) throw new Error('at ' + w + ' px ' + p.q + ' runs off the top bar (' + Math.round(p.r.left) + '–' + Math.round(p.r.right) + ' in ' + Math.round(top.left) + '–' + Math.round(top.right) + ')');
+              if (i && p.r.left < parts[i - 1].r.right - 0.5) throw new Error('at ' + w + ' px ' + p.q + ' overlaps ' + parts[i - 1].q);
+              if (i && (p.r.width < 24 || p.r.height < 24)) throw new Error('at ' + w + ' px ' + p.q + ' is ' + Math.round(p.r.width) + '×' + Math.round(p.r.height));
+            });
+            const jn = document.getElementById('hm-join-btn');
+            if (jn.scrollWidth > jn.clientWidth + 1) throw new Error('at ' + w + ' px “Join” is cut off inside its pill');
+            const wm = document.querySelector('.hm-brand-img');
+            const ww = wm ? wm.getBoundingClientRect().width : 0;
+            if (!(ww >= 90)) throw new Error('at ' + w + ' px the FreeMotion wordmark is squeezed to ' + Math.round(ww) + ' px wide beside Join (135 px at full size) — too small to read');
+          }, w);
+        }
         /* Off: one real tap → the one-tap card, nothing connected; Turn on → the Join sheet. */
         const c0 = net.constructed;
         await atPhoneWidth(async function () {
@@ -103375,6 +103396,8 @@
        said it in steps, Comments sat between the people and the invite, and the keep-open toast landed over the short code. */
     const C = need921S7('how it works');
     const STEPS = [/^1\s*Tap Start sharing$/, /^2\s*Send your friend the link$/, /^3\s*They tap it — you’re both editing$/];
+    /* Review fix: off, there is no Start sharing to tap — step 1 names the switch that IS there, then Start sharing. */
+    const STEP1_OFF = /^1\s*Turn on Work with friends below, then tap Start sharing$/;
     await withFakeNet921(async function () {
       await withLabs921(async function (ui) {
         await with945(async function () {
@@ -103391,8 +103414,11 @@
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
                 const ol = fr.querySelector('.cs-how');
                 const li = ol ? Array.prototype.map.call(ol.children, function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }) : [];
-                if (li.length !== 3 || !STEPS.every(function (re, i) { return re.test(li[i]); })) throw new Error((on ? 'turned on' : 'turned off') + ', the block does not say how it works in three steps (' + JSON.stringify(li) + ') (J5-2)');
+                if (li.length !== 3 || !STEPS.every(function (re, i) { return (i || on ? re : STEP1_OFF).test(li[i]); })) throw new Error((on ? 'turned on' : 'turned off') + ', the block does not say how it works in three steps (' + JSON.stringify(li) + ') (J5-2)');
                 if (!ol.getClientRects().length) throw new Error('the three steps are not on show');
+                /* …and step 1 names a control that is really in the block, on show — a step he cannot follow is worse than none. */
+                const step1 = on ? fr.querySelector('.cs-start') : fr.querySelector('.cs-offrow [role=switch]');
+                if (!step1 || !step1.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', step 1 says “' + li[0] + '” but the block has no ' + (on ? 'Start sharing button' : '“Work with friends” switch') + ' on show');
                 const first = fr.querySelector('.cs-start') || fr.querySelector('[role=switch]');
                 if (first && ol.getBoundingClientRect().bottom > first.getBoundingClientRect().top + 1) throw new Error('the three steps are not at the top of the block, above ' + (first.className || first.tagName));
                 if (on) {
@@ -103428,6 +103454,110 @@
         });
       });
     });
+  });
+
+  test('967 B2 9 with the connection service unreachable the Share panel lights “Connect with a code”, not Copy link — Copy link stops saying just “Link copied”, and “tap Join and type it in” leaves the short code; with it up, Copy link is the lit one', { item: '967', budgetMs: 90000 }, async function () {
+    /* J5-8 (batch 2 review): "When the relays are unreachable on a real network, make the code swap the lit button and stop
+       Copy link claiming success." Measured on the builder's commit: every relay refused, Copy link was still the only lit
+       button and said "Link copied", and the line under the short code told the friend to type a code that could not work.
+       On this loopback page relayGate() refuses every relay at once — the state a network that blocks them gives. The fake
+       network, where they come up, is the control: the same panel must light Copy link there. */
+    const C = need921S7('the Share panel with the relays down');
+    const dlg = document.getElementById('canvas-dialog');
+    const fr = function () { return document.getElementById('cv-fr-body'); };
+    const had = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: function () { return Promise.resolve(); }, readText: function () { return Promise.resolve(''); } } });
+    async function panel(want, what) {
+      await with945(async function () {
+        await withCollab921([layer921('A')], async function () {
+          await atPhoneWidth(async function () {
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            if (!fr().querySelector('.cs-stop')) throw new Error(what + ': setup: the block is not the live Share panel');
+            await until921S6('the relay to be ' + want, function () { const r = C.ui._relay(); return r && r.status === want ? 1 : 0; }, 12000)
+              .catch(function () { const r = C.ui._relay(); throw new Error(what + ': setup: the relay is “' + (r && r.status) + '”, not ' + want); });
+            await settle921(120);
+            const cl = fr().querySelector('.cs-invite .cs-copylink'), add = fr().querySelector('.cs-body > .cs-add'), how = fr().querySelector('.cs-invite .cs-codehow');
+            if (!cl || !add) throw new Error(what + ': setup: no Copy link or no Connect with a code in the Share panel');
+            const lit = Array.prototype.filter.call(fr().querySelectorAll('.cs-body button.accent'), function (b) { return b.getClientRects().length; })
+              .map(function (b) { return b.textContent.trim().split('\n')[0].slice(0, 40); });
+            const got = toasts921();
+            try { cl.click(); await settle921(150); } finally { got.restore(); }
+            const said = got.filter(function (m) { return /[Cc]op/.test(m); }).pop() || '';
+            if (want === 'unreachable') {
+              if (cl.classList.contains('accent')) throw new Error(what + ': Copy link is still the lit button (lit: ' + JSON.stringify(lit) + ') while the link cannot reach him');
+              if (!add.classList.contains('accent')) throw new Error(what + ': “Connect with a code” is not lit — it is the one way in that needs no relay (lit: ' + JSON.stringify(lit) + ')');
+              if (how && how.getClientRects().length) throw new Error(what + ': “' + how.textContent + '” still sits under a short code that cannot work right now');
+              if (!said || said === 'Link copied' || !/won’t work/.test(said)) throw new Error(what + ': Copy link said “' + said + '” — it has to say the link won’t work until the service is reachable');
+            } else {
+              if (!cl.classList.contains('accent')) throw new Error(what + ' (control): Copy link is not the lit button (lit: ' + JSON.stringify(lit) + ')');
+              if (add.classList.contains('accent')) throw new Error(what + ' (control): “Connect with a code” is lit while the link works');
+              if (!how || !how.getClientRects().length) throw new Error(what + ' (control): the short code has no “tap Join and type it in” line');
+              if (said !== 'Link copied') throw new Error(what + ' (control): Copy link said “' + said + '”');
+            }
+            FM.closeCanvasDialog(); await settle921(80);
+          }, 390);
+        });
+      });
+    }
+    try {
+      await withLabs921(async function () { await panel('unreachable', 'relays refused'); });
+      await withFakeNet921(async function () { await withLabs921(async function () { await panel('up', 'relays up'); }); });
+    } finally {
+      if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard;
+    }
+  });
+
+  test('967 B2 10 the sticky “You’re in” leaves no listener behind — a key puts it away as well as a tap, and turning the feature off takes its listener with it, even before its first tick', { item: '967', budgetMs: 30000 }, async function () {
+    /* Batch 2 review (safety): "You're in" waits for the first press on a one-shot capture listener that only it could
+       remove. A keyboard-only PC never presses a pointer, so the toast sat on the stage all session — and turning the
+       feature off from the keyboard then left a collab listener in a page §23 (as relaxed) allows one door and NO
+       listeners. The listeners are tracked by what toastTillTap itself adds to the document. */
+    const C = need921S7('the sticky “You’re in”');
+    if (!C.ui._toastTillTap) throw new Error('setup: no FM.collab.ui._toastTillTap seam');
+    const t = document.getElementById('toast');
+    const realAdd = document.addEventListener, realRemove = document.removeEventListener;
+    let live = [];
+    const same = function (a, type, fn, o) { return a.type === type && a.fn === fn && a.cap === !!(o === true || (o && o.capture)); };
+    document.addEventListener = function (type, fn, o) {
+      if (type === 'pointerdown' || type === 'keydown') live.push({ type: type, fn: fn, cap: !!(o === true || (o && o.capture)) });
+      return realAdd.apply(this, arguments);
+    };
+    document.removeEventListener = function (type, fn, o) {
+      live = live.filter(function (a) { return !same(a, type, fn, o); });
+      return realRemove.apply(this, arguments);
+    };
+    try {
+      await withLabs921(async function (ui) {
+        /* 1 · CONTROL: up, and listening, after its first tick. */
+        live = [];
+        ui._toastTillTap('You’re in — probe one');
+        await settle921(60);
+        if (t.classList.contains('hidden') || !/probe one/.test(t.textContent)) throw new Error('setup: the sticky toast did not show');
+        if (!live.length) throw new Error('CONTROL: the sticky toast added no listener at all — this test is not watching the right thing');
+        /* 2 · a key puts it away, and its listeners go with it. */
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }));
+        await settle921(60);
+        if (!t.classList.contains('hidden') && /probe one/.test(t.textContent)) throw new Error('a key did not put “You’re in” away — on a keyboard-only PC it stays on the video all session');
+        if (live.length) throw new Error('after the key, ' + live.length + ' listener(s) of the sticky toast are still on the document (' + live.map(function (a) { return a.type; }).join(', ') + ')');
+        /* 3 · turned off while it is up: nothing of it stays. */
+        ui._toastTillTap('You’re in — probe two');
+        await settle921(60);
+        if (!live.length) throw new Error('setup: the second sticky toast added no listener');
+        FM.settings.set('collabLabs', false); ui.syncLabs();
+        await settle921(60);
+        if (live.length) throw new Error('with the feature turned off, the sticky toast left ' + live.length + ' listener(s) on the document (' + live.map(function (a) { return a.type; }).join(', ') + ') — §23 as relaxed: one door, no listeners');
+        /* 4 · turned off before its first tick (the listener goes on a tick later): it must not arrive afterwards. */
+        FM.settings.set('collabLabs', true); ui.syncLabs();
+        ui._toastTillTap('You’re in — probe three');
+        FM.settings.set('collabLabs', false); ui.syncLabs();
+        await settle921(80);
+        if (live.length) throw new Error('turned off in the same tick as “You’re in”, its listener arrived afterwards anyway (' + live.length + ')');
+      });
+    } finally {
+      document.addEventListener = realAdd; document.removeEventListener = realRemove;
+      live.slice().forEach(function (a) { try { realRemove.call(document, a.type, a.fn, a.cap); } catch (e) {} });
+      if (FM.hideToast) FM.hideToast();
+    }
   });
 
 })();
