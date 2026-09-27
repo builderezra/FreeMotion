@@ -1024,6 +1024,7 @@ window.FM = window.FM || {};
    * the host, and the backstop in collab-session.js — it is what keeps a Viewer from feeling locked out. */
   function applyRoleClasses() {
     syncLive();                                  // #967 batch 2: every place the session's state is re-read re-reads LIVE too
+    syncCmt();                                   // #967 batch 5: …and the comments bubble beside it
     const b = document.body;
     const r = C.myRole ? C.myRole() : 'owner';
     const ro = installed && (r === 'viewer' || r === 'commenter');
@@ -1090,11 +1091,75 @@ window.FM = window.FM || {};
     p.style.maxWidth = Math.max(60, Math.round(sr.width) - left - 46) + 'px';
   }
 
+  /* ═══ #967 BATCH 5 · COMMENTS HAVE A DOOR ON THE VIDEO (his pick A — J4-5) ═══════════════════════════════════════════
+     The only way to the comments was the chip → Canvas settings → Friends → Comments, and only while live; after Stop
+     sharing there was none at all but a mark on the ruler. So: a speech bubble beside the chip (past LIVE when LIVE is up,
+     so batch 2's pill stays by the chip), wearing the chip's glass, shown while the project is live or has comments, with a
+     count of what arrived since he last looked (collab-comments.js `unread`). A phone thing, like LIVE: a PC keeps its
+     comment surfaces (styles.css hides it above 700 px). Nothing here while the feature is off (§23). */
+  let cmtEl = null;
+  const CMT_SVG = 'M5.5 5h13A2.5 2.5 0 0 1 21 7.5v7a2.5 2.5 0 0 1-2.5 2.5H12l-4.5 3.5V17h-2A2.5 2.5 0 0 1 3 14.5v-7A2.5 2.5 0 0 1 5.5 5z';
+  function syncCmt() {
+    const st = document.getElementById('stage');
+    const CM = C.comments;
+    const s = C.session;
+    const live = !!(s && C.active && !s.ended);
+    const on = !!(installed && st && CM && CM.installed && CM.installed() && (live || CM.list().length));
+    if (!on) {
+      if (cmtEl && cmtEl.parentNode) cmtEl.parentNode.removeChild(cmtEl);
+      cmtEl = null;
+      return;
+    }
+    if (!cmtEl) {
+      cmtEl = el('button', 'collab-cmt');
+      cmtEl.id = 'collab-cmt';
+      cmtEl.type = 'button';
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '1.9');
+      svg.setAttribute('stroke-linejoin', 'round');
+      svg.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', CMT_SVG);
+      svg.appendChild(path);
+      cmtEl.appendChild(svg);
+      cmtEl.appendChild(el('span', 'ccm-n hidden'));
+      cmtEl.addEventListener('click', function (e) { e.stopPropagation(); if (C.comments) C.comments.open(); });
+    }
+    if (cmtEl.parentNode !== st) st.appendChild(cmtEl);
+    const n = CM.unread ? CM.unread() : 0, open = CM.count();
+    const badge = cmtEl.querySelector('.ccm-n');
+    const txt = n ? (n > 99 ? '99+' : String(n)) : '';
+    if (badge.textContent !== txt) badge.textContent = txt;
+    badge.classList.toggle('hidden', !n);
+    const label = n ? 'Comments — ' + n + ' new' : open ? 'Comments — ' + open + ' open' : 'Comments';
+    if (cmtEl.getAttribute('aria-label') !== label) { cmtEl.setAttribute('aria-label', label); cmtEl.title = label; }
+    placeCmt();
+  }
+  U.syncCmt = syncCmt;
+  /* Just past whatever is last in the corner: LIVE when it is up, else the chip, else the person+. */
+  function placeCmt() {
+    const b = cmtEl;
+    if (!b || !b.parentNode) return;
+    const stage = b.parentNode;
+    const prev = [liveEl, document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) {
+      return n && n.parentNode === stage && n.offsetWidth;
+    })[0];
+    const sr = stage.getBoundingClientRect();
+    const left = prev ? Math.round(prev.getBoundingClientRect().right - sr.left + 6) : 8;
+    if (b.style.left !== left + 'px') b.style.left = left + 'px';
+  }
+  /* Whether the Friends block should carry a Comments row when nothing is live (the idle and shared-copy panels). */
+  function hasComments() { return !!(C.comments && C.comments.installed && C.comments.installed() && C.comments.list().length); }
+
   function roleWords(r) { return r === 'viewer' ? 'a Viewer' : r === 'commenter' ? 'a Commenter' : 'an Editor'; }
   function roleMeans(r) { for (let i = 0; i < ROLES.length; i++) if (ROLES[i][0] === r) return ROLES[i][2]; return ROLES[0][2]; }
   /* The owner changed this device's role: said, applied, and every open surface redrawn — now, not at
      the next thing the person tries (§16.3 "live role changes update these classes immediately"). */
   U.onRole = function () {
+    setAsk(null);                                // #967 B5: his role change is the answer to anything asked
     applyRoleClasses();
     const s = C.session;
     const root = panelRoot();
@@ -1110,6 +1175,7 @@ window.FM = window.FM || {};
   };
   /* A comment was added, answered or resolved: the "Comments" row of whichever panel is open says so. */
   U.onComments = function () {
+    syncCmt();                                   // #967 B5: the bubble's count and whether it shows
     const root = panelRoot();
     if (!root) return;
     const row = root.querySelector('.cs-comments');
@@ -1277,6 +1343,8 @@ window.FM = window.FM || {};
     body.appendChild(el('div', 'cs-fr-hint', 'You’ll get a link, a QR and a short code to send. Nothing’s shared until you tap Start sharing.'));
     body.appendChild(joinAsRow({ pending: true }));
     body.appendChild(joinLinkRow());
+    /* #967 B5 (J4-5): the project's comments outlive the sharing — after Stop sharing this was the one place they had gone. */
+    if (hasComments()) body.appendChild(commentsRow());
     c.appendChild(offRow(host));
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
@@ -3104,6 +3172,7 @@ window.FM = window.FM || {};
       ? 'This copy could not be made your own yet — the device may be full. It will not reconnect; Leave tries again.'
       : findable ? 'This is ' + who + '’s project. Your changes are kept on this device and sent when you’re back in touch.'
         : 'This is ' + who + '’s project. To get back in, ask ' + who + ' for the link or a new swap code — joining again starts from ' + who + '’s copy, and what you changed here stays in this one.'));
+    if (hasComments()) c.appendChild(commentsRow());   // #967 B5 (J4-5): the comments on a shared copy are still readable here
     c.appendChild(offRow(host));   // #967 batch 2: the switch that stays, on a shared copy too
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
@@ -3903,10 +3972,14 @@ window.FM = window.FM || {};
     const host = el('div', 'collab-knock');
     host.id = 'collab-knock';
     host.setAttribute('role', 'alertdialog');
+    const asking = k.info.kind === 'ask';     // #967 B5: a member asking to edit, not a stranger at the door
+    if (asking) host.classList.add('ck-ask');
     const who = (cleanName(k.info.name) || 'Someone') + (k.info.dev ? ' (' + cleanName(k.info.dev) + ')' : '');
     /* #967 B3 (J4-13): WHICH project — on Home, or with two shared, "wants to join" named nothing he could check. */
     const sp = C.session && C.session.isOwner ? (C.session.pid || currentPid()) : currentPid();
-    host.appendChild(el('div', 'ck-text', who + ' wants to join “' + nameOfPid(sp) + '” as ' + labelFor(k.info.role) + '.'));
+    host.appendChild(el('div', 'ck-text', asking ? who + ' asks to edit “' + nameOfPid(sp) + '”.' : who + ' wants to join “' + nameOfPid(sp) + '” as ' + labelFor(k.info.role) + '.'));
+    /* What Allow does, in batch 4's words for the role (ROLES) — the one thing he needs to decide it. */
+    if (asking) host.appendChild(el('div', 'ck-sas ck-what', 'Allow makes ' + (cleanName(k.info.name) || 'them') + ' an Editor — they can change anything.'));
     /* S6: on the relay, the five letters this leg of the handshake derived (§14.6). Somebody holding the
        link could sit between a real joiner and this device; the joiner's screen shows the same five only
        when nobody does. Offered, not demanded — the link's promise is one tap — and in plain words. */
@@ -3922,14 +3995,14 @@ window.FM = window.FM || {};
     const wait = knockWait != null ? knockWait : ((C.LIMITS && C.LIMITS.KNOCK_TIMEOUT) || 120000);
     const mins = Math.round(wait / 60000);
     const span = wait >= 60000 ? mins + (mins === 1 ? ' minute' : ' minutes') : Math.max(1, Math.round(wait / 1000)) + ' seconds';
-    host.appendChild(el('div', 'ck-limit', 'No answer in ' + span + ' turns them away.'));
+    host.appendChild(el('div', 'ck-limit', 'No answer in ' + span + (asking ? ' turns it down.' : ' turns them away.')));
     const bar = el('div', 'ck-bar'), fill = el('i');
     bar.setAttribute('aria-hidden', 'true');
     bar.appendChild(fill);
     host.appendChild(bar);
     const acts = el('div', 'ck-acts');
-    acts.appendChild(btn('ck-no', 'Don’t allow', function () { answer(false); }));
-    acts.appendChild(btn('ck-yes accent', 'Let in', function () { answer(true); }));
+    acts.appendChild(btn('ck-no', asking ? 'Not now' : 'Don’t allow', function () { answer(false); }));
+    acts.appendChild(btn('ck-yes accent', asking ? 'Allow' : 'Let in', function () { answer(true); }));
     host.appendChild(acts);
     document.body.appendChild(host);
     const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3937,9 +4010,9 @@ window.FM = window.FM || {};
     const t = setTimeout(function () {
       /* §19.3: a request nobody answers declines itself, with a quiet note where he will look next — and, #967 B3, said
          at once when the Share panel is not open to hold that note (on Home, or in the editor with it shut). */
-      shareNote = (cleanName(k.info.name) || 'Someone') + ' asked to join and was not let in — the request timed out.';
+      shareNote = (cleanName(k.info.name) || 'Someone') + (asking ? ' asked to edit and got no answer — they can ask again.' : ' asked to join and was not let in — the request timed out.');
       const said = shareNote;
-      answer(false);
+      answer(asking ? 'timeout' : false);   // #967 B5: an unanswered ask is not a Not now — they are told, not held off
       redrawShare();
       if (!panelRoot() && FM.toast) FM.toast(said, 3600);
     }, wait);
@@ -3954,6 +4027,101 @@ window.FM = window.FM || {};
     }
     k.answer = answer;
   }
+
+  /* ═══ #967 BATCH 5 · ASKING FOR EDIT (J4-15, his pick A) ═══════════════════════════════════════════════════════════
+   * A Viewer was told "View only — ask for edit access" and had no way to ask. The friend's banner now has "Ask to edit";
+   * it sends one `ask` (collab-session.js S.askEdit), which the owner's session checks — a member, a Viewer or a
+   * Commenter, one open at a time, not during the wait after a Not now — and hands here as a card on the knock's own path
+   * (queued behind a knock, called off with the session, the same two-minute limit): "Sam asks to edit “Beach” · Not now /
+   * Allow". Allow is his role menu's own change (setPeerRole + noteRole), so the asker is told exactly as if he had picked
+   * Editor from it. Nothing from the other phone changes a role; the name on the card is the one his member table holds. */
+  const askCards = Object.create(null);           // mid -> the card promise for that member's ask, on screen or queued
+  U.onAsk = function (mid, info) {
+    const s = C.session;
+    if (!installed || !s || !s.isOwner) return false;
+    const name = cleanName(info && info.name) || 'Someone';
+    const k = U.knock({ kind: 'ask', name: name, role: info && info.role });
+    askCards[mid] = k;
+    k.then(function (ans) {
+      if (askCards[mid] === k) delete askCards[mid];
+      if (C.session !== s) return;
+      if (ans !== true) { s.answerAsk(mid, ans === false ? 'no' : ans === 'timeout' ? 'timeout' : 'gone'); return; }
+      /* Read again at the tap: they may have left, or he may have changed their role from the menu meanwhile. */
+      const m = s.host && s.host.members[mid];
+      if (!m || (m.role !== 'viewer' && m.role !== 'commenter')) { s.answerAsk(mid, 'gone'); return; }
+      s.answerAsk(mid, 'yes');
+      s.setPeerRole(mid, 'editor'); noteRole(mid, 'editor'); redrawShare();
+      if (FM.toast) FM.toast(name + ' can edit now', 2400);
+    });
+    return true;
+  };
+  /* They left, were dropped, or he changed their role himself: the card goes, with no answer sent. */
+  U.onAskCancel = function (mid) {
+    const k = askCards[mid];
+    if (!k) return;
+    delete askCards[mid];
+    k.cancel('gone');
+  };
+
+  /* The friend's side: what THIS session asked. `open` until an answer (or longer than any card lives), `cool` for the
+     wait after a Not now. A state from another session is nobody's. */
+  let askState = null, askTimer = null;
+  function askFor(s) { return askState && askState.s === s ? askState : null; }
+  function setAsk(st) {
+    askState = st;
+    if (askTimer) { clearTimeout(askTimer); askTimer = null; }
+    if (!st) return;
+    askTimer = setTimeout(function () {
+      askTimer = null;
+      if (askState !== st) return;
+      if (st.state === 'open') askState = null;   // no answer ever came (a card lives two minutes): the button comes back
+      U.syncBanner();
+    }, Math.max(0, st.until - Date.now()) + 50);
+  }
+  function askWaiting(s) { const a = askFor(s); return !!a && (a.state === 'open' || Date.now() < a.until); }
+  function ownerWord(s, cap) {
+    const n = cleanName(s && s.hostName) || cleanName(s && cardOf(s.gpid) && cardOf(s.gpid).collab && cardOf(s.gpid).collab.hostName);
+    return n || (cap ? 'The owner' : 'the owner');
+  }
+  function roleLead(s) { return s.role === 'viewer' ? 'View only' : 'Comments only'; }
+  function askBanner(s, short) {
+    const lead = roleLead(s);
+    const a = askFor(s);
+    if (a && a.state === 'open') return U.banner(lead + ' · ' + (short ? 'asked ' + ownerWord(s) : 'you asked ' + ownerWord(s) + ' to let you edit'));
+    if (a && a.state === 'cool' && Date.now() < a.until) return U.banner(lead + ' · ' + ownerWord(s, true) + ' said not now');
+    return U.banner(lead, { action: 'Ask to edit', onAction: function () { U.askEdit(); } });
+  }
+  U.askEdit = function () {
+    const s = C.session;
+    if (!installed || !s || s.isOwner || !C.active || s.ended) return false;
+    if (s.role !== 'viewer' && s.role !== 'commenter') return false;
+    if (askWaiting(s)) return false;
+    if (!s.askEdit || !s.askEdit()) {
+      if (FM.toast) FM.toast('Not connected to ' + ownerWord(s) + ' right now — ask again once you’re back', 3000);
+      return false;
+    }
+    const wait = (C.LIMITS && C.LIMITS.KNOCK_TIMEOUT) || 120000;
+    setAsk({ s: s, state: 'open', until: Date.now() + wait + 30000 });
+    if (FM.toast) FM.toast('Asked ' + ownerWord(s) + ' to let you edit', 2600);
+    U.syncBanner();
+    return true;
+  };
+  /* The owner's answer. One that answers nothing this device asked is dropped — it came off the wire. */
+  U.onAskAnswer = function (how) {
+    const s = C.session;
+    if (!s || s.isOwner) return;
+    const a = askFor(s);
+    if (!a || a.state !== 'open') return;
+    if (how === 'timeout') {
+      setAsk(null);
+      if (FM.toast) FM.toast(ownerWord(s, true) + ' didn’t answer — you can ask again', 3000);
+    } else {
+      setAsk({ s: s, state: 'cool', until: Date.now() + ((C.LIMITS && C.LIMITS.ASK_COOLDOWN) || 120000) });
+      if (FM.toast) FM.toast(ownerWord(s, true) + ' said not now', 3000);
+    }
+    U.syncBanner();
+  };
+  U._askState = function () { return askState; };   // suite seam: the wait after Not now is not a thing a suite waits out
 
   /* ═══ 5. THE BANNER (§19.4) ═══════════════════════════════════════════════════════════════════ */
 
@@ -3999,10 +4167,11 @@ window.FM = window.FM || {};
      its words. Presence calls this whenever the chip changes; `U.banner` whenever the words do. */
   U.placeBanner = function () {
     placeLive();                                 // #967 batch 2: the LIVE pill follows the chip first; the banner clears both
+    placeCmt();                                  // #967 batch 5: …then the comments bubble, past LIVE
     const b = bannerEl;
     if (!b || !b.parentNode) return;
     b.style.left = ''; b.style.transform = ''; b.style.maxWidth = ''; b.style.top = '';
-    const corner = [document.getElementById('collab-people'), liveEl].filter(function (n) { return n && n.parentNode === b.parentNode && n.offsetWidth; });
+    const corner = [document.getElementById('collab-people'), document.getElementById('btn-share'), liveEl, cmtEl].filter(function (n) { return n && n.parentNode === b.parentNode && n.offsetWidth; });
     if (!corner.length) return;
     const sr = b.parentNode.getBoundingClientRect(), br = b.getBoundingClientRect();
     let minL = 0, cTop = Infinity, cBot = -Infinity;
@@ -4010,7 +4179,7 @@ window.FM = window.FM || {};
     if (br.left - sr.left >= minL || cBot <= br.top || cTop >= br.bottom) return;
     /* #967 batch 2: with the LIVE pill beside the chip the row can be too short for the sentence — then the banner takes a
        row of its own under them, centred, rather than being cut (the phone short forms were written to keep their words). */
-    if (liveEl && corner.indexOf(liveEl) >= 0) {
+    if ((liveEl && corner.indexOf(liveEl) >= 0) || (cmtEl && corner.indexOf(cmtEl) >= 0)) {
       b.style.maxWidth = 'none';
       const need = b.getBoundingClientRect().width;
       b.style.maxWidth = '';
@@ -4104,7 +4273,9 @@ window.FM = window.FM || {};
        Follow was ever asked about, so the person most likely to follow — a client watching the edit —
        saw the playhead start moving by itself under a banner that said nothing about it and offered
        nothing to press. Both facts are true, so the banner says both. */
-    if (!s.isOwner && (s.role === 'viewer' || s.role === 'commenter')) return fl ? U.banner('View only · ' + fl, follow) : U.banner('View only — ask for edit access');
+    /* #967 B5 (J4-15): "ask for edit access" had nothing to press — now it is a button, and the line says where the ask
+       stands. A Commenter can ask too, and is told what a Commenter can do rather than "View only". */
+    if (!s.isOwner && (s.role === 'viewer' || s.role === 'commenter')) return fl ? U.banner(roleLead(s) + ' · ' + fl, follow) : askBanner(s, short);
     if (C._pendingReload && C._pendingReload()) return U.banner('Update ready — it applies once sharing ends');
     /* Lowest: what he chose to do, below what the session is telling him. */
     if (fl) return U.banner(fl, follow);

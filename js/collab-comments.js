@@ -51,6 +51,8 @@ window.FM = window.FM || {};
   let unRebuilt = null;
   let scrim = null, card = null, listEl = null, composer = null;
   let showResolved = false, replyFor = null, replyDraft = '', focusId = null;
+  /* #967 B5: what is new since he last looked (see "WHAT IS NEW" below). */
+  let seen = null, seenPid, seenProj = null, unread = 0;
 
   /* ═══ SMALL HELPERS ═══════════════════════════════════════════════════════════════════════════ */
   function el(tag, cls, text) { const d = document.createElement(tag); if (cls) d.className = cls; if (text != null) d.textContent = text; return d; }
@@ -116,7 +118,8 @@ window.FM = window.FM || {};
     if (FM.history && FM.history.commit) FM.history.commit();
     if (FM.storage && FM.storage.markDirty) FM.storage.markDirty();
   }
-  function changed() { CM.paintMarks(); render(); if (C.ui && C.ui.onComments) { try { C.ui.onComments(); } catch (e) {} } }
+  function changed() { CM.paintMarks(); render(); notify(); }
+  function notify() { if (C.ui && C.ui.onComments) { try { C.ui.onComments(); } catch (e) {} } }
 
   CM.count = function () { return list().filter(function (c) { return c && !c.resolved; }).length; };
   CM.list = function () { return list().slice(); };
@@ -138,6 +141,7 @@ window.FM = window.FM || {};
       if (typeof sel === 'string' && ID_RE.test(sel) && FM.layerById && FM.layerById(FM.scene, sel)) c.lid = sel;
     }
     l.push(c);
+    see(c, null);                           // his own is never news to him (#967 B5)
     commit(); changed();
     return c.id;
   };
@@ -149,6 +153,7 @@ window.FM = window.FM || {};
     if (c.replies.length >= MAX_REPLIES) return null;
     const r = { id: rid('r_'), by: me(), at: Date.now(), text: tx };
     c.replies.push(r);
+    see(c, r);
     commit(); changed();
     return r.id;
   };
@@ -196,6 +201,61 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast(msg, 3200);
   }
 
+  /* ═══ #967 BATCH 5 · WHAT IS NEW SINCE HE LAST LOOKED (J4-5, his pick A) ═════════════════════════════════════════════
+   * A friend's comment used to arrive in silence: this file only ever toasted your OWN actions, and the one sign was a
+   * mark merged into the playhead on the ruler. Now every comment or reply that arrives from somebody else, while the
+   * card is shut, is counted (the bubble on the video shows the count — collab-ui.js syncCmt) and said: "Sam commented".
+   * Opening the card spends the count.
+   * "New" is measured against what was here when this project was opened: ids already in the document then are seen, so
+   * opening a project with twenty comments counts none of them, and an undo that brings one back is not news either.
+   * THE PROJECT, NOT JUST ITS ID: opening another one sets the current id BEFORE its document loads (storage.js open), so a
+   * scan in between would read the OLD comments under the new id and the new ones as twenty arrivals — the document
+   * object changing is the other half of "another project". A new object under the same id (an undo, a snapshot) only
+   * re-reads what is seen, and keeps the count. */
+  function key(c, r) { return r ? 'r:' + c.id + ':' + r.id : 'c:' + c.id; }
+  function see(c, r) { if (seen && c && typeof c.id === 'string') seen[key(c, r)] = 1; }
+  function eachItem(fn) {
+    list().forEach(function (c) {
+      if (!isObj(c) || typeof c.id !== 'string') return;
+      fn(c, null);
+      (Array.isArray(c.replies) ? c.replies : []).forEach(function (r) { if (isObj(r) && typeof r.id === 'string') fn(c, r); });
+    });
+  }
+  function scan() {
+    const pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    const proj = FM.scene && FM.scene.project;
+    if (!seen || pid !== seenPid || proj !== seenProj) {
+      if (!seen || pid !== seenPid) unread = 0;
+      seen = Object.create(null); seenPid = pid; seenProj = proj;
+      eachItem(function (c, r) { seen[key(c, r)] = 1; });
+      return [];
+    }
+    const fresh = [];
+    const self = myMid();
+    eachItem(function (c, r) {
+      const k = key(c, r);
+      if (seen[k]) return;
+      seen[k] = 1;
+      const x = r || c;
+      if (!isObj(x.by) || x.by.mid === self) return;
+      fresh.push({ name: cleanName(x.by.name) || 'Someone', reply: !!r });
+    });
+    /* Read as it lands: the card is open, so he is looking at it. */
+    if (fresh.length && !CM.isOpen()) unread = Math.min(999, unread + fresh.length);
+    return fresh;
+  }
+  /* One line for what just arrived — the name as text (FM.toast writes textContent), and a tap opens the card. */
+  function announce(fresh) {
+    if (!fresh.length || CM.isOpen() || !FM.toast) return;
+    const names = [];
+    fresh.forEach(function (f) { if (names.indexOf(f.name) < 0) names.push(f.name); });
+    const msg = names.length > 1 ? fresh.length + ' new comments'
+      : names[0] + (fresh.every(function (f) { return f.reply; }) ? ' replied' : ' commented');
+    const home = FM.home && FM.home.isOpen && FM.home.isOpen();
+    FM.toast(msg, 3600, home ? undefined : function () { CM.open(); });
+  }
+  CM.unread = function () { return installed ? unread : 0; };
+
   /* ═══ THE PLAYHEAD'S HEAD, PARKED ON A COMMENT (S7 review) ═══════════════════════════════════════
    * A comment is pinned at the playhead by default, so its mark is drawn exactly where #tl-headtap sits —
    * a 34×26 button over an 18×16 mark in another stacking context (the sticky ruler row, z 7, under the
@@ -238,6 +298,10 @@ window.FM = window.FM || {};
   CM.paintMarks = function () {
     const ruler = document.getElementById('tl-ruler');
     document.querySelectorAll('.tl-cmark').forEach(function (n) { n.remove(); });
+    /* #967 B5: every timeline rebuild passes here — opening a project included — so this is where "what is here now" is
+       read, and where the bubble on the video learns whether there is anything to lead to. */
+    if (installed) scan();
+    if (C.ui && C.ui.syncCmt) { try { C.ui.syncCmt(); } catch (e) {} }
     if (!installed || !ruler || !FM.timeline || !FM.timeline.timeToX) return 0;
     const off = ruler.offsetLeft || 0;
     let n = 0;
@@ -290,6 +354,9 @@ window.FM = window.FM || {};
        it — Edit and Delete could not be reached at all, and "Let in" took two taps. `cc-open` lifts those
        three above it (styles.css), still under FM.ask (3200). */
     document.body.classList.add('cc-open');
+    /* #967 B5: he is looking at them now — the count on the bubble is spent. */
+    scan(); unread = 0;
+    if (C.ui && C.ui.syncCmt) { try { C.ui.syncCmt(); } catch (e) {} }
     let downOnScrim = false;   // queue 944: close on the CLICK of a press that began on the backdrop — see js/collab-ui.js openCard
     scrim.addEventListener('pointerdown', function (e) { downOnScrim = e.target === scrim; });
     scrim.addEventListener('click', function (e) { if (e.target === scrim && downOnScrim) CM.close(); downOnScrim = false; });
@@ -486,7 +553,8 @@ window.FM = window.FM || {};
 
   /* ═══ WHAT THE REST OF THE APP CALLS ══════════════════════════════════════════════════════════ */
   /* The document changed under us — a batch from somebody else, an undo. */
-  CM.onChange = function () { CM.paintMarks(); render(); };
+  /* #967 B5: …and what arrived from somebody else is counted and said — read BEFORE the marks repaint, which scan too. */
+  CM.onChange = function () { const fresh = installed ? scan() : []; CM.paintMarks(); render(); announce(fresh); notify(); };
   /* The role changed: the composer and every button are re-decided. */
   CM.onRole = function () { if (card) { drawComposer(); render(); } };
   CM.install = function () {
@@ -497,11 +565,13 @@ window.FM = window.FM || {};
   };
   CM.uninstall = function () {
     installed = false;
+    seen = null; seenPid = undefined; seenProj = null; unread = 0;
     if (unRebuilt) { try { unRebuilt(); } catch (e) {} unRebuilt = null; }
     CM.close();
     document.querySelectorAll('.tl-cmark').forEach(function (n) { n.remove(); });
     CM.syncHead();
     showResolved = false;
+    if (C.ui && C.ui.syncCmt) { try { C.ui.syncCmt(); } catch (e) {} }
   };
   CM.installed = function () { return installed; };
 

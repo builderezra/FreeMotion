@@ -36096,7 +36096,9 @@
         x.click();
         if (C.presence.following()) throw new Error('the × did not stop Follow');
         const b2 = document.getElementById('collab-banner');
-        if (!b2 || b2.textContent !== 'View only — ask for edit access') throw new Error('after Follow stopped the banner reads ' + JSON.stringify(b2 && b2.textContent) + ', not the View only line');
+        /* #967 B5: the View only line is "View only" with an “Ask to edit” button now (J4-15) — the words and the button. */
+        const b2t = b2 && b2.querySelector('.cb-text'), b2a = b2 && b2.querySelector('.cb-act');
+        if (!b2 || !b2t || b2t.textContent !== 'View only' || !b2a || b2a.textContent !== 'Ask to edit') throw new Error('after Follow stopped the banner reads ' + JSON.stringify(b2 && b2.textContent) + ', not the View only line');
       } finally { C.presence.unfollow(); C.presence._clock(null); }
     });
   });
@@ -105964,6 +105966,355 @@
           if (FM.settings.isOpen()) FM.settings.close();
           const a = ask967b3(); if (a && a.cancel) a.cancel.click();
           if (wasHome && !FM.home.isOpen()) FM.home.open();
+        }
+      });
+    });
+  });
+
+  /* ═══ #967 BATCH 5 — COMMENTS YOU CAN FIND, AND ASKING FOR EDIT ACCESS ═════════════════════════════════════════════════
+   * His recommended picks on the options sheet (tools/design/967-options.html, “Comments you can find”): A — a speech-bubble
+   * button next to the person chip, with a count, only when there are comments or it is live; A — an “Ask” button on a
+   * Viewer's banner that pops a card on the owner's phone. Audit findings J4-5 (major) and J4-15. Pictures: tools/design/967/b5.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+  function cmtDoor967b5() { const b = document.getElementById('collab-cmt'); return b && b.getClientRects().length ? b : null; }
+  function cmtCount967b5() {
+    const b = cmtDoor967b5();
+    const n = b && b.querySelector('.ccm-n');
+    return n && n.getClientRects().length ? n.textContent : '';
+  }
+  function knock967b5() { const k = document.getElementById('collab-knock'); return k && k.getClientRects().length ? k : null; }
+  function askMsgs967b5(list) { return list.filter(function (m) { return m && m.t === 'ask'; }); }
+
+  test('967 B5 1 on a phone comments have a door on the video — a speech bubble beside LIVE while he shares, counting what is new; “Sam commented” when one arrives from someone else (the name printed as text); tapping it opens them and clears the count; his own comment and one he watched arrive count nothing; after Stop sharing it stays while the project has comments, and goes when they do', { item: '967', budgetMs: 120000 }, async function () {
+    /* J4-5 (major): the only way in was the chip → Canvas settings → Friends → Comments, only while live, and a friend's comment
+       arrived in silence — the owner got no toast and no badge (collab-comments.js only ever toasted your own actions). */
+    const C = need921S7('the comments door');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A', { duration: 6 })], async function (ctx) {
+        const got = toasts921();
+        try {
+          await atPhoneWidth(async function () {
+            ui.syncBanner(); await settle921(150);
+            const door = cmtDoor967b5();
+            if (!door) throw new Error('while he shares, nothing on the video leads to the comments — the only way in is Canvas settings → Friends → Comments (J4-5)');
+            const live = document.getElementById('collab-live');
+            if (!live || !live.getClientRects().length) throw new Error('setup: no LIVE pill on the video');
+            const dr = door.getBoundingClientRect(), lr = live.getBoundingClientRect();
+            if (dr.left < lr.right - 0.5 || dr.left - lr.right > 14 || Math.abs((dr.top + dr.height / 2) - (lr.top + lr.height / 2)) > 4) throw new Error('the comments bubble is not beside LIVE (bubble at ' + Math.round(dr.left) + ',' + Math.round(dr.top) + ', LIVE ends at ' + Math.round(lr.right) + ')');
+            if (dr.width < 24 || dr.height < 24) throw new Error('the comments bubble is ' + Math.round(dr.width) + '×' + Math.round(dr.height) + ' — under a 24 px target');
+            if (!/comment/i.test(door.getAttribute('aria-label') || '')) throw new Error('the bubble’s label is “' + door.getAttribute('aria-label') + '”');
+            if (cmtCount967b5()) throw new Error('with no comments the bubble already counts “' + cmtCount967b5() + '”');
+            /* Sam comments from his phone — the first comment in a project with none is the whole list. */
+            const EVIL = 'Sam <img src=x>';
+            const S = rawWire921(ctx, 'commenter', EVIL);
+            const a1 = S.tx([{ o: 's', p: ['P', 'comments'], v: [{ id: 'c_b5a', text: 'The logo lands late', replies: [] }] }]);
+            if (!a1 || a1.rej.length) throw new Error('setup: Sam’s comment was refused ' + JSON.stringify(a1 && a1.rej));
+            await settle921(150);
+            if (!(FM.scene.project.comments || []).some(function (c) { return c.id === 'c_b5a'; })) throw new Error('setup: Sam’s comment did not reach his screen');
+            if (got.indexOf(EVIL + ' commented') < 0) throw new Error('a comment from Sam arrived in silence — no “Sam commented” (J4-5); toasts: ' + JSON.stringify(got));
+            const t = document.getElementById('toast');
+            if (t.querySelector('img')) throw new Error('Sam’s name was parsed as HTML in the toast');
+            if (cmtCount967b5() !== '1') throw new Error('after Sam’s comment the bubble counts “' + cmtCount967b5() + '”, not 1');
+            if (!/1 new/.test(cmtDoor967b5().getAttribute('aria-label'))) throw new Error('the bubble’s label does not say what is new: “' + cmtDoor967b5().getAttribute('aria-label') + '”');
+            const a2 = S.tx([{ o: 'ai', p: ['P', 'comments'], k: '#i:c_b5b', a: '#i:c_b5a', v: { id: 'c_b5b', text: 'And the title', replies: [] } }]);
+            if (!a2 || a2.rej.length) throw new Error('setup: Sam’s second comment was refused ' + JSON.stringify(a2 && a2.rej));
+            await settle921(150);
+            if (cmtCount967b5() !== '2') throw new Error('after Sam’s second comment the bubble counts “' + cmtCount967b5() + '”, not 2');
+            /* A real tap on it opens the comments, and the count is spent. */
+            await onScreen924(async function () { await hd5Tap(cmtDoor967b5(), 'the comments bubble'); });
+            const cc = await until921S6('the comments card', function () { return document.getElementById('collab-comments'); }, 3000)
+              .catch(function () { throw new Error('tapping the comments bubble opened nothing'); });
+            if (!cc.querySelector('.cc-c[data-cid="c_b5b"]')) throw new Error('the card the bubble opened does not show Sam’s comments');
+            C.comments.close(); await settle921(80);
+            if (cmtCount967b5()) throw new Error('after opening the comments the bubble still counts “' + cmtCount967b5() + '”');
+            /* His own comment is not news to him. */
+            const before = got.length;
+            C.comments.add('Moving it now', { pin: false });
+            await settle921(320); ctx.S.tick('hot');   // the tick the suite's session does not run by itself: past §8.8's quiet, his own change is let go of
+            if (cmtCount967b5()) throw new Error('his own comment counted as new: “' + cmtCount967b5() + '”');
+            if (got.slice(before).some(function (x) { return /commented|replied/.test(x); })) throw new Error('his own comment was announced to him: ' + JSON.stringify(got.slice(before)));
+            /* …nor is one he watched arrive on the open card. */
+            C.comments.open();
+            S.tx([{ o: 'ai', p: ['P', 'comments'], k: '#i:c_b5c', a: '#i:c_b5b', v: { id: 'c_b5c', text: 'Seen it', replies: [] } }]);
+            await settle921(150);
+            if (!document.querySelector('#collab-comments .cc-c[data-cid="c_b5c"]')) throw new Error('setup: Sam’s third comment did not reach the open card');
+            C.comments.close(); await settle921(80);
+            if (cmtCount967b5()) throw new Error('a comment that arrived on the card he was reading counted as new: “' + cmtCount967b5() + '”');
+            /* A reply from Sam counts too. */
+            S.tx([{ o: 'ai', p: ['P', 'comments', '#i:c_b5a', 'replies'], k: '#i:r_b5', a: null, v: { id: 'r_b5', text: 'I mean at 0:02' } }]);
+            await settle921(150);
+            if (cmtCount967b5() !== '1') throw new Error('Sam’s reply did not count (the bubble reads “' + cmtCount967b5() + '”)');
+            /* Stop sharing: the comments are still there, and so is the way to them. */
+            C.end(); ui.syncBanner(); await settle921(150);
+            if (document.getElementById('collab-live') && document.getElementById('collab-live').getClientRects().length) throw new Error('setup: LIVE is still up after the session ended');
+            const after = cmtDoor967b5();
+            if (!after) throw new Error('after Stop sharing the comments bubble went, and the project’s comments with it (J4-5 “stranded”)');
+            const chip = [document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) { return n && n.getClientRects().length; })[0];
+            if (!chip) throw new Error('setup: no person chip after the stop');
+            const ar = after.getBoundingClientRect(), chr = chip.getBoundingClientRect();
+            if (ar.left < chr.right - 0.5 || ar.left - chr.right > 14) throw new Error('after the stop the bubble is not beside the person+ (it starts at ' + Math.round(ar.left) + ', the person+ ends at ' + Math.round(chr.right) + ')');
+            /* …and once there are none, not live, it goes (the positive control is everything above). */
+            C.comments.list().forEach(function (c) { C.comments.remove(c.id); });
+            await settle921(120);
+            if (C.comments.list().length) throw new Error('setup: the comments could not be deleted');
+            if (cmtDoor967b5()) throw new Error('with no comments and nothing shared, the bubble is still on the video');
+          }, 390);
+          /* A PC keeps its own comment surfaces — no bubble on the video. */
+          await atWideWidth(async function () {
+            C.comments.add('On the PC', { pin: false }); await settle921(120);
+            if (cmtDoor967b5()) throw new Error('a PC shows the phone’s comments bubble on the video');
+          }, 1280);
+        } finally { got.restore(); try { C.comments.close(); } catch (e) {} }
+      });
+    });
+  });
+
+  test('967 B5 2 comments are not stranded — after Stop sharing the Friends block keeps a Comments row that opens them, a shared copy with no connection has one too, neither shows one when there are none, and a friend is told “Ezra commented” and sees the count', { item: '967', budgetMs: 150000 }, async function () {
+    /* J4-5: after Stop sharing the comment was still there (count 1) and the Friends block had no Comments row (64); the
+       linked-copy panel had none either (70). */
+    const C = need921S7('the Comments row after a stop');
+    await withLabs921(async function (ui) {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const fr = function () { return document.getElementById('cv-fr-body'); };
+        const openFr = async function () {
+          if (!dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await settle921(80); }
+          FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+        };
+        /* 1 · his own project, after a stop. */
+        await withCollab921([layer921('A')], async function () {
+          await atPhoneWidth(async function () {
+            C.end(); ui.syncBanner(); await settle921(120);
+            await openFr();
+            if (!fr().querySelector('.cs-start')) throw new Error('setup: the block is not the idle panel after the stop: “' + fr().textContent.slice(0, 120) + '”');
+            if (fr().querySelector('.cs-comments')) throw new Error('CONTROL: with no comments the idle block already has a Comments row');
+            FM.closeCanvasDialog(); await settle921(80);
+            C.comments.add('Tighten the cut', { pin: false });
+            await openFr();
+            const row = fr().querySelector('.cs-comments');
+            if (!row) throw new Error('after Stop sharing the Friends block has no Comments row — the project’s comments are stranded (J4-5)');
+            if (!/Comments · 1 open/.test(row.textContent)) throw new Error('the idle block’s Comments row reads “' + row.textContent + '”');
+            row.click();
+            await until921S6('the comments card from the idle block', function () { return document.getElementById('collab-comments'); }, 3000)
+              .catch(function () { throw new Error('the idle block’s Comments row opened nothing'); });
+            C.comments.close(); await settle921(80);
+          }, 390);
+        });
+        /* 2 · a shared copy with no connection: with comments, and without. */
+        const mk = function (withComments) {
+          const D = { project: { name: 'Ezra’s film B5', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('Shared B5')] };
+          if (withComments) D.project.comments = [{ id: 'c_lcb5', by: { mid: 'o', name: 'Ezra', color: '#ff9f43' }, at: Date.now() - 60000, text: 'Check the audio', replies: [] }];
+          const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'editor', epoch: 'e-b5', seq: 0, name: 'Tester' }, D);
+          if (!gpid) throw new Error('setup: could not make the shared copy');
+          return gpid;
+        };
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        const made = [mk(false), mk(true)];
+        try {
+          if (wasHome) FM.home.close();
+          await atPhoneWidth(async function () {
+            await FM.projects.open(made[0]);
+            await openFr();
+            if (!/Shared with you/.test(fr().textContent)) throw new Error('setup: the block on a shared copy is not its panel');
+            if (fr().querySelector('.cs-comments')) throw new Error('CONTROL: a shared copy with no comments already has a Comments row');
+            FM.closeCanvasDialog(); await settle921(80);
+            await FM.projects.open(made[1]);
+            await openFr();
+            if (!/Shared with you/.test(fr().textContent)) throw new Error('setup: the block on the second shared copy is not its panel');
+            const row = fr().querySelector('.cs-comments');
+            if (!row) throw new Error('a shared copy with comments has no Comments row — Ezra’s comments on it are stranded (J4-5)');
+            row.click();
+            const cc = await until921S6('the comments card from the shared copy', function () { return document.getElementById('collab-comments'); }, 3000)
+              .catch(function () { throw new Error('the shared copy’s Comments row opened nothing'); });
+            if (!cc.querySelector('.cc-c[data-cid="c_lcb5"]')) throw new Error('the card from the shared copy does not show Ezra’s comment');
+            C.comments.close(); await settle921(80);
+            if (!cmtDoor967b5()) throw new Error('a shared copy with comments has no comments bubble on the video');
+          }, 390);
+        } finally { try { C.comments.close(); } catch (e) {} await q915aCleanup(made, orig, wasHome, [], [], []); }
+        /* 3 · a friend is told when the owner comments. */
+        await withGuestApp921('commenter', [layer921('A')], async function (g) {
+          const got = toasts921();
+          try {
+            await atPhoneWidth(async function () {
+              ui.syncBanner(); await settle921(120);
+              if (!cmtDoor967b5()) throw new Error('a friend who is in has no comments bubble on the video');
+              g.hdoc.project.comments = [{ id: 'c_ezb5', by: { mid: 'o', name: 'Ezra', color: '#ff9f43' }, at: Date.now(), text: 'Try the blue', replies: [] }];
+              g.HS.tick('hot'); g.settle(); await settle921(150);
+              if (!(FM.scene.project.comments || []).some(function (c) { return c.id === 'c_ezb5'; })) throw new Error('setup: Ezra’s comment did not reach the friend');
+              if (got.indexOf('Ezra commented') < 0) throw new Error('Ezra’s comment reached the friend in silence: ' + JSON.stringify(got));
+              if (cmtCount967b5() !== '1') throw new Error('the friend’s bubble counts “' + cmtCount967b5() + '” after Ezra’s comment');
+            }, 390);
+          } finally { got.restore(); }
+        });
+      });
+    });
+  });
+
+  test('967 B5 3 a Viewer’s “View only” banner has “Ask to edit” — one tap sends one ask, the banner says it was asked, “Ezra said not now” holds it off for a while, “didn’t answer” lets them ask again, Allow makes them an Editor, a Commenter can ask too, and an answer to nothing asked is ignored', { item: '967', budgetMs: 120000 }, async function () {
+    /* J4-15: “View only — ask for edit access” with nothing to press, and no request-edit action anywhere. */
+    const C = need921S7('asking for edit');
+    await withLabs921(async function (ui) {
+      await withGuestApp921('viewer', [layer921('A')], async function (g) {
+        const asked = [];
+        g.HA.onAsk = function (mid, info) { asked.push({ mid: mid, info: info }); };
+        const got = toasts921();
+        const sent = function () { return askMsgs967b5(g.hostGot.filter(function (x) { return x.ch === 'ctl'; }).map(function (x) { return x.msg; })); };
+        const banner = function () {
+          const b = document.getElementById('collab-banner');
+          if (!b) return { text: '', act: null };
+          const tx = b.querySelector('.cb-text'), a = b.querySelector('.cb-act');
+          return { el: b, text: tx ? tx.textContent : '', act: a && a.getClientRects().length ? a : null };
+        };
+        try {
+          await atPhoneWidth(async function () {
+            ui.syncBanner(); await settle921(150);
+            let b = banner();
+            if (!/^View only/.test(b.text)) throw new Error('setup: a Viewer’s banner reads “' + b.text + '”');
+            if (!b.act) throw new Error('a Viewer’s banner has nothing to press — “ask for edit access” with no way to ask (J4-15): “' + (b.el ? b.el.textContent : 'no banner') + '”');
+            if (b.act.textContent !== 'Ask to edit') throw new Error('the banner’s button reads “' + b.act.textContent + '”');
+            const ar = b.act.getBoundingClientRect(), br = b.el.getBoundingClientRect();
+            if (ar.right > br.right + 0.5 || ar.right > window.innerWidth || ar.height < 20) throw new Error('“Ask to edit” is cut or tiny on a 390 phone (' + JSON.stringify([Math.round(ar.left), Math.round(ar.right), Math.round(ar.height), Math.round(br.right)]) + ')');
+            const hit = document.elementFromPoint(ar.left + ar.width / 2, ar.top + ar.height / 2);
+            if (hit !== b.act && !b.act.contains(hit)) throw new Error('“Ask to edit” is covered by ' + (hit ? hit.id || hit.className : 'nothing'));
+            const tx = b.el.querySelector('.cb-text');
+            if (tx.scrollWidth > tx.clientWidth + 1) throw new Error('the banner’s words are cut: “' + tx.textContent + '”');
+            /* One real tap: one ask on the wire, and the banner says so. */
+            await onScreen924(async function () { await hd5Tap(b.act, 'Ask to edit'); });
+            g.settle(); await settle921(120);
+            const s1 = sent();
+            if (s1.length !== 1 || s1[0].w !== 'edit') throw new Error('Ask to edit sent ' + JSON.stringify(s1) + ' — one {t:"ask", w:"edit"} expected');
+            if (asked.length !== 1 || asked[0].mid !== g.mid || asked[0].info.name !== 'Guest') throw new Error('the owner’s side was not asked, or asked with the wrong name: ' + JSON.stringify(asked));
+            if (!got.some(function (x) { return /^Asked Ezra to let you edit/.test(x); })) throw new Error('the tap said nothing: ' + JSON.stringify(got));
+            b = banner();
+            if (b.act || !/asked Ezra/.test(b.text)) throw new Error('after asking the banner reads “' + b.text + '”' + (b.act ? ' and still offers “' + b.act.textContent + '”' : ''));
+            if (ui.askEdit()) throw new Error('a second ask went while the first was open');
+            if (sent().length !== 1) throw new Error('an open ask was sent again');
+            /* Not now: said, and it holds off for a while. */
+            if (!g.HS.answerAsk(g.mid, 'no')) throw new Error('setup: the owner’s side could not answer the ask');
+            g.settle(); await settle921(120);
+            if (got.indexOf('Ezra said not now') < 0) throw new Error('“Not now” reached the friend in silence: ' + JSON.stringify(got));
+            b = banner();
+            if (b.act || !/Ezra said not now/.test(b.text)) throw new Error('after Not now the banner reads “' + b.text + '”' + (b.act ? ' and offers “' + b.act.textContent + '” at once' : ''));
+            if (ui.askEdit()) throw new Error('the friend could ask again straight after Not now');
+            /* The wait is over (both sides' clocks, through their seams): Ask is back. */
+            ui._askState().until = Date.now() - 1;
+            g.HS._asks()[g.mid].noUntil = 0;
+            ui.syncBanner(); await settle921(80);
+            b = banner();
+            if (!b.act) throw new Error('once the wait is over “Ask to edit” did not come back: “' + b.text + '”');
+            /* Nobody answers: the friend is told, and may ask again at once. */
+            b.act.click(); g.settle(); await settle921(80);
+            if (sent().length !== 2 || asked.length !== 2) throw new Error('setup: the second ask did not go (' + sent().length + ' sent, ' + asked.length + ' seen)');
+            g.HS.answerAsk(g.mid, 'timeout'); g.settle(); await settle921(120);
+            if (!got.some(function (x) { return /^Ezra didn’t answer/.test(x); })) throw new Error('an ask nobody answered ended in silence: ' + JSON.stringify(got));
+            b = banner();
+            if (!b.act) throw new Error('after no answer “Ask to edit” is not offered again: “' + b.text + '”');
+            /* Allow: the owner's role change, the same path as his role menu. */
+            b.act.click(); g.settle(); await settle921(80);
+            g.HS.answerAsk(g.mid, 'yes'); g.HS.setPeerRole(g.mid, 'editor'); g.settle(); await settle921(150);
+            if (g.G.role !== 'editor') throw new Error('setup: Allow did not make the friend an Editor');
+            b = banner();
+            if (/View only/.test(b.text)) throw new Error('an Editor still sees “' + b.text + '”');
+            if (!got.some(function (x) { return /Ezra made you an Editor/.test(x); })) throw new Error('becoming an Editor was not said: ' + JSON.stringify(got));
+            /* An answer to nothing asked changes nothing and says nothing. */
+            const n0 = got.length;
+            g.loop.a.send('ctl', { t: 'ask-no' }); g.settle(); await settle921(80);
+            if (got.slice(n0).some(function (x) { return /not now|answer/.test(x); })) throw new Error('an answer to nothing the friend asked was shown: ' + JSON.stringify(got.slice(n0)));
+            /* A Commenter can ask too — the banner says what a Commenter can do. */
+            g.HS.setPeerRole(g.mid, 'commenter'); g.settle(); await settle921(120);
+            b = banner();
+            if (!/^Comments only/.test(b.text) || !b.act) throw new Error('a Commenter’s banner reads “' + b.text + '”' + (b.act ? '' : ' with nothing to press'));
+          }, 390);
+        } finally { got.restore(); }
+      });
+    });
+  });
+
+  test('967 B5 4 the owner gets “Sam asks to edit “Beach B5”” as a card — Not now tells Sam and holds further asks off, Allow makes Sam an Editor through the role change, no answer tells Sam; a flood raises one card; an Editor’s, a stranger’s or a malformed ask raises none, and no ask ever changes a role by itself', { item: '967', budgetMs: 120000 }, async function () {
+    /* J4-15, from the owner's side. The ask is a new message from an untrusted phone: only a member who is a Viewer or a
+       Commenter may send it, the name on the card is the one his own member table holds, and only his Allow changes a role. */
+    const C = need921S7('the ask-to-edit card');
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        FM.projects.rename(ctx.pid, 'Beach B5');
+        const got = toasts921();
+        try {
+          await atPhoneWidth(async function () {
+            const EVIL = 'Sam <img src=x>';
+            const V = rawWire921(ctx, 'viewer', EVIL);
+            V.say({ t: 'ask', w: 'edit' });
+            await settle921(100);
+            const card = knock967b5();
+            if (!card) throw new Error('a Viewer’s ask raised nothing on the owner’s phone (J4-15)');
+            const txt = card.querySelector('.ck-text').textContent;
+            if (txt !== EVIL + ' asks to edit “Beach B5”.') throw new Error('the ask card reads “' + txt + '”');
+            if (card.querySelector('img')) throw new Error('the asker’s name was parsed as HTML on the card');
+            const yes = card.querySelector('.ck-yes'), no = card.querySelector('.ck-no');
+            if (!yes || yes.textContent !== 'Allow' || !no || no.textContent !== 'Not now') throw new Error('the ask card’s buttons read ' + JSON.stringify([no && no.textContent, yes && yes.textContent]));
+            if (!/Editor/.test(card.textContent)) throw new Error('the card does not say what Allow does: “' + card.textContent + '”');
+            const cr = card.getBoundingClientRect();
+            if (cr.left < 0 || cr.right > window.innerWidth + 0.5) throw new Error('the ask card runs off a 390 screen');
+            /* A flood, junk and people who may not ask: still one card, and nobody's role moved. */
+            for (let i = 0; i < 25; i++) V.say({ t: 'ask', w: 'edit' });
+            const E = rawWire921(ctx, 'editor', 'Ed');
+            E.say({ t: 'ask', w: 'edit' });
+            const V2 = rawWire921(ctx, 'viewer', 'Vi');
+            [{ t: 'ask' }, { t: 'ask', w: 'owner' }, { t: 'ask', w: { a: 1 } }, { t: 'ask', w: 'edit'.repeat(9) }, { t: 'ask', w: ['edit'] }].forEach(function (m) { V2.say(m); });
+            const X = rawWire921(ctx, 'viewer', 'Gone');
+            ctx.S.dropPeer(X.mid);
+            X.say({ t: 'ask', w: 'edit' });
+            await settle921(120);
+            if (ui._knocks() !== 1) throw new Error('a flood, an Editor, a malformed ask or a stranger raised ' + ui._knocks() + ' cards — one expected');
+            if (ctx.S.host.members[V.mid].role !== 'viewer' || ctx.S.host.members[V2.mid].role !== 'viewer') throw new Error('an ask changed a role by itself');
+            if (V.got.some(function (m) { return m.t === 'role'; })) throw new Error('the asker was sent a role before anybody answered');
+            /* Not now — a real tap. */
+            await onScreen924(async function () { await hd5Tap(no, 'Not now'); });
+            await settle921(120); V.loop.settle();
+            if (knock967b5()) throw new Error('Not now left the card up');
+            const nos = V.got.filter(function (m) { return m.t === 'ask-no'; });
+            if (nos.length !== 1 || nos[0].why) throw new Error('Not now sent the asker ' + JSON.stringify(nos));
+            if (ctx.S.host.members[V.mid].role !== 'viewer') throw new Error('Not now changed the role');
+            /* Held off: asking straight away raises nothing. */
+            V.say({ t: 'ask', w: 'edit' }); await settle921(100);
+            if (knock967b5() || ui._knocks()) throw new Error('an ask straight after Not now raised another card');
+            /* V2's malformed ones raised nothing; a well-formed one from V2 does — the positive control for the junk above. It
+               CLAIMS a name and a role; the card reads the name the owner's member table holds, and the role is untouched. */
+            V2.say({ t: 'ask', w: 'edit', name: 'Ezra', role: 'editor' }); await settle921(100);
+            const c2 = knock967b5();
+            if (!c2) throw new Error('CONTROL: a well-formed ask from the second Viewer raised no card, so “the junk raised none” proved nothing');
+            if (c2.querySelector('.ck-text').textContent !== 'Vi asks to edit “Beach B5”.') throw new Error('the card took the name the ask CLAIMED: “' + c2.querySelector('.ck-text').textContent + '”');
+            if (ctx.S.host.members[V2.mid].role !== 'viewer') throw new Error('an ask claiming role:editor changed the role before anybody answered');
+            c2.querySelector('.ck-yes').click(); await settle921(150); V2.loop.settle();
+            if (ctx.S.host.members[V2.mid].role !== 'editor') throw new Error('Allow did not make the asker an Editor (role ' + ctx.S.host.members[V2.mid].role + ')');
+            if (!V2.got.some(function (m) { return m.t === 'role' && m.role === 'editor'; })) throw new Error('the asker was not told they are an Editor now');
+            if (!got.some(function (x) { return /^Vi can edit now/.test(x); })) throw new Error('Allow said nothing to the owner: ' + JSON.stringify(got));
+            if (knock967b5()) throw new Error('Allow left the card up');
+            /* An Editor now: asking again raises nothing. */
+            V2.say({ t: 'ask', w: 'edit' }); await settle921(80);
+            if (ui._knocks()) throw new Error('an Editor’s ask raised a card');
+            /* Nobody answers: the asker is told, and nothing moved. */
+            ui._knockWait(300);
+            const W = rawWire921(ctx, 'commenter', 'Wes');
+            W.say({ t: 'ask', w: 'edit' });
+            await until921S6('the Commenter’s ask card', function () { return knock967b5(); }, 2000)
+              .catch(function () { throw new Error('a Commenter’s ask raised no card'); });
+            await until921S6('the unanswered ask to end', function () { W.loop.settle(); return !knock967b5() && W.got.some(function (m) { return m.t === 'ask-no'; }) ? 1 : 0; }, 3000)
+              .catch(function () { throw new Error('an ask nobody answered did not tell the asker: ' + JSON.stringify(W.got.map(function (m) { return m.t; }))); });
+            const wn = W.got.filter(function (m) { return m.t === 'ask-no'; })[0];
+            if (wn.why !== 'timeout') throw new Error('an unanswered ask was sent as ' + JSON.stringify(wn) + ' — a Not now would hold them off for something he never said');
+            if (ctx.S.host.members[W.mid].role !== 'commenter') throw new Error('an unanswered ask changed the role');
+            ui._knockWait(null);
+            /* Somebody who leaves takes their ask with them. */
+            const Y = rawWire921(ctx, 'viewer', 'Yan');
+            Y.say({ t: 'ask', w: 'edit' }); await settle921(80);
+            if (!knock967b5()) throw new Error('setup: Yan’s ask raised no card');
+            Y.say({ t: 'bye', why: 'left' }); await settle921(120);
+            if (knock967b5() || ui._knocks()) throw new Error('the card stayed up after the asker left');
+          }, 390);
+        } finally {
+          got.restore();
+          ui._knockWait(null);
+          const kc = document.getElementById('collab-knock'); if (kc) { const n = kc.querySelector('.ck-no'); if (n) n.click(); }
         }
       });
     });
