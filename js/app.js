@@ -7066,6 +7066,12 @@ window.FM = window.FM || {};
       if (FM.closeCanvasDialog) FM.closeCanvasDialog(); else if (dlg) dlg.classList.add('hidden');
       if (FM.settings && FM.settings.open) FM.settings.open();
     });
+    /* #967 batch 2 — THE SAME DOOR IN THE CANVAS BAR (J3-9). While Friends is the big card the canvas card shrinks to its bar and
+       everything else in it — this dialog's own "App settings…" included — is set aside at 0×0, so from the editor on a phone
+       Settings had no way in at all. The bar's copy does exactly what the dialog's does; it must not ALSO swap the pair (the
+       bar's own click), so the tap stops here. */
+    const miniAppBtn = document.getElementById('cv-mini-app');
+    if (miniAppBtn && appSetBtn) miniAppBtn.addEventListener('click', (e) => { e.stopPropagation(); appSetBtn.click(); });
     // The PC top bar's ⋯ (#btn-more) used to live here, opening FM.projectMoreItems with nothing
     // selected and FM.layerMenuItems with a clip selected. Both halves were duplicates by the end:
     // the layer half is exactly what right-clicking the clip or its row head already shows, and the

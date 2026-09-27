@@ -859,6 +859,7 @@ html[data-home="light"] .hm-brand-wm::after { display: none; content: none; }
 
 /* The header's round buttons, so they sit on the glass rather than punching holes in it. */
 html[data-home="light"] .hm-search-btn,
+html[data-home="light"] #hm-join-btn,
 html[data-home="light"] #hm-select-btn {
   background-color: rgba(255, 255, 255, .72);
   border-color: rgba(20, 50, 80, .16);
@@ -1162,6 +1163,11 @@ html[data-home="light"] body.home-open .set-action.danger:not(:disabled) {
 html[data-home="light"] body.home-open .set-action.danger:not(:disabled):hover {
   color: #b01f37; background-color: rgba(198, 39, 64, .14); border-color: rgba(198, 39, 64, .55);
 }
+/* #967 batch 2: a group's heading ("Work with friends") and the folded Reports row. #1780b4 is the light Home's accent ink
+   (4.6:1 on the card); the dark theme's cyan is 2:1 on white. */
+html[data-home="light"] body.home-open .set-grouptitle { color: #1780b4; }
+html[data-home="light"] body.home-open .set-reports-body { border-top-color: rgba(16, 30, 52, .08); }
+html[data-home="light"] body.home-open .set-reports-chev { border-color: #5a6478; }
 /* The report boxes: a quiet well inside the white card, with ink that still reads at 11px. */
 html[data-home="light"] body.home-open .set-perf-out { background: #f3f5f9; border-color: rgba(16, 30, 52, .10); color: #46566e; }
 /* Test connection's ✓ and ✕ (S8 review): #57d98a and #ff8a8a are picked to glow on near-black and are 1.7:1 and
@@ -1286,6 +1292,10 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cs-copycode,
 .collab-scrim.collab-light .cj-alt { background-color: #ffffff; border-color: rgba(16, 30, 52, .14); color: #10151f; }
 .collab-scrim.collab-light .cj-fieldrow .cj-scan.on { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }   /* S8 */
+/* #967 batch 2: the fresh-Safari landing card's optional step and its "I already have the app" link. */
+.collab-scrim.collab-light .cl-after { background-color: rgba(16, 30, 52, .035); border-color: rgba(16, 30, 52, .12); }
+.collab-scrim.collab-light .cl-after-t { color: #10151f; }
+.collab-scrim.collab-light .cs-slink { color: #1780b4; }
 .collab-scrim.collab-light .cs-linkrow .cs-copylink.accent,
 .collab-scrim.collab-light .cj-alt.accent { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
 .collab-scrim.collab-light .cs-relay,

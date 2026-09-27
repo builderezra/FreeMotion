@@ -1915,8 +1915,8 @@ open with "Ezra stopped sharing — this is now your own copy" / "Ezra removed y
 
 ## 23. Solo editing unchanged (clause 16)
 
-- With Labs off, **no collab DOM exists**: no `#collab-people`, no `#hm-join-btn`, no `.hm-live`, **and no
-  `#btn-share` at all**.
+- With Labs off, **no collab DOM exists** beyond the two doors below (#967 batch 2): no `#collab-people`, no `.hm-live`,
+  and no `#btn-share` anywhere but the phone's person+ on the video.
   **Corrected in S3, because the original line contradicted itself:** it said "no collab DOM exists… and
   `#btn-share` stays `.hidden`", and a hidden button is DOM. §4.2 wanted the button written into
   index.html's markup. `js/collab-ui.js` builds it on install and removes it on uninstall instead, for
@@ -1924,6 +1924,19 @@ open with "Ezra stopped sharing — this is now your own copy" / "Ezra removed y
   page" is checkable in one line where "there is one but it has a class on it" is one CSS regression away
   from being false; and the S2 inertness test already asserted `!document.getElementById('btn-share')`,
   so the gate that guards this needed no exemption for the stage that ships the UI.
+  **Relaxed by #967 batch 2 — "one door, no network, no listeners".** "No collab DOM with Labs off" meant every way in
+  appeared only after a switch buried at the bottom of Settings; his words were *"you can't even send it to your friends
+  … buried it all in a deeper setting"*. Asked on the options sheet whether one sharing door may show while the feature is
+  off, the recommended answer (built, as his standing rule says, when he has not answered) was yes. So with Labs off the
+  page holds exactly two collaboration elements, each ONE button with its own click handler and nothing else — no
+  listener on the document, no timer, no socket:
+  - the phone's round person+ on the video (`#btn-share.cs-door`, on `#stage`; CSS hides it above 700 px, so a PC's layout
+    is unchanged), which opens the Friends block's explanation and its "Work with friends" switch;
+  - Home's worded **Join** (`#hm-join-btn`, beside Select), which opens the one-tap "Turn on Work with friends to join"
+    card and then the Join sheet.
+  Everything else — `#collab-people`, the LIVE pill, the banner, a knock, any card or scrim — is still absent until the
+  switch is on. The suite's rule is `doors23` in `tests/tests.js`, used by the S2 inertness test, the S3 Labs-gate test
+  (which also presses Home's Join and counts constructions), the transport-rebuild test and the 945 Labs-off test.
 - **No listeners, timers, WebSockets or RTCPeerConnections** exist until a session starts. `collab-core.js`'s only work at load is the `#j=` stash and the test-agent gate.
   **As built (S6):** the two document listeners (`visibilitychange`, `online`) exist only while he hosts or a
   relay join or reconnect is running, and every WebSocket is constructed behind `relayGate()` — which Codes

@@ -30555,8 +30555,10 @@
        for `<button id="btn-share" class="hidden">` in the markup and §23 promised in the same breath
        that "no collab DOM exists"; both cannot hold. collab-ui.js builds the button on install and
        removes it on uninstall, so this line needs no exemption for the stage that ships the UI —
-       see the decision note at the top of js/collab-ui.js. (queue 921 S3) */
-    if (document.getElementById('collab-people') || document.getElementById('hm-join-btn') || document.getElementById('btn-share')) throw new Error('collab DOM exists on a page whose Labs switch is off — §23 promises a solo user no collaboration DOM at all, not hidden collaboration DOM');
+       see the decision note at the top of js/collab-ui.js. (queue 921 S3)
+       📐 RELAXED BY #967 BATCH 2, on his pick ("one door, no network, no listeners"): with Labs off the page may hold the
+       phone's person+ on the video and Home's worded Join — one button each — and nothing else. doors23 is that rule. */
+    doors23('the S2 inertness check');
     /* ⚠️ THE LISTENERS ARE THE POINT OF §23, and they are the one thing here a solo user could feel.
        The bridge installs capture listeners on document for pointer and key events; with no session
        there must be none, and `installed()` is how that is stated. */
@@ -32859,7 +32861,10 @@
     });
   });
 
-  test('921 S3 with the Labs switch off there is no collab DOM, and nothing in a solo session ever constructs a connection', { item: '921', budgetMs: 120000 }, async function () {
+  /* 📐 #967 BATCH 2 RENAMED THIS, ON HIS PICK: it was "…there is no collab DOM…". Asked whether one sharing door may show
+     while the feature is off, the recommended answer he builds by was yes — one button that only opens the explanation and
+     the switch, with no network and no listeners. So the rule this measures is doors23's, and the doors are pressed too. */
+  test('921 S3 with the Labs switch off the only collab DOM is the two doors — one button each, no network, no listeners — and nothing in a solo session ever constructs a connection', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S3('the Labs gate');
     const was = FM.settings.get('collabLabs');
     const RTC = window.RTCPeerConnection, WS = window.WebSocket, F = window.fetch;
@@ -32893,21 +32898,30 @@
          settings.js and every assertion below would still pass. */
       if (!('collabLabs' in FM.settings.get())) throw new Error('collabLabs is not one of the settings \u2014 the Labs switch has no stored preference behind it, so it cannot survive a reload');
       FM.settings.set('collabLabs', false);
-      ['btn-share', 'hm-join-btn', 'collab-banner', 'collab-knock', 'collab-share', 'collab-join', 'collab-profile'].forEach(function (id) {
-        if (document.getElementById(id)) throw new Error('#' + id + ' is in the page with Labs off — §23 promises a solo user no collaboration DOM at all, not hidden collaboration DOM');
-      });
-      if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page with Labs off');
+      doors23('with Labs off');
+      /* CONTROL: the doors are really there — a page with nothing in it would pass the line above for the wrong reason. */
+      const door = document.getElementById('hm-join-btn');
+      if (!door) throw new Error('CONTROL: with Labs off Home has no Join door — §23 as relaxed allows exactly this one, and a friend with a code needs it');
       if (C.ui.isInstalled()) throw new Error('the UI reports itself installed with Labs off');
       count();
       await solo();
       if (rtc || ws || offsite.length) throw new Error('a solo session with Labs off constructed ' + rtc + ' RTCPeerConnection, ' + ws + ' WebSocket and called out to ' + JSON.stringify(offsite));
+      /* …and pressing a door explains and offers the switch — it connects nothing and starts nothing listening. */
+      door.click();
+      await new Promise(function (r) { setTimeout(r, 150); });
+      if (!document.getElementById('collab-labs-ask')) throw new Error('with Labs off Home’s Join opened nothing — the door has to say what it is and offer the switch');
+      C.ui.close();
+      if (rtc || ws || offsite.length) throw new Error('pressing Home’s Join with Labs off constructed ' + rtc + ' RTCPeerConnection, ' + ws + ' WebSocket and called out to ' + JSON.stringify(offsite));
+      if (C.ui.isInstalled() || C.bridge.installed() || FM.settings.get('collabLabs')) throw new Error('pressing Home’s Join with Labs off installed something or turned Labs on by itself');
+      doors23('after pressing Home’s Join with Labs off');
       /* …and with the switch ON but nothing shared. This is the half §23(b) names, and the half a
          rendezvous driver would break the moment one is added (S6). */
       /* …and SETTING IT IS ALL IT TAKES: `apply()` owns the sync, which is the one place that runs at
          boot AND on every change. `syncLabs()` is deliberately NOT called here \u2014 if it had to be, the
          switch would only work when something remembered to call it. */
       FM.settings.set('collabLabs', true);
-      if (!document.getElementById('btn-share')) throw new Error('CONTROL: turning the setting on did not add the share button, so either the emptiness above is absence rather than a working gate, or settings.apply() does not sync the Labs UI and the switch does nothing on its own');
+      const sb = document.getElementById('btn-share');
+      if (!sb || sb.classList.contains('cs-door')) throw new Error('CONTROL: turning the setting on did not add the share button (or left it the Labs-off door), so either the emptiness above is absence rather than a working gate, or settings.apply() does not sync the Labs UI and the switch does nothing on its own');
       rtc = 0; ws = 0; offsite = [];
       await solo();
       if (rtc || ws || offsite.length) throw new Error('Labs on but nothing shared still constructed ' + rtc + ' RTCPeerConnection, ' + ws + ' WebSocket and called out to ' + JSON.stringify(offsite) + ' — S3 ships no rendezvous driver and must reach nothing at all until he taps Share');
@@ -33490,19 +33504,32 @@
       /* Put the row through the one order that matters: narrow (teardown) → wide (a BUILD, which is the
          only thing that records #btn-share in `_pcHomes`) → Labs off → narrow again. */
       await atPhoneWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 380);
-      await atWideWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 1280);
-      const t = document.getElementById('transport');
-      const homes = (t && t._pcHomes) || [];
-      if (!homes.some(function (h) { return h && h.el && h.el.id === 'btn-share'; })) {
-        throw new Error('CONTROL: the transport row did not borrow #btn-share, so the teardown below has nothing of ours to put back and this test measures nothing');
-      }
-      FM.settings.set('collabLabs', false);
-      if (document.getElementById('btn-share')) throw new Error('CONTROL: turning Labs off did not remove the button in the first place');
-      await atPhoneWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 380);
-      const back = document.getElementById('btn-share');
-      if (back) throw new Error('#btn-share is back in the page with Labs OFF, in ' + (back.parentNode && (back.parentNode.id || back.parentNode.className)) +
-        ' — pcTransportTeardown re-inserts every node it recorded whether or not it is still in the document, and the click listener survives removeChild, so §23’s "no collaboration DOM at all" is broken by a live-looking button that does nothing (U.share returns early with Labs off). uninstall() cannot sweep it either: it had already latched installed=false');
-      if (!C.ui.isInstalled()) { /* the switch is off, which is what we want */ }
+      /* #967 batch 2: Labs goes off AT 1280, where the button really is the bar's, and §23 is now doors23's rule — the phone's
+         door on the video is allowed (a NEW node, on #stage); the node the transport row borrowed must never come back. */
+      let old = null;
+      await atWideWidth(async function () {
+        if (FM.pcTransportLayout) FM.pcTransportLayout();
+        const t = document.getElementById('transport');
+        const homes = (t && t._pcHomes) || [];
+        if (!homes.some(function (h) { return h && h.el && h.el.id === 'btn-share'; })) {
+          throw new Error('CONTROL: the transport row did not borrow #btn-share, so the teardown below has nothing of ours to put back and this test measures nothing');
+        }
+        old = document.getElementById('btn-share');
+        FM.settings.set('collabLabs', false);
+        if (old.isConnected) throw new Error('CONTROL: turning Labs off did not remove the button in the first place');
+        doors23('at 1280 with Labs off');
+      }, 1280);
+      const came = function () {
+        if (!old.isConnected) return;
+        throw new Error('#btn-share is back in the page with Labs OFF, in ' + (old.parentNode && (old.parentNode.id || old.parentNode.className)) +
+          ' — pcTransportTeardown re-inserts every node it recorded whether or not it is still in the document, and the click listener survives removeChild, so §23’s "one door, nothing else" is broken by a live-looking button that does nothing (U.share returns early with Labs off). uninstall() cannot sweep it either: it had already latched installed=false');
+      };
+      await atPhoneWidth(async function () {
+        if (FM.pcTransportLayout) FM.pcTransportLayout();
+        came();
+        doors23('narrowed to 380 with Labs off');
+      }, 380);
+      came();
       FM.settings.set('collabLabs', true);
     });
   });
@@ -38202,8 +38229,11 @@
 
   /* #967 CHANGED THIS TEST'S WORDING, ON PURPOSE: it pinned "Settings → Labs", and Settings has no Labs heading — the row is
      "Live collaboration (preview)", at the bottom (audit J2-3 / J5-1). His words: "you can't even send it to your friends …
-     make sure it … actually makes sense for someone who doesn't know how to use it". The step now names the real row. */
-  test('921 S6 review: the iPhone landing card says how to reach Join in the app — the Live collaboration row in Settings first (#967: not “Settings → Labs”, which does not exist), then the ⎇ button', { item: '921', budgetMs: 60000 }, async function () {
+     make sure it … actually makes sense for someone who doesn't know how to use it". The step now names the real row.
+     📐 …AND #967 BATCH 2 RENAMED IT (was "…the Live collaboration row in Settings first (#967: not “Settings → Labs”, which does
+     not exist), then the ⎇ button"): Home's Join is a worded button that is there with the feature off too (his pick A), and
+     with it off it asks to turn it on in one tap — so the steps go straight to it, and the Settings step is gone. */
+  test('921 S6 review: the iPhone landing card says how to reach Join in the app — straight to Home’s worded Join (#967 batch 2: always there, so no trip to Settings first)', { item: '921', budgetMs: 60000 }, async function () {
     const C = need921S6('the landing card’s steps');
     const S = C.signal;
     await withLabs921(async function (ui) {
@@ -38213,9 +38243,13 @@
         ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1', maxTouchPoints: 5 }, standalone: false });
         await ui.resumePendingJoin();
         const steps = Array.prototype.map.call(document.querySelectorAll('#collab-landing .cl-steps li'), function (li) { return li.textContent; }).join(' | ');
-        if (!/Settings → Live collaboration/.test(steps)) throw new Error('the steps never say to turn on Live collaboration, by the name the row really has — with it off (the default) the app has no Join anywhere: ' + steps);
-        if (/Settings → Labs/.test(steps)) throw new Error('the steps send him to “Settings → Labs”, which Settings does not have (#967): ' + steps);
-        if (!/⎇/.test(steps)) throw new Error('the steps do not say what the Join button looks like: ' + steps);
+        if (/Settings →/.test(steps)) throw new Error('the steps still send him to Settings first — Home’s Join is there with the feature off and asks to turn it on itself (#967 batch 2): ' + steps);
+        if (!/On Home, tap Join, then Paste/.test(steps)) throw new Error('the steps do not name Home’s Join by the word it wears: ' + steps);
+        /* …and the step is true: Home really has that word on a button, with the feature off as well as on. */
+        FM.settings.set('collabLabs', false); ui.syncLabs();
+        const hj = document.getElementById('hm-join-btn');
+        if (!hj || hj.textContent.trim() !== 'Join') throw new Error('the steps say “tap Join” and with the feature off Home has ' + (hj ? '“' + hj.textContent.trim() + '”' : 'no Join'));
+        FM.settings.set('collabLabs', true); ui.syncLabs();
       } finally {
         ui._iosProbe(null); ui.close();
         if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
@@ -101096,14 +101130,12 @@
               if (sws.length !== 1) throw new Error('with Labs off the block shows ' + sws.length + ' switch(es), not the one that turns live sharing on');
               if (!/being tested/i.test(bodyEl.textContent)) throw new Error('with Labs off the block does not say live sharing is being tested');
               if (bodyEl.querySelector('.cs-start')) throw new Error('with Labs off the block offers Start sharing');
-              ['btn-share', 'hm-join-btn', 'collab-banner', 'collab-knock', 'collab-share', 'collab-join', 'collab-profile'].forEach(function (id) {
-                if (document.getElementById(id)) throw new Error('#' + id + ' is in the page with Labs off (§23)');
-              });
-              if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page with Labs off');
+              doors23('the Labs-off Friends block');   // #967 batch 2: the two doors, and nothing else (§23 as relaxed)
               if (C.ui.isInstalled()) throw new Error('the collab UI installed itself with Labs off');
               sws[0].click(); await settle921(200);
               if (FM.settings.get('collabLabs') !== true) throw new Error('the switch in the block did not turn Labs on');
-              if (!document.getElementById('btn-share')) throw new Error('CONTROL: Labs is on but the phone person+ is not in the page');
+              const on945 = document.getElementById('btn-share');
+              if (!on945 || on945.classList.contains('cs-door')) throw new Error('CONTROL: Labs is on but the phone person+ is not in the page (or is still the Labs-off door)');
               if (!bodyEl.querySelector('.cs-start')) throw new Error('after turning it on the block does not offer Start sharing');
               if (C.session) throw new Error('turning Labs on from the block started sharing');
               if (net.constructed !== c0) throw new Error('turning Labs on from the block opened ' + (net.constructed - c0) + ' relay socket(s)');
@@ -102111,14 +102143,17 @@
         await ui.resumePendingJoin();
         const lc = document.getElementById('collab-labs-ask');
         bad(lc.textContent, 'the invite’s Labs card');
-        if (!/Settings → Live collaboration/.test(lc.textContent)) throw new Error('the invite’s Labs card does not name the real row');
+        /* #967 batch 2: Settings has a “Work with friends” heading now (checked at the end of this test), so that is the real place. */
+        if (!/Settings → Work with friends/.test(lc.textContent)) throw new Error('the invite’s Labs card does not name the real place: “' + lc.textContent.slice(0, 200) + '”');
         ui.close();
         ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', maxTouchPoints: 5 }, standalone: false });
         localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() }));
         await ui.resumePendingJoin();
         const land = document.getElementById('collab-landing');
         bad(land.textContent, 'the iPhone landing card');
-        if (!/Settings → Live collaboration/.test(land.textContent)) throw new Error('the landing card does not name the real row');
+        /* #967 batch 2: Home's Join is a worded button that is always there, so the steps go straight to it — no trip to Settings. */
+        if (!/tap Join/.test(land.textContent) || /Settings →/.test(land.textContent)) throw new Error('the landing card does not send him straight to Home’s Join: “' + land.textContent.slice(0, 200) + '”');
+        if (!document.getElementById('hm-join-btn') || document.getElementById('hm-join-btn').textContent.trim() !== 'Join') throw new Error('the landing card says “tap Join” and Home has no Join with the feature off');
         ui.close();
         ui._iosProbe(null);
         /* The Friends block with Labs off. */
@@ -102129,7 +102164,7 @@
               await entranceDone(document.getElementById('canvas-dialog')); await land945();
               const t = document.getElementById('cv-fr-body').textContent;
               bad(t, 'the Labs-off Friends block');
-              if (!/Settings → Live collaboration \(at the bottom\)/.test(t)) throw new Error('the Friends block does not say where the off switch really is');
+              if (!/turn it off here any time/.test(t)) throw new Error('the Friends block does not say the off switch is right here (#967 batch 2): “' + t.slice(0, 200) + '”');
             });
           });
         });
@@ -102172,6 +102207,7 @@
         FM.settings.open(); await sleep(350);
         const jr = Array.prototype.filter.call(document.querySelectorAll('.set-row'), function (r) { return /Join a live project/.test(r.textContent); })[0];
         if (!jr || !/Paste the link or code they sent you, or type the short code/.test(jr.textContent)) throw new Error('the Settings Join hint reads “' + (jr && jr.textContent) + '”');
+        if (!Array.prototype.some.call(document.querySelectorAll('.set-panel .set-grouptitle'), function (h) { return h.textContent.trim() === 'Work with friends'; })) throw new Error('the Labs card names “Settings → Work with friends” and Settings has no such heading');
         FM.settings.close(); await sleep(300);
       } finally {
         ui._iosProbe(null);
@@ -102784,6 +102820,613 @@
           C.end();
         });
       } finally { got.restore(); }
+    });
+  });
+
+
+  /* ═══ #967 BATCH 2 — DOORS AND SWITCHES HE CAN SEE ═════════════════════════════════════════════════════════════════════
+   * His words: "there's a switch to turn it on, but you can never turn it off on any project ever … you can't even send it to
+   * your friends … buried it all in a deeper setting … actually makes sense for someone who doesn't know how to use it".
+   * Batch 1 (v17.06) fixed the logic; this batch puts the doors and switches where a first-timer can see them, built to the
+   * RECOMMENDED pick of every question on the options sheet (tools/design/967-options.html, pictures in tools/design/967/) —
+   * he had not answered, and his standing rule is to build the recommendation. Each test below fails on v17.06.
+   * ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+  /* §23 AS RELAXED BY #967 BATCH 2 — his answer to "is it OK to show one sharing door while the feature is off": yes, one
+     button that only opens the explanation and the switch, with no network and no listeners. With Labs off the page may hold
+     the phone's person+ on the video (#btn-share, on #stage, shown only at a phone width) and Home's worded Join
+     (#hm-join-btn) — one button each — and nothing else: no chip, no LIVE marker, no banner, no knock, no card, no scrim. */
+  function doors23(where) {
+    ['collab-people', 'collab-live', 'collab-banner', 'collab-knock', 'collab-share', 'collab-join', 'collab-profile'].forEach(function (id) {
+      if (document.getElementById(id)) throw new Error('#' + id + ' is in the page with Labs off (' + where + ') — §23 allows the two doors and nothing else');
+    });
+    if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page with Labs off (' + where + ')');
+    if (document.querySelectorAll('#btn-share').length > 1 || document.querySelectorAll('#hm-join-btn').length > 1) throw new Error('a door is in the page twice (' + where + ')');
+    const b = document.getElementById('btn-share');
+    if (b) {
+      if (!b.parentNode || b.parentNode.id !== 'stage') throw new Error('with Labs off #btn-share is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ' (' + where + ') — the one share door allowed is the person+ on the video');
+      if (!matchMedia('(max-width: 700px)').matches && b.getClientRects().length) throw new Error('with Labs off a PC shows the share door (' + where + ') — it is the phone’s door; a PC keeps its layout');
+    }
+    const j = document.getElementById('hm-join-btn');
+    if (j && j.textContent.trim() !== 'Join') throw new Error('Home’s door reads “' + j.textContent.trim() + '” (' + where + ')');
+  }
+  /* The "Work with friends" row at the foot of whatever the Friends block (or the Share card) is showing. */
+  function offRow967(root) {
+    const r = root && root.querySelector('.cs-offrow');
+    if (!r) return null;
+    const sw = r.querySelector('[role=switch]');
+    return { row: r, sw: sw, on: !!sw && sw.getAttribute('aria-checked') === 'true',
+      label: ((r.querySelector('.cs-slabel') || {}).textContent || '').trim(), hint: ((r.querySelector('.cs-shint') || {}).textContent || '').trim() };
+  }
+  /* On screen, inside its box, big enough to press, and not covered at its centre. */
+  function box967(el, box, what) {
+    const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (!(r.width >= 24 && r.height >= 24)) throw new Error(what + ' is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px — not on screen, or under a 24 px target');
+    if (r.top < b.top - 1 || r.bottom > b.bottom + 1 || r.left < b.left - 1 || r.right > b.right + 1) throw new Error(what + ' is cut off: ' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(',') + ' in a box of ' + [b.left, b.top, b.right, b.bottom].map(Math.round).join(','));
+    const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (!h || (h !== el && !el.contains(h))) throw new Error(what + ' is covered at its centre by ' + (h ? (h.id || String(h.className) || h.tagName) : 'nothing'));
+  }
+
+  test('967 B2 1 a “Work with friends” on/off row stays at the foot of the Friends block in every state — off, idle, live, the gear’s settings, a guest, a shared copy — and on the PC Share card; off from there asks first, and the off block says to turn it off HERE', { item: '967', budgetMs: 180000 }, async function () {
+    /* R1 / J3-1 (blocker), J1-2, J4-1, J5-1 — his pick A: "a quiet switch row at the foot of the Friends block, in every state.
+       It sits exactly where he turned it on." Measured at v17.06: the block showed a switch only while the feature was OFF. */
+    const C = need921S7('the off switch that stays');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await with945(async function () {
+          const dlg = document.getElementById('canvas-dialog');
+          const fr = function () { return document.getElementById('cv-fr-body'); };
+          const openFr = async function () {
+            if (!dlg.classList.contains('hidden') && FM.closeCanvasDialog) { FM.closeCanvasDialog(); await settle921(80); }
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+          };
+          const row = function (what, on) {
+            const o = offRow967(fr());
+            if (!o) throw new Error(what + ': the Friends block has no “Work with friends” on/off row — once it is on, nothing here can turn it off (J3-1): “' + fr().textContent.slice(0, 140) + '”');
+            if (o.label !== 'Work with friends') throw new Error(what + ': the row is labelled “' + o.label + '”');
+            if (o.on !== on) throw new Error(what + ': the row’s switch reads ' + (o.on ? 'on' : 'off') + ' while the feature is ' + (on ? 'on' : 'off'));
+            box967(o.sw, document.getElementById('cv-friends'), what + ': the switch');
+            return o;
+          };
+          /* 1 · nothing shared: off, then on from the row itself. */
+          await editorWithShape(async function () {
+            await atPhoneWidth(async function () {
+              FM.settings.set('collabLabs', false); ui.syncLabs();
+              await openFr();
+              let o = row('with the feature off', false);
+              const t0 = fr().textContent;
+              if (/Settings →/.test(t0)) throw new Error('with the feature off the block still sends him to Settings to turn it off again: “' + t0.slice(0, 220) + '”');
+              if (!/turn it off here any time/.test(t0)) throw new Error('with the feature off the block does not say it can be turned off HERE: “' + t0.slice(0, 220) + '”');
+              o.sw.click(); await settle921(200);
+              if (FM.settings.get('collabLabs') !== true) throw new Error('the row’s switch did not turn the feature on');
+              o = row('idle, not shared yet', true);
+              if (!/turn it off here any time/.test(o.hint)) throw new Error('idle, the row reads “' + o.hint + '”');
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          });
+          /* 2 · live: the Share panel and the gear's Sharing settings — and turning it off from here asks first. */
+          await withCollab921([layer921('A')], async function () {
+            await atPhoneWidth(async function () {
+              await openFr();
+              if (!fr().querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+              row('live, the Share panel', true);
+              fr().querySelector('.cs-gear').click(); await settle921(100);
+              if (!fr().querySelector('.cs-sgroup')) throw new Error('setup: the gear did not open Sharing settings');
+              row('live, the gear’s Sharing settings', true);
+              fr().querySelector('.cs-gear').click(); await settle921(100);
+              row('live, back on the Share panel', true).sw.click();
+              const cancel = await until921S6('the confirm', function () { return askUp967() ? document.querySelector('#fm-ask .fm-ask-cancel') : null; }, 3000)
+                .catch(function () { throw new Error('turning it off from the block while sharing asked nothing — Batch 1’s confirm is the one thing between a tap and everyone’s session ending'); });
+              cancel.click(); await settle921(150);
+              if (!C.session || FM.settings.get('collabLabs') !== true) throw new Error('answering Cancel turned it off anyway');
+              row('after Cancel', true).sw.click();
+              (await askOk921()).click();
+              await until921S6('the feature to go off', function () { return FM.settings.get('collabLabs') === false ? 1 : 0; }, 4000)
+                .catch(function () { throw new Error('answering Turn off did not turn it off'); });
+              await settle921(150);
+              if (C.session) throw new Error('turning it off from the block left the session running');
+              row('after turning it off from the block', false);
+              FM.closeCanvasDialog(); await settle921(80);
+              FM.settings.set('collabLabs', true); ui.syncLabs();
+            }, 390);
+          });
+          /* 3 · the PC's Share card has the same row. */
+          await withCollab921([layer921('A')], async function () {
+            await atWideWidth(async function () {
+              await ui.share(); await settle921(420);
+              const card = document.getElementById('collab-share');
+              const o = offRow967(card);
+              if (!o || !o.on || o.label !== 'Work with friends') throw new Error('on a PC the Share card has no “Work with friends” on/off row');
+              box967(o.sw, card, 'the PC Share card’s switch');
+              ui.close();
+            }, 1280);
+          });
+          /* 4 · a guest: the row says what turning it off does to THEM. */
+          const fx = guest967(C);
+          const wasHome = FM.home.isOpen();
+          try {
+            C.attach(fx.G, { autoTick: false });
+            if (wasHome) FM.home.close();
+            await atPhoneWidth(async function () {
+              await openFr();
+              if (!/Shared with you/.test(fr().textContent)) throw new Error('setup: the block is not the guest panel');
+              const o = row('a guest', true);
+              if (!/Ezra/.test(o.hint)) throw new Error('a guest’s row reads “' + o.hint + '” — turning it off leaves Ezra’s project, and it should say so');
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally {
+            await dropFixture967(C, [fx.gpid]);
+            if (wasHome && !FM.home.isOpen()) FM.home.open();
+          }
+          /* 5 · a shared copy with no session (it joined with a code, so it has nothing to reconnect through). */
+          const wasHome2 = FM.home.isOpen(), orig = FM.projects.currentId();
+          const lc = linkedCopy921(C, { meta: {} });
+          try {
+            if (wasHome2) FM.home.close();
+            await FM.projects.open(lc.gpid);
+            await atPhoneWidth(async function () {
+              await openFr();
+              if (!/Shared with you/.test(fr().textContent)) throw new Error('setup: the block on a shared copy is not its panel');
+              row('a shared copy with no session', true);
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally { await q915aCleanup([lc.gpid], orig, wasHome2, [], [], []); }
+        });
+      });
+    });
+  });
+
+  test('967 B2 2 on a phone the round person+ is on the video even with the feature off — a 44 px target that opens the explanation and its switch and connects nothing — it stays with a layer selected, and a PC gets no door', { item: '967', budgetMs: 90000 }, async function () {
+    /* R3 / J1-1, J1-10, J1-11 — his picks: A (the door on the video, always), yes (one door with the feature off: no network,
+       no listeners) and A (the chip stays with a layer selected). Measured at v17.06: no door at all with the feature off, and
+       display:none in Select (styles.css `body.sel-mode .collab-people`). */
+    const C = need921S7('the always-there share door');
+    const was = FM.settings.get('collabLabs');
+    await withFakeNet921(async function (net) {
+      await editorWithShape(async function (L) {
+        await with945(async function () {
+          const dlg = document.getElementById('canvas-dialog');
+          try {
+            FM.settings.set('collabLabs', false); C.ui.syncLabs();
+            await atPhoneWidth(async function () {
+              FM.selectLayer(null); FM.refreshAll(); await settle921(150);
+              const st = document.getElementById('stage');
+              const b = document.getElementById('btn-share');
+              if (!b) throw new Error('with the feature off a phone has no way in on the video — every door appeared only after a switch buried in Settings (J1-1)');
+              if (b.parentNode !== st) throw new Error('the door is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ', not on the video');
+              const r = b.getBoundingClientRect();
+              if (!(r.width >= 24 && r.height >= 24)) throw new Error('the door is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' — not on screen, or under a 24 px target');
+              /* 44 px to hit: every point of a 44 px square centred on the drawn circle that is on the video lands on the door. */
+              const sr = st.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+              const miss = [];
+              for (let dx = -21; dx <= 21; dx += 7) for (let dy = -21; dy <= 21; dy += 7) {
+                const x = cx + dx, y = cy + dy;
+                if (x < sr.left + 1 || y < sr.top + 1) continue;          // off the video: the phone's bar, not the door's to claim
+                const h = document.elementFromPoint(x, y);
+                if (!h || (h !== b && !b.contains(h))) miss.push(dx + ',' + dy + '→' + (h ? (h.id || String(h.className) || h.tagName) : 'nothing'));
+              }
+              if (miss.length) throw new Error('the door is not a 44 px target — ' + miss.length + ' points of the square around it land elsewhere: ' + miss.slice(0, 4).join(' | '));
+              doors23('the phone editor, feature off');
+            }, 390);
+            const c0 = net.constructed;
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () { await hd5Tap(document.getElementById('btn-share'), 'the person+ on the video'); });
+              await until921S6('the Friends block', function () { return !dlg.classList.contains('hidden') && dlg.classList.contains('cv-fr-big') ? 1 : 0; }, 5000)
+                .catch(function () { throw new Error('with the feature off, the person+ on the video opened nothing'); });
+              await land945();
+              const body = document.getElementById('cv-fr-body');
+              const sw = body.querySelector('[role=switch]');
+              if (!sw || sw.getAttribute('aria-checked') !== 'false' || !/being tested/i.test(body.textContent)) throw new Error('the door did not open the explanation and its switch: “' + body.textContent.slice(0, 140) + '”');
+              if (net.constructed !== c0) throw new Error('the door opened ' + (net.constructed - c0) + ' socket(s) with the feature off');
+              if (C.ui.isInstalled() || C.bridge.installed() || (C.presence && C.presence.attached && C.presence.attached())) throw new Error('the door installed the collaboration UI, the bridge or presence with the feature off');
+              if (document.querySelector('.collab-scrim')) throw new Error('the door put a card over the editor instead of opening the Friends block');
+              FM.closeCanvasDialog(); await settle921(100);
+            }, 360);
+            /* A layer selected (the phone's edited layer), then Select: the door stays. */
+            for (const on of [false, true]) {
+              FM.settings.set('collabLabs', on); C.ui.syncLabs();
+              await atPhoneWidth(async function () {
+                FM.selectLayer(L.id); FM.refreshAll(); await settle921(150);
+                if (!document.body.classList.contains('m-editing')) throw new Error('setup: selecting the layer did not make it the phone’s edited layer');
+                let b = document.getElementById('btn-share');
+                if (!b || !b.getClientRects().length || !(b.getBoundingClientRect().width > 0)) throw new Error('with a layer selected the person+ is hidden' + (on ? '' : ' (feature off)'));
+                FM.selectMode = true; FM.syncSelectionChrome(); await settle921(100);
+                if (!document.body.classList.contains('sel-mode')) throw new Error('setup: Select mode did not come on');
+                b = document.getElementById('btn-share');
+                if (!b || !b.getClientRects().length || !(b.getBoundingClientRect().width > 0)) throw new Error('in Select the person+ is hidden' + (on ? '' : ' (feature off)') + ' — display:none whenever layers are being selected (J1-10)');
+                FM.selectMode = false; FM.selectLayer(null); FM.syncSelectionChrome(); FM.refreshAll(); await settle921(100);
+              }, 390);
+            }
+            /* A PC keeps its layout: no door with the feature off, its own Share beside Export with it on. */
+            FM.settings.set('collabLabs', false); C.ui.syncLabs();
+            await atWideWidth(async function () {
+              if (FM.pcTransportLayout) FM.pcTransportLayout();
+              const b = document.getElementById('btn-share');
+              if (b && b.getClientRects().length) throw new Error('with the feature off a PC shows a share door — the phone’s door; a PC keeps its layout');
+              doors23('a PC, feature off');
+              FM.settings.set('collabLabs', true); C.ui.syncLabs(); await settle921(80);
+              const b2 = document.getElementById('btn-share');
+              if (!b2 || !b2.getClientRects().length || b2.parentNode.id === 'stage') throw new Error('CONTROL: with the feature on the PC has no Share button beside Export');
+            }, 1280);
+          } finally { FM.selectMode = false; FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
+        });
+      });
+    });
+  });
+
+  test('967 B2 4 Home has a worded Join beside Select, always — off, it asks to turn the feature on in one tap and then opens the Join sheet; it offers an invite he put away; it fits a 380 px phone; and the Friends block has “Got an invite?”', { item: '967', budgetMs: 120000 }, async function () {
+    /* R3 / J2-2, J2-4, J2-6, J4-6, J5-4, J1-5 (⎇) — his pick A: "a word needs no learning". Measured at v17.06: with the
+       feature off Home had no Join at all, and with it on a bare ⎇ before the search button. */
+    const C = need921S6('the Join door on Home');
+    const S = C.signal;
+    const was = FM.settings.get('collabLabs');
+    const saved = localStorage.getItem('fm.pendingJoin');
+    let wasProfile = null;
+    try { wasProfile = localStorage.getItem('fm.profile'); } catch (e) {}
+    const wasHome = FM.home.isOpen();
+    await withFakeNet921(async function (net) {
+      try {
+        C.ui.setProfile('Test Person', C.ui.PALETTE[0]);
+        localStorage.removeItem('fm.pendingJoin');
+        FM.settings.set('collabLabs', false); C.ui.syncLabs();
+        if (!FM.home.isOpen()) { FM.home.open(); await settle921(350); }
+        const j = document.getElementById('hm-join-btn'), sel = document.getElementById('hm-select-btn');
+        if (!j) throw new Error('with the feature off Home has no Join — a friend who was sent a code has nowhere to type it (J2-2)');
+        if (j.textContent.trim() !== 'Join') throw new Error('Home’s Join reads “' + j.textContent.trim() + '” — his pick was the word, like Select, not a glyph (J1-5)');
+        if (!sel || j.nextElementSibling !== sel) throw new Error('Join does not sit right before Select');
+        const jr = j.getBoundingClientRect(), sr = sel.getBoundingClientRect();
+        if (Math.abs(jr.height - sr.height) > 1 || Math.abs(jr.top - sr.top) > 1) throw new Error('Join is ' + Math.round(jr.height) + ' px tall at ' + Math.round(jr.top) + ' and Select ' + Math.round(sr.height) + ' px at ' + Math.round(sr.top) + ' — they should be the same pill');
+        if (getComputedStyle(j).borderTopLeftRadius !== getComputedStyle(sel).borderTopLeftRadius || getComputedStyle(j).fontWeight !== getComputedStyle(sel).fontWeight) throw new Error('Join is not styled like Select');
+        await atPhoneWidth(async function () {
+          await settle921(120);
+          const top = document.querySelector('.hm-top').getBoundingClientRect();
+          const parts = ['.hm-brand', '#hm-search-btn', '#hm-join-btn', '#hm-select-btn', '#hm-settings-btn'].map(function (q) {
+            const n = document.querySelector(q);
+            if (!n) throw new Error('setup: no ' + q);
+            return { q: q, r: n.getBoundingClientRect() };
+          });
+          parts.forEach(function (p, i) {
+            if (p.r.left < top.left - 0.5 || p.r.right > top.right + 0.5) throw new Error('at 380 px ' + p.q + ' runs off the top bar (' + Math.round(p.r.left) + '–' + Math.round(p.r.right) + ' in ' + Math.round(top.left) + '–' + Math.round(top.right) + ')');
+            if (i && p.r.left < parts[i - 1].r.right - 0.5) throw new Error('at 380 px ' + p.q + ' overlaps ' + parts[i - 1].q);
+            if (i && (p.r.width < 24 || p.r.height < 24)) throw new Error('at 380 px ' + p.q + ' is ' + Math.round(p.r.width) + '×' + Math.round(p.r.height));
+          });
+          const jn = document.getElementById('hm-join-btn');
+          if (jn.scrollWidth > jn.clientWidth + 1) throw new Error('at 380 px “Join” is cut off inside its pill');
+        }, 380);
+        /* Off: one real tap → the one-tap card, nothing connected; Turn on → the Join sheet. */
+        const c0 = net.constructed;
+        await atPhoneWidth(async function () {
+          await onScreen924(async function () { await hd5Tap(document.getElementById('hm-join-btn'), 'Home’s Join'); });
+        }, 360);
+        const lc = await until921S6('the one-tap “turn it on” card', function () { return document.getElementById('collab-labs-ask'); }, 4000)
+          .catch(function () { throw new Error('with the feature off, Join opened nothing'); });
+        if (FM.settings.get('collabLabs')) throw new Error('Join turned the feature on without asking');
+        if (net.constructed !== c0) throw new Error('Join with the feature off opened ' + (net.constructed - c0) + ' socket(s) before he said yes');
+        lc.querySelector('.cl-turnon').click();
+        await until921S6('the Join sheet', function () { return document.getElementById('collab-join'); }, 4000)
+          .catch(function () { throw new Error('Turn on did not go on to the Join sheet'); });
+        if (FM.settings.get('collabLabs') !== true) throw new Error('Turn on did not turn the feature on');
+        C.ui.close(); await settle921(80);
+        /* An invite he put away earlier is offered, filled in. */
+        const inv = S.newRoom();
+        localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now(), put: Date.now() }));
+        document.getElementById('hm-join-btn').click();
+        const sheet = await until921S6('the Join sheet', function () { return document.getElementById('collab-join'); }, 4000);
+        if (sheet.querySelector('.cj-code').value !== S.inviteLink(inv)) throw new Error('an invite he put away is not offered — Join opened an empty sheet, and the link he was sent is out of reach (J2-6)');
+        C.ui.close(); await settle921(80);
+        /* CONTROL: with it on, the same worded Join in the same place. */
+        const j2 = document.getElementById('hm-join-btn');
+        if (!j2 || j2.textContent.trim() !== 'Join' || j2.nextElementSibling !== document.getElementById('hm-select-btn')) throw new Error('with the feature on Home’s Join is not the worded button beside Select');
+        localStorage.removeItem('fm.pendingJoin');
+        /* The Friends block: “Got an invite?”, on and off. */
+        await editorWithShape(async function () {
+          await with945(async function () {
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog');
+              for (const on of [true, false]) {
+                FM.settings.set('collabLabs', on); C.ui.syncLabs();
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                const row = Array.prototype.filter.call(document.querySelectorAll('#cv-fr-body button'), function (b) { return /Got an invite\? Join with a link or code/.test(b.textContent); })[0];
+                if (!row) throw new Error('the Friends block' + (on ? '' : ' with the feature off') + ' can only share — there is no “Got an invite? Join with a link or code” (J2-4)');
+                row.scrollIntoView({ block: 'nearest' }); await settle921(60);
+                box967(row, document.getElementById('cv-friends'), '“Got an invite?”');
+                row.click();
+                const want = on ? 'collab-join' : 'collab-labs-ask';
+                await until921S6('the join', function () { return document.getElementById(want); }, 4000)
+                  .catch(function () { throw new Error('“Got an invite?”' + (on ? '' : ' with the feature off') + ' did not open ' + (on ? 'the Join sheet' : 'the one-tap card')); });
+                C.ui.close(); await settle921(80);
+                if (!dlg.classList.contains('hidden') && FM.closeCanvasDialog) FM.closeCanvasDialog();
+                await settle921(80);
+              }
+            }, 390);
+          });
+        });
+      } finally {
+        C.ui.close();
+        FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
+        if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+        if (wasProfile === null) localStorage.removeItem('fm.profile'); else localStorage.setItem('fm.profile', wasProfile);
+        if (wasHome && !FM.home.isOpen()) FM.home.open(); else if (!wasHome && FM.home.isOpen()) FM.home.close();
+        await settle921(200);
+      }
+    });
+  });
+
+  test('967 B2 5 the video says it is live — a red ● LIVE by the person chip while he shares, even with nobody in; “● Live · Ezra” for a friend, which opens their panel with Leave; the chip stays with a layer selected; and “You’re in” stays until the first tap', { item: '967', budgetMs: 90000 }, async function () {
+    /* J1-3, J3-4, J2-8, J5-11 — his picks A (a red pill for him, "Live · Ezra" for a friend) and A (a layer selected).
+       Measured at v17.06: the person+ looked pixel-identical shared or not, a friend saw nothing saying whose project it was,
+       and "You're in" was gone after 3 s. */
+    const C = need921S7('the live marker on the video');
+    await withLabs921(async function (ui) {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        /* He shares; nobody is in yet. */
+        await withCollab921([layer921('A')], async function (ctx) {
+          await atPhoneWidth(async function () {
+            ui.syncBanner(); if (C.presence && C.presence.refresh) C.presence.refresh();
+            await settle921(250);
+            const p = document.getElementById('collab-live');
+            if (!p || !p.getClientRects().length) throw new Error('while he shares with nobody in, nothing on the video says so — the person+ looks the same shared or not (J1-3)');
+            if (p.textContent.trim() !== 'LIVE') throw new Error('his marker reads “' + p.textContent.trim() + '”');
+            const bg = (getComputedStyle(p).backgroundColor.match(/\d+/g) || []).map(Number);
+            if (!(bg[0] > 180 && bg[1] < 120 && bg[2] < 120)) throw new Error('his marker is ' + getComputedStyle(p).backgroundColor + ', not red');
+            const chip = [document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) { return n && n.getClientRects().length; })[0];
+            if (!chip) throw new Error('setup: no person chip on the video');
+            const pr = p.getBoundingClientRect(), cr = chip.getBoundingClientRect();
+            if (pr.left < cr.right - 0.5 || pr.left - cr.right > 14 || pr.bottom < cr.top || pr.top > cr.bottom) throw new Error('the LIVE pill is not beside the person chip (' + Math.round(pr.left) + ',' + Math.round(pr.top) + ' vs the chip ending at ' + Math.round(cr.right) + ')');
+            if (pr.height < 18) throw new Error('the LIVE pill is ' + Math.round(pr.height) + ' px tall');
+            /* It stays with a layer selected, and in Select — the chip too. */
+            FM.selectLayer(ctx.ids[0]); FM.refreshAll(); await settle921(150);
+            FM.selectMode = true; FM.syncSelectionChrome(); await settle921(120);
+            if (!document.body.classList.contains('sel-mode')) throw new Error('setup: Select mode did not come on');
+            const ch2 = document.getElementById('collab-people');
+            if (!ch2 || !ch2.getClientRects().length) throw new Error('in Select the person chip is hidden — display:none whenever layers are being selected (J1-10)');
+            if (!document.getElementById('collab-live').getClientRects().length) throw new Error('in Select the LIVE pill is hidden');
+            FM.selectMode = false; FM.selectLayer(null); FM.syncSelectionChrome(); FM.refreshAll(); await settle921(100);
+            /* A tap opens his Share panel. */
+            document.getElementById('collab-live').click();
+            await until921S6('the Share panel', function () { return !dlg.classList.contains('hidden') && dlg.classList.contains('cv-fr-big') ? 1 : 0; }, 4000)
+              .catch(function () { throw new Error('tapping LIVE opened nothing'); });
+            await land945();
+            if (!document.querySelector('#cv-fr-body .cs-stop')) throw new Error('tapping LIVE did not open his Share panel');
+            FM.closeCanvasDialog(); await settle921(80);
+            /* CONTROL: stopped, it is gone. */
+            C.end(); ui.syncBanner(); await settle921(80);
+            const gone = document.getElementById('collab-live');
+            if (gone && gone.getClientRects().length) throw new Error('after the session ended the video still says LIVE');
+          }, 390);
+        });
+        /* A friend joins with a code (the 967 6 rig: fake links, the owner's handshake answered). */
+        const realJoin = C.join;
+        const ids = [];
+        const evil = '<b>Ezra</b><img src=x>';           // 22 characters: under the 32 a name is cut to, so all of it must print
+        try {
+          await atPhoneWidth(async function () {
+            await withFakeLinks921(C, function () { return fakeLink921({ code: 'LIVEB2' }); }, async function () {
+              C.signal.handshake = function () { return Promise.resolve({ sas: 'Q4T7N', host: { sid: 'r967b2', nm: 'Ezra', cl: '#a3e635' } }); };
+              C.join = function (o) {
+                const fx = guest967(C, { meta: { hostName: evil } });
+                ids.push(fx.gpid);
+                fx.G.setLink(o.link);
+                C.attach(fx.G, { autoTick: false });
+                return Promise.resolve({ gpid: fx.gpid, session: fx.G });
+              };
+              await ui.join();
+              document.querySelector('#collab-join .cj-code').value = 'FM1-ABCDE';
+              document.querySelector('#collab-join .cj-go').click();
+              await until921S6('the friend to be in', function () { return C.session && !C.session.isOwner ? 1 : 0; }, 5000);
+              const t = document.getElementById('toast');
+              await until921S6('“You’re in”', function () { return !t.classList.contains('hidden') && /You’re in/.test(t.textContent) ? 1 : 0; }, 3000);
+              await settle921(3700);
+              if (t.classList.contains('hidden') || !/You’re in/.test(t.textContent)) throw new Error('“You’re in” vanished by itself after 3 s — a first-timer looking at the video never read it (J2-8)');
+              press921(); lift921(); await settle921(120);
+              if (!t.classList.contains('hidden') && /You’re in/.test(t.textContent)) throw new Error('“You’re in” is still up after the first tap');
+              ui.syncBanner(); await settle921(120);
+              const g = document.getElementById('collab-live');
+              if (!g || !g.getClientRects().length) throw new Error('a friend who is in sees nothing on the video saying it is live, or whose project it is (J3-4)');
+              if (g.textContent.trim() !== 'Live · ' + evil) throw new Error('the friend’s marker reads “' + g.textContent.trim() + '” — it should be “Live · <the owner’s name>”, printed as text');
+              if (g.querySelector('img, b')) throw new Error('the owner’s name was parsed as HTML');
+              g.click();
+              await until921S6('their panel', function () { return !dlg.classList.contains('hidden') && dlg.classList.contains('cv-fr-big') ? 1 : 0; }, 4000)
+                .catch(function () { throw new Error('tapping “Live · …” opened nothing — it should open their panel with Leave'); });
+              await land945();
+              const body = document.getElementById('cv-fr-body');
+              const leave = body.querySelector('.cs-stop');
+              if (!/Shared with you/.test(body.textContent) || !leave || !/Leave/.test(leave.textContent)) throw new Error('tapping “Live · …” did not open their panel with Leave');
+              FM.closeCanvasDialog(); await settle921(80);
+              /* CONTROL: offline is not "Live". */
+              C.session.setOnline(false); ui.syncBanner(); await settle921(80);
+              const g2 = document.getElementById('collab-live');
+              if (g2 && g2.getClientRects().length && /Live/.test(g2.textContent)) throw new Error('a friend who is offline is still told “Live”');
+            });
+          }, 390);
+        } finally {
+          C.join = realJoin;
+          ui.close();
+          await dropFixture967(C, ids);
+        }
+      });
+    });
+  });
+
+  test('967 B2 6 Settings: “Work with friends” has its own heading up on the first screen — above the reports, which fold into one Reports row at the bottom — and from the editor on a phone “App settings…” stays in reach while Friends is the big card', { item: '967', budgetMs: 90000 }, async function () {
+    /* R1 / J1-2, J2-2, J2-3, J4-1, J5-1, J3-9 — his pick A. Measured at v17.06: an untitled group 4.2–5.6 screens down, under
+       seven diagnostic reports, and "App settings…" 0×0 once Friends was the big card. */
+    need921S7('the Settings layout');
+    const wasHome = FM.home.isOpen();
+    try {
+      await atPhoneWidth(async function () {
+        if (!FM.home.isOpen()) { FM.home.open(); await settle921(300); }
+        FM.settings.open(); await settle921(400);
+        const p = document.querySelector('.set-panel'), body = p.querySelector('.set-body');
+        const head = Array.prototype.filter.call(p.querySelectorAll('.set-grouptitle'), function (h) { return h.textContent.trim() === 'Work with friends'; })[0];
+        if (!head) throw new Error('Settings has no “Work with friends” heading — the switch is an untitled group at the very bottom (J2-3)');
+        const g = head.closest('.set-group');
+        if (!g || !/Live collaboration/.test(g.textContent)) throw new Error('the heading is not on the group that holds the switch');
+        const hr = head.getBoundingClientRect(), br = body.getBoundingClientRect();
+        if (hr.top > br.bottom - 40) throw new Error('from Home, “Work with friends” starts ' + Math.round(hr.top - br.top) + ' px down a ' + Math.round(br.height) + ' px panel — not on the first screen (J1-2)');
+        const fold = document.getElementById('set-reports');
+        if (!fold) throw new Error('setup: no #set-reports');
+        const labels = Array.prototype.slice.call(p.querySelectorAll('.set-label'));
+        ['Your last export', 'Your last playback', 'Your last project open', 'Your last scrub', 'Your last Back from an effects category', 'A clip with no picture'].forEach(function (w) {
+          const l = labels.filter(function (x) { return x.textContent.trim() === w; })[0];
+          if (!l) throw new Error('setup: no “' + w + '” in Settings');
+          if (!fold.contains(l)) throw new Error('“' + w + '” is not inside the one Reports row');
+          if (l.getClientRects().length) throw new Error('“' + w + '” is on show before Reports is opened — the seven reports should fold into one row');
+        });
+        if (!(fold.getBoundingClientRect().top > g.getBoundingClientRect().bottom)) throw new Error('the Reports row is not below Work with friends');
+        const groups = Array.prototype.filter.call(body.children, function (n) { return n.classList.contains('set-group'); });
+        if (groups[groups.length - 1] !== fold) throw new Error('the Reports row is not the last group — it should sit at the bottom');
+        const tog = fold.querySelector('.set-reports-toggle');
+        if (!tog || !/Reports/.test(tog.textContent)) throw new Error('the Reports row has no toggle');
+        if (tog.getAttribute('aria-expanded') !== 'false') throw new Error('the Reports toggle does not say it is closed');
+        tog.click(); await settle921(80);
+        const l0 = labels.filter(function (x) { return x.textContent.trim() === 'Your last export'; })[0];
+        if (!l0.getClientRects().length || tog.getAttribute('aria-expanded') !== 'true') throw new Error('tapping Reports did not open it');
+        FM.settings.close(); await settle921(300);
+      }, 390);
+      /* From the editor on a phone, with Friends big. */
+      if (FM.home.isOpen()) { FM.home.close(); await settle921(250); }
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog');
+          FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('setup: Friends is not the big card');
+          const a = Array.prototype.filter.call(dlg.querySelectorAll('button'), function (b) { return /^App settings/.test(b.textContent.trim()) && b.getClientRects().length && b.getBoundingClientRect().width > 0; })[0];
+          if (!a) throw new Error('with Friends as the big card there is no “App settings…” to press — its button is 0×0 there (J3-9)');
+          box967(a, dlg, '“App settings…”');
+          a.click(); await settle921(450);
+          if (!FM.settings.isOpen()) throw new Error('“App settings…” did not open Settings');
+          if (!dlg.classList.contains('hidden')) throw new Error('Settings opened behind the Canvas dialog');
+          FM.settings.close(); await settle921(300);
+        }, 390);
+      });
+    } finally {
+      if (FM.settings.isOpen()) FM.settings.close();
+      await settle921(200);
+      if (wasHome && !FM.home.isOpen()) FM.home.open(); else if (!wasHome && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('967 B2 7 a friend opening the invite in a fresh iPhone Safari gets “Join now” first, with adding FreeMotion to the Home Screen as an optional step after — a Safari used before still gets the app first, and its steps name Home’s Join', { item: '967', budgetMs: 60000 }, async function () {
+    /* J1-5, J2-5 — his pick A. Measured at v17.06: every iPhone Safari was told to open an installed app, first, including
+       the friend who had never heard of FreeMotion. */
+    const C = need921S6('the iPhone landing card');
+    const S = C.signal;
+    const IPHONE = { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1', maxTouchPoints: 5 };
+    const was = FM.settings.get('collabLabs');
+    const saved = localStorage.getItem('fm.pendingJoin');
+    let wasProfile = null;
+    try { wasProfile = localStorage.getItem('fm.profile'); } catch (e) {}
+    const inv = S.newRoom();
+    const put = function () { localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now() })); };
+    try {
+      C.ui.setProfile('Test Person', C.ui.PALETTE[0]);
+      FM.settings.set('collabLabs', false); C.ui.syncLabs();          // a fresh Safari has the feature off
+      put();
+      C.ui._iosProbe({ nav: IPHONE, standalone: false, fresh: true });
+      await C.ui.resumePendingJoin();
+      const card = document.getElementById('collab-landing');
+      if (!card) throw new Error('setup: no landing card for an invite in iPhone Safari');
+      const ok = card.querySelector('.fm-ask-ok');
+      if (!ok || ok.textContent.trim() !== 'Join now') throw new Error('a fresh Safari is led with “' + (ok && ok.textContent.trim()) + '” — somebody who has never used FreeMotion is sent to an app they do not have (J1-5)');
+      const t = card.textContent;
+      if (!/Add FreeMotion to your Home Screen/.test(t) || !/optional/i.test(t)) throw new Error('the fresh card does not offer adding FreeMotion to the Home Screen as an optional step after: “' + t.slice(0, 220) + '”');
+      if (/Settings →|tap Share/.test(t)) throw new Error('the fresh card names a place that is not there: “' + t.slice(0, 220) + '”');
+      ok.click();
+      await until921S6('the Join sheet', function () { return document.getElementById('collab-join'); }, 4000)
+        .catch(function () { throw new Error('Join now did not go on to the Join sheet'); });
+      if (document.querySelector('#collab-join .cj-code').value !== S.inviteLink(inv)) throw new Error('the Join sheet is not filled in with the invite');
+      if (FM.settings.get('collabLabs') !== true) throw new Error('Join now left the feature off');
+      C.ui.close(); await settle921(80);
+      /* A Safari used before: the app first, and the steps name the worded Join on Home. */
+      FM.settings.set('collabLabs', false); C.ui.syncLabs();
+      put();
+      C.ui._iosProbe({ nav: IPHONE, standalone: false, fresh: false });
+      await C.ui.resumePendingJoin();
+      const c2 = document.getElementById('collab-landing');
+      const ok2 = c2 && c2.querySelector('.fm-ask-ok');
+      if (!ok2 || !/Copy invite/.test(ok2.textContent)) throw new Error('a Safari used before is not led with the app (Copy invite)');
+      const steps = Array.prototype.map.call(c2.querySelectorAll('.cl-steps li'), function (li) { return li.textContent; }).join(' | ');
+      if (!/tap Join/.test(steps) || /⎇|Settings →/.test(steps)) throw new Error('the steps read “' + steps + '” — Home has a worded Join now, always, so there is no trip to Settings first');
+      C.ui.close(); await settle921(60);
+      /* CONTROL: the real question — this suite's browser has projects and a profile, so it is a returning one. */
+      put();
+      C.ui._iosProbe({ nav: IPHONE, standalone: false });
+      await C.ui.resumePendingJoin();
+      const c3 = document.getElementById('collab-landing');
+      if (!c3 || !/Copy invite/.test(((c3.querySelector('.fm-ask-ok') || {}).textContent) || '')) throw new Error('CONTROL: this browser, which has projects and a profile, was treated as a fresh Safari');
+      C.ui.close();
+      /* …and the question itself, on the shapes it has to tell apart. */
+      const f = C.ui._freshBrowser;
+      if (typeof f !== 'function') throw new Error('setup: no _freshBrowser seam to ask');
+      if (!f([], null) || !f([{ layers: 0 }], null)) throw new Error('an empty Safari (or one holding only the blank project it makes itself) is not called fresh');
+      if (f([{ layers: 2 }], null) || f([{ layers: 0 }], { name: 'Ann' }) || f([{ layers: 0 }, { layers: 0 }], null)) throw new Error('a Safari with work in it, a name, or projects of its own was called fresh');
+    } finally {
+      C.ui._iosProbe(null); C.ui.close();
+      FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
+      if (saved === null) localStorage.removeItem('fm.pendingJoin'); else localStorage.setItem('fm.pendingJoin', saved);
+      if (wasProfile === null) localStorage.removeItem('fm.profile'); else localStorage.setItem('fm.profile', wasProfile);
+    }
+  });
+
+  test('967 B2 8 the Friends block says how it works in three steps, off and on; Start sharing says what he will get; the short code says what the friend does; and in the Share panel the invite comes straight under the people, Comments after it, and “Keep FreeMotion open” is in the panel, not a toast', { item: '967', budgetMs: 120000 }, async function () {
+    /* R5 / J5-2, J1-8, J5-4 (owner half); J1-6, J1-12, J1-13 (order half), J5-8 — his pick A. Measured at v17.06: nothing
+       said it in steps, Comments sat between the people and the invite, and the keep-open toast landed over the short code. */
+    const C = need921S7('how it works');
+    const STEPS = [/^1\s*Tap Start sharing$/, /^2\s*Send your friend the link$/, /^3\s*They tap it — you’re both editing$/];
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await with945(async function () {
+          const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+          if (wasHome) FM.home.close();
+          const made = [await FM.projects.create({ name: 'B2 967 how it works', width: 320, height: 240 })];
+          const got = toasts921();
+          try {
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog');
+              const fr = document.getElementById('cv-fr-body');
+              for (const on of [false, true]) {
+                FM.settings.set('collabLabs', on); ui.syncLabs();
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                const ol = fr.querySelector('.cs-how');
+                const li = ol ? Array.prototype.map.call(ol.children, function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }) : [];
+                if (li.length !== 3 || !STEPS.every(function (re, i) { return re.test(li[i]); })) throw new Error((on ? 'turned on' : 'turned off') + ', the block does not say how it works in three steps (' + JSON.stringify(li) + ') (J5-2)');
+                if (!ol.getClientRects().length) throw new Error('the three steps are not on show');
+                const first = fr.querySelector('.cs-start') || fr.querySelector('[role=switch]');
+                if (first && ol.getBoundingClientRect().bottom > first.getBoundingClientRect().top + 1) throw new Error('the three steps are not at the top of the block, above ' + (first.className || first.tagName));
+                if (on) {
+                  const start = fr.querySelector('.cs-start');
+                  const hint = start && start.nextElementSibling;
+                  if (!hint || !/You’ll get a link, a QR and a short code to send\./.test(hint.textContent)) throw new Error('under Start sharing: “' + (hint && hint.textContent) + '” — it should say what he will get (J1-8)');
+                } else { FM.closeCanvasDialog(); await settle921(80); }
+              }
+              /* Start sharing, for real. */
+              got.length = 0;
+              fr.querySelector('.cs-start').click();
+              await until921S6('the Share panel', function () { return C.session && fr.querySelector('.cs-invite') ? 1 : 0; }, 8000)
+                .catch(function () { throw new Error('setup: Start sharing did not bring up the Share panel'); });
+              await settle921(200);
+              if (got.some(function (x) { return /Keep FreeMotion open/.test(x); })) throw new Error('“Keep FreeMotion open” is still a toast — it lands over the short code he is about to read out (J1-13)');
+              const keep = fr.querySelector('.cs-keepopen');
+              if (!keep || !/Keep FreeMotion open — it pauses when your screen locks/.test(keep.textContent) || !keep.getClientRects().length) throw new Error('the Share panel does not say to keep FreeMotion open');
+              const people = fr.querySelector('.cs-people'), invite = fr.querySelector('.cs-invite'), comments = fr.querySelector('.cs-comments');
+              if (!people || people.nextElementSibling !== invite) throw new Error('the invite is not straight under the people — the job comes first (J1-6)');
+              if (!comments) throw new Error('setup: no Comments row to place');
+              if (!(invite.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('Comments sits above the invite');
+              const code = fr.querySelector('.cs-roomrow');
+              const how2 = code && code.nextElementSibling;
+              if (!how2 || how2.textContent.trim() !== 'They open FreeMotion, tap Join, and type it in.') throw new Error('under the short code: “' + (how2 && how2.textContent) + '” — it should say what the friend does (J5-4)');
+            }, 390);
+          } finally {
+            got.restore();
+            try { C.end(); } catch (e) {}
+            try { localStorage.removeItem('fm.collab.host.' + made[0]); } catch (e) {}
+            ui.close();
+            await q915aCleanup(made, orig, wasHome, [], [], []);
+          }
+        });
+      });
     });
   });
 
