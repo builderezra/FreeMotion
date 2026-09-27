@@ -1267,13 +1267,85 @@ window.FM = window.FM || {};
       return { kind: 'shared', host: (C.ui.cleanName && C.ui.cleanName(p.collab.hostName)) || 'the owner',
         color: (C.ui.cleanColor && C.ui.cleanColor(p.collab.hostColor)) || null, now: !!now, seen: +p.collab.seen || 0, ended: !!p.collab.ended };
     }
+    /* #967 B3 (J3-2, J4-7): a project he shared and then left for another keeps its room, and nothing on its card said so
+       — it was invisible, and reopening it re-armed it. Now it says SHARED · paused (his pick 2, A). */
+    if (C.ui.isSharing && C.ui.isSharing(p.id)) return awayPids.has(p.id) ? { kind: 'away' } : { kind: 'paused' };
     return null;
   }
+  /* #967 B3 review: a kept room that ANOTHER FreeMotion tab or window is sharing right now is live there, not paused — it
+     says LIVE · other tab (red, stacked like paused). The locks are read when Home draws, and a card whose answer changed
+     by the time they come back is redrawn in place. */
+  let awayPids = new Set();
+  function readAwayPids() {
+    const U = FM.collab && FM.collab.ui;
+    if (!U || !U.sharedAway || !U.labsOn || !U.labsOn()) { awayPids = new Set(); return; }
+    U.sharedAway().then(function (set) {
+      const was = awayPids;
+      awayPids = set;
+      const moved = [...set].filter(function (x) { return !was.has(x); }).concat([...was].filter(function (x) { return !set.has(x); }));
+      moved.forEach(function (pid) {
+        const card = grid && grid.querySelector('.hm-card[data-pid="' + (window.CSS && CSS.escape ? CSS.escape(pid) : pid) + '"]');
+        const th = card && card.querySelector('.hm-thumb');
+        const p = th && (FM.projects.list() || []).find(function (x) { return x.id === pid; });
+        if (!p) return;
+        const old = th.querySelector('.hm-live'), cx = collabOf(p);
+        if (old) old.remove();
+        if (cx) th.appendChild(liveBadge(cx));
+      });
+    });
+  }
   function liveBadge(cx) {
-    const b = el('span', 'hm-live' + (cx.kind === 'shared' ? ' hm-shared' : ''));
+    const dim = cx.kind === 'shared' && !cx.now;   // #967 B3 (J4-9): ended, or not connected — its line says which
+    const b = el('span', 'hm-live' + (cx.kind === 'shared' ? ' hm-shared' : '') + (cx.kind === 'paused' ? ' hm-paused' : '') + (cx.kind === 'away' ? ' hm-away' : '') + (dim ? ' hm-dim' : ''));
     if (cx.kind === 'shared' && cx.color) { const d = el('span', 'hm-live-dot'); d.style.background = cx.color; b.appendChild(d); }
-    b.appendChild(document.createTextNode(cx.kind === 'live' ? (cx.n ? 'LIVE · ' + cx.n : 'LIVE') : 'SHARED'));
+    /* "SHARED · paused" is 88 px on one line and the thumbnail has 76 — so it stands on two, SHARED over paused (the dot
+       is kept in the words, hidden by the stack). */
+    if (cx.kind === 'paused' || cx.kind === 'away') {
+      b.appendChild(el('span', null, cx.kind === 'away' ? 'LIVE' : 'SHARED')); b.appendChild(el('span', 'hm-live-sep', ' · '));
+      b.appendChild(el('span', 'hm-live-q', cx.kind === 'away' ? 'other tab' : 'paused'));
+    }
+    else b.appendChild(document.createTextNode(cx.kind === 'live' ? (cx.n ? 'LIVE · ' + cx.n : 'LIVE') : 'SHARED'));
     return b;
+  }
+  /* #967 B3 (J4-10) + review: WHAT DELETING A SHARED PROJECT DOES, for both doors to it — the card's ⋯ Delete… and Select →
+     Delete. The second one had been missed: it asked the plain "Delete 1 project?" about the project Sam was working in,
+     and the switch away from it told him `paused` — "the owner will be back" — about a project that no longer existed.
+     The shared ones among `ids`, the people in the live one, and which project that is; and the end said to them first. */
+  function sharedOf(ids) {
+    const U = FM.collab && FM.collab.ui;
+    const out = { ids: [], who: [], live: null };
+    if (!U || !U.isSharing || !U.labsOn || !U.labsOn()) return out;
+    ids.forEach(function (id) {
+      if (!U.isSharing(id)) return;
+      out.ids.push(id);
+      const here = U.peopleIn ? U.peopleIn(id) : [];
+      if (here.length) { out.live = id; here.forEach(function (n) { out.who.push(n); }); }
+    });
+    return out;
+  }
+  function namesOf(list) { return list.length <= 1 ? list.join('') : list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1]; }
+  function endSharedFor(id) {
+    const U = FM.collab && FM.collab.ui;
+    if (U && U.endForDelete) { try { U.endForDelete(id); } catch (e) {} }
+  }
+  /* #967 B3 (J4-11): the projects with save points, read when Home draws — "Earlier versions…" shows on those only. */
+  let ckptPids = null;
+  function readVersionPids() {
+    const U = FM.collab && FM.collab.ui;
+    if (!U || !U.versionPids || !U.labsOn || !U.labsOn()) return;
+    U.versionPids().then(function (set) { ckptPids = set; });
+  }
+  /* #967 B3 (his pick 4, A): every way Home opens ANOTHER project asks first while somebody who joined with a code is in —
+     for them the switch is the end (collab-ui.js U.switchAsk). Resolves true to go ahead. */
+  async function leaveOk() {
+    const U = FM.collab && FM.collab.ui;
+    return !(U && U.confirmSwitch) || !!(await U.confirmSwitch());
+  }
+  /* …and whether there is anything to ask, synchronously: a card tap with nothing to ask must reach the push in the same
+     task as the click (openProject), so it does not await a question that is not there. */
+  function switchAsked() {
+    const U = FM.collab && FM.collab.ui;
+    return !!(U && U.switchAsk && U.switchAsk());
   }
 
   function projectCard(p, subOverride) {
@@ -1304,8 +1376,10 @@ window.FM = window.FM || {};
     mi(resLabel(p.width, p.height));
     mi(p.fps ? p.fps + 'fps' : '');       // older cards have no fps yet — it fills in when the project is next opened
     mi(p.layers != null ? p.layers + (p.layers === 1 ? ' layer' : ' layers') : '');
+    /* #967 B3 (J4-9): a friend's copy says where it stands — live now, ended, or not connected; it said nothing after
+       "Shared by Ezra" once the owner had ended it or gone away. */
     const sub = el('div', 'hm-sub', subOverride || (cx && cx.kind === 'shared'
-      ? 'Shared by ' + cx.host + (cx.ended ? '' : cx.now ? ' · live now' : cx.seen ? ' · last synced ' + ago(cx.seen) : '')
+      ? 'Shared by ' + cx.host + (cx.ended ? ' · ended' : cx.now ? ' · live now' : ' · not connected')
       : 'edited ' + ago(p.modified)));
     const more = moreBtn();
     more.setAttribute('aria-label', 'Project actions');
@@ -1371,7 +1445,7 @@ window.FM = window.FM || {};
         /* queue 921 S7 review: the save points taken while he shared this project, readable WITHOUT sharing it
            again (Share would arm a new room, and write a save point of its own, just to show the list). With
            Labs on only, and never on somebody else's shared copy — the save points are the owner's. */
-        ...((FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn() && FM.collab.ui.versions && !p.collab)
+        ...((FM.collab && FM.collab.ui && FM.collab.ui.labsOn && FM.collab.ui.labsOn() && FM.collab.ui.versions && !p.collab && ckptPids && ckptPids.has(p.id))
           ? [{ label: 'Earlier versions…', action: () => { FM.collab.ui.versions(p.id, p.name || 'Untitled'); } }] : []),
         // Sits directly under Duplicate: both make a NEW thing out of this project, so they read as a
         // pair. It was buried below Select… (a mode, not a creation) and Ezra asked for a feature that
@@ -1436,11 +1510,20 @@ window.FM = window.FM || {};
           if (!ok) { if (ok === false && FM.toast) FM.toast('Busy opening a project — try again'); return; }   // another open in flight: exporting now would serialize the WRONG scene
           await FM.storage.exportFile();
         } },
+        /* #967 B3 (J4-10): a friend's copy has ONE delete — Leave & delete, above — not a second, generic Delete… beside it.
+           And Delete on a project he is sharing says who is in it, and ends it for them first (`ended` — not the `paused`
+           the switch away from a deleted open project would otherwise have told them). */
+        ...(cx && cx.kind === 'shared' ? [] : [
         { sep: true },
         { label: 'Delete…', danger: true, action: async () => {
-          if (!await FM.ask({ title: 'Delete project', message: 'Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.', ok: 'Delete', danger: true })) return;
+          const sh = sharedOf([p.id]), who = sh.who, shared = sh.ids.length > 0;
+          const message = who.length ? namesOf(who) + (who.length === 1 ? ' is' : ' are') + ' working in this now — deleting ends it for everyone. This cannot be undone.'
+            : shared ? 'Delete "' + (p.name || 'Untitled') + '"? It is shared — deleting it stops sharing, and the link and code stop working. This cannot be undone.'
+            : 'Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.';
+          if (!await FM.ask({ title: 'Delete project', message: message, ok: 'Delete', danger: true })) return;
+          if (shared) endSharedFor(p.id);
           await FM.projects.remove(p.id); render();
-        } },
+        } }]),
       ], { right: r.right, above: r.top });
     });
     const body = el('div', 'hm-body');
@@ -1709,7 +1792,14 @@ window.FM = window.FM || {};
     del.disabled = !n;
     del.addEventListener('click', async () => {
       if (!n) return; let ids = [...selected];
-      if (!await FM.ask({ title: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's'), message: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's') + '? This cannot be undone.', ok: 'Delete', danger: true })) return;
+      /* #967 B3 review: the shared projects among them — said, and ended for the people in them first (sharedOf). */
+      const sh = K.noun === 'project' ? sharedOf(ids) : { ids: [], who: [], live: null };
+      const liveName = sh.live ? ((FM.projects.list() || []).find(x => x.id === sh.live) || {}).name || 'Untitled' : '';
+      const onlyName = sh.ids.length === 1 ? ((FM.projects.list() || []).find(x => x.id === sh.ids[0]) || {}).name || 'Untitled' : '';
+      const shareNote = sh.who.length ? ' ' + namesOf(sh.who) + (sh.who.length === 1 ? ' is' : ' are') + ' working in “' + liveName + '” now — deleting ends it for everyone.'
+        : sh.ids.length ? ' ' + (sh.ids.length === 1 ? '“' + onlyName + '” is shared' : sh.ids.length + ' of them are shared') + ' — deleting stops sharing, and the link and code stop working.'
+        : '';
+      if (!await FM.ask({ title: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's'), message: 'Delete ' + ids.length + ' ' + K.noun + (ids.length === 1 ? '' : 's') + '?' + shareNote + ' This cannot be undone.', ok: 'Delete', danger: true })) return;
       if (FM.toast) FM.toast('Deleting ' + ids.length + '…');
       if (K.noun === 'project') {
         // delete the CURRENTLY-OPEN project LAST: remove() does a full project-switch (media decode +
@@ -1726,7 +1816,7 @@ window.FM = window.FM || {};
       const draftIds = new Set((FM.projects.list() || []).filter(x => x.elementDraft || x.templateDraft).map(x => x.id));
       for (const id of ids) {
         if (draftIds.has(id)) await FM.projects.discardDraftAnyway(id);
-        else await K.store.remove(id);
+        else { if (sh.ids.indexOf(id) >= 0) endSharedFor(id); await K.store.remove(id); }
       }
       exitSelect();
     });
@@ -1931,6 +2021,7 @@ window.FM = window.FM || {};
       editing = true;
       holdPress();
       try {
+        if (!(await leaveOk())) return;   // #967 B3
         const pid = await FM.templates.openForEdit(t.id);
         if (pid === false) return;   // queue 690: his open project could not be saved and he chose to stay
         if (!pid) { if (FM.toast) FM.toast('That template’s data is missing — save it again'); return; }
@@ -1939,6 +2030,7 @@ window.FM = window.FM || {};
       } finally { clearPress(true); editing = false; }
     }
     async function use() {
+      if (!(await leaveOk())) { cancelPress(card); return; }   // #967 B3
       holdPress();   // building a project out of a template is the same long async wait as opening one
       if (FM.toast) FM.toast('Creating project…');
       try {
@@ -2030,6 +2122,7 @@ window.FM = window.FM || {};
     async function edit() {
       holdPress();
       try {
+        if (!(await leaveOk())) return;   // #967 B3
         const pid = await FM.elements.openForEdit(e.id);
         if (pid === false) return;   // queue 690: his open project could not be saved and he chose to stay
         if (!pid) { if (FM.toast) FM.toast('That element’s data is missing — save it again'); return; }
@@ -2204,6 +2297,7 @@ window.FM = window.FM || {};
        "Select works on EVERY tab now (v5.04)". Two comments disagreeing, and the older one is the one
        this entry's first diagnosis quoted. Fixed below so it cannot mislead a third time. */
     selectify(card, dthumb, p.id, async () => {
+      if (p.id !== FM.storage.openProjectId() && !(await leaveOk())) { cancelPress(card); return; }   // #967 B3
       if ((await FM.projects.open(p.id)) === false) return;   // queue 690: his project could not be saved and he chose to stay
       FM.home.close({ push: true, lead: card });
     });
@@ -2258,6 +2352,7 @@ window.FM = window.FM || {};
         { label: 'New element', disabled: true }, { sep: true },
         { label: 'Build a new one…', action: async () => {
           const name = await FM.ask({ title: 'New element', message: 'Element name', input: { value: 'My element' }, ok: 'Create' }); if (!name || !name.trim()) return;
+          if (!(await leaveOk())) return;   // #967 B3
           const pid = await FM.projects.create({ name: name.trim(), width: 1080, height: 1080, elementDraft: true });   // a workspace, not a project — see storage.js (queue 340)
           if (!pid) { if (pid !== false && FM.toast) FM.toast('Could not create that'); return; }   // false = he chose to stay (queue 690)
           FM.scene.project.background = null;   // transparent: an element drops onto whatever is under it
@@ -2296,6 +2391,13 @@ window.FM = window.FM || {};
     // …but only for as long as that first open is plausibly still running. An open whose promise
     // never settles at all would otherwise wall the home screen off permanently — see openAbandoned.
     if (_opening && !openAbandoned()) return false;
+    /* #967 B3: ANOTHER project, while a friend who joined with a code is in — ask first (leaveOk). Stay resolves null, like
+       the storage question below: nothing moved, and nothing to report. Asked, then the busy check again: he can take a
+       while to answer, and another open may have started meanwhile. */
+    if (id !== FM.storage.openProjectId() && switchAsked()) {
+      if (!(await leaveOk())) { cancelPress(lead || null); return null; }
+      if (_opening && !openAbandoned()) return false;
+    }
     /* END ANY DRAWING SESSION BEFORE A PROJECT LOADS (queue 453, v11.22).
      * FM.drawTool is ONE module-level object, not per-project state, so an unfinished sketch survived
      * a project switch entirely: you came back to the drawing toolbar over a project you had never
@@ -2410,6 +2512,8 @@ window.FM = window.FM || {};
   function setSelectionForTest(ids) { selectMode = true; selected.clear(); (ids || []).forEach(id => selected.add(id)); }
   function render() {
     if (!grid) return;
+    readVersionPids();    // #967 B3: which projects have save points, for their ⋯ (read in the background)
+    readAwayPids();       // #967 B3 review: which kept rooms another tab is sharing right now (their badges say so)
     ensureStaticTile();   // one-time; the CSS vars it sets are what #hm-grain draws
     /* Give the background its pair of fields to dissolve between (queue 157). Two DIFFERENT tiles, or
        the cross-fade has nothing to cross to and the grain sits perfectly still. */
@@ -2792,6 +2896,7 @@ window.FM = window.FM || {};
     const s = npCompute(), fps = npFps();
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
+    if (!(await leaveOk())) return;   // #967 B3: New project is another project too — Stay leaves him on Home
     /* ⚠️ queue 690 (HUNT-a): A TILE IS A PROMISE. Only Custom says Auto adjusts (his words, #659); the other five
        name a shape and a size, and he picked one. The first clip or photo used to replace that size with the
        file's own for EVERY tile (FM.addMediaLayer), so a 16:9 project turned portrait the moment his phone clip

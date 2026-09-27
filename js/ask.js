@@ -9,6 +9,10 @@
  *                without it, true or null. Cancel, Escape and a tap on the scrim all give null, so every
  *                `if (!n || !n.trim()) return` / `if (!confirm(…)) return` caller keeps its meaning after
  *                an `await`.
+ *   `cancelValue` (#967 B3 review): what the CANCEL BUTTON answers, when that answer is a real choice and not
+ *                "put this away". “Carry on sharing?” — Not now stops sharing for good — must not be what a tap on
+ *                the dim area or an Escape does: those still answer null (no answer), and only the button answers
+ *                `cancelValue`. Every other caller leaves it out and nothing changes for them.
  *
  * It is the #hm-dialog card family, not a lookalike: `.fm-ask-card` is added to the same selector lists as
  * `.hm-dlg-card` (styles.css, theme-glass.css), so it wears the same glass, swings open with the same
@@ -63,7 +67,7 @@ window.FM = window.FM || {};
     scrim.appendChild(card);
     document.body.appendChild(scrim);
 
-    cancelBtn.addEventListener('click', () => finish(null));
+    cancelBtn.addEventListener('click', () => finish(pending ? pending.cancelValue : null));
     okBtn.addEventListener('click', () => finish(answer()));
     /* THE SCRIM CANCELS ON CLICK, NOT ON POINTERDOWN. Hiding on pointerdown hands the rest of that tap —
        the pointerup and the click — to whatever was under the scrim, which on Home is a project card: a
@@ -89,7 +93,7 @@ window.FM = window.FM || {};
       if (e.isComposing || e.keyCode === 229) return;   // an IME confirming a word, not the dialog
       if (e.target === area && !(e.metaKey || e.ctrlKey)) return;   // a new line; ⌘/Ctrl+Enter answers
       e.preventDefault();
-      finish(e.target === cancelBtn ? null : answer());   // Enter on a Tabbed-to Cancel means Cancel
+      finish(e.target === cancelBtn ? pending.cancelValue : answer());   // Enter on a Tabbed-to Cancel means Cancel
       return;
     }
     if (e.key === 'Tab') {   // keep focus inside the card; anything behind it is not reachable while it is up
@@ -150,7 +154,7 @@ window.FM = window.FM || {};
        Enter is OK there as it was. */
     if (withInput) { input.focus(); try { input.select(); } catch (e) {} }
     else okBtn.focus();
-    return new Promise(resolve => { pending = { resolve, withInput }; });
+    return new Promise(resolve => { pending = { resolve, withInput, cancelValue: opts.cancelValue === undefined ? null : opts.cancelValue }; });
   };
   FM.ask.isOpen = () => !!pending;
 })(window.FM);

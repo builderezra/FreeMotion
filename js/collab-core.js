@@ -352,6 +352,9 @@ window.FM = window.FM || {};
     if (!(opts && opts.force) && s.pid && FM.projects && FM.projects.currentId && FM.projects.currentId() === s.pid) return;
     undoHandover = false;
     handoverSession = null;
+    /* #967 B3 review: `paused` is only true for people who come back by themselves — the UI tells anybody who joined with a
+       long code that it ended for them, first (collab-ui.js U.beforePause). */
+    if (C.ui && C.ui.beforePause) { try { C.ui.beforePause(s); } catch (e) {} }
     try { s.stop('paused'); } catch (e) {}
     C.detach();
     afterReset();

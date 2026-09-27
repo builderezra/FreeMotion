@@ -272,6 +272,15 @@
       };
     },
     homeClose967: async function () { if (FM.home && FM.home.isOpen()) FM.home.close(); await sleep(50); return true; },
+    /* #967 B3: the app's own question card — what it says, and (with `answer`) a tap on one of its two buttons. */
+    ask967: function (a) {
+      const el = document.getElementById('fm-ask');
+      if (!el || el.classList.contains('hidden')) return { up: false };
+      const out = { up: true, title: el.querySelector('.fm-ask-title').textContent, msg: el.querySelector('.fm-ask-msg').textContent,
+        ok: el.querySelector('.fm-ask-ok').textContent, cancel: el.querySelector('.fm-ask-cancel').textContent };
+      if (a && a.answer) el.querySelector(a.answer === 'ok' ? '.fm-ask-ok' : '.fm-ask-cancel').click();
+      return out;
+    },
     /* a NEW session: what a phone does when the app was closed and is opened again (sessionStorage is per session) */
     newSession942: function () {
       try { sessionStorage.clear(); } catch (e) {}
