@@ -60,7 +60,7 @@ window.R = (function () {
     return true;
   };
   R.open = async function (which, big) {
-    try { localStorage.setItem('fm.panelBig', JSON.stringify(big ? { [which]: true } : {})); } catch (e) {}
+    FM.panelSize._setBig('notes', !!big && which === 'notes'); FM.panelSize._setBig('shortcuts', !!big && which !== 'notes');   // #968: per project
     if (which === 'notes') FM.notepad.open(); else FM.shortcuts.show();
     await sleep(750);
     return R.geom(which);

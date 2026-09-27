@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Sep at v17.10
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Sep at v17.11
 >
-> **State:** v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -33808,8 +33808,7 @@ re-opened #480, which I had marked done and had not fixed.
       BUILT OUT UNTIL HE sends himself an invite link from his phone to his PC (or another phone) and joins with it once — the one check nothing here can make. Tick clauses 2 and 5 when he says it worked; if it did not, what he saw is the next fix.
       Builder's context (not his words): at v17.02 on his phone the only door to sharing was a small person+ on the stage, and only with Settings → Labs on — nothing in Canvas settings, no Stop sharing he could find once Labs was on. v17.04 (shipped today) added the Friends block in Canvas settings on the phone (Start sharing / Stop sharing, the Labs switch in place). This entry is the end-to-end audit he is asking for, done as a first-time user on a phone, and whatever it finds.
 
-- [ ] **968 — Notes and the Help menu open SMALL by default, and remember their size PER PROJECT (a new project starts small again)** (26 Sep, ~22:40–22:41 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **968 — Notes and the Help menu open SMALL by default, and remember their size PER PROJECT (a new project starts small again)** (26 Sep, ~22:40–22:41 AWST, via INBOX — his words)
       Moved from INBOX.md whole — two blocks; the second CORRECTS the first (Help, not Settings; remembered per project), and its plan REPLACES the first's:
       ### 26 Sep 2026, ~22:40 AWST — Notes and Shortcuts/tips (the panels that can go BIG) open SMALL when you start a new project
 
@@ -33866,13 +33865,13 @@ re-opened #480, which I had marked done and had not fixed.
       - Verify at 380/440 and on PC.
 
       Clauses (his, as corrected):
-      1. [ ] The two panels are Notes and the Help menu (the ? Shortcuts/tips panel).
-      2. [ ] Both default to SMALL.
-      3. [ ] They remember their size within the same project: make it big, go back, still big.
-      4. [ ] A new project: small again.
+      1. [x] ✅ v17.11 — The two panels are Notes and the Help menu (the ? Shortcuts/tips panel).
+      2. [x] ✅ v17.11 — Both default to SMALL.
+      3. [x] ✅ v17.11 — They remember their size within the same project: make it big, go back, still big.
+      4. [x] ✅ v17.11 — A new project: small again.
+      ✅ **v17.11 — SHIPPED** (queue 968): each project remembers its own Notes/Help size (store `fm.panelBigByProject`, this tab's open project, the 40 most recent kept); a new project opens both small; the old global size is not read, so both open small once after the update. Tests: “968 …” ×2; the 927 tests retuned to `FM.panelSize.isBig/_setBig` (bodies, not names).
 
-- [ ] **969 — Phone: the SMALL Help menu must actually be small (today there is no visible difference from big)** (26 Sep, ~22:41 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **969 — Phone: the SMALL Help menu must actually be small (today there is no visible difference from big)** (26 Sep, ~22:41 AWST, via INBOX — his words)
       Moved from INBOX.md whole:
       ### 26 Sep 2026, ~22:41 AWST — Phone: the SMALL Help menu is not actually small; there is no visible difference from big
 
@@ -33910,9 +33909,10 @@ re-opened #480, which I had marked done and had not fixed.
       - The proving test is written out in full in the plan. It checks small ≤ 60% of big's height and ≥ 30px narrower, at phone width, in a project and over Home. Its controls are that big still fills the screen, small is still usable, and PC keeps its 440px card. Its assertions were run by hand at 360×760: FAIL on HEAD, PASS with A. Re-run `?only=927` (desktop and `--width 380`) plus 'only the list scrolls', '690 on the phone a tap outside' and '912 the shortcuts sheet'.
 
       Clauses (his):
-      1. [ ] On mobile the small Help menu is actually small.
-      2. [ ] …a clear difference from big.
-      3. [ ] (#545) his pick on the render (A recommended, ~half the screen) — build A if no answer has come (the plan's own rule).
+      1. [x] ✅ v17.11 — On mobile the small Help menu is actually small.
+      2. [x] ✅ v17.11 — …a clear difference from big.
+      3. [x] ✅ v17.11 — (#545) his pick on the render (A recommended, ~half the screen) — build A if no answer has come (the plan's own rule).
+      ✅ **v17.11 — SHIPPED** (queue 969): his A (no pick came, the plan's rule) — small Help on a phone is ~half the screen with 28px margins (324×416 against big 360×780 at 380 wide); PC unchanged. Say “Help B” for the 40% version.
 
 - [ ] **970 — PC ~1160–1386px wide, two layers selected: the ⋯ layer-options button sits under the version chip and cannot be clicked (hunt MEDIUM #970)** (26 Sep, found by the logging chat's corners planner — NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -33925,8 +33925,7 @@ re-opened #480, which I had marked done and had not fixed.
       Suggested fix (the reviewer's): don't send ctl batches or presence to a member while its link is disconnected/down; flush when it recovers — so no reliable data is queued into a backed-off channel.
       1. [ ] An edit made while a friend's phone is paused reaches them within a few seconds of their coming back.
 
-- [ ] **972 — Streamer safety: the friends invite code starts BLURRED each time you open sharing — tap to show** (27 Sep, ~08:57 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **972 — Streamer safety: the friends invite code starts BLURRED each time you open sharing — tap to show** (27 Sep, ~08:57 AWST, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it (plan ready):
       ### 27 Sep 2026, ~08:57 AWST — Streamer safety: the invite code starts BLURRED each time you open sharing, tap to show
 
@@ -33962,5 +33961,6 @@ re-opened #480, which I had marked done and had not fixed.
       - Out of scope unless he asks: the JOINER's side (~4237 shows the code or link someone typed on their own device).
 
       Clauses (his):
-      1. [ ] The invite code for friends is blurred when you first open it.
-      2. [ ] …so someone streaming or screen-recording does not show it (the QR too — recommended yes, by default if no answer).
+      1. [x] ✅ v17.11 — The invite code for friends is blurred when you first open it.
+      2. [x] ✅ v17.11 — …so someone streaming or screen-recording does not show it (the QR too — recommended yes, by default if no answer).
+      ✅ **v17.11 — SHIPPED** (queue 972): the short code shows a blurred decoy (the real code is never painted) and the QR is blurred, each with “Tap to show”, every time sharing is opened; one tap shows both; a settings flip keeps them shown; closing and Reset frost them again; a refused copy lands in a frosted field (found in review). The QR half was recommended and built by default.

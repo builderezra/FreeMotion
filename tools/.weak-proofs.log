@@ -86,3 +86,4 @@
 2026-09-27 06:25	WEAK	967 7c a peer connection that has FAILED is held, not closed — the owner is told “Sam’s connection dropped” and Sam greys, “Sam is back” when it recovers, and only a failure that lasts the grace takes Sam off his list, without saying it twice	a failed link does not say it is down (down undefined, ondown [])
 2026-09-28 02:14	WEAK	967 3b a guest who turns Labs off is asked first (“This leaves Ezra’s project — your copy stays”) and told “You left” after	Cannot read properties of undefined (reading 'querySelector')
 2026-09-28 03:08	WEAK	967 3b a guest who turns Labs off is asked first (“This leaves Ezra’s project — your copy stays”) and told “You left” after	Cannot read properties of undefined (reading 'querySelector')
+2026-09-28 06:39	WEAK	927 closing while BIG shrinks onto itself first, then folds into its button — a real click on Done on PC and a real tap on a phone	FM.panelSize._setBig is not a function

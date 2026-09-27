@@ -179,6 +179,8 @@ window.FM = window.FM || {};
     if (!card) return;
     /* #967: the Share card closing in the middle of the five-character check is an answer — "not let in", said. */
     if (!reopening && card.id === 'collab-share') abandonSas();
+    /* #972: a real close (not a redraw) — the next opening starts frosted. Only the Share card holds the invite. */
+    if (!reopening && card.id === 'collab-share') veilInvite();
     if (card._esc) window.removeEventListener('keydown', card._esc, true);
     if (card._unpop) { try { card._unpop(); } catch (e) {} }
     if (card._onclose) { const f = card._onclose; card._onclose = null; try { f(); } catch (e) {} }
@@ -1210,7 +1212,7 @@ window.FM = window.FM || {};
     /* S6: a pending note is NOT cleared by opening the panel — the knock that declined itself while the
        panel was shut (§19.3's "quiet note") has to still be there when he next looks. The note is spent
        by the draw that shows it, as before. */
-    if (!o.keepStep) shareStep = 'main';
+    if (!o.keepStep) { shareStep = 'main'; veilInvite(); }   // #972: opened, not redrawn — the invite starts frosted
     const s = C.session;
     /* A guest's Share button opens the same card showing the session he is IN, never an arm. */
     if (s && !s.isOwner) return drawGuestPanel(s);
@@ -1292,7 +1294,9 @@ window.FM = window.FM || {};
      live → the Share panel itself; a shared copy with no session → its panel; otherwise → not shared yet, with Start sharing. */
   U.renderFriends = function (host, o) {
     if (!host) return null;
-    if (fhost !== host) { fhost = host; fhostShowedCode = false; }
+    /* #972: a NEW host is the block being opened (friendsClosed lets go of the old one) — the invite starts frosted. A
+       redraw into the same host is not an opening, even without keepStep: Settings' apply() redraws it that way. */
+    if (fhost !== host) { fhost = host; fhostShowedCode = false; veilInvite(); }
     watchFriendsHost();
     if (!(o && o.keepStep)) shareStep = 'main';
     U.friendsBar();
@@ -1437,6 +1441,7 @@ window.FM = window.FM || {};
     const b = fhost || document.getElementById('cv-fr-body');
     if (b) b.textContent = '';
     fhost = null;
+    veilInvite();                               // #972: closed — the next opening starts frosted
     pendingLinkRole = null;
     offNote = null;                             // said once, where he was looking — not again at the next opening
     U.friendsBar();
@@ -2017,7 +2022,11 @@ window.FM = window.FM || {};
        the link as buttons only. On a refusal the text is put in a read-only field beside the button that
        asked, already selected, so the sentence is true. */
     function fallback() {
-      if (FM.toast) FM.toast('Could not copy — it is selected below, copy it yourself', 2800);
+      /* #972 review: beside a FROSTED invite this field printed the whole short code (or most of the link) in plain text —
+         the one thing the frost is for. So it is frosted with the invite (paintVeil): the text is in it, selected, and
+         nothing of it is painted until one tap on it shows the invite. */
+      const box = near && near.closest ? near.closest('.cs-invite') : null;
+      if (FM.toast) FM.toast(veiled(box) ? 'Could not copy — tap the box below to show it, then copy it yourself' : 'Could not copy — it is selected below, copy it yourself', 2800);
       const at = near && near.parentNode;
       if (!at) return;
       let f = at.parentNode ? at.parentNode.querySelector('.cs-copyfield') : null;
@@ -2025,9 +2034,13 @@ window.FM = window.FM || {};
         f = el('input', 'fm-ask-input cs-copyfield');
         f.type = 'text'; f.readOnly = true;
         f.setAttribute('aria-label', 'Copy this yourself');
-        at.parentNode.insertBefore(f, at.nextSibling);
+        const wrap = el('div', 'cs-copywrap');      // holds the "Tap to show" pill — an input draws no ::after of its own
+        wrap.appendChild(f);
+        at.parentNode.insertBefore(wrap, at.nextSibling);
+        if (box) onVeilTap(box, f);
       }
       f.value = t;
+      paintVeil(box);
       try { f.focus(); f.select(); } catch (e) {}
     }
     try {
@@ -2103,6 +2116,8 @@ window.FM = window.FM || {};
     cv.id = 'collab-room-code';
     cv.setAttribute('aria-label', 'Short code ' + code.split('').join(' '));
     codeRow.appendChild(cv);
+    box._veilKey = veilKeyOf(link, code);   // #972: frosted until he taps it, each time sharing is opened
+    onVeilTap(box, cv);
     const cc = btn('cs-copycode', 'Copy', function () { copyPlain(code, 'Short code copied', cc); });
     codeRow.appendChild(cc);
     box.appendChild(codeRow);
@@ -2116,6 +2131,7 @@ window.FM = window.FM || {};
     if (relayWarn()) st.classList.add('warn');
     box.appendChild(st);
     box.appendChild(btn('cs-reset', 'Reset link and short code', resetLink));
+    paintVeil(box);                            // #972: once the code row is in the box
     return box;
   }
 
@@ -2134,12 +2150,87 @@ window.FM = window.FM || {};
     cv.setAttribute('role', 'img');
     cv.setAttribute('aria-label', 'QR code of the invite link');
     const wrap = el('div', 'cs-qr');
-    wrap.appendChild(cv);
+    /* #972: in a frame of its own, so the frost and its "Tap to show" sit on the QR and not on the line under it. */
+    const frame = el('div', 'cs-qrframe');
+    frame.appendChild(cv);
+    wrap.appendChild(frame);
     wrap.appendChild(el('div', 'collab-sub', 'Point the other phone’s camera at this.'));
     const row = box.querySelector('.cs-linkrow');
     box.insertBefore(wrap, row ? row.nextSibling : null);
+    onVeilTap(box, frame);
+    paintVeil(box);
     qrBtn.setAttribute('aria-pressed', 'true');
     qrBtn.classList.add('on');
+  }
+
+  /* ═══ #972 · THE INVITE STARTS FROSTED ══════════════════════════════════════════════════════════════════════════════
+     His words (27 Sep): "Make the code for inviting friends blurred out when you first open it incase streamers or whatever
+     are using it". The short code and the QR are the two things on this panel that someone watching a stream could use — the
+     link itself is only ever Copy / Share, which paint nothing — so both start frosted EVERY TIME SHARING IS OPENED (the Share
+     card, the Friends block), and one tap on either shows both for the rest of that open. Copy and Share work while frosted.
+     A redraw while it is open keeps it shown: every settings change redraws the panel, and some redraw the Friends block as
+     a fresh draw (Settings' apply() → syncLabs → renderFriends with no keepStep), so what re-frosts it is the panel being
+     OPENED (U.share without keepStep, a new Friends host, a real close) — never a draw. The key is the secret itself, so a
+     new one — Reset, the rotation after a removal, a lapsed code replaced — starts frosted too.
+     ⚠️ NOTHING OF THE REAL CODE IS PAINTED WHILE IT IS FROSTED. Its glyphs are transparent; the blur on screen is a DECOY
+     drawn by the stylesheet (styles.css `.cs-roomcode.cs-veiled::before`). A blurred shadow of the real glyphs would still
+     carry each character's weight of ink, and nine characters from a 32-letter alphabet is a small search. The QR's blur
+     (12 px over 4 px modules) leaves nothing at the scale a module is drawn at, and its canvas stays the real one. */
+  let inviteShown = null;              // the veil key he tapped to show during THIS open of the panel; null = all frosted
+  function veilInvite() { inviteShown = null; }
+  function veilKeyOf(link, code) { return String(link || '') + '|' + String(code || ''); }
+  function veiled(box) { return !!box && typeof box._veilKey === 'string' && inviteShown !== box._veilKey; }
+  /* The frosted thing is a button while it is frosted — a keyboard and a screen reader can reach it — and plain text after. */
+  function veilButton(n, on, label) {
+    if (!n) return;
+    if (on) {
+      n.setAttribute('role', 'button');
+      n.tabIndex = 0;
+      n.setAttribute('aria-label', label);
+    } else {
+      n.removeAttribute('role');
+      /* Shown by a key press: the keyboard stays where it was rather than being dropped on the page. */
+      if (document.activeElement === n) n.tabIndex = -1; else n.removeAttribute('tabindex');
+    }
+  }
+  function paintVeil(box) {
+    if (!box) return;
+    const on = veiled(box);
+    const cv = box.querySelector('.cs-roomcode');
+    if (cv) {
+      cv.classList.toggle('cs-veiled', on);
+      veilButton(cv, on, 'Short code hidden, tap to show');
+      if (!on) cv.setAttribute('aria-label', 'Short code ' + cv.textContent.split('').join(' '));
+    }
+    const qr = box.querySelector('.cs-qr');
+    if (qr) {
+      qr.classList.toggle('cs-veiled', on);
+      const fr = qr.querySelector('.cs-qrframe');
+      veilButton(fr, on, 'QR code hidden, tap to show');
+      if (fr && !on) fr.removeAttribute('aria-label');
+    }
+    /* A refused copy's field (copyPlain) is frosted with the rest. Already a field a keyboard reaches, so no role here. */
+    const cf = box.querySelector('.cs-copyfield');
+    if (cf) {
+      const w = cf.closest('.cs-copywrap');
+      if (w) w.classList.toggle('cs-veiled', on);
+      cf.setAttribute('aria-label', on ? 'Hidden, tap to show, then copy it yourself' : 'Copy this yourself');
+      if (!on && document.activeElement === cf) { try { cf.select(); } catch (e) {} }   // shown by a tap on it: ready to copy
+    }
+  }
+  function onVeilTap(box, n) {
+    const show = function () {
+      if (!veiled(box)) return false;
+      inviteShown = box._veilKey;
+      paintVeil(box);
+      return true;
+    };
+    n.addEventListener('click', show);
+    n.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.code !== 'Space') return;
+      /* The editor's bare keys (Space plays) must not see a key that was meant for this. */
+      if (show()) { e.preventDefault(); e.stopPropagation(); }
+    });
   }
 
   /* §19.1 "Reset link and code": a new sid, key and code, so every copy of the old link and every note
@@ -2158,6 +2249,7 @@ window.FM = window.FM || {};
       stopHostRelay();
       startHostRelay();
       pushSettings();                          // S7: the editors who may invite get the new link
+      veilInvite();                            // #972: a new secret starts frosted (its new key would too — said, not implied)
       redrawShare();
       if (FM.toast) FM.toast('New link and short code — the old ones no longer work', 2600);
     });
@@ -3058,6 +3150,7 @@ window.FM = window.FM || {};
        it was read to would wait on a dead door. The link never lapses. */
     if (!s.ended && s.role === 'editor' && rs.editorsInvite && typeof rs.link === 'string') {
       const box = el('div', 'cs-invite cs-guestinvite');
+      box._veilKey = veilKeyOf(rs.link, '');   // #972: the QR of the link starts frosted, as the owner's does
       box.appendChild(el('div', 'cs-rowlabel', 'Invite someone'));
       const row = el('div', 'cs-linkrow');
       const gl = btn('cs-copylink accent', 'Copy link', function () { copyPlain(rs.link, 'Link copied', gl); });

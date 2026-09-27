@@ -8,6 +8,8 @@
  *   · "it expands into a bigger view where it basically covers up more of the screen and is in the center"
  *   · "if you grab the edges again and drag it back in again it'll go back to smaller"
  *   · "every time you open it up and close it it'll remember what you last had it like"   → localStorage, per panel
+ *   · #968: "both need to default a small but they remember When it's in the same project … if I start a new project,
+ *      it'll be small again"                                                          → per panel AND per project
  *   · "if you extend it out big and you close it … it kind of like shrinks down onto itself before closing so it's
  *      like shrinking and then folding into the button"                               → fold()
  *
@@ -32,18 +34,48 @@
   'use strict';
   const FM = window.FM = window.FM || {};
 
-  const STORE = 'fm.panelBig';   // {notes: true, shortcuts: true} — a key is present only while that panel is big
+  /* REMEMBERED PER PROJECT (queue 968). Ezra, 26 Sep: *"both need to default a small but they remember When it's in the
+     same project so like basically if I'm in a project and I make it bigger and then go back and it will still be big but
+     then if I start a new project, it'll be small again"*. So the size is kept under the project it was set in:
+     { "<projectId>": { notes: true, shortcuts: true }, … } — a panel is present only while it is big, and a project only
+     while one of its panels is. A NEW project has a new id and so no entry: it opens small with no hook in any of the
+     ways a project gets made (New project, a template, a duplicate, a friend's copy), which is why there are none.
+     The old flat store, `fm.panelBig` (one size for every project), is deliberately NOT read: after this update both
+     panels start small once, which is exactly the default he asked for. */
+  const STORE = 'fm.panelBigByProject';
+  const KEEP = 40;               // projects remembered at most — the ones written most recently; storage cannot grow forever
   const COMMIT = 36;             // px of travel (outward to grow, inward to shrink) that switches size on release
   const TAP = 6;                 // under this much travel a press on the grip is a tap, and a tap switches too
   const LEAN = 0.07;             // the most the panel leans after the pointer before it commits
 
+  /* WHICH PROJECT. THIS tab's open one (FM.storage.openProjectId), not the shared fm.currentProject pointer, which a
+     second window opening another project moves under this one (see boundId in js/storage.js). Nothing open — Home on a
+     fresh start, Settings › Keyboard shortcuts with no project — keeps its own '_none' slot. */
+  function pid() {
+    try {
+      let id = null;
+      if (FM.storage && typeof FM.storage.openProjectId === 'function') id = FM.storage.openProjectId();
+      else if (FM.projects && typeof FM.projects.currentId === 'function') id = FM.projects.currentId();
+      return (typeof id === 'string' && id) ? id : '_none';
+    } catch (e) { return '_none'; }
+  }
+  function isObj(o) { return !!o && typeof o === 'object' && !Array.isArray(o); }
   function readStore() {
-    try { const o = JSON.parse(localStorage.getItem(STORE) || '{}'); return (o && typeof o === 'object') ? o : {}; }
+    try { const o = JSON.parse(localStorage.getItem(STORE) || '{}'); return isObj(o) ? o : {}; }
     catch (e) { return {}; }
   }
-  function remembered(key) { return readStore()[key] === true; }
+  function remembered(key) { const p = readStore()[pid()]; return isObj(p) && p[key] === true; }
   function remember(key, big) {
-    try { const o = readStore(); if (big) o[key] = true; else delete o[key]; localStorage.setItem(STORE, JSON.stringify(o)); }
+    try {
+      const o = readStore(), id = pid();
+      const p = isObj(o[id]) ? o[id] : {};
+      if (big) p[key] = true; else delete p[key];
+      delete o[id];                              // re-inserted LAST: key order is the order projects were written in
+      if (Object.keys(p).length) o[id] = p;      // a project with nothing big is not kept at all
+      const ids = Object.keys(o);                // project ids are 'p_…' strings, never integer-like, so this is insertion order
+      for (let i = 0; i < ids.length - KEEP; i++) delete o[ids[i]];
+      localStorage.setItem(STORE, JSON.stringify(o));
+    }
     catch (e) { /* private window / storage off: the size still works, it just is not remembered */ }
   }
   function still() {
@@ -419,8 +451,10 @@
 
   FM.panelSize = {
     attach: attach,
-    isBig: remembered,
+    isBig: remembered,                                         // for THIS project (queue 968)
+    _setBig: function (key, big) { remember(key, !!big); },   // suite seam: set the remembered size without writing the store's shape by hand
     STORE: STORE,
+    KEEP: KEEP,
     COMMIT: COMMIT,
     _reduce: false
   };

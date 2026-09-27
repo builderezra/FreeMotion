@@ -10590,6 +10590,32 @@ body.text-editing .collab-people { display: none; }
   text-align: center; padding: 7px 6px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
   color: var(--text); user-select: all; overflow-wrap: anywhere;
 }
+/* #972 — THE SHORT CODE AND THE QR START FROSTED each time sharing is opened: "incase streamers or whatever are using it".
+   The code's own glyphs are TRANSPARENT (still in the page, for Copy); what is painted is a DECOY blurred to a smudge, because
+   a blur of the real glyphs keeps each one's weight of ink. The QR keeps its real canvas under a 12 px blur — three modules
+   wide, which leaves nothing at the scale a module is drawn at. One tap shows both (collab-ui.js onVeilTap).
+   `!important` on purpose: no theme's ink for the code (theme-glass.css gives the light card one) may paint it while frosted. */
+.cs-roomcode.cs-veiled {
+  position: relative; cursor: pointer; -webkit-user-select: none; user-select: none;
+  color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important;
+}
+.cs-roomcode.cs-veiled::before {
+  content: 'K7Q-M4X-R2P'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: transparent; -webkit-text-fill-color: transparent; text-shadow: 0 0 12px var(--text); pointer-events: none;
+}
+.cs-qrframe { position: relative; border-radius: 10px; }
+.cs-qr.cs-veiled .cs-qrframe { cursor: pointer; overflow: hidden; }
+.cs-qr.cs-veiled .cs-qrimg { filter: blur(12px); }
+.cs-roomcode.cs-veiled::after,
+.cs-qr.cs-veiled .cs-qrframe::after,
+.cs-copywrap.cs-veiled::after {
+  content: 'Tap to show'; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  padding: 6px 12px; border-radius: 999px; background: rgba(11, 14, 20, .78);
+  font: 700 13px/1.2 system-ui, -apple-system, sans-serif; letter-spacing: 0; white-space: nowrap;
+  color: #ffffff; -webkit-text-fill-color: #ffffff; text-shadow: none; pointer-events: none;
+}
+.cs-roomcode.cs-veiled:focus-visible,
+.cs-qr.cs-veiled .cs-qrframe:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cs-copycode {
   flex: 0 0 auto; min-height: 44px; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--line);
   background: var(--panel); color: var(--text); font-weight: 700; font-size: 14px; cursor: pointer;
@@ -10852,6 +10878,16 @@ body.collab-card-open #toast { z-index: 225; }
 body.set-open #toast { z-index: 225; }   /* queue 930 review: a toast raised from Settings (Key saved / forgotten) was painted under it */
 /* …and a copy the browser refused is put in a field under the button that asked, selected (collab-ui.js copyPlain). */
 .cs-copyfield { display: block; width: 100%; box-sizing: border-box; margin-top: 8px; font-size: 12px; }
+/* #972 review: …in a wrap that carries the frost's "Tap to show" (an input draws no ::after). Beside a frosted invite the
+   field's text is there and selected, and none of it is painted — its ink, its selection and its caret are transparent. */
+.cs-copywrap { position: relative; margin-top: 8px; }
+.cs-copywrap > .cs-copyfield { margin-top: 0; }
+.cs-copywrap.cs-veiled > .cs-copyfield { cursor: pointer; caret-color: transparent; }
+.cs-copywrap.cs-veiled > .cs-copyfield,
+.cs-copywrap.cs-veiled > .cs-copyfield::selection {
+  color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important;
+}
+.cs-copywrap.cs-veiled > .cs-copyfield::selection { background: transparent; }
 body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
 /* A TOAST THAT ONLY SAYS SOMETHING NEVER TAKES A TAP (found shipping v16.95, #935). It sits over the middle of the phone
    timeline for a second or two after nearly every action — "Keyframe added", "Camera hidden" — and it caught the next
@@ -10926,6 +10962,23 @@ body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
 }
 /* `flex: none`: the scrim is a flex row, and a flex item shrinks to its container by default — big must not. */
 .pb-card.pb-big { flex: none; width: var(--pb-w); height: var(--pb-h); max-width: none; max-height: none; min-width: 0; }
+/* A phone's SMALL Help is really small (queue 969). Ezra: "Also on mobile make it so that the small version for the Help menu
+   is actually small because right now it's like there is no difference". Measured at 380×800 before this: small 356×688,
+   big 360×780 — 4px narrower and 12% shorter, because the list is long enough to fill small's 86% cap. Small is now about
+   half the screen with a 28px margin each side (324×416 at 380×800, 384×460 at 440×956), centred like every other phone
+   card, and the list scrolls inside it. min-width: 0 is load-bearing: the base rule's min-width (min(360px, 100vw − 24px)
+   = 356px at 380) beats a smaller width, and without it the card stays exactly as wide as before.
+   The floor (300px, or 86% of a shorter screen) keeps a landscape phone from getting a sliver (measured 440×300 at
+   667×375, five rows showing; without it, about two).
+   :not(.pb-big) so big keeps --pb-w/--pb-h; .pb-morph's !important caps still win while it animates between the two. */
+@media (max-width: 700px) {
+  .shortcuts-card:not(.pb-big) {
+    width: calc(100vw - 56px);
+    min-width: 0;
+    max-height: clamp(min(300px, 86vh), 52vh, 460px);     /* where dvh is missing */
+    max-height: clamp(min(300px, 86dvh), 52dvh, 460px);
+  }
+}
 
 /* While the frame animates between the two sizes nothing may clamp it — the shortcuts card's 440px max-width
    would otherwise stop a shrinking panel dead at 440 and then jump. !important so popfrom's inline cap loses too. */

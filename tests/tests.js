@@ -100138,7 +100138,7 @@
     document.querySelectorAll('.pop-tail').forEach(n => n.remove());
     document.querySelectorAll('.pop-src').forEach(n => n.classList.remove('pop-src'));
     document.documentElement.removeAttribute('data-pb-cursor');
-    try { localStorage.removeItem('fm.panelBig'); } catch (e) {}
+    try { localStorage.removeItem('fm.panelBig'); localStorage.removeItem('fm.panelBigByProject'); } catch (e) {}   // #968: the size is kept per project now
     if (FM.panelSize) FM.panelSize._reduce = false;
   }
   function mouseDrag927(x0, y0, dx, dy, n) {
@@ -100337,8 +100337,8 @@
           if (right < rows.length * 0.35 || right > rows.length * 0.65) throw new Error('the two columns are lopsided: ' + (rows.length - right) + ' rows on the left, ' + right + ' on the right');
           const sc = card.querySelector('.shortcuts-scroll');
           if (sc.scrollHeight > sc.clientHeight + 2) throw new Error('big shortcuts still scroll (' + sc.scrollHeight + ' in ' + sc.clientHeight + ') in an 800-tall window — all ' + rows.length + ' should fit');
-          let stored = null; try { stored = JSON.parse(localStorage.getItem('fm.panelBig') || 'null'); } catch (e) {}
-          if (!stored || stored.shortcuts !== true || stored.notes) throw new Error('what is remembered is ' + JSON.stringify(stored) + ' — it should be shortcuts big, notes untouched');
+          /* #968: remembered for THIS project, read through the module rather than the store's shape */
+          if (!FM.panelSize.isBig('shortcuts') || FM.panelSize.isBig('notes')) throw new Error('what is remembered is shortcuts ' + (FM.panelSize.isBig('shortcuts') ? 'big' : 'small') + ', notes ' + (FM.panelSize.isBig('notes') ? 'big' : 'small') + ' — it should be shortcuts big, notes untouched');
 
           /* a real click on Close: it is closed at once (a second ? would open it) but still on screen, folding */
           const close = [].slice.call(card.querySelectorAll('.shortcuts-foot .btn')).find(b => !b.classList.contains('shortcuts-tut'));
@@ -100373,8 +100373,7 @@
           FM.shortcuts.show(); await sleep927(450);
           if (card.classList.contains('pb-big')) throw new Error('closed small and reopened: it came back big');
           if (!near927(rect927(card), small, 2)) throw new Error('reopened small at ' + fmt927(rect927(card)) + ', not ' + fmt927(small));
-          stored = null; try { stored = JSON.parse(localStorage.getItem('fm.panelBig') || 'null'); } catch (e) {}
-          if (stored && stored.shortcuts) throw new Error('small was not remembered: ' + JSON.stringify(stored));
+          if (FM.panelSize.isBig('shortcuts')) throw new Error('small was not remembered: the shortcuts are still remembered big');
         });
       }, 1100);
     } finally {
@@ -100390,7 +100389,7 @@
     tidy927();
     async function once(where, kind, notesBtnId) {
       if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
-      try { localStorage.setItem('fm.panelBig', JSON.stringify({ notes: true })); } catch (e) {}
+      FM.panelSize._setBig('notes', true);   // #968: remembered big for THIS project
       FM.notepad.open(); await sleep927(700);
       const scrim = document.querySelector('.np-scrim'), card = scrim && scrim.querySelector('.np-card');
       if (!card || !card.classList.contains('pb-big')) throw new Error(where + ': setup: the notepad did not open big from the remembered size');
@@ -106790,6 +106789,591 @@
         });
       }
     });
+  });
+
+
+  /* ═══ 968 — NOTES AND THE HELP MENU OPEN SMALL, AND REMEMBER THEIR SIZE PER PROJECT ═══════════════════════════════════
+   * Ezra, 26 Sep, in full in REQUESTS.md #968: "It's the Help menu yeah so the menu on the menu both need to default a small
+   * but they remember When it's in the same project so like basically if I'm in a project and I make it bigger and then go
+   * back and it will still be big but then if I start a new project, it'll be small again". Driven at a phone width with a
+   * REAL finger (tests/_cdp.py's __fmWantInput): the panels open from the phone top bar's Notes and ? buttons, go big from a
+   * tap on their grip, close from Done / Close, and the new project is made the way he makes one — + on Home, then Create —
+   * and project A is reopened by its card. The CONTROL for "B opens small" is A: the same checks see BIG there, before B is
+   * made and again after coming back, so a check that could never see big cannot pass. */
+  async function tap968(el, what) {
+    if (!el) throw new Error('setup: nothing to tap for ' + what);
+    /* never tap a moving target: Home hands over to the editor with a slide that runs for about 900ms after the card is
+       tapped (measured at 360: the top bar's Notes button travels from x 599 to 239), and a tap aimed during it lands on the button
+       that has slid under the finger — the Canvas settings cog, twice in six runs */
+    let r = el.getBoundingClientRect();
+    for (const end = Date.now() + 3000; ;) {
+      await sleep927(120);
+      const q = el.getBoundingClientRect();
+      if (Math.abs(q.left - r.left) < 0.5 && Math.abs(q.top - r.top) < 0.5 && Math.abs(q.width - r.width) < 0.5) break;
+      if (Date.now() > end) throw new Error('setup: ' + what + ' was still moving after 3s');
+      r = q;
+    }
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (!(r.width > 0) || x < 0 || y < 0 || x > 370 || y > 750) throw new Error('setup: ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
+    hitIs927(x, y, el, what);
+    await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+  }
+  function notesCard968() { return document.querySelector('.np-scrim:not(.np-closing) .np-card'); }
+  function helpCard968() { const o = document.getElementById('shortcuts-overlay'); return o && !o.classList.contains('hidden') && !o.classList.contains('pb-closing') ? o.querySelector('.shortcuts-card') : null; }
+  /* open a panel with a real tap on its phone button; answer whether it came up BIG */
+  async function open968(which, where) {
+    await tap968(document.getElementById(which === 'notes' ? 'm-notes' : 'm-help'), where + ': a tap on the phone ' + (which === 'notes' ? 'Notes button' : '? (Help)'));
+    await sleep927(700);
+    const card = which === 'notes' ? notesCard968() : helpCard968();
+    if (!card) throw new Error(where + ': a real tap on the phone ' + (which === 'notes' ? 'Notes button' : '? (Help)') + ' did not open it');
+    return card.classList.contains('pb-big');
+  }
+  /* close it the way he does — Done on the notes, Close on the help — and let a big one finish folding */
+  async function close968(which, where) {
+    const card = which === 'notes' ? notesCard968() : helpCard968();
+    if (!card) throw new Error(where + ': setup: ' + which + ' is not open to close');
+    const btn = which === 'notes' ? card.querySelector('.np-done') : [].slice.call(card.querySelectorAll('.shortcuts-foot .btn')).find(b => !b.classList.contains('shortcuts-tut'));
+    await tap968(btn, where + ': a tap on ' + (which === 'notes' ? 'Done' : 'Close'));
+    await sleep927(950);
+    const still = which === 'notes' ? !!document.querySelector('.np-scrim') : !document.getElementById('shortcuts-overlay').classList.contains('hidden');
+    if (still) throw new Error(where + ': ' + which + ' was still on screen 950ms after ' + (which === 'notes' ? 'Done' : 'Close'));
+  }
+
+  test('968 Notes and the Help menu: made big in one project they stay big there, a new project made from Home opens both small, and going back to the first they are big again', { item: '968', budgetMs: 150000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let newp = null; try { newp = localStorage.getItem('fm.newproj'); } catch (e) {}
+    tidy927();
+    try {
+      if (wasOpen) { FM.home.close(); await sleep927(300); }
+      const a = await FM.projects.create({ name: '968 Beach house', width: 1080, height: 1920 });
+      if (!a) throw new Error('setup: project A could not be made');
+      made.push(a);
+      hcShape('968 title', '#f4a261');
+      await FM.storage.save();
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+          if (FM.storage.openProjectId() !== a) throw new Error('setup: the editor is not on project A');
+
+          /* in A: both open small, a tap on the grip makes each big, and closed and reopened they are STILL big */
+          for (const which of ['notes', 'help']) {
+            const name = which === 'notes' ? 'Notes' : 'Help';
+            if (await open968(which, 'A')) throw new Error('A: ' + name + ' opened BIG in a project where it was never made big — the default is small');
+            const card = which === 'notes' ? notesCard968() : helpCard968();
+            await tap968(grip927(card), 'A: a tap on the grip of ' + name);
+            await sleep927(700);
+            if (!card.classList.contains('pb-big')) throw new Error('CONTROL: A: a real tap on the grip of ' + name + ' did not make it big — nothing below would mean anything');
+            await close968(which, 'A (' + name + ' big)');
+            if (!(await open968(which, 'A, reopened'))) throw new Error('A: ' + name + ' was made big, closed and reopened in the SAME project — it came back small (clause 3: "if I … make it bigger and then go back … it will still be big")');
+            await close968(which, 'A, reopened');
+          }
+
+          /* + on Home, then Create: a NEW project B — both small */
+          await tap968(document.getElementById('m-back'), 'a tap on the phone back arrow (to Home)');
+          await hcUntil('Home to open', () => FM.home.isOpen(), 4000);
+          await sleep927(700);
+          const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+          if (tab && !tab.classList.contains('active')) { await tap968(tab, 'a tap on the Projects tab'); await sleep927(400); }
+          await tap968(document.getElementById('hm-new'), 'a tap on + (new project)');
+          await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden'); }, 4000);
+          await sleep927(400);
+          await tap968(document.getElementById('hm-create'), 'a tap on Create');
+          const b = await hcUntil('the new project to open in the editor', () => { const id = FM.storage.openProjectId(); return !FM.home.isOpen() && id && id !== a ? id : null; }, 8000);
+          made.push(b);
+          await sleep927(600);
+          for (const which of ['notes', 'help']) {
+            const name = which === 'notes' ? 'Notes' : 'Help';
+            if (await open968(which, 'B')) throw new Error('B: made big in project A, then a NEW project was made from Home (+ then Create) — and ' + name + ' opened BIG in it (clause 4: "if I start a new project, it\'ll be small again")');
+            await close968(which, 'B');
+          }
+
+          /* back to A by its card: both big again — the size belongs to the project */
+          await tap968(document.getElementById('m-back'), 'a tap on the phone back arrow (to Home, again)');
+          await hcUntil('Home to open again', () => FM.home.isOpen(), 4000);
+          await sleep927(900);
+          const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+          await sleep927(150);
+          const cardA = hcCard(a);
+          if (!cardA) throw new Error('setup: project A has no card on Home');
+          await tap968(cardA.querySelector('.hm-thumb') || cardA, 'a tap on the card of project A');
+          await hcUntil('project A to open in the editor', () => !FM.home.isOpen() && FM.storage.openProjectId() === a, 8000);
+          await sleep927(600);
+          for (const which of ['notes', 'help']) {
+            const name = which === 'notes' ? 'Notes' : 'Help';
+            if (!(await open968(which, 'A again'))) throw new Error('back in project A after B: ' + name + ' opened small — it was left big in A, and the size is remembered per project (clause 3)');
+            await close968(which, 'A again');
+          }
+        });
+      }, 360);
+    } finally {
+      try { if (FM.notepad) FM.notepad.close({ now: true }); } catch (e) {}
+      tidy927();
+      try { const d = document.getElementById('hm-dialog'); if (d) d.classList.add('hidden'); } catch (e) {}
+      try { if (newp == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', newp); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('968 the per-project sizes are kept for the 40 projects written most recently, and a project with nothing big is not kept at all', { item: '968' }, async function () {
+    tidy927();
+    const K = 'fm.panelBigByProject';
+    try {
+      if (!FM.panelSize || typeof FM.panelSize._setBig !== 'function') throw new Error('FM.panelSize._setBig is missing — the size is not remembered per project (#968)');
+      const me = FM.storage.openProjectId() || '_none';
+      const seed = {};
+      for (let i = 0; i < 45; i++) seed['p_old' + String(i).padStart(2, '0')] = { notes: true };
+      localStorage.setItem(K, JSON.stringify(seed));
+      if (FM.panelSize.isBig('notes')) throw new Error('setup: 45 OTHER projects are big and this one reads big too — the size is not per project');
+      FM.panelSize._setBig('notes', true);
+      if (!FM.panelSize.isBig('notes')) throw new Error('CONTROL: after _setBig the notes do not read big for this project');
+      let o = JSON.parse(localStorage.getItem(K) || '{}');
+      const ids = Object.keys(o);
+      if (ids.length !== 40) throw new Error('the store holds ' + ids.length + ' projects after a write — it should keep the 40 written most recently');
+      if (ids[ids.length - 1] !== me) throw new Error('the project just written is not the newest entry (' + ids[ids.length - 1] + ', not ' + me + ')');
+      const gone = ['p_old00', 'p_old05'].filter(k => k in o), kept = ['p_old06', 'p_old44'].filter(k => !(k in o));
+      if (gone.length || kept.length) throw new Error('the wrong projects were dropped: still there ' + JSON.stringify(gone) + ', missing ' + JSON.stringify(kept) + ' — the six OLDEST should go');
+      FM.panelSize._setBig('notes', false);
+      o = JSON.parse(localStorage.getItem(K) || '{}');
+      if (me in o) throw new Error('with nothing big, this project still has an entry (' + JSON.stringify(o[me]) + ') — the store would fill with empty projects');
+      if (FM.panelSize.isBig('notes')) throw new Error('made small again, the notes still read big');
+    } finally {
+      tidy927();
+    }
+  });
+
+  /* ═══ 969 — ON A PHONE, THE SMALL HELP IS ACTUALLY SMALL ═════════════════════════════════════════════════════════════════
+     Ezra, 26 Sep: *"Also on mobile make it so that the small version for the Help menu is actually small because right now it's
+     like there is no difference"*. Measured before the fix at 380×800: small 356×688, big 360×780 — 4px narrower, 12% shorter,
+     because the list fills small's 86% cap (and the base rule's min-width kept it as wide as big). Asserted as RATIOS against
+     big at the same width, so the test says what he said ("no difference") rather than pinning pixels; and against a big that
+     is proven to still fill the screen, so the ratio cannot pass by shrinking big. Opened in a project (a real tap on the phone
+     bar's ?) and over Home (Settings › Keyboard shortcuts' own call), which are the two ways in; small → big → small is a real
+     finger on the grip, the way he switches it. */
+  test('969 phone — the small Help (Shortcuts/tips) is clearly smaller than big: at most 60% of its height and 30px narrower, still usable small, big still fills the screen, and PC is unchanged', { item: '969', budgetMs: 120000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    tidy927();
+    function sheet() { const o = document.getElementById('shortcuts-overlay'); return o && !o.classList.contains('hidden') ? o.querySelector('.shortcuts-card') : null; }
+    async function tap(el, what) {
+      const q = rect927(el);
+      hitIs927(q.cx, q.cy, el, what);
+      await realInput924([{ t: 'touchStart', x: q.cx, y: q.cy, ms: 70 }, { t: 'touchEnd', x: q.cx, y: q.cy, ms: 0 }], what);
+    }
+    function mustBeSmall(card, where) {
+      if (!card || !card._panelSize) throw new Error(where + ': setup: the Help sheet did not open with its size grip');
+      if (card.classList.contains('pb-big')) throw new Error(where + ': setup: it opened BIG — the remembered size was not cleared, so this would measure big twice');
+      return card;
+    }
+    async function phone(where, open) {
+      await open(); await sleep927(650);
+      const card = mustBeSmall(sheet(), where);
+      const small = rect927(card);
+      /* still USABLE small: the list scrolls inside, the foot is whole and both its buttons take a press, the grip is reachable,
+         and enough rows show to be worth opening */
+      const sc = card.querySelector('.shortcuts-scroll'), foot = card.querySelector('.shortcuts-foot');
+      if (!(sc.scrollHeight > sc.clientHeight + 4)) throw new Error(where + ': small, the list does not scroll inside the card (' + sc.scrollHeight + ' in ' + sc.clientHeight + ') — the rest of the shortcuts are unreachable');
+      const f = rect927(foot);
+      if (f.t < small.t - 0.5 || f.b > small.b + 0.5 || f.b > innerHeight) throw new Error(where + ': small, Tutorials/Close are cut off (' + fmt927(f) + ' in a card at ' + fmt927(small) + ')');
+      [].forEach.call(foot.querySelectorAll('.btn'), b => { const q = rect927(b); hitIs927(q.cx, q.cy, b, where + ': ' + (b.textContent || '').trim()); });
+      if (small.l < 0 || small.t < 0 || small.r > innerWidth || small.b > innerHeight) throw new Error(where + ': small runs off the screen (' + fmt927(small) + ')');
+      const sb = rect927(sc);
+      const rows = [].filter.call(card.querySelectorAll('.shortcut-row'), r => { const q = r.getBoundingClientRect(); return q.height > 0 && q.top >= sb.t - 1 && q.bottom <= sb.b + 1; }).length;
+      if (rows < 4) throw new Error(where + ': small shows only ' + rows + ' shortcuts without scrolling — too small to be worth opening');
+      /* a real finger on the grip: small → big */
+      await tap(grip927(card), where + ': a tap on the grip of small');
+      await sleep927(650);
+      if (!card.classList.contains('pb-big')) throw new Error(where + ': a tap on the grip did not make it big');
+      const big = rect927(card);
+      /* THE CONTROL: big still fills the phone. Without it, "small is 60% of big" could pass by breaking big. */
+      if (!(big.w >= innerWidth * 0.9 && big.h >= innerHeight * 0.85)) throw new Error(where + ': control: big is ' + fmt927(big) + ' in a ' + innerWidth + '×' + innerHeight + ' screen — it should fill it');
+      if (!(small.h <= big.h * 0.6)) throw new Error(where + ': small is ' + fmt927(small) + ' and big ' + fmt927(big) + ' — small is ' + Math.round(small.h / big.h * 100) + '% of big’s height. He said "there is no difference"; on a phone small must be 60% of big or less');
+      if (!(small.w <= big.w - 30)) throw new Error(where + ': small is only ' + Math.round(big.w - small.w) + 'px narrower than big (' + Math.round(small.w) + ' against ' + Math.round(big.w) + ') — it should sit clear of the screen edges, 30px narrower or more');
+      if (small.h < innerHeight * 0.3 || small.w < innerWidth * 0.7) throw new Error(where + ': small went too far — ' + fmt927(small) + ' in a ' + innerWidth + '×' + innerHeight + ' screen');
+      /* and back: a second tap returns it to the same small box */
+      await tap(grip927(card), where + ': a tap on the grip of big');
+      await sleep927(650);
+      if (card.classList.contains('pb-big')) throw new Error(where + ': a second tap on the grip did not make it small again');
+      if (!near927(rect927(card), small, 2)) throw new Error(where + ': back to small at ' + fmt927(rect927(card)) + ', not where it was (' + fmt927(small) + ')');
+      /* and Close, pressed for real, still closes it at the new size */
+      const closeBtn = [].find.call(foot.querySelectorAll('.btn'), b => /close/i.test(b.textContent || ''));
+      if (!closeBtn) throw new Error(where + ': setup: no Close in the foot');
+      await tap(closeBtn, where + ': Close on small');
+      await sleep927(700);
+      if (sheet()) throw new Error(where + ': a real tap on Close did not close the small Help');
+    }
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+          await phone('phone, in a project', async function () {
+            const q = document.getElementById('m-help');
+            if (!q || !(q.getBoundingClientRect().width > 0)) throw new Error('setup: the phone bar has no ? (#m-help) on screen');
+            await tap(q, 'the phone bar’s ?');
+          });
+          FM.home.open(); await sleep927(400);
+          await phone('phone, over Home', async function () { FM.shortcuts.show(); });
+          FM.home.close(); await sleep927(300);
+        });
+      }, 360);
+      /* PC is not what he asked about: small there keeps its 440px card AND its 86%-of-the-window height. Width alone
+         cannot see a leak — the base rule's max-width: 440px caps the phone width too — so over Home, where the card is
+         centred with no popFrom cap, a list that scrolls must mean the card has reached its PC cap (86%), not the
+         phone's ~half. Checked by moving the phone rule out of its media query: the width check alone stayed green. */
+      await atWideWidth(async function () {
+        if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+        FM.shortcuts.show(); await sleep927(650);
+        let card = mustBeSmall(sheet(), 'PC, in a project');
+        let w = card.getBoundingClientRect().width;
+        if (!(w >= 420)) throw new Error('PC, in a project: small Help is ' + Math.round(w) + 'px wide — the phone rule leaked onto PC (it is 440 there)');
+        FM.shortcuts.hide({ now: true }); await sleep927(150);
+        FM.home.open(); await sleep927(400);
+        FM.shortcuts.show(); await sleep927(650);
+        card = mustBeSmall(sheet(), 'PC, over Home');
+        const r = rect927(card), sc = card.querySelector('.shortcuts-scroll');
+        if (!(r.w >= 420)) throw new Error('PC, over Home: small Help is ' + Math.round(r.w) + 'px wide — the phone rule leaked onto PC (it is 440 there)');
+        if (sc.scrollHeight > sc.clientHeight + 4 && !(r.h >= innerHeight * 0.8)) throw new Error('PC, over Home: small Help is ' + fmt927(r) + ' in a ' + innerWidth + '×' + innerHeight + ' window with its list scrolling — it stopped short of its 86% cap, so the phone’s half-height rule leaked onto PC');
+        FM.shortcuts.hide({ now: true }); await sleep927(150);
+        FM.home.close(); await sleep927(300);
+      }, 1280);
+    } finally {
+      tidy927();
+      try { if (hadHome && !FM.home.isOpen()) FM.home.open(); else if (!hadHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep927(120);
+    }
+  });
+
+  /* ═══ 972 — THE INVITE STARTS FROSTED ════════════════════════════════════════════════════════════════════════════════════
+   * His words (27 Sep): "Make the code for inviting friends blurred out when you first open it incase streamers or whatever are
+   * using it". The short code and the QR are the two things on the sharing panel that someone watching a stream could use (the
+   * link itself is only ever Copy / Share). Both start frosted every time sharing is OPENED — the Share card or the Friends
+   * block — one tap on either shows both for the rest of that open, a redraw while it is open keeps it shown, and a new
+   * secret (Reset) starts frosted again. Driven with a real finger and real keys (tests/_cdp.py's __fmWantInput). */
+  function alpha972(c) {
+    const s = String(c || '').trim();
+    if (s === 'transparent') return 0;
+    const m = /rgba?\(([^)]*)\)/.exec(s);
+    if (!m) return 1;
+    const p = m[1].split(/[\s,\/]+/).filter(Boolean);
+    return p.length > 3 ? parseFloat(p[3]) : 1;
+  }
+  function frosted972(root, where, want) {
+    const cv = (root || document).querySelector('#collab-room-code');
+    if (!cv) throw new Error('setup: no short code on screen ' + where);
+    /* CONTROL: the code IS there — the frost hides it from the screen, not from Copy or from anything that reads it. */
+    if (FM.collab.signal.normRoomCode(cv.textContent) !== want) throw new Error('setup: the short code ' + where + ' reads “' + cv.textContent + '”, not the room’s code');
+    const cs = getComputedStyle(cv);
+    if (!cv.classList.contains('cs-veiled') || alpha972(cs.color) !== 0 || alpha972(cs.webkitTextFillColor) !== 0) {
+      throw new Error('the short code can be read ' + where + ' (' + (cv.classList.contains('cs-veiled') ? 'frosted, but ' : 'not frosted: ') + 'colour ' + cs.color + ', fill ' + cs.webkitTextFillColor + ') — anyone watching his stream can type it in');
+    }
+    /* What IS painted is a decoy — a blur of the real glyphs keeps how much ink each one has, and that is a clue. */
+    const decoy = getComputedStyle(cv, '::before').content || '';
+    if (decoy === 'none' || decoy.replace(/[^0-9A-Z]/g, '').indexOf(want) >= 0) throw new Error('the frost ' + where + ' is ' + (decoy === 'none' ? 'not drawn at all' : 'drawn from the real code (' + decoy + ')'));
+    const say = getComputedStyle(cv, '::after').content;
+    if (say !== '"Tap to show"') throw new Error('the frosted code ' + where + ' does not say “Tap to show” (' + say + ')');
+    if (cv.getAttribute('role') !== 'button' || cv.tabIndex !== 0 || cv.getAttribute('aria-label') !== 'Short code hidden, tap to show') {
+      throw new Error('the frosted code ' + where + ' is not a button a keyboard or a screen reader can use (role ' + cv.getAttribute('role') + ', tabIndex ' + cv.tabIndex + ', label “' + cv.getAttribute('aria-label') + '”)');
+    }
+    return cv;
+  }
+  function shown972(root, where, want) {
+    const cv = (root || document).querySelector('#collab-room-code');
+    if (!cv) throw new Error('setup: no short code on screen ' + where);
+    if (FM.collab.signal.normRoomCode(cv.textContent) !== want) throw new Error('setup: the short code ' + where + ' reads “' + cv.textContent + '”, not the room’s code');
+    const cs = getComputedStyle(cv);
+    if (cv.classList.contains('cs-veiled') || alpha972(cs.color) < 0.5 || alpha972(cs.webkitTextFillColor) < 0.5) throw new Error('the short code is still frosted ' + where + ' (colour ' + cs.color + ', fill ' + cs.webkitTextFillColor + ')');
+    if (cv.getAttribute('role') === 'button' || cv.getAttribute('aria-label') !== 'Short code ' + cv.textContent.split('').join(' ')) throw new Error('the shown code ' + where + ' is still labelled as hidden (“' + cv.getAttribute('aria-label') + '”, role ' + cv.getAttribute('role') + ')');
+    return cv;
+  }
+  function qr972(root) {
+    const q = root.querySelector('.cs-qr');
+    const img = q ? q.querySelector('canvas') : null;
+    return { q: q, img: img, veiled: !!q && q.classList.contains('cs-veiled'), filter: img ? getComputedStyle(img).filter : '' };
+  }
+  async function tap972(el, what) {
+    if (!el) throw new Error('setup: nothing to tap for ' + what);
+    el.scrollIntoView({ block: 'center' });
+    await settle921(80);
+    await hd5Tap(el, what);
+    await settle921(160);
+  }
+  /* The keyboard on `el`, for a real key. Not frameKeys690c's document.hasFocus(): that asks whether the whole Chrome WINDOW
+     has the OS focus, which another suite's Chrome opening beside this one takes away — the key still goes to the page's
+     focused element, which is what is checked here. */
+  async function keysTo972(el, what) {
+    if (!el) throw new Error('setup: nothing to put the keyboard on for ' + what);
+    window.focus();
+    el.focus();
+    await settle921(60);
+    if (document.activeElement !== el) throw new Error(what + ' cannot take the keyboard — Tab never reaches it');
+  }
+  function segOf972(root, words) {
+    return Array.prototype.filter.call(root.querySelectorAll('.cs-segbtn'), function (b) { return b.textContent === words; })[0] || null;
+  }
+
+  test('972 the short code starts frosted each time the Share card opens — its glyphs are not painted while Copy still copies it, the QR opened then is frosted too and one real tap on it shows both, a settings redraw and a trip to Sharing settings keep it shown, closing and reopening frosts it again, and Reset frosts the new one', { item: '972', budgetMs: 150000 }, async function () {
+    const C = need921S6('the frosted short code');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const rec = function () { return JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid)); };
+          const card = function () { return document.getElementById('collab-share'); };
+          const had = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+          let copied = null;
+          Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: function (t) { copied = t; return Promise.resolve(); } } });
+          try {
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () {
+                await ui.share(); await settle921(300);
+                let cv = frosted972(card(), 'when the Share card opens', rec().code);
+                /* Copy works while it is frosted — copying never paints the code. */
+                await tap972(card().querySelector('.cs-copycode'), 'Copy (the code frosted)');
+                if (copied !== cv.textContent) throw new Error('Copy beside the frosted code copied “' + copied + '”, not the code (' + cv.textContent + ')');
+                frosted972(card(), 'after Copy', rec().code);
+                /* The QR IS the link, and a camera can read it off a stream: opened while the code is frosted, it is frosted. */
+                await tap972(card().querySelector('.cs-qrbtn'), 'QR');
+                let q = qr972(card());
+                if (!q.img) throw new Error('setup: [QR] drew nothing');
+                if (!q.veiled || !/blur\(/.test(q.filter)) throw new Error('the QR opened while the code is frosted is sharp (filter “' + q.filter + '”) — a phone watching the stream can scan the invite link off it');
+                await tap972(q.img, 'the frosted QR');
+                q = qr972(card());
+                if (!q.img || q.veiled || /blur\(/.test(q.filter)) throw new Error('a tap on the frosted QR did not show it (filter “' + q.filter + '”)');
+                cv = shown972(card(), 'after one tap on the frosted QR — one tap shows both', rec().code);
+                await tap972(card().querySelector('.cs-qrbtn'), 'QR (put away)');
+                /* A settings change redraws the whole panel: it stays shown. */
+                await tap972(segOf972(card(), 'Let them in'), 'Let them in');
+                if (rec().settings.ask !== false) throw new Error('setup: “Let them in” did not change the room');
+                const cv2 = shown972(card(), 'after “Let them in” redrew the panel', rec().code);
+                if (cv2 === cv) throw new Error('setup: the panel was not redrawn, so this measured nothing');
+                await tap972(segOf972(card(), 'Ask me first'), 'Ask me first');
+                shown972(card(), 'after “Ask me first”', rec().code);
+                /* Into Sharing settings and back: still shown. */
+                await tap972(card().querySelector('.cs-gear'), 'the gear');
+                if (document.getElementById('collab-room-code')) throw new Error('setup: Sharing settings still shows the code');
+                await tap972(card().querySelector('.cs-backbtn'), 'Back');
+                shown972(card(), 'after Sharing settings and Back', rec().code);
+                /* Closed and opened again: frosted again. */
+                ui.close(); await settle921(150);
+                await ui.share(); await settle921(300);
+                cv = frosted972(card(), 'when the Share card is opened again', rec().code);
+                await tap972(cv, 'the frosted short code');
+                shown972(card(), 'after one tap on it', rec().code);
+                /* Reset: a new secret, frosted. */
+                const old = rec().code;
+                await tap972(card().querySelector('.cs-reset'), 'Reset link and short code');
+                const ok = await until921S6('the Reset confirm', function () { const b = document.querySelector('#fm-ask .fm-ask-ok'); return b && !document.getElementById('fm-ask').classList.contains('hidden') ? b : null; });
+                await tap972(ok, 'Reset');
+                await until921S6('the new code on screen', function () { const n = document.getElementById('collab-room-code'); return n && rec().code !== old && C.signal.normRoomCode(n.textContent) === rec().code; });
+                frosted972(card(), 'after Reset link and short code', rec().code);
+                ui.close();
+              });
+            }, 380);
+          } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
+        });
+      });
+    });
+  });
+
+  test('972 in the Friends block on a phone the short code starts frosted, one real tap shows it, flipping “Show others’ pointers” — which redraws the block through Settings — keeps it shown, and closing Canvas settings and opening Friends again frosts it', { item: '972', budgetMs: 150000 }, async function () {
+    need921S6('the frosted short code in the Friends block');
+    const wasCursors = FM.settings.get('collabCursors') !== false;
+    try {
+      await withFakeNet921(async function () {
+        await withLabs921(async function () {
+          await with945(async function () {
+            await withCollab921([layer921('A')], async function (ctx) {
+              const rec = function () { return JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid)); };
+              await atPhoneWidth(async function () {
+                await onScreen924(async function () {
+                  const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                  FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                  if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+                  const cv = frosted972(fr, 'when the Friends block opens', rec().code);
+                  await tap972(cv, 'the frosted short code');
+                  shown972(fr, 'after one tap on it', rec().code);
+                  /* Settings' apply() redraws the block (collab-ui.js syncLabs) as a fresh draw — not a keepStep redraw. */
+                  await tap972(fr.querySelector('.cs-gear'), 'the gear');
+                  const row = Array.prototype.filter.call(fr.querySelectorAll('.cs-srow'), function (r) { const l = r.querySelector('.cs-slabel'); return l && l.textContent === 'Show others’ pointers'; })[0];
+                  const before = FM.settings.get('collabCursors') !== false;
+                  await tap972(row && row.querySelector('.set-switch'), 'Show others’ pointers');
+                  if ((FM.settings.get('collabCursors') !== false) === before) throw new Error('setup: the switch did not change the setting');
+                  const back = fr.querySelector('.cs-backbtn');
+                  if (back) await tap972(back, 'Back');
+                  shown972(fr, 'after flipping “Show others’ pointers” (Settings redraws the block)', rec().code);
+                  FM.closeCanvasDialog(); await settle921(250);
+                  FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                  frosted972(fr, 'when Friends is opened again', rec().code);
+                  FM.closeCanvasDialog(); await settle921(150);
+                });
+              }, 380);
+            });
+          });
+        });
+      });
+    } finally { FM.settings.set('collabCursors', wasCursors); }
+  });
+
+  test('972 on a PC the frosted code is a keyboard button — Enter or Space shows it and the keyboard stays on it; an Editor’s invite QR starts frosted too and Enter shows it; and the light card cannot paint the code either', { item: '972', budgetMs: 150000 }, async function () {
+    need921S7('the frosted invite on a PC');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const rec = function () { return JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid)); };
+          await onScreen924(async function () {
+            await atWideWidth(async function () {
+              for (const k of [KEY690c.enter, KEY690c.space]) {
+                await ui.share(); await settle921(300);
+                const card = document.getElementById('collab-share');
+                const cv = frosted972(card, 'when the Share card opens on a PC', rec().code);
+                await keysTo972(cv, 'the frosted code');
+                await realInput924([k], k.code + ' on the frosted code');
+                await settle921(150);
+                shown972(card, 'after ' + k.code + ' on it', rec().code);
+                if (document.activeElement !== cv) throw new Error(k.code + ' showed the code and dropped the keyboard (focus went to ' + (document.activeElement && (document.activeElement.id || document.activeElement.className || document.activeElement.tagName)) + ')');
+                ui.close(); await settle921(150);
+              }
+            }, 720);
+          });
+        });
+        /* An Editor allowed to invite has the link's QR — the same invite, frosted the same way, each time the panel opens. */
+        await withGuestApp921('editor', [layer921('A')], async function (g) {
+          g.HS.setRoomSettings({ roExport: true, editorsInvite: true, max: 8, link: 'https://example.test/FreeMotion/#j=' + 'A'.repeat(44), ask: true });
+          g.settle();
+          await onScreen924(async function () {
+            await atWideWidth(async function () {
+              for (let round = 1; round <= 2; round++) {
+                await ui.share(); await settle921(250);
+                const box = document.querySelector('#collab-share .cs-guestinvite');
+                if (!box) throw new Error('CONTROL: the Editor’s panel has no invite');
+                await keysTo972(box.querySelector('.cs-qrbtn'), 'the Editor’s QR button');
+                await realInput924([KEY690c.enter], 'Enter on the Editor’s QR button');
+                await settle921(150);
+                let q = qr972(box);
+                if (!q.img) throw new Error('setup: the Editor’s [QR] drew nothing');
+                if (!q.veiled || !/blur\(/.test(q.filter)) throw new Error('the Editor’s QR is sharp when first opened (opening ' + round + ', filter “' + q.filter + '”) — it is the invite link');
+                const hid = q.q.querySelector('[role="button"]');
+                if (!hid || hid.getAttribute('aria-label') !== 'QR code hidden, tap to show' || hid.tabIndex !== 0) throw new Error('the frosted QR is not a button a keyboard or a screen reader can use');
+                await keysTo972(hid, 'the frosted QR');
+                await realInput924([KEY690c.enter], 'Enter on the frosted QR');
+                await settle921(150);
+                q = qr972(box);
+                if (!q.img || q.veiled || /blur\(/.test(q.filter)) throw new Error('Enter on the frosted QR did not show it (filter “' + q.filter + '”)');
+                ui.close(); await settle921(150);
+              }
+            }, 720);
+          });
+        });
+      });
+    });
+    /* The light card (the Share card over the light Home) gives the code its ink, #10151f — that must not win over the frost. */
+    const mk = function (tag, cls, parent) { const n = document.createElement(tag); n.className = cls; if (parent) parent.appendChild(n); return n; };
+    const probe = mk('div', 'collab-scrim collab-light');
+    const rc = mk('div', 'cs-roomcode cs-veiled', mk('div', 'cs-roomrow', mk('div', 'cs-invite', mk('div', 'collab-card fm-ask-card', probe))));
+    rc.textContent = '7QK-M4X-R2P';
+    document.body.appendChild(probe);
+    try {
+      const fc = getComputedStyle(rc);
+      if (alpha972(fc.color) !== 0 || alpha972(fc.webkitTextFillColor) !== 0) throw new Error('on the light card the frosted code is painted ' + fc.color + ' — the light look’s ink wins over the frost');
+      const sh = getComputedStyle(rc, '::before').textShadow;
+      if (!/rgb\(16, 21, 31\)/.test(sh)) throw new Error('on the light card the frost is drawn in ' + sh + ' — near-white on white, so the code looks missing rather than hidden');
+      rc.classList.remove('cs-veiled');
+      if (getComputedStyle(rc).color !== 'rgb(16, 21, 31)') throw new Error('CONTROL: the light card’s code is ' + getComputedStyle(rc).color + ', not its ink');
+    } finally { probe.remove(); }
+  });
+
+  /* #972 review: when the browser REFUSES the clipboard, Copy puts the text in a read-only field under the button (the S8
+     review's "copy it yourself" field). Beside a frosted code that field printed the whole short code — or most of the
+     invite link — in plain text, which is the one thing the frost is for. The field is frosted with the invite: its text
+     is there (so it can still be selected and copied) but nothing of it is painted until one tap, which shows it all. */
+  function copyField972(root, where, want) {
+    const f = root.querySelector('.cs-copyfield');
+    if (!f) throw new Error('setup: no copy-yourself field ' + where);
+    if (f.value !== want) throw new Error('setup: the copy-yourself field ' + where + ' holds “' + f.value + '”, not “' + want + '”');
+    return f;
+  }
+  function fieldHidden972(f, where) {
+    const cs = getComputedStyle(f), sel = getComputedStyle(f, '::selection');
+    if (alpha972(cs.color) !== 0 || alpha972(cs.webkitTextFillColor) !== 0) {
+      throw new Error('the copy-yourself field ' + where + ' prints “' + f.value + '” for anyone watching his stream to read (colour ' + cs.color + ', fill ' + cs.webkitTextFillColor + ')');
+    }
+    /* It is put there SELECTED — a selection painted in its own ink would print it too. */
+    if (alpha972(sel.color) !== 0 && alpha972(sel.webkitTextFillColor) !== 0) throw new Error('the frosted field ' + where + ' paints its selected text ' + sel.color);
+    const w = f.closest('.cs-copywrap');
+    const say = w ? getComputedStyle(w, '::after').content : 'none';
+    if (say !== '"Tap to show"') throw new Error('the frosted copy-yourself field ' + where + ' does not say “Tap to show” (' + say + ') — it just looks empty');
+  }
+  function fieldShown972(f, where) {
+    const cs = getComputedStyle(f);
+    if (alpha972(cs.color) < 0.5 || alpha972(cs.webkitTextFillColor) < 0.5) throw new Error('the copy-yourself field is still frosted ' + where + ' (colour ' + cs.color + ', fill ' + cs.webkitTextFillColor + ') — he cannot see what he is meant to copy');
+    const w = f.closest('.cs-copywrap');
+    if (w && getComputedStyle(w, '::after').content !== 'none') throw new Error('the shown copy-yourself field ' + where + ' still says “Tap to show”');
+  }
+
+  test('972 a Copy the browser refuses beside the frosted invite puts the short code or the link in a frosted field — nothing of it painted, one real tap on it shows everything, once shown the field reads plainly, and reopening frosts it again; the Editor’s Copy link too', { item: '972', budgetMs: 150000 }, async function () {
+    need921S7('a refused copy beside the frosted invite');
+    const had = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const refuse = function () { const e = new Error('Write permission denied.'); e.name = 'NotAllowedError'; return Promise.reject(e); };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: refuse, readText: refuse } });
+    try {
+      await withFakeNet921(async function () {
+        await withLabs921(async function (ui) {
+          await withCollab921([layer921('A')], async function (ctx) {
+            const rec = function () { return JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid)); };
+            const card = function () { return document.getElementById('collab-share'); };
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () {
+                await ui.share(); await settle921(300);
+                const code = frosted972(card(), 'when the Share card opens', rec().code).textContent;
+                await tap972(card().querySelector('.cs-copycode'), 'Copy beside the frosted code (refused)');
+                await until921S6('the copy-yourself field', function () { return card().querySelector('.cs-copyfield'); }, 3000);
+                let f = copyField972(card(), 'after a refused Copy', code);
+                fieldHidden972(f, 'after a refused Copy beside the frosted code');
+                frosted972(card(), 'after the refused Copy', rec().code);
+                await tap972(card().querySelector('.cs-copylink'), 'Copy link (refused)');
+                await until921S6('the link in the field', function () { const n = card().querySelector('.cs-copyfield'); return n && /#j=/.test(n.value) ? n : null; }, 3000);
+                f = card().querySelector('.cs-copyfield');
+                fieldHidden972(f, 'after a refused Copy link');
+                /* One real tap on the frosted field shows it — and the code, as one tap on either always has. */
+                await tap972(f, 'the frosted copy-yourself field');
+                fieldShown972(f, 'after one tap on it');
+                shown972(card(), 'after one tap on the frosted field', rec().code);
+                /* CONTROL: shown, a refused Copy puts the code in a field anyone can read — the frost above is the veil, not a broken field. */
+                await tap972(card().querySelector('.cs-copycode'), 'Copy beside the shown code (refused)');
+                await until921S6('the code in the field', function () { const n = card().querySelector('.cs-copyfield'); return n && n.value === code ? n : null; }, 3000);
+                fieldShown972(copyField972(card(), 'after a refused Copy with the code shown', code), 'after a refused Copy with the code shown');
+                /* Closed and opened again: frosted again, and so is the field. */
+                ui.close(); await settle921(150);
+                await ui.share(); await settle921(300);
+                frosted972(card(), 'when the Share card is opened again', rec().code);
+                await tap972(card().querySelector('.cs-copycode'), 'Copy beside the frosted code again (refused)');
+                await until921S6('the copy-yourself field again', function () { return card().querySelector('.cs-copyfield'); }, 3000);
+                fieldHidden972(copyField972(card(), 'after reopening', code), 'after the Share card was opened again');
+                ui.close(); await settle921(150);
+              });
+            }, 380);
+          });
+          /* An Editor allowed to invite has the link under the same frost — its refused Copy link too. */
+          await withGuestApp921('editor', [layer921('A')], async function (g) {
+            const link = 'https://example.test/FreeMotion/#j=' + 'A'.repeat(44);
+            g.HS.setRoomSettings({ roExport: true, editorsInvite: true, max: 8, link: link, ask: true });
+            g.settle();
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () {
+                await ui.share(); await settle921(250);
+                const box = document.querySelector('#collab-share .cs-guestinvite');
+                if (!box) throw new Error('CONTROL: the Editor’s panel has no invite');
+                await tap972(box.querySelector('.cs-copylink'), 'the Editor’s Copy link (refused)');
+                await until921S6('the Editor’s copy-yourself field', function () { return box.querySelector('.cs-copyfield'); }, 3000);
+                const f = copyField972(box, 'after the Editor’s refused Copy link', link);
+                fieldHidden972(f, 'after the Editor’s refused Copy link');
+                await tap972(f, 'the Editor’s frosted field');
+                fieldShown972(f, 'after one tap on the Editor’s field');
+                ui.close(); await settle921(150);
+              });
+            }, 380);
+          });
+        });
+      });
+    } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
   });
 
 })();
