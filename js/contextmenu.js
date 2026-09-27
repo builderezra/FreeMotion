@@ -111,7 +111,12 @@ window.FM = window.FM || {};
       const onLightHome = !!home && !home.classList.contains('hidden')
                        && document.documentElement.getAttribute('data-home') === 'light';
       menu.classList.toggle('ctx-light', onLightHome);
-      menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.classList.remove('hidden');
+      /* ⚠️ MEASURED AT THE LEFT EDGE FIRST (#967 B4/B5 review). A fixed box is shrink-to-fit, so one placed at x takes at
+         most `innerWidth − x`: opened from a button near the right edge, a menu of long items ("Editor — can change
+         anything") WRAPPED every item onto two lines, measured that squeezed width, and the clamp below — which only acts
+         when it hangs off the screen — found nothing to do, leaving it flush against the edge. At x = 0 nothing squeezes
+         it, so `natW` below is the menu's own width and the clamp places it whole. */
+      menu.style.left = '0px'; menu.style.top = y + 'px'; menu.classList.remove('hidden');
       /* ⚠️ THE HINGE CLASS COMES OFF BEFORE ANYTHING IS MEASURED, and this cost a real bug on the
          SECOND open. `fm-hinge-corner` is `animation-fill-mode: both`, so the moment the class is on,
          the element is already wearing the FROM frame — `rotateX(-78deg)` — and a rotated box measures
@@ -121,6 +126,8 @@ window.FM = window.FM || {};
          viewport. The FIRST open was always fine, which is exactly what makes it the kind of bug that
          ships. */
       menu.classList.remove('ctx-hinge');
+      const natW = menu.getBoundingClientRect().width;
+      menu.style.left = x + 'px';
       let r = menu.getBoundingClientRect();
       /* ANCHORED UNDER A BUTTON, RIGHT EDGE TO RIGHT EDGE (queue 918.10 / 918.13). The callers that open
          a menu from a button used to GUESS its width — `r.right - 200` for Layer actions, `min(r.left,
@@ -130,12 +137,15 @@ window.FM = window.FM || {};
          sat right-aligned at 900. `opts.right` says where the right edge goes and the menu's own
          measured width does the rest — so it cannot drift from its button whatever it holds. */
       const alignR = !!opts && typeof opts.right === 'number' && isFinite(opts.right);
-      if (alignR) { menu.style.left = Math.max(6, opts.right - r.width) + 'px'; r = menu.getBoundingClientRect(); }
-      if (r.right > window.innerWidth) menu.style.left = Math.max(6, window.innerWidth - r.width - 6) + 'px';   // see the hinge note below: measured BEFORE any transform
+      if (alignR) { menu.style.left = Math.max(6, opts.right - natW) + 'px'; r = menu.getBoundingClientRect(); }
+      /* Its OWN width decides (natW, above) — at x it may already have been squeezed to end exactly at the edge. */
+      const overR = r.left + natW > window.innerWidth;
+      if (overR) menu.style.left = Math.max(6, window.innerWidth - natW - 6) + 'px';   // see the hinge note below: measured BEFORE any transform
+      r = menu.getBoundingClientRect();                                                 // …and its height once it has its width
       // Math.max(6,…): a menu TALLER than the viewport pushed top NEGATIVE, clipping its first items
       // off the top with no way to reach them — clamp to 6 and let CSS max-height/overflow scroll it.
       // A right-anchored menu hangs from its top-RIGHT corner, under the button, so it hinges from there.
-      const flipX = alignR || r.right > window.innerWidth, flipY = r.bottom > window.innerHeight;
+      const flipX = alignR || overR, flipY = r.bottom > window.innerHeight;
       /* …and when it does not fit BELOW its button it opens ABOVE it (`opts.above` = the button's top),
          rather than being slid up until it covers the very button that opened it — measured at 1280x900,
          Layer actions (button 634-668, menu 247 tall) was clamped to 647-894, on top of its own button.

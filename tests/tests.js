@@ -36090,7 +36090,8 @@
         if (!b0 || !/View only/.test(b0.textContent)) throw new Error('CONTROL: a Viewer’s banner does not say View only (' + (b0 ? b0.textContent : 'none') + ')');
         if (!C.presence.follow('o')) throw new Error('CONTROL: a Viewer could not follow the owner');
         const b = document.getElementById('collab-banner');
-        if (!b || !/Watching along with Ezra/.test(b.textContent)) throw new Error('a Viewer is following Ezra and the banner says ' + JSON.stringify(b && b.textContent) + ' — the playhead is moving by itself and nothing on screen says why');
+        /* #967 B4/B5 review: a phone says it shorter beside “View only” — “Watching Ezra” — so the row keeps its words. */
+        if (!b || !/Watching (along with )?Ezra/.test(b.textContent)) throw new Error('a Viewer is following Ezra and the banner says ' + JSON.stringify(b && b.textContent) + ' — the playhead is moving by itself and nothing on screen says why');
         const x = b.querySelector('.cb-x');
         if (!x) throw new Error('a Viewer following has no × to stop following');
         x.click();
@@ -104292,8 +104293,9 @@
               for (const on of [true, false]) {
                 FM.settings.set('collabLabs', on); C.ui.syncLabs();
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
-                const row = Array.prototype.filter.call(document.querySelectorAll('#cv-fr-body button'), function (b) { return /Got an invite\? Join with a link or code/.test(b.textContent); })[0];
-                if (!row) throw new Error('the Friends block' + (on ? '' : ' with the feature off') + ' can only share — there is no “Got an invite? Join with a link or code” (J2-4)');
+                /* #967 B4/B5 review: never a bare “code” — “Join with what your friend sent”. */
+                const row = Array.prototype.filter.call(document.querySelectorAll('#cv-fr-body button'), function (b) { return /Got an invite\? Join with what your friend sent/.test(b.textContent); })[0];
+                if (!row) throw new Error('the Friends block' + (on ? '' : ' with the feature off') + ' can only share — there is no “Got an invite? Join with what your friend sent” (J2-4)');
                 row.scrollIntoView({ block: 'nearest' }); await settle921(60);
                 box967(row, document.getElementById('cv-friends'), '“Got an invite?”');
                 row.click();
@@ -105931,7 +105933,7 @@
                 if (!/Shared with you/.test(fr.textContent)) throw new Error('setup: the block is not the friend’s panel');
                 fr.querySelector('.cs-foot .cs-stop').click();
                 const q = await until921S6('Leave this project?', ask967b3, 3000);
-                if (q.ok.textContent !== 'Leave (keep my copy)') throw new Error('the friend’s Leave question answers “' + q.ok.textContent + '” — it reads like a different choice from the Leave just tapped (J5-10c)');
+                if (q.ok.textContent.replace(/\u00a0/g, ' ') !== 'Leave (keep my copy)') throw new Error('the friend’s Leave question answers “' + q.ok.textContent + '” — it reads like a different choice from the Leave just tapped (J5-10c)');
                 q.cancel.click(); await settle921(120);
                 FM.closeCanvasDialog(); await settle921(80);
               }, 390);
@@ -105946,7 +105948,7 @@
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
                 fr.querySelector('.cs-foot .cs-stop').click();
                 const q = await until921S6('Leave this project? (a shared copy)', ask967b3, 3000);
-                if (q.ok.textContent !== 'Leave (keep my copy)') throw new Error('a shared copy’s Leave question answers “' + q.ok.textContent + '”');
+                if (q.ok.textContent.replace(/\u00a0/g, ' ') !== 'Leave (keep my copy)') throw new Error('a shared copy’s Leave question answers “' + q.ok.textContent + '”');
                 q.cancel.click(); await settle921(120);
                 FM.closeCanvasDialog(); await settle921(80);
               }, 390);
@@ -106317,6 +106319,466 @@
           const kc = document.getElementById('collab-knock'); if (kc) { const n = kc.querySelector('.ck-no'); if (n) n.click(); }
         }
       });
+    });
+  });
+
+  /* ═══ #967 BATCHES 4–5 · THE REVIEW'S FINDINGS ═══════════════════════════════════════════════════════════════════════════
+   * Three lenses read the combined build (ba5d8d2a): two real Chromes paired by swap code at 380 and 390, a first-timer
+   * reading every word, and a PC pass. Each test below fails on that build and passes with its fix. */
+  function banner967r() {
+    const b = document.getElementById('collab-banner');
+    if (!b) return null;
+    const tx = b.querySelector('.cb-text'), a = b.querySelector('.cb-act'), x = b.querySelector('.cb-x');
+    return { el: b, text: tx ? tx.textContent : '', tx: tx, act: a && a.getClientRects().length ? a : null, x: x && x.getClientRects().length ? x : null,
+      cut: !!tx && tx.scrollWidth > tx.clientWidth + 1 };
+  }
+  function uncut967r(b, what) {
+    if (!b) throw new Error(what + ': no banner at all');
+    if (b.cut) throw new Error(what + ': the banner’s words are cut — “' + b.text + '” needs ' + b.tx.scrollWidth + ' px and has ' + b.tx.clientWidth);
+    const r = b.el.getBoundingClientRect();
+    if (r.left < -0.5 || r.right > window.innerWidth + 0.5) throw new Error(what + ': the banner runs off the screen (' + Math.round(r.left) + '–' + Math.round(r.right) + ' of ' + window.innerWidth + ')');
+    [b.act, b.x].forEach(function (n) {
+      if (!n) return;
+      const q = n.getBoundingClientRect();
+      if (q.right > r.right + 0.5 || q.left < r.left - 0.5) throw new Error(what + ': “' + (n.getAttribute('aria-label') || n.textContent) + '” is cut by the banner’s edge');
+    });
+  }
+  function asks967r(got) { return got.filter(function (m) { return m.ch === 'ctl' && m.msg && m.msg.t === 'ask'; }); }
+
+  test('967 B4 7 on a 380 phone Watch along keeps its words — a Viewer watching “Christopher” reads “View only · Watching Christopher” uncut and still has “Ask to edit” (a Commenter too, the button saying just “Ask” when it must), a real tap asks and keeps the watching, the × reaches past its 22 px, and an Editor’s “Watching along with Christopher” is uncut too', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (two Chromes at 380 and 390, a real tap on Watch along): the rename made the line ten characters longer, and the
+       banner's own row under the chip, LIVE and the bubble kept the FIRST row's cap (100% − 140 px, 240 at 380) — “View only ·
+       Watching along w…” even for “Ezra”, and an Editor's “Watching along with Christopher” cut too. The watch-along line
+       also replaced the ask banner whole, so a Viewer watching had nothing to press; and its × was a 22 px target. */
+    const C = need921S5('Watch along on a phone');
+    const chris = { mid: 'm8', name: 'Christopher', color: '#f472b6', role: 'editor', st: 'here', ls: null };
+    const startWatching = async function (ui, gs, k) {
+      gs.send('ctl', rosterMsg921([chris]));
+      gs.send('pres', { t: 'PR', n: 1, full: 1, m: { o: prOf921(), m8: prOf921() } });
+      k.step(100); C.presence.tick(); C.presence._draw();
+      await ui.share(); await settle921(150);
+      const f = document.querySelector('.cs-person[data-mid="m8"] .cs-follow');
+      if (!f || f.textContent !== 'Watch along') throw new Error('setup: Christopher’s row has no Watch along (' + (f && f.textContent) + ')');
+      await hd5Tap(f, 'Watch along');
+      await settle921(150);
+      if (C.presence.following() !== 'm8') throw new Error('setup: a real tap on Watch along did not start watching along');
+      ui.close(); ui.syncBanner(); await settle921(150);
+    };
+    await withLabs921(async function (ui) {
+      /* A Viewer, and a Commenter — whose longer lead leaves the button less room (it may say just “Ask”, never cut words). */
+      for (const role of ['viewer', 'commenter']) {
+        const lead = role === 'viewer' ? 'View only' : 'Comments only';
+        await withCollab921([layer921('A')], async function () {
+          const gs = guest921S5(C, role);
+          const k = clock921(C);
+          try {
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () {
+                await startWatching(ui, gs, k);
+                let b = banner967r();
+                uncut967r(b, 'a ' + role + ' watching along with Christopher at 380');
+                if (b.text !== lead + ' · Watching Christopher') throw new Error('a ' + role + ' watching along reads “' + b.text + '” on a phone');
+                if (!b.act || !/^Ask( to edit)?$/.test(b.act.textContent)) throw new Error('a ' + role + ' watching along has nothing to press but the × — “Ask to edit” is gone while they watch: “' + b.el.textContent + '”');
+                if (role === 'viewer' && b.act.textContent !== 'Ask to edit') throw new Error('a Viewer’s button says “' + b.act.textContent + '” where “Ask to edit” fits');
+                if (!b.x || b.x.getAttribute('aria-label') !== 'Stop watching along') throw new Error('setup: the watch-along banner has no ×');
+                /* The × reaches past its 22 px drawing, as “Ask to edit” beside it does. */
+                const xr = b.x.getBoundingClientRect(), cx = xr.left + xr.width / 2, cy = xr.top + xr.height / 2;
+                [[cx, xr.top - 2, '2 px above'], [xr.right + 2, cy, '2 px right of'], [xr.left - 1, cy, '1 px left of']].forEach(function (p) {
+                  const hit = document.elementFromPoint(p[0], p[1]);
+                  if (hit !== b.x && !b.x.contains(hit)) throw new Error('a finger ' + p[2] + ' the 22 px × lands on ' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing') + ' — a target under 24 px');
+                });
+                /* One real tap on Ask: one ask on the wire, and still watching along. */
+                const n0 = asks967r(gs.got).length;
+                await hd5Tap(b.act, 'Ask (while watching along, ' + role + ')');
+                gs.loop.pump(); await settle921(150);
+                const asks = asks967r(gs.got);
+                if (asks.length !== n0 + 1 || asks[asks.length - 1].msg.w !== 'edit') throw new Error('Ask while watching along sent ' + JSON.stringify(asks.map(function (m) { return m.msg; })));
+                if (C.presence.following() !== 'm8') throw new Error('tapping Ask on the banner stopped the watching along');
+                b = banner967r();
+                uncut967r(b, 'after asking, still watching along');
+                if (b.act || b.text !== lead + ' · Watching Christopher') throw new Error('after asking the banner reads “' + b.text + '”' + (b.act ? ' and still offers “' + b.act.textContent + '”' : ''));
+              });
+            }, 380);
+          } finally { C.presence.unfollow(); C.presence._clock(null); }
+        });
+      }
+      /* An Editor: the full words, uncut on their own row. */
+      await withCollab921([layer921('A')], async function () {
+        const gs = guest921S5(C);
+        const k = clock921(C);
+        try {
+          await atPhoneWidth(async function () {
+            await onScreen924(async function () {
+              await startWatching(ui, gs, k);
+              const b = banner967r();
+              uncut967r(b, 'an Editor watching along with Christopher at 380');
+              if (b.text !== 'Watching along with Christopher') throw new Error('an Editor watching along reads “' + b.text + '”');
+            });
+          }, 380);
+        } finally { C.presence.unfollow(); C.presence._clock(null); }
+      });
+    });
+  });
+
+  test('967 B4 8 Stop sharing says what really stops — with Swap codes only on it names the swap code he sent (there is no link or short code), and Sharing settings offers “Swap codes with someone” rather than “Link not working?”; with links on it names the link, the short code and any swap code', { item: '967', budgetMs: 150000 }, async function () {
+    /* Review (a real Chrome, Swap codes only on): the question said “Your link and short code stop working.” under a panel
+       saying links and short codes need the online helpers this device does not use — and left out the swap code he had
+       sent, which is what really stops. The Connection group offered “Link not working?” with no link in sight. */
+    const C = need921S7('what Stop sharing says');
+    const wasCO = FM.settings.get('collabCodesOnly');
+    const WANT = {
+      true: { door: 'Swap codes with someone', msg: 'Everyone keeps their own copy. Any swap code you sent stops working.' },
+      false: { door: 'Link not working? Swap codes instead', msg: 'Everyone keeps their own copy. Your link, short code and any swap code you sent stop working.' }
+    };
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        try {
+          await with945(async function () {
+            for (const co of [true, false]) {
+              FM.settings.set('collabCodesOnly', co);
+              await withCollab921([layer921('A')], async function () {
+                await atPhoneWidth(async function () {
+                  const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                  FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                  if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+                  fr.querySelector('.cs-gear').click(); await settle921(100);
+                  const door = fr.querySelector('.cs-slink');
+                  if (!door) throw new Error('setup: Sharing settings has no swap-codes door');
+                  if (door.textContent !== WANT[co].door) throw new Error('with Swap codes only ' + (co ? 'ON' : 'off') + ' Sharing settings offers “' + door.textContent + '”');
+                  fr.querySelector('.cs-gear').click(); await settle921(100);
+                  fr.querySelector('.cs-stop').click();
+                  const q = await until921S6('Stop sharing?', ask967b3, 3000);
+                  if (q.title !== 'Stop sharing?') throw new Error('CONTROL: the question is “' + q.title + '”');
+                  if (q.msg !== WANT[co].msg) throw new Error('with Swap codes only ' + (co ? 'ON' : 'off') + ' Stop sharing asks “' + q.msg + '”');
+                  q.cancel.click(); await settle921(100);
+                  FM.closeCanvasDialog(); await settle921(80);
+                }, 390);
+              });
+            }
+          });
+        } finally {
+          FM.settings.set('collabCodesOnly', !!wasCO);
+          const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+        }
+      });
+    });
+  });
+
+  test('967 B4 9 the words agree with themselves — a Viewer’s panel says “you can watch, not change the edit” above the line that says they can play and export it, and no door a friend reads says a bare “code”: the Join field, “Got an invite?”, the turn-on card and Home’s Join', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (a first-timer's reading): “You’re a Viewer — you can only watch.” then “…You can export a video of it”; and the
+       words sheet's rule “Neither is ever just ‘code’” broken in four places a friend holding a swap code reads. */
+    const C = need921S7('the words');
+    const bare = function (t) { return /\bcodes?\b/i.test(String(t || '').replace(/\b(short|swap) codes?\b/gi, '')); };
+    await withLabs921(async function (ui) {
+      await withGuestApp921('viewer', [layer921('A')], async function () {
+        await ui.share(); await settle921(120);
+        const mine = document.querySelector('.cs-myrole'), hint = document.querySelector('.cs-rolehint');
+        if (!hint || !/export a video/.test(hint.textContent)) throw new Error('CONTROL: the Viewer’s panel no longer says they can export (' + (hint && hint.textContent) + ')');
+        if (!mine || mine.textContent !== 'You’re a Viewer — you can watch, not change the edit.') throw new Error('a Viewer’s panel says “' + (mine && mine.textContent) + '” and then “' + hint.textContent + '”');
+        ui.close(); await settle921(80);
+      });
+      await with945(async function () {
+        await editorWithShape(async function () {
+          await atPhoneWidth(async function () {
+            const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            const row = fr.querySelector('.cs-joinlink');
+            if (!row) throw new Error('setup: the Friends block has no “Got an invite?”');
+            if (!/^Got an invite\?/.test(row.textContent) || bare(row.textContent)) throw new Error('the Friends block’s way in reads “' + row.textContent + '” — a bare “code”');
+            FM.closeCanvasDialog(); await settle921(80);
+          }, 390);
+        });
+      });
+      await atPhoneWidth(async function () {
+        await ui.join(); await settle921(150);
+        const input = document.querySelector('#collab-join .cj-code');
+        if (!input) throw new Error('setup: no Join field');
+        if (!input.placeholder || bare(input.placeholder)) throw new Error('the Join field says “' + input.placeholder + '” — a friend holding a swap code reads a bare “code”');
+        /* …and the words fit the field on a phone (the first fix, “Link, short code or swap code”, was cut at 390). */
+        const cs = getComputedStyle(input), cx = document.createElement('canvas').getContext('2d');
+        cx.font = cs.font;
+        const need = cx.measureText(input.placeholder).width, have = input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        if (!(have > 40)) throw new Error('setup: the Join field measures ' + have + ' px inside');
+        if (need > have + 0.5) throw new Error('the Join field’s “' + input.placeholder + '” needs ' + Math.round(need) + ' px and the field has ' + Math.round(have) + ' at 380 — it is cut');
+        ui.close(); await settle921(80);
+      }, 380);
+      const hj = document.getElementById('hm-join-btn');
+      if (!hj) throw new Error('setup: Home has no Join');
+      if (bare(hj.title)) throw new Error('Home’s Join says “' + hj.title + '”');
+      FM.settings.set('collabLabs', false); ui.syncLabs();
+      try {
+        ui.joinDoor(); await settle921(150);
+        const card = document.getElementById('collab-labs-ask');
+        if (!card) throw new Error('setup: Join with the feature off did not ask to turn it on');
+        if (!/Turn on Work with friends/.test(card.textContent)) throw new Error('CONTROL: the turn-on card reads “' + card.textContent.slice(0, 120) + '”');
+        if (bare(card.textContent)) throw new Error('the turn-on card says “' + card.querySelector('.collab-sub').textContent + '” — a bare “code”');
+        ui.close(); await settle921(80);
+      } finally { FM.settings.set('collabLabs', true); ui.syncLabs(); }
+    });
+  });
+
+  test('967 B4 10 the role menus open whole — at 390 “New people join as” and a person’s menu keep every item on one line and sit inside the screen, not squeezed flush against its edge', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (390, 380 and a PC at 1280): “Editor — can change anything” and “Watch along — your screen follows theirs” wrapped
+       onto two lines each, the menu flush against the right edge. contextMenu measured the menu while it sat at the button's
+       left edge, where a fixed box can only be as wide as what is left of the screen. */
+    const C = need921S5('the role menus');
+    const whole = async function (where) {
+      const m = document.getElementById('ctx-menu');
+      if (!m || m.classList.contains('hidden')) throw new Error('setup: ' + where + ' did not open');
+      /* Measured at rest: the hinge overshoots its scale for a moment on the way in. */
+      await Promise.race([Promise.all(m.getAnimations().map(function (a) { return a.finished.catch(function () {}); })), sleep(1000)]);
+      const items = Array.prototype.slice.call(m.querySelectorAll('.ctx-item'));
+      if (items.length < 3) throw new Error('setup: ' + where + ' has ' + items.length + ' items');
+      items.forEach(function (it) {
+        const rg = document.createRange(); rg.selectNodeContents(it);
+        const tops = {};
+        Array.prototype.forEach.call(rg.getClientRects(), function (r) { if (r.width > 0) tops[Math.round(r.top)] = 1; });
+        const n = Object.keys(tops).length;
+        if (n > 1) throw new Error(where + ': “' + it.textContent + '” wraps onto ' + n + ' lines (the menu is ' + Math.round(m.getBoundingClientRect().width) + ' px wide at x ' + Math.round(m.getBoundingClientRect().left) + ')');
+      });
+      const r = m.getBoundingClientRect();
+      if (r.right > window.innerWidth - 5.5 || r.left < 5.5) throw new Error(where + ' sits at ' + Math.round(r.left) + '–' + Math.round(r.right) + ' of ' + window.innerWidth + ' — flush against the edge');
+    };
+    await withLabs921(async function (ui) {
+      await with945(async function () {
+        await withCollab921([layer921('A')], async function (c) {
+          const k = clock921(C);
+          const g = rawGuest921(c, 'Sam Lee', '#f472b6');
+          g.pr({});
+          k.step(100); C.presence.tick(); C.presence._draw();
+          try {
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              const ja = fr.querySelector('.cs-joinas');
+              if (!ja) throw new Error('setup: no “New people join as”');
+              ja.click(); await settle921(80);
+              await whole('“New people join as”');
+              FM.contextMenu.hide(); await settle921(60);
+              const row = fr.querySelector('.cs-person[data-mid="' + g.mid + '"]');
+              if (!row) throw new Error('setup: Sam has no row');
+              row.querySelector('.cs-role').click(); await settle921(80);
+              await whole('Sam’s menu');
+              FM.contextMenu.hide(); await settle921(60);
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally { C.presence._clock(null); try { FM.contextMenu.hide(); } catch (e) {} }
+        });
+      });
+    });
+  });
+
+  test('967 B4 11 “Leave (keep my copy)” keeps its brackets together on a 390 phone — it breaks before the bracket, never as “Leave (keep my / copy)”', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (390, a real tap on Leave): the confirm button is 151 px and the label wrapped inside its brackets. */
+    const C = need921S7('the Leave button’s label');
+    await withLabs921(async function () {
+      await with945(async function () {
+        const fx = guest967(C);
+        const wasHome = FM.home.isOpen();
+        try {
+          C.attach(fx.G, { autoTick: false });
+          if (wasHome) FM.home.close();
+          await atPhoneWidth(async function () {
+            const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            fr.querySelector('.cs-foot .cs-stop').click();
+            const q = await until921S6('Leave this project?', ask967b3, 3000);
+            await settle921(120);
+            const t = q.ok.textContent;
+            if (t.replace(/ /g, ' ') !== 'Leave (keep my copy)') throw new Error('setup: the answer reads “' + t + '”');
+            const node = Array.prototype.filter.call(q.ok.childNodes, function (n) { return n.nodeType === 3 && n.nodeValue.indexOf('(') >= 0; })[0];
+            if (!node) throw new Error('setup: the label is not one text node');
+            const rg = document.createRange();
+            rg.setStart(node, node.nodeValue.indexOf('(')); rg.setEnd(node, node.nodeValue.indexOf(')') + 1);
+            const tops = {};
+            Array.prototype.forEach.call(rg.getClientRects(), function (r) { if (r.width > 0) tops[Math.round(r.top)] = 1; });
+            if (Object.keys(tops).length !== 1) throw new Error('“(keep my copy)” breaks across ' + Object.keys(tops).length + ' lines on the ' + Math.round(q.ok.getBoundingClientRect().width) + ' px button — it reads “Leave (keep my / copy)”');
+            q.cancel.click(); await settle921(120);
+            FM.closeCanvasDialog(); await settle921(80);
+          }, 390);
+        } finally {
+          const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+          await dropFixture967(C, [fx.gpid]);
+          if (wasHome && !FM.home.isOpen()) FM.home.open();
+        }
+      });
+    });
+  });
+
+  test('967 B5 5 on a 380 phone the ask banner keeps the answer — with an owner called “Christopher” a Viewer and a Commenter read “asked Christopher” and “Christopher said not now” uncut, and a 20-letter name gives way to “asked · waiting” and “not now · ask again later”', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (two Chromes, the owner named Christopher, real taps on Ask to edit and Not now): “View only · Christopher sai…”
+       and “Comments only · Christopher sai…” — the words that say where the ask stands were the ones cut, and “said not now”
+       stays on the banner for two minutes while its toast lasts three seconds. */
+    const C = need921S7('the ask banner on a phone');
+    await withLabs921(async function (ui) {
+      await withGuestApp921('viewer', [layer921('A')], async function (g) {
+        g.G.hostName = 'Christopher';
+        g.HA.onAsk = function () { return true; };   // the owner's side shows each ask (his card is B5 4's business)
+        const got = toasts921();
+        const cycle = async function (lead, who, asked, notNow) {
+          g.G.hostName = who;                        // (a role change from the owner re-sends his name — this is the one under test)
+          ui.syncBanner(); await settle921(150);
+          let b = banner967r();
+          if (!b || !b.act || b.text !== lead) throw new Error('setup: the ' + lead + ' banner reads “' + (b && b.text) + '”' + (b && b.act ? '' : ' with nothing to press'));
+          await hd5Tap(b.act, 'Ask to edit (' + lead + ', owner ' + who + ')');
+          g.settle(); await settle921(150);
+          b = banner967r();
+          if (!b || b.text !== asked) throw new Error('after asking, the ' + lead + ' banner reads “' + (b && b.text) + '” (owner ' + who + ')');
+          uncut967r(b, lead + ', asked, owner ' + who);
+          if (!g.HS.answerAsk(g.mid, 'no')) throw new Error('setup: the owner’s side could not answer');
+          g.settle(); await settle921(150);
+          b = banner967r();
+          if (!b || b.text !== notNow) throw new Error('after Not now, the ' + lead + ' banner reads “' + (b && b.text) + '” (owner ' + who + ')');
+          uncut967r(b, lead + ', not now, owner ' + who);
+          /* The wait is over on both sides (their seams), so the next round can ask. */
+          ui._askState().until = Date.now() - 1;
+          g.HS._asks()[g.mid].noUntil = 0;
+        };
+        try {
+          await atPhoneWidth(async function () {
+            await onScreen924(async function () {
+              await cycle('View only', 'Christopher', 'View only · asked Christopher', 'View only · Christopher said not now');
+              g.HS.setPeerRole(g.mid, 'commenter'); g.settle(); await settle921(150);
+              if (g.G.role !== 'commenter') throw new Error('setup: the friend did not become a Commenter');
+              await cycle('Comments only', 'Christopher', 'Comments only · asked Christopher', 'Comments only · Christopher said not now');
+              await cycle('Comments only', 'Alexandra Montgomery', 'Comments only · asked · waiting', 'Comments only · not now · ask again later');
+            });
+          }, 380);
+        } finally { got.restore(); }
+      });
+    });
+  });
+
+  test('967 B5 6 “What gets sent? ›” can be read on the light Settings panel — at least 4.5:1 against its card, where the dark theme’s cyan was 1.9:1', { item: '967', budgetMs: 60000 }, async function () {
+    /* Review (Settings over the light Home): the one way to the list that names every service (the S6 rule) was
+       rgb(90,199,237) at 12.5 px on white. The heading above it is the control that the light rules are applying. */
+    const C = need921S7('the privacy link on light Settings');
+    const lum = function (css) {
+      const m = /rgba?\(([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(css || '');
+      if (!m) throw new Error('could not read the colour ' + css);
+      const v = [+m[1], +m[2], +m[3]].map(function (x) { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+      return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+    };
+    /* What the link sits on: every translucent layer under it, laid over the light Home's white. */
+    const under = function (node) {
+      const chain = [];
+      for (let n = node.parentElement; n; n = n.parentElement) chain.push(getComputedStyle(n).backgroundColor);
+      let c = [255, 255, 255];
+      chain.reverse().forEach(function (bg) {
+        const m = /rgba?\(([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/.exec(bg || '');
+        if (!m) return;
+        const a = m[4] == null ? 1 : +m[4];
+        c = [0, 1, 2].map(function (i) { return c[i] * (1 - a) + (+m[i + 1]) * a; });
+      });
+      return 'rgb(' + c.map(Math.round).join(', ') + ')';
+    };
+    const root = document.documentElement, had = root.getAttribute('data-home');
+    const wasHome = FM.home.isOpen();
+    await withLabs921(async function () {
+      try {
+        root.setAttribute('data-home', 'light');
+        if (!FM.home.isOpen()) FM.home.open();
+        FM.settings.open(); await sleep(400);
+        const head = document.querySelector('#set-friends .set-grouptitle') || document.querySelector('.set-panel .set-grouptitle');
+        if (!head || getComputedStyle(head).color !== 'rgb(23, 128, 180)') throw new Error('CONTROL: the light Settings rules are not applying (the heading is ' + (head ? getComputedStyle(head).color : 'missing') + ')');
+        const more = document.querySelector('.set-panel .cs-privmore');
+        if (!more) throw new Error('setup: Settings has no “What gets sent? ›”');
+        const fg = getComputedStyle(more).color, bg = under(more);
+        const l1 = lum(fg), l2 = lum(bg);
+        const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+        if (ratio < 4.5) throw new Error('“What gets sent? ›” is ' + fg + ' on ' + bg + ' — ' + ratio.toFixed(2) + ':1, under 4.5:1 for 12.5 px text, on the one way to the list that names every service');
+      } finally {
+        if (FM.settings.isOpen()) FM.settings.close();
+        await sleep(300);
+        if (had == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', had);
+        if (!wasHome && FM.home.isOpen()) FM.home.close();
+      }
+    });
+  });
+
+  test('967 B5 7 a comment he has not opened survives Leave — Ezra comments, the friend is told and sees 1 on the bubble, taps Leave → “Leave (keep my copy)”, and the copy (a new project) still counts 1 until the comments are opened', { item: '967', budgetMs: 120000 }, async function () {
+    /* Review (two Chromes): Sam saw “1” and the toast, tapped Leave → Leave (keep my copy), and the badge went — the copy has a
+       new id, which the count read as another project. Only opening the comments may spend it. */
+    const C = need921S7('the count across Leave');
+    await withLabs921(async function (ui) {
+      await with945(async function () {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+        const D = { project: { name: 'Ezra’s film B45', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('Shared B45')] };
+        const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-b45', seq: 0, name: 'Sam' }, D);
+        if (!gpid) throw new Error('setup: could not make the shared copy');
+        const made = [gpid];
+        const got = toasts921();
+        try {
+          if (wasHome) FM.home.close();
+          await FM.projects.open(gpid);
+          const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+          const inv = C.bridge.invariants();
+          const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+          const HS = C.Session({ adapter: plainAdapter921(hdoc, inv), role: 'owner', mid: 'o', host: H });
+          const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+          const mid = HS.addPeer(loop.a, { role: 'viewer', name: 'Sam', color: '#a3e635' });
+          const G = C.Session({ adapter: C.bridge, role: 'viewer', mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+          G.gpid = gpid; G.pid = gpid; G.hostName = 'Ezra';
+          G.setLink(loop.b); G.bs = H.seq;
+          C.attach(G, { autoTick: false });
+          await atPhoneWidth(async function () {
+            ui.syncBanner(); await settle921(150);
+            hdoc.project.comments = [{ id: 'c_b45lv', by: { mid: 'o', name: 'Ezra', color: '#ff9f43' }, at: Date.now(), text: 'Keep the wide shot', replies: [] }];
+            HS.tick('hot'); loop.settle(); await settle921(150);
+            if (got.indexOf('Ezra commented') < 0 || cmtCount967b5() !== '1') throw new Error('CONTROL: Ezra’s comment did not arrive as news (' + JSON.stringify(got) + ', count “' + cmtCount967b5() + '”)');
+            const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            fr.querySelector('.cs-foot .cs-stop').click();
+            const q = await until921S6('Leave this project?', ask967b3, 3000);
+            q.ok.click();
+            const nid = await until921S6('the copy to become his own', function () {
+              const id = FM.projects.currentId();
+              return id && id !== gpid && !FM.projects.list().some(function (p) { return p.id === gpid; }) && (FM.scene.project.comments || []).length ? id : null;
+            }, 10000);
+            made.push(nid);
+            await settle921(300);
+            if (C.session) throw new Error('setup: the session is still attached after Leave');
+            if (!(FM.scene.project.comments || []).some(function (c) { return c.id === 'c_b45lv'; })) throw new Error('setup: the copy does not carry Ezra’s comment');
+            const door = cmtDoor967b5();
+            if (cmtCount967b5() !== '1') throw new Error('Leave (keep my copy) spent a comment he never opened — the bubble on his copy counts “' + cmtCount967b5() + '” (' + (door ? door.getAttribute('aria-label') : 'no bubble') + ')');
+            /* …and opening them spends it, as ever. */
+            door.click(); await settle921(150);
+            C.comments.close(); await settle921(100);
+            if (cmtCount967b5() !== '') throw new Error('opening the comments on the copy did not spend the count (“' + cmtCount967b5() + '”)');
+          }, 390);
+        } finally {
+          got.restore();
+          try { C.comments.close(); } catch (e) {}
+          const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+          try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+          if (FM.closeCanvasDialog) FM.closeCanvasDialog();
+          await q915aCleanup(made, orig, wasHome, [], [], []);
+        }
+      });
+    });
+  });
+
+  test('967 B5 8 an ask lets go of its session — once the friend has asked (and again after “Not now”), the session ending drops the ask with it, so an ended project is not held in memory by the banner', { item: '967', budgetMs: 90000 }, async function () {
+    /* Review (a PC pass, read and reproduced): the ask state kept a reference to the guest Session and nothing cleared it —
+       not the end of the session, not a detach, not turning the feature off — so the ended session's document, outbox and
+       link stayed reachable until some later ask. */
+    const C = need921S7('the ask state’s lifetime');
+    await withLabs921(async function (ui) {
+      for (const how of ['open', 'cool']) {
+        await withGuestApp921('viewer', [layer921('A')], async function (g) {
+          g.HA.onAsk = function () { return true; };   // the owner's side shows the ask, so it can answer it
+          ui.syncBanner(); await settle921(100);
+          const b = banner967r();
+          if (!b || !b.act) throw new Error('setup: no Ask to edit');
+          b.act.click(); g.settle(); await settle921(100);
+          if (how === 'cool') { g.HS.answerAsk(g.mid, 'no'); g.settle(); await settle921(100); }
+          const a = ui._askState();
+          if (!a || a.s !== g.G || a.state !== how) throw new Error('CONTROL: the friend’s ask is not recorded as ' + how + ' (' + (a ? a.state : 'none') + ')');
+          g.G.stop('left'); C.detach(); await settle921(60);
+          const left = ui._askState();
+          if (left) throw new Error('after the session ended the ' + how + ' ask still holds it (' + left.state + ', the ended Session ' + (left.s === g.G ? 'itself' : 'or another') + ' kept alive)');
+        });
+      }
     });
   });
 

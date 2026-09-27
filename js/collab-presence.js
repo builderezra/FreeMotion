@@ -1280,7 +1280,9 @@ window.FM = window.FM || {};
       followBound = function (e) {
         if (e.type === 'keydown') return PZ.unfollow();
         const t = e.target;
-        if (t && t.closest && t.closest('#stage, #timeline-panel, #inspector-panel') && !t.closest('#collab-people')) PZ.unfollow();
+        /* #967 B5 review: not the banner either — it is inside #stage, and a Viewer watching along now has "Ask to edit" on
+           it; asking must not stop the watching (its × does that, on purpose). */
+        if (t && t.closest && t.closest('#stage, #timeline-panel, #inspector-panel') && !t.closest('#collab-people, #collab-banner')) PZ.unfollow();
       };
       window.addEventListener('pointerdown', followBound, true);
       window.addEventListener('keydown', followBound, true);
@@ -1302,7 +1304,8 @@ window.FM = window.FM || {};
   };
   PZ.following = function () { return following; };
   /* #967 B4 (J5-9): Follow is "Watch along" — the banner says so, with who. */
-  PZ.followLabel = function () { return following ? 'Watching along with ' + (knownName(following) ? cleanName(knownName(following)) : followName || 'them') : null; };
+  /* #967 B4/B5 review: `short` is the phone's form beside "View only" / "Comments only" — "Watching Ezra". */
+  PZ.followLabel = function (short) { return following ? (short ? 'Watching ' : 'Watching along with ') + (knownName(following) ? cleanName(knownName(following)) : followName || 'them') : null; };
   /* Who holds a layer, by name, for the refusal toasts in collab-session.js — null when nobody else does
      or the name is unknown, so the caller can fall back to "Someone else" (S5 review). */
   PZ.holderName = function (lid) {

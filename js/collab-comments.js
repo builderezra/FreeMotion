@@ -255,6 +255,17 @@ window.FM = window.FM || {};
     FM.toast(msg, 3600, home ? undefined : function () { CM.open(); });
   }
   CM.unread = function () { return installed ? unread : 0; };
+  /* B4/B5 review: LEAVE KEEPS THE COPY UNDER A NEW PROJECT ID, and scan() reads a new id as another project — so a comment he
+     had been told about ("Ezra commented", the 1 on the bubble) was zeroed without ever being opened, when only opening them
+     spends the count. Whoever made the copy hands the count across: onto that copy only, and only while it is the one open. */
+  CM.carryUnread = function (pid, n) {
+    if (!installed || !(n > 0)) return false;
+    scan();                                    // the copy's comments are what is here now — none of them is news
+    if (!pid || seenPid !== pid) return false;
+    unread = Math.min(999, Math.max(unread, n | 0));
+    if (C.ui && C.ui.syncCmt) { try { C.ui.syncCmt(); } catch (e) {} }
+    return true;
+  };
 
   /* ═══ THE PLAYHEAD'S HEAD, PARKED ON A COMMENT (S7 review) ═══════════════════════════════════════
    * A comment is pinned at the playhead by default, so its mark is drawn exactly where #tl-headtap sits —

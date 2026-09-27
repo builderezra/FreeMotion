@@ -10701,6 +10701,10 @@ body.text-editing .collab-cmt, #stage:has(> #collab-people.cp-hidden) > .collab-
 /* #967 B5: the banner's "Ask to edit" is a 22 px pill on a 28 px banner — its hit area is the banner's full height and more. */
 .collab-banner .cb-act { position: relative; }
 .collab-banner .cb-act::before { content: ""; position: absolute; inset: -11px -4px; }
+/* B4/B5 review: the × that stops Watch along is 22×22 — under a 24 px target, and the one beside it had been given more.
+   The same reach (the banner's overflow keeps it to the banner's own 28 px height, and 30 px across). */
+.collab-banner .cb-x { position: relative; }
+.collab-banner .cb-x::before { content: ""; position: absolute; inset: -11px -4px; }
 /* The Friends block (and the Share card): how it works in three lines, the switch that stays at the foot, and the way in
    for a friend. */
 .cs-how { list-style: none; margin: 2px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 7px; }

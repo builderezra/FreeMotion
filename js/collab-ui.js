@@ -1398,8 +1398,9 @@ window.FM = window.FM || {};
   }
   /* THE WAY IN FOR A FRIEND, from the block that could only share (J2-4): the same door as Home's Join. */
   function joinLinkRow() {
-    const b = btn('cs-navrow cs-joinlink', 'Got an invite? Join with a link or code', function () { closeAny(); U.joinDoor(); });
-    b.appendChild(el('span', 'cs-add-sub', 'Paste what your friend sent you, or type their short code'));
+    /* B4/B5 review: never a bare "code" (tools/design/967/b4/words.html) — a friend may be holding either kind. */
+    const b = btn('cs-navrow cs-joinlink', 'Got an invite? Join with what your friend sent', function () { closeAny(); U.joinDoor(); });
+    b.appendChild(el('span', 'cs-add-sub', 'Paste their link or swap code, or type their short code'));
     return b;
   }
   /* THE OFF SWITCH THAT STAYS (J3-1, blocker — pick A: "a quiet switch row at the foot of the Friends block, in every
@@ -1609,8 +1610,11 @@ window.FM = window.FM || {};
    * now offers Stop sharing on a project that is live or holds a kept room, with the same question, and it drops the
    * record without arming anything. */
   function stopAsk() {
+    /* #967 B4 (J5-10b): the link is what he handed out. B4/B5 review: …but with Swap codes only on there IS no link or short
+       code (the panel above says so), and what stops is a swap code he sent — which the link form left out as well. */
     return { title: 'Stop sharing?', danger: true, ok: 'Stop sharing',
-      message: 'Everyone keeps their own copy. Your link and short code stop working.' };   // #967 B4 (J5-10b): the link is what he handed out
+      message: C.signal.codesOnly() ? 'Everyone keeps their own copy. Any swap code you sent stops working.'
+        : 'Everyone keeps their own copy. Your link, short code and any swap code you sent stop working.' };
   }
   function stopSharingNow(pid, o) {
     if (!pid) return false;
@@ -1848,7 +1852,8 @@ window.FM = window.FM || {};
     const line = el('div', 'cs-relay cs-sstatus', C.signal.codesOnly() ? 'Swap codes only — no online helpers, just the devices' : relayLine());
     if (!C.signal.codesOnly()) { line.id = 'collab-relay-status'; if (relayWarn()) line.classList.add('warn'); }
     con.appendChild(line);
-    con.appendChild(btn('cs-slink', 'Link not working? Swap codes instead', function () { shareStep = 'code'; redrawShare(); }));
+    /* B4/B5 review: under Swap codes only there is no link to be "not working" — the main view's door says so already. */
+    con.appendChild(btn('cs-slink', C.signal.codesOnly() ? 'Swap codes with someone' : 'Link not working? Swap codes instead', function () { shareStep = 'code'; redrawShare(); }));
     body.appendChild(con);
 
     const ev = btn('cs-navrow cs-versions-nav', 'Earlier versions…', function () { shareStep = 'versions'; redrawShare(); });
@@ -3006,7 +3011,8 @@ window.FM = window.FM || {};
       : s.online === false ? 'Offline — the live link dropped; your changes are kept here' : 'Live'));
     /* #967: an ended copy is nobody's room — "You're an Editor" under "Ended" was a contradiction. */
     /* #967 B4 (J5-9): the role, and what it means. */
-    if (!s.ended) head.appendChild(el('div', 'collab-sub cs-myrole', 'You’re ' + roleWords(s.role) + ' — you ' + roleMeans(s.role) + '.'));
+    /* B4/B5 review: not the menu's "can only watch" here — the line under it says a Viewer can play it and export it too. */
+    if (!s.ended) head.appendChild(el('div', 'collab-sub cs-myrole', 'You’re ' + roleWords(s.role) + ' — you ' + (s.role === 'viewer' ? 'can watch, not change the edit' : roleMeans(s.role)) + '.'));
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
@@ -3085,7 +3091,7 @@ window.FM = window.FM || {};
       const blank = pend ? (pend.n || 0) + (pend.skipped || 0) : 0;
       /* #967 B4 (J5-10c): the answer to "Leave?" is Leave — "Keep my own copy" read like a different choice. */
       FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device — you can delete it from Home if you want.'
-        + (blank ? ' ' + (blank === 1 ? '1 clip has' : blank + ' clips have') + ' not arrived yet and will be blank in your copy.' : ''), ok: 'Leave (keep my copy)', cancel: 'Cancel' })
+        + (blank ? ' ' + (blank === 1 ? '1 clip has' : blank + ' clips have') + ' not arrived yet and will be blank in your copy.' : ''), ok: LEAVE_KEEP, cancel: 'Cancel' })
         .then(function (yes) {
           if (!yes) return;
           if (host) closeAny(); else closeCard();
@@ -3103,6 +3109,9 @@ window.FM = window.FM || {};
      nothing either, while seconds of media were copied under the screen. So: the room is checked BEFORE the
      session is let go (§12.3 step 1) — if the clips will not fit twice, he chooses between deleting the copy
      and staying in; the copy runs under a "Leaving…" line; and the result is said either way. */
+  /* B4/B5 review: the answer to "Leave?" (J5-10c), held together inside its brackets — on a 151 px button at 390 it broke as
+     "Leave (keep my / copy)". Now it breaks before the bracket, if it has to break at all. */
+  const LEAVE_KEEP = 'Leave (keep\u00a0my\u00a0copy)';
   function leaveKeeping(s) {
     const gpid = s && s.gpid;
     const who = hostNameOf(s);                 // read before the copy stops being theirs
@@ -3116,7 +3125,7 @@ window.FM = window.FM || {};
           });
       }
       if (FM.toast) FM.toast('Leaving… copying your clips', 0);
-      return C.leave({ keep: true }).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
+      return carryUnread(C.leave({ keep: true })).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
         U.syncBanner();
         /* #967: one sentence for every way out — Leave, the Labs switch, opening another project. */
         if (nid) { if (FM.toast) FM.toast('You left ' + who + '’s project — your copy is kept', 2600); return nid; }
@@ -3125,6 +3134,16 @@ window.FM = window.FM || {};
           message: 'You have left, but this device could not finish copying the project — it may be full. The copy stays as it is and will not reconnect; free some space and open it to try again, or delete it from Home.' });
         return null;
       });
+    });
+  }
+  /* B4/B5 review: the copy Leave keeps has a NEW project id, which the comments count reads as another project — a comment
+     he was told about and never opened was zeroed. What he has not read yet goes across with the copy (collab-comments.js). */
+  function carryUnread(job) {
+    const n = C.comments && C.comments.unread ? C.comments.unread() : 0;
+    if (!n) return job;
+    return Promise.resolve(job).then(function (nid) {
+      if (nid && C.comments.carryUnread) { try { C.comments.carryUnread(nid, n); } catch (e) {} }
+      return nid;
     });
   }
   /* Is there room for a second copy of every clip in this project? true / false, or null when the browser will
@@ -3176,7 +3195,7 @@ window.FM = window.FM || {};
     c.appendChild(offRow(host));   // #967 batch 2: the switch that stays, on a shared copy too
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
-      FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device as a project of your own.', ok: 'Leave (keep my copy)', cancel: 'Cancel' })
+      FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device as a project of your own.', ok: LEAVE_KEEP, cancel: 'Cancel' })
         .then(function (yes) {
           if (!yes) return;
           if (recon && recon.gpid === pid) stopRecon();
@@ -3186,7 +3205,7 @@ window.FM = window.FM || {};
              again — and the result is said either way. */
           try { if (FM.projects.patchCollab) FM.projects.patchCollab(pid, { ended: 'left' }); } catch (e) {}
           joinBusy++;
-          FM.projects.detachLinked(pid).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
+          carryUnread(FM.projects.detachLinked(pid)).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
             joinBusy = Math.max(0, joinBusy - 1); U.syncBanner();
             if (nid) { if (FM.toast) FM.toast('You left — this is now your own copy', 2600); return; }
             FM.ask({ title: 'Your copy could not be made your own', ok: 'OK', single: true,
@@ -3246,7 +3265,7 @@ window.FM = window.FM || {};
     input.type = 'text';
     input.spellcheck = false;
     input.autocapitalize = 'characters';
-    input.placeholder = C.signal.codesOnly() ? 'Paste a swap code' : 'Link or code';
+    input.placeholder = C.signal.codesOnly() ? 'Paste a swap code' : 'Link, short or swap code';   // B4/B5 review: all three by name, and it fits a 380 field
     input.setAttribute('aria-label', C.signal.codesOnly() ? 'Paste a swap code' : 'Link, short code or swap code');
     if (jo.prefill) input.value = jo.prefill;
     fieldRow.appendChild(input);
@@ -4074,7 +4093,10 @@ window.FM = window.FM || {};
     askTimer = setTimeout(function () {
       askTimer = null;
       if (askState !== st) return;
-      if (st.state === 'open') askState = null;   // no answer ever came (a card lives two minutes): the button comes back
+      /* Lapsed either way: no answer ever came (a card lives two minutes), or the wait after Not now is over — the button
+         comes back. #967 B5 review: a `cool` state was never dropped, so it held the ended guest Session (its document,
+         outbox and link) in memory until some later ask. */
+      askState = null;
       U.syncBanner();
     }, Math.max(0, st.until - Date.now()) + 50);
   }
@@ -4087,8 +4109,11 @@ window.FM = window.FM || {};
   function askBanner(s, short) {
     const lead = roleLead(s);
     const a = askFor(s);
-    if (a && a.state === 'open') return U.banner(lead + ' · ' + (short ? 'asked ' + ownerWord(s) : 'you asked ' + ownerWord(s) + ' to let you edit'));
-    if (a && a.state === 'cool' && Date.now() < a.until) return U.banner(lead + ' · ' + ownerWord(s, true) + ' said not now');
+    /* #967 B5 review: on a phone a long name gives way and the ANSWER stays — "View only · asked Alexandra Montgom…" and
+       "Comments only · Christopher sai…" had lost exactly the words that say where the ask stands. */
+    const brief = short && ownerWord(s).length > 12;
+    if (a && a.state === 'open') return U.banner(lead + ' · ' + (brief ? 'asked · waiting' : short ? 'asked ' + ownerWord(s) : 'you asked ' + ownerWord(s) + ' to let you edit'));
+    if (a && a.state === 'cool' && Date.now() < a.until) return U.banner(lead + ' · ' + (brief ? 'not now · ask again later' : ownerWord(s, true) + ' said not now'));
     return U.banner(lead, { action: 'Ask to edit', onAction: function () { U.askEdit(); } });
   }
   U.askEdit = function () {
@@ -4157,6 +4182,11 @@ window.FM = window.FM || {};
     if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
     if (o.ms) bannerTimer = setTimeout(U.hideBanner, o.ms);
     U.placeBanner();
+    /* B4/B5 review: a button may carry a shorter label (`actionShort`), used only when the words would otherwise be cut —
+       "Comments only · Watching Christopher [Ask to edit] ×" is 375 px on a 364 px row at 380. The words say what is
+       happening; the button can say less. */
+    const act = o.actionShort && bannerEl.querySelector('.cb-act'), tx = bannerEl.querySelector('.cb-text');
+    if (act && tx.scrollWidth > tx.clientWidth + 1) { act.textContent = o.actionShort; U.placeBanner(); }
     return bannerEl;
   };
   /* ⚠️ THE BANNER CLEARS THE PEOPLE CHIP (S5 review). Both live at the top of the stage: the chip in the
@@ -4183,7 +4213,9 @@ window.FM = window.FM || {};
       b.style.maxWidth = 'none';
       const need = b.getBoundingClientRect().width;
       b.style.maxWidth = '';
-      if (need > sr.width - 46 - minL) { b.style.top = Math.round(cBot - sr.top + 6) + 'px'; return; }
+      /* #967 B4/B5 review: …and the row is ITS OWN, so the pill may use it. Only `top` was set, and the first row's cap
+         (100% − 140 px: 240 at 380) stayed — "View only · Watching along w…" was cut under a row with room to spare. */
+      if (need > sr.width - 46 - minL) { b.style.top = Math.round(cBot - sr.top + 6) + 'px'; b.style.maxWidth = Math.max(60, Math.round(sr.width) - 16) + 'px'; return; }
     }
     b.style.transform = 'none';
     b.style.left = minL + 'px';
@@ -4275,7 +4307,15 @@ window.FM = window.FM || {};
        nothing to press. Both facts are true, so the banner says both. */
     /* #967 B5 (J4-15): "ask for edit access" had nothing to press — now it is a button, and the line says where the ask
        stands. A Commenter can ask too, and is told what a Commenter can do rather than "View only". */
-    if (!s.isOwner && (s.role === 'viewer' || s.role === 'commenter')) return fl ? U.banner(roleLead(s) + ' · ' + fl, follow) : askBanner(s, short);
+    if (!s.isOwner && (s.role === 'viewer' || s.role === 'commenter')) {
+      if (!fl) return askBanner(s, short);
+      /* #967 B5 review: …and watching along KEEPS the Ask. The follow line replaced the ask banner whole, so the person
+         most likely to watch — a client watching the edit — had nothing to press, while an edit they tried was refused
+         with "ask for edit access". The phone says it shorter ("Watching Ezra") so both fit on the row. */
+      const fa = { onClose: follow.onClose, closeLabel: follow.closeLabel };
+      if (!askWaiting(s)) { fa.action = 'Ask to edit'; fa.actionShort = 'Ask'; fa.onAction = function () { U.askEdit(); }; }
+      return U.banner(roleLead(s) + ' · ' + (short ? C.presence.followLabel(true) : fl), fa);
+    }
     if (C._pendingReload && C._pendingReload()) return U.banner('Update ready — it applies once sharing ends');
     /* Lowest: what he chose to do, below what the session is telling him. */
     if (fl) return U.banner(fl, follow);
@@ -4538,6 +4578,7 @@ window.FM = window.FM || {};
   };
   U.onDetach = function (s) {
     forgetPeerNotes();                         // #967: per-person notes die with the session (see forgetPeerNotes)
+    setAsk(null);                              // #967 B5 review: an ask belongs to its session — and must not keep it in memory
     /* #967 B3: A ROOM LEFT BY OPENING ANOTHER PROJECT SAYS SO. The switch stands the session down `paused` and keeps the
        room; the mark is what tells a later reload onto this project (the boot landing in the editor) that he had LEFT it —
        so it asks “Carry on sharing?” — from a page that went away while the room was live, which carries no mark and comes
@@ -4955,7 +4996,7 @@ window.FM = window.FM || {};
     let keep = false;
     c._onclose = function () { if (!keep && !oo.join) putAwayPendingJoin(); };   // #967: Not now keeps it (see putAwayPendingJoin)
     c.appendChild(el('h2', 'fm-ask-title', 'Turn on Work with friends to join'));
-    bodyOf(c).appendChild(el('div', 'collab-sub', (oo.join ? 'Join a friend’s project with the link or code they sent you, and edit it together, live. '
+    bodyOf(c).appendChild(el('div', 'collab-sub', (oo.join ? 'Join a friend’s project with what they sent you, and edit it together, live. '
       : 'A friend sent you an invite to their project. ') +
       'Work with friends stays off until you turn it on. You can turn it off again any time — right where you share, or in Settings → Work with friends.'));
     const acts = el('div', 'fm-ask-actions');
@@ -5087,7 +5128,7 @@ window.FM = window.FM || {};
     const b = el('button', 'hm-select-btn hm-join-btn', 'Join');
     b.id = 'hm-join-btn';
     b.type = 'button';
-    b.title = 'Join a friend’s project with the link or code they sent you';
+    b.title = 'Join a friend’s project with what they sent you';
     b.setAttribute('aria-label', 'Join a friend’s project');
     b.addEventListener('click', function () { U.joinDoor(); });
     const sel = document.getElementById('hm-select-btn');   // Home builds Select at its first render — before or after this
@@ -5149,6 +5190,7 @@ window.FM = window.FM || {};
        `if (!installed) return false` meant the one sweep that could have caught it never ran again. */
     const was = installed;
     installed = false;
+    setAsk(null);                              // #967 B5 review (see U.onDetach)
     if (C.comments && C.comments.uninstall) { try { C.comments.uninstall(); } catch (e) {} }
     applyRoleClasses();
     stopCkpt();
