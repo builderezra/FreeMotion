@@ -630,6 +630,20 @@ tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
 # 2700, not 1800 (26 Sep): measured at v17.01 on an idle Mac (load ~2 on 6 cores) a green full pass took 1848 s — the suite
 # had simply outgrown 1800 (1971 tests; the tier-3 and real-input tests are the long ones). Two ships ran out of time with the
 # stall point MOVING (a hunt-7 test, then a #927 test), which is this file's own sign of "not one hung test".
+# THE WHOLE FAILURE, NOT THE FIRST QUOTE OF IT (27 Sep, v17.06). This printed `grep -o 'FAIL[^"]*'`, which stops at the
+# first escaped quote — and a test that reports what it collected as JSON (`… said nothing ([\"Sam left\"])`) lost exactly
+# the part that said why. The red '967 7' had to be re-run by hand to learn what it had seen. Parse the runner's JSON.
+_fails() { python3 -c '
+import json,sys
+raw=sys.stdin.read(); i=raw.find("{")
+try: d=json.loads(raw[i:])
+except Exception: d=None
+fs=(d or {}).get("failures") or []
+for f in fs[:6]: print("   " + f[:1200])
+if not fs:
+    import re
+    for m in re.findall(r"FAIL[^\n]{0,400}", raw)[:6]: print("   " + m)
+'; }
 SUITE_TIMEOUT=2700
 # ⚠️ A TIMEOUT'S REAL CAUSE IS USUALLY THE MACHINE, AND NOTHING HERE MEASURED IT (21 Sep). Three ship
 # cycles went on "the suite ran out of time" — first at prove's 600s, then at the suite's 1800s — before
@@ -668,7 +682,7 @@ if ! printf '%s' "$OUT" | grep -q '"ok": true'; then
   # produce. If nothing actually failed, say what DID happen instead of implying a regression.
   if printf '%s' "$OUT" | grep -q 'FAIL'; then
     echo "❌ SUITE IS RED — not committing, not pushing."
-    printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | head -6
+    printf '%s' "$OUT" | _fails
   else
     echo "⚠️  THE SUITE DID NOT RUN — no test failed. Nothing is committed or pushed."
     printf '%s' "$OUT" | grep -o '"error": "[^"]*"' | head -1
@@ -712,7 +726,7 @@ if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; th
     echo "❌ SUITE IS RED AT PHONE WIDTH — not committing, not pushing."
     echo "   It is GREEN at 1280px, so this is a layout that only breaks on a phone — which is the"
     echo "   one shape of bug this app can least afford, and exactly how queue 431 shipped."
-    printf '%s' "$POUT" | grep -o 'FAIL[^"]*' | head -6
+    printf '%s' "$POUT" | _fails
     exit 1
   fi
   test_floor_check "$POUT" || { echo "   Not committing, not pushing."; exit 1; }

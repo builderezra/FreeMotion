@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=728">
+<link rel="stylesheet" href="styles.css?v=729">
 <link rel="stylesheet" href="theme-glass.css?v=64">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.06</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.07</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -279,7 +279,7 @@
              dialog (btn-snapshot). Nothing opens them here. -->
         <div id="topbar-extra" style="display:none">
           <button id="btn-ai" class="btn btn-ai" title="Generate a scene with AI"><span class="ai-spark">✨</span>Generate</button>
-          <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import</button>
+          <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import media</button>
           <button id="btn-canvas" class="icon-btn" title="Canvas settings — size, frame rate, background"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg></button>
           <button id="btn-guides" class="icon-btn" title="Safe margins & rule-of-thirds overlay"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></button>
           <button id="btn-snapshot" class="icon-btn" title="Save current frame as PNG"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4zM12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg></button>
@@ -419,12 +419,8 @@
                the difference you can see on a phone, where the canvas is letterboxed. -->
           <div id="pause-fx" aria-hidden="true"><svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg></div>
           <div id="drop-hint">
-            <div class="dh-icon"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><!-- v5.92. Ezra: "this shape looks a little shitty, fix it up so the lines aren't going through." The clapstick was an OPEN path forming a wedge 4.5 thick at the hinge and 1.5 at the tip, and the three stripes were fixed-length diagonals that fitted neither end of it: measured against the wedge, all three overshot its TOP edge by ~1.0, and two crossed BELOW y=9 into the board — the third started at y=9.6, i.e. entirely inside it. Now the clapstick is a CLOSED bar of constant 3.6 thickness and the stripes are inset 0.8 from both of its edges, so nothing can protrude at either end. Declaration order is load-bearing, as it was for the Template icon: stripes first, bar over their ends, board last. --><path d="M7.55 7.5 7.28 5.53M12.0 6.9 11.73 4.93M16.44 6.3 16.18 4.33"/><path d="M3.2 8.9 21 6.5 20.52 2.93 2.72 5.33Z"/><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></div>
+            <div class="dh-icon"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><!-- v5.92. Ezra: "this shape looks a little shitty, fix it up so the lines aren't going through." The clapstick was an OPEN path forming a wedge 4.5 thick at the hinge and 1.5 at the tip, and the three stripes were fixed-length diagonals that fitted neither end of it: measured against the wedge, all three overshot its TOP edge by ~1.0, and two crossed BELOW y=9 into the board — the third started at y=9.6, i.e. entirely inside it. Now the clapstick is a CLOSED bar of constant 3.6 thickness and the stripes are inset 0.8 from both of its edges, so nothing can protrude at either end. Declaration order is load-bearing, as it was for the Template icon: stripes first, bar over their ends, board last. --><!-- queue 957. Ezra: "make it make a little animation for like the film real thing where it's like open and then it slams down with like a little effect with like some lines coming out of it". The v5.92 paths are untouched; they are only GROUPED. Stripes + bar are the stick (.dh-stick), hinged at the bar's bottom-left corner (3.2, 8.9), which is the board's top-left. The hinge is the two static translate() wrappers around the animated <g>, NOT transform-origin: the CSS rotation then turns about the local origin, whatever an engine does with transform-origin / transform-box on an SVG child. The drawn pose is 7.68° open; styles.css turns it +7.68° to shut it flat on the board. .dh-body jolts on the impact; .dh-whack is the three impact lines past the tip, invisible until the slam (pathLength="1" so the dash maths is in fractions of each line). --><g class="dh-body"><g transform="translate(3.2 8.9)"><g class="dh-stick"><g transform="translate(-3.2 -8.9)"><path d="M7.55 7.5 7.28 5.53M12.0 6.9 11.73 4.93M16.44 6.3 16.18 4.33"/><path d="M3.2 8.9 21 6.5 20.52 2.93 2.72 5.33Z"/></g></g></g><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></g><g class="dh-whack" stroke-width="1.4"><path pathLength="1" d="M22.2 6.47 24 3.35"/><path pathLength="1" d="M23.01 7.35 26.28 5.83"/><path pathLength="1" d="M23.17 8.55 26.71 9.17"/></g></svg></div>
             <div class="dh-pc">Drag a video or image here<br>or click <b>Import media</b></div>
-            <!-- The phone has neither drag-and-drop nor an "Import media" button (queue 917 finding 14); what
-                 it has is the big + filling the timeline right under the canvas. Swapped by styles.css at
-                 the phone breakpoint — the same width everything else in the phone layout keys off. -->
-            <div class="dh-phone">Tap <b>+</b> below to add<br>a video or image</div>
           </div>
         </div>
         <!-- AM-style right-side VIEW toolbar (toggled by the ⛶ button): fit · layers · camera · canvas zoom · toggles.
@@ -1048,7 +1044,7 @@
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=11"></script>
-  <script src="js/statusbar.js?v=3"></script>
+  <script src="js/statusbar.js?v=4"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=118"></script>
   <script src="js/eases.js?v=3"></script>
@@ -1058,14 +1054,15 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=4"></script>
   <script src="js/gl-color.js?v=3"></script>
-  <script src="js/compositor.js?v=194"></script>
+  <script src="js/compositor.js?v=195"></script>
   <script src="js/fx-registry.js?v=25.23"></script>
   <script src="js/filters.js?v=17"></script>
   <script src="js/fx-presets.js?v=11"></script>
   <script src="js/fx-thumbs.js?v=52"></script>
   <script src="js/timeline.js?v=257"></script>
-  <script src="js/addmenu.js?v=80"></script>
-  <script src="js/inspector.js?v=392"></script>
+  <script src="js/tilefit.js?v=1"></script>
+  <script src="js/addmenu.js?v=81"></script>
+  <script src="js/inspector.js?v=393"></script>
   <script src="js/fx-browser.js?v=96"></script>
   <script src="js/elements-browser.js?v=4"></script>
   <script src="js/color-wheel.js?v=53"></script>
@@ -1093,7 +1090,7 @@
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
-  <script src="js/home-arrow.js?v=1"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
+  <script src="js/home-arrow.js?v=2"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
   <script src="js/home.js?v=187"></script>
   <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
@@ -1106,7 +1103,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=58"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=459"></script>
+  <script src="js/app.js?v=460"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>

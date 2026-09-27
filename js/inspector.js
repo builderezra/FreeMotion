@@ -3807,6 +3807,11 @@ window.FM = window.FM || {};
       card.innerHTML = (i < 9 ? '<span class="cat-num">' + (i + 1) + '</span>' : '') +
         '<span class="cat-ico">' + (gico ? icoMulti(gico) : svgIcon(cat.icon)) + '</span>' +
         '<span class="cat-label">' + label + '</span>';
+      /* queue 963: the name, on the card itself. When the band is too short for names the card shows its picture alone, and
+         this is what hovering it says and what a screen reader reads (the label span is display:none then). setAttribute,
+         so a name can never become markup. */
+      card.title = label;
+      card.setAttribute('aria-label', label);
       /* HOLD A CARD TO RESET THAT GROUP (queue 381). Ezra: "Make it so if you hold down on any of the
          layer edit buttons it gives an option to reset that one specific groups values back to how to
          was."
@@ -3865,6 +3870,38 @@ window.FM = window.FM || {};
     wrap.appendChild(top);
     if (bot.children.length) wrap.appendChild(bot);
     return wrap;
+  }
+  /* QUEUE 963 — THE CARDS ARE PLANNED BY THE SAME CODE AS THE ADD MENU'S TILES (js/tilefit.js), from the box they really
+     have: the height left in #inspector under whatever sits above the grid (the Text to Voice row on a text layer; the
+     title line, which grows 7px when the clip keys come on) and its width. This replaces the --tl-h arithmetic in
+     styles.css (queues 285 / 518 / 672 / 807 / 918.3), which counted 88px of chrome by hand, was 7px out once the keys
+     moved onto the title line, and drew 12px icons under 11.5px names at every laptop's default band.
+     `fill`: on an icon tie the grid that spans more of the panel wins, so a tall inspector keeps three columns (his 26 Sep
+     screenshot) rather than two 118px ones with a strip of nothing either side.
+     PC only. On the phone the property sheet keeps its own layout; a stale plan is cleared when the width drops. */
+  function fitCards() {
+    const wrap = root && root.querySelector(':scope > .cat-wrap');
+    if (!wrap || !FM.tileFit) return;
+    const pc = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
+    let plan = null, box = null;
+    if (pc && root.clientHeight) {
+      const sr = root.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+      const top = wr.top - sr.top - root.clientTop + root.scrollTop;
+      const padB = parseFloat(getComputedStyle(root).paddingBottom) || 0;
+      box = { w: wrap.clientWidth, h: root.clientHeight - top - padB - 1 };
+      const n = wrap.querySelectorAll('.cat-card').length;
+      // the widest word of these names, in the font the labels really use: a chip is only offered where it fits whole
+      const labs = wrap.querySelectorAll('.cat-label');
+      const word = FM.tileFit.wordPx(Array.from(labs, l => l.textContent), labs[0]);
+      plan = (n && box.w > 40 && box.h > 20) ? FM.tileFit.plan(n, box.w, box.h, { fill: true, word }) : null;
+      /* The inspector never pages. If even the smallest tile cannot show every card (a box squeezed by something that
+         does not exist yet — a 150px band fits them all), keep the tile the plan chose and let #inspector scroll the rest. */
+      if (plan && plan.pages > 1) {
+        plan = Object.assign({}, plan, { rows: Math.ceil(n / plan.cols), pages: 1 });
+        box = { w: box.w, h: plan.rows * plan.h + (plan.rows - 1) * FM.tileFit.GAP };
+      }
+    }
+    FM.tileFit.apply(wrap, plan, plan ? box : null);
   }
 
   function gradientControls(layer, body) {
@@ -6757,6 +6794,19 @@ window.FM = window.FM || {};
     _catsFor(layer) { return catsFor(layer).slice(); },
     init() {
       root = document.getElementById('inspector');
+      /* queue 963: re-plan the cards whenever #inspector's box changes — the band dragged, the panel raised over the canvas
+         (--am-h), the window resized, or the title line growing when the clip keys come on. Observing #inspector rather than
+         the panel is what catches that last one: the panel keeps its size, the scroller under the title does not. The
+         signature guard stops a re-plan (which never changes #inspector's own box) from looping. */
+      if (root && window.ResizeObserver) {
+        let sig = '';
+        new ResizeObserver(() => {
+          const s = root.clientWidth + 'x' + root.clientHeight;
+          if (s === sig) return;
+          sig = s;
+          fitCards();
+        }).observe(root);
+      }
       try { const rc = JSON.parse(localStorage.getItem('fm.recentColors') || '[]'); if (Array.isArray(rc)) FM.recentColors = rc; } catch (e) {}   // hydrate persisted recents
     },
     // Opening a panel starts with NOTHING selected, so it behaves exactly as it did before row
@@ -6861,6 +6911,11 @@ window.FM = window.FM || {};
         if (FM.pointEdit && FM.pointEdit.isActive() && FM.pointEdit.isEmbedded()) FM.pointEdit.stop();   // deselect ends Edit Points
         if (FM.fillDrag && FM.fillDrag.isActive()) FM.fillDrag.stop();                                   // …and hands the canvas back from the fill drag
         if (title) title.textContent = 'Add';
+        /* queue 963: put the clip keys away BEFORE the Add menu measures its box. The re-sync above waits a task, so a
+           deselect drew the menu under a title line still 7px tall with the keys, then the keys went, #inspector grew, and
+           the menu's observer drew every tile a second time — on every deselect, and a click landing between the two
+           went to tiles that no longer existed. With nothing selected the keys have nothing to act on, so this is final. */
+        try { if (FM.timeline && FM.timeline.syncKeyRail) FM.timeline.syncKeyRail(); } catch (e) {}
         if (FM.addMenu) FM.addMenu.render(root, { variant: 'panel' });
         else root.appendChild(el('div', 'empty', 'Select a layer to edit it.'));
         return;
@@ -6917,6 +6972,7 @@ window.FM = window.FM || {};
         // that would quietly touch just one.
         if (!multi) {
           root.appendChild(quickRow(layer)); root.appendChild(categoryGrid(layer));
+          fitCards();   // queue 963: measured in place, so it has to run after the append
         }
         else root.appendChild(alignRow());
       } else if (view === 'transform' && FM._mtEasing && FM.buildEasingEditor) {

@@ -19,6 +19,23 @@ window.FM = window.FM || {};
   function icoMulti(inner) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
   }
+  /* ONE DRAWING FOR BOTH IMPORT TILES (queue 960). Ezra: "The import media button and the import audio button both have
+     some discrepancies. Like they both look different. I think you should make them both have like the shiny look that
+     the import media button has."
+     Measured before the change (1280x900 and 380x820, computed styles): the two tiles already shared everything else —
+     one grey --am-tint (150, 160, 176), one class list, the same background, border, radius and inset shadow. The one
+     difference in the tile was the arrow: Media's (#270) strokes with a white-to-55%-white gradient, Audio's with
+     currentColor, i.e. the grey. #270 left Audio grey on purpose and said "say if you want the audio one to match".
+     So the drawing lives here and both tiles call it — they cannot drift apart again. Each passes its OWN id: a
+     duplicate gradient id silently steals the paint from whichever element asks for it second.
+     importIcon('fm-ic-imp') is byte-identical to the markup the Media tile shipped with (checked in the browser by
+     serialising both), so the Media tile does not change at all. */
+  function importIcon(gid) {
+    return icoMulti('<defs><linearGradient id="' + gid + '" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset="1" stop-color="#ffffff" stop-opacity=".55"/></linearGradient></defs>'
+      + '<path d="M12 16V4M7 9l5-5 5 5" stroke="url(#' + gid + ')"/>'
+      + '<path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="url(#' + gid + ')"/>');
+  }
   // The one file input is shared, so narrow `accept` to what this entry is actually asking for and put
   // it back afterwards. Two reasons this matters on a phone: a picker limited to audio doesn't bury
   // songs among the camera roll, and — the actual bug Ezra hit — iOS greys audio out in Files when the
@@ -348,7 +365,15 @@ window.FM = window.FM || {};
       { label: 'Parallelogram', icon: ico('<path d="M8 5h13l-5 14H3z"/>'), add: shp('parallelogram') },
       { label: 'Line', icon: ico('<path d="M4 12h16"/>'), add: shp('line') },
       { label: 'Polygon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/><circle cx="12" cy="12" r="1.6"/>'), add: shp('polygon') },
-    ].concat(LIB_SHAPES.map(function (s) { return { label: s[1], icon: icoPoly(s[0]), add: shp(s[0], { name: s[1] }) }; })) },
+    ].concat(LIB_SHAPES.map(function (s) {
+      /* A GETTER, or #159 never reaches the menu (queue 962). This array is built when addmenu.js loads, and index.html loads
+         addmenu.js BEFORE app.js — which is where FM.SHAPE_ASPECT is defined — so icoPoly read undefined, fell back to [1, 1],
+         and every shape icon was drawn in a SQUARE from the day #159 shipped: the Eye tile measured "M3.99 12.00 … 12.00 5.79",
+         an 18x18 box, against the 18x10.8 its own aspect gives (Key was 2.06x too tall, Banner 0.44x too thin). The probe that
+         checked #159 (tests/_shapedrift.html) re-implements icoPoly instead of reading the menu, so it never saw this.
+         card() reads item.icon at render time, long after app.js has run. */
+      return { label: s[1], get icon() { return icoPoly(s[0]); }, add: shp(s[0], { name: s[1] }) };
+    })) },
     { key: 'media', label: 'Media', icon: icoMulti(
       /* A little PICTURE, filled, rather than an outline sketch. Ezra: "I want the whole bottom line,
          rn it looks tacky, maybe try also filling in the green hills solid green and make the
@@ -391,11 +416,11 @@ window.FM = window.FM || {};
            So the icon gets its own paint server, exactly as Sound effects does — a CSS colour cannot
            override one, which is the whole reason #267 took two attempts. Namespaced id: a duplicate
            silently steals the paint from whichever element asked for it second. */
-        { label: 'Import', icon: icoMulti(
-          '<defs><linearGradient id="fm-ic-imp" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">'
-          + '<stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset="1" stop-color="#ffffff" stop-opacity=".55"/></linearGradient></defs>'
-          + '<path d="M12 16V4M7 9l5-5 5 5" stroke="url(#fm-ic-imp)"/>'
-          + '<path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="url(#fm-ic-imp)"/>'), add: fileImport },
+        /* "IMPORT MEDIA", NOT "IMPORT" (queue 960). His words: "rename the import media button to import media because
+           right now it's just called import just so then it feels a bit more thought out and less slack". The PC empty
+           canvas already said "click Import media" (index.html) about a button called "Import"; now they agree.
+           BY_LABEL below is keyed by this exact text. The icon is importIcon() above — shared with Import audio. */
+        { label: 'Import media', icon: importIcon('fm-ic-imp'), add: fileImport },
         /* SAMPLE CLIP — a real clapperboard (queue 543). Ezra: "fix up the sample clip icon because
            the lines are going through it", and he was describing the geometry exactly. The old art was
            `rect x=4 w=16` with `M4 9.5h16` across it and two ticks starting at `y=5`: the crossbar ran
@@ -449,7 +474,8 @@ window.FM = window.FM || {};
       // a song like adding media it stays in the audios section"). They used to land in Media, mixed
       // in among the video thumbnails with no artwork to tell them apart.
       return [
-        { label: 'Import audio', icon: ico('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), add: audioImport },
+        // The same white-gradient arrow as Import media, under its own id (queue 960 — "make them both have like the shiny look")
+        { label: 'Import audio', icon: importIcon('fm-ic-impau'), add: audioImport },
         /* Record voice… sits BESIDE Import rather than replacing it, and second rather than first:
            importing is still the commoner move, and the tile you have always tapped should not
            change position under your finger.
@@ -661,7 +687,6 @@ window.FM = window.FM || {};
    * inside its unchanged 22px box. That is deliberate. Ezra's complaint ("its a triangle and
    * circle") is equally true on a phone, and forking one icon per surface would mean the same tab
    * says two different things depending on the device. Layout is PC-only; the icon is everywhere. */
-  var FIT_GAP = 8;        // must match the grid `gap` the fit CSS sets
   /* The pager strip's own height, which the fit hands back before it plans the grid. The phone
    * sheet's row is 15 (a 6px dot on a 9px margin, decoration only); the PC panel's carries the real
    * ‹ › buttons, so it is a 24px row on a 2px margin — 26, and this constant is PC-only because
@@ -672,180 +697,11 @@ window.FM = window.FM || {};
      gap) rather than assumed — and CSS still owns the truth, so a test asserts the rendered pitch
      matches these. If that test goes red the numbers here are stale, not the layout. */
   var LIB_ROW_H = 63, LIB_GAP = 8, LIB_PITCH = LIB_ROW_H + LIB_GAP;
-  var FS_MIN = 9.6;       // the label font at the smallest tile; the height floors are derived from it
-  var FIT_CFG = {
-    /* The minimums are not taste — each is the geometric floor of the tile it describes, and this
-     * got written twice before it was right, in the same way both times: a floor was set from what
-     * looked comfortable, and it quietly FORBADE grids the app had been shipping for versions. A
-     * floor that outlaws the shipped layout is not a floor, it is a regression with a justification.
-     * Measured on pristine HEAD at 1024x640 classic (panel 285x358, tile box 257x161):
-     *   labelled tabs drew 5 columns of 45.0 x 62.5 tiles, 19px icons, ONE page, nothing clipped;
-     *   the Shape tab drew 6 columns of 36.2 x 60 tiles holding 34px icons — i.e. 1.1px of side
-     *   padding. HEAD is DENSER than anything below; none of these numbers invent a new tightness.
-     *
-     * What a floor is allowed to protect is the CONTROL, not the decoration around it. So padding
-     * is now a RANGE (padV/padH preferred, padVMin/padHMin hard) and every floor is derived from
-     * the hard end of it:
-     *   ico.minW/minH = icoMin 30 + 2*2 = 34. The previous 42 was derived from the PREFERRED
-     *        padding (30 + 6*2) and its stated justification — "w >= minW guarantees w - padH*2 >=
-     *        30" — is true only if padH can never move. Measured, 42 makes 6 columns arithmetically
-     *        unreachable in a 257px box (floor(265/50) = 5) at the very sizes HEAD ships 36.2px
-     *        tiles, and that cost real page turns: classic 800x600 Shape 6 pages -> 7, 1280x720 3 -> 4.
-     *   lbl.minW = 44 stays a genuine constant, and is the one floor NOT derived from the icon:
-     *        a labelled tile has to fit two lines of text, and the label runs out of room long
-     *        before the 18px icon does. 44 sits a hair under HEAD's proven 45.0.
-     *   lbl.minH = 40 is only a backstop; the real floor is derived per-plan from the label band
-     *        (2*2 + 18 + 5 + lblH, so 53 at the 9.6px font a 45px tile draws). The old 58 was 5px
-     *        too tall to allow the SECOND ROW that HEAD draws at classic 800x600, which is why
-     *        Elements — nine items — turned one page into two and left 59px of panel empty.
-     *   aspect caps how letterbox-tall a sparse tab may grow its tiles. 1.25 for icon-only art;
-     *        1.45 for labelled, because HEAD ships 62.5/45 = 1.39 and a cap under what ships is
-     *        the same mistake again — at 1.25 the 1024x640 Elements tile shrank 63 -> 56 for
-     *        nothing.
-     *   maxW / maxH 118 are LEFT WHERE THEY WERE, and that is a measured decision rather than an
-     *        oversight — the sparse tabs (Media / Audio / Template, one to three entries) do leave
-     *        up to 124px below their row at the widest PC panels. Raising the cap does not spend
-     *        that space on anything you can see: at a 118px tile the icon is ALREADY at icoMax 46
-     *        (min(46, 118-8, 118-14-31) = 46), so every extra pixel of tile becomes padding around
-     *        an icon that has stopped growing. A 3-entry tab cannot fill a 380x313 panel with tiles
-     *        without drawing absurd ones; what it can do is stop dumping the slack in one block at
-     *        the bottom, which is what `align-content: center` in the fit CSS now does. */
-    /* icoMin IS THE SHIPPED ICON, EXACTLY. 19px for a labelled card and 34px for a shape tile are
-     * not chosen numbers — they are what styles.css draws in the un-measured layout
-     * (`.addmenu--panel:not(.addmenu--fit) … .addmenu-ic svg { width: 19px }` and
-     * `.addmenu-card--ico .addmenu-ic svg { width: 34px }`), so a panel the fit has taken over can
-     * never hand back smaller art than the same panel without it. The floors that sit under them —
-     * minW / minH and padHMin / padVMin — are then arithmetic, not taste: a tile has to be at least
-     * icoMin + twice the hard padding on each axis, or the icon it is supposed to protect gets
-     * clipped by its own card. The PREFERRED padding (padV / padH) is unchanged; it is spent first
-     * and only compressed when the tile is tight, and the label band then takes whatever room is
-     * left.
-     * ico's HARD padding is 0 on both axes, and that is the number that looks wrong until you price
-     * it. Every pixel of hard padding raises the smallest legal shape tile, and a 2px floor on each
-     * axis is a whole ROW or COLUMN in a tight box. Measured, at the real panel boxes: padHMin 1
-     * (tile floor 36) costs the tenth column at Studio 2560x1440 and turns "all 67 shapes on one
-     * page" into two, and the ninth column at Studio 1440x900, 4 pages into 5; padVMin 2 (tile floor
-     * 38) turns Studio 1280x720 from two rows of 43.5px tiles, 5 pages, into one row of 79px ones,
-     * 10 pages. With both at 0 the 34px floor is FREE: identical page counts to the 30px floor it
-     * replaces at all seven measured boxes (31) and over a 3,780-box sweep (11,767), with 4px more
-     * art everywhere it used to bottom out. At the floor the art meets the card edge, which is what
-     * HEAD already does horizontally — its densest tile is 36.2px around 34px of art. */
-    // labelled cards (Elements / Media / Audio / Template)
-    lbl: { minW: 44, maxW: 118, minH: 40, maxH: 118, padV: 7, padH: 4, padVMin: 2, padHMin: 2, aspect: 1.45, icoGap: 5, icoMin: 19, icoMax: 46, lines: 2 },
-    // icon-only cards (Shape) — the name lives in the tooltip, so all the height goes to the art
-    /* BIGGER ON PC (queue 760 clause 1, his words: "on pc make the shape buttons bigger"). The 3 Sep sheet drew the grid at 40px as
-       shipped (seven across), 48px (six across, recommended) and 56px; decided under rule 16 as 48. minW/minH lift the floor the
-       solver may not go under, icoMin the art inside it; measured at 1280 before: 39.7x35 tiles, 34px art. Say 40 or 56 to change. */
-    ico: { minW: 46, maxW: 110, minH: 44, maxH: 110, padV: 8, padH: 6, padVMin: 0, padHMin: 0, aspect: 1.25, icoGap: 0, icoMin: 40, icoMax: 58, lines: 0 },
-  };
-  /* The label's RESERVED band, in px, and the one number that makes the fit monotonic.
-   * It is a CONSTANT per card kind — the gap plus two lines at the smallest font — not a function
-   * of the tile width. It used to be the latter, and that alone accounted for every remaining
-   * icon inversion in the sweep: a 1px wider panel pushed the font 10.0 -> 10.1, which pushed the
-   * two-line band 26 -> 27, which took a pixel off an icon whose tile had not grown (its height was
-   * already at the aspect cap). Measured, classic + studio, 1px steps across the whole real panel
-   * range: 15 icon inversions with the band derived from the font, 0 with it fixed here.
-   * The font still scales with the tile — it is just chosen AFTER the icon, out of the slack the
-   * icon left behind (see fitArt), so it can never take room the icon was already using. */
-  Object.keys(FIT_CFG).forEach(function (k) {
-    var c = FIT_CFG[k];
-    c.band = c.lines ? c.icoGap + Math.ceil(FS_MIN * 1.2 * c.lines) + 2 : 0;   // lbl 31, ico 0
-  });
-  /* Size the art inside one tile of w x h, and say what padding and label band are left over.
-   * The rule is the whole point of the height floors above: PADDING IS DECORATION, THE ICON IS THE
-   * CONTROL. So the icon is first sized inside the PREFERRED padding, and only if that would push it
-   * under icoMin does the padding compress (never past padVMin/padHMin) to protect the icon. At a
-   * roomy panel nothing compresses and the tiles are exactly what they were; at a cramped one the
-   * gutter gives way instead of the artwork — which is what lets a second row exist at all in a 90px
-   * box, where the old fixed 8px padding made the choice "one row, or an icon below its own floor".
-   *
-   * ORDER MATTERS, and it is the reverse of what it was. The icon is measured against cfg.band, a
-   * CONSTANT; the FONT is then chosen out of whatever the icon did not take. Sizing the font first
-   * and the icon from the remainder is what made a wider panel able to hand back a SMALLER icon.
-   * ico(w, h) is now non-decreasing in both w and h — both terms of the min() grow, cfg.band never
-   * moves — and that is the property the whole monotonicity proof rests on. */
-  function fitArt(cfg, w, h) {
-    var availH = h - cfg.band;
-    var ico = Math.min(cfg.icoMax, availH - cfg.padV * 2, w - cfg.padH * 2);
-    var padV = cfg.padV, padH = cfg.padH;
-    if (ico < cfg.icoMin) {   // preferred padding starves the art → spend the padding, not the icon
-      ico = Math.min(cfg.icoMax, cfg.icoMin, availH - cfg.padVMin * 2, w - cfg.padHMin * 2);
-      padV = cfg.padVMin; padH = cfg.padHMin;
-    }
-    ico = Math.max(0, ico);
-    padV = Math.max(cfg.padVMin, Math.min(padV, (availH - ico) / 2));
-    padH = Math.max(cfg.padHMin, Math.min(padH, (w - ico) / 2));
-    // whatever the icon and its padding did not use is the label's; cfg.band is its guaranteed floor
-    var slack = cfg.lines ? Math.max(cfg.band - cfg.icoGap, h - padV * 2 - ico - cfg.icoGap) : 0;
-    var fs = 0, lblH = 0;
-    if (cfg.lines) {
-      var t = Math.max(0, Math.min(1, (w - cfg.minW) / Math.max(1, cfg.maxW - cfg.minW)));
-      fs = Math.round((FS_MIN + t * 2.4) * 10) / 10;                       // scale the text with the tile…
-      fs = Math.max(FS_MIN, Math.min(fs, (slack - 2) / (1.2 * cfg.lines)));  // …but never past its own band
-      fs = Math.round(fs * 10) / 10;
-      lblH = Math.max(Math.ceil(fs * 1.2 * cfg.lines) + 2, slack);
-    }
-    return { ico: ico, padV: padV, padH: padH, fs: fs, lblH: lblH };
-  }
-  /* Pick the column count / row count / row height / icon size that uses `availW x availH` best for
-   * `count` items. Every (columns x rows) pair is costed, and the ranking answers Ezra's sentence in
-   * the order he said it — "so they all fit … and I don't have to scroll to see them all", then
-   * "make the icons get smaller or bigger depending on how zoomed in you have that area":
-   *   1. FEWEST PAGES wins (showing everything is simply "one page", so this subsumes it);
-   *   2. then the BIGGEST ICON — the control Ezra named, and the thing that has to track the panel;
-   *   3. then the biggest card, so a tie on the icon still spends the leftover on the tile.
-   *
-   * THIS IS WHY IT IS MONOTONIC, which the shipped version was not. For a fixed (c, rows):
-   *   · w and h are non-decreasing in availW / availH (both are clamped maxima, never rejections),
-   *   · so ico(w, h) is non-decreasing (see fitArt), and so is w*h;
-   *   · pages = ceil(count / (c*rows)) does not depend on the box at all.
-   * And the candidate SET only ever grows as the box grows: hMin is a constant now, a column whose
-   * share exceeds maxW is CLAMPED to maxW instead of being struck out, and cMax/rowsMax are floors
-   * of the box. A maximum, taken over a growing set of individually non-decreasing values, is
-   * non-decreasing — so more room can no longer buy a smaller icon.
-   * Two things in the old loop broke each half of that:
-   *   · `cMin = ceil((availW+g)/(maxW+g))` DELETED the wide-tile candidates as the panel grew. A
-   *     3-entry tab went from 3 columns of 117.7px to 4 columns of 86.8px across a 2px panel step
-   *     (measured, classic, panel 397 -> 399), because 3 columns had become "too wide to be legal".
-   *   · rows was DERIVED (min(rowsNeed, rowsMax)) rather than costed, so the only 6-column layout
-   *     ever considered at a given height was the densest one. Shape at box 257x202 was drawn 6c4r
-   *     (44.4px tiles) and at 257x206 — a 4px BIGGER box — 5c5r (34.8px tiles), on the same 3 pages,
-   *     because 6c4r was not a candidate there at all. */
-  function planGrid(count, availW, availH, cfg) {
-    var g = FIT_GAP, best = null;
-    // the floor is the HARD padding and the CONSTANT band, so it does not move with the tile width
-    var hMin = Math.max(cfg.minH, cfg.padVMin * 2 + cfg.icoMin + cfg.band);
-    var rowsMax = Math.floor((availH + g) / (hMin + g));
-    if (rowsMax < 1) return null;
-    var cMax = Math.max(1, Math.min(count, Math.floor((availW + g) / (cfg.minW + g))));
-    for (var c = 1; c <= cMax; c++) {
-      // CLAMP, don't reject: a column wider than maxW keeps its tile at maxW and leaves the slack
-      // to the grid, which centres it. (Rejecting is what made the tile shrink as the panel grew.)
-      var w = Math.min(cfg.maxW, (availW - g * (c - 1)) / c);
-      if (w < cfg.minW - 0.5) continue;
-      var hMax = Math.max(hMin, Math.min(cfg.maxH, w * cfg.aspect));
-      var rowsNeed = Math.max(1, Math.ceil(count / c));
-      var rTop = Math.min(rowsMax, rowsNeed);   // more rows than the tab needs is only empty cells
-      for (var rows = 1; rows <= rTop; rows++) {
-        var h = Math.min(hMax, (availH - g * (rows - 1)) / rows);
-        if (h < hMin - 0.5) continue;
-        var art = fitArt(cfg, w, h);
-        var shown = rows * c;
-        var pages = Math.max(1, Math.ceil(count / shown));
-        var better = !best || pages < best.pages;
-        if (!better && pages === best.pages) {
-          if (art.ico > best.ico + 1e-6) better = true;
-          else if (art.ico > best.ico - 1e-6 && w * h > best.w * best.h + 1e-6) better = true;
-        }
-        if (better) {
-          best = { cols: c, rows: rows, w: w, h: h, fs: art.fs, lblH: art.lblH, ico: art.ico,
-                   padV: art.padV, padH: art.padH, perPage: shown, pages: pages, cfg: cfg };
-        }
-      }
-    }
-    return best;
-  }
-  var FIT_VARS = ['--am-cols', '--am-cw', '--am-row', '--am-ico', '--am-fs', '--am-lblh', '--am-pad', '--am-icogap', '--am-gap', '--am-pager'];
+  /* THE SOLVER MOVED TO js/tilefit.js (queue 963). planGrid, fitArt and FIT_CFG lived here; FIT_CFG.lbl is now
+   * FM.tileFit.CFG.stack and FIT_CFG.ico is CFG.ico, number for number. It moved because the layer inspector now plans its
+   * cards with the same code — two copies of one solver is how the two panels came to shrink in two different ways,
+   * which is what he reported. The notes on why every floor is what it is are in git history (v17.03, js/addmenu.js
+   * 676–846) and summarised on CFG in tilefit.js. FIT_DOTS and the LIB_* pitch above stay: they are the add menu's own. */
   var _fitRO = null;   // the one live ResizeObserver; a re-render replaces it (see render())
 
   function fmtDur(s) {
@@ -897,8 +753,8 @@ window.FM = window.FM || {};
    * grey is specified at all, so it must survive any later repaint. */
   var BY_LABEL = {
     // "a basic grey" / "basic grey" — the neutral, everyday action. Deliberately colourless so the
-    // buttons that create something stand out against it.
-    'Import': '150, 160, 176',
+    // buttons that create something stand out against it. ('Import' left with its tile — queue 960 renamed it
+    // "Import media", which already had a key; a dead key outlives everyone who remembers why.)
     'Import audio': '150, 160, 176',
     'Import media': '150, 160, 176',
     'AI Scene': '240, 200, 90',          // "just a yellow colour for the background that isn't obnoxious"
@@ -1158,42 +1014,32 @@ window.FM = window.FM || {};
         var padB = parseFloat(getComputedStyle(container).paddingBottom) || 0;
         var h = host.clientHeight - top - padB - reserve - 2;
         var w = bodyEl.clientWidth;
-        return (w > 40 && h > 40) ? { w: w, h: h } : null;   // no room to plan with → leave the old layout alone
+        return (w > 40 && h > 20) ? { w: w, h: h } : null;   // no room to plan with → leave the old layout alone (20: queue 963's icon tiles are 28 tall)
+      }
+      /* QUEUE 963 — WHEN THE TABS GIVE UP THEIR WORDS. Once per panel size, the same for every tab: it asks whether the
+       * ELEMENTS tab (the labelled grid that opens first) would get comfortable stacked tiles on one page with the words
+       * kept on the tabs, in the box a tab with no pinned strip gets (measured from the tab row's bottom, not the body's
+       * top — Media's pinned strip must not change the answer). Deciding it per tab would make the row jump 64 ↔ 32px as
+       * you change tab, and "jumpy" is the word he used for exactly that in v5.46. Monotonic: shrinking the band takes the
+       * words away at one height, growing it gives them back at the same height. */
+      function tabsSettled() {
+        if (!host || !host.clientHeight || !tabsEl.isConnected) return true;
+        var pr = host.getBoundingClientRect(), tr = tabsEl.getBoundingClientRect();
+        var gap = parseFloat(getComputedStyle(main).rowGap) || 0;
+        var top = tr.bottom - pr.top - host.clientTop + host.scrollTop + gap;
+        var padB = parseFloat(getComputedStyle(container).paddingBottom) || 0;
+        var h = host.clientHeight - top - padB - 2, w = bodyEl.clientWidth;
+        var el = TABS[0], n = (typeof el.options === 'function' ? el.options() : (el.options || [])).length;
+        return FM.tileFit.settled((n && w > 40 && h > 20) ? FM.tileFit.plan(n, w, h) : null);
       }
       function applyPlan(plan, box) {
         root.classList.toggle('addmenu--fit', !!plan);
-        // the numbers the plan was made from, so a probe (or a future bug report) can read what was
-        // measured instead of re-deriving it: `data-am-fit="338x90 7c2r"` = the box the solver was
-        // given, and the grid it chose. (An earlier comment here cited tests/_addfit.html as the
-        // probe that reads it. There is no such file and there never has been — this attribute is
-        // the hook; drive index.html top-level at a real size and read it.)
+        // the box the plan was made from and the grid it chose — `data-am-fit="338x90 7c2r"` — for a probe or a bug report
         if (plan && box) root.dataset.amFit = Math.round(box.w) + 'x' + Math.round(box.h) + ' ' + plan.cols + 'c' + plan.rows + 'r';
         else delete root.dataset.amFit;
-        if (!plan) { FIT_VARS.forEach(function (v) { root.style.removeProperty(v); }); return; }
-        var s = root.style;
-        s.setProperty('--am-cols', String(plan.cols));
-        // the column's STATED width, not 1fr. A tile is capped at cfg.maxW, so on a wide panel the
-        // columns no longer stretch past it — the grid centres them and keeps the slack as an even
-        // margin instead of inflating the cards (which is what forced an extra column, and a
-        // smaller tile, every time the panel grew past a multiple of maxW).
-        s.setProperty('--am-cw', plan.w.toFixed(2) + 'px');
-        s.setProperty('--am-row', plan.h.toFixed(2) + 'px');
-        s.setProperty('--am-ico', plan.ico.toFixed(2) + 'px');
-        s.setProperty('--am-fs', (plan.fs || 10.5) + 'px');
-        s.setProperty('--am-lblh', (plan.lblH || 0) + 'px');
-        // the padding the PLAN could afford, not the config's preferred pair — fitIcon() compresses
-        // it when the tile is tight, and writing the preferred value here would overflow the card.
-        s.setProperty('--am-pad', plan.padV.toFixed(2) + 'px ' + plan.padH.toFixed(2) + 'px');
-        s.setProperty('--am-icogap', plan.cfg.icoGap + 'px');
-        s.setProperty('--am-gap', FIT_GAP + 'px');
-        /* The pager takes the WHOLE measured box, not just the rows it drew, and the grid inside
-         * centres itself in it. The grid is a stack of stated-height rows, so any leftover used to
-         * fall out as one block of nothing under the last row — which is the "lots of space" half
-         * of Ezra's complaint wearing a different hat. Measured while paging, this box: median
-         * leftover 0px, p90 14-27px, worst 70px; centring splits that in two rather than piling it
-         * at the bottom. It cannot overflow: box.h is what planGrid was handed, and every row it
-         * chose fits inside it by construction. */
-        s.setProperty('--am-pager', (box ? box.h : (plan.rows * plan.h + (plan.rows - 1) * FIT_GAP)).toFixed(2) + 'px');
+        /* queue 963: the ONE writer both panels share — `data-rung` (the tile's shape) and the --tf-* sizes, including
+           --tf-box, the whole measured box the pager takes and the grid centres itself in (what --am-pager was). */
+        FM.tileFit.apply(root, plan, box);
       }
 
       /* Deliberately built with textContent and appendChild rather than innerHTML: the only reason this
@@ -1215,6 +1061,11 @@ window.FM = window.FM || {};
         bodyEl.innerHTML = '';
         pinnedEl.innerHTML = '';
         pinnedEl.classList.remove('is-on');
+        // queue 963: measured with the words ON (so the answer cannot depend on the last answer), then set for this size
+        var tabsIco0 = root.classList.contains('addmenu--tabs-ico');
+        root.classList.remove('addmenu--tabs-ico');
+        if (fitOn && FM.tileFit.TAB_WORDS_GO && !tabsSettled()) root.classList.add('addmenu--tabs-ico');
+        if (tabsIco0 !== root.classList.contains('addmenu--tabs-ico')) placeGlint();   // the open tab's ring is fitted to its size
         var tab = TABS.filter(function (t) { return t.key === active; })[0] || TABS[0];
         var opts = typeof tab.options === 'function' ? tab.options() : (tab.options || []);   // Elements/Templates lists are live
         /* WHICH ONES ARE PINNED: the tab's own actions, i.e. everything that is NOT a library tile.
@@ -1335,18 +1186,24 @@ window.FM = window.FM || {};
         }
         var plan = null, box = null;
         if (fitOn) {
-          var cfg = iconOnly ? FIT_CFG.ico : FIT_CFG.lbl;
-          box = fitBox(FIT_DOTS);
-          plan = box && planGrid(opts.length, box.w, box.h, cfg);
-          if (plan && plan.pages === 1) {          // no pager row \u2192 hand the reserve back to the tiles
-            var box0 = fitBox(0);
-            var p0 = box0 && planGrid(opts.length, box0.w, box0.h, cfg);
-            if (p0 && p0.pages === 1) { plan = p0; box = box0; }
-          }
-          if (!plan) {                              // too short for a reserved grid, but maybe not for a bare one
-            var boxN = fitBox(0);
-            var pN = boxN && planGrid(opts.length, boxN.w, boxN.h, cfg);
-            if (pN && pN.pages === 1) { plan = pN; box = boxN; }
+          /* QUEUE 963 — the ladder (js/tilefit.js): the first tile shape, most words first, that shows the whole tab on one
+             page. The Shape tab keeps its own art tiles; a tab of PICTURES (library frames, template thumbs) keeps stacked
+             tiles and pages — a photograph never becomes a chip or loses its caption. */
+          var pictures = opts.some(function (o) { return o.mid || o.thumb; });
+          var ladder = iconOnly ? ['ico'] : pictures ? ['stack'] : FM.tileFit.LADDER;
+          // a chip is only offered where this tab's widest word fits whole beside its icon; measured in the font the tab
+          // labels render in, which is the cards' too (both are .addmenu-lbl inside a <button>)
+          var fitOpts = { ladder: ladder };
+          if (ladder.indexOf('row') >= 0) fitOpts.word = FM.tileFit.wordPx(opts.map(function (o) { return o.label; }), tabsEl.querySelector('.addmenu-lbl'));
+          /* ONE PAGE FIRST, IN THE WHOLE BOX. The old order planned against the box minus the pager's row, and only tried
+             the whole box if that had ALREADY fitted on one page — so a tab that needed those 26px to fit was drawn on two
+             pages with a pager it did not need. Measured: at 1440x900 the nine Elements fit 5x2 in the whole box and were
+             drawn five and four over two pages. */
+          var box0 = fitBox(0), p0 = box0 && FM.tileFit.plan(opts.length, box0.w, box0.h, fitOpts);
+          if (p0 && p0.pages === 1) { plan = p0; box = box0; }
+          else {
+            var boxD = fitBox(FIT_DOTS), pD = boxD && FM.tileFit.plan(opts.length, boxD.w, boxD.h, fitOpts);
+            if (pD) { plan = pD; box = boxD; }
           }
         }
         applyPlan(plan, box);
@@ -1634,15 +1491,17 @@ window.FM = window.FM || {};
        * whole detached subtree alive, one per render, for the life of the session. */
       if (_fitRO) { _fitRO.disconnect(); _fitRO = null; }
       if (fitOn && host && window.ResizeObserver) {
-        var sig = host.clientHeight + 'x' + host.clientWidth;
+        // queue 963: the container too — the title line above it changes height (the clip keys) without the panel moving
+        var sig = host.clientHeight + 'x' + host.clientWidth + 'x' + container.clientHeight;
         var ro = new ResizeObserver(function () {
           if (!root.isConnected) { ro.disconnect(); return; }     // a re-render replaced us
-          var s = host.clientHeight + 'x' + host.clientWidth;
+          var s = host.clientHeight + 'x' + host.clientWidth + 'x' + container.clientHeight;
           if (s === sig) return;
           sig = s;
           drawBody();
         });
         ro.observe(host);
+        if (container !== host) ro.observe(container);
         _fitRO = ro;
       }
     },

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Sep at v17.06
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Sep at v17.07
 >
-> **State:** v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -32623,7 +32623,7 @@ re-opened #480, which I had marked done and had not fixed.
       3. [x] ✅ picture sent 22 Sep (Rename light · Delete light · Delete dark, 380) — Show him a picture before it ships.
 
 - [ ] **920 — THE FADED BAR AT THE TOP IS STILL THERE: a white bar on the light screen / a black bar, fading onto the screen at the top. "Pretty much the same as the screenshots I sent you before."** (22 Sep, his words, from the same message as #921:)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       > *"And also the faded white bar is still at the top of the screen, all black bar, like it fades onto the screen, like that's still a thing. You haven't fixed that yet. Um, it's pretty much the same as the screenshots I sent you before. So don't ask me to send more screenshots. Just log that and keep going."*
       **Do NOT ask him for screenshots** — his explicit instruction. The screenshots are the ones behind #883 (white bar at the top inside a project), #903 (v16.18 turned his white bar into a black one; the Home top bar's white veil) and #6bb7f072 v16.19 (the fade at the top, on both screens). Those entries are ticked done; he says it is still there, so they did not fix what he sees. Read #883 / #903 in full, and the memory note "He names the place, not the cause" — the fault may be BEHIND the bar (the page colour, a gradient veil, a safe-area inset, the status-bar theme-color), not the bar itself. #883 clause 2 was left because an iOS standalone web app could not be run here — that is probably where it lives.
       1. [x] ✅ 22 Sep — FOUND, and it is not the page: tools/shot.py now fakes the iPhone safe area (--safe-top 47, Chrome's Emulation.setSafeAreaInsetsOverride), and with it the page's own top is clean on Home light/dark and in a project. Since iOS 26 an installed web app running UNDER the status bar (our black-translucent + viewport-fit=cover, since v5.49) gets the system Liquid Glass scroll-edge fade over its top ~45pt — white over light, black over dark: his words exactly. Same report from other apps: github.com/MrClit/fin-app/issues/411, github.com/amir20/dozzle/pull/5222. Find what he sees: the fade at the very top, on his phone, as an installed app (standalone), on Home (light AND dark) and inside a project.
@@ -32676,18 +32676,20 @@ re-opened #480, which I had marked done and had not fixed.
       - The intermittent fade (clause 2) may be the same mechanism. The edge blur appears when the sampled colour mismatches what is painted under it, which would be exactly the moments after a screen switch.
       - There is no iOS simulator runtime on this Mac (#920), so it cannot be seen here. Whatever ships, say plainly it is unverified on iOS. And re-measure the fix, not just the bug: if a forced re-sample is added, the test should prove the re-sample fires on every Home↔project switch, both directions, light and dark.
       His clauses (new):
-      7. [ ] The fade at the top of the screen goes, for good.
-      8. [ ] It stops being intermittent (sometimes there, sometimes not).
-      9. [ ] In light mode the top is white all the way up — never a BLACK bar.
-      10. [ ] Going in and out of projects no longer changes it.
+      7. [x] ✅ v17.07 (built; unverified on an iPhone) — The fade at the top of the screen goes, for good.
+      8. [x] ✅ v17.07 (built; unverified on an iPhone) — It stops being intermittent (sometimes there, sometimes not).
+      9. [x] ✅ v17.07 (built; unverified on an iPhone) — In light mode the top is white all the way up — never a BLACK bar.
+      10. [x] ✅ v17.07 (built; unverified on an iPhone) — Going in and out of projects no longer changes it.
       ⏳ PLAN PENDING: the logging chat is researching iOS 26's status-bar sampling for this (its 17:46 note): wait for its plan block (`tools/design/plans/2026-09-26-…/plan.md`) before building; do NOT ask him for screenshots (#920's standing rule).
-      JUMPED: waiting on the logging chat's plan block for this (its 17:46 note: "don't start building any of them until its plan block has landed") — #945 (his answer, fully built) ships ahead of it in v17.04. Take this line off when the plan lands.
+      (was JUMPED — waiting on the logging chat's plan block, which landed 26 Sep ~23:54.) Old line: (its 17:46 note: "don't start building any of them until its plan block has landed") — #945 (his answer, fully built) ships ahead of it in v17.04. Take this line off when the plan lands.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#920 (top fade / black bar):** `2026-09-26-topbar/plan.md`. RESEARCHED in WebKit's source and TESTED in real WebKit (a WKWebView probe reading WebKit's own sampled top colour):
         - iOS takes the top colour from the first full-screen fixed layer it sees, and by WebKit's rule (commit 8b209a7, iOS 26.0) a later one cannot replace it. It re-samples only when a fixed/sticky element is added or removed, and no colour means the blur.
         - Today the light Home kept #111111 (the intro's black) for a whole session. That is his black bar. Inside a project there is nothing to sample, which is the blur.
         - **Fix A (recommended; decided):** one invisible masked top-edge tab, refreshed on every screen switch. It changed zero pixels and needs no reinstall.
         - Say plainly in the release that it is unverified on an actual iPhone. Do not ask him for screenshots.
+      ✅ **v17.07 — Fix A BUILT** (the plan's decided fix, researched in WebKit's source and tested in real WebKit on this Mac): one invisible, masked 12px tab across the top edge, in each screen's top colour, re-inserted on every screen switch so iOS re-samples it — the light Home no longer inherits the intro's #111111 (his black bar), and a project always offers iOS a colour (no blur). Real-WebKit probe: before, top=#111111 all session; after, light Home #fafdff / dark Home #091823 / project #161a21 within 50–100 ms of each switch. Pixels unchanged; taps at the top still reach the top bar. ⚠️ NOT verified on an actual iPhone (no simulator here) — said plainly in the release.
+      BUILT OUT UNTIL HE looks at the top of the screen on his phone (Home light, Home dark, inside a project, and going in and out of projects) and says whether the fade and the black bar are gone. ✔ reply checked 27 Sep — his 26 Sep answer ("still wrong") was to the v16.96 ask; this one is new, after Fix A.
 
 - [ ] **921 — LIVE COLLABORATION: two or more people editing the SAME project at the same time, seeing each other live, like Google Docs / Sheets.** (22 Sep, his words IN FULL, verbatim — he said "I don't want you to miss out any details":)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -33376,8 +33378,7 @@ re-opened #480, which I had marked done and had not fixed.
       1. [ ] Noted: he still has to go through the page and answer everything on it. No decisions from it here.
       BUILT OUT UNTIL HE answers the questions on the page at the link above (his answers come back through the inbox as their own blocks).
 
-- [ ] **957 — Home: the drawn arrow's tip lands INSIDE the + button; and in an empty project the “Tap +” text goes, replaced by a clapperboard that claps** (26 Sep, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **957 — Home: the drawn arrow's tip lands INSIDE the + button; and in an empty project the “Tap +” text goes, replaced by a clapperboard that claps** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:26 AWST — Two things from his phone at v17.02: (A) the Home arrow's tip lands INSIDE the + button; (B) the empty-project text goes, and the clapperboard gets a clap animation
 
@@ -33414,18 +33415,18 @@ re-opened #480, which I had marked done and had not fixed.
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
-      1. [ ] The arrow (the #936 drawn arrow on the empty Projects tab) must not end inside the + button.
-      2. [ ] In an empty project, the outdated “press + to add a photo or video” text goes.
-      3. [ ] Instead, the clapperboard does a little animation: open, then it slams down.
-      4. [ ] The slam has a small effect — lines coming out of it, to show it was clapped.
-      5. [ ] (his standing design rule, #545 — not waived) the clapper's options drawn and shown to him before it ships.
+      1. [x] ✅ v17.07 — The arrow (the #936 drawn arrow on the empty Projects tab) must not end inside the + button.
+      2. [x] ✅ v17.07 — In an empty project, the outdated “press + to add a photo or video” text goes.
+      3. [x] ✅ v17.07 — Instead, the clapperboard does a little animation: open, then it slams down.
+      4. [x] ✅ v17.07 — The slam has a small effect — lines coming out of it, to show it was clapped.
+      5. [x] ✅ v17.07 — (his standing design rule, #545 — not waived) the clapper's options drawn and shown to him before it ships.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#957 (arrow + clapper)**
         - (A) Arrow: `2026-09-26-arrow-and-addmenu/plan.md` §A. MEASURED: `draw()` runs 278–288ms into the intro, while the + is still in its 545ms delay (read as 49.9px wide and 18px low). The tip settles 25.3px from the centre of a 29px +, which is inside it; drawn at rest it lands at 41px. **Fix A1:** draw after the + has landed, with a backup timer. It appears ~0.8s later and stops 12px clear. Decided, not asked.
         - (B) Clapper: `2026-09-26-clapper/plan.md`. The full new SVG and CSS; the phone line goes; it stops behind Home and when a layer is added. ❓ his picks: timing **A (recommended: claps when the empty project opens, then every 6s)** / B once / C non-stop; impact lines **cyan (recommended)** / grey; PC sentence **keep (recommended)**. Not checked on WebKit: the plan's §8 has the fallback.
+      ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Arrow: Fix A1 — drawn after the + has landed (it stops 12px clear). Clapper: the recommended A (claps 0.4 s after the empty project opens, then every 6 s; cyan impact lines; the phone's 'Tap +' line gone, the PC sentence kept; stops behind Home, with a layer on the stage and under reduced motion) — his picks were pending and the 23:54 block's rule is to build the recommended option.
 
-- [ ] **958 — PC: the separately-draggable Add menu must drag right up to the top of the screen, whatever height the timeline is** (26 Sep, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **958 — PC: the separately-draggable Add menu must drag right up to the top of the screen, whatever height the timeline is** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:33 AWST — PC: the separately-draggable Add menu stops short. It should drag up to the top of the screen whatever height the timeline is at
 
@@ -33452,15 +33453,15 @@ re-opened #480, which I had marked done and had not fixed.
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
-      1. [ ] On PC the Add menu (the one that drags separately from the timeline, #244) goes as far up as it should.
-      2. [ ] It is no longer bound to how high the timeline is.
-      3. [ ] It drags up to the top of the screen, covering the whole side.
-      4. [ ] That holds no matter where the timeline is.
+      1. [x] ✅ v17.07 — On PC the Add menu (the one that drags separately from the timeline, #244) goes as far up as it should.
+      2. [x] ✅ v17.07 — It is no longer bound to how high the timeline is.
+      3. [x] ✅ v17.07 — It drags up to the top of the screen, covering the whole side.
+      4. [x] ✅ v17.07 — That holds no matter where the timeline is.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#958 (PC Add menu height):** `2026-09-26-arrow-and-addmenu/plan.md` §B. MEASURED with real synthetic drags at 1280×800, 1920×1080 and 900×800, with the timeline at min, default and max. The menu stops at exactly the timeline's own `0.72·vh` ceiling in every case. There is no other limiter, and **PC has no top bar in the way**, so the "cover the top bar?" ask is moot. **Fix B1 (recommended; decided):** it drags to the top at any timeline height, with the handle just above its edge. One existing test gets a one-line retune.
+      ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Fix B1: the PC Add menu drags up to the top at any timeline height (measured at 1280, 1920 and 900; PC has no top bar in the way).
 
-- [ ] **959 — PC: the three layer-action buttons lose their background and outline, for two fading corner lines (top-right and bottom-left)** (26 Sep, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **959 — PC: the three layer-action buttons lose their background and outline, for two fading corner lines (top-right and bottom-left)** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:35 AWST — PC: the three layer-action buttons lose their background and outline, and get two fading corner lines instead (top-right and bottom-left)
 
@@ -33490,16 +33491,16 @@ re-opened #480, which I had marked done and had not fixed.
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
-      1. [ ] The three-button menu that appears when a layer is selected looks like his drawing (tools/design/2026-09-26-layer-actions-corners.webp).
-      2. [ ] No background, and no line all the way around it.
-      3. [ ] Two corner lines instead: top-right and bottom-left.
-      4. [ ] Each is solid at the corner and slowly fades out along both edges.
-      5. [ ] (his standing design rule, #545) rendered and shown to him before it ships.
+      1. [x] ✅ v17.07 — The three-button menu that appears when a layer is selected looks like his drawing (tools/design/2026-09-26-layer-actions-corners.webp).
+      2. [x] ✅ v17.07 — No background, and no line all the way around it.
+      3. [x] ✅ v17.07 — Two corner lines instead: top-right and bottom-left.
+      4. [x] ✅ v17.07 — Each is solid at the corner and slowly fades out along both edges.
+      5. [x] ✅ v17.07 — (his standing design rule, #545) rendered and shown to him before it ships.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#959 (corner lines):** `2026-09-26-corners/plan.md`. CSS only; the group stays 126×36 and the corners follow it at 206px when two layers are selected. ❓ his pick: **A white, as he drew it (recommended)** / B accent blue / C short bold brackets. Four old tests that expect the outline get retuned.
+      ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended A: white corner lines, top-right and bottom-left, solid at the corner and fading along both edges; no background, no outline (his drawing). Three old outline tests renamed and retuned (declared). The render at his 2× screen goes to him with the release.
 
-- [ ] **960 — Import media and Import audio match: both get the shiny look, and “Import” is renamed “Import media”** (26 Sep, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **960 — Import media and Import audio match: both get the shiny look, and “Import” is renamed “Import media”** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:42 AWST — The Import (media) and Import audio buttons should match: both get the shiny look, and "Import" is renamed "Import media"
 
@@ -33524,14 +33525,14 @@ re-opened #480, which I had marked done and had not fixed.
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
-      1. [ ] The Import media and Import audio buttons stop looking different from each other.
-      2. [ ] Both get the shiny look the Import media button has.
-      3. [ ] The Import media button, now just “Import”, is renamed “Import media”.
+      1. [x] ✅ v17.07 — The Import media and Import audio buttons stop looking different from each other.
+      2. [x] ✅ v17.07 — Both get the shiny look the Import media button has.
+      3. [x] ✅ v17.07 — The Import media button, now just “Import”, is renamed “Import media”.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#960 (Import buttons):** `2026-09-26-import/plan.md`. The difference is the arrow (media has the white gradient from #270, audio is plain grey). On PC, Import audio is also 60px tall against Import's 43px. ⚠️ **The rename alone breaks the PC Media tab's fit at 1280**, so the plan includes a small PC sizing fix. ❓ his pick: **A (recommended: same arrow, rename, same size)** / B (A plus a lit top edge).
+      ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended A: Import audio wears Import media's white-gradient arrow, the Media tile says 'Import media', and both are the same size on PC (the rename alone would have broken the Media tab's fit at 1280, so the plan's PC sizing came with it). Merging with #963 moved the Add menu's layout into #inspector-panel; #960's pinned-strip rules were re-scoped there and its PC test now measures the real panel (proven: without the re-scope 'Import media' wraps to two lines).
 
-- [ ] **961 — The Car shape needs to be improved** (26 Sep, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **961 — The Car shape needs to be improved** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:42 AWST — The Car shape needs to be improved
 
@@ -33547,12 +33548,12 @@ re-opened #480, which I had marked done and had not fixed.
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
-      1. [ ] The Car shape is improved (options traced from real pictograms, shown big and at the 34px icon size — #545).
+      1. [x] ✅ v17.07 — The Car shape is improved (options traced from real pictograms, shown big and at the 34px icon size — #545).
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#961 (Car):** `2026-09-26-car/plan.md`. MEASURED at the 34px icon: the current hub is 2.19px (4.1px² open), so it reads as dots. ❓ his pick: **A Material Design Icons side view, Apache-2.0 (recommended)**: 3.34px hubs, same proportions, so saved projects keep their footprint / B Phosphor side view (MIT) / C AIGA front view (public domain). ⚠️ A and B need a licence notice in a public release; add them to BEFORE-PUBLISHING.md.
+      ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended A: the Car traced from Material Design Icons' side view (Apache-2.0 — notice added to BEFORE-PUBLISHING.md), open 3.34px hubs at the 34px icon, same footprint for saved projects. The old car test renamed (declared).
 
-- [ ] **962 — The Eye shape needs to be HEAVILY improved (and a standing steer to the logging chat: PLAN, don't just log)** (26 Sep, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **962 — The Eye shape needs to be HEAVILY improved (and a standing steer to the logging chat: PLAN, don't just log)** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:43 AWST — The Eye shape needs to be HEAVILY improved; and a standing steer for the logging chat: PLAN, don't just log
 
@@ -33568,13 +33569,13 @@ re-opened #480, which I had marked done and had not fixed.
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
-      1. [ ] The Eye shape is heavily improved (options shown big and at 34px — #545).
+      1. [x] ✅ v17.07 — The Eye shape is heavily improved (options shown big and at 34px — #545).
       2. [ ] (standing, for the logging chat — done there) each request gets a ready-to-build plan; the builder follows it.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#962 (Eye):** `2026-09-26-eye/plan.md`. The pupil is stretched 1.66:1 because the shape spawns in a 5:3 box. ⚠️ **Found along the way: the Shape menu has never drawn any icon at its real proportions** (#159's "make them 1-1" never reached the menu; Key, Envelope, Banner and Eye are the worst). The plan fixes that in the same release, or the new eye's icon comes out wrong. ❓ his pick: A Classic / **B Almond + catchlight (recommended)** / C Lashes.
+      ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended B: almond + catchlight, a round pupil in an even white ring. Found and fixed with it: the Shape menu now draws EVERY icon at the proportions its shape spawns at (#159's 1:1 never reached the menu — Key, Envelope, Banner and Eye were the worst).
 
-- [ ] **963 — PC: the Add menu and the layer inspector shrink well — drop the text when too small, or a better dynamic — and behave as ONE system** (26 Sep, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **963 — PC: the Add menu and the layer inspector shrink well — drop the text when too small, or a better dynamic — and behave as ONE system** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~17:44 AWST — PC: when the Add menu or the layer inspector is shrunk, the tiles bunch up. Make both shrink well (drop the text when too small, or a better dynamic), and make the two behave as ONE system
 
@@ -33591,12 +33592,12 @@ re-opened #480, which I had marked done and had not fixed.
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
       Clauses (his):
-      1. [ ] On PC, a shrunk Add menu or layer inspector no longer looks bunched up.
-      2. [ ] Either it loses the text when it gets too small…
-      3. [ ] …or it shrinks and still looks good small, keeping text and picture, in a dynamic that looks really good.
-      4. [ ] The Add menu and the inspector stop shrinking in two different ways.
-      5. [ ] “Have a big look through that”: one considered design for both, not a patch on one.
-      6. [ ] (#545) options rendered for him to pick.
+      1. [x] ✅ v17.07 — On PC, a shrunk Add menu or layer inspector no longer looks bunched up.
+      2. [x] ✅ v17.07 — Either it loses the text when it gets too small…
+      3. [x] ✅ v17.07 — …or it shrinks and still looks good small, keeping text and picture, in a dynamic that looks really good.
+      4. [x] ✅ v17.07 — The Add menu and the inspector stop shrinking in two different ways.
+      5. [x] ✅ v17.07 — “Have a big look through that”: one considered design for both, not a patch on one.
+      6. [x] ✅ v17.07 — (#545) options rendered for him to pick.
       (The logging chat's 17:46 note, whole, applies to #957–#963:)
       ### 26 Sep 2026, ~17:46 AWST — Logger's note: full plans are being drawn for this afternoon's blocks; wait for them
 
@@ -33612,9 +33613,10 @@ re-opened #480, which I had marked done and had not fixed.
       Each plan was reviewed by a second reader and lands as a follow-up block linking `tools/design/plans/2026-09-26-<name>/plan.md`, with his picks recorded once he makes them. Log these blocks as normal, **but don't start building any of them until its plan block has landed.** They are at the back of the queue anyway.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#963 (panel shrinking):** `2026-09-26-panels/plan.md`. The inspector is forced to 3 columns (12px icons at common laptop sizes); the Add menu collapses to a sliver, and at 1440 it splits the nine Elements over 2 pages when they fit on one. One shared rule for both, "tilefit" (CSS + JS in the plan). ❓ his pick: A names drop / B names always stay / **C tiles → chips → icons (recommended)**. The phone is unchanged.
+      ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended C: one shared shrink rule for the Add menu and the inspector ('tilefit': tiles → chips → icons, js/tilefit.js); a chip never cuts a word ('Adjustm…'); the phone is unchanged. ⚠️ Worth his eye: at the 1280×800 default height the Add menu's tab names drop to icons, and with #958 the menu can rise to the top, where the Elements tab lays out as 2 columns × 5 rows of big tiles. Found by the full suite before shipping and fixed in this release: deselecting a clip drew the Add menu twice (once under the clip keys, then again a task later when they went), so a click landing in between hit tiles that had just been replaced — the keys are now put away before the menu measures.
 
 - [ ] **964 — Empty project, phone: tapping the big add area is glitchy — the blue outline misses the top edge and gets stuck; a far better, colourful, whole-area tap animation; the outline PULSES round and goes** (26 Sep, ~20:29 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 26 Sep 2026, ~20:29 AWST — Empty project, phone: tapping the big add area is glitchy. The blue outline misses the top edge and gets stuck; the tap animation needs a far better, colourful, whole-area version; the outline should PULSE around and then go
 
@@ -33673,6 +33675,8 @@ re-opened #480, which I had marked done and had not fixed.
         - ❓ASK 2, the menu: open it 300ms after the press, with a quicker 360ms lap, so the lights meet at the top before the sheet covers it (**recommended**). Or 300/620, or no hold.
         - ❓ASK 3, where the lights start: **bottom-middle, meeting at the top (recommended)**, or the edge nearest the finger.
         - **What can ship without him:** the outline fix (top edge, not sticking, the travelling pulse) and removing the stuck states. Per #545, the COLOUR option waits for his pick unless he says "do recommended". His picks come back as their own block.
+      ⏸ 27 Sep: BUILT in a worktree (outline pulse, stuck states gone, :focus-visible ring, AND the colour + timing) but HELD from v17.07: the plan says the colour and the lap timing wait for his picks (sent in the logging chat as send-pick-and-timing.jpg), and the build did not split the outline fix out. The branch is kept: worktree-wf_9e749931-857-8 (commit 07cdd8d7).
+      BUILT OUT UNTIL HE picks the #964 colour (A Aurora recommended), the menu timing and where the lights start — or says "do recommended".
 
 - [x] **965 — Settings: redesign the close ✕ (use the search ✕'s drawn design) — and, his yes, the same drawn ✕ on every close button in the app** (26 Sep, ~20:57 AWST, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -33910,3 +33914,43 @@ re-opened #480, which I had marked done and had not fixed.
       Measured (2 of 9 runs, two Chromes, the guest's Chrome SIGSTOPped 25 s while the owner added a layer 3 s in): the guest came back online, then went Offline again and stayed so until ~60 s, while both sides read 'connected' and the owner's send buffer grew (ctl 205→1584, pres 168→9772) — then everything flushed at once and caught up, no data lost. Looks like the SCTP data channel's retransmit backoff after a long outage, not app logic. With no edit during the pause it never happened (3/3).
       Suggested fix (the reviewer's): don't send ctl batches or presence to a member while its link is disconnected/down; flush when it recovers — so no reliable data is queued into a backed-off channel.
       1. [ ] An edit made while a friend's phone is paused reaches them within a few seconds of their coming back.
+
+- [ ] **972 — Streamer safety: the friends invite code starts BLURRED each time you open sharing — tap to show** (27 Sep, ~08:57 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole, as the logging chat wrote it (plan ready):
+      ### 27 Sep 2026, ~08:57 AWST — Streamer safety: the invite code starts BLURRED each time you open sharing, tap to show
+
+      **His words (verbatim):** "Make the code for inviting friends blurred out when you first open it incase streamers or whatever are using it"
+
+      His clauses:
+      1. The invite code for friends is blurred when you first open it.
+      2. Why: so someone streaming or screen-recording does not show it.
+
+      **Logger's plan (not his words). Ready to build:**
+      - What shows the secret on screen: the short code `#collab-room-code` (`.cs-roomcode`), built in `inviteBlock()` in `js/collab-ui.js` ~1790–1830. It is always visible today. The link is never shown as text, only via Copy/Share. The QR (`toggleQr`, ~1832) only appears after tapping "QR", but a stream viewer could scan it. `inviteBlock` renders in BOTH the Share card (`U.share`) and the friends block beside Canvas settings (#945, `U.renderFriends`).
+      - Decided:
+        - **Veil the code every time sharing is OPENED fresh.** One tap on it (or on a small "Tap to show" label over it) reveals it for the rest of that open.
+        - A redraw while open (`redrawShare()` ~851 → `U.share({keepStep:true})` / `renderFriends(…, {keepStep:true})`, fired by any settings change) must NOT re-veil it, or it hides itself again every time he flips a switch.
+        - **Reset link and code** re-veils (it is a new secret).
+        - Copy code / Copy link / Share keep working while veiled, because none of them paints the secret.
+      - ❓ASK: veil the QR too, so it shows frosted until tapped? **Recommended: YES**, because the QR IS the link and can be scanned straight off a stream. One tap reveals the code and the QR together. Build the code half now; add the QR on his yes, or by default if no answer when you reach it.
+      - Build:
+        - (a) In `js/collab-ui.js`, add a module flag `let inviteShown = false;`. Set it back to `false` wherever the Share card or the friends block is opened WITHOUT `keepStep` (find the open paths of `U.share` / `U.renderFriends`) and at the end of `resetLink()`.
+        - (b) In `inviteBlock()`, when `!inviteShown`: add class `cs-veiled` to `cv`, and set `cv.setAttribute('aria-label', 'Short code hidden, tap to show')`, `cv.setAttribute('role', 'button')` and `cv.tabIndex = 0`. On click or Enter/Space: `inviteShown = true`; remove `cs-veiled`; restore the old aria-label (`'Short code ' + code.split('').join(' ')`); drop the role and tabIndex. Keep `textContent` = the code. Seven existing tests read `#collab-room-code`'s textContent (~37592–41807) and must keep passing.
+        - (c) `styles.css` after `.cs-roomcode` (~10493): `.cs-roomcode.cs-veiled { color: transparent; text-shadow: 0 0 14px var(--text); user-select: none; cursor: pointer; position: relative; } .cs-roomcode.cs-veiled::after { content: 'Tap to show'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 600 13px/1 system-ui, sans-serif; letter-spacing: 0; color: var(--text-dim); text-shadow: none; }`.
+        - (d) `theme-glass.css` ~1285 (the light look sets `.cs-roomcode` colour #10151f): add `.collab-scrim.collab-light .cs-roomcode.cs-veiled { color: transparent; text-shadow: 0 0 14px #10151f; } .collab-scrim.collab-light .cs-roomcode.cs-veiled::after { color: #5a6478; }`. Check the friends block's light look as well.
+        - (e) For the QR, if yes: in `toggleQr`, when `!inviteShown`, give `.cs-qr` the class `cs-veiled` (`.cs-qr.cs-veiled .cs-qrimg { filter: blur(12px); }` plus the same "Tap to show" label), and tapping reveals both.
+        - Bump `?v=` for `js/collab-ui.js`, `styles.css` and `theme-glass.css`.
+      - Check the blur is really unreadable: render the veiled code at 380 and on PC at 2× and look. The glyphs must not be legible, and `14px` is a starting value to measure against. A `filter: blur` on the element is the fallback if the text-shadow trick shows glyph edges in WebKit.
+      - Test (`921`-style, `{ item: 'NNN' }`, no network, as the other share tests do):
+        - Open Share: `#collab-room-code` has `.cs-veiled` and its computed `color` is transparent (alpha 0), while `textContent` is still the code, which is the positive control that the code is there.
+        - Tap it: `.cs-veiled` is gone and the colour is opaque.
+        - Trigger a settings redraw: it stays revealed.
+        - Close and reopen: it is veiled again.
+        - Reset link and code: veiled again.
+        - Fails on HEAD (no `.cs-veiled`). Also re-run `?only=921` (the 44px/20px phone checks at ~37694 must still pass) at desktop and `--width 380`.
+      - Out of scope unless he asks: the JOINER's side (~4237 shows the code or link someone typed on their own device).
+
+      Clauses (his):
+      1. [ ] The invite code for friends is blurred when you first open it.
+      2. [ ] …so someone streaming or screen-recording does not show it (the QR too — recommended yes, by default if no answer).

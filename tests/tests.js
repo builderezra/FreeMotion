@@ -12092,7 +12092,7 @@
     if (swallowed.length) throw new Error(swallowed.length + ' effect parameter(s) treat a dial at 0 as their default, which is exactly what `evalProp(p.x, t) || N` does: ' + swallowed.slice(0, 8).join('; '));
   });
 
-  test('PC: the layer actions sit on the right of the transport row, in one pill you can see', { item: '425' }, function () {
+  test('PC: the layer actions sit on the right of the transport row, as one group you can see', { item: '425' }, function () {
     /* Queue 425, from a desktop screenshot. Ezra: "THE three buttons on pc with trash copy and parent
        need to be on the right side not left and also the background they have is too subtle". */
     if (!FM.pcTransportLayout) throw new Error('no pcTransportLayout to test');
@@ -12114,42 +12114,16 @@
           this is the line that says so. */
     if (sel.contains(menu)) throw new Error('the copy button was moved into the selection group — queue 373 put it on the left in his own words and the add-row switch is placed relative to it, so this needs his word first');
 
-    /* 3. The background is a REAL recess. Both halves of what he has asked for over two rounds: deep
-          enough to see (v10.61 and earlier were .22, which he called too subtle), and DARKER rather
-          than brighter — v7.89 lifted it with a white wash and he sent it back with "instead of being
-          brighter than everything else make its lightly darker". A future lift would satisfy "stronger"
-          and reopen the older complaint, so both are asserted. */
+    /* 3. …and it READS AS ONE GROUP. "Too subtle" (queue 425) has outlived every way this group has been drawn: a white wash
+          (v7.89), a black recess (#251 / #425), an outline (#516, v12.46), and since queue 959 two corner lines that fade —
+          top-right and bottom-left, his drawing of 26 Sep: "instead of it having like a background and a line all the way
+          around it, it should have two like corner lines". So the assertion is the one that survives all of them: the group
+          paints something you can SEE, at its corners. The exact look is queue 959's own test. */
     sel.classList.add('has-sel');
-    const bg = getComputedStyle(sel).backgroundColor || '';
-    const m = bg.match(/rgba?\(([^)]+)\)/);
-    if (!m) throw new Error('the group has no background colour at all (' + bg + ')');
-    const n = m[1].split(',').map(parseFloat), a = n.length > 3 ? n[3] : 1;
-    /* ⚠️ v12.46 — THIS USED TO DEMAND A DARK FILL AND HE OVERTURNED IT (queue 516). His words then:
-       "instead of being brighter than everything else make its lightly darker", which is where the
-       black slab came from. His words on 25 Aug, looking at the result: "the black bar in the background
-       looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make
-       it, like, an outline or something instead." He was then shown four treatments rendered with the
-       REAL buttons and picked the outlined one.
-       What survives is the half that was never about the colour: the group must still READ as one
-       container rather than three loose icons — so it needs a visible edge, whichever side of the
-       background it sits on. */
-    const bgA = (String(bg).match(/[\d.]+/g) || []).map(Number);
-    const bgAlpha = bgA.length > 3 ? bgA[3] : 1;
-    const bgLum = bgA.length >= 3 ? (bgA[0] + bgA[1] + bgA[2]) / 3 : 0;
-    const selBorder = parseFloat(getComputedStyle(sel).borderTopWidth) || 0;
-    if (bgAlpha > 0.02 && bgLum < 60 && selBorder < 0.5)
-      throw new Error('the group is a dark fill with no outline (' + bg + ') — that is the "entire black backdrop" he asked to replace');
-    if (bgAlpha <= 0.02 && selBorder < 0.5)
-      throw new Error('the group has neither a fill nor an outline — it no longer reads as one container at all');
-    /* ⚠️ "TOO SUBTLE" IS ABOUT BEING ABLE TO SEE THE GROUP, NOT ABOUT THE ALPHA (queue 425 -> 516).
-       This demanded a fill of at least 0.35, which was the right answer while a FILL was the only way
-       the group was drawn. From v12.46 it is drawn with a hairline outline instead - his choice, from
-       four treatments rendered with the real buttons - and an outline delineates a group far more
-       cheaply than a wash. So the requirement is restated as what he actually complained about: the
-       group must be VISIBLY one thing. A strong fill satisfies that, and so does a real outline; having
-       neither does not, and that is still caught. */
-    if (!(a >= 0.35) && selBorder < 0.5)
-      throw new Error('the group has neither a strong fill (alpha ' + a + ') nor an outline - "too subtle" was the complaint, and it would be again');
+    const aOf = c => { const n = (String(c).match(/[\d.]+/g) || []).map(Number); return n.length > 3 ? n[3] : (n.length === 3 ? 1 : 0); };
+    const tr = getComputedStyle(sel, '::before'), bl = getComputedStyle(sel, '::after');
+    if (tr.content === 'none' || aOf(tr.borderTopColor) < 0.3 || bl.content === 'none' || aOf(bl.borderBottomColor) < 0.3)
+      throw new Error('the group has no visible corner lines (top-right ' + tr.content + ' ' + tr.borderTopColor + ', bottom-left ' + bl.content + ' ' + bl.borderBottomColor + ') — it no longer reads as one group, and "too subtle" was the complaint');
 
     /* 4. …and the group survives a round trip. The wrapper now lives in .t-right rather than .t-left, so
           the narrow-the-window teardown that queue 405 built is walking a different tree than it was
@@ -12352,10 +12326,12 @@
     }
   });
 
-  /* 917.14 — the empty canvas told a PHONE to "Drag a video or image here or click Import media": no drag,
-     no such button. The phone gets its own words; the PC keeps its sentence. And at 320 the PC sentence
-     wrapped with "here" alone on a line, so the phone wording must not wrap past its own two lines. */
-  test('917.14 the empty canvas hint tells a phone what it can do, and the PC keeps drag and Import media', { item: '917' }, async function () {
+  /* 917.14 — the empty canvas told a PHONE to "Drag a video or image here or click Import media": no drag, no such
+     button. The phone got its own words ("Tap + below…"), and queue 957 took those away too. His words: "that's
+     actually outdated that text instead get rid of the text" — the timeline's big + right under the canvas already
+     says "Tap here to start creating" (js/timeline.js addRowLabel), so the stage was saying it twice. The phone shows
+     the clapper alone; the PC keeps its sentence, the only place that tells you you can drag files in. */
+  test('917.14 the empty canvas hint: a phone shows the clapper and no words, the PC keeps drag and Import media', { item: '917' }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
     const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -12367,16 +12343,14 @@
     try {
       if (homeWasOpen) FM.home.close();
       FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(80);
-      await atPhoneWidth(async function () {
-        const d = shown(), txt = d.innerText.replace(/\s+/g, ' ').trim();
-        if (/drag|click|import media/i.test(txt)) throw new Error('at 320px the empty canvas says "' + txt + '" — a phone has no drag-and-drop and no Import media button');
-        if (!/tap/i.test(txt)) throw new Error('at 320px the empty canvas says "' + txt + '", which does not tell him what to tap');
-        const vis = [].slice.call(d.children).filter(c => !c.classList.contains('dh-icon') && c.getBoundingClientRect().width > 0)[0];
-        const rg = document.createRange(); rg.selectNodeContents(vis);
-        const tops = new Set([].slice.call(rg.getClientRects()).filter(r => r.width > 1).map(r => Math.round(r.top)));
-        const want = vis.querySelectorAll('br').length + 1;
-        if (tops.size > want) throw new Error('at 320px the phone hint wraps onto ' + tops.size + ' lines instead of its own ' + want + ' — a word is left alone on a line');
-      }, 320);
+      for (const w of [320, 380, 440]) {
+        await atPhoneWidth(async function () {
+          const d = shown(), txt = d.innerText.replace(/\s+/g, ' ').trim();
+          if (txt) throw new Error('at ' + w + 'px the empty canvas still says "' + txt + '" — he asked for the words to go; the big + under the canvas already says "Tap here to start creating"');
+          const ic = d.querySelector('.dh-icon svg'), r = ic && ic.getBoundingClientRect();
+          if (!r || !(r.width > 30 && r.height > 30)) throw new Error('at ' + w + 'px the clapper is not on screen either — the empty canvas shows nothing at all');
+        }, w);
+      }
       await atWideWidth(async function () {
         const txt = shown().innerText.replace(/\s+/g, ' ').trim();
         if (!/drag/i.test(txt) || !/import media/i.test(txt)) throw new Error('on PC the empty canvas lost its drag / Import media wording: "' + txt + '"');
@@ -15823,42 +15797,41 @@
     });
   });
 
-  test('the car shape is car-shaped: level wheels, open holes, nothing below the ground line', { item: 'car-shape' }, function () {
-    // v5.33. Rejected twice by eye, so this pins the properties that were actually wrong rather than
-    // the look. The old shape had rings printed on a blobby body with the floor line running straight
-    // through them, tyres below the floor, and an ink box that was literally square (57x58) — which is
-    // why all three judges called it a bubble-van blob.
+  test('the car shape is car-shaped: level wheels, open holes, the wheels part of the silhouette', { item: 'car-shape' }, function () {
+    // v5.33, retuned for queue 961. Still pins the properties that were actually wrong in the car he rejected
+    // twice (a square blob, rings printed on a body, a floor line through the tyres) — but the tyres are no longer
+    // separate rings sitting in arches. Every published car pictogram draws the tyre AS PART OF the silhouette, a
+    // round bump below the body, with the hub as the hole: that is what keeps the wheel legible at icon size, where
+    // the old 0.023 arch gap closed up.
     const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.car;
-    if (!car || car.length < 5) throw new Error('FM.SHAPE_POLYS.car is missing or too simple');
-    const bbox = sub => sub.reduce((a, p) => ({
-      x0: Math.min(a.x0, p[0]), x1: Math.max(a.x1, p[0]),
-      y0: Math.min(a.y0, p[1]), y1: Math.max(a.y1, p[1]),
-    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
-    const area = sub => {   // signed — the sign IS the winding, which decides whether a hole fills in
-      let s = 0;
-      for (let i = 0; i < sub.length; i++) { const a = sub[i], b = sub[(i + 1) % sub.length]; s += a[0] * b[1] - b[0] * a[1]; }
-      return s / 2;
+    if (!car || car.length < 4) throw new Error('FM.SHAPE_POLYS.car is missing or too simple');
+    const H = carHubs(car), b = H.body;
+    if ((b.x1 - b.x0) < (b.y1 - b.y0) * 1.4) {
+      throw new Error('the car is ' + (b.x1 - b.x0).toFixed(2) + ' wide by ' + (b.y1 - b.y0).toFixed(2) + ' tall — a car in profile is a WIDE shape; this is the blob the old one was');
+    }
+    if (H.holes < 3) throw new Error('only ' + H.holes + ' sub-paths wind against the body — the windows/hubs would fill in solid');
+    if (H.hubs.length !== 2) throw new Error('could not find two round wheel hubs in the shape (found ' + H.hubs.length + ')');
+    const [w1, w2] = H.hubs;
+    if (Math.abs(w1.cy - w2.cy) > 0.005) throw new Error('the wheels are not level (hub centres at y ' + w1.cy.toFixed(3) + ' and ' + w2.cy.toFixed(3) + ')');
+    if (Math.abs(w1.r - w2.r) > 0.005) throw new Error('the two wheels are different sizes');
+    if (w1.cx - w1.r < b.x0 || w2.cx + w2.r > b.x1) throw new Error('a wheel pokes outside the body outline');
+    // The tyre is the silhouette: under each hub the BODY outline reaches well below where it runs between the wheels.
+    // (read off the outline's on-curve points joined straight — plenty for "is the bottom here or there")
+    const lowestAt = xq => {
+      let m = -1;
+      const o = car[0];
+      for (let i = 0; i < o.length; i++) {
+        const p = o[i], q = o[(i + 1) % o.length];
+        if (p[0] === q[0] || (p[0] - xq) * (q[0] - xq) > 0) continue;
+        m = Math.max(m, p[1] + (q[1] - p[1]) * (xq - p[0]) / (q[0] - p[0]));
+      }
+      return m;
     };
-    const body = bbox(car[0]);
-    if ((body.x1 - body.x0) < (body.y1 - body.y0) * 1.4) {
-      throw new Error('the car is ' + (body.x1 - body.x0).toFixed(2) + ' wide by ' + (body.y1 - body.y0).toFixed(2) + ' tall — a car in profile is a WIDE shape; this is the blob the old one was');
-    }
-    // Holes must wind against the body, or nonzero fill paints them solid.
-    const bodyWind = Math.sign(area(car[0]));
-    const holes = car.slice(1).filter(sub => Math.sign(area(sub)) !== bodyWind);
-    if (holes.length < 3) throw new Error('only ' + holes.length + ' sub-paths wind against the body — the windows/hubs would fill in solid');
-    // The two tyres: same size, same centre line.
-    const rings = car.slice(1).map(bbox).filter(b => (b.x1 - b.x0) > 0.12 && Math.abs((b.x1 - b.x0) - (b.y1 - b.y0)) < 0.02);
-    if (rings.length < 2) throw new Error('could not find two round wheels in the shape');
-    const [w1, w2] = rings.slice(0, 2);
-    const cy1 = (w1.y0 + w1.y1) / 2, cy2 = (w2.y0 + w2.y1) / 2;
-    if (Math.abs(cy1 - cy2) > 0.005) throw new Error('the wheels are not level (centres at y ' + cy1.toFixed(3) + ' and ' + cy2.toFixed(3) + ')');
-    if (Math.abs((w1.x1 - w1.x0) - (w2.x1 - w2.x0)) > 0.01) throw new Error('the two wheels are different sizes');
-    // Tyres sit IN arches: they reach below the body's underside, and stay inside its width.
-    if (!(Math.max(w1.y1, w2.y1) > body.y1)) throw new Error('the tyres do not reach below the body — they are discs laid on a slab, not wheels in arches');
-    if (Math.min(w1.x0, w2.x0) < body.x0 - 0.001 || Math.max(w1.x1, w2.x1) > body.x1 + 0.001) {
-      throw new Error('a wheel pokes outside the body outline');
-    }
+    const between = lowestAt((w1.cx + w2.cx) / 2);
+    [w1, w2].forEach((w, j) => {
+      const under = lowestAt(w.cx);
+      if (!(under - between > w.r)) throw new Error('the ' + (j ? 'front' : 'rear') + ' tyre is not part of the silhouette: the body reaches y ' + under.toFixed(3) + ' under its hub against ' + between.toFixed(3) + ' between the wheels — a separate ring in an arch, which closes up at icon size');
+    });
   });
 
   test('camera focus blur is symmetric about the focus plane', { item: 'cam-focus' }, function () {
@@ -17018,8 +16991,11 @@
          three buttons have a different background to signify their difference." They are the controls
          that belong to the SELECTION rather than to the project, and they come and go with it. */
       const selW = document.getElementById('t-sel');
-      const bg = getComputedStyle(selW).backgroundColor;
-      if (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') throw new Error('the selection trio has no ground of its own — it reads the same as the project controls beside it');
+      /* queue 959: the trio's "own ground" is two fading corner lines now, not a fill — his drawing, 26 Sep ("instead of it
+         having like a background and a line all the way around it … two like corner lines"). What this protects is the same:
+         the trio reads differently from the project controls beside it. */
+      const trC = getComputedStyle(selW, '::before');
+      if (trC.content === 'none' || !((parseFloat(trC.borderTopWidth) || 0) >= 1)) throw new Error('the selection trio has no mark of its own (no corner lines) — it reads the same as the project controls beside it');
       // …and the buttons inside stay BARE. Queue 230 removed every resting box on his own instruction
       // ("if you're not hovering over it, you don't show it"), and a ground behind the GROUP must not
       // quietly put boxes back on the members.
@@ -20213,12 +20189,10 @@
 
 
   test('shapes: an added Car renders with ROUND wheels', { item: 'car-aspect' }, function () {
-    // v5.65: SHAPE_ASPECT.car still carried [1.76, 0.57] from the v3.96 image trace, but the v5.33
-    // redraw carries its own proportion inside the unit box (ink 0.9576 x 0.5200 of it) and draws
-    // both tyres as true circles there. The box only scales that drawing, so a non-square box turned
-    // every wheel into an ellipse by exactly the box ratio - 3.09:1, "really wide and streched out".
-    // Measured in PIXELS, not read off the declaration: the two tyres are separate ink blobs from the
-    // body (the arch cavity is open at the bottom), so each wheel's bbox comes off the rendered image.
+    // v5.65, retuned for queue 961. SHAPE_ASPECT.car must stay [1, 1]: the drawing carries its own proportion
+    // inside the unit box, so any other box stretches the wheels by exactly the box ratio ("really wide and
+    // streched out"). The v5.33 car's tyres were separate ink blobs; the rebuilt car's tyre is part of the
+    // silhouette, so the wheel is measured by its HUB — the round hole — off the rendered image.
     var savedScene = FM.scene, commit = FM.history.commit, autosave = FM.storage.autosave,
         save = FM.storage.save, dirty = FM.storage.markDirty;
     FM.history.commit = function () {}; FM.storage.autosave = function () {};
@@ -20233,48 +20207,54 @@
       FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
     }
     if (!L || L.shape !== 'car') throw new Error('FM.addShapeLayer("car") did not add a car layer');
-    // Same box ratio, rendered big enough that the 0.023-normalized tyre/arch gap survives even when
-    // the aspect is wrong (so a failure reports the ellipse, not "could not find the wheels").
-    var k = 600 / Math.max(L.shapeW, L.shapeH), S = 680;
-    // position lives in layer.transform, NOT on the layer - a top-level x/y here is silently ignored
-    // and the car renders half off the canvas (which is how this test first failed, on a good fix)
-    var cl = Object.assign({}, L, { start: 0, duration: 5, fill: '#ffffff',
-      transform: Object.assign({}, L.transform, { x: S / 2, y: S / 2 }),
-      shapeW: Math.round(L.shapeW * k), shapeH: Math.round(L.shapeH * k) });
-    var c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
-    FM.renderScene(x, scene([cl], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
-    var d = x.getImageData(0, 0, S, S).data, n = S * S, mask = new Uint8Array(n), i;
-    for (i = 0; i < n; i++) mask[i] = d[i * 4] > 127 ? 1 : 0;
-    var lab = new Int32Array(n).fill(-1), st = new Int32Array(n), blobs = [];
-    for (var p = 0; p < n; p++) {
-      if (!mask[p] || lab[p] >= 0) continue;
-      var id = blobs.length, sp = 0, cnt = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
-      st[sp++] = p; lab[p] = id;
-      while (sp > 0) {
-        var q = st[--sp], qx = q % S, qy = (q / S) | 0;
-        cnt++;
-        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
-        if (qx > 0     && mask[q - 1] && lab[q - 1] < 0) { lab[q - 1] = id; st[sp++] = q - 1; }
-        if (qx < S - 1 && mask[q + 1] && lab[q + 1] < 0) { lab[q + 1] = id; st[sp++] = q + 1; }
-        if (qy > 0     && mask[q - S] && lab[q - S] < 0) { lab[q - S] = id; st[sp++] = q - S; }
-        if (qy < S - 1 && mask[q + S] && lab[q + S] < 0) { lab[q + S] = id; st[sp++] = q + S; }
+    var S = 680;
+    function hubsAt(w, h) {
+      // position lives in layer.transform, NOT on the layer - a top-level x/y here is silently ignored
+      var cl = Object.assign({}, L, { start: 0, duration: 5, fill: '#ffffff',
+        transform: Object.assign({}, L.transform, { x: S / 2, y: S / 2 }), shapeW: w, shapeH: h });
+      var c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([cl], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
+      var d = x.getImageData(0, 0, S, S).data, n = S * S, bg = new Uint8Array(n), i;
+      for (i = 0; i < n; i++) bg[i] = d[i * 4] <= 127 ? 1 : 0;
+      for (i = 0; i < S; i++) {
+        if (!bg[i] || !bg[(S - 1) * S + i] || !bg[i * S] || !bg[i * S + S - 1])
+          throw new Error('the car render touches the canvas edge at ' + w + 'x' + h + ' - it is clipped, refusing to measure it');
       }
-      if (cnt > 40) blobs.push({ n: cnt, x0: x0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
+      // the HOLES: background not reachable from the border
+      var lab = new Int32Array(n).fill(-1), st = new Int32Array(n), sp = 0, holes = [], id, p, q, qx, qy;
+      var flood = function (seed, tag, rec) {
+        sp = 0; st[sp++] = seed; lab[seed] = tag;
+        while (sp > 0) {
+          q = st[--sp]; qx = q % S; qy = (q / S) | 0;
+          if (rec) { rec.n++; if (qx < rec.x0) rec.x0 = qx; if (qx > rec.x1) rec.x1 = qx; if (qy < rec.y0) rec.y0 = qy; if (qy > rec.y1) rec.y1 = qy; }
+          if (qx > 0     && bg[q - 1] && lab[q - 1] < 0) { lab[q - 1] = tag; st[sp++] = q - 1; }
+          if (qx < S - 1 && bg[q + 1] && lab[q + 1] < 0) { lab[q + 1] = tag; st[sp++] = q + 1; }
+          if (qy > 0     && bg[q - S] && lab[q - S] < 0) { lab[q - S] = tag; st[sp++] = q - S; }
+          if (qy < S - 1 && bg[q + S] && lab[q + S] < 0) { lab[q + S] = tag; st[sp++] = q + S; }
+        }
+      };
+      flood(0, 0, null);
+      for (p = 0; p < n; p++) {
+        if (!bg[p] || lab[p] >= 0) continue;
+        var rec = { n: 0, x0: 1e9, y0: 1e9, x1: -1, y1: -1 };
+        flood(p, holes.length + 1, rec);
+        if (rec.n > 40) holes.push({ n: rec.n, x0: rec.x0, w: rec.x1 - rec.x0 + 1, h: rec.y1 - rec.y0 + 1, cy: (rec.y0 + rec.y1) / 2 });
+      }
+      // the hubs are the two holes lowest in the picture (the windows are above them)
+      return holes.sort(function (a, b) { return b.cy - a.cy; }).slice(0, 2).sort(function (a, b) { return a.x0 - b.x0; });
     }
-    if (!blobs.length) throw new Error('the car rendered nothing at ' + cl.shapeW + 'x' + cl.shapeH);
-    // never measure a clipped picture: any ink on the border means part of the car is off-canvas
-    for (i = 0; i < S; i++) {
-      if (mask[i] || mask[(S - 1) * S + i] || mask[i * S] || mask[i * S + S - 1])
-        throw new Error('the car render touches the canvas edge - it is clipped, refusing to measure it');
-    }
-    if (blobs.length !== 3) throw new Error('expected 3 ink blobs (body + 2 tyres), got ' + blobs.length +
-      ' at box ' + cl.shapeW + 'x' + cl.shapeH + ' - the wheels cannot be isolated, which itself means the car is distorted');
-    blobs.sort(function (a, b) { return b.n - a.n; });
-    blobs.slice(1).sort(function (a, b) { return a.x0 - b.x0; }).forEach(function (wl, j) {
-      if (Math.abs(wl.w - wl.h) > 1)
-        throw new Error((j ? 'front' : 'rear') + ' wheel is ' + wl.w + 'x' + wl.h + 'px (' + (wl.w / wl.h).toFixed(2) +
+    var k = 600 / Math.max(L.shapeW, L.shapeH);
+    var hubs = hubsAt(Math.round(L.shapeW * k), Math.round(L.shapeH * k));
+    if (hubs.length !== 2) throw new Error('could not find the two wheel hubs as holes in the rendered car');
+    hubs.forEach(function (hb, j) {
+      if (Math.abs(hb.w - hb.h) > 1)
+        throw new Error((j ? 'front' : 'rear') + ' hub is ' + hb.w + 'x' + hb.h + 'px (' + (hb.w / hb.h).toFixed(2) +
           ':1), not a circle - SHAPE_ASPECT.car must stay square, but a Car spawned at ' + L.shapeW + 'x' + L.shapeH);
     });
+    // CONTROL: the same measure on a car deliberately stretched 3:2 must SEE the ellipse, or the check above proves nothing.
+    var bad = hubsAt(600, 400);
+    if (bad.length !== 2 || Math.abs(bad[0].w - bad[0].h) < 4)
+      throw new Error('control failed: a car stretched to 600x400 still measured round hubs (' + (bad[0] ? bad[0].w + 'x' + bad[0].h : 'none') + ') — this measurement cannot see a stretched wheel');
   });
 
   /* ---- queue 45 (v5.70) — one options layout for every layer ------------------------------------
@@ -42531,8 +42511,10 @@
         const grey = function (t) { return Math.max.apply(null, t) - Math.min.apply(null, t) < 40; };
         // "a basic grey" / "basic grey" — the neutral everyday action, and the reason the coloured
         // ones read as doing something.
-        ['Import', 'Import audio'].forEach(function (l) {
-          if (byLabel[l] && !grey(tintOf(l))) throw new Error(l + ' should be a basic grey, got rgb(' + tintOf(l).join(',') + ')');
+        // queue 960 renamed "Import" to "Import media"; the pair is REQUIRED here, not skipped when missing —
+        // a rename that missed BY_LABEL would otherwise drop the grey silently and this line would stay green.
+        ['Import media', 'Import audio'].forEach(function (l) {
+          if (!grey(tintOf(l))) throw new Error(l + ' should be a basic grey, got rgb(' + tintOf(l).join(',') + ')');
         });
         // "a strong red"
         const rv = byLabel['Record voice…'] ? tintOf('Record voice…') : null;
@@ -44933,8 +44915,8 @@
       if (!tab) throw new Error('no Media tab');
       tab.click();
       await sleep(180);
-      const card = [...host.querySelectorAll('.addmenu-card')].find(c => c.textContent.trim() === 'Import');
-      if (!card) throw new Error('no Import card on the Media tab');
+      const card = [...host.querySelectorAll('.addmenu-card')].find(c => c.textContent.trim() === 'Import media');   // renamed by queue 960
+      if (!card) throw new Error('no Import media card on the Media tab');
       const paths = [...card.querySelectorAll('svg path')];
       if (!paths.length) throw new Error('the Import icon has no strokes to check');
       /* Every stroke must use the gradient — one path left on currentColor would come out grey and
@@ -51092,7 +51074,7 @@
     }
   });
 
-  test('the selection button group is an outlined container, and the bin is calm at rest (queue 516)', { item: '516' }, async function () {
+  test('the selection button group is no dark slab, and the bin is calm at rest (queue 516)', { item: '516' }, async function () {
     /* Ezra: "the bin icon doesn't look really good there … And then also the black bar in the background
        looks kinda bad as well. Maybe instead of it being an entire black backdrop, you could just make
        it, like, an outline or something instead."
@@ -51133,8 +51115,12 @@
          LIGHTER than the bar behind it — not another layer of black. */
       if (alpha > 0.02 && lum < 60)
         throw new Error('the selection group is filled with a dark colour again (' + cs.backgroundColor + ') — that is the "entire black backdrop" he asked to replace with an outline');
-      if (parseFloat(cs.borderTopWidth) < 0.5)
-        throw new Error('the selection group has no outline (' + cs.borderTopWidth + ') — the outline IS the treatment he chose');
+      /* ⚠️ queue 959 (26 Sep) — THE OUTLINE IS GONE, BY HIM: "instead of it having like a background and a line all the way
+         around it, it should have two like corner lines … the top right to the bottom left … that like fade out". The half of
+         #516 that survives is the one above — no dark slab. The corners do the outline's job now. */
+      const trc = getComputedStyle(slab, '::before'), blc = getComputedStyle(slab, '::after');
+      if (trc.content === 'none' || blc.content === 'none' || !((parseFloat(trc.borderTopWidth) || 0) >= 1) || !((parseFloat(blc.borderBottomWidth) || 0) >= 1))
+        throw new Error('the selection group has no corner lines (top-right ' + trc.content + ' ' + trc.borderTopWidth + ', bottom-left ' + blc.content + ' ' + blc.borderBottomWidth + ') — the corners ARE the treatment he chose (queue 959)');
 
       /* THE BIN: neutral at rest. Red is a hover/press state now, not the resting colour. */
       const restCol = rgba(getComputedStyle(del).color);
@@ -53855,7 +53841,7 @@
     const rootEl = document.documentElement;
     const hadFloat = document.body.classList.contains('am-floating');
     try {
-      const tall = Math.round(window.innerHeight * 0.95);
+      const tall = window.innerHeight + 100;   // queue 958: the drag may now reach the window's top, so "too tall" means taller than the window
       rootEl.style.setProperty('--am-h', tall + 'px');
       document.body.classList.add('am-floating');
       if (FM._amRepin) FM._amRepin();
@@ -56299,7 +56285,7 @@
    * lightly darker, and also it isnt centred and aligned so fix that." Two faults, and measuring
    * found the second one to be the same class as #209: not the boxes, the INK. */
 
-  test('the selection cluster recesses rather than glowing, and its glyphs are centred', { item: 'sel-ground' }, async function () {
+  test('the selection cluster reads as one group by its corner lines, and its glyphs are centred', { item: 'sel-ground' }, async function () {
     if (!matchMedia('(min-width: 701px)').matches) return;   // PC arrangement
     const frame = () => new Promise(r => setTimeout(r, 120));
     const layers0 = FM.scene.layers.slice();
@@ -56325,9 +56311,13 @@
          description, so the colour is his to change; what this test protects now is that the cluster is
          still READABLE AS ONE GROUP, which is what the entry was actually about.
          The glyph-centring half below is untouched — that was never about the wash. */
-      const edge = parseFloat(getComputedStyle(sel).borderTopWidth) || 0;
-      if (a <= 0.02 && edge < 0.5) {
-        throw new Error('the cluster has neither a wash nor an outline — it no longer reads as one group, which is what "the background they have is too subtle" was about');
+      /* ⚠️ queue 959 (26 Sep) — NEITHER A WASH NOR AN OUTLINE, BY HIM: "instead of it having like a background and a line
+         all the way around it, it should have two like corner lines … the top right to the bottom left". What this protects
+         is unchanged — the cluster still reads as ONE group — and the corners carry that now. */
+      const trc = getComputedStyle(sel, '::before'), blc = getComputedStyle(sel, '::after');
+      const lit = c => { const n = (String(c).match(/[\d.]+/g) || []).map(Number); return (n.length > 3 ? n[3] : (n.length === 3 ? 1 : 0)) >= 0.3; };   // 'transparent' has no numbers → not lit
+      if (trc.content === 'none' || blc.content === 'none' || !lit(trc.borderTopColor) || !lit(blc.borderBottomColor)) {
+        throw new Error('the cluster has no corner lines (top-right ' + trc.content + ' ' + trc.borderTopColor + ', bottom-left ' + blc.content + ' ' + blc.borderBottomColor + ') — it no longer reads as one group, which is what "the background they have is too subtle" was about');
       }
       // the ink, not the boxes — the same class of fault as #209
       const kids = Array.prototype.slice.call(sel.children).filter(function (k) { return k.getBoundingClientRect().width > 0; });
@@ -80559,6 +80549,13 @@
           for (const c of cards) {
             const lab = c.querySelector('.cat-label');
             if (!lab || !(lab.textContent || '').trim()) continue;
+            /* queue 963: on the icon-only rung the name is hidden ON PURPOSE and moves onto the card (aria-label / title) —
+               that is not the collapse this test guards, so it is checked for its name instead of its height. */
+            const wrap963 = c.closest('.cat-wrap');
+            if (wrap963 && wrap963.dataset.rung === 'icon') {
+              if ((c.getAttribute('aria-label') || '').trim() !== lab.textContent.trim()) throw new Error('at a band height of ' + h + 'px "' + lab.textContent.trim() + '" shows its icon alone and no aria-label names it');
+              continue;
+            }
             const lr = lab.getBoundingClientRect(), cr = c.getBoundingClientRect();
             if (lr.height < 1)
               throw new Error('at a band height of ' + h + 'px the label "' + lab.textContent.trim() + '" renders 0px tall — the card becomes an unlabelled icon, which is what a 1440x900 laptop was showing');
@@ -80607,6 +80604,8 @@
             const lab = c.querySelector('.cat-label');
             const txt = lab && (lab.textContent || '').trim();
             if (!txt) continue;
+            const wrap963 = c.closest('.cat-wrap');
+            if (wrap963 && wrap963.dataset.rung === 'icon') continue;   // queue 963: the icon-only rung hides the name on purpose; 963's own test checks the card's aria-label
             const full = lab.scrollHeight, shown = lab.clientHeight;
             lab.textContent = 'Xg'; const line = lab.scrollHeight; lab.textContent = txt;
             if (!(line > 4)) throw new Error('a one-word label measured ' + line + 'px tall — the line height could not be read');
@@ -102787,4 +102786,1107 @@
     });
   });
 
+  /* ================= QUEUE 963 — the Add menu and the layer inspector shrink as ONE system (PC) =================
+     Ezra, 26 Sep: *"When you shrink the add layer or like the layer inspect layer inspector on PC, it should just lose the
+     text when it gets too small. Because it just looks really bunched up when it gets really small. Or just make or just
+     figure out a way for it to shrink and still look good when it's small. And have the text and the picture and just so
+     it's dynamic in a way that actually looks really good. Because right now, the dynamics of the add layer and the
+     inspector layer are both very different. from each other and honestly they both are shit in their own ways and
+     they're also both good in their own ways so just maybe have a big look through that"*
+     Measured on v17.03 (tools/design/plans/2026-09-26-panels/plan.md §3), 1280 wide:
+       · inspector, 232–300px band: 12px icons under 11.5px names in 87x48–68 cards — the bunched look, as numbers;
+       · inspector, 190px band: the third row needs 23px of scrolling, "Outline &" and "Customise" lose their second line;
+       · Add menu, 190px band: the solver gives up and the body is a 56px scroller over 133px of tiles; at 150, 16px.
+     Helpers for the six tests below (the sixth, the chip word check, added by the build on 27 Sep). */
+  function q963Lines(lab, card) {   // every painted line of a label: whole, and inside its card?
+    const lr = lab.getBoundingClientRect(), cr = card.getBoundingClientRect();
+    const clip = getComputedStyle(lab).overflow !== 'visible';
+    const rg = document.createRange(); rg.selectNodeContents(lab);
+    let shown = 0;
+    for (const q of rg.getClientRects()) {
+      if (q.width < 0.5) continue;
+      const top = clip ? Math.max(q.top, lr.top) : q.top, bot = clip ? Math.min(q.bottom, lr.bottom) : q.bottom;
+      if (bot - top < 0.5) continue;                       // a line the row's two-line clamp hid whole (its ellipsis says so)
+      if (bot - top < q.height - 1) return 'a part-line (' + (bot - top).toFixed(1) + ' of ' + q.height.toFixed(1) + 'px)';
+      // vertically exact; sideways a word may spill up to half the 8px gutter — the add menu's stacked rule since v5.69
+      // ("far more readable spilling a few px into the gutter than cut to 'Capti…'"), which a 48px tile needs for "Adjustment"
+      if (bot > cr.bottom + 0.5 || top < cr.top - 0.5 || q.left < cr.left - 4 || q.right > cr.right + 4) return 'a line outside its card';
+      shown++;
+    }
+    /* A CLIPPED label (the chip's) must also hold every word whole: a word wider than the label is drawn "Adjustm…" by the
+       ellipsis, and its line rect still sits inside the card, so the check above cannot see it. Found in the build's own
+       screenshots at 1100–1280 wide (27 Sep). */
+    if (clip && lab.scrollWidth > lab.clientWidth + 0.5) return 'a word cut by its chip (it needs ' + lab.scrollWidth + 'px, the chip gives it ' + lab.clientWidth + ')';
+    if (clip && lab.scrollHeight > lab.clientHeight + 1) return 'a line cut off by its chip (' + lab.scrollHeight + 'px of text in ' + lab.clientHeight + ')';
+    return shown ? '' : 'no line at all';
+  }
+  /* One card, either panel. Returns 'named' or 'icon', or throws with what is wrong. */
+  function q963Card(c, icoSel, lblSel, where) {
+    const cr = c.getBoundingClientRect();
+    if (cr.width < 27.5 || cr.height < 27.5) throw new Error('a card is ' + cr.width.toFixed(1) + 'x' + cr.height.toFixed(1) + ' — under a 28px target' + where);
+    const ic = c.querySelector(icoSel), lab = c.querySelector(lblSel);
+    if (!ic || !lab) throw new Error('a card has no icon or no label element' + where);
+    const ico = ic.getBoundingClientRect().width, name = (lab.textContent || '').trim();
+    if (getComputedStyle(lab).display === 'none' || lab.getBoundingClientRect().height < 1) {
+      const said = (c.getAttribute('aria-label') || c.title || '').trim();
+      if (said !== name) throw new Error('"' + name + '" shows its picture alone and carries "' + said + '" as its name — nothing to hover or read' + where);
+      if (ico < 17.5) throw new Error('"' + name + '" shows its picture alone at ' + ico.toFixed(1) + 'px' + where);
+      return 'icon';
+    }
+    const fs = parseFloat(getComputedStyle(lab).fontSize);
+    if (ico < fs * 1.5 - 0.1) throw new Error('"' + name + '" draws a ' + ico.toFixed(1) + 'px icon beside ' + fs + 'px words — the bunched look' + where);
+    const bad = q963Lines(lab, c);
+    if (bad) throw new Error('"' + name + '" shows ' + bad + where);
+    return 'named';
+  }
+  const Q963_BANDS = [150, 165, 180, 200, 232, 264, 300, 360, 420];
+
+  test('963 — the PC layer inspector shrinks without bunching: at every band the cards fit, a shown name is whole, and the icon is never smaller than its words', { item: '963' }, async function () {
+    return await atWideWidth(async function () {
+      const root = document.documentElement, prev = root.style.getPropertyValue('--tl-h');
+      const keep = FM.scene.layers.slice();
+      try {
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'star', x: 200, y: 200, shapeW: 200, shapeH: 200 });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.refreshAll(); FM.selectLayer(L.id);
+        await sleep(250);
+        const panel = document.getElementById('inspector-panel'), insp = document.getElementById('inspector');
+        const seen = {};
+        for (const h of Q963_BANDS) {
+          root.style.setProperty('--tl-h', h + 'px');
+          await sleep(150);                                  // the ResizeObserver re-plans on the next frame
+          const cards = [].slice.call(panel.querySelectorAll('#inspector .cat-card'));
+          if (cards.length < 8) throw new Error('at a ' + h + 'px band only ' + cards.length + ' category cards — the grid this test guards is not showing');
+          const wrap = document.querySelector('#inspector > .cat-wrap');
+          const where = ' (band ' + h + 'px, plan "' + ((wrap && wrap.dataset.tf) || 'none') + '")';
+          const scroll = insp.scrollHeight - insp.clientHeight;
+          if (scroll > 1) throw new Error('the cards need ' + scroll + 'px of scrolling' + where);
+          const pb = panel.getBoundingClientRect().bottom;
+          for (const c of cards) {
+            if (c.getBoundingClientRect().bottom > pb + 0.5) throw new Error('a card hangs ' + Math.round(c.getBoundingClientRect().bottom - pb) + 'px below the panel' + where);
+            const kind = q963Card(c, '.cat-ico svg', '.cat-label', where);
+            seen[kind] = (seen[kind] || 0) + 1;
+          }
+        }
+        // CONTROL: the sweep reached the roomy end (names) and at least one smaller shape, or it proved nothing about shrinking
+        if (!seen.named) throw new Error('CONTROL: no band showed the names — the sweep never reached the roomy end');
+        const rungs = new Set();
+        for (const h of [150, 420]) { root.style.setProperty('--tl-h', h + 'px'); await sleep(150); const w = document.querySelector('#inspector > .cat-wrap'); rungs.add(w && w.dataset.rung); }
+        if (rungs.size < 2) throw new Error('CONTROL: 150px and 420px bands drew the same tile shape (' + [...rungs].join() + ') — nothing changed shape, so the small end was never exercised');
+      } finally {
+        if (prev) root.style.setProperty('--tl-h', prev); else root.style.removeProperty('--tl-h');
+        FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+        FM.selectLayer(null); FM.refreshAll();
+        await sleep(80);
+      }
+    }, 1280);
+  });
+
+  test('963 — the PC Add menu shrinks without a sliver: at every band its tiles sit whole inside the panel and nothing scrolls', { item: '963' }, async function () {
+    return await atWideWidth(async function () {
+      const root = document.documentElement, prev = root.style.getPropertyValue('--tl-h');
+      const sel0 = FM.scene.selectedId;
+      try {
+        FM.selectLayer(null);
+        if (FM.addMenu && FM.addMenu.openTab) FM.addMenu.openTab('object');   // Elements: nine fixed tiles, the tab that opens first
+        await sleep(200);
+        const panel = document.getElementById('inspector-panel');
+        let sawNamed = 0;
+        for (const h of Q963_BANDS) {
+          root.style.setProperty('--tl-h', h + 'px');
+          await sleep(200);                                  // addmenu.js's own observer redraws the tab
+          const am = panel.querySelector('.addmenu');
+          if (!am) throw new Error('deselecting did not put the Add menu in the panel — this test measured nothing');
+          const where = ' (band ' + h + 'px, plan "' + (am.dataset.tf || 'none') + '")';
+          const body = am.querySelector('.addmenu-body'), pager = am.querySelector('.addmenu-pager');
+          if (!body || !pager) throw new Error('no .addmenu-body / .addmenu-pager' + where);
+          const sc = body.scrollHeight - body.clientHeight;
+          if (sc > 1) throw new Error('the Add menu body is a ' + body.clientHeight + 'px scroller over ' + body.scrollHeight + 'px of tiles — the sliver' + where);
+          const pr = pager.getBoundingClientRect(), pb = panel.getBoundingClientRect().bottom;
+          const cards = [].slice.call(am.querySelectorAll('.addmenu-body .addmenu-card')).filter(c => { const r = c.getBoundingClientRect(); return r.width > 0 && r.left >= pr.left - 1 && r.right <= pr.right + 1; });
+          if (!cards.length) throw new Error('no tile on the page showing' + where);
+          for (const c of cards) {
+            if (c.getBoundingClientRect().bottom > pb + 0.5) throw new Error('a tile hangs ' + Math.round(c.getBoundingClientRect().bottom - pb) + 'px below the panel' + where);
+            if (q963Card(c, '.addmenu-ic svg, .addmenu-ic .add-emoji', '.addmenu-lbl', where) === 'named') sawNamed++;
+          }
+          const dots = am.querySelector('.addmenu-dots');
+          if (dots && dots.getBoundingClientRect().height > 0 && dots.getBoundingClientRect().bottom > pb + 0.5) throw new Error('the page dots sit ' + Math.round(dots.getBoundingClientRect().bottom - pb) + 'px below the panel — the pages cannot be turned' + where);
+          for (const t of am.querySelectorAll('.addmenu-tab')) {
+            const tr = t.getBoundingClientRect(), tl = t.querySelector('.addmenu-lbl');
+            if (tr.height < 27.5) throw new Error('a tab is ' + tr.height.toFixed(1) + 'px tall' + where);
+            const shows = tl && getComputedStyle(tl).display !== 'none' && tl.getBoundingClientRect().height > 1;
+            if (shows && tl.getBoundingClientRect().bottom > tr.bottom + 0.5) throw new Error('the "' + tl.textContent + '" tab label is cut by its tab' + where);
+            if (!shows && (t.title || '').trim() !== (tl ? tl.textContent.trim() : '')) throw new Error('a tab shows its icon alone with no name to hover' + where);
+          }
+        }
+        // CONTROL: at 420 the nine Elements are all on one page with their names — the roomy end is intact
+        root.style.setProperty('--tl-h', '420px'); await sleep(200);
+        const am = panel.querySelector('.addmenu');
+        if (am.querySelectorAll('.addmenu-page').length !== 1) throw new Error('CONTROL: at a 420px band the Elements tab still pages (' + am.querySelectorAll('.addmenu-page').length + ' pages)');
+        if (!sawNamed) throw new Error('CONTROL: no band showed a named tile');
+      } finally {
+        if (prev) root.style.setProperty('--tl-h', prev); else root.style.removeProperty('--tl-h');
+        FM.selectLayer(sel0 || null); FM.refreshAll();
+        await sleep(80);
+      }
+    }, 1280);
+  });
+
+  test('963 — one planner for both panels: each grid carries its plan, and every tile is drawn at the size the plan wrote', { item: '963' }, async function () {
+    /* "the dynamics of the add layer and the inspector layer are both very different" — the structural half of the fix is
+       that they are no longer two mechanisms. Both grids are planned by FM.tileFit and drawn by the same [data-rung] rules,
+       so each must carry a plan, and what is on screen must be exactly what that plan says. On v17.03 the inspector carries
+       no plan at all (it was CSS arithmetic on --tl-h), which is the "two different systems" he described. */
+    return await atWideWidth(async function () {
+      if (!FM.tileFit || typeof FM.tileFit.plan !== 'function') throw new Error('FM.tileFit is not loaded — there is no shared planner');
+      const root = document.documentElement, prev = root.style.getPropertyValue('--tl-h');
+      const keep = FM.scene.layers.slice();
+      const px = (el, v) => parseFloat(el.style.getPropertyValue(v));
+      const check = function (grid, cards, icoSel, lblSel, what, h) {
+        const where = ' (' + what + ', band ' + h + 'px, plan "' + (grid && grid.dataset.tf) + '")';
+        if (!grid || !grid.dataset.rung) throw new Error(what + ' carries no plan at a ' + h + 'px band — it is not laid out by the shared planner');
+        const cw = px(grid, '--tf-cw'), rh = px(grid, '--tf-row'), ico = px(grid, '--tf-ico');
+        for (const c of cards) {
+          const r = c.getBoundingClientRect();
+          if (Math.abs(r.width - cw) > 1 || Math.abs(r.height - rh) > 1) throw new Error('a tile is ' + r.width.toFixed(1) + 'x' + r.height.toFixed(1) + ', the plan says ' + cw + 'x' + rh + where);
+          const i = c.querySelector(icoSel).getBoundingClientRect().width;
+          if (Math.abs(i - ico) > 1) throw new Error('an icon is ' + i.toFixed(1) + 'px, the plan says ' + ico + where);
+          const lab = c.querySelector(lblSel), hidden = getComputedStyle(lab).display === 'none';
+          if (hidden !== (grid.dataset.rung === 'icon')) throw new Error('the label is ' + (hidden ? 'hidden' : 'shown') + ' on the "' + grid.dataset.rung + '" rung' + where);
+          const dir = getComputedStyle(c).flexDirection;
+          if ((grid.dataset.rung === 'row') !== (dir === 'row')) throw new Error('a tile lays out as ' + dir + ' on the "' + grid.dataset.rung + '" rung' + where);
+        }
+      };
+      try {
+        /* Its own start, whatever the test before it left (found in a slice: Home open, or the Add menu on a sub-view,
+           and the Add menu then drew no cards — the same state that fails the older #475 check). */
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        FM.scene.layers.length = 0;
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 200, shapeW: 200, shapeH: 200 });
+        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+        FM.refreshAll();
+        const kinds = new Set();
+        for (const h of [150, 190, 264, 420]) {
+          root.style.setProperty('--tl-h', h + 'px');
+          FM.selectLayer(L.id); await sleep(180);
+          const wrap = document.querySelector('#inspector > .cat-wrap');
+          check(wrap, [].slice.call(document.querySelectorAll('#inspector .cat-card')), '.cat-ico svg', '.cat-label', 'the inspector', h);
+          kinds.add(wrap.dataset.rung);
+          /* DRAWN ONCE ON A DESELECT. The clip keys sit on the title line while a clip is selected; the Add menu used to be
+             drawn under them, then redrawn whole a task later when they went (found as a click in the full suite that landed
+             on a page turner the redraw had just replaced). The menu drawn by the deselect must be the one still there. */
+          const keysOn = document.getElementById('inspector-panel').classList.contains('keys-on');
+          if (h === 264 && !keysOn) throw new Error('CONTROL: the clip keys were not on the title line with a clip selected — the deselect below could not show a redraw');
+          FM.selectLayer(null);
+          const tile0 = document.querySelector('#inspector-panel .addmenu-body .addmenu-card');   // drawBody replaces the tiles, not the menu around them
+          if (h === 264 && !tile0) throw new Error('CONTROL: deselecting drew no Add menu tiles at once — nothing to watch for a redraw');
+          await sleep(120);
+          if (keysOn && tile0 && !tile0.isConnected) throw new Error('deselecting drew the Add menu twice (band ' + h + 'px): the tiles drawn under the clip keys were replaced when they went');
+          if (FM.addMenu && FM.addMenu.openTab) FM.addMenu.openTab('object');   // the Elements grid, as its sibling test measures
+          await sleep(200);
+          const am = document.querySelector('#inspector-panel .addmenu');
+          if (!am) throw new Error('deselecting did not put the Add menu in the panel (band ' + h + 'px) — this test measured nothing');
+          const pr = am.querySelector('.addmenu-pager').getBoundingClientRect();
+          check(am, [].slice.call(am.querySelectorAll('.addmenu-body .addmenu-card')).filter(c => { const r = c.getBoundingClientRect(); return r.width > 0 && r.left >= pr.left - 1 && r.right <= pr.right + 1; }), '.addmenu-ic svg, .addmenu-ic .add-emoji', '.addmenu-lbl', 'the Add menu', h);
+          kinds.add(am.dataset.rung);
+        }
+        if (kinds.size < 2) throw new Error('CONTROL: every band drew the same tile shape (' + [...kinds].join() + ') — the rung switch was never exercised');
+      } finally {
+        if (prev) root.style.setProperty('--tl-h', prev); else root.style.removeProperty('--tl-h');
+        FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+        FM.selectLayer(null); FM.refreshAll();
+        await sleep(80);
+      }
+    }, 1280);
+  });
+
+  test('963 — FM.tileFit: a bigger box never shows fewer words, more pages, or a smaller icon', { item: '963' }, function () {
+    /* The property that makes the shrink feel deliberate rather than jumpy: drag the band UP and the tiles only ever gain —
+       a name comes back, never goes; a page folds away, never appears; inside one shape the icon only grows. Checked on the
+       real planner over every box both panels can be (widths 272–372, the panel's 300–400 less its padding; heights from a
+       squeezed 30px to a raised panel's 560) for the counts the two panels actually show. */
+    const T = FM.tileFit;
+    if (!T || typeof T.plan !== 'function') throw new Error('FM.tileFit.plan is missing — the one planner both panels share is not loaded');
+    let checked = 0;
+    // `word`: the widest name word a caller measures (the chip's check since 27 Sep) — default, Arial's "Customise", and a wide one
+    for (const n of [3, 5, 8, 9]) for (let W = 272; W <= 372; W += 10) for (const fill of [false, true]) for (const word of [undefined, 47.2, 60]) {
+      let last = null;
+      for (let H = 30; H <= 560; H++) {
+        const p = T.plan(n, W, H, { fill: fill, word: word });
+        if (last && !p) throw new Error(n + ' items, ' + W + 'x' + H + ': the plan vanished as the box grew');
+        if (!p) continue;
+        if (last) {
+          const at = n + ' items in ' + W + 'x' + H + (word ? ', word ' + word + 'px' : '') + ' (' + last.kind + ' ' + last.cols + 'x' + last.rows + ' → ' + p.kind + ' ' + p.cols + 'x' + p.rows + ')';
+          if (p.pages > last.pages) throw new Error('more pages in a bigger box: ' + at);
+          if (p.pages === last.pages && (p.comfy || !last.comfy) && T.ORDER[p.kind] > T.ORDER[last.kind]) throw new Error('fewer words in a bigger box: ' + at);
+          if (p.kind === last.kind && p.pages === last.pages && p.ico < last.ico - 0.01) throw new Error('a smaller icon in a bigger box: ' + at + ', ' + last.ico.toFixed(2) + ' → ' + p.ico.toFixed(2));
+        }
+        last = p; checked++;
+      }
+    }
+    if (checked < 5000) throw new Error('CONTROL: only ' + checked + ' boxes were planned — the sweep did not run');
+  });
+
+  test('963 — at his 1440 window the nine Elements are on ONE page: no pager for a tab that fits', { item: '963' }, async function () {
+    /* Found while measuring for 963: the Add menu planned against the box MINUS the pager's row first, and only tried the
+       whole box if that had already fitted on one page. So a tab that needed those 26px to fit on one page never got them:
+       at 1440x900 (panel 345.6 wide, band 270) the nine Elements were drawn five and four over two pages, with page
+       arrows, while 5x2 fits the whole box. */
+    return await atWideWidth(async function () {
+      const root = document.documentElement, prev = root.style.getPropertyValue('--tl-h');
+      const sel0 = FM.scene.selectedId;
+      try {
+        root.style.setProperty('--tl-h', '270px');           // 30vh of a 900px-tall window: his default band
+        FM.selectLayer(null);
+        if (FM.addMenu && FM.addMenu.openTab) FM.addMenu.openTab('object');
+        await sleep(250);
+        const am = document.querySelector('#inspector-panel .addmenu');
+        if (!am) throw new Error('the Add menu is not in the panel');
+        const all = am.querySelectorAll('.addmenu-body .addmenu-card').length;
+        if (all < 9) throw new Error('CONTROL: the Elements tab has ' + all + ' tiles, not the nine this is about');
+        const pages = am.querySelectorAll('.addmenu-page').length;
+        if (pages !== 1) throw new Error('the nine Elements are drawn over ' + pages + ' pages at 1440x900 (plan "' + (am.dataset.amFit || am.dataset.tf) + '") — they fit on one');
+        const named = [].slice.call(am.querySelectorAll('.addmenu-body .addmenu-lbl')).filter(l => getComputedStyle(l).display !== 'none' && l.getBoundingClientRect().height > 1).length;
+        if (named < 9) throw new Error('only ' + named + ' of the nine show their names — one page was bought by dropping the words');
+      } finally {
+        if (prev) root.style.setProperty('--tl-h', prev); else root.style.removeProperty('--tl-h');
+        FM.selectLayer(sel0 || null); FM.refreshAll();
+        await sleep(80);
+      }
+    }, 1440);
+  });
+
+  test('963 — a chip never cuts a name: at the narrowest PC panels every word of every chip is whole, never Adjustm…', { item: '963', budgetMs: 120000 }, async function () {
+    /* The chip (name beside icon) is the rung that keeps "the text and the picture" on a short band, and the plan's promise
+       for it was "never cut to 'Outline & Sh…'". Built as planned, its icon followed only the chip's HEIGHT, so at the
+       narrowest PC panel (300px — every window up to 1250 wide) and at 1280 a 20–22px icon left "Adjustment" 48 of the
+       50px it needs and the chip drew "Adjustm…"; "Customise" lost 1px the same way. Measured in the build's screenshots,
+       27 Sep. Swept band by band through the chip range (5px steps: the cut lives in 25px of band) for the inspector on a
+       shape and a text layer (their longest words: "Customise", "Properties") and the Add menu's Elements. */
+    const labelled = function (c, lblSel) {
+      const lab = c.querySelector(lblSel);
+      return lab && getComputedStyle(lab).display !== 'none' && lab.getBoundingClientRect().height > 1 ? lab : null;
+    };
+    const cut = function (lab) {
+      if (lab.scrollWidth > lab.clientWidth + 0.5) return '"' + lab.textContent.trim() + '" needs ' + lab.scrollWidth + 'px and its chip gives it ' + lab.clientWidth;
+      if (lab.scrollHeight > lab.clientHeight + 1) return '"' + lab.textContent.trim() + '" has ' + lab.scrollHeight + 'px of lines in ' + lab.clientHeight;
+      return '';
+    };
+    const chips = { insp: 0, add: 0 };
+    for (const W of [1100, 1280]) {
+      await atWideWidth(async function () {
+        const root = document.documentElement, prev = root.style.getPropertyValue('--tl-h');
+        const keep = FM.scene.layers.slice();
+        try {
+          FM.scene.layers.length = 0;
+          const S = FM.makeLayer('shape', { shape: 'star', x: 200, y: 200, shapeW: 200, shapeH: 200 });
+          const X = FM.makeLayer('text', { text: 'Hello', x: 300, y: 300 });
+          S.start = X.start = 0; S.duration = X.duration = 3; FM.scene.layers.push(S, X);
+          FM.refreshAll();
+          for (let h = 160; h <= 260; h += 5) {
+            root.style.setProperty('--tl-h', h + 'px');
+            for (const L of [S, X]) {
+              FM.selectLayer(L.id); await sleep(120);
+              const wrap = document.querySelector('#inspector > .cat-wrap');
+              if (!wrap || wrap.dataset.rung !== 'row') continue;
+              chips.insp++;
+              for (const c of document.querySelectorAll('#inspector .cat-card')) {
+                const lab = labelled(c, '.cat-label'), bad = lab ? cut(lab) : 'a chip shows no name';
+                if (bad) throw new Error('the inspector (' + L.type + ' layer) cuts a name: ' + bad + ' (' + W + ' wide, band ' + h + 'px, plan "' + wrap.dataset.tf + '")');
+              }
+            }
+            FM.selectLayer(null); await sleep(60);
+            if (FM.addMenu && FM.addMenu.openTab) FM.addMenu.openTab('object');
+            await sleep(150);
+            const am = document.querySelector('#inspector-panel .addmenu');
+            if (!am || am.dataset.rung !== 'row') continue;
+            chips.add++;
+            const pr = am.querySelector('.addmenu-pager').getBoundingClientRect();
+            for (const c of am.querySelectorAll('.addmenu-body .addmenu-card')) {
+              const r = c.getBoundingClientRect();
+              if (!(r.width > 0 && r.left >= pr.left - 1 && r.right <= pr.right + 1)) continue;
+              const lab = labelled(c, '.addmenu-lbl'), bad = lab ? cut(lab) : 'a chip shows no name';
+              if (bad) throw new Error('the Add menu cuts a name: ' + bad + ' (' + W + ' wide, band ' + h + 'px, plan "' + am.dataset.tf + '")');
+            }
+          }
+        } finally {
+          if (prev) root.style.setProperty('--tl-h', prev); else root.style.removeProperty('--tl-h');
+          FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+          FM.selectLayer(null); FM.refreshAll();
+          await sleep(80);
+        }
+      }, W);
+    }
+    // CONTROL: the sweep must have met chips in BOTH panels, or it checked nothing (and on a build with no chip rung it fails here)
+    if (!chips.insp || !chips.add) throw new Error('CONTROL: the sweep drew ' + chips.insp + ' inspector and ' + chips.add + ' Add menu chip grids — the chip rung was never on screen, so no name was checked');
+  });
+
+  /* QUEUE 920 (26 Sep) — HIS BLACK BAR ON THE LIGHT HOME, AND THE FADE THAT COMES AND GOES.
+     *"sometimes the top bar instead of it being like when you're on the white mode it going white all the way to the top
+     it's got a black bar at the top and like when you go in and out of projects it's like changing constantly"*
+     iOS 26's WebKit colours the status-bar strip from the first plain background-color on the FIXED/STICKY element under
+     the top centre of the viewport, 4px down (LocalFrameView::fixedContainerEdges) — re-read only when a fixed element is
+     added or removed, and never REPLACED by a container the size of the whole viewport (WebKit 8b209a7). Every screen here
+     is one of those (#splash, #home-screen, #app mid-push/pop), so the editor's #161a21 stuck on the light Home, and a
+     project with nothing fixed at the top got iOS's blur instead. Measured in a real WKWebView (macOS 27) before the fix:
+     #161a21 on the light Home after one round trip. #fm-sb-tab is the one ordinary container WebKit now finds on every
+     screen. This holds it to the rules WebKit classifies by, at the moments that went wrong — the first frame of a push, the
+     middle of it, after it; the same for the pop; a light/dark switch — and holds that every colour change RE-INSERTS it,
+     because that removal is the only thing that makes WebKit look again.
+     The probe does what WebKit's own hit-test does and Chrome's does not: it ignores pointer-events
+     (IgnoreCSSPointerEventsProperty). It does NOT look through clipping — measured in a WKWebView, a clipped tab is never
+     read — and, like WebKit, it is not stopped by the tab's mask. Its control hides the tab and must then see #home-screen
+     as a full-screen layer — the exact thing that inherits a stale colour — so a pass cannot be vacuous. */
+  test('920 the top-edge tab: every screen offers iOS the same short fixed tab at the top centre, in that screen top colour, re-inserted on every switch', { item: '920', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const html = document.documentElement, home = document.getElementById('home-screen');
+    const C = FM.statusBar && FM.statusBar.colours;
+    if (!C) throw new Error('setup: FM.statusBar.colours is missing');
+    const rgbOf = h => { const n = parseInt(String(h).slice(1), 16); return 'rgb(' + (n >> 16) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')'; };
+    const homeOn = () => !!home && !home.classList.contains('hidden');
+    const wasHome = homeOn(), dh = html.getAttribute('data-home');
+
+    /* WebKit's pick for the TOP side, ported from Source/WebCore/page/LocalFrameView.cpp (fixedContainerEdges):
+       hit-test (width/2, 4), walk up to the first fixed/sticky box, classify it against the viewport (<90% narrow,
+       90–105% same, >105% larger), and take the first visible plain background-color on a box >10px tall and ≥90% wide. */
+    function topEdge() {
+      const W = innerWidth, H = innerHeight, vpW = W - 8, vpH = H - 8;
+      const cmp = (len, vp) => len < vp * 0.9 ? 'S' : len < vp * 1.05 ? 'M' : 'L';
+      const st = document.createElement('style');
+      st.textContent = '*,*::before,*::after{pointer-events:auto!important}';
+      document.head.appendChild(st);
+      try {
+        const hit = document.elementFromPoint(W / 2, 4);
+        let colour = null;
+        for (let el = hit; el && el.nodeType === 1; el = el.parentElement) {
+          const cs = getComputedStyle(el), r = el.getBoundingClientRect(), bg = cs.backgroundColor;
+          const visibleBg = bg && bg !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(bg);
+          if (!colour && visibleBg && r.width >= vpW * 0.9 && r.height > 10 && cs.visibility === 'visible' && +cs.opacity >= 0.1) colour = bg;
+          if (cs.position === 'fixed' || cs.position === 'sticky') {
+            const side = cmp(r.width, vpW), adj = cmp(r.height, vpH);
+            const kind = side === 'S' ? 'too narrow' : (side === 'M' && adj === 'M') ? 'full-screen' : adj === 'L' ? 'too tall' : 'bar';
+            return { id: el.id || String(el.className || el.tagName), kind: kind, colour: colour, hit: hit.id || String(hit.className || hit.tagName) };
+          }
+        }
+        return { id: null, kind: 'none', colour: colour, hit: hit ? (hit.id || String(hit.className || hit.tagName)) : null };
+      } finally { st.remove(); }
+    }
+    function mustBeTab(want, where) {
+      const e = topEdge();
+      if (e.id !== 'fm-sb-tab') {
+        throw new Error(where + ': iOS\'s top-centre sample lands on ' + (e.id ? '#' + e.id + ' (' + e.kind + ')' : 'nothing fixed') + ', hit ' + e.hit + ' — '
+          + (e.kind === 'full-screen' ? 'a full-screen layer never replaces the colour it inherited: the black bar on the light Home' : 'with nothing fixed at the top iOS draws its blur: the fade'));
+      }
+      if (e.kind !== 'bar') throw new Error(where + ': WebKit would read the tab as ' + e.kind + ' — only a short full-width bar has its colour re-read every time');
+      if (e.colour !== rgbOf(want)) throw new Error(where + ': the tab offers ' + e.colour + ', not this screen\'s top colour ' + rgbOf(want));
+    }
+    async function settle(what) {   // until the push/pop is over: Home shown/hidden as asked, no push or pop classes left
+      for (let i = 0; i < 60; i++) {
+        const b = document.body.classList;
+        if (!b.contains('fm-pushing') && !b.contains('fm-popping') && homeOn() === (what === 'home')) return;
+        await sleep(50);
+      }
+      throw new Error('setup: the ' + (what === 'home' ? 'pop back to Home' : 'push into the project') + ' never finished');
+    }
+
+    await atPhoneWidth(async function () {
+      const tab = document.getElementById('fm-sb-tab');
+      let kicks = [];
+      const mo = new MutationObserver(recs => recs.forEach(r => {
+        if (r.type === 'attributes' && /display:\s*none/.test(r.oldValue || '')) kicks.push(((r.oldValue.match(/--sb:\s*([^;]+)/) || [])[1] || '').trim());
+        if (r.type === 'childList') [].forEach.call(r.removedNodes, n => { if (n.id === 'fm-sb-tab') kicks.push((n.style.getPropertyValue('--sb') || '').trim()); });
+      }));
+      const kickedWith = (want, where) => {
+        if (!kicks.some(k => k.toLowerCase() === want.toLowerCase())) throw new Error(where + ': the tab took ' + want + ' but was never re-inserted with it (re-inserts seen: [' + kicks.join(', ') + ']) — WebKit re-reads the top only when a fixed element comes or goes, so the colour would stay stale');
+        kicks = [];
+      };
+      try {
+        for (let i = 0; i < 100 && document.getElementById('splash'); i++) await sleep(100);   // the intro (z 10000) is above everything until boot removes it
+        if (document.getElementById('splash')) throw new Error('setup: the intro never left, and it covers the top centre');
+        html.classList.remove('splash-on', 'splash-on-light');
+        html.setAttribute('data-home', 'light');
+        if (!homeOn()) { FM.home.open(); }
+        await settle('home'); await sleep(150);
+
+        // CONTROL — without the tab, the probe must see what WebKit saw before the fix: Home as a full-screen layer.
+        if (tab) tab.style.setProperty('display', 'none', 'important');
+        const bare = topEdge();
+        if (tab) tab.style.removeProperty('display');
+        if (bare.id !== 'home-screen' || bare.kind !== 'full-screen') throw new Error('control: with the tab gone the probe finds ' + bare.id + ' (' + bare.kind + '), not #home-screen as a full-screen layer — it cannot tell the fix from the bug');
+        if (!tab) throw new Error('there is no #fm-sb-tab — iOS samples #home-screen, a full-screen layer, which keeps whatever colour came before it (the editor\'s #161a21 after a project, the intro\'s #111 after launch): the black bar on the light Home');
+        mo.observe(tab, { attributes: true, attributeFilter: ['style'], attributeOldValue: true });
+        mo.observe(document.body, { childList: true });
+
+        // It paints nothing (masked to transparent — a mask is the kind of invisible WebKit still reads), and it takes no taps.
+        const tcs = getComputedStyle(tab), mask = tcs.maskImage || tcs.webkitMaskImage || '';
+        const maskCols = mask.match(/rgba?\([^)]*\)/g) || [];
+        if (!/gradient/.test(mask) || !maskCols.length || maskCols.some(c => !/,\s*0\)$/.test(c))) throw new Error('the tab is not masked to nothing (mask-image: ' + mask + ') — it would paint a 12px band of colour across the top of every screen');
+        if (tcs.pointerEvents !== 'none') throw new Error('the tab takes taps (pointer-events ' + tcs.pointerEvents + ') — the top 12px of every screen would go dead');
+        const under = document.elementFromPoint(innerWidth / 2, 4);
+        if (!under || tab.contains(under)) throw new Error('a tap at the top centre lands on the tab, not on the screen');
+        // …and the kick detector sees a kick (positive control for the re-insert checks below).
+        kicks = []; FM.statusBar.kick(); await sleep(0);
+        if (!kicks.length) throw new Error('control: FM.statusBar.kick() re-inserted nothing the observer could see');
+        kicks = [];
+
+        mustBeTab(C.homeLight, 'light Home');
+
+        FM.home.close({ push: true }); await sleep(0);
+        mustBeTab(C.editor, 'first frame of the push into a project');
+        kickedWith(C.editor, 'into a project');   // checked at the FIRST frame: the 700ms late kick cannot have fired yet, so only the immediate re-insert can pass this
+        await sleep(160);
+        mustBeTab(C.editor, 'middle of the push (the editor is a full-screen fixed layer now)');
+        await settle('project'); await sleep(100);
+        mustBeTab(C.editor, 'in the project after the push');
+
+        FM.home.open(); await sleep(0);
+        mustBeTab(C.homeLight, 'first frame of the pop back to the light Home (the editor is still on top of it)');
+        kickedWith(C.homeLight, 'back to the light Home');
+        await sleep(160);
+        mustBeTab(C.homeLight, 'middle of the pop');
+        await settle('home'); await sleep(100);
+        mustBeTab(C.homeLight, 'back on the light Home');
+
+        html.setAttribute('data-home', 'dark'); await sleep(60);
+        mustBeTab(C.homeDark, 'dark Home');
+        kickedWith(C.homeDark, 'light → dark');
+        FM.home.close({ push: true }); await settle('project'); await sleep(100);
+        mustBeTab(C.editor, 'project, entered from the dark Home');
+        FM.home.open(); await settle('home'); await sleep(100);
+        mustBeTab(C.homeDark, 'back on the dark Home');
+        html.setAttribute('data-home', 'light'); await sleep(60);
+        mustBeTab(C.homeLight, 'dark → light, on Home');
+        kickedWith(C.homeLight, 'dark → light');
+      } finally {
+        mo.disconnect();
+        html.setAttribute('data-home', dh || 'light');
+        if (wasHome && !homeOn()) FM.home.open();
+        if (!wasHome && homeOn()) FM.home.close();
+        await sleep(200);
+      }
+    }, 440);
+  });
+  /* ═══ QUEUE 957 — THE ARROW'S TIP LANDS INSIDE THE + ══════════════════════════════════════════════════════════════
+     Ezra, 26 Sep, on his phone at v17.02 (dictated): *"The hour [arrow] is inside of the plus button"*.
+     home-arrow.js aims the tip at the +'s centre + (radius + 12) px, reading the + from getBoundingClientRect() at the
+     moment it draws — and on the first open that moment falls inside the +'s OWN ENTRANCE (hm-rise-fab: held at
+     translateY(18px) scale(.86) through its animation-delay, then rising). So the arrow is aimed at a + that is 18px low
+     and 14% small, and the + then rises up into the tip. Reproduced here the way both launch roads reach it: the + is
+     stamped with the exact classes stampIntro() gives it, and Home re-renders its EMPTY Projects tab, which calls
+     arrowSoon() -> FM.homeArrow.draw() two frames later, inside the +'s delay. Measured on HEAD (tools/shot.py, a real
+     first launch in a 440x956 phone frame): see plan — the tip ends ~25px from the centre of a 29px-radius +.
+     CONTROL first: the same arrow drawn with the + at rest must land exactly where the code aims it — proves the tip is
+     read correctly, so a red below is the timing, not the measuring. */
+  test('957 the Home arrow to the + ends outside the + even when Home opens with the + still rising in (queue 957)', { item: '957', budgetMs: 60000 }, async function () {
+    if (!FM.homeArrow || !FM.home || !FM.projects) throw new Error('need FM.homeArrow, FM.home and FM.projects');
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const U = [Math.cos(-52 * Math.PI / 180), Math.sin(-52 * Math.PI / 180)];
+    const tip = () => {            // the main stroke's centre-line is the FIRST mask path; its last point is the tip E
+      const mp = document.querySelector('#hm-arrow936 mask path');
+      if (!mp) return null;
+      const n = mp.getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number);
+      return [n[n.length - 2], n[n.length - 1]];
+    };
+    const plus = () => { const p = document.getElementById('hm-new').getBoundingClientRect(); return { cx: p.left + p.width / 2, cy: p.top + p.height / 2, r: p.width / 2 }; };
+    const finiteAnims = el => el.getAnimations().filter(a => { const t = a.effect.getComputedTiming(); return isFinite(t.endTime) && a.playState !== 'finished' && a.playState !== 'idle'; });
+    const home = document.getElementById('home-screen'), fab = document.getElementById('hm-new');
+    if (!home || !fab) throw new Error('need #home-screen and #hm-new');
+    const hadHome = FM.home.isOpen(), list0 = FM.projects.list, look0 = document.documentElement.getAttribute('data-home');
+    const rows = [];
+    const oneCase = async (label) => {
+      FM.home.refresh(); await wait(700);             // the empty Projects tab, settled: no entrance on the +
+      if (!document.querySelector('#home-screen .hm-grid .hm-empty-title')) throw new Error(label + ': the Projects tab is not showing its empty state');
+      if (finiteAnims(fab).length) throw new Error(label + ': the + is still animating before the case starts');
+      // CONTROL — drawn with the + at rest, the tip is exactly radius + 12 from the centre, up and to the right
+      FM.homeArrow.draw({ still: true });
+      const P0 = plus(), E0 = tip();
+      if (!E0) throw new Error(label + ': control: no arrow was drawn at rest (is the frame tall enough for the swoop?)');
+      const d0 = Math.hypot(E0[0] - P0.cx, E0[1] - P0.cy);
+      if (Math.abs(d0 - (P0.r + 12)) > 1) throw new Error(label + ': control: at rest the tip is ' + d0.toFixed(1) + 'px from the +\'s centre, the code aims at ' + (P0.r + 12).toFixed(1) + ' — the tip is not being read right');
+      // HIS CONDITION — the + stamped exactly as stampIntro() stamps it on a first open, then Home renders the empty tab
+      home.classList.add('hm-intro');
+      fab.classList.add('hm-in-fab');
+      fab.style.animationDelay = '0.545s';           // 0.05 + 9 x 0.055: brand, search, Select, cog, 4 tabs, the empty state
+      FM.home.refresh();
+      // (under prefers-reduced-motion the entrance is `animation: none` — styles.css — so there is no rise to be caught in;
+      //  the arrow then draws at once and the checks below still hold. Measured with the setting emulated: without this
+      //  guard the control, not the code, was the red.)
+      if (!finiteAnims(fab).length && !matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error(label + ': control: the +\'s entrance did not start, so this case is not his');
+      for (let i = 0; i < 60 && (finiteAnims(fab).length || !tip()); i++) await wait(100);   // the + lands; the arrow is there
+      await wait(1500);                              // …and the draw-on (1.27s) has finished
+      const P = plus(), E = tip();
+      if (!E) throw new Error(label + ': no arrow at all once the + had landed — the empty Projects tab must still point at the +');
+      const d = Math.hypot(E[0] - P.cx, E[1] - P.cy);
+      const want = [P.cx + U[0] * (P.r + 12), P.cy + U[1] * (P.r + 12)], off = Math.hypot(E[0] - want[0], E[1] - want[1]);
+      rows.push(label + ' ' + d.toFixed(1) + '/' + (P.r + 12).toFixed(1));
+      if (d < P.r + 4) throw new Error(label + ': the arrow\'s tip is ' + d.toFixed(1) + 'px from the centre of a ' + P.r.toFixed(1) + 'px-radius + — INSIDE it (his "the arrow is inside of the plus button"). It was aimed while the + was still rising in.');
+      if (off > 2) throw new Error(label + ': the tip is ' + off.toFixed(1) + 'px from where it is aimed (radius + 12 at -52°) — ' + d.toFixed(1) + 'px from the centre, wanted ' + (P.r + 12).toFixed(1));
+      home.classList.remove('hm-intro'); fab.classList.remove('hm-in-fab'); fab.style.animationDelay = '';
+    };
+    try {
+      FM.projects.list = () => [];                   // an EMPTY Projects tab without touching the suite's own project
+      if (!hadHome) FM.home.open();
+      await wait(2200);                              // past stripIntro's 2 s timer, in case this open ran the first-open entrance itself
+      const pt = home.querySelector('.hm-tab[data-tab="projects"]');
+      if (pt && !pt.classList.contains('active')) { pt.click(); await wait(700); }
+      for (const w of [440, 380]) {
+        await atPhoneWidth(async () => {
+          for (const look of ['light', 'dark']) {
+            document.documentElement.setAttribute('data-home', look);
+            await oneCase(w + ' ' + look);
+          }
+        }, w);
+      }
+    } finally {
+      home.classList.remove('hm-intro'); fab.classList.remove('hm-in-fab'); fab.style.animationDelay = '';
+      FM.projects.list = list0;
+      if (look0 == null) document.documentElement.removeAttribute('data-home'); else document.documentElement.setAttribute('data-home', look0);
+      FM.homeArrow.clear();
+      FM.home.refresh();
+      if (!hadHome) FM.home.close();
+      await wait(100);
+    }
+  });
+
+  /* ═══ 957 — THE EMPTY PROJECT'S CLAPPER CLAPS ════════════════════════════════════════════════════════════
+     His words, 26 Sep (dictated): "get rid of the text and just make it make a little animation for like the film
+     real thing where it's like open and then it slams down with like a little effect with like some lines coming out
+     of it to show that it's like slap down and like clapped".
+     ⚠️ MEASURED ON THE DRAWING, NOT READ OFF THE CSS. The clap is paused and SEEKED through its first 1.2 s, and every
+     10 ms the bar's hinge and tip are mapped through its live CTM into the board's coordinates: open at the start,
+     hinge on the board's corner the whole way, shut flat on the board, and quick about it. A keyframe that exists but
+     turns the stick about the wrong point — the transform-origin trap on SVG children — moves the hinge and fails
+     here, where a check of the CSS text would pass.
+     ⚠️ "IT STOPS" HAS ITS CONTROL: the same query that must find nothing behind Home and with a layer on the stage
+     must first find the clap running on the empty stage, and must find it again when each of those goes away. */
+  test('957 the empty project clapper opens, slams shut on the board with lines out of the tip, and stops when it cannot be seen', { item: '957' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const d = document.getElementById('drop-hint');
+    const claps = () => d.getAnimations({ subtree: true }).filter(a => /^dh-/.test(a.animationName || ''));
+    try {
+      if (homeWasOpen) FM.home.close();
+      FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(80);
+      if (d.classList.contains('hidden') || !(d.getBoundingClientRect().width > 0)) throw new Error('the empty-canvas hint is not on screen with no layers, so there is nothing to watch');
+      const stick = d.querySelector('.dh-stick');
+      const bar = stick && stick.querySelectorAll('path')[1], board = d.querySelector('.dh-body > path');
+      const lines = [].slice.call(d.querySelectorAll('.dh-whack path'));
+      if (!stick || !bar || !board) throw new Error('the clapper is still one still drawing: no hinged stick (.dh-stick) to open and slam onto a board (.dh-body > path)');
+      if (lines.length < 3) throw new Error('the slam has ' + lines.length + ' impact lines; he asked for "some lines coming out of it"');
+
+      // reduced motion: the still v5.92 drawing, no clap — asserted on the stylesheet so it holds on every machine,
+      // not only on one with the OS setting on (the runner does not emulate it)
+      const rmRules = [];
+      [].slice.call(document.styleSheets).forEach(ss => {
+        let rules; try { rules = ss.cssRules; } catch (e) { return; }
+        [].slice.call(rules || []).forEach(r => {
+          if (!r.media || !/prefers-reduced-motion:\s*reduce/.test(r.media.mediaText)) return;
+          [].slice.call(r.cssRules).forEach(c => { if (c.selectorText && /\.dh-stick/.test(c.selectorText) && c.style.animationName === 'none') rmRules.push(c.selectorText); });
+        });
+      });
+      if (!rmRules.length) throw new Error('no prefers-reduced-motion rule stops the clap (.dh-stick { animation: none }) — someone who has asked for less motion gets a slamming icon');
+      if (reduced) {
+        if (claps().length) throw new Error('under prefers-reduced-motion the clapper still runs ' + claps().map(a => a.animationName).join(', '));
+        return;
+      }
+
+      const running = claps();
+      const clap = running.filter(a => a.animationName === 'dh-clap')[0];
+      if (!clap) throw new Error('nothing animates the stick (running on the empty stage: ' + (running.map(a => a.animationName).join(', ') || 'none') + ')');
+      const tm = clap.effect.getComputedTiming();
+      // his pick (variant A): it claps as the empty project opens and again every ~6 s while it stays empty
+      if (tm.iterations !== Infinity) throw new Error('the clap plays ' + tm.iterations + ' time(s); it is meant to come back every few seconds while the project is empty');
+      if (!(tm.duration >= 4000 && tm.duration <= 8000)) throw new Error('one clap cycle is ' + tm.duration + 'ms — meant to be a clap every ~6 s, not constant flapping nor a rare one');
+
+      // ⚠️ Points, not boxes: getBoundingClientRect on a rotated SVG path is the box of its ROTATED BOUNDING BOX
+      // (measured: the shut bar reads 8.4 units tall, not 3.6), which cannot tell shut from ajar. So the bar's own
+      // hinge and tip are mapped through its live CTM into the BOARD's coordinates, where the board's top is y = 9.
+      const inBoard = (el, x, y) => new DOMPoint(x, y).matrixTransform(el.getScreenCTM()).matrixTransform(board.getScreenCTM().inverse());
+      const S = [];
+      for (let ms = 0; ms <= 1200; ms += 10) {
+        running.forEach(a => { a.pause(); a.currentTime = tm.delay + ms; });
+        const H = inBoard(bar, 3.2, 8.9), R = inBoard(bar, 21, 6.5);          // the bar's bottom edge: hinge → tip
+        S.push({ ms: ms, deg: Math.atan2(H.y - R.y, R.x - H.x) * 180 / Math.PI,  // how far OPEN, in degrees (0 = flat)
+                 hinge: Math.hypot(H.x - 3.2, H.y - 8.9), tipY: R.y,
+                 ink: Math.max.apply(null, lines.map(p => +getComputedStyle(p).opacity)),
+                 out: Math.min.apply(null, lines.map(p => { const b = p.getBBox(); return inBoard(p, b.x, b.y).x - 21; })) });
+      }
+      running.forEach(a => a.play());
+      const s0 = S[0];
+      // 1. it starts OPEN — "it's like open and then it slams down"
+      if (!(s0.deg > 20)) throw new Error('at the start the stick is ' + s0.deg.toFixed(1) + '° open — it does not start open');
+      if (s0.ink > 0.05) throw new Error('the impact lines are showing before the slam (opacity ' + s0.ink + ')');
+      // 2. the hinge stays on the board's top-left corner through the whole clap — a wrong rotation centre moves it
+      const off = S.filter(s => s.hinge > 0.3)[0];
+      if (off) throw new Error('at ' + off.ms + 'ms the stick\'s hinge has moved ' + off.hinge.toFixed(2) + ' units off the board\'s corner — it is swinging about the wrong point');
+      // 3. it SHUTS: flat on the board, its tip down on the board's top edge
+      const hit = S.filter(s => s.deg < 1)[0];
+      if (!hit) throw new Error('the stick never shuts: it is never less than ' + Math.min.apply(null, S.map(s => s.deg)).toFixed(1) + '° open in the first 1.2 s');
+      if (Math.abs(hit.tipY - 8.9) > 0.4) throw new Error('shut, the stick\'s tip is at y=' + hit.tipY.toFixed(2) + ' — not down on the board\'s top edge');
+      // 4. it SLAMS: from mostly open to shut in a blink, not a gentle close
+      const lastOpen = S.filter(s => s.ms < hit.ms && s.deg > 0.8 * s0.deg).pop();
+      if (!lastOpen) throw new Error('the stick was never mostly open before it shut');
+      if (hit.ms - lastOpen.ms > 150) throw new Error('the stick takes ' + (hit.ms - lastOpen.ms) + 'ms from open to shut — that is a close, not a slam');
+      // 5. the lines burst AT the impact, out past the tip, and are gone again
+      const burst = S.filter(s => s.ms >= hit.ms - 10 && s.ms <= hit.ms + 80 && s.ink > 0.5)[0];
+      if (!burst) throw new Error('no impact lines within 80ms of the slam at ' + hit.ms + 'ms');
+      if (burst.out < -0.5) throw new Error('the impact lines start ' + (-burst.out).toFixed(1) + ' units inside the board — they are meant to fly out of the tip');
+      const late = S.filter(s => s.ms >= hit.ms + 400 && s.ink > 0.05)[0];
+      if (late) throw new Error('the impact lines still show at ' + late.ms + 'ms, 400ms after the slam — a burst, not a decoration');
+
+      // 6. nothing animates where it cannot be seen — and it comes back when it can (the "running" above is the control)
+      FM.home.open(); await sleep(150);
+      const behindHome = claps().length;
+      FM.home.close(); await sleep(150);
+      if (behindHome) throw new Error('the clapper keeps animating behind Home (' + behindHome + ' animations), repainting under a screen that covers it');
+      if (!claps().length) throw new Error('back from Home the clap did not start again');
+      FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: '957', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+      FM.refreshAll(); await sleep(80);
+      if (!d.classList.contains('hidden')) throw new Error('with a layer on the stage the empty-canvas hint is still shown');
+      if (claps().length) throw new Error('with a layer on the stage the hidden clapper still animates (' + claps().length + ')');
+      FM.scene.layers.length = 0; FM.refreshAll(); await sleep(80);
+      if (!claps().length) throw new Error('with the stage empty again the clap did not come back');
+    } finally {
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+  /* ═══ QUEUE 958 — THE ADD MENU DRAGS RIGHT UP TO THE TOP, WHEREVER THE TIMELINE IS ══════════════════════════════════
+     Ezra, 26 Sep: *"there's an issue with the draggable add menu on PC that goes up and down separate to the timeline layer.
+     And basically, the issue is that it doesn't go as far up as it should be able to go up. unless you drag up the timeline.
+     So it's like kind of still bound to how high the timeline is. You should be able to drag it like up to like the top of
+     the screen, honestly. So it covers up the whole side of the screen. But you know, it, no matter where the timeline is."*
+     The ceiling was max(0.62·vh, the timeline's own 0.72·vh ceiling) — #512 tied it to the timeline's clamp. Measured with
+     this same drag before the fix: 576 of an 800px window (top at y=224) at 900 and 1280 wide, 778 of 1080 (y=302) at 1920,
+     identically with the timeline at its min, default and max; in the suite's 900x760 frame it stops at y=213.
+     Driven through the REAL handlers with PointerEvents dispatched on both handles (the way the #244 tests drive them), with
+     the timeline at its MIN and at its MAX, at three PC widths. "The top" = the handle (which hangs 9px above the panel's
+     top edge) at y=0: any higher and it is off screen and the menu could never be pulled back down. Every #244 behaviour
+     that this touches is re-asserted: the timeline does not move, and the menu's bottom stays on the band's line. */
+  test('the add menu drags right up to the top of the window, wherever the timeline is (queue 958)', { item: '958', budgetMs: 60000 }, async function () {
+    const frame = () => new Promise(r => setTimeout(r, 60));
+    const root = document.documentElement, body = document.body;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const tl0 = root.style.getPropertyValue('--tl-h');
+    let ls0 = null; try { ls0 = localStorage.getItem('fm_tl_h'); } catch (e) {}
+    const savedSel = FM.scene.selectedId;
+    const run = async (w) => {
+      const am = document.getElementById('am-resizer'), tlr = document.getElementById('tl-resizer');
+      const panel = document.getElementById('inspector-panel'), tlp = document.getElementById('timeline-panel');
+      if (!am || !tlr || !panel || !tlp) throw new Error('need #am-resizer, #tl-resizer, #inspector-panel and #timeline-panel');
+      const drag = async (el, toY) => {
+        const r = el.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+        const pe = (t, y) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', button: 0, buttons: t === 'pointerup' ? 0 : 1 }));
+        pe('pointerdown', y0);
+        for (let i = 1; i <= 8; i++) { pe('pointermove', Math.round(y0 + (toY - y0) * i / 8)); await frame(); }
+        pe('pointerup', toY); await frame();
+      };
+      for (const at of ['min', 'max']) {
+        if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+        root.style.removeProperty('--tl-h'); await frame();
+        FM.selectLayer(null); if (FM.inspector) FM.inspector.refresh(); await frame();
+        await drag(tlr, at === 'max' ? 0 : window.innerHeight - 2);
+        const tlH = FM._bandH(), wantTl = FM.clampTimelineH(at === 'max' ? 999999 : 0);
+        // CONTROL: the timeline drag engaged and reached the end asked for, so "min" and "max" really are two cases
+        if (Math.abs(tlH - wantTl) > 2) throw new Error('control: at ' + w + 'px wide the timeline drag did not reach its ' + at + ' (' + tlH + 'px, wanted ' + wantTl + ') — the gesture never engaged, so nothing below would mean anything');
+        const tlBox = tlp.getBoundingClientRect();
+        await drag(am, 0);
+        const p = panel.getBoundingClientRect(), h = am.getBoundingClientRect(), t2 = tlp.getBoundingClientRect();
+        // CONTROL: the add-menu drag engaged (it left the grid and grew)
+        if (!body.classList.contains('am-floating')) throw new Error('control: at ' + w + 'px wide (timeline at its ' + at + ') the add-menu drag never raised the menu');
+        if (h.top < -0.5) throw new Error('at ' + w + 'px wide the add menu\'s handle ended at y=' + Math.round(h.top) + ' — off the top of the window, so the menu could never be pulled back down');
+        if (h.top > 3) throw new Error('at ' + w + 'x' + window.innerHeight + ' with the timeline at its ' + at + ' (' + tlH + 'px) the add menu stops with its top at y=' + Math.round(p.top) + ' (handle at y=' + Math.round(h.top) + ') — he wants it "up to like the top of the screen … no matter where the timeline is"');
+        // #244 kept: it floats OVER the canvas, so the timeline has not moved, and its bottom is still the band's line
+        if (Math.abs(t2.top - tlBox.top) > 1 || Math.abs(t2.height - tlBox.height) > 1) throw new Error('raising the add menu moved the timeline (' + Math.round(tlBox.top) + ' → ' + Math.round(t2.top) + ') — it must go over the canvas, not push');
+        if (Math.abs(p.bottom - t2.bottom) > 2) throw new Error('the raised add menu\'s bottom left the band: ' + Math.round(p.bottom) + ' against the timeline\'s ' + Math.round(t2.bottom));
+      }
+    };
+    try {
+      if (hadHome) FM.home.close();
+      await frame();
+      if (matchMedia('(min-width: 701px)').matches) await run(window.innerWidth);
+      else await atWideWidth(() => run(900), 900);   // the 380 pass: the gesture is PC-only, so force the runner's PC width
+      await atWideWidth(() => run(1280), 1280);
+      await atWideWidth(() => run(1920), 1920);
+    } finally {
+      if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+      body.classList.remove('am-floating', 'am-resizing', 'tl-resizing');
+      if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+      try { if (ls0 == null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', ls0); } catch (e) {}   // the drags persisted a height
+      FM.selectLayer(savedSel || null); if (FM.inspector) FM.inspector.refresh();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await frame();
+    }
+  });
+  test('959 on PC the layer-action group has no background and no outline — two corner lines, top-right and bottom-left, solid at the corner and fading out', { item: '959', budgetMs: 30000 }, async function () {
+    /* Ezra, 26 Sep, with a PC screenshot and the corners drawn on in red (tools/design/2026-09-26-layer-actions-corners.webp):
+       "This little menu with the three buttons in it that pops up when you select a layer, … instead of it having like a
+        background and a line all the way around it, it should have two like corner lines on the bottom left and then the
+        bottom right. I mean, the top right to the bottom left, top right. that like fade out so it's like a solid line in the
+        corner but then it slowly fades out"
+       One block per clause: no background; no line all the way round; a corner at TOP-RIGHT and one at BOTTOM-LEFT (he
+       corrected himself, so bottom-right and top-left stay dark); each solid at its corner and fading along both arms. Then
+       the buttons must still take the click, and the corners must follow the group when it grows (two selected adds group +
+       mask-group; #425 may move copy in).
+       Fails on HEAD at the background: the #516 look is rgba(255,255,255,.045) with a 1px rgba(255,255,255,.13) outline,
+       and no ::before / ::after at all. The colour is NOT pinned (his pick among white / accent is the CSS's business);
+       only "visible" is (alpha >= .3). Width is asserted >= 1, not 1.5: at DPR 1 Chrome snaps 1.5px to 1px (measured). */
+    const aOf = c => { if (String(c).trim() === 'transparent') return 0; const n = (String(c).match(/[\d.]+/g) || []).map(Number); return n.length > 3 ? n[3] : (n.length === 3 ? 1 : 0); };
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'k959a', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#c05030', start: 0, duration: 3 });
+      const B = FM.makeLayer('shape', { name: 'k959b', shape: 'ellipse', x: 700, y: 900, shapeW: 200, shapeH: 200, fill: '#3070c0', start: 0, duration: 3 });
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      await atWideWidth(async function () {
+        FM.selectLayer(A.id); FM.refreshAll(); await sleep(250);
+        const sel = document.getElementById('t-sel'), del = document.getElementById('btn-del-layer');
+        if (!sel || !del) throw new Error('setup: the PC layer-action group is not built (t-sel ' + !!sel + ', delete ' + !!del + ') at ' + innerWidth + 'px');
+        const r = sel.getBoundingClientRect();
+        // CONTROL — every "has no …" below passes against a group that is not on screen
+        if (!sel.classList.contains('has-sel') || r.width < 60 || r.height < 24) throw new Error('control: with a layer selected the group is ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' (has-sel ' + sel.classList.contains('has-sel') + ') — not on screen, so nothing below would mean anything');
+        const cs = getComputedStyle(sel);
+        // clause 2a — no background
+        if (aOf(cs.backgroundColor) > 0.02 || cs.backgroundImage !== 'none') throw new Error('the group still has a background (' + cs.backgroundColor + (cs.backgroundImage !== 'none' ? ' / ' + cs.backgroundImage.slice(0, 60) : '') + ') — he asked for no background (queue 959)');
+        // clause 2b — no line all the way around (as a border, an outline or a box-shadow)
+        ['Top', 'Right', 'Bottom', 'Left'].forEach(function (s) {
+          if ((parseFloat(cs['border' + s + 'Width']) || 0) > 0 && aOf(cs['border' + s + 'Color']) > 0.02) throw new Error('the group still has its outline (' + s.toLowerCase() + ' ' + cs['border' + s + 'Width'] + ' ' + cs['border' + s + 'Color'] + ') — "instead of … a line all the way around it" (queue 959)');
+        });
+        if (cs.outlineStyle !== 'none' && (parseFloat(cs.outlineWidth) || 0) > 0 && aOf(cs.outlineColor) > 0.02) throw new Error('the outline came back as a CSS outline (' + cs.outlineWidth + ' ' + cs.outlineColor + ')');
+        if (cs.boxShadow && cs.boxShadow !== 'none') throw new Error('the outline came back as a box-shadow (' + cs.boxShadow + ')');
+        // clauses 3 + 4 — the two corners
+        const corner = function (pseudo, lit, dark, at, pos) {
+          const p = getComputedStyle(sel, pseudo);
+          if (p.content === 'none' || p.display === 'none') throw new Error(pseudo + ' is not drawn — there is no ' + at + ' corner line (queue 959)');
+          if (p.position !== 'absolute' || p.pointerEvents !== 'none') throw new Error('the ' + at + ' corner is ' + p.position + ' / pointer-events ' + p.pointerEvents + ' — it must be absolute and click-through, or it moves the buttons or eats their clicks');
+          lit.forEach(function (s) { if (!((parseFloat(p['border' + s + 'Width']) || 0) >= 1) || aOf(p['border' + s + 'Color']) < 0.3) throw new Error('the ' + at + ' corner has no visible ' + s.toLowerCase() + ' arm (' + p['border' + s + 'Width'] + ' ' + p['border' + s + 'Color'] + ')'); });
+          dark.forEach(function (s) { if ((parseFloat(p['border' + s + 'Width']) || 0) > 0 && aOf(p['border' + s + 'Color']) > 0.02) throw new Error('the ' + at + ' corner also draws its ' + s.toLowerCase() + ' edge (' + p['border' + s + 'Color'] + ') — that is the line all the way round again'); });
+          // the size of the whole group, so it sits exactly at the group's corner and follows it when the group grows
+          if (Math.abs(parseFloat(p.width) - r.width) > 1.5 || Math.abs(parseFloat(p.height) - r.height) > 1.5) throw new Error('the ' + at + ' corner is ' + p.width + ' x ' + p.height + ' but the group is ' + r.width.toFixed(1) + ' x ' + r.height.toFixed(1) + ' — it is not sitting on the group\'s corner');
+          if (!((parseFloat(p['border' + (at === 'top-right' ? 'TopRight' : 'BottomLeft') + 'Radius']) || 0) >= 6)) throw new Error('the ' + at + ' corner is square — it must keep the group\'s rounding');
+          // clause 4 — solid at the corner, fading out: a radial mask centred on this corner, opaque first, transparent last
+          const m = String(p.maskImage && p.maskImage !== 'none' ? p.maskImage : (p.webkitMaskImage || 'none'));
+          if (!/radial-gradient\(/.test(m) || !pos.test(m)) throw new Error('the ' + at + ' corner does not fade from its corner (mask: ' + m.slice(0, 120) + ') — "a solid line in the corner but then it slowly fades out"');
+          const cols = m.match(/rgba?\([^)]*\)|transparent/g) || [];
+          if (cols.length < 2 || aOf(cols[0]) < 0.99 || aOf(cols[cols.length - 1]) > 0.01) throw new Error('the ' + at + ' fade is not solid-then-gone (' + m.slice(0, 120) + ')');
+        };
+        corner('::before', ['Top', 'Right'], ['Bottom', 'Left'], 'top-right', /at (100%|right) (0(px|%)?|top)[ ,)]/);
+        corner('::after', ['Bottom', 'Left'], ['Top', 'Right'], 'bottom-left', /at (0(px|%)?|left) (100%|bottom)[ ,)]/);
+        // the buttons still take the click
+        const dr = del.getBoundingClientRect(), hit = document.elementFromPoint(dr.left + dr.width / 2, dr.top + dr.height / 2);
+        if (!hit || !(hit === del || del.contains(hit))) throw new Error('the bin is covered by "' + (hit && (hit.id || hit.className)) + '" — the corners must not take its click');
+        // the corners follow the group when it grows
+        FM.toggleSelect(B.id); FM.refreshAll(); await sleep(250);
+        const r2 = sel.getBoundingClientRect();
+        if (!(r2.width > r.width + 20)) throw new Error('control: with two layers selected the group did not grow (' + Math.round(r.width) + ' → ' + Math.round(r2.width) + 'px) — the check below would measure nothing');
+        const w2 = parseFloat(getComputedStyle(sel, '::before').width), w3 = parseFloat(getComputedStyle(sel, '::after').width);
+        if (Math.abs(w2 - r2.width) > 1.5 || Math.abs(w3 - r2.width) > 1.5) throw new Error('the corners did not follow the group when it grew to ' + Math.round(r2.width) + 'px (top-right ' + w2 + ', bottom-left ' + w3 + ')');
+        // …and leave with the selection
+        FM.selectLayer(null); FM.refreshAll(); await sleep(200);
+        if (getComputedStyle(sel, '::before').content !== 'none' || getComputedStyle(sel, '::after').content !== 'none') throw new Error('with nothing selected the corner lines are still drawn — an empty frame left hanging in the row');
+      }, 1280);
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  });
+  /* ---- the Car, rebuilt from a published pictogram (queue 961) ---------------------------------------------------
+     Ezra, 26 Sep: "The car shape needs to be improved." Rebuilt the way the people finally landed (#929): traced from a
+     real published pictogram instead of drawn from landmarks — Pictogrammers Material Design Icons `car-side`,
+     Apache-2.0 — through the plan's converter into this format. Three tests: the new proof (the wheels read at the
+     menu's 34px), and the two older car tests retuned to the new construction, where the tyre is PART of the
+     silhouette and the hub is the hole, exactly as every published car pictogram draws it. ---- */
+
+  // Shared by the three: the car's two wheel hubs, found in the DATA — the round holes in the lower half.
+  function carHubs(car) {
+    const bbox = sub => sub.reduce((a, p) => ({
+      x0: Math.min(a.x0, p[0]), x1: Math.max(a.x1, p[0]), y0: Math.min(a.y0, p[1]), y1: Math.max(a.y1, p[1]),
+    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
+    const area = sub => {   // signed — the sign IS the winding, which decides whether a hole fills in
+      let s = 0;
+      for (let i = 0; i < sub.length; i++) { const a = sub[i], b = sub[(i + 1) % sub.length]; s += a[0] * b[1] - b[0] * a[1]; }
+      return s / 2;
+    };
+    const body = bbox(car[0]), wind = Math.sign(area(car[0])), midY = (body.y0 + body.y1) / 2;
+    const hubs = car.slice(1).filter(sub => Math.sign(area(sub)) !== wind).map(bbox)
+      .filter(b => Math.abs((b.x1 - b.x0) - (b.y1 - b.y0)) < 0.01 && (b.y0 + b.y1) / 2 > midY)
+      .map(b => ({ cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, r: (b.x1 - b.x0) / 2 }))
+      .sort((a, b) => a.cx - b.cx);
+    return { body: body, hubs: hubs, holes: car.slice(1).filter(sub => Math.sign(area(sub)) !== wind).length };
+  }
+
+  test('961 — the Car reads as a car at the Shape menu\'s 34px: open hubs, wheels below the body', { item: '961' }, function () {
+    /* The v17.02 car's own comment named its weak point: the tyre-to-arch gap is 0.023 of the box, 0.59px at the
+       menu's icon, so the tyre ring runs into the body and the wheels read as small dots. Measured for the plan,
+       FM.renderScene at 1x into the icon's own 25.5px box: the v17.02 hubs are 2.19px across, 4.1px² of open area
+       each; the MDI car's are 3.34px, 7.9px². 6px² sits between them. Measured at 1x on purpose — at arm's length a
+       CSS pixel is about what an eye resolves, whatever the screen's DPR. */
+    const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.car;
+    if (!car || !FM.renderScene || !FM.makeLayer) throw new Error('seams missing: SHAPE_POLYS.car / renderScene / makeLayer');
+    // The menu icon's box, as js/addmenu.js icoPoly builds it: the longer side of SHAPE_ASPECT fills 18 of the
+    // 24-unit viewBox, and the tile shows that viewBox at 34px.
+    const asp = (FM.SHAPE_ASPECT && FM.SHAPE_ASPECT.car) || [1, 1];
+    const S = 34, k = (18 / Math.max(asp[0], asp[1])) * S / 24, bw = asp[0] * k, bh = asp[1] * k;
+    const ox = (S - bw) / 2, oy = (S - bh) / 2;
+    const c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
+    const L = FM.makeLayer('shape', { shape: 'car', name: 'Car', x: S / 2, y: S / 2, shapeW: bw, shapeH: bh, fill: '#ffffff', start: 0, duration: 5 });
+    FM.renderScene(x, scene([L], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
+    const d = x.getImageData(0, 0, S, S).data, ink = (px, py) => d[(py * S + px) * 4] / 255;
+    let total = 0;
+    for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) total += ink(px, py);
+    if (total < 60) throw new Error('the car drew only ' + total.toFixed(1) + 'px² of ink at 34px — nothing to measure');
+    const H = carHubs(car);
+    if (H.hubs.length !== 2) throw new Error('expected two round wheel hubs (holes in the lower half of the car), found ' + H.hubs.length);
+    const bottom = col => { let b = -1; for (let py = 0; py < S; py++) if (ink(col, py) >= 0.5) b = py; return b + 1; };
+    const mid = Math.floor(ox + ((H.hubs[0].cx + H.hubs[1].cx) / 2) * bw);
+    H.hubs.forEach((h, j) => {
+      const cx = ox + h.cx * bw, cy = oy + h.cy * bh, r = h.r * bw, which = j ? 'front' : 'rear';
+      let open = 0, ring = 0, ringN = 0;
+      for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+        const dist = Math.hypot(px + 0.5 - cx, py + 0.5 - cy);
+        if (dist <= r + 0.75) open += 1 - ink(px, py);
+        else if (dist <= r + 1.4) { ring += ink(px, py); ringN++; }
+      }
+      // CONTROL: the hole must be IN ink. A hub located off the car would read as wide open and pass for nothing.
+      if (!ringN || ring / ringN < 0.5) throw new Error('the ' + which + ' hub is not surrounded by tyre at 34px (ring ink ' + (ringN ? (ring / ringN).toFixed(2) : 'none') + ') — the measurement is not looking at a wheel');
+      if (open < 6) throw new Error('the ' + which + ' wheel\'s hub is ' + open.toFixed(1) + 'px² of open space at the menu\'s 34px (' + (2 * r).toFixed(2) + 'px across) — it reads as a dot, not a wheel; 6px² is the line (v17.02 measured 4.1, the MDI car 7.9)');
+      const hang = bottom(Math.floor(cx)) - bottom(mid);
+      if (hang < 2) throw new Error('the ' + which + ' wheel hangs ' + hang + 'px below the body at 34px — the wheels have to stand proud of the underside to read (v17.02: 2, the MDI car: 4)');
+    });
+  });
+
+  /* ═══ QUEUE 962 — THE EYE, TRACED FROM A REAL PICTOGRAM, AND THE SHAPE MENU AT ITS REAL PROPORTIONS ════════════════════════
+     His words, 26 Sep: *"the eye shape needs to be heavily improved."* The old eye was a thin almond ring around a pupil drawn as a
+     circle in the UNIT box — and the box it spawns in is 1.5 x 0.9 (SHAPE_ASPECT.eye), so the pupil rendered as a 1.66:1 ellipse and
+     the white beside it was 3.2x wider than the white above it (512x307: pupil 174x105, white 94px beside vs 29px above). Now it is
+     Bootstrap Icons' "eye-fill" (MIT) with a catchlight, drawn so that its circles are circles in the SPAWNED box.
+     The menu half: the Shape tab's icons were built when addmenu.js loads, before app.js defines FM.SHAPE_ASPECT, so every shape icon
+     was drawn in a square (queue 159 never reached the real menu). The new eye, drawn for 5:3, would have come out TALL there. */
+  function eyeParts(w, h) {
+    const f = figMask('eye', w, h), m = f.m, N = w * h, lab = new Int32Array(N), st = new Int32Array(N), boxes = [];
+    for (let i = 0; i < N; i++) {
+      if (!m[i] || lab[i]) continue;
+      const id = boxes.length + 1, b = { x0: w, y0: h, x1: -1, y1: -1 };
+      let sp = 0; st[sp++] = i; lab[i] = id;
+      while (sp) {
+        const p = st[--sp], x = p % w, y = (p - x) / w;
+        if (x < b.x0) b.x0 = x; if (x > b.x1) b.x1 = x; if (y < b.y0) b.y0 = y; if (y > b.y1) b.y1 = y;
+        [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1].forEach(function (q) {
+          if (q >= 0 && m[q] && !lab[q]) { lab[q] = id; st[sp++] = q; }
+        });
+      }
+      boxes.push(b);
+    }
+    // the pupil is the SMALLEST ink part whose box holds the centre of the shape's box
+    const holding = boxes.filter(function (b) { return b.x0 <= w / 2 && b.x1 >= w / 2 && b.y0 <= h / 2 && b.y1 >= h / 2; })
+      .sort(function (a, b) { return (a.x1 - a.x0) * (a.y1 - a.y0) - (b.x1 - b.x0) * (b.y1 - b.y0); });
+    const P = holding.length > 1 ? holding[0] : null, topo = figTopo(f);
+    if (!P) return { topo: topo, P: null };
+    const cx = Math.round((P.x0 + P.x1) / 2), cy = Math.round((P.y0 + P.y1) / 2);
+    let y = P.y0 - 1; while (y >= 0 && !m[y * w + cx]) y--;
+    let x = P.x1 + 1; while (x < w && !m[cy * w + x]) x++;
+    return { topo: topo, P: P, pw: P.x1 - P.x0 + 1, ph: P.y1 - P.y0 + 1, gapTop: P.y0 - 1 - y, gapSide: x - P.x1 - 1 };
+  }
+
+  test('962 the eye has a round pupil in an even white ring, with a catchlight — in the box it spawns and at the menu-icon size', { item: '962' }, function () {
+    const box = figSpawnBox('eye');
+    /* The icon: the Shape tab's svg is 34px and icoPoly draws the eye in 18 of its 24 units at SHAPE_ASPECT, so at the phone's 2x
+       the eye's box is 51x31 device pixels (measured 26 Sep: svg 34x34 at 380 and 440 wide). Tolerances from measurement:
+       the new eye reads 1.008:1 and 1.00x at the spawn box and exactly 1:1 / 1.0x at 51x31; the old one 1.657:1 / 3.24x and 1.55:1 / 3.0x. */
+    [[box.w, box.h, 'a ' + box.w + 'x' + box.h + ' render of the ' + box.raw + ' box it spawns in', 0.05, 1.3], [51, 31, 'the 51x31 menu icon', 0.2, 1.6]].forEach(function (c) {
+      const s = eyeParts(c[0], c[1]), where = c[2];
+      // POSITIVE CONTROL: a pupil standing clear of the lids inside an enclosed white. Without it the ratios below could pass on a
+      // drawing that has no pupil at all.
+      if (s.topo.components < 2 || s.topo.holes < 1 || !s.P) throw new Error('at ' + where + ' the eye renders ' + s.topo.components + ' ink part(s) and ' + s.topo.holes + ' enclosed white(s) — the pupil does not stand clear of the lids');
+      const asp = s.pw / s.ph;
+      if (Math.abs(asp - 1) > c[3]) throw new Error('at ' + where + ' the pupil renders ' + s.pw + 'x' + s.ph + ' (' + asp.toFixed(2) + ':1) — an ellipse, so it was drawn round in the unit box and stretched by SHAPE_ASPECT.eye');
+      if (!(s.gapTop > 0) || s.gapSide / s.gapTop > c[4]) throw new Error('at ' + where + ' the white beside the pupil is ' + s.gapSide + 'px and above it ' + s.gapTop + 'px (' + (s.gapSide / Math.max(1, s.gapTop)).toFixed(2) + 'x) — the iris is not an even ring');
+      // B: the catchlight is a second enclosed white, and it survives at the icon size (measured: 2 holes at 51x31)
+      if (s.topo.holes < 2) throw new Error('at ' + where + ' the eye has ' + s.topo.holes + ' enclosed white(s) — the catchlight in the pupil is missing or has closed up');
+    });
+  });
+
+  test('962 every Shape-menu icon is drawn at the proportions its shape spawns at — the #159 aspect reaches the real menu', { item: '962' }, async function () {
+    /* Measured 26 Sep: the real Eye tile's path began "M3.99 12.00 C3.99 12.00 9.33 5.79 12.00 5.79" — mapped into an 18x18 SQUARE,
+       because addmenu.js built the Shape tab's icons when it loaded, before app.js had defined FM.SHAPE_ASPECT. The labels below are
+       the library shapes whose SHAPE_ASPECT is not square; Gear is square on purpose — THE CONTROL, which agrees before and after,
+       so a disagreement elsewhere is the menu and not this measurement. */
+    const KIND = { 'Banner': 'banner', 'Silk ribbon': 'ribbon', 'Cloud': 'cloud', 'Check': 'check', 'Thumbs up': 'thumbsup',
+      'Pointing hand': 'pointhand', 'Envelope': 'envelope', 'Key': 'key', 'Crown': 'crown', 'Eye': 'eye', 'Map pin': 'pin',
+      'Lock': 'lock', 'Music note': 'note', 'Gear': 'gear' };
+    const inkAsp = function (draw, w, h) {
+      const c = offscreen(w, h), g = c.getContext('2d'); draw(g);
+      const d = g.getImageData(0, 0, w, h).data; let x0 = w, x1 = -1, y0 = h, y1 = -1;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 127) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      return x1 < 0 ? NaN : (x1 - x0 + 1) / (y1 - y0 + 1);
+    };
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    const bad = [], seen = [];
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(80);
+      const tb = host.querySelector('.addmenu-tab[data-key="shape"]');
+      if (!tb) throw new Error('the Add menu has no Shape tab to read');
+      tb.click(); await sleep(80);
+      [].slice.call(host.querySelectorAll('button')).forEach(function (b) {
+        const kind = KIND[b.title]; if (!kind) return;
+        const path = b.querySelector('.addmenu-ic svg path'); if (!path) return;
+        // 40x: a thin icon (Banner is 41px tall at 10x) quantises by up to 5% at 10x; at 40x it is under 1.5%
+        const icon = inkAsp(function (g) { g.scale(40, 40); g.fill(new Path2D(path.getAttribute('d'))); }, 960, 960);
+        const box = figSpawnBox(kind);
+        const real = inkAsp(function (g) { FM.traceShapePath(g, { shape: kind }, 0, 0, box.w, box.h); g.fillStyle = '#000'; g.fill(); }, box.w, box.h);
+        seen.push(b.title);
+        // 3%: measured 26 Sep, at their aspect every icon agrees within 0.6%; the nearest wrong one (Thumbs up, drawn square) is 7.9% off
+        if (!(Math.abs(icon / real - 1) <= 0.03)) bad.push(b.title + ' (icon ' + icon.toFixed(2) + ':1, spawns ' + real.toFixed(2) + ':1)');
+      });
+    } finally { host.remove(); }
+    if (seen.length < 12 || seen.indexOf('Eye') < 0 || seen.indexOf('Gear') < 0) throw new Error('only found ' + seen.length + ' of the shape tiles (' + seen.join(', ') + ') — the labels moved, so this is not measuring the menu');
+    if (bad.some(function (s) { return /^Gear /.test(s); })) throw new Error('the CONTROL disagrees — Gear is square both ways, so the measurement is broken, not the menu: ' + bad.join(' | '));
+    if (bad.length) throw new Error('these Shape-menu icons are not drawn at the proportions the shape spawns at: ' + bad.join(' | '));
+  });
+  /* ---------------- queue 960: Import media and Import audio match ----------------
+   * His words: "The import media button and the import audio button both have some discrepancies. Like they both look
+   * different. I think you should make them both have like the shiny look that the import media button has. But also
+   * rename the import media button to import media because right now it's just called import just so then it feels a
+   * bit more thought out and less slack"
+   * MEASURED FIRST (v17.03, 1280x900 and 380x820, computed styles of both tiles): the plates were already the same —
+   * one --am-tint (150, 160, 176), one class list, the same background, border, radius and inset shadow. The only
+   * difference in the tile itself was the ICON PAINT: Media's arrow strokes url(#fm-ic-imp), a white → 55%-white
+   * gradient (#270); Import audio's strokes currentColor, i.e. the grey tint. #270 left it grey on purpose and said so.
+   * The SAME checker runs on the Media tile first — the look he pointed at is the positive control: if paint() could
+   * not see a gradient, the Media tile would fail it too and this test could never pass vacuously. */
+  test('960 Import media and Import audio wear the same white-gradient arrow, and the Media tile says Import media', { item: '960' }, async function () {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:420px;height:600px';
+    document.body.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      const openTab = async function (name) {
+        const tab = [...host.querySelectorAll('.addmenu-tab')].find(e => e.textContent.trim() === name);
+        if (!tab) throw new Error('no ' + name + ' tab');
+        tab.click(); await sleep(180);
+      };
+      const labelOf = c => ((c.querySelector('.addmenu-lbl') || {}).textContent || '').trim();
+      const cardNamed = label => [...host.querySelectorAll('.addmenu-card')].find(c => labelOf(c) === label);
+      // What a tile's icon is painted with. Every stroke must name ONE gradient, and it must live inside this card.
+      function paint(card, what) {
+        const paths = [...card.querySelectorAll('.addmenu-ic svg path')];
+        if (!paths.length) throw new Error(what + ': the icon has no strokes to check');
+        const ids = new Set();
+        paths.forEach(p => {
+          const st = p.getAttribute('stroke') || '';
+          const m = /^url\(#([^)]+)\)$/.exec(st);
+          if (!m) throw new Error(what + ': a stroke is "' + (st || 'currentColor, inherited from the svg') + '" — it takes the card\'s grey tint, not the white gradient');
+          ids.add(m[1]);
+        });
+        if (ids.size !== 1) throw new Error(what + ': the arrow and the tray use ' + ids.size + ' different paints');
+        const id = [...ids][0];
+        const grad = [...card.querySelectorAll('linearGradient')].find(g => g.id === id);
+        if (!grad) throw new Error(what + ': the icon points at #' + id + ', which is not inside this card — it would borrow (or lose) another icon\'s paint');
+        const stops = [...grad.querySelectorAll('stop')].map(s => (s.getAttribute('stop-color') || '').toLowerCase() + '@' + (s.getAttribute('stop-opacity') || '1')).join(' > ');
+        return { id, stops, tint: card.style.getPropertyValue('--am-tint').trim(), cls: card.className };
+      }
+
+      await openTab('Media');
+      if (cardNamed('Import')) throw new Error('the Media tile is still called just "Import" — he asked for "Import media"');
+      const media = cardNamed('Import media');
+      if (!media) throw new Error('no "Import media" tile on the Media tab (tiles: ' + [...host.querySelectorAll('.addmenu-card')].map(labelOf).join(', ') + ')');
+      if (media.title !== 'Import media') throw new Error('the Import media tile\'s tooltip says "' + media.title + '"');
+      const m = paint(media, 'Import media');     // the positive control: the look he pointed at passes
+      if (m.stops !== '#ffffff@1 > #ffffff@.55') throw new Error('the Import media gradient is ' + m.stops + ' — it is the reference look and was not meant to change');
+
+      await openTab('Audio');
+      const audio = cardNamed('Import audio');
+      if (!audio) throw new Error('no "Import audio" tile on the Audio tab');
+      const a = paint(audio, 'Import audio');
+
+      if (a.stops !== m.stops) throw new Error('the two arrows are painted differently — Import media ' + m.stops + ', Import audio ' + a.stops);
+      if (a.id === m.id) throw new Error('both icons use the id #' + a.id + ' — a duplicate id silently steals the paint from whichever element asks second');
+      if (a.tint !== m.tint) throw new Error('the plates differ: Import media --am-tint ' + m.tint + ', Import audio ' + a.tint);
+      if (a.cls !== m.cls) throw new Error('the tiles carry different classes: "' + m.cls + '" vs "' + a.cls + '"');
+
+      // the tint map is keyed by the visible label, so the rename has to reach it — and leave no dead key behind
+      const hue = FM.addMenu._tileHue('Import media');
+      if (!hue) throw new Error('"Import media" has no tile colour — BY_LABEL is keyed by the label');
+      const rgb = hue.split(',').map(n => parseInt(n, 10));
+      if (Math.max.apply(null, rgb) - Math.min.apply(null, rgb) > 40) throw new Error('"Import media" is no longer the basic grey (#210): ' + hue);
+      if (FM.addMenu._tileHue('Import')) throw new Error('the tile-colour map still carries an "Import" key that no tile has any more');
+    } finally { host.remove(); }
+  });
+
+  /* 960, the PC half. MEASURED on the plan (v17.03 + the change applied at runtime, a library of two clips and a song):
+   * 1. THE RENAME ALONE BROKE THE PC FIT. At 1280x900 (inspector 307x270) it knocked the Media tab out of its
+   *    fitted layout — pinned tiles 43→64px tall, icons 19→22px, the library squeezed into the fixed five-column
+   *    fallback — and Audio with it. Under .addmenu--fit a pinned label may wrap, "Import media" is wider than its
+   *    fitted tile, it went to two lines, the strip grew, and the grid lost the room it had been planned in.
+   * 2. THE TWO BUTTONS WERE NEVER THE SAME SIZE ON PC. The strip wore the fit variables planned for the LIBRARY under
+   *    it, per tab: at 1280x900 Import was 64x43 with a 19px arrow and Import audio 87x60 with a 27px arrow.
+   * The strip now has its own size (styles.css, queue 960), the same on both tabs. This drives the real fit (a .panel
+   * host at a desktop width, the render the inspector does) and asserts the three facts: still fitted, one line,
+   * same height and same arrow on both tabs. 285x358 is a panel the fit comments record measuring (classic 1024x640);
+   * measured on the plan, it is a size where the un-fixed rename wraps to 2.0 lines at 12px.
+   * THE SECOND PHASE (added by the builder, measured): at 285x358 the box is roomy and BOTH tabs plan the same padding
+   * (7px 4px), so deleting the strip's own padding rule left that phase green — the tabs only plan differently in a
+   * SHORT box, which is the one his 1280x900 inspector has (the plan measured 56/72px there). So the same panel is then
+   * shrunk to 216px, the way the band drag and the ResizeObserver reach it (a fresh render that short is order-
+   * dependent: fitBox measures below whatever strip is drawn). Measured at 216 with the fix: both 50px, 22px arrow,
+   * padding 2px on both tabs, fitted down to 208. With the strip padding rule removed: Media 45px vs Audio 55px, and the
+   * fitted panel scrolls 8px on Audio. */
+  test('960 on PC Import media and Import audio are the same size, on one line, in the REAL panel — and the tabs keep their fitted layout', { item: '960' }, async function () {
+    /* Measured in #inspector-panel itself, where the PC Add menu lives — its layout is scoped there since #963 ("tilefit"),
+       so an off-screen copy of the menu no longer shows what he sees (the merge of #960 with #963, 27 Sep). */
+    const KEY = 'fm.medialib', saved = localStorage.getItem(KEY);
+    return await atWideWidth(async function () {
+      const root = document.documentElement, prev = root.style.getPropertyValue('--tl-h');
+      const sel0 = FM.scene.selectedId;
+      const panel = document.getElementById('inspector-panel');
+      try {
+        localStorage.setItem(KEY, JSON.stringify([
+          { mid: 't960v', key: 'k960v', name: 'Clip.mp4', kind: 'video', audio: false, w: 1080, h: 1920, dur: 4, added: 3 },
+          { mid: 't960p', key: 'k960p', name: 'Shot.jpg', kind: 'image', audio: false, w: 1080, h: 1350, dur: 0, added: 2 },
+          { mid: 't960a', key: 'k960a', name: 'Song.mp3', kind: 'video', audio: true, w: 0, h: 0, dur: 95, added: 1 }
+        ]));
+        FM.selectLayer(null);
+        const visit = async function (key, name, label) {
+          FM.addMenu.openTab(key); await sleep(300);
+          const am = panel && panel.querySelector('.addmenu');
+          if (!am) throw new Error('deselecting did not put the Add menu in #inspector-panel — this test measured nothing');
+          const pinned = [...am.querySelectorAll('.addmenu-pinned .addmenu-card')];
+          const card = pinned.find(c => ((c.querySelector('.addmenu-lbl') || {}).textContent || '').trim() === label);
+          if (!card) throw new Error('no "' + label + '" tile in the PC ' + name + ' strip (strip: ' + pinned.map(c => c.textContent.trim()).join(', ') + ')');
+          // THE CONTROL: the fitted PC layout, not the fixed fallback — otherwise nothing below is about the fit
+          if (!am.classList.contains('addmenu--fit')) throw new Error('the PC ' + name + ' tab is not in its fitted layout (data-am-fit ' + (am.dataset.amFit || 'none') + ')');
+          const lb = card.querySelector('.addmenu-lbl'), fs = parseFloat(getComputedStyle(lb).fontSize);
+          return { h: card.getBoundingClientRect().height, ico: card.querySelector('.addmenu-ic svg').getBoundingClientRect().width, fs: fs, lines: lb.getBoundingClientRect().height / (fs * 1.2) };
+        };
+        const both = async function (where) {
+          const m = await visit('media', 'Media', 'Import media');
+          const a = await visit('audio', 'Audio', 'Import audio');
+          if (m.lines > 1.4) throw new Error(where + ': "Import media" wraps to ' + m.lines.toFixed(1) + ' lines in the PC strip (' + m.fs + 'px)');
+          if (Math.abs(m.h - a.h) > 0.5) throw new Error(where + ': on PC Import media is ' + m.h.toFixed(1) + 'px tall and Import audio ' + a.h.toFixed(1) + 'px — "they both look different"');
+          if (Math.abs(m.ico - a.ico) > 0.5) throw new Error(where + ': on PC the Import media arrow is ' + m.ico.toFixed(1) + 'px and the Import audio arrow ' + a.ico.toFixed(1) + 'px');
+          if (m.h > 70) throw new Error(where + ': the Import media tile is ' + m.h.toFixed(1) + 'px tall — the strip is eating the grid (merged-in #963 rules outranking #960)');
+        };
+        for (const h of [360, 420]) {
+          root.style.setProperty('--tl-h', h + 'px'); await sleep(250);
+          await both('a ' + h + 'px band');
+        }
+      } finally {
+        if (prev) root.style.setProperty('--tl-h', prev); else root.style.removeProperty('--tl-h');
+        if (saved == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved);
+        FM.selectLayer(sel0 || null); FM.refreshAll();
+        await sleep(80);
+      }
+    }, 1280);
+  });
 })();
