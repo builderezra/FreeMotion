@@ -106792,4 +106792,242 @@
     });
   });
 
+  /* ═══ 972 — THE INVITE STARTS FROSTED ════════════════════════════════════════════════════════════════════════════════════
+   * His words (27 Sep): "Make the code for inviting friends blurred out when you first open it incase streamers or whatever are
+   * using it". The short code and the QR are the two things on the sharing panel that someone watching a stream could use (the
+   * link itself is only ever Copy / Share). Both start frosted every time sharing is OPENED — the Share card or the Friends
+   * block — one tap on either shows both for the rest of that open, a redraw while it is open keeps it shown, and a new
+   * secret (Reset) starts frosted again. Driven with a real finger and real keys (tests/_cdp.py's __fmWantInput). */
+  function alpha972(c) {
+    const s = String(c || '').trim();
+    if (s === 'transparent') return 0;
+    const m = /rgba?\(([^)]*)\)/.exec(s);
+    if (!m) return 1;
+    const p = m[1].split(/[\s,\/]+/).filter(Boolean);
+    return p.length > 3 ? parseFloat(p[3]) : 1;
+  }
+  function frosted972(root, where, want) {
+    const cv = (root || document).querySelector('#collab-room-code');
+    if (!cv) throw new Error('setup: no short code on screen ' + where);
+    /* CONTROL: the code IS there — the frost hides it from the screen, not from Copy or from anything that reads it. */
+    if (FM.collab.signal.normRoomCode(cv.textContent) !== want) throw new Error('setup: the short code ' + where + ' reads “' + cv.textContent + '”, not the room’s code');
+    const cs = getComputedStyle(cv);
+    if (!cv.classList.contains('cs-veiled') || alpha972(cs.color) !== 0 || alpha972(cs.webkitTextFillColor) !== 0) {
+      throw new Error('the short code can be read ' + where + ' (' + (cv.classList.contains('cs-veiled') ? 'frosted, but ' : 'not frosted: ') + 'colour ' + cs.color + ', fill ' + cs.webkitTextFillColor + ') — anyone watching his stream can type it in');
+    }
+    /* What IS painted is a decoy — a blur of the real glyphs keeps how much ink each one has, and that is a clue. */
+    const decoy = getComputedStyle(cv, '::before').content || '';
+    if (decoy === 'none' || decoy.replace(/[^0-9A-Z]/g, '').indexOf(want) >= 0) throw new Error('the frost ' + where + ' is ' + (decoy === 'none' ? 'not drawn at all' : 'drawn from the real code (' + decoy + ')'));
+    const say = getComputedStyle(cv, '::after').content;
+    if (say !== '"Tap to show"') throw new Error('the frosted code ' + where + ' does not say “Tap to show” (' + say + ')');
+    if (cv.getAttribute('role') !== 'button' || cv.tabIndex !== 0 || cv.getAttribute('aria-label') !== 'Short code hidden, tap to show') {
+      throw new Error('the frosted code ' + where + ' is not a button a keyboard or a screen reader can use (role ' + cv.getAttribute('role') + ', tabIndex ' + cv.tabIndex + ', label “' + cv.getAttribute('aria-label') + '”)');
+    }
+    return cv;
+  }
+  function shown972(root, where, want) {
+    const cv = (root || document).querySelector('#collab-room-code');
+    if (!cv) throw new Error('setup: no short code on screen ' + where);
+    if (FM.collab.signal.normRoomCode(cv.textContent) !== want) throw new Error('setup: the short code ' + where + ' reads “' + cv.textContent + '”, not the room’s code');
+    const cs = getComputedStyle(cv);
+    if (cv.classList.contains('cs-veiled') || alpha972(cs.color) < 0.5 || alpha972(cs.webkitTextFillColor) < 0.5) throw new Error('the short code is still frosted ' + where + ' (colour ' + cs.color + ', fill ' + cs.webkitTextFillColor + ')');
+    if (cv.getAttribute('role') === 'button' || cv.getAttribute('aria-label') !== 'Short code ' + cv.textContent.split('').join(' ')) throw new Error('the shown code ' + where + ' is still labelled as hidden (“' + cv.getAttribute('aria-label') + '”, role ' + cv.getAttribute('role') + ')');
+    return cv;
+  }
+  function qr972(root) {
+    const q = root.querySelector('.cs-qr');
+    const img = q ? q.querySelector('canvas') : null;
+    return { q: q, img: img, veiled: !!q && q.classList.contains('cs-veiled'), filter: img ? getComputedStyle(img).filter : '' };
+  }
+  async function tap972(el, what) {
+    if (!el) throw new Error('setup: nothing to tap for ' + what);
+    el.scrollIntoView({ block: 'center' });
+    await settle921(80);
+    await hd5Tap(el, what);
+    await settle921(160);
+  }
+  /* The keyboard on `el`, for a real key. Not frameKeys690c's document.hasFocus(): that asks whether the whole Chrome WINDOW
+     has the OS focus, which another suite's Chrome opening beside this one takes away — the key still goes to the page's
+     focused element, which is what is checked here. */
+  async function keysTo972(el, what) {
+    if (!el) throw new Error('setup: nothing to put the keyboard on for ' + what);
+    window.focus();
+    el.focus();
+    await settle921(60);
+    if (document.activeElement !== el) throw new Error(what + ' cannot take the keyboard — Tab never reaches it');
+  }
+  function segOf972(root, words) {
+    return Array.prototype.filter.call(root.querySelectorAll('.cs-segbtn'), function (b) { return b.textContent === words; })[0] || null;
+  }
+
+  test('972 the short code starts frosted each time the Share card opens — its glyphs are not painted while Copy still copies it, the QR opened then is frosted too and one real tap on it shows both, a settings redraw and a trip to Sharing settings keep it shown, closing and reopening frosts it again, and Reset frosts the new one', { item: '972', budgetMs: 150000 }, async function () {
+    const C = need921S6('the frosted short code');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const rec = function () { return JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid)); };
+          const card = function () { return document.getElementById('collab-share'); };
+          const had = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+          let copied = null;
+          Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: function (t) { copied = t; return Promise.resolve(); } } });
+          try {
+            await atPhoneWidth(async function () {
+              await onScreen924(async function () {
+                await ui.share(); await settle921(300);
+                let cv = frosted972(card(), 'when the Share card opens', rec().code);
+                /* Copy works while it is frosted — copying never paints the code. */
+                await tap972(card().querySelector('.cs-copycode'), 'Copy (the code frosted)');
+                if (copied !== cv.textContent) throw new Error('Copy beside the frosted code copied “' + copied + '”, not the code (' + cv.textContent + ')');
+                frosted972(card(), 'after Copy', rec().code);
+                /* The QR IS the link, and a camera can read it off a stream: opened while the code is frosted, it is frosted. */
+                await tap972(card().querySelector('.cs-qrbtn'), 'QR');
+                let q = qr972(card());
+                if (!q.img) throw new Error('setup: [QR] drew nothing');
+                if (!q.veiled || !/blur\(/.test(q.filter)) throw new Error('the QR opened while the code is frosted is sharp (filter “' + q.filter + '”) — a phone watching the stream can scan the invite link off it');
+                await tap972(q.img, 'the frosted QR');
+                q = qr972(card());
+                if (!q.img || q.veiled || /blur\(/.test(q.filter)) throw new Error('a tap on the frosted QR did not show it (filter “' + q.filter + '”)');
+                cv = shown972(card(), 'after one tap on the frosted QR — one tap shows both', rec().code);
+                await tap972(card().querySelector('.cs-qrbtn'), 'QR (put away)');
+                /* A settings change redraws the whole panel: it stays shown. */
+                await tap972(segOf972(card(), 'Let them in'), 'Let them in');
+                if (rec().settings.ask !== false) throw new Error('setup: “Let them in” did not change the room');
+                const cv2 = shown972(card(), 'after “Let them in” redrew the panel', rec().code);
+                if (cv2 === cv) throw new Error('setup: the panel was not redrawn, so this measured nothing');
+                await tap972(segOf972(card(), 'Ask me first'), 'Ask me first');
+                shown972(card(), 'after “Ask me first”', rec().code);
+                /* Into Sharing settings and back: still shown. */
+                await tap972(card().querySelector('.cs-gear'), 'the gear');
+                if (document.getElementById('collab-room-code')) throw new Error('setup: Sharing settings still shows the code');
+                await tap972(card().querySelector('.cs-backbtn'), 'Back');
+                shown972(card(), 'after Sharing settings and Back', rec().code);
+                /* Closed and opened again: frosted again. */
+                ui.close(); await settle921(150);
+                await ui.share(); await settle921(300);
+                cv = frosted972(card(), 'when the Share card is opened again', rec().code);
+                await tap972(cv, 'the frosted short code');
+                shown972(card(), 'after one tap on it', rec().code);
+                /* Reset: a new secret, frosted. */
+                const old = rec().code;
+                await tap972(card().querySelector('.cs-reset'), 'Reset link and short code');
+                const ok = await until921S6('the Reset confirm', function () { const b = document.querySelector('#fm-ask .fm-ask-ok'); return b && !document.getElementById('fm-ask').classList.contains('hidden') ? b : null; });
+                await tap972(ok, 'Reset');
+                await until921S6('the new code on screen', function () { const n = document.getElementById('collab-room-code'); return n && rec().code !== old && C.signal.normRoomCode(n.textContent) === rec().code; });
+                frosted972(card(), 'after Reset link and short code', rec().code);
+                ui.close();
+              });
+            }, 380);
+          } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
+        });
+      });
+    });
+  });
+
+  test('972 in the Friends block on a phone the short code starts frosted, one real tap shows it, flipping “Show others’ pointers” — which redraws the block through Settings — keeps it shown, and closing Canvas settings and opening Friends again frosts it', { item: '972', budgetMs: 150000 }, async function () {
+    need921S6('the frosted short code in the Friends block');
+    const wasCursors = FM.settings.get('collabCursors') !== false;
+    try {
+      await withFakeNet921(async function () {
+        await withLabs921(async function () {
+          await with945(async function () {
+            await withCollab921([layer921('A')], async function (ctx) {
+              const rec = function () { return JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid)); };
+              await atPhoneWidth(async function () {
+                await onScreen924(async function () {
+                  const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                  FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                  if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+                  const cv = frosted972(fr, 'when the Friends block opens', rec().code);
+                  await tap972(cv, 'the frosted short code');
+                  shown972(fr, 'after one tap on it', rec().code);
+                  /* Settings' apply() redraws the block (collab-ui.js syncLabs) as a fresh draw — not a keepStep redraw. */
+                  await tap972(fr.querySelector('.cs-gear'), 'the gear');
+                  const row = Array.prototype.filter.call(fr.querySelectorAll('.cs-srow'), function (r) { const l = r.querySelector('.cs-slabel'); return l && l.textContent === 'Show others’ pointers'; })[0];
+                  const before = FM.settings.get('collabCursors') !== false;
+                  await tap972(row && row.querySelector('.set-switch'), 'Show others’ pointers');
+                  if ((FM.settings.get('collabCursors') !== false) === before) throw new Error('setup: the switch did not change the setting');
+                  const back = fr.querySelector('.cs-backbtn');
+                  if (back) await tap972(back, 'Back');
+                  shown972(fr, 'after flipping “Show others’ pointers” (Settings redraws the block)', rec().code);
+                  FM.closeCanvasDialog(); await settle921(250);
+                  FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                  frosted972(fr, 'when Friends is opened again', rec().code);
+                  FM.closeCanvasDialog(); await settle921(150);
+                });
+              }, 380);
+            });
+          });
+        });
+      });
+    } finally { FM.settings.set('collabCursors', wasCursors); }
+  });
+
+  test('972 on a PC the frosted code is a keyboard button — Enter or Space shows it and the keyboard stays on it; an Editor’s invite QR starts frosted too and Enter shows it; and the light card cannot paint the code either', { item: '972', budgetMs: 150000 }, async function () {
+    need921S7('the frosted invite on a PC');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const rec = function () { return JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid)); };
+          await onScreen924(async function () {
+            await atWideWidth(async function () {
+              for (const k of [KEY690c.enter, KEY690c.space]) {
+                await ui.share(); await settle921(300);
+                const card = document.getElementById('collab-share');
+                const cv = frosted972(card, 'when the Share card opens on a PC', rec().code);
+                await keysTo972(cv, 'the frosted code');
+                await realInput924([k], k.code + ' on the frosted code');
+                await settle921(150);
+                shown972(card, 'after ' + k.code + ' on it', rec().code);
+                if (document.activeElement !== cv) throw new Error(k.code + ' showed the code and dropped the keyboard (focus went to ' + (document.activeElement && (document.activeElement.id || document.activeElement.className || document.activeElement.tagName)) + ')');
+                ui.close(); await settle921(150);
+              }
+            }, 720);
+          });
+        });
+        /* An Editor allowed to invite has the link's QR — the same invite, frosted the same way, each time the panel opens. */
+        await withGuestApp921('editor', [layer921('A')], async function (g) {
+          g.HS.setRoomSettings({ roExport: true, editorsInvite: true, max: 8, link: 'https://example.test/FreeMotion/#j=' + 'A'.repeat(44), ask: true });
+          g.settle();
+          await onScreen924(async function () {
+            await atWideWidth(async function () {
+              for (let round = 1; round <= 2; round++) {
+                await ui.share(); await settle921(250);
+                const box = document.querySelector('#collab-share .cs-guestinvite');
+                if (!box) throw new Error('CONTROL: the Editor’s panel has no invite');
+                await keysTo972(box.querySelector('.cs-qrbtn'), 'the Editor’s QR button');
+                await realInput924([KEY690c.enter], 'Enter on the Editor’s QR button');
+                await settle921(150);
+                let q = qr972(box);
+                if (!q.img) throw new Error('setup: the Editor’s [QR] drew nothing');
+                if (!q.veiled || !/blur\(/.test(q.filter)) throw new Error('the Editor’s QR is sharp when first opened (opening ' + round + ', filter “' + q.filter + '”) — it is the invite link');
+                const hid = q.q.querySelector('[role="button"]');
+                if (!hid || hid.getAttribute('aria-label') !== 'QR code hidden, tap to show' || hid.tabIndex !== 0) throw new Error('the frosted QR is not a button a keyboard or a screen reader can use');
+                await keysTo972(hid, 'the frosted QR');
+                await realInput924([KEY690c.enter], 'Enter on the frosted QR');
+                await settle921(150);
+                q = qr972(box);
+                if (!q.img || q.veiled || /blur\(/.test(q.filter)) throw new Error('Enter on the frosted QR did not show it (filter “' + q.filter + '”)');
+                ui.close(); await settle921(150);
+              }
+            }, 720);
+          });
+        });
+      });
+    });
+    /* The light card (the Share card over the light Home) gives the code its ink, #10151f — that must not win over the frost. */
+    const mk = function (tag, cls, parent) { const n = document.createElement(tag); n.className = cls; if (parent) parent.appendChild(n); return n; };
+    const probe = mk('div', 'collab-scrim collab-light');
+    const rc = mk('div', 'cs-roomcode cs-veiled', mk('div', 'cs-roomrow', mk('div', 'cs-invite', mk('div', 'collab-card fm-ask-card', probe))));
+    rc.textContent = '7QK-M4X-R2P';
+    document.body.appendChild(probe);
+    try {
+      const fc = getComputedStyle(rc);
+      if (alpha972(fc.color) !== 0 || alpha972(fc.webkitTextFillColor) !== 0) throw new Error('on the light card the frosted code is painted ' + fc.color + ' — the light look’s ink wins over the frost');
+      const sh = getComputedStyle(rc, '::before').textShadow;
+      if (!/rgb\(16, 21, 31\)/.test(sh)) throw new Error('on the light card the frost is drawn in ' + sh + ' — near-white on white, so the code looks missing rather than hidden');
+      rc.classList.remove('cs-veiled');
+      if (getComputedStyle(rc).color !== 'rgb(16, 21, 31)') throw new Error('CONTROL: the light card’s code is ' + getComputedStyle(rc).color + ', not its ink');
+    } finally { probe.remove(); }
+  });
+
 })();

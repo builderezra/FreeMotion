@@ -1297,6 +1297,9 @@ html[data-home="light"] .hm-top { border-bottom-color: rgba(16, 30, 52, .10); }
 .collab-scrim.collab-light .cs-roomcode,
 .collab-scrim.collab-light .cs-copycode,
 .collab-scrim.collab-light .cj-alt { background-color: #ffffff; border-color: rgba(16, 30, 52, .14); color: #10151f; }
+/* #972: the frosted short code's smudge in the paper's ink — near-white on the white card reads as missing, not hidden. The
+   code's own glyphs stay transparent over the ink above (styles.css .cs-roomcode.cs-veiled, !important). */
+.collab-scrim.collab-light .cs-roomcode.cs-veiled::before { text-shadow: 0 0 12px #10151f; }
 .collab-scrim.collab-light .cj-fieldrow .cj-scan.on { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }   /* S8 */
 /* #967 batch 2: the fresh-Safari landing card's optional step and its "I already have the app" link. */
 .collab-scrim.collab-light .cl-after { background-color: rgba(16, 30, 52, .035); border-color: rgba(16, 30, 52, .12); }

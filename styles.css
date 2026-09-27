@@ -10590,6 +10590,31 @@ body.text-editing .collab-people { display: none; }
   text-align: center; padding: 7px 6px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
   color: var(--text); user-select: all; overflow-wrap: anywhere;
 }
+/* #972 — THE SHORT CODE AND THE QR START FROSTED each time sharing is opened: "incase streamers or whatever are using it".
+   The code's own glyphs are TRANSPARENT (still in the page, for Copy); what is painted is a DECOY blurred to a smudge, because
+   a blur of the real glyphs keeps each one's weight of ink. The QR keeps its real canvas under a 12 px blur — three modules
+   wide, which leaves nothing at the scale a module is drawn at. One tap shows both (collab-ui.js onVeilTap).
+   `!important` on purpose: no theme's ink for the code (theme-glass.css gives the light card one) may paint it while frosted. */
+.cs-roomcode.cs-veiled {
+  position: relative; cursor: pointer; -webkit-user-select: none; user-select: none;
+  color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important;
+}
+.cs-roomcode.cs-veiled::before {
+  content: 'K7Q-M4X-R2P'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: transparent; -webkit-text-fill-color: transparent; text-shadow: 0 0 12px var(--text); pointer-events: none;
+}
+.cs-qrframe { position: relative; border-radius: 10px; }
+.cs-qr.cs-veiled .cs-qrframe { cursor: pointer; overflow: hidden; }
+.cs-qr.cs-veiled .cs-qrimg { filter: blur(12px); }
+.cs-roomcode.cs-veiled::after,
+.cs-qr.cs-veiled .cs-qrframe::after {
+  content: 'Tap to show'; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  padding: 6px 12px; border-radius: 999px; background: rgba(11, 14, 20, .78);
+  font: 700 13px/1.2 system-ui, -apple-system, sans-serif; letter-spacing: 0; white-space: nowrap;
+  color: #ffffff; -webkit-text-fill-color: #ffffff; text-shadow: none; pointer-events: none;
+}
+.cs-roomcode.cs-veiled:focus-visible,
+.cs-qr.cs-veiled .cs-qrframe:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cs-copycode {
   flex: 0 0 auto; min-height: 44px; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--line);
   background: var(--panel); color: var(--text); font-weight: 700; font-size: 14px; cursor: pointer;
