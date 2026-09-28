@@ -701,10 +701,26 @@ body.text-editing .sb-wrap { display: none !important; }
    (js/app.js updateDropHint), which removes the animations outright, and body.home-open stops them behind Home
    — the same reasoning as #hm-grain's pause. Coming back to the empty project restarts them, so it claps again. */
 .dh-icon svg { overflow: visible; }   /* the open stick rises ~8 px above the 54 px box; the lines reach ~6 px past its right edge */
-.dh-stick { transform-box: view-box; transform-origin: 0 0; animation: dh-clap 6s .4s infinite both; }
-.dh-body { animation: dh-jolt 6s .4s infinite both; }
-.dh-whack path { opacity: 0; stroke-dasharray: 1 2; stroke-dashoffset: 1; animation: dh-whack 6s .4s infinite both; }
-.dh-whack { stroke: var(--accent); }   /* the lines in the accent, not the icon's grey: at 54 px grey lines read as part of the drawing, cyan reads as the hit */
+/* ═══ ALL THREE TIMINGS AND BOTH LINE COLOURS, ONE AT RANDOM (queue 974) ═══════════════════════════════════════════
+   Ezra, 28 Sep: *"make them all happen in the app but it's just random which one so I can decide which is best over
+   use time"*. js/app.js picks the timing each time the empty project comes on screen (FM.variant 'clapper.timing' →
+   .dh-t-a / .dh-t-b / .dh-t-c on #drop-hint) and the line colour on every clap ('clapper.lines' → .dh-grey):
+     A — open, then a clap every 6 s while the project stays empty (dh-clap / dh-jolt / dh-whack, as shipped in v17.07)
+     B — one clap, then it stays shut (…-b, 1000 ms, once)
+     C — non-stop, a clap every 1.6 s (…-c)
+   All three slam at 470 ms into their cycle (the keyframes are the plan's §5d blocks, tools/design/plans/2026-09-26-
+   clapper/plan.md). The CHOICE rides on custom properties, never on a more specific `animation` rule: the Home and
+   reduced-motion rules below switch `animation` off on the same three elements at their own specificity, and a
+   `#drop-hint.dh-t-b .dh-stick { animation: … }` would outrank both and clap behind Home and for someone who asked
+   for less motion. With no class (the first frame, or FM.variant missing) the defaults are A. */
+#drop-hint { --dh-clap: dh-clap; --dh-jolt: dh-jolt; --dh-whack: dh-whack; --dh-dur: 6s; --dh-n: infinite; }
+#drop-hint.dh-t-b { --dh-clap: dh-clap-b; --dh-jolt: dh-jolt-b; --dh-whack: dh-whack-b; --dh-dur: 1000ms; --dh-n: 1; }
+#drop-hint.dh-t-c { --dh-clap: dh-clap-c; --dh-jolt: dh-jolt-c; --dh-whack: dh-whack-c; --dh-dur: 1600ms; --dh-n: infinite; }
+.dh-stick { transform-box: view-box; transform-origin: 0 0; animation: var(--dh-clap) var(--dh-dur) .4s var(--dh-n) both; }
+.dh-body { animation: var(--dh-jolt) var(--dh-dur) .4s var(--dh-n) both; }
+.dh-whack path { opacity: 0; stroke-dasharray: 1 2; stroke-dashoffset: 1; animation: var(--dh-whack) var(--dh-dur) .4s var(--dh-n) both; }
+.dh-whack { stroke: var(--accent); }   /* cyan, the accent: at 54 px grey lines read as part of the drawing, cyan reads as the hit (plan's recommendation) */
+#drop-hint.dh-grey .dh-whack { stroke: currentColor; }   /* grey: the clapper's own colour, the quieter option */
 @keyframes dh-clap {
   0% { transform: rotate(-20.32deg); }
   5% { transform: rotate(-20.32deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
@@ -726,6 +742,50 @@ body.text-editing .sb-wrap { display: none !important; }
   7.833% { opacity: 1; stroke-dashoffset: .7; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
   9% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
   11.667%, 100% { opacity: 0; stroke-dashoffset: -.95; }
+}
+/* B — once (plan §5d): 1000 ms, the slam at 47% = 470 ms, then it holds shut (fill: both). */
+@keyframes dh-clap-b {
+  0% { transform: rotate(-20.32deg); }
+  30% { transform: rotate(-20.32deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  38% { transform: rotate(-23.32deg); animation-timing-function: cubic-bezier(.6, 0, 1, .6); }
+  47% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  53% { transform: rotate(4.18deg); animation-timing-function: ease-in; }
+  60%, 100% { transform: rotate(7.68deg); }
+}
+@keyframes dh-jolt-b {
+  0% { transform: translateY(0px); }
+  47% { transform: translateY(0px); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  51% { transform: translateY(.5px); animation-timing-function: ease-in; }
+  60%, 100% { transform: translateY(0px); }
+}
+@keyframes dh-whack-b {
+  0%, 46.9% { opacity: 0; stroke-dashoffset: 1; }
+  47% { opacity: 1; stroke-dashoffset: .7; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  54% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
+  70%, 100% { opacity: 0; stroke-dashoffset: -.95; }
+}
+/* C — non-stop (plan §5d): 1600 ms, the slam at 29.375% = 470 ms, open again by the end so the loop has no seam. */
+@keyframes dh-clap-c {
+  0% { transform: rotate(-20.32deg); }
+  18.75% { transform: rotate(-20.32deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  23.75% { transform: rotate(-23.32deg); animation-timing-function: cubic-bezier(.6, 0, 1, .6); }
+  29.375% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  33.125% { transform: rotate(4.18deg); animation-timing-function: ease-in; }
+  37.5% { transform: rotate(7.68deg); }
+  56.25% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  100% { transform: rotate(-20.32deg); }
+}
+@keyframes dh-jolt-c {
+  0% { transform: translateY(0px); }
+  29.375% { transform: translateY(0px); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  31.875% { transform: translateY(.5px); animation-timing-function: ease-in; }
+  37.5%, 100% { transform: translateY(0px); }
+}
+@keyframes dh-whack-c {
+  0%, 29.313% { opacity: 0; stroke-dashoffset: 1; }
+  29.375% { opacity: 1; stroke-dashoffset: .7; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  33.75% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
+  43.75%, 100% { opacity: 0; stroke-dashoffset: -.95; }
 }
 body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path { animation: none; }
 @media (prefers-reduced-motion: reduce) { .dh-stick, .dh-body, .dh-whack path { animation: none; } }
@@ -8438,62 +8498,32 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
    goes with it — a halo around a box that no longer paints is the same edge drawn a second time.
    EMPTY STATE ONLY (his clause 3): the slim row keeps its wash, its dashed outline and its glow, and
    `.tl-empty-start` is phone-and-no-layers, so the desktop timeline never sees this. */
-/* ⚠️ THE PRESS BURST (queue 571 clause 3). Ezra: *"do a nice little colourful reaction when you press
-   on this screen, something that comes from where you tapped, like those keyboards that light but based
-   on what button you press."*
-   TWO rings, not one, and that is what makes it read as a reaction rather than a blob: a soft filled
-   glow that blooms and fades, plus a thin ring that races out ahead of it. One alone looks like a
-   smudge; the ring is what gives it a direction and an edge, which is what "comes from where you
-   tapped" actually looks like.
-   `--burst-h` is set per-press from the tap's position (js/timeline.js), so the colour belongs to the
-   SPOT — his keyboard analogy — and the same place always answers the same way.
-   The element is a zero-size point at the tap and both layers are centred on it with a translate, so
-   the growth is symmetrical about the finger no matter where on the screen it lands. `pointer-events:
-   none` throughout: this is feedback, and it must never eat the tap it is feedback FOR. */
-.tl-tapburst {
-  position: absolute; width: 0; height: 0; pointer-events: none; z-index: 4;
-}
-.tl-tapburst::before,
-.tl-tapburst::after {
-  content: ""; position: absolute; left: 0; top: 0; border-radius: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  will-change: transform, opacity;
-}
-/* ⚠️ SIZES ARE DELIBERATELY SMALL — he asked for a *"nice LITTLE colourful reaction"*, and the first
-   build was not little. Rendered at 380px and looked at: a 170px bloom and a 120px ring growing to 1.5
-   (180px) covered half the width of the screen and read as big thin outlines drawn over the timeline
-   rather than a response to a fingertip — the ring dominated and the colour barely registered. Roughly
-   halved, and the bloom's alpha raised to compensate: a small bright pop beats a large faint circle at
-   this size, which is the queue 313 lesson (a full-screen gradient shrunk to a small disc turns to mud)
-   pointed the other way round. */
-/* the soft bloom */
-.tl-tapburst::before {
-  width: 104px; height: 104px;
-  background: radial-gradient(circle,
-    hsla(var(--burst-h, 190), 95%, 70%, .62) 0%,
-    hsla(calc(var(--burst-h, 190) + 40), 92%, 64%, .34) 45%,
-    transparent 74%);
-  animation: tl-burst-bloom 620ms cubic-bezier(.22, .9, .28, 1) forwards;
-}
-/* the ring that runs ahead of it */
-.tl-tapburst::after {
-  width: 62px; height: 62px;
-  border: 2px solid hsla(var(--burst-h, 190), 95%, 74%, .85);
-  animation: tl-burst-ring 620ms cubic-bezier(.16, .84, .30, 1) forwards;
-}
-@keyframes tl-burst-bloom {
-  0%   { transform: translate(-50%, -50%) scale(.15); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
-}
-@keyframes tl-burst-ring {
-  0%   { transform: translate(-50%, -50%) scale(.10); opacity: .9; }
-  70%  { opacity: .35; }
-  100% { transform: translate(-50%, -50%) scale(1.55); opacity: 0; }   /* 62 → ~96px, a fingertip's worth */
-}
-/* Asked the OS for less motion → no lightshow. The JS checks this too; both, because either one alone
-   is a single point of failure for an accessibility promise. */
+/* ---- THE EMPTY AREA ANSWERS A PRESS (queue 964) — drawn and removed by areaFx in js/timeline.js ----------------
+   Replaces #571's .tl-tapburst and #600's resting :hover/:focus-within box. These are EVENT layers: created on
+   pointerdown in #timeline-panel (outside the scroller, so no scroll offset can move them), sized to the area below
+   the ruler row, and removed on a timer. z-index 8 puts them over #tl-rulerrow (7), whose opaque background is what
+   hid the old box's top edge. pointer-events: none throughout — feedback must never eat the tap it answers. */
+.tl-areafx { position: absolute; pointer-events: none; z-index: 8; }
+.tl-areafx--pulse svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+/* screen: the colour ADDS light to the dark wash instead of greying it, and white stays white (the caption). */
+.tl-areafx--press { overflow: hidden; contain: layout paint; mix-blend-mode: screen; }
+.tl-areafx--press > div { position: absolute; left: 0; top: 0; border-radius: 50%; will-change: transform, opacity; }
+.tl-areafx--press > .fx-tint { border-radius: 0; will-change: opacity; }
+/* The JS picks the calm version itself; this is the second lock, as #571 had — either alone is one point of failure. */
 @media (prefers-reduced-motion: reduce) {
-  .tl-tapburst { display: none; }
+  .tl-areafx--pulse, .tl-areafx--press { display: none; }
+}
+/* THE ROW-SIZED #616 PULSE IS OFF ON THE EMPTY SCREEN (clause 6). There the row is a 300px box mid-area, and its
+   band lights both sides and the whole top at once — the second, wrong-sized box. The area pulse replaces it; the
+   slim row (a project with layers) keeps #616 exactly as approved. timeline.js also stops arming it there. */
+#timeline-panel.tl-empty-start .tl-addrow-pulse { display: none; }
+/* KEYBOARD ONLY: a real ring while the row has :focus-visible — never on a tap (a finger focus does not match
+   :focus-visible). Same box as the pulse: --tl-area-top is the ruler row's bottom, published by applyEmptyStart. */
+#timeline-panel.tl-empty-start:has(.tl-addrow:focus-visible)::after {
+  content: ""; position: absolute; pointer-events: none; z-index: 8;
+  left: 4px; right: 4px; bottom: 4px; top: calc(var(--tl-area-top, 0px) + 4px);
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px rgba(150, 232, 255, .9), 0 0 16px rgba(90, 199, 237, .45);
 }
 
 #timeline-panel.tl-empty-start #timeline {
@@ -8554,15 +8584,13 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
    `:focus-within` rather than a new class: the row inside is what actually takes focus, and #timeline
    already runs to the panel's bottom (the empty-state wash is painted on it for that same reason). **So
    the picture and the listener are now the same box by construction** rather than two numbers somebody
-   has to keep equal — which is exactly how this broke. */
+   has to keep equal — which is exactly how this broke.
+   964: the box is no longer a state. It is drawn on the press by `areaFx` (js/timeline.js) from the
+   same `#timeline` box, so #600's 'picture = listener' still holds. */
 #timeline-panel.tl-empty-start .tl-addrow:hover,
 #timeline-panel.tl-empty-start .tl-addrow:focus-visible {
   border-color: transparent;
   box-shadow: none;
-}
-#timeline-panel.tl-empty-start #timeline:focus-within,
-#timeline-panel.tl-empty-start #timeline:hover {
-  box-shadow: inset 0 0 0 1px rgba(150, 232, 255, .8), inset 0 0 14px rgba(90, 199, 237, .30);
 }
 /* ⚠️ `align-self: stretch` ON THE HEAD REACHES ONLY AS FAR AS **THIS** BOX (queue 550 clause 2).
    The head below says `align-self: stretch` and its comment claims that "makes the rule run the row's

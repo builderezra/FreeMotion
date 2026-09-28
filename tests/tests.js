@@ -5865,93 +5865,7 @@
     }
   });
 
-  test('571 clause 3: pressing the empty timeline answers from the point you touched', { item: '571' }, async function () {
-    /* Queue 571 clause 3. Ezra: "do a nice little colourful reaction when you press on this screen,
-     * something that comes from where you tapped, like those keyboards that light but based on what
-     * button you press."
-     * TWO requirements in that sentence, and the second is the one easy to drop: it must come FROM the
-     * touch point, AND its colour must depend on WHERE that point was. A single fixed-colour ripple
-     * satisfies the first and quietly ignores the half he described most specifically — so the hue is
-     * asserted to CHANGE with position, not merely to exist.
-     * \u26a0 NOTHING HERE MEASURES MOTION. LOOP rule 11, confirmed again while building this: the preview
-     * pane reported document.hidden true, rAF fired 0 frames in 450ms, and a control animation sat at
-     * currentTime 0. So the animation cannot be timed from a run there, and asserting it would be
-     * asserting the pane's throttling. What IS checkable is structural: the element exists, in the right
-     * place, with the right hue, and it cleans itself up.
-     * \u26a0 THE TEARDOWN IS A setTimeout AND THAT IS LOAD-BEARING — an animationend listener never fires
-     * in a throttled tab, so the nodes would accumulate for as long as the app stayed open. This test
-     * would still pass with animationend in a live tab, which is why the reason is written here. */
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const layers0 = FM.scene.layers.slice();
-    try {
-      return await atPhoneWidth(async function () {
-        FM.scene.layers.length = 0;
-        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
-        await sleep(260);
-        const panel = document.getElementById('timeline-panel');
-        const tl = document.getElementById('timeline');
-        if (!panel || !panel.classList.contains('tl-empty-start')) throw new Error('not on the empty-start screen, so this is measuring the wrong thing');
-        if (typeof FM._tapBurst !== 'function') throw new Error('FM._tapBurst is missing — pressing the empty screen has no reaction at all (queue 571 clause 3)');
-        [].slice.call(tl.querySelectorAll('.tl-tapburst')).forEach(function (n) { n.remove(); });
-
-        const r = tl.getBoundingClientRect();
-        /* \u26a0 EVERY pointerdown IS CLOSED WITH A pointerup, AND THAT IS NOT TIDINESS — IT IS THE BUG
-           THIS TEST CAUSED. The first version pressed 27 times and never released, which left the
-           timeline's gesture state machine mid-gesture for every test that ran afterwards. THREE
-           unrelated tests went red — the flick tests and the phone-hold-to-move test — all reporting
-           "the fixture is not producing a real gesture", which is their own guard telling the truth
-           about a state THIS test had corrupted. A synthetic gesture has to finish, exactly like a real
-           finger does. (LOOP rule 17 is the same lesson from the effects browser: a test that leaves
-           machinery running is a test that breaks its neighbours.)
-           pointerup does NOT synthesise a click, so this cannot open the add sheet by accident — the
-           burst still fires on the down, which is what is being measured. */
-        const press = function (dx, dy) {
-          const opts = { bubbles: true, cancelable: true, clientX: r.left + dx, clientY: r.top + dy, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0 };
-          tl.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, opts, { buttons: 1 })));
-          tl.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, opts, { buttons: 0 })));
-        };
-
-        press(40, 60);
-        await sleep(40);
-        const bursts = [].slice.call(tl.querySelectorAll('.tl-tapburst'));
-        if (bursts.length !== 1) throw new Error('pressing the empty timeline produced ' + bursts.length + ' reactions, not one (queue 571 clause 3)');
-        const px = parseFloat(bursts[0].style.left), py = parseFloat(bursts[0].style.top);
-        if (Math.abs(px - 40) > 1 || Math.abs(py - 60) > 1) throw new Error('the reaction appeared at ' + px + ',' + py + ' but the press was at 40,60 — it has to come from the point he touched');
-        const hueA = bursts[0].style.getPropertyValue('--burst-h');
-        if (!hueA) throw new Error('the reaction has no colour of its own');
-
-        press(300, 320);
-        await sleep(40);
-        const all = [].slice.call(tl.querySelectorAll('.tl-tapburst'));
-        const hueB = all[all.length - 1].style.getPropertyValue('--burst-h');
-        if (hueA === hueB) throw new Error('two presses far apart both came out hue ' + hueA + ' — his ask was "like those keyboards that light but based on what button you press", so the colour has to follow the position');
-
-        for (let i = 0; i < 25; i++) press(100 + i, 100 + i);
-        const capped = tl.querySelectorAll('.tl-tapburst').length;
-        if (capped > 8) throw new Error(capped + ' reactions are live at once — a fast tapper builds a pile of nodes (queue 571 clause 3)');
-
-        await sleep(1000);
-        const leaked = tl.querySelectorAll('.tl-tapburst').length;
-        if (leaked !== 0) throw new Error(leaked + ' reaction nodes survived a second after the last press — they are not torn down, and in a backgrounded tab that leaks for as long as the app is open');
-
-        // --- CONTROL: this is the EMPTY screen's behaviour. With a layer, pressing must do nothing. ---
-        const L = FM.makeLayer('shape', { name: 'X', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
-        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
-        FM.refreshAll(); FM.timeline.rebuild();
-        await sleep(260);
-        press(190, 200);
-        await sleep(60);
-        const onReal = tl.querySelectorAll('.tl-tapburst').length;
-        if (onReal !== 0) throw new Error('CONTROL FAILED — pressing a timeline that HAS layers also throws the reaction, so it fires over real clips while he is scrubbing. He asked for it on "this screen", the empty one.');
-      });
-    } finally {
-      const tl2 = document.getElementById('timeline');
-      if (tl2) [].slice.call(tl2.querySelectorAll('.tl-tapburst')).forEach(function (n) { n.remove(); });
-      FM.scene.layers.length = 0;
-      layers0.forEach(function (l) { FM.scene.layers.push(l); });
-      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
-    }
-  });
+  // 571 clause 3 moved to the 964 tests: the burst became the whole-area press
 
   test('572: the effects BROWSER warns before you spend the pick, not after', { item: '572' }, async function () {
     /* Queue 572. Ezra, for the FOURTH time: "These effects still don't work, you've tried to fix it so
@@ -68448,12 +68362,14 @@
       const a = entrance(card);
       dlg.classList.add('hidden');
       if (!a.length) throw new Error('the New project card appears in one frame with no animation (' + want + ')');
-      if (!a.some(x => want.test(x.animationName))) throw new Error('the New project card animates with ' + animNames(a) + ', not the ' + want + ' its neighbours use');
+      /* #947 (built under #974): the + no longer opens with the pop/hinge its neighbours use — his words, it should not be
+         "the same you've done for everything else". Its entrance is its own (Web Animations named np947-<A|B|C>-…). */
+      if (!a.some(x => want.test(x.animationName || x.id || ''))) throw new Error('the New project card animates with ' + (a.map(x => x.animationName || x.id || '?').join(', ')) + ', not ' + want);
     };
     try {
       if (!wasOpen) { FM.home.open(); await sleep(600); }
-      await atPhoneWidth(() => once(/fm-hinge-panel/));
-      await atWideWidth(() => once(/pop-grow/));
+      await atPhoneWidth(() => once(/^np947-[ABC]-/));
+      await atWideWidth(() => once(/^np947-[ABC]-/));
     } finally {
       dlg.classList.add('hidden');
       if (!wasOpen) FM.home.close();
@@ -78885,7 +78801,8 @@
      and was nothing of the kind. The suite cannot guarantee it is fronted, so asserting progress here
      would be a flaky test that fails for a reason unrelated to the feature. The travel was verified by
      hand with a control (rAF frame count) and sampled through the motion; what a test CAN hold is that
-     the element exists in both states, spans the whole row, and is armed by a press. */
+     the element exists, spans the whole row, and is armed by a press — on the SLIM row since queue 964, which
+     gave the empty screen the area pulse instead (tested by '964 clause 6'). */
   test('616: the add row has a press pulse, wired and full-width', { item: '616' }, async function () {
     const keep = FM.scene.layers.slice();
     try {
@@ -78897,9 +78814,8 @@
           const row = document.querySelector('.tl-addrow');
           if (!row) throw new Error('no add row on screen in the ' + what + ' state');
           const pulse = row.querySelector('.tl-addrow-pulse');
-          /* BOTH states matter. The resting decoration lives on ::before, which is switched OFF
-             entirely in the empty state — and the empty state is the screen he photographed. */
-          if (!pulse) throw new Error('the ' + what + ' add row has no .tl-addrow-pulse — queue 616 needs it in BOTH states, because ::before is content:none when the project is empty');
+          /* The empty state's pulse is the AREA pulse now (queue 964, test '964 clause 6'); this holds the slim row. */
+          if (!pulse) throw new Error('the ' + what + ' add row has no .tl-addrow-pulse (queue 616)');
           const rr = row.getBoundingClientRect(), pr = pulse.getBoundingClientRect();
           if (rr.width - pr.width > 6) {
             throw new Error('the pulse is ' + Math.round(pr.width) + 'px on a ' + Math.round(rr.width) + 'px row (' + what + ') — queue 616: "not cut off on the sides". It must span the row, not stop at the project end like the resting box does.');
@@ -78911,7 +78827,6 @@
           pulse.classList.remove('is-pulsing');
         };
         FM.scene.layers.length = 0;
-        await check('empty');
         FM.addShapeLayer('rect'); FM.addShapeLayer('rect');
         FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 6; });
         await check('slim');
@@ -92160,7 +92075,7 @@
           const before = new Set(FM.projects.list().map(p => p.id));
           await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
           const wide = await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden') ? d.querySelector('.hm-aspect[data-aspect="16:9"]') : null; }, 4000);
-          await sleep(350);
+          await sleep(700);   // #947/#974: the + has its own 640 ms entrance now (one of three at random) - a real finger waits for the card to land
           await h3aTap(wide, 'a tap on 16:9 Wide');
           await sleep(150);
           const said = (document.getElementById('hm-new-size') || {}).textContent || '';
@@ -92218,7 +92133,7 @@
           const before = new Set(FM.projects.list().map(p => p.id));
           await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
           const custom = await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden') ? d.querySelector('.hm-aspect[data-aspect="custom"]') : null; }, 4000);
-          await sleep(350);
+          await sleep(700);   // #947/#974: the + has its own 640 ms entrance now (one of three at random) - a real finger waits for the card to land
           await h3aTap(custom, 'a tap on Custom');
           await sleep(150);
           await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
@@ -100084,7 +99999,7 @@
           FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
           await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
           await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden'); }, 4000);
-          await sleep(350);
+          await sleep(700);   // #947/#974: the + has its own 640 ms entrance now (one of three at random) - a real finger waits for the card to land
           newName = (document.getElementById('hm-new-name') || {}).value || '';
           await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
           await sleep(1500);
@@ -103462,6 +103377,14 @@
     const claps = () => d.getAnimations({ subtree: true }).filter(a => /^dh-/.test(a.animationName || ''));
     try {
       if (homeWasOpen) FM.home.close();
+      /* #974 put every clapper option in at random; this test is timing A with the cyan lines (the ones this test was
+         written for — the other two timings have their own test, '974 the clapper's three timings…'). The pick happens
+         as the hint comes on screen, so bring it on fresh: a layer on, then off. */
+      if (FM.variant && FM.variant.force) {
+        FM.variant.force('clapper.timing', 'A'); FM.variant.force('clapper.lines', 'cyan');
+        FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: '957', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+        FM.refreshAll(); await sleep(40);
+      }
       FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(80);
       if (d.classList.contains('hidden') || !(d.getBoundingClientRect().width > 0)) throw new Error('the empty-canvas hint is not on screen with no layers, so there is nothing to watch');
       const stick = d.querySelector('.dh-stick');
@@ -103543,6 +103466,7 @@
       FM.scene.layers.length = 0; FM.refreshAll(); await sleep(80);
       if (!claps().length) throw new Error('with the stage empty again the clap did not come back');
     } finally {
+      if (FM.variant && FM.variant.force) { FM.variant.force('clapper.timing', null); FM.variant.force('clapper.lines', null); }
       FM.scene.layers = layers0;
       if (FM.selectLayer) FM.selectLayer(sel0 || null);
       if (FM.refreshAll) FM.refreshAll();
@@ -107374,6 +107298,861 @@
         });
       });
     } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
+  });
+
+  /* 964 — the empty project's add area, from one dictated message (26 Sep). His clauses, numbered in REQUESTS.md:
+     1 the blue outline does not reach the TOP; 2 it stays there (stuck); 3 the tap animation looks bad; 4 play it across
+     the WHOLE area, much more colourful; 5 the lines must look good and GO AWAY; 6 they PULSE all the way round, not all
+     lines at once. Shared setup: an empty project at phone width, then put everything back. */
+  async function onEmptyArea964(fn) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(260);
+        const panel = document.getElementById('timeline-panel');
+        const tl = document.getElementById('timeline');
+        const row = document.querySelector('.tl-addrow');
+        if (!panel || !panel.classList.contains('tl-empty-start') || !row || !row.classList.contains('tl-addrow--empty')) {
+          throw new Error('not on the empty-project screen (.tl-empty-start + .tl-addrow--empty), so this would measure the wrong thing');
+        }
+        [].slice.call(panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+        const ruler = document.getElementById('tl-rulerrow').getBoundingClientRect();
+        const tr = tl.getBoundingClientRect();
+        // THE AREA, measured here rather than asked of the code under test: #timeline below the sticky ruler row.
+        const area = { left: tr.left, right: tr.left + tl.clientWidth, top: ruler.bottom, bottom: tr.bottom };
+        area.width = area.right - area.left; area.height = area.bottom - area.top;
+        /* ⚠️ EVERY pointerdown IS CLOSED WITH A pointerup — the 571 lesson: an unfinished synthetic gesture left the
+           timeline mid-gesture and turned three unrelated tests red. pointerup does not synthesise a click, so this
+           cannot open the add sheet. */
+        const press = function (x, y, on) {
+          const t = on || tl;
+          const o = { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0 };
+          t.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, o, { buttons: 1 })));
+          t.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, o, { buttons: 0 })));
+        };
+        return await fn({ panel: panel, tl: tl, row: row, area: area, press: press, sleep: sleep });
+      });
+    } finally {
+      if (FM.variant && FM.variant.force) { FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null); }   // #974's seam, cleared for the next test
+      const p = document.getElementById('timeline-panel');
+      if (p) [].slice.call(p.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  }
+
+  test('964 clause 2: after a tap the empty area keeps no outline - not on focus, not on hover', { item: '964' }, async function () {
+    /* MEASURED 26 Sep at 380x800 and 440x956: a tap focuses the row (tabIndex 0), focus SURVIVES openAdd() and
+       closeAdd(), so `#timeline:focus-within` stayed true and the inset box stayed painted after the menu closed —
+       "it just stays there". row.focus() is that state. Measured too: in this runner a script focus does NOT match
+       :focus-visible, so it stands for a finger, not a keyboard (asserted below as a control). */
+    return onEmptyArea964(async function (c) {
+      /* The app sits in run.html's frame, and Chrome matches :focus / :focus-within only in a FOCUSED document - so
+         give the frame the keyboard first (the 690c helpers do the same), or the control below fails for the runner's
+         reason, not the app's. */
+      window.focus();
+      await c.sleep(60);
+      c.row.focus();
+      if (!c.tl.matches(':focus-within')) throw new Error('CONTROL: focusing the row did not put #timeline in :focus-within, so the stuck state was never reproduced');
+      if (c.row.matches(':focus-visible')) throw new Error('CONTROL: this focus reads as a KEYBOARD focus in this runner, so it cannot stand in for a tap');
+      const cs = getComputedStyle(c.tl);
+      if (cs.boxShadow !== 'none') throw new Error('the empty area still draws a box while the tapped row keeps focus (' + cs.boxShadow + ') - the outline that "just stays there" (queue 964 clause 2)');
+      /* :hover CANNOT BE SYNTHESISED - script pointer events do not move the hover state, and iOS leaves :hover on the
+         last thing tapped. So the RULES are what is checked: nothing may paint the empty timeline on :hover/:focus-within. */
+      const bad = [];
+      const walk = function (list) {
+        for (const ru of list) {
+          if (ru.cssRules && !ru.selectorText) { walk(ru.cssRules); continue; }
+          const sel = ru.selectorText || '';
+          if (!/tl-empty-start/.test(sel) || !/#timeline:(hover|focus-within)/.test(sel)) continue;
+          const st = ru.style;
+          if ((st.boxShadow && st.boxShadow !== 'none') || (st.outlineStyle && st.outlineStyle !== 'none') || (st.borderColor && !/transparent/.test(st.borderColor))) bad.push(sel);
+        }
+      };
+      for (const sh of document.styleSheets) { let rs = null; try { rs = sh.cssRules; } catch (e) { continue; } walk(rs); }
+      if (bad.length) throw new Error('a rule still paints the empty area on :hover/:focus-within, which iOS keeps on after a tap: ' + bad.join(' | '));
+      // POSITIVE CONTROL: the same read DOES see a box when one is there - otherwise a broken read passes the check above.
+      c.tl.style.boxShadow = 'inset 0 0 0 1px rgb(255, 0, 0)';
+      const seen = getComputedStyle(c.tl).boxShadow;
+      c.tl.style.boxShadow = '';
+      if (seen === 'none') throw new Error('CONTROL: getComputedStyle did not see an inline box-shadow, so the check above proves nothing');
+    });
+  });
+
+  test('964 clauses 1 5 6: a press sends the outline all the way round incl. the top, one side after another, then it is gone', { item: '964', budgetMs: 8000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      // #974: both starts are in at random; this is the bottom-middle one (the nearest-edge start has its own test)
+      if (FM.variant && FM.variant.force) FM.variant.force('emptytap.start', 'bottom');
+      c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height * 0.36);   // on the +
+      const host = c.panel.querySelector('.tl-areafx--pulse');
+      if (!host) throw new Error('pressing the empty area drew no travelling outline (queue 964 clause 6)');
+      /* CLAUSE 1 - THE TOP. The old box was an inset shadow on #timeline, and #tl-rulerrow (its sticky, opaque
+         descendant, z-index 7) painted over its top 22px, so the top line never showed. The pulse must start at or below
+         the ruler's bottom AND be stacked above it. */
+      const hr = host.getBoundingClientRect();
+      if (hr.top < c.area.top - 1) throw new Error('the pulse box starts ' + Math.round(c.area.top - hr.top) + 'px up under the ruler row, where its top line cannot be seen (clause 1)');
+      if (Math.abs(hr.bottom - c.area.bottom) > 1 || Math.abs(hr.left - c.area.left) > 1 || Math.abs(hr.right - c.area.right) > 1) throw new Error('the pulse box ' + JSON.stringify([hr.left, hr.top, hr.right, hr.bottom]) + ' is not the area ' + JSON.stringify(c.area));
+      const zr = +getComputedStyle(document.getElementById('tl-rulerrow')).zIndex, zp = +getComputedStyle(host).zIndex;
+      if (!(zp > zr)) throw new Error('the pulse (z ' + zp + ') is not stacked above the ruler row (z ' + zr + ')');
+      /* SEEK, DON'T WAIT. A paused Web Animation reports its style at any currentTime, with or without frames - the
+         571/616 notes: this runner can fire 0 rAF when it is not fronted, so timing the real motion would be flaky. */
+      const cores = [].slice.call(host.querySelectorAll('path.fx-core'));
+      if (cores.length !== 2) throw new Error('expected two travelling lights (one per side), found ' + cores.length);
+      const T = FM._areaFx.PULSE_TRAVEL;
+      const at = function (p, t) {
+        p.getAnimations().forEach(function (an) { an.pause(); an.currentTime = t; });
+        const len = parseFloat(p.style.strokeDasharray);
+        const off = parseFloat(getComputedStyle(p).strokeDashoffset);
+        const L = p.getTotalLength();
+        const pt = p.getPointAtLength(Math.max(0, Math.min(L, len - off)));
+        return { x: hr.left + pt.x, y: hr.top + pt.y };
+      };
+      const seen = { left: 0, right: 0, top: 0, bottom: 0 };
+      for (let k = 0; k <= 24; k++) {
+        cores.forEach(function (p) {
+          const q = at(p, T * k / 24);
+          if (q.x <= hr.left + 8) seen.left++;
+          if (q.x >= hr.right - 8) seen.right++;
+          if (q.y <= hr.top + 8) seen.top++;
+          if (q.y >= hr.bottom - 40) seen.bottom++;
+        });
+      }
+      const miss = Object.keys(seen).filter(function (k) { return !seen[k]; });
+      if (miss.length) throw new Error('the lights never reached the ' + miss.join(', ') + ' edge - "all the way around it" (queue 964 clauses 1 and 6): ' + JSON.stringify(seen));
+      // CLAUSE 6 - ONE AFTER ANOTHER. A quarter of the way in, neither light may be in the top 40% yet ...
+      const q1 = cores.map(function (p) { return at(p, T * 0.25); });
+      if (q1.some(function (q) { return q.y < hr.top + hr.height * 0.4; })) throw new Error('a quarter of the way through, a light is already near the top ' + JSON.stringify(q1) + ' - the lines are appearing at once, not travelling (clause 6)');
+      // ... and the drawn line is still growing then (the old #616 band lit a whole side and the top together).
+      const tr = host.querySelector('path.fx-trail');
+      tr.getAnimations().forEach(function (an) { an.pause(); an.currentTime = T * 0.25; });
+      const drawn = 1 - parseFloat(getComputedStyle(tr).strokeDashoffset) / tr.getTotalLength();
+      if (!(drawn > 0.05 && drawn < 0.6)) throw new Error('a quarter of the way in, the trail has drawn ' + Math.round(drawn * 100) + '% of its side - it must grow, not appear');
+      // POSITIVE CONTROL for the two negatives above: the same read DOES report the top - both finish at the top-centre.
+      const qe = cores.map(function (p) { return at(p, T); });
+      if (qe.some(function (q) { return Math.abs(q.x - (hr.left + hr.width / 2)) > 6 || q.y > hr.top + 8; })) throw new Error('the two lights do not meet at the top-centre: ' + JSON.stringify(qe));
+      // CLAUSE 5 - IT GOES AWAY. Real time, because the teardown is a setTimeout by design (it must not wait on frames).
+      await c.sleep(FM._areaFx.PULSE_MS + 400);
+      if (c.panel.querySelector('.tl-areafx--pulse')) throw new Error('the outline is still in the page ' + (FM._areaFx.PULSE_MS + 400) + 'ms after the press - it has to GO AWAY (clause 5)');
+      if (getComputedStyle(c.tl).boxShadow !== 'none') throw new Error('after the pulse, #timeline still paints a box (' + getComputedStyle(c.tl).boxShadow + ')');
+    });
+  });
+
+  test('964 clauses 3 4: a press floods the WHOLE area with colour from the finger, coloured by the spot, and cleans up', { item: '964', budgetMs: 8000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      const a = c.area;
+      // #974: all three colours are in at random; this is A, Aurora (B and C have their own coverage tests)
+      if (FM.variant && FM.variant.force) FM.variant.force('emptytap.colour', 'A');
+      c.press(a.left + 40, a.top + 60);
+      const host = c.panel.querySelector('.tl-areafx--press');
+      if (!host) {
+        const old = c.tl.querySelector('.tl-tapburst');
+        throw new Error('pressing the empty area made no whole-area colour layer' + (old ? ' - only the old ' + Math.round(old.getBoundingClientRect().width || 104) + 'px .tl-tapburst, the "small little touch thing" he asked to replace' : '') + ' (queue 964 clause 4)');
+      }
+      // FROM THE FINGER (#571's first half): the layer records the press point, and its white-hot core is centred there.
+      if (Math.abs(+host.dataset.x - 40) > 1.5 || Math.abs(+host.dataset.y - 60) > 1.5) throw new Error('the colour layer recorded the press at ' + host.dataset.x + ',' + host.dataset.y + ', not 40,60');
+      const core = host.querySelector('.fx-core');
+      core.getAnimations().forEach(function (an) { an.pause(); an.currentTime = 1; });
+      const cr = core.getBoundingClientRect();
+      if (Math.abs(cr.left + cr.width / 2 - (a.left + 40)) > 2 || Math.abs(cr.top + cr.height / 2 - (a.top + 60)) > 2) throw new Error('the flash does not start under the finger');
+      /* THE WHOLE AREA (clause 4). Geometric, from the live boxes: a sample point is lit when it lies inside a colour
+         curtain's visible ellipse (80% of its radial gradient's closest-side) while that curtain is at least 35%
+         opaque. Best moment over the first half of the animation; >= 90% of a 12x12 grid. The old burst was one
+         104px bloom - about 6% of the area at 380px. */
+      const curtains = [].slice.call(host.querySelectorAll('.fx-curtain'));
+      if (curtains.length < 3) throw new Error('the colour layer has ' + curtains.length + ' colour curtains - not enough to fill anything');
+      let best = 0, bestT = 0;
+      for (let t = 60; t <= FM._areaFx.PRESS_MS * 0.5; t += 30) {
+        host.getAnimations({ subtree: true }).forEach(function (an) { an.pause(); an.currentTime = t; });
+        const shapes = curtains.map(function (el) {
+          const r = el.getBoundingClientRect();
+          return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, rx: r.width / 2 * 0.8, ry: r.height / 2 * 0.8, op: +getComputedStyle(el).opacity };
+        }).filter(function (s) { return s.op >= 0.35 && s.rx > 0 && s.ry > 0; });
+        let lit = 0;
+        for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+          const px = a.left + a.width * (i + 0.5) / 12, py = a.top + a.height * (j + 0.5) / 12;
+          if (shapes.some(function (s) { const dx = (px - s.cx) / s.rx, dy = (py - s.cy) / s.ry; return dx * dx + dy * dy <= 1; })) lit++;
+        }
+        if (lit / 144 > best) { best = lit / 144; bestT = t; }
+      }
+      if (best < 0.9) throw new Error('at its fullest (' + bestT + 'ms) the colour reaches ' + Math.round(best * 100) + '% of the area - he asked for it to "cook up the whole area" (clause 4)');
+      host.getAnimations({ subtree: true }).forEach(function (an) { an.play(); });
+      // COLOUR BY THE SPOT (#571's keyboard): a press at the far corner answers in a different colour.
+      c.press(a.right - 40, a.bottom - 40);
+      const hosts = c.panel.querySelectorAll('.tl-areafx--press');
+      const hB = +hosts[hosts.length - 1].dataset.h, hA = +host.dataset.h;
+      const dh = Math.min(Math.abs(hA - hB), 360 - Math.abs(hA - hB));
+      if (dh < 30) throw new Error('two presses at opposite corners came out hue ' + hA + ' and ' + hB + ' - the colour must follow the position (#571: "based on what button you press")');
+      // CAPPED, and TORN DOWN - a drum-roll must not pile up nodes, and nothing may outlive the animation.
+      for (let i = 0; i < 25; i++) c.press(a.left + 100 + i, a.top + 100 + i);
+      const live = c.panel.querySelectorAll('.tl-areafx--press').length, laps = c.panel.querySelectorAll('.tl-areafx--pulse').length;
+      if (live > FM._areaFx.MAX) throw new Error(live + ' colour layers live at once (cap ' + FM._areaFx.MAX + ')');
+      if (laps > 1) throw new Error(laps + ' outline laps live at once - a second tap must not stack another');
+      await c.sleep(Math.max(FM._areaFx.PRESS_MS, FM._areaFx.PULSE_MS) + 450);
+      const left = c.panel.querySelectorAll('.tl-areafx').length;
+      if (left) throw new Error(left + ' press layers survived their animation - they must be torn down on a timer');
+      // CONTROL: with a layer in the project the same press does nothing (the empty screen only).
+      const L = FM.makeLayer('shape', { name: 'X', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.timeline.rebuild();
+      await c.sleep(260);
+      c.press(a.left + 190, a.top + 200);
+      await c.sleep(40);
+      if (c.panel.querySelectorAll('.tl-areafx').length) throw new Error('CONTROL FAILED - a press on a timeline WITH layers also floods it with colour; this is for the empty screen only');
+    });
+  });
+
+  test('964: asked for less motion, a press is acknowledged by one short still fade - nothing travels or grows', { item: '964', budgetMs: 6000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      const realMM = window.matchMedia;
+      window.matchMedia = function (q) {
+        if (/prefers-reduced-motion:\s*reduce/.test(q)) return { matches: true, media: q, onchange: null, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+        return realMM.call(window, q);
+      };
+      try {
+        c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height / 2);
+      } finally { window.matchMedia = realMM; }
+      if (c.panel.querySelector('.tl-areafx--pulse, .tl-areafx--press')) throw new Error('with reduced motion asked for, the press still sends the travelling outline or the colour flood');
+      const calm = c.panel.querySelector('.tl-areafx--calm');
+      if (!calm) throw new Error('with reduced motion asked for, the press shows nothing at all - it must still be acknowledged, just without motion');
+      const anims = calm.getAnimations({ subtree: true });
+      if (!anims.length) throw new Error('the reduced-motion acknowledgement never fades - it would stay on screen');
+      anims.forEach(function (an) {
+        const d = an.effect.getTiming().duration;
+        if (d > 300) throw new Error('the reduced-motion fade runs ' + d + 'ms - keep it short');
+        an.effect.getKeyframes().forEach(function (k) { if (k.transform && k.transform !== 'none') throw new Error('the reduced-motion fade moves or scales (' + k.transform + ')'); });
+      });
+      await c.sleep(FM._areaFx.CALM_MS + 300);
+      if (c.panel.querySelector('.tl-areafx')) throw new Error('the reduced-motion fade is still in the page after it finished');
+    });
+  });
+
+  test('964 clause 6: on the empty screen the old row-sized pulse no longer fires - the area pulse replaces it; the slim row keeps #616', { item: '964' }, async function () {
+    /* The #616 pulse is a band that climbs the ROW's box and lights both sides and the whole top line at once. In
+       the empty state the row is a 300px box in the middle of the area, so a tap there drew a SECOND outline, not
+       the area's - one that does exactly "all the lines appear at once". */
+    return onEmptyArea964(async function (c) {
+      const p = c.row.querySelector('.tl-addrow-pulse');
+      c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height * 0.36, c.row);
+      const firing = p && p.classList.contains('is-pulsing') && getComputedStyle(p).display !== 'none';
+      if (firing) throw new Error('pressing the empty area still fires the row-sized #616 pulse - a second box whose lines all light at once (clause 6)');
+      if (!c.panel.querySelector('.tl-areafx--pulse')) throw new Error('CONTROL: the same press drew no area pulse either, so this is not testing the replacement');
+      // CONTROL: the slim row (a project with layers) keeps #616 exactly as he approved it.
+      FM.addShapeLayer('rect');
+      FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 6; });
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      await c.sleep(300);
+      const slim = document.querySelector('.tl-addrow');
+      const sp = slim && slim.querySelector('.tl-addrow-pulse');
+      if (!sp) throw new Error('CONTROL FAILED - the slim add row lost its #616 pulse');
+      slim.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      slim.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      if (!sp.classList.contains('is-pulsing') || getComputedStyle(sp).display === 'none') throw new Error('CONTROL FAILED - pressing the slim add row no longer plays its #616 pulse');
+      sp.classList.remove('is-pulsing');
+    });
+  });
+
+  /* ONLY IF HE PICKS A HOLD (ASK 2). With SHEET_HOLD_MS = 0 this test is deleted, not skipped. */
+  test('964: the add menu waits a beat after a press on the empty area, counted from the press - never after a bare click', { item: '964', budgetMs: 6000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM._areaFx || !(FM._areaFx.HOLD_MS >= 0)) throw new Error('FM._areaFx.HOLD_MS is missing - there is no hold, so the menu covers the press animation within ~100ms of the finger lifting (measured: 59% at 50ms, 98% at 100ms)');
+      const real = FM.mobile.openAdd;
+      const calls = [];
+      FM.mobile.openAdd = function () { calls.push(performance.now()); };
+      try {
+        const HOLD = FM._areaFx.HOLD_MS;
+        if (!(HOLD > 0)) throw new Error('HOLD_MS is ' + HOLD + ' - with no hold this test should have been removed');
+        const t0 = performance.now();
+        c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height * 0.36, c.row);
+        c.row.click();
+        if (calls.length) throw new Error('the add menu opened ' + Math.round(calls[0] - t0) + 'ms after the press - the colour is covered before it is seen (measured: the sheet covers 59% of the area 50ms into its swing, 98% at 100ms)');
+        await c.sleep(HOLD + 120);
+        if (calls.length !== 1) throw new Error('after the hold the add menu opened ' + calls.length + ' times, not once');
+        if (calls[0] - t0 < HOLD - 25) throw new Error('the menu opened ' + Math.round(calls[0] - t0) + 'ms after the press, short of the ' + HOLD + 'ms hold');
+        // CONTROL: a click with no press before it (the keyboard's Enter path, and every older test) is NOT delayed.
+        calls.length = 0;
+        c.row.click();
+        if (calls.length !== 1) throw new Error('CONTROL FAILED - a bare click (no press) was delayed too; the hold must count from a press');
+      } finally { FM.mobile.openAdd = real; }
+    });
+  });
+
+  /* ═══ 974 — EVERY ANIMATION WITH OPTIONS: ALL OF THEM IN THE APP, ONE AT RANDOM EACH TIME ═══════════════════════════
+     Ezra, 28 Sep: "Honestly for all of the different button animations - make them all happen in the app but it's just
+     random which one so I can decide which is best over use time".
+     His clauses: (1) every animation with competing options has ALL of them in the app; (2) which one plays is random.
+     So each option is FORCED in turn through FM.variant.force (the seam) and seen to PLAY, by what it draws — the proof
+     that every one is really there — and the same real route is then played 60 times UNFORCED and must reach every
+     option: the control that the randomness is not stuck on one. (Missing one of three in 60 fair picks: 3·(2/3)^60 ≈
+     1e-10; one of two: 2·(1/2)^60 ≈ 2e-18 — a red here is never bad luck.) */
+  test('974 FM.variant picks at random on every play, remembers the last pick, logs it (50 per animation) and can be forced', { item: '974' }, async function () {
+    if (!FM.variant || typeof FM.variant !== 'function') throw new Error('FM.variant is missing - there is no shared way to play one of several options at random (queue 974)');
+    const KEY = 'fm.variantLog';
+    let saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    try {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      const seen = {};
+      for (let i = 0; i < 60; i++) {
+        const p = FM.variant('t974.a', ['x', 'y', 'z']);
+        if (['x', 'y', 'z'].indexOf(p) < 0) throw new Error('FM.variant returned ' + p + ', which is not one of the options');
+        if (FM.variant.last['t974.a'] !== p) throw new Error('FM.variant.last does not hold the pick just made (' + FM.variant.last['t974.a'] + ' vs ' + p + ')');
+        seen[p] = (seen[p] || 0) + 1;
+      }
+      if (Object.keys(seen).length !== 3) throw new Error('60 plays picked only ' + JSON.stringify(seen) + ' - the pick is not random per play (his clause 2)');
+      const mine = FM.variant.log().filter(e => e.name === 't974.a');
+      if (mine.length !== 50) throw new Error('after 60 plays the log keeps ' + mine.length + ' of them; it is a ring of the newest 50');
+      if (!mine.every(e => typeof e.t === 'number' && ['x', 'y', 'z'].indexOf(e.pick) >= 0)) throw new Error('a log entry is not {name, pick, t}: ' + JSON.stringify(mine[0]));
+      if (mine[mine.length - 1].pick !== FM.variant.last['t974.a']) throw new Error('the newest log entry is not the last pick');
+      let raw = [];
+      try { raw = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) {}
+      if (raw.filter(e => e.name === 't974.a').length !== 50) throw new Error('the log is not kept in localStorage "' + KEY + '", so it cannot be read back when he names the one he liked');
+      // one chatty animation (the clapper logs every clap) cannot push another one's picks out
+      FM.variant('t974.b', ['p']);
+      for (let i = 0; i < 60; i++) FM.variant('t974.a', ['x', 'y', 'z']);
+      if (!FM.variant.log().some(e => e.name === 't974.b')) throw new Error('60 plays of one animation pushed another animation\'s pick out of the log');
+      // THE SEAM: a forced pick holds; a force that is not an option is ignored; clearing it brings the dice back
+      FM.variant.force('t974.a', 'y');
+      for (let i = 0; i < 20; i++) if (FM.variant('t974.a', ['x', 'y', 'z']) !== 'y') throw new Error('a forced pick did not hold');
+      FM.variant.force('t974.a', 'not-an-option');
+      const s2 = {};
+      for (let i = 0; i < 60; i++) s2[FM.variant('t974.a', ['x', 'y', 'z'])] = 1;
+      if (Object.keys(s2).length !== 3) throw new Error('forcing something that is not an option stuck the pick: ' + JSON.stringify(s2));
+      FM.variant.force('t974.a', null);
+      const s3 = {};
+      for (let i = 0; i < 60; i++) s3[FM.variant('t974.a', ['x', 'y', 'z'])] = 1;
+      if (Object.keys(s3).length !== 3) throw new Error('clearing the force did not bring the random pick back: ' + JSON.stringify(s3));
+    } finally {
+      if (FM.variant && FM.variant.force) FM.variant.force('t974.a', null);
+      if (FM.variant && FM.variant.last) { delete FM.variant.last['t974.a']; delete FM.variant.last['t974.b']; }
+      try { if (saved === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved); } catch (e) {}
+    }
+  });
+
+  /* #964's tap colour. Each option is recognised by what only it draws: A six colour curtains, B three rings and thirty
+     sparks, C one canvas of keys (drawn through its own seam, since a canvas has no Web Animation to read). */
+  test('974 the empty area\'s tap colour: A Aurora, B Rings and sparks and C Key ripple each play when chosen, and 60 real presses play all three', { item: '974', budgetMs: 30000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - only one tap colour can ever play (queue 974)');
+      const clear = () => [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
+      const keysLit = function (host, t) {
+        const cv = host.querySelector('canvas.fx-keys');
+        if (!cv || typeof host._fxDraw !== 'function') return -1;
+        host._fxSeeking = true; host._fxDraw(t);
+        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let lit = 0;
+        for (let i = 3; i < d.length; i += 4 * 97) if (d[i] > 40) lit++;
+        return lit;
+      };
+      const marks = function (host) {
+        return { curtains: host.querySelectorAll('.fx-curtain:not(.fx-ring)').length, rings: host.querySelectorAll('.fx-ring').length,
+                 sparks: host.querySelectorAll('.fx-spark').length, keys: host.querySelectorAll('canvas.fx-keys').length,
+                 moving: host.getAnimations({ subtree: true }).length };
+      };
+      const at = { x: c.area.left + c.area.width / 2, y: c.area.top + c.area.height * 0.36 };   // on the +
+      for (const v of ['A', 'B', 'C']) {
+        FM.variant.force('emptytap.colour', v); clear();
+        c.press(at.x, at.y);
+        const host = c.panel.querySelector('.tl-areafx--press');
+        if (!host) throw new Error('with ' + v + ' chosen, a press made no colour layer at all');
+        if (host.dataset.variant !== v) throw new Error('with ' + v + ' chosen, the colour layer says it is "' + host.dataset.variant + '"');
+        const m = marks(host);
+        if (v === 'A' && !(m.curtains === 6 && !m.rings && !m.keys && m.moving)) throw new Error('A (Aurora) does not play: ' + JSON.stringify(m) + ' - it is six moving colour curtains');
+        if (v === 'B' && !(m.rings === 3 && m.sparks >= 20 && !m.keys && m.moving)) throw new Error('B (Rings and sparks) does not play: ' + JSON.stringify(m) + ' - it is three moving rings and thirty sparks');
+        if (v === 'C') {
+          if (!(m.keys === 1 && !m.rings && !m.curtains)) throw new Error('C (Key ripple) does not play: ' + JSON.stringify(m) + ' - it is one canvas of keys');
+          const early = keysLit(host, 0), mid = keysLit(host, 300);
+          if (!(mid > early)) throw new Error('C\'s keys do not light up as the wave passes (' + early + ' lit at 0ms, ' + mid + ' at 300ms)');
+        }
+        if (host.dataset.x !== String(Math.round(at.x - c.area.left))) throw new Error(v + ' does not start from the finger (x ' + host.dataset.x + ')');
+      }
+      clear();
+      FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null);
+      const got = {}, starts = {};
+      for (let i = 0; i < 60; i++) {
+        clear();
+        c.press(c.area.left + 30 + (i * 37) % (c.area.width - 60), c.area.top + 30 + (i * 53) % (c.area.height - 60));
+        const host = c.panel.querySelector('.tl-areafx--press'), pulse = c.panel.querySelector('.tl-areafx--pulse');
+        if (!host || !pulse) throw new Error('unforced press ' + (i + 1) + ' of 60 played ' + (host ? 'no outline' : 'no colour'));
+        got[host.dataset.variant] = (got[host.dataset.variant] || 0) + 1;
+        starts[pulse.dataset.start] = (starts[pulse.dataset.start] || 0) + 1;
+        if (FM.variant.last['emptytap.colour'] !== host.dataset.variant) throw new Error('FM.variant.last names ' + FM.variant.last['emptytap.colour'] + ' but ' + host.dataset.variant + ' played');
+      }
+      clear();
+      if (Object.keys(got).sort().join() !== 'A,B,C') throw new Error('60 unforced presses played the colours ' + JSON.stringify(got) + ' - all three must come up at random (his clause 2)');
+      if (Object.keys(starts).sort().join() !== 'bottom,nearest') throw new Error('60 unforced presses started the outline ' + JSON.stringify(starts) + ' - both starts must come up');
+    });
+  });
+
+  /* B's own proof (the plan's appendix: "a ring is lit only on its band, not inside it", so decide by measuring).
+     A grid point is lit at a moment when it lies in a ring's bright band — 0.70 to 0.98 of its radius: the gradient is
+     clear to 70%, .85 at 88%, .95 at 93%, clear at 100% — while that ring is at least 15% opaque. MEASURED 28 Sep at
+     380x800: the rings SWEEP 98.6% of a 12x12 grid in their first second from a press on the +, 97.2% from the top-left
+     corner; the fullest single moment is 69% (rings are rings), so the sweep is what is held, at 90%. */
+  test('974 option B, Rings and sparks: its rings sweep the WHOLE area out from the finger', { item: '974', budgetMs: 10000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option B cannot be chosen (queue 974)');
+      const a = c.area;
+      FM.variant.force('emptytap.colour', 'B');
+      for (const p of [[a.left + a.width / 2, a.top + a.height * 0.36, 'on the +'], [a.left + 40, a.top + 60, 'in the top-left corner']]) {
+        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
+        c.press(p[0], p[1]);
+        const host = c.panel.querySelector('.tl-areafx--press');
+        const rings = host ? [].slice.call(host.querySelectorAll('.fx-ring')) : [];
+        if (rings.length !== 3) throw new Error('a press ' + p[2] + ' with B chosen made ' + rings.length + ' rings, not three');
+        const lit = new Set();
+        let fromFinger = false;
+        for (let t = 0; t <= 1000; t += 20) {
+          host.getAnimations({ subtree: true }).forEach(an => { an.pause(); an.currentTime = t; });
+          const shapes = rings.map(el => { const r = el.getBoundingClientRect(); return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, R: r.width / 2, op: +getComputedStyle(el).opacity }; });
+          if (t === 100 && shapes.some(s => Math.hypot(s.cx - p[0], s.cy - p[1]) < 2)) fromFinger = true;
+          for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+            const x = a.left + a.width * (i + 0.5) / 12, y = a.top + a.height * (j + 0.5) / 12;
+            if (shapes.some(s => { if (s.op < 0.15) return false; const d = Math.hypot(x - s.cx, y - s.cy); return d >= 0.7 * s.R && d <= 0.98 * s.R; })) lit.add(i * 12 + j);
+          }
+        }
+        if (!fromFinger) throw new Error('B\'s rings are not centred on the press ' + p[2]);
+        if (lit.size / 144 < 0.9) throw new Error('pressed ' + p[2] + ', B\'s rings sweep ' + Math.round(lit.size / 1.44) + '% of the area - he asked for it to "cook up the whole area" (#964 clause 4)');
+      }
+    });
+  });
+
+  /* C's own proof (the plan's appendix: seek the canvas through host._fxDraw and read pixels). A grid point counts when
+     the brightest pixel within 6px of it has alpha > 40 (a point can land in the 6px gap between two keys). MEASURED
+     28 Sep at 380x800: the fullest moment lights 98.6% of a 12x12 grid from a press on the +, 97.2% from the top-left
+     corner (the wave is a band, so it is the best frame of 60..900ms that is held, at 90%). */
+  test('974 option C, Key ripple: its wave of keys lights the WHOLE area out from the finger', { item: '974', budgetMs: 10000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option C cannot be chosen (queue 974)');
+      const a = c.area;
+      FM.variant.force('emptytap.colour', 'C');
+      for (const p of [[a.left + a.width / 2, a.top + a.height * 0.36, 'on the +'], [a.left + 40, a.top + 60, 'in the top-left corner']]) {
+        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
+        c.press(p[0], p[1]);
+        const host = c.panel.querySelector('.tl-areafx--press');
+        const cv = host && host.querySelector('canvas.fx-keys');
+        if (!cv || typeof host._fxDraw !== 'function') throw new Error('a press ' + p[2] + ' with C chosen drew no key canvas');
+        host._fxSeeking = true;
+        const g = cv.getContext('2d'), k = cv.width / a.width;
+        const litAt = function (t) {
+          host._fxDraw(t);
+          const img = g.getImageData(0, 0, cv.width, cv.height).data;
+          const on = [];
+          for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+            const x = Math.round(a.width * (i + 0.5) / 12 * k), y = Math.round(a.height * (j + 0.5) / 12 * k);
+            let m = 0;
+            for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++) {
+              const xx = Math.min(cv.width - 1, Math.max(0, x + dx * 2)), yy = Math.min(cv.height - 1, Math.max(0, y + dy * 2));
+              m = Math.max(m, img[(yy * cv.width + xx) * 4 + 3]);
+            }
+            on.push(m > 40);
+          }
+          return on;
+        };
+        // from the finger: early on, the key under the finger is lit and the far corner is not
+        const e = litAt(90);
+        const gi = (px, py) => Math.min(11, Math.max(0, Math.floor((px - a.left) / a.width * 12))) * 12 + Math.min(11, Math.max(0, Math.floor((py - a.top) / a.height * 12)));
+        const farX = p[0] - a.left < a.width / 2 ? a.right - 5 : a.left + 5, farY = p[1] - a.top < a.height / 2 ? a.bottom - 5 : a.top + 5;
+        if (!e[gi(p[0], p[1])] || e[gi(farX, farY)]) throw new Error('90ms after a press ' + p[2] + ', C has not started at the finger and spread from it (finger lit: ' + e[gi(p[0], p[1])] + ', far corner lit: ' + e[gi(farX, farY)] + ')');
+        let best = 0, bestT = 0;
+        for (let t = 60; t <= 900; t += 30) { const n = litAt(t).filter(Boolean).length / 144; if (n > best) { best = n; bestT = t; } }
+        if (best < 0.9) throw new Error('pressed ' + p[2] + ', C\'s keys light at most ' + Math.round(best * 100) + '% of the area (at ' + bestT + 'ms) - he asked for the whole area (#964 clause 4)');
+      }
+    });
+  });
+
+  /* #964 ASK 3's second option. The two lights start at the rim point nearest the finger, one each way round, and meet
+     half the rim away. Seeked, like the bottom-middle test ('964 clauses 1 5 6'), and with that start as the CONTROL:
+     the same press with the bottom-middle start must begin at the bottom-centre, or this test could not tell them apart. */
+  test('974 the outline\'s other start: from the edge nearest the finger, both ways round, meeting on the far side', { item: '974', budgetMs: 10000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the outline can only start one way (queue 974)');
+      const a = c.area, T = FM._areaFx.PULSE_TRAVEL;
+      const lap = function (start, px, py) {
+        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
+        FM.variant.force('emptytap.start', start);
+        c.press(px, py);
+        const host = c.panel.querySelector('.tl-areafx--pulse');
+        if (!host) throw new Error('a press drew no outline (start ' + start + ')');
+        if (host.dataset.start !== start) throw new Error('with the ' + start + ' start chosen, the outline says it started "' + host.dataset.start + '"');
+        const hr = host.getBoundingClientRect();
+        const cores = [].slice.call(host.querySelectorAll('path.fx-core'));
+        if (cores.length !== 2) throw new Error('expected two travelling lights, found ' + cores.length);
+        const at = function (t) {
+          return cores.map(function (p) {
+            p.getAnimations().forEach(function (an) { an.pause(); an.currentTime = t; });
+            const len = parseFloat(p.style.strokeDasharray), off = parseFloat(getComputedStyle(p).strokeDashoffset), L = p.getTotalLength();
+            const pt = p.getPointAtLength(Math.max(0, Math.min(L, len - off)));
+            return { x: hr.left + pt.x, y: hr.top + pt.y };
+          });
+        };
+        return { host: host, hr: hr, at: at };
+      };
+      // pressed near the LEFT edge, half-way down
+      const px = a.left + 20, py = a.top + a.height * 0.5;
+      const L1 = lap('nearest', px, py), hr = L1.hr;
+      const s0 = L1.at(0);
+      s0.forEach(function (q) { if (Math.abs(q.x - (hr.left + 4)) > 6 || Math.abs(q.y - py) > 8) throw new Error('pressed near the left edge at y=' + Math.round(py) + ', a light starts at ' + JSON.stringify(q) + ' - not the nearest point of the rim'); });
+      const q15 = L1.at(T * 0.15);
+      if (!((q15[0].y < py - 10 && q15[1].y > py + 10) || (q15[1].y < py - 10 && q15[0].y > py + 10))) throw new Error('the two lights do not go opposite ways round from the finger: ' + JSON.stringify(q15));
+      const seen = { left: 0, right: 0, top: 0, bottom: 0 };
+      for (let k = 0; k <= 24; k++) L1.at(T * k / 24).forEach(function (q) {
+        if (q.x <= hr.left + 8) seen.left++;
+        if (q.x >= hr.right - 8) seen.right++;
+        if (q.y <= hr.top + 8) seen.top++;
+        if (q.y >= hr.bottom - 40) seen.bottom++;
+      });
+      const miss = Object.keys(seen).filter(function (k) { return !seen[k]; });
+      if (miss.length) throw new Error('from the nearest edge the lights never reached the ' + miss.join(', ') + ' edge - "all the way around it": ' + JSON.stringify(seen));
+      const e = L1.at(T);
+      if (Math.hypot(e[0].x - e[1].x, e[0].y - e[1].y) > 6) throw new Error('the two lights do not meet: ' + JSON.stringify(e));
+      if (e[0].x < hr.right - 12) throw new Error('from the left edge they meet at x=' + Math.round(e[0].x) + ' - not on the far (right) side');
+      // the start FOLLOWS the finger: near the right edge, low down, it starts there
+      const px2 = a.right - 30, py2 = a.bottom - 60;
+      const L2 = lap('nearest', px2, py2);
+      L2.at(0).forEach(function (q) { if (Math.abs(q.x - (L2.hr.right - 4)) > 6 || Math.abs(q.y - py2) > 8) throw new Error('pressed near the right edge at y=' + Math.round(py2) + ', a light starts at ' + JSON.stringify(q)); });
+      // CONTROL: the same left-edge press with the bottom-middle start begins at the bottom-centre
+      const L3 = lap('bottom', px, py);
+      L3.at(0).forEach(function (q) { if (Math.abs(q.x - (L3.hr.left + L3.hr.width / 2)) > 6 || q.y < L3.hr.bottom - 40) throw new Error('CONTROL: the bottom-middle start began at ' + JSON.stringify(q) + ', so this test cannot tell the two starts apart'); });
+    });
+  });
+
+  /* #957's clapper: timing A (open, then every 6 s), B (once), C (non-stop), and grey or cyan impact lines. The timing is
+     picked each time the empty project comes on screen, so each check brings it on fresh (a layer on, then off). */
+  async function clapFresh974(timing, lines) {
+    if (FM.variant && FM.variant.force) { FM.variant.force('clapper.timing', timing); FM.variant.force('clapper.lines', lines === undefined ? null : lines); }
+    FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: '974', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+    FM.refreshAll(); await sleep(30);
+    FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(60);
+    const d = document.getElementById('drop-hint');
+    if (!d || d.classList.contains('hidden') || !(d.getBoundingClientRect().width > 0)) throw new Error('the empty-canvas clapper is not on screen with no layers, so there is nothing to watch');
+    return d;
+  }
+  async function onEmptyStage974(fn) {
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(60);
+      return await fn();
+    } finally {
+      if (FM.variant && FM.variant.force) { FM.variant.force('clapper.timing', null); FM.variant.force('clapper.lines', null); }
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  }
+  /* The same measurement as '957 the empty project clapper…', seeked and read off the drawing through its live CTM. */
+  function clapSample974(d, upto) {
+    const board = d.querySelector('.dh-body > path'), bar = d.querySelector('.dh-stick').querySelectorAll('path')[1];
+    const lines = [].slice.call(d.querySelectorAll('.dh-whack path'));
+    const running = d.getAnimations({ subtree: true }).filter(a => /^dh-/.test(a.animationName || ''));
+    const clap = running.filter(a => /^dh-clap/.test(a.animationName))[0];
+    if (!clap) return { running: running };
+    const tm = clap.effect.getComputedTiming();
+    const inBoard = (el, x, y) => new DOMPoint(x, y).matrixTransform(el.getScreenCTM()).matrixTransform(board.getScreenCTM().inverse());
+    const at = function (ms) {
+      running.forEach(a => { a.pause(); a.currentTime = tm.delay + ms; });
+      const H = inBoard(bar, 3.2, 8.9), R = inBoard(bar, 21, 6.5);
+      return { ms: ms, deg: Math.atan2(H.y - R.y, R.x - H.x) * 180 / Math.PI, hinge: Math.hypot(H.x - 3.2, H.y - 8.9), tipY: R.y,
+               ink: Math.max.apply(null, lines.map(p => +getComputedStyle(p).opacity)),
+               out: Math.min.apply(null, lines.map(p => { const b = p.getBBox(); return inBoard(p, b.x, b.y).x - 21; })) };
+    };
+    const S = [];
+    for (let ms = 0; ms <= (upto || 1200); ms += 10) S.push(at(ms));
+    return { running: running, clap: clap, tm: tm, S: S, at: at };
+  }
+  test('974 the clapper\'s three timings each play as drawn: A open then every 6 s, B one clap then shut, C non-stop', { item: '974', budgetMs: 20000 }, async function () {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // nothing claps there, by design ('957 the empty project clapper…' holds that)
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the clapper can only ever play one timing (queue 974)');
+    return onEmptyStage974(async function () {
+      const want = { A: { name: 'dh-clap', it: Infinity, lo: 4000, hi: 8000 }, B: { name: 'dh-clap-b', it: 1, lo: 700, hi: 1600 }, C: { name: 'dh-clap-c', it: Infinity, lo: 1200, hi: 2000 } };
+      for (const v of ['A', 'B', 'C']) {
+        const d = await clapFresh974(v, 'cyan');
+        const m = clapSample974(d);
+        if (!m.clap) throw new Error('with timing ' + v + ' chosen nothing animates the stick (running: ' + (m.running.map(a => a.animationName).join(', ') || 'none') + ')');
+        const w = want[v];
+        if (m.clap.animationName !== w.name) throw new Error('with timing ' + v + ' chosen the stick runs ' + m.clap.animationName + ', not ' + w.name);
+        if (m.tm.iterations !== w.it) throw new Error('timing ' + v + ' plays ' + m.tm.iterations + ' time(s), not ' + w.it);
+        if (!(m.tm.duration >= w.lo && m.tm.duration <= w.hi)) throw new Error('timing ' + v + '\'s cycle is ' + m.tm.duration + 'ms, not ' + w.lo + '-' + w.hi);
+        if (m.running.length !== 5) throw new Error('timing ' + v + ' runs ' + m.running.length + ' clapper animations (stick, board, three lines = 5): ' + m.running.map(a => a.animationName).join(', '));
+        if (m.running.some(a => a.effect.getComputedTiming().duration !== m.tm.duration)) throw new Error('timing ' + v + '\'s stick, board and lines are out of step: ' + m.running.map(a => a.animationName + ' ' + a.effect.getComputedTiming().duration).join(', '));
+        const S = m.S, s0 = S[0];
+        if (!(s0.deg > 20)) throw new Error('timing ' + v + ': at the start the stick is ' + s0.deg.toFixed(1) + '° open - it does not start open');
+        if (s0.ink > 0.05) throw new Error('timing ' + v + ': the impact lines show before the slam');
+        const off = S.filter(s => s.hinge > 0.3)[0];
+        if (off) throw new Error('timing ' + v + ': at ' + off.ms + 'ms the hinge has moved ' + off.hinge.toFixed(2) + ' units off the board\'s corner');
+        const hit = S.filter(s => s.deg < 1)[0];
+        if (!hit) throw new Error('timing ' + v + ': the stick never shuts in the first 1.2 s');
+        if (Math.abs(hit.tipY - 8.9) > 0.4) throw new Error('timing ' + v + ': shut, the tip is at y=' + hit.tipY.toFixed(2) + ', not on the board');
+        const lastOpen = S.filter(s => s.ms < hit.ms && s.deg > 0.8 * s0.deg).pop();
+        if (!lastOpen || hit.ms - lastOpen.ms > 150) throw new Error('timing ' + v + ': it takes ' + (lastOpen ? hit.ms - lastOpen.ms : '?') + 'ms from open to shut - a close, not a slam');
+        const burst = S.filter(s => s.ms >= hit.ms - 10 && s.ms <= hit.ms + 80 && s.ink > 0.5)[0];
+        if (!burst || burst.out < -0.5) throw new Error('timing ' + v + ': no impact lines out of the tip within 80ms of the slam at ' + hit.ms + 'ms');
+        if (S.filter(s => s.ms >= hit.ms + 400 && s.ink > 0.05)[0]) throw new Error('timing ' + v + ': the impact lines still show 400ms after the slam');
+        if (v === 'B') {
+          // ONCE: long after its one clap it is still shut, lines gone (the plan's §6 check for B)
+          const late = m.at(m.tm.duration + 2000);
+          if (!(late.deg < 1) || late.ink > 0.05) throw new Error('timing B: 2 s after its clap the stick is ' + late.deg.toFixed(1) + '° open (lines ' + late.ink + ') - it is meant to clap once and stay shut');
+        } else {
+          // AGAIN: one cycle on, it is open again for the next clap
+          const again = m.at(m.tm.duration);
+          if (!(again.deg > 20)) throw new Error('timing ' + v + ': at the start of its next cycle the stick is ' + again.deg.toFixed(1) + '° open - it does not come back for another clap');
+        }
+        m.running.forEach(a => a.play());
+        // the timing classes must not outrank the Home off switch (the reduced-motion rule is the same kind of rule)
+        FM.home.open(); await sleep(120);
+        const behind = d.getAnimations({ subtree: true }).filter(a => /^dh-/.test(a.animationName || '')).length;
+        FM.home.close(); await sleep(120);
+        if (behind) throw new Error('with timing ' + v + ' the clapper keeps animating behind Home (' + behind + ')');
+      }
+      // CONTROL: 60 unforced openings of the empty project reach all three timings and both line colours
+      FM.variant.force('clapper.timing', null); FM.variant.force('clapper.lines', null);
+      const d = document.getElementById('drop-hint'), got = {}, cols = {};
+      for (let i = 0; i < 60; i++) {
+        FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: '974', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+        FM.refreshAll(); await sleep(0);
+        FM.scene.layers.length = 0; FM.refreshAll(); await sleep(0);
+        const t = ['a', 'b', 'c'].filter(k => d.classList.contains('dh-t-' + k));
+        if (t.length !== 1) throw new Error('opening ' + (i + 1) + ' of 60 left the clapper with timing classes ' + JSON.stringify(t));
+        if (FM.variant.last['clapper.timing'] !== t[0].toUpperCase()) throw new Error('FM.variant.last names timing ' + FM.variant.last['clapper.timing'] + ' but ' + t[0].toUpperCase() + ' is on');
+        got[t[0]] = 1; cols[d.classList.contains('dh-grey') ? 'grey' : 'cyan'] = 1;
+      }
+      if (Object.keys(got).sort().join() !== 'a,b,c') throw new Error('60 unforced openings played the timings ' + JSON.stringify(got) + ' - all three must come up at random');
+      if (Object.keys(cols).sort().join() !== 'cyan,grey') throw new Error('60 unforced openings drew the lines ' + JSON.stringify(cols) + ' - both colours must come up');
+    });
+  });
+
+  test('974 the clapper\'s impact lines: cyan or grey, a new pick on every clap', { item: '974', budgetMs: 20000 }, async function () {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the clapper\'s lines can only ever be one colour (queue 974)');
+    return onEmptyStage974(async function () {
+      const accent = (function () {
+        const p = document.createElement('span'); p.style.color = 'var(--accent)';
+        document.getElementById('drop-hint').appendChild(p);
+        const c = getComputedStyle(p).color; p.remove(); return c;
+      })();
+      let d = await clapFresh974('C', 'grey');
+      const g = d.querySelector('.dh-whack'), icon = d.querySelector('.dh-icon svg');
+      const grey = getComputedStyle(g).stroke, ink = getComputedStyle(icon).color;
+      if (grey !== ink) throw new Error('with grey chosen the lines are ' + grey + ', not the clapper\'s own ' + ink);
+      d = await clapFresh974('C', 'cyan');
+      const cyan = getComputedStyle(d.querySelector('.dh-whack')).stroke;
+      if (cyan !== accent) throw new Error('with cyan chosen the lines are ' + cyan + ', not the accent ' + accent);
+      if (cyan === grey) throw new Error('CONTROL: cyan and grey came out the same colour (' + cyan + '), so neither check above means anything');
+      /* EVERY CLAP picks again. Real time (a seek does not fire animationiteration — measured), on timing C: 0.4 s delay +
+         two 1.6 s laps. Counted in the log, which is exactly what he would be read back. */
+      d = await clapFresh974('C');
+      // counted by time, not by length: the log keeps the newest 50 per animation, so a full log does not grow
+      const since = Date.now() + 1;
+      const count = () => FM.variant.log().filter(e => e.name === 'clapper.lines' && e.t >= since).length;
+      const n0 = count();
+      const stick = d.querySelector('.dh-stick').getAnimations()[0];
+      const t0 = stick ? stick.currentTime : null;
+      await sleep(400 + 1600 * 2 + 400);
+      const moved = stick ? stick.currentTime - t0 : 0;
+      if (!(moved > 3000)) throw new Error('CONTROL: the clap\'s clock moved ' + moved + 'ms in 4.4 s, so animations are not running here and this cannot count claps');
+      const n1 = count();
+      if (n1 - n0 < 2) throw new Error('two claps went by and the line colour was picked ' + (n1 - n0) + ' more time(s) - it is picked again on every clap');
+    });
+  });
+
+  /* ═══ #947 — THE NEW PROJECT + GETS ITS OWN ENTRANCE (all three of its options, one at random, per #974) ═══════════════
+     His words (#944): the + to make a new project should not open "the same you've done for everything else"; it should
+     "actually look really good and be really well thought out". The three drawn options (tools/design/947-options.html)
+     are each forced and SEEKED at the points that make them what they are, measured against the real + and the real card:
+       A · the flying disc starts ON the + and lands AS the card, the + itself shrinks away into it, the card's own
+           surface waits for the landing;
+       B · a 9:16 frame starts on the +, its outline draws itself by 42%, and it lands as the card;
+       C · the screen opens as a circle from the +'s centre, reaching the farthest corner by 55%, and the + turns 135°.
+     Then the part that matters most on Home afterwards: nothing outlives the card, and the + is whole again. */
+  test('947 the New project + opens with its own entrance - A the orb becomes the card, B a canvas is drawn, C a ripple opens it - and gives the + back', { item: '947', budgetMs: 40000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the + has no entrance options to play (queue 947 / 974)');
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog'), card = dlg.querySelector('.hm-dlg-card'), orb = document.getElementById('hm-new');
+    const np = () => document.getAnimations().filter(a => /^np947-/.test(a.id || ''));
+    const seek = (list, t) => list.forEach(a => { a.pause(); a.currentTime = t; });
+    const near = (r, s, tol) => Math.abs(r.left - s.left) <= tol && Math.abs(r.top - s.top) <= tol && Math.abs(r.width - s.width) <= tol && Math.abs(r.height - s.height) <= tol;
+    const box = r => '[' + [r.left, r.top, r.width, r.height].map(Math.round).join(', ') + ']';
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      await sleep(80);
+      for (const width of ['phone', 'pc']) {
+        await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
+          for (const v of ['A', 'B', 'C']) {
+            FM.variant.force('newproject', v);
+            dlg.classList.add('hidden'); await sleep(40);
+            const O = orb.getBoundingClientRect();
+            if (!(O.width > 20)) throw new Error(width + ': the + is not on screen (' + box(O) + ') before it is pressed');
+            orb.click();
+            if (dlg.classList.contains('hidden')) throw new Error(width + ': tapping + did not open the New project card');
+            const list = np();
+            if (!list.length) throw new Error(width + ', ' + v + ': the card opened with no entrance of its own');
+            const stray = list.filter(a => a.id.indexOf('np947-' + v + '-') !== 0);
+            if (stray.length) throw new Error(width + ': with ' + v + ' chosen, ' + stray[0].id + ' also plays');
+            const pop = card.getAnimations().concat(dlg.getAnimations()).filter(a => a.animationName);
+            if (pop.length) throw new Error(width + ', ' + v + ': the card still pops like every other card (' + pop.map(a => a.animationName).join(', ') + ') - #947 asked for an entrance of its own');
+            seek(list, 640);
+            const Cr = card.getBoundingClientRect();
+            if (v === 'A') {
+              const m = dlg.querySelector('.np-fx-orb');
+              if (!m) throw new Error(width + ', A: no flying disc');
+              seek(list, 0);
+              if (!near(m.getBoundingClientRect(), O, 2)) throw new Error(width + ', A: the disc starts at ' + box(m.getBoundingClientRect()) + ', not on the + ' + box(O));
+              if (getComputedStyle(card).backgroundColor !== 'rgba(0, 0, 0, 0)') throw new Error(width + ', A: the card\'s own surface shows before the disc lands (' + getComputedStyle(card).backgroundColor + ')');
+              seek(list, 320);
+              if (orb.getBoundingClientRect().width > 2) throw new Error(width + ', A: half-way through, the + is still ' + Math.round(orb.getBoundingClientRect().width) + 'px wide - the orb itself is meant to become the card');
+              seek(list, 640);
+              if (!near(m.getBoundingClientRect(), Cr, 2)) throw new Error(width + ', A: the disc lands at ' + box(m.getBoundingClientRect()) + ', not as the card ' + box(Cr));
+              if (getComputedStyle(card).backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error(width + ', A: landed, the card has no surface of its own');
+            } else if (v === 'B') {
+              const fr = dlg.querySelector('.np-fx-frame'), out = fr && fr.querySelector('.np-fx-outline');
+              if (!fr || !out) throw new Error(width + ', B: no frame being drawn');
+              seek(list, 0);
+              const f0 = fr.getBoundingClientRect();
+              if (Math.hypot(f0.left + f0.width / 2 - (O.left + O.width / 2), f0.top + f0.height / 2 - (O.top + O.height / 2)) > 2) throw new Error(width + ', B: the frame does not rise out of the + (' + box(f0) + ' vs ' + box(O) + ')');
+              if (Math.abs(f0.height / f0.width - 16 / 9) > 0.05) throw new Error(width + ', B: the frame is ' + (f0.height / f0.width).toFixed(2) + ' tall per wide - a new project\'s 9:16 canvas is 1.78');
+              if (Math.abs(parseFloat(getComputedStyle(out).strokeDashoffset) - 1) > 0.01) throw new Error(width + ', B: the outline is already drawn at the start');
+              seek(list, 0.42 * 640);
+              if (Math.abs(parseFloat(getComputedStyle(out).strokeDashoffset)) > 0.01) throw new Error(width + ', B: the outline is not drawn in full by 42% (' + getComputedStyle(out).strokeDashoffset + ')');
+              seek(list, 640);
+              if (!near(fr.getBoundingClientRect(), Cr, 2)) throw new Error(width + ', B: the frame lands at ' + box(fr.getBoundingClientRect()) + ', not as the card ' + box(Cr));
+            } else {
+              const cx = O.left + O.width / 2, cy = O.top + O.height / 2;
+              const clip = () => { const m = /circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)/.exec(getComputedStyle(dlg).clipPath || ''); return m ? { r: +m[1], x: +m[2], y: +m[3] } : null; };
+              seek(list, 0);
+              const c0 = clip();
+              if (!c0 || c0.r > 1 || Math.hypot(c0.x - cx, c0.y - cy) > 2) throw new Error(width + ', C: the screen does not open from the +\'s centre (' + getComputedStyle(dlg).clipPath + ')');
+              if (+getComputedStyle(card).opacity > 0.05) throw new Error(width + ', C: the card is visible before the ripple has opened the screen');
+              const ring = document.querySelector('.np-fx-ring');
+              if (!ring) throw new Error(width + ', C: no ring spreads from the +');
+              seek(list, 0.55 * 640);
+              const far = Math.max(Math.hypot(cx, cy), Math.hypot(innerWidth - cx, cy), Math.hypot(cx, innerHeight - cy), Math.hypot(innerWidth - cx, innerHeight - cy));
+              const c1 = clip();
+              if (!c1 || c1.r < far - 1) throw new Error(width + ', C: by 55% the opening is ' + (c1 ? Math.round(c1.r) : '?') + 'px, short of the farthest corner at ' + Math.round(far) + 'px');
+              seek(list, 640);
+              const mt = new DOMMatrix(getComputedStyle(orb).transform), deg = Math.round(Math.atan2(mt.b, mt.a) * 180 / Math.PI);
+              if (Math.abs(deg - 135) > 1) throw new Error(width + ', C: the + turns ' + deg + '° - it is meant to turn 135° into an ×');
+            }
+            // IT LANDS AND CLEANS UP on a timer; only the +'s own pose stays while the card is open
+            list.forEach(a => a.play());
+            await sleep(640 + 250);
+            if (document.querySelector('.np-fx')) throw new Error(width + ', ' + v + ': the entrance\'s layers are still in the page after it landed');
+            const still = np().filter(a => !/-button$/.test(a.id));
+            if (still.length) throw new Error(width + ', ' + v + ': ' + still.map(a => a.id).join(', ') + ' still running after the card landed');
+            // …and the card goes, the + is whole
+            dlg.classList.add('hidden'); await sleep(40);
+            if (np().length) throw new Error(width + ', ' + v + ': ' + np().map(a => a.id).join(', ') + ' outlived the card');
+            const back = orb.getBoundingClientRect();
+            if (!near(back, O, 1)) throw new Error(width + ', ' + v + ': after the card closed the + is ' + box(back) + ', not the ' + box(O) + ' it was - it would be missing or turned on Home');
+            if (card.style.animation || dlg.style.animation) throw new Error(width + ', ' + v + ': the card keeps its entrance switch-off after it closed');
+          }
+        });
+      }
+      // REDUCED MOTION: no entrance at all - and the card still opens (the control)
+      const realMM = window.matchMedia;
+      window.matchMedia = function (q) {
+        if (/prefers-reduced-motion:\s*reduce/.test(q)) return { matches: true, media: q, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } };
+        return realMM.call(window, q);
+      };
+      try {
+        FM.variant.force('newproject', null);
+        dlg.classList.add('hidden'); await sleep(40);
+        orb.click();
+        if (dlg.classList.contains('hidden')) throw new Error('CONTROL: under reduced motion tapping + did not open the card at all');
+        if (np().length || document.querySelector('.np-fx')) throw new Error('with reduced motion asked for, the + still flies/draws/ripples into the card');
+      } finally { window.matchMedia = realMM; }
+    } finally {
+      FM.variant.force('newproject', null);
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (!wasOpen) FM.home.close();
+    }
+  });
+
+  test('947 A: Cancel runs the entrance backwards - the card shrinks back into the + - then it closes and the + is whole', { item: '947', budgetMs: 15000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option A cannot be chosen (queue 947 / 974)');
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog'), card = dlg.querySelector('.hm-dlg-card'), orb = document.getElementById('hm-new');
+    const np = () => document.getAnimations().filter(a => /^np947-/.test(a.id || ''));
+    const near = (r, s, tol) => Math.abs(r.left - s.left) <= tol && Math.abs(r.top - s.top) <= tol && Math.abs(r.width - s.width) <= tol && Math.abs(r.height - s.height) <= tol;
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      await sleep(80);
+      await atPhoneWidth(async function () {
+        FM.variant.force('newproject', 'A');
+        dlg.classList.add('hidden'); await sleep(40);
+        const O = orb.getBoundingClientRect();
+        orb.click();
+        await sleep(640 + 200);
+        const Cr = card.getBoundingClientRect();
+        document.getElementById('hm-cancel').click();
+        if (dlg.classList.contains('hidden')) throw new Error('Cancel closed the card at once - with A the card is meant to shrink back into the + first');
+        const back = np();
+        const m = dlg.querySelector('.np-fx-orb');
+        if (!m || !back.length) throw new Error('Cancel ran no reverse flight (no disc, ' + back.length + ' animations)');
+        const dur = back.map(a => a.effect.getComputedTiming().duration).reduce((x, y) => Math.max(x, y), 0);
+        back.forEach(a => { a.pause(); a.currentTime = 0; });
+        if (!near(m.getBoundingClientRect(), Cr, 2)) throw new Error('the reverse flight does not start as the card');
+        back.forEach(a => { a.currentTime = dur; });
+        if (!near(m.getBoundingClientRect(), O, 2)) throw new Error('the reverse flight does not end on the + (' + JSON.stringify(m.getBoundingClientRect()) + ')');
+        back.forEach(a => { a.currentTime = 0; a.play(); });
+        await sleep(dur + 250);
+        if (!dlg.classList.contains('hidden')) throw new Error('after running backwards the card did not close');
+        if (np().length || document.querySelector('.np-fx')) throw new Error('the reverse flight outlived the card');
+        if (!near(orb.getBoundingClientRect(), O, 1)) throw new Error('after Cancel the + is not whole on Home');
+        // CONTROL: B keeps the plain close - Cancel hides it at once, so the check above is about A, not about Cancel
+        FM.variant.force('newproject', 'B');
+        orb.click(); await sleep(60);
+        document.getElementById('hm-cancel').click();
+        if (!dlg.classList.contains('hidden')) throw new Error('CONTROL: with B, Cancel did not close the card at once');
+      });
+    } finally {
+      FM.variant.force('newproject', null);
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (!wasOpen) FM.home.close();
+    }
+  });
+
+  test('974 the New project +: 60 real taps open it with all three entrances at random', { item: '974', budgetMs: 30000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the + only ever opens one way (queue 974)');
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog'), orb = document.getElementById('hm-new');
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      await sleep(80);
+      FM.variant.force('newproject', null);
+      const got = {};
+      for (let i = 0; i < 60; i++) {
+        dlg.classList.add('hidden'); await sleep(0);
+        orb.click();
+        const ids = document.getAnimations().map(a => a.id || '').filter(id => /^np947-/.test(id));
+        const v = (ids[0] || '').charAt(6);
+        if (!v) throw new Error('tap ' + (i + 1) + ' of 60 opened the card with no entrance');
+        if (FM.variant.last.newproject !== v) throw new Error('FM.variant.last names ' + FM.variant.last.newproject + ' but ' + v + ' played');
+        got[v] = (got[v] || 0) + 1;
+      }
+      if (Object.keys(got).sort().join() !== 'A,B,C') throw new Error('60 taps on + opened with ' + JSON.stringify(got) + ' - all three entrances must come up at random (#974 clause 2)');
+    } finally {
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (!wasOpen) FM.home.close();
+    }
   });
 
 })();

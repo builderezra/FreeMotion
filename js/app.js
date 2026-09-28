@@ -804,6 +804,47 @@ window.FM = window.FM || {};
     dropHint.classList.toggle('hidden', FM.scene.layers.length > 0);
   }
 
+  /* ═══ THE CLAPPER'S OPTIONS, ALL LIVE, ONE AT RANDOM (queue 974) ═══════════════════════════════════════════════
+     Ezra, 28 Sep: *"make them all happen in the app but it's just random which one so I can decide which is best over
+     use time"*. #957's clapper had two open picks — its timing (A: open, then every 6 s · B: once · C: non-stop) and
+     its impact lines (cyan · grey). Both now play, chosen by FM.variant (js/variant.js):
+       · the TIMING once per empty-project open — each time #drop-hint comes on screen, which is exactly when its CSS
+         animation restarts: a layer removed, Home closed, the app opened into an empty project. The class lands in the
+         same task (a MutationObserver microtask), before the first frame, so the clap starts in the chosen timing.
+       · the LINE COLOUR on every clap — once as it opens, and again at each lap of the stick (animationiteration, at
+         the open pose, where the lines are invisible, so a colour never changes mid-hit). B claps once, so its first
+         pick is its only one.
+     The keyframes and the custom properties that choose between them are in styles.css (THE CLAP). Nothing is picked
+     under reduced motion: nothing plays there. When he picks, the chosen class becomes the CSS default and this goes. */
+  const CLAP_TIMINGS = ['A', 'B', 'C'], CLAP_LINES = ['cyan', 'grey'];
+  function clapReduced() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+  }
+  function clapLines() {
+    if (!FM.variant || clapReduced()) return;
+    dropHint.classList.toggle('dh-grey', FM.variant('clapper.lines', CLAP_LINES) === 'grey');
+  }
+  function watchClapper() {
+    if (!dropHint || dropHint._clapWatch || !window.MutationObserver) return;
+    dropHint._clapWatch = true;
+    let shown = false;
+    const check = function () {
+      const on = !dropHint.classList.contains('hidden') && !document.body.classList.contains('home-open');
+      if (on && !shown && FM.variant && !clapReduced()) {
+        const t = String(FM.variant('clapper.timing', CLAP_TIMINGS) || 'A').toLowerCase();
+        dropHint.classList.remove('dh-t-a', 'dh-t-b', 'dh-t-c');
+        dropHint.classList.add('dh-t-' + t);
+        clapLines();
+      }
+      shown = on;
+    };
+    dropHint.addEventListener('animationiteration', function (e) { if (/^dh-clap/.test(e.animationName || '')) clapLines(); });
+    const mo = new MutationObserver(check);
+    mo.observe(dropHint, { attributes: true, attributeFilter: ['class'] });
+    mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    check();
+  }
+
   // Keep the composition EXACTLY as long as its clips — grows when a clip extends past the end,
   // shrinks when the furthest clip ends earlier. Runs on every refresh so the timeline never has
   // trailing empty space. Empty project keeps its configured length.
@@ -6659,6 +6700,7 @@ window.FM = window.FM || {};
     ctx = canvas.getContext('2d');
     readoutEl = document.getElementById('time-readout');
     dropHint = document.getElementById('drop-hint');
+    watchClapper();   // queue 974: the clapper's timing and line colour, one at random
     setupTimelineResizer();
     /* TAP THE TIMECODE → PLAY / PAUSE (queue 364 clause 1). Ezra drew an arrow from the ▶ down to the
        pill: "Make it so that the play button is now the project time pill and when you press on it it
