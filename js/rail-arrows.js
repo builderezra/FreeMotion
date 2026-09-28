@@ -72,6 +72,14 @@
     const item = opts.item || ':scope > *';
     rail.classList.add('fm-rail');
     sc.classList.add('fm-rail-sc');
+    /* ⚠️ A SPENT ARROW STAYS UNDER THE POINTER (review, 29 Sep). Clicking › until it stops is what a mouse does, and the
+       › used to hide the moment the row reached its end — so the NEXT click on that same spot went through to the tile
+       underneath and picked it: a filter he never chose, previewed on his canvas (measured with a real mouse: Cinematic
+       at 1280, whose short last step 273 → 342 looks like nothing moved, so he clicks again). An arrow he has pressed now
+       holds its place — dimmed and inert (styles.css, .hold-l / .hold-r) — until the pointer leaves the row; then it goes,
+       because an arrow only belongs on a side that has more. */
+    const hold = (dir) => rail.classList.add(dir < 0 ? 'hold-l' : 'hold-r');
+    rail.addEventListener('pointerleave', () => rail.classList.remove('hold-l', 'hold-r'));
     [-1, 1].forEach((dir) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -80,8 +88,11 @@
       b.setAttribute('aria-hidden', 'true');
       b.title = dir < 0 ? 'Back' : 'More';
       b.innerHTML = CHEV[dir];   // a constant: no user data
+      b.addEventListener('pointerdown', () => hold(dir));   // before the release: the row can reach its end mid-click
       b.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        hold(dir);
+        if (!rail.classList.contains(dir < 0 ? 'can-l' : 'can-r')) return;   // spent: it only swallows the click
         if (opts.onPage) opts.onPage(dir);
         pageTo(sc, dir, item);
       });

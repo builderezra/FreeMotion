@@ -107656,4 +107656,214 @@
     }
   });
 
+  /* ═══ 976/977 REVIEW (29 Sep) — WHAT A MOUSE DOES AT A ROW'S END ════════════════════════════════════════════════════
+   * Clicking › until it stops is the most natural thing to do with a mouse, and the build hid the › the moment the row
+   * reached its end — so the NEXT click on that same spot went through to the tile underneath and picked it: a filter he
+   * never chose, previewed on his canvas, "Add 1 filter" up (measured with a real mouse: Cinematic at 1280, the third
+   * click picked Desert; the effects New row's last click picked Light Wrap). Cinematic makes it likely, because its last
+   * step is short (273 → 342) and looks like nothing moved, so he clicks again. The first 976 test could not see it: a
+   * script's click() on the element cannot miss the element. These use the driver's REAL mouse, which hit-tests. */
+  // Slide the on-screen frame so `el` sits in the middle of what the driver's window can reach — the 380 pass's window is
+  // 380 wide, and a docked PC panel at a 1280 frame sits far past that (the same move as aim927).
+  function aim976(el) {
+    const fe = window.frameElement, topW = (window.top && window.top.innerWidth) || 380, r = el.getBoundingClientRect();
+    fe.style.left = (r.right > topW - 8 ? Math.round(topW / 2 - (r.left + r.right) / 2) : 0) + 'px';
+    return { x: 5 - (parseFloat(fe.style.left) || 0), y: 5 };   // a point in reach and well away from any row
+  }
+  function mid976(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+  // his click: press and release on one spot, a beat apart, with nothing moved in between
+  function click976(p, what) { return realInput924([{ t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 450 }], what); }
+  /* › until the row stops and ONE MORE on the same spot, then ‹ until it is home and one more; then the pointer leaves and
+     comes back, and the spent ‹ must be gone. `hits()` is every real click that reached a tile/card. Returns the ‹'s spot. */
+  async function spend976(sc, rail, hits, away, what) {
+    const next = rail.querySelector(':scope > .fm-rail-arrow--next'), prev = rail.querySelector(':scope > .fm-rail-arrow--prev');
+    const max = sc.scrollWidth - sc.clientWidth, r = sc.getBoundingClientRect(), over = { x: r.left + r.width * 0.4, y: r.top + r.height / 2 };
+    if (r.top < 0 || r.bottom > innerHeight) throw new Error('setup: the ' + what + ' is off screen (' + Math.round(r.top) + '..' + Math.round(r.bottom) + ')');
+    await realInput924([{ t: 'mouseMove', x: over.x, y: over.y, ms: 250 }], 'pointer over the ' + what);
+    if (getComputedStyle(next).visibility !== 'visible') throw new Error('setup: with the pointer over the ' + what + ', which has more, the › is not showing');
+    const nc = mid976(next);
+    await realInput924([{ t: 'mouseMove', x: nc.x, y: nc.y, ms: 150 }], 'pointer onto the ' + what + '’s ›');
+    let clicks = 0;
+    while (rail.classList.contains('can-r') && clicks < 14) await click976(nc, 'the ' + what + '’s › click ' + (++clicks));
+    // CONTROL: the clicks really paged it to its end, or there was never an end to click through
+    if (Math.abs(sc.scrollLeft - max) > 2) throw new Error('CONTROL: ' + clicks + ' real clicks on the ' + what + '’s › left it at ' + sc.scrollLeft.toFixed(1) + ' of ' + max);
+    if (hits().length) throw new Error('paging the ' + what + ' with › reached a tile under it (' + hits().join(', ') + ') before the end');
+    await click976(nc, 'one more › click at the ' + what + '’s end');
+    if (hits().length) throw new Error('one more click on the › at the end of the ' + what + ' went through to the tile under it (' + hits().join(', ') + ') — the › hid, and something he never chose got picked');
+    if (Math.abs(sc.scrollLeft - max) > 2) throw new Error('a click on the spent › moved the ' + what + ' (' + sc.scrollLeft.toFixed(1) + ' of ' + max + ')');
+    const pc = mid976(prev);
+    await realInput924([{ t: 'mouseMove', x: pc.x, y: pc.y, ms: 150 }], 'pointer onto the ' + what + '’s ‹');
+    clicks = 0;
+    while (rail.classList.contains('can-l') && clicks < 14) await click976(pc, 'the ' + what + '’s ‹ click ' + (++clicks));
+    if (sc.scrollLeft > 1) throw new Error('CONTROL: ' + clicks + ' real clicks on the ' + what + '’s ‹ left it at ' + sc.scrollLeft.toFixed(1) + ', not home');
+    await click976(pc, 'one more ‹ click at the ' + what + '’s start');
+    if (hits().length) throw new Error('one more click on the ‹ back at the start of the ' + what + ' went through to the tile under it (' + hits().join(', ') + ')');
+    // once he has moved on, a spent arrow goes: an arrow only belongs on a side that has more
+    await realInput924([{ t: 'mouseMove', x: away.x, y: away.y, ms: 250 }, { t: 'mouseMove', x: over.x, y: over.y, ms: 250 }], 'pointer away from the ' + what + ' and back');
+    if (getComputedStyle(prev).visibility !== 'hidden') throw new Error('after the pointer left the ' + what + ' and came back, the spent ‹ is still showing at its start');
+    if (getComputedStyle(next).visibility !== 'visible') throw new Error('after the pointer left the ' + what + ' and came back, the › is not offered at its start');
+    return pc;
+  }
+
+  test('976: a real mouse clicking › until a filter row stops, and ‹ until it is home, never picks the tile under the arrow', { item: '976', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;   // a finger has no arrows to click
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;
+    if (realMount) FM.fxThumbs.mountFilter = function () {};
+    const hit = [];   // every real click that reached a filter tile, whatever the tile then did with it
+    const onClick = (e) => { const t = e.target && e.target.closest && e.target.closest('.flt-tile'); if (t) hit.push(t.dataset.fltid); };
+    window.addEventListener('click', onClick, true);
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          if (homeWasOpen) FM.home.close();
+          const L = FM.makeLayer('shape', { name: 'rail', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#c05030' });
+          L.start = 0; L.duration = 4; L.effects = [];
+          FM.scene.layers.length = 0; FM.scene.layers.push(L);
+          FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+          FM.inspector.openCategory('effects'); await sleep(250);
+          FM.inspector.openFxTab('filters'); await sleep(600);
+          // the row with the most tiles: the most › stops, and at 1280 (Cinematic) a last step so short it looks like nothing moved
+          const g = [].slice.call(document.querySelectorAll('#inspector-panel .flt-grid')).filter(x => x.scrollWidth > x.clientWidth + 4)
+            .sort((a, b) => b.children.length - a.children.length)[0];
+          if (!g) throw new Error('setup: no filter row overflows');
+          g.scrollIntoView({ block: 'center' }); g.scrollLeft = 0; await sleep(250);
+          const rail = g.parentElement, away = aim976(rail); await sleep(80);
+          const picked = () => [].slice.call(document.querySelectorAll('#inspector-panel .flt-tile.is-picked')).map(t => t.dataset.fltid);
+          const hits = () => hit.concat(picked());
+          const pc = await spend976(g, rail, hits, away, 'filter row');
+          /* POSITIVE CONTROL: with the ‹ gone, a real click on that very spot DOES reach the tile under it and pick it — so the
+             "nothing picked" above was the arrow taking the click, not a spot where no click could have picked anything. */
+          await click976(pc, 'a click where the ‹ was, with it gone');
+          if (hit.length !== 1 || picked().length !== 1) throw new Error('CONTROL: a real click where the ‹ sat, with the ‹ gone, reached ' + hit.length + ' tile(s) and picked ' + picked().length + ' — then "nothing picked" above proved nothing');
+          const clr = document.querySelector('#inspector-panel .flt-commit .fxb-commit-clear');
+          if (clr) clr.click();
+        }, 1280);
+      });
+    } finally {
+      window.removeEventListener('click', onClick, true);
+      if (realMount) FM.fxThumbs.mountFilter = realMount;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  test('977: a real mouse clicking › until the New row stops, and ‹ until it is home, never reaches the card under the arrow — in the effects and the audio browser', { item: '977', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;   // a finger has no arrows to click
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const sideOk0 = FM.fxAudioSideOk;
+    /* Every real click that reaches a card is recorded AND stopped here, in the capture phase before the card hears it — so
+       a click that gets through adds nothing to the layer (an audio card ADDS on a click; an effects card picks). */
+    const hit = [];
+    const onClick = (e) => { const c = e.target && e.target.closest && e.target.closest('.fxb-card'); if (c) { hit.push(c.title || c.textContent); e.stopPropagation(); e.preventDefault(); } };
+    window.addEventListener('click', onClick, true);
+    try {
+      if (homeWasOpen) FM.home.close();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#4070c0' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); await sleep(160);
+      FM.fxAudioSideOk = function () { return true; };   // a shape has no sound; the gate is not what this is about (as 922)
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          for (const which of ['effects', 'audio']) {
+            const root = document.getElementById(which === 'audio' ? 'afx-browser' : 'fx-browser');
+            if (which === 'audio') FM.audioFxBrowser.open(L); else FM.fxBrowser.open(L);
+            await sleep(700);
+            if (root.classList.contains('hidden')) throw new Error('setup: the ' + which + ' browser did not open');
+            const row = root.querySelector('.fxb-featured');
+            if (!row) throw new Error('the ' + which + ' browser drew no New/Featured row');
+            if (!(row.scrollWidth - row.clientWidth > 100)) throw new Error('setup: the ' + which + ' row does not overflow (' + row.scrollWidth + ' in ' + row.clientWidth + ')');
+            row.scrollIntoView({ block: 'center' });   // the docked audio browser draws its Featured row near the frame's foot
+            row.scrollLeft = 0; row._autoLeft = 0; await sleep(150);
+            const sec = row.parentElement, away = aim976(sec); await sleep(80);
+            hit.length = 0;
+            const pc = await spend976(row, sec, () => hit.slice(), away, which + ' browser’s New row');
+            // POSITIVE CONTROL, as in the filter test: with the ‹ gone, a real click on its spot DOES reach the card under it
+            await click976(pc, 'a click where the ' + which + ' row’s ‹ was, with it gone');
+            if (hit.length !== 1) throw new Error('CONTROL: a real click where the ' + which + ' row’s ‹ sat, with the ‹ gone, reached ' + hit.length + ' card(s) — then "nothing reached" above proved nothing');
+            hit.length = 0;
+            if (which === 'audio') FM.audioFxBrowser.close(); else FM.fxBrowser.close();
+            await sleep(200);
+          }
+        }, 1280);
+      });
+    } finally {
+      window.removeEventListener('click', onClick, true);
+      FM.fxAudioSideOk = sideOk0;
+      try { if (FM.audioFxBrowser && FM.audioFxBrowser.close) FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.refreshAll(); await sleep(100);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  /* Queue 976 review, finding 2. The build made the dots agree with the arrows about WHERE the row is, but still counted
+     them as ceil(scrollWidth / clientWidth), which ignores the gap: a row of exactly two pages (eight tiles where four fit)
+     drew THREE dots, one › took it from the first to the last, and the middle one could never be lit. Measured at 1280 on
+     Retro / Analogue and Stylised. The case is BUILT here — a Favourites row of exactly two pages — so it does not rest on
+     how many filters a section happens to hold; every other row is checked the same way beside it. */
+  test('976: a filter row draws one dot for each place › can take it — a row of exactly two pages has two dots, not three', { item: '976', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;
+    if (realMount) FM.fxThumbs.mountFilter = function () {};
+    let faves0 = null;
+    try { faves0 = localStorage.getItem('fm.filterFaves'); } catch (e) {}
+    const settle = async (g) => { let last = -1, same = 0; const t0 = Date.now();
+      while (Date.now() - t0 < 2500) { await sleep(40); if (Math.abs(g.scrollLeft - last) < 0.5) { if (++same >= 3) return; } else same = 0; last = g.scrollLeft; } };
+    try {
+      if (homeWasOpen) FM.home.close();
+      // eight favourites = a Favourites row of exactly two pages (a filter tile is a quarter of the row, less its gaps)
+      localStorage.setItem('fm.filterFaves', JSON.stringify(FM.filters.all().slice(0, 8).map(f => f.id)));
+      const L = FM.makeLayer('shape', { name: 'dots', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#c05030' });
+      L.start = 0; L.duration = 4; L.effects = [];
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+      FM.inspector.openCategory('effects'); await sleep(250);
+      FM.inspector.openFxTab('filters'); await sleep(600);
+      const grids = [].slice.call(document.querySelectorAll('#inspector-panel .flt-grid')).filter(g => g.scrollWidth > g.clientWidth + 4);
+      if (!grids.length) throw new Error('setup: no filter row overflows');
+      const bad = [], seen = [];
+      let twoPages = 0, threePlus = 0;
+      for (const g of grids) {
+        const rail = g.parentElement, next = rail.querySelector(':scope > .fm-rail-arrow--next');
+        const label = rail.previousElementSibling ? rail.previousElementSibling.textContent : '?';
+        const geo = FM._railGeometry(g, '.flt-tile');
+        const dots = () => [].slice.call(g.nextElementSibling.children), lit = () => dots().findIndex(d => d.classList.contains('on'));
+        g.scrollLeft = 0; await settle(g);
+        const lits = [lit()];
+        let stops = 0;
+        while (rail.classList.contains('can-r') && stops < 12) { next.click(); await settle(g); stops++; lits.push(lit()); }
+        if (Math.abs(g.scrollLeft - (g.scrollWidth - g.clientWidth)) > 2) throw new Error('setup: › stopped short of the end of ' + label + ' (' + g.scrollLeft + ')');
+        seen.push(label + ' ' + g.children.length + ' tiles: ' + dots().length + ' dots, ' + (stops + 1) + ' places');
+        if (g.children.length === 2 * geo.per) twoPages++;
+        if (stops >= 2) threePlus++;
+        if (dots().length !== stops + 1) bad.push(label + ' (' + g.children.length + ' tiles) draws ' + dots().length + ' dots for ' + (stops + 1) + ' places › can take it');
+        else if (lits.join() !== lits.map((_, i) => i).join()) bad.push(label + ': paging lit dots ' + lits.join(' → '));
+        g.scrollLeft = 0;
+      }
+      // CONTROLS: the row the bug lived in (exactly two pages) and a row of three places or more must both have been paged
+      if (!twoPages) throw new Error('CONTROL: no row of exactly two pages was paged (' + seen.join('; ') + ') — the case the dots got wrong was never tested');
+      if (!threePlus) throw new Error('CONTROL: no row needed two › or more (' + seen.join('; ') + ') — a middle dot was never tested');
+      if (bad.length) throw new Error('the dots under a filter row do not count the places › takes it: ' + bad.join('; '));
+    } finally {
+      try { if (faves0 === null) localStorage.removeItem('fm.filterFaves'); else localStorage.setItem('fm.filterFaves', faves0); } catch (e) {}
+      if (realMount) FM.fxThumbs.mountFilter = realMount;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
 })();

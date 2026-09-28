@@ -1930,7 +1930,15 @@ window.FM = window.FM || {};
          that it overflows, so the answer can never legitimately be 1 — any overflow at all is a second
          page. Exposed by adding a fifth Cinematic filter, but the arithmetic was always wrong; every
          section happened to sit at a whole number of pages until one did not. */
-      const pages = () => Math.max(2, Math.ceil(grid.scrollWidth / Math.max(1, grid.clientWidth)));
+      /* …AND A PAGE IS ONE ‹ › STEP, GAP INCLUDED (queue 976 review). Width over width ignores the gap, so a row of
+         exactly two pages — eight tiles where four fit, Retro / Analogue at 1280: 536 in 263 — counted THREE, one ›
+         went from the first dot to the last, and the middle one could never be lit. Row plus one gap over page plus one
+         gap is the tiles over the tiles per page (546 / 273 = 2; Cinematic's nine: 2.25 → 3). The 0.02 absorbs the
+         whole-pixel rounding of the two widths, which can put an exact 2 a hair over; a real part-page is ≥ 0.25. */
+      const pages = () => {
+        const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+        return Math.max(2, Math.ceil((grid.scrollWidth + gap) / Math.max(1, grid.clientWidth + gap) - 0.02));
+      };
       const build = () => {
         const n = grid.scrollWidth > grid.clientWidth + 4 ? pages() : 0;
         if (n === count) return;

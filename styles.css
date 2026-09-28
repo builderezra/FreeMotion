@@ -7831,6 +7831,14 @@ body.fm-pushing #toast { z-index: 213; }
     opacity: 1; visibility: visible;
     transition: opacity .15s ease, visibility 0s, border-color .15s ease;
   }
+  /* A SPENT ARROW (review, 29 Sep): the row reached its end while he was clicking it, so it stays where it is, dimmed and
+     inert, and swallows the next click until the pointer leaves the row — hidden, that click went through to the tile
+     under it and picked a filter he never chose. js/rail-arrows.js sets .hold-l / .hold-r and clears them on leave. */
+  .fm-rail.hold-l:not(.can-l):hover > .fm-rail-arrow--prev,
+  .fm-rail.hold-r:not(.can-r):hover > .fm-rail-arrow--next {
+    opacity: .35; visibility: visible; cursor: default; border-color: var(--line);
+    transition: opacity .15s ease, visibility 0s, border-color .15s ease;
+  }
   /* the soft edge, on the side that has more */
   .fm-rail.can-r > .fm-rail-sc {
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
