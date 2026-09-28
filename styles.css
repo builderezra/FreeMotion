@@ -7906,16 +7906,23 @@ body.fm-pushing #toast { z-index: 213; }
    with it any more. One control height taller at those widths is the honest cost; a hidden control is
    not. A two-row grid was tried first and collapsed the row's fr tracks — measured, not guessed.
      Nested inside the 701 block on purpose: this is a refinement of the PC layout, not a layout of its own. */
-  @media (max-width: 1160px) {
-    /* The band's 40px come from the STAGE, not the tracks: the panel grows by the band's height (the base
-       --tl-h is the 701px clamp two screens up), so the ruler and every track row sit exactly where they
-       did — measured, because the first cut took the height from the tracks and four desktop tests that
-       count visible rows went red at the runner's 900px. */
-    :root { --tl-h: calc(clamp(232px, 30vh, 300px) + 40px); }
-    #timeline-panel { grid-template-rows: 80px 1fr; }
-    #transport { align-self: start; height: 40px; }
-    #t-far { top: 100%; bottom: auto; height: 40px; }
-  }
+  /* ⚠️ …AND IT IS NO LONGER "BELOW 1160px" (queue 970). 1160 was measured with ONE layer selected; with two the group
+     is 206px, and from 1180 to 1360 the ⋯ sat under the version chip (at 1280 its centre hit `.ver`). A second width
+     would only have moved the cliff — Labs' share button widens the far run by 42px — so app.js (pcTransportFit)
+     MEASURES whether the widest group would reach the far run and sets `.t-band` on the row; these rules are the
+     band, and the class is the only switch. `.t-band-home` drops the back button into the band's left end as well,
+     for the widths where the copy button slid under it (900–980, measured). */
+  /* The band's 40px come from the STAGE, not the tracks: the panel grows by the band's height, so the ruler and every
+     track row sit exactly where they did — measured, because the first cut took the height from the tracks and four
+     desktop tests that count visible rows went red at the runner's 900px. Added to the base --tl-h of the width the
+     window is at (styles.css "Bigger screens have room to spare"); a height he DRAGGED is inline on <html> and wins,
+     as it always did. */
+  :root:has(#transport.t-band) { --tl-h: calc(clamp(232px, 30vh, 300px) + 40px); }
+  @media (min-width: 1600px) { :root:has(#transport.t-band) { --tl-h: calc(clamp(300px, 33vh, 460px) + 40px); } }
+  #timeline-panel:has(> #transport.t-band) { grid-template-rows: 80px 1fr; }
+  #transport.t-band { align-self: start; height: 40px; }
+  #transport.t-band #t-far { top: 100%; bottom: auto; height: 40px; }
+  #transport.t-band-home #t-home { top: 100%; height: 40px; transform: none; }
 
   /* ---- the LAST control comes down off the header (v7.75, queue 229) -------------------------
      Ezra: "no dont reclaim the top bar, i just want you to move the nescesary buttons to the bottoms

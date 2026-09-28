@@ -16862,15 +16862,19 @@
         let checked = 0;
         /* Below 1160px the far run (version chip · help · notes · cog · export · view options) hangs in a BAND under the
            row (queue 801), so those controls are measured against the band they sit on, not the row above it. The
-           intent is unchanged: nothing is taller than the strip it lives on. */
-        const far = document.getElementById('t-far');
-        const fr = far ? far.getBoundingClientRect() : null;
-        const farInBand = !!(fr && fr.top >= tr.bottom - 1);
+           intent is unchanged: nothing is taller than the strip it lives on.
+           …and since queue 970 the back button (#t-home) can hang in the same band, at its left end, where the copy
+           button would otherwise slide under it (900–980 wide) — so it is measured against its own strip the same way. */
+        const inBand = [document.getElementById('t-far'), document.getElementById('t-home')].map(function (w) {
+          const r = w ? w.getBoundingClientRect() : null;
+          return (r && r.top >= tr.bottom - 1) ? { w: w, r: r } : null;
+        }).filter(Boolean);
         [].slice.call(t.querySelectorAll('button, .btn, .ver')).forEach(function (el) {
           const b = el.getBoundingClientRect();
           if (b.width < 2 || b.height < 2) return;   // hidden controls are not this test's business
           checked++;
-          const strip = (farInBand && far.contains(el)) ? fr : tr;
+          const hung = inBand.filter(function (x) { return x.w.contains(el); })[0];
+          const strip = hung ? hung.r : tr;
           const over = Math.max(Math.round(strip.top - b.top), Math.round(b.bottom - strip.bottom));
           if (over > 0) {
             throw new Error((studio ? 'studio' : 'classic') + ': ' + (el.id || el.className) + ' is ' + Math.round(b.height) +
@@ -43748,12 +43752,15 @@
     }
   });
 
-  test('801: in the PC layout the far-right run never covers the selected layer toolbar, at 900 and at 760, and stays one row at 1280', { item: '801', budgetMs: 40000 }, async function () {
+  test('801: in the PC layout the far-right run never covers the selected layer toolbar, at 900 and at 760, and stays one row on a wide window', { item: '801', budgetMs: 40000 }, async function () {
     /* Found 6 Sep by using the PC layout at 900px with a layer selected: #t-far is absolute (so play stays centred) and #t-sel is
        a flex child of the right column, so below ~1150px the far run sat on top of parent / delete / more — 123px of overlap at
        900, all of it at 760, with undo and redo half covered. Below 1160 the far run now hangs in a band under the row. This selects a
        layer, narrows the runner to 900 and 760, and asks elementFromPoint what is on top of the delete button; then confirms
-       the row is still ONE row at 1280 (the far run's top on the transport's first row), so the wrap does not leak wide. */
+       the row is still ONE row on a wide window (the far run's top on the transport's first row), so the wrap does not leak wide.
+       ⚠️ The wide check was at 1280 until queue 970, and 1280 is no longer "wide" for this row: with two layers selected the
+       group reaches the far run up to ~1380 (the ⋯ sat under the version chip), so the band is now MEASURED against the widest
+       group and is deliberately on at 1280. 1600 is past that reach even with Labs' share button in the far run (~1460). */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -43775,12 +43782,12 @@
           if (far.getBoundingClientRect().right > tr.right + 1) throw new Error('at ' + w + 'px the far run runs past the row (' + Math.round(far.getBoundingClientRect().right) + ' > ' + Math.round(tr.right) + ')');
         }, w);
       }
-      // wide: still one row — the far run's top sits on the transport's first row, beside the undo button (1280 explicitly: the runner's own frame may be narrower)
+      // wide: still one row — the far run's top sits on the transport's first row, beside the undo button (1600 explicitly: the runner's own frame may be narrower)
       await atWideWidth(async function () {
         FM.refreshAll(); await sleep(250);
         const far = document.getElementById('t-far'), undo = document.getElementById('btn-undo');
         if (far && undo && Math.abs(far.getBoundingClientRect().top - undo.getBoundingClientRect().top) > 6) throw new Error('at ' + innerWidth + 'px the far run has dropped under the row (' + Math.round(far.getBoundingClientRect().top) + ' vs undo at ' + Math.round(undo.getBoundingClientRect().top) + ') — the band leaked into the wide layout');
-      }, 1280);
+      }, 1600);
     } finally {
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
@@ -107374,6 +107381,138 @@
         });
       });
     } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
+  });
+
+  test('970 on PC the layer options button (⋯) and every control in the transport row take their own click at every width from 900 to 1920, with one, two and three layers selected', { item: '970', budgetMs: 150000 }, async function () {
+    /* Found 26 Sep by the corners planner (hunt MEDIUM #970): with TWO layers selected the group is five buttons (parent ·
+       delete · group · mask-group · ⋯), 206px against one layer's 126, and #801's band only started below 1160px — a width
+       measured with ONE selected. Measured on v17.11, every 20px: from 1180 to 1360 the ⋯ sat under the version chip (at
+       1280 elementFromPoint on its centre returned `.ver`), the mask-group button with it, and with ONE selected ⋯'s right
+       edge was under the chip at 1180–1200. From 900 to 980 the back button sat on the copy button at the other end.
+       So this sweeps the frame every 20px from 900 to 1920 with one, two and three layers selected and asks the page
+       what is on top — at the ⋯'s centre and four corners (4px in, inside its 8px rounding), at the centre and both ends
+       of every other control in the row, and across the version chip, which must stay readable. Rectangles are not
+       compared: a hit test is what a click gets. Then the far run is made 42px wider (what Labs' share button does) and
+       the widths where that collided are swept again, because a fixed width would only have moved the cliff.
+       Fails on v17.11: 37 of the 156 states, 19 of them at the ⋯'s own centre or corners — at 1180 with one selected its
+       right corners are under #t-far, with two its centre is under the help button's icon, and at 1280 under the chip;
+       three more have the ⋯'s edge under `.ver` (1200 with one selected, 1360 with two and three), and the other 15 are the
+       copy button under the back button from 900 to 980, with any number selected. */
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to sweep the PC widths');
+    const w0 = fe.style.width;
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const nm = el => !el ? 'nothing' : (el.id ? '#' + el.id : (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/)[0] : el.tagName.toLowerCase()));
+    const topAt = (el, x, y) => { const h = document.elementFromPoint(x, y); return (h && (h === el || el.contains(h))) ? null : nm(h); };
+    let standIn = null;
+    const setWidth = async function (w) {
+      fe.style.width = w + 'px';
+      window.dispatchEvent(new Event('resize'));
+      await frame(); FM.refreshAll(); await frame(); await sleep(30);
+      if (window.innerWidth !== w) throw new Error('setup: the frame is ' + window.innerWidth + 'px wide, not ' + w);
+    };
+    /* One width, one selection: every problem found, as words. */
+    const survey = function (w, n) {
+      const bad = [];
+      const t = document.getElementById('transport'), more = document.getElementById('btn-more-layer'), ver = document.querySelector('#transport .ver');
+      if (!t || !more || !ver || !document.getElementById('t-far')) throw new Error('setup at ' + w + 'px: the PC transport row is not built (more ' + !!more + ', ver ' + !!ver + ')');
+      const r = more.getBoundingClientRect();
+      // CONTROL — every "nothing covers it" below passes against a ⋯ that is not on screen
+      if (!(r.width >= 30 && r.height >= 30)) throw new Error('control at ' + w + 'px, ' + n + ' selected: ⋯ is ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — not on screen, so no hit test below would mean anything');
+      [['centre', r.left + r.width / 2, r.top + r.height / 2], ['top-left', r.left + 4, r.top + 4], ['top-right', r.right - 4, r.top + 4],
+       ['bottom-left', r.left + 4, r.bottom - 4], ['bottom-right', r.right - 4, r.bottom - 4]].forEach(function (p) {
+        const on = topAt(more, p[1], p[2]); if (on) bad.push('⋯ ' + p[0] + ' is under ' + on);
+      });
+      // the version chip stays readable: nothing lies across its text
+      const vr = ver.getBoundingClientRect();
+      if (!(vr.width > 20)) bad.push('the version chip is ' + Math.round(vr.width) + 'px wide');
+      [vr.left + 3, vr.left + vr.width / 2, vr.right - 3].forEach(function (x) { const on = topAt(ver, x, vr.top + vr.height / 2); if (on) bad.push('the version chip is covered by ' + on + ' at x ' + Math.round(x)); });
+      // …and every other control in the row takes its own click
+      let n0 = 0;
+      Array.prototype.forEach.call(t.querySelectorAll('button, [role=button]'), function (b) {
+        const br = b.getBoundingClientRect();
+        if (!(br.width > 4 && br.height > 4) || getComputedStyle(b).visibility === 'hidden') return;
+        n0++;
+        [br.left + br.width / 2, br.left + 4, br.right - 4].forEach(function (x) { const on = topAt(b, x, br.top + br.height / 2); if (on) bad.push(nm(b) + ' is under ' + on + ' at x ' + Math.round(x)); });
+      });
+      if (n0 < 12) throw new Error('control at ' + w + 'px: only ' + n0 + ' visible controls in the row — this is not the real PC row');
+      return bad.length ? w + 'px, ' + n + ' selected: ' + bad.slice(0, 3).join('; ') : '';
+    };
+    try {
+      if (hadHome) FM.home.close();
+      const mk = (name, x) => FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 600, shapeW: 200, shapeH: 200, fill: '#c05030', start: 0, duration: 3 });
+      const L = [mk('k970a', 250), mk('k970b', 540), mk('k970c', 830)];
+      FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      const select = async function (n) {
+        FM.selectLayer(L[0].id);
+        for (let i = 1; i < n; i++) FM.toggleSelect(L[i].id);
+        FM.refreshAll(); await frame();
+        if (FM.selectionIds().length !== n) throw new Error('setup: ' + FM.selectionIds().length + ' selected, not ' + n);
+      };
+      const widths = []; for (let w = 900; w <= 1920; w += 20) widths.push(w);
+      const fails = [];
+      for (const n of [1, 2, 3]) {
+        await select(n);
+        for (const w of widths) { window.__fmStep = n + ' selected at ' + w; await setWidth(w); const f = survey(w, n); if (f) fails.push(f); }
+      }
+      if (fails.length) {
+        const dots = fails.filter(f => /⋯/.test(f));   // the finding itself first, then the rest of the row
+        throw new Error(fails.length + ' of ' + widths.length * 3 + ' width × selection states have a covered control, ' + dots.length + ' of them the ⋯ (queue 970) — ' + dots.concat(fails.filter(f => !/⋯/.test(f))).slice(0, 4).join(' | '));
+      }
+
+      /* The band must not come and go with the selection: at a width where it is needed for two, it is already there for one,
+         so shift-clicking a second layer never moves the row. */
+      await setWidth(1280);
+      await select(1); const far1 = document.getElementById('t-far').getBoundingClientRect().top, row1 = document.getElementById('transport').getBoundingClientRect().top;
+      await select(2); const far2 = document.getElementById('t-far').getBoundingClientRect().top, row2 = document.getElementById('transport').getBoundingClientRect().top;
+      if (Math.abs(far1 - far2) > 1 || Math.abs(row1 - row2) > 1) throw new Error('at 1280px selecting a second layer moved the row (far run ' + Math.round(far1) + ' → ' + Math.round(far2) + ', row ' + Math.round(row1) + ' → ' + Math.round(row2) + ') — the band must be decided by the widest the group gets, not by the selection');
+
+      /* …and it is only there where it is needed. A band that were simply always on would pass every hit test above, and
+         cost the stage 40px on every PC; on a wide window, with the widest group showing, the far run is on the row. */
+      for (const w of [1600, 1920]) {
+        await setWidth(w); await select(3);
+        const fr = document.getElementById('t-far').getBoundingClientRect(), ur = document.getElementById('btn-undo').getBoundingClientRect();
+        if (Math.abs(fr.top + fr.height / 2 - (ur.top + ur.height / 2)) > 6) throw new Error('at ' + w + 'px with three selected the far run hangs under the row (its middle at ' + Math.round(fr.top + fr.height / 2) + ', undo\'s at ' + Math.round(ur.top + ur.height / 2) + ') — the band has leaked to a width where everything fits on one row');
+      }
+
+      /* A WIDER FAR RUN: Labs' share button sits in it before Export. A stand-in of the same kind and size — 1340 to 1440 is
+         where it collided on v17.11 (at 1440, his screen's likely width, ⋯'s right corners were under the far run).
+         Put in with the window LEFT ALONE first: the share button arrives when Labs is switched on, not on a resize, so the
+         row has to re-decide from the far run's own size — then the widths where it collided are swept. */
+      await setWidth(1440); await select(2);
+      const exp = document.getElementById('btn-export');
+      standIn = document.createElement('button'); standIn.className = 'btn icon-btn'; standIn.type = 'button'; standIn.textContent = '+'; standIn.setAttribute('aria-label', 'stand-in for the share button (test 970)');
+      exp.parentNode.insertBefore(standIn, exp);
+      await frame(); await frame(); await sleep(30);
+      const sw = standIn.getBoundingClientRect().width;
+      if (!(sw >= 30)) throw new Error('setup: the stand-in for the share button is ' + Math.round(sw) + 'px wide, not a button\'s ~34 — the far run was not really widened');
+      const still = survey(1440, 2);
+      if (still) throw new Error('the far run grew by one button with the window left alone (Labs switched on) and the row did not re-decide — ' + still + ' (queue 970)');
+      const wide = [];
+      for (const w of [1340, 1360, 1400, 1420, 1460]) { window.__fmStep = 'stand-in at ' + w; await setWidth(w); const f = survey(w, 2); if (f) wide.push(f); }
+      if (wide.length) throw new Error('with the far run 42px wider (the share button) the row still collides — ' + wide.slice(0, 3).join(' | ') + ' (queue 970)');
+
+      /* POSITIVE CONTROL for the hit test: something really lying over ⋯ is reported. Without it every "nothing covers it"
+         above could be a hit test that never sees anything. */
+      await setWidth(1440);
+      const mr = document.getElementById('btn-more-layer').getBoundingClientRect(), lid = document.createElement('div');
+      lid.style.cssText = 'position:fixed;z-index:99999;left:' + (mr.left + mr.width / 2 - 3) + 'px;top:' + mr.top + 'px;width:30px;height:' + mr.height + 'px;';
+      document.body.appendChild(lid);
+      try {
+        const got = survey(1440, 2);
+        if (!/⋯ centre is under/.test(got)) throw new Error('control: a box laid over ⋯ was not reported by the hit test (' + (got || 'nothing reported') + ') — every pass above proves nothing');
+      } finally { lid.remove(); }
+    } finally {
+      if (standIn) standIn.remove();
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(120);
+    }
   });
 
 })();

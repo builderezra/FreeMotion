@@ -6320,7 +6320,7 @@ window.FM = window.FM || {};
        unless it has been registered, so getPropertyValue hands back the token stream the stylesheet wrote
        — measured on a fresh profile at 1280x800: "clamp(232px, 30vh, 300px)" — and parseInt of that is
        NaN. All four readers below then fell to their fallback of 232 while the real band was 240 (300 on
-       a 1080p window; 40 more below 1160px, where the transport hangs under the row). Measured
+       a 1080p window; 40 more wherever the transport hangs its band under the row, queue 801/970). Measured
        consequences, all three from this one line-pattern: a 10px drag DOWN on the add menu's handle
        detached the panel at 232px inside a 240px row and opened an 8px strip of bare background above it;
        a CLICK on the timeline divider persisted 232, so the next load opened with a shorter band than the
@@ -7663,6 +7663,7 @@ window.FM = window.FM || {};
     t._pcBuilt = true;
     pcTransportSync();
     pcSyncShare();
+    pcTransportWatchFit(t);
   }
   /* "they only show up when they should, not always there."
    *
@@ -7706,6 +7707,89 @@ window.FM = window.FM || {};
       lm.setAttribute('aria-disabled', 'false');
     }
   }
+  /* ---- THE BAND IS DECIDED BY WHAT FITS, NOT BY A WINDOW WIDTH (queue 970) ----------------------------------------
+     #801 hung the far run (version chip · ? · notes · cog · export · ⛶) in a band under the row below 1160px, because
+     past that width it sat on top of the layer group. 1160 was measured with ONE layer selected, and the group is 206px
+     with two (parent · delete · group · mask-group · ⋯), not 126. Measured on v17.11 with two selected, every 20px from
+     900 to 1920: from 1180 to 1360 the ⋯ sat under the version chip — at 1280 elementFromPoint on its centre returned
+     `.ver`, 34px of overlap — and the mask-group button with it; with ONE selected ⋯'s right edge was under the chip at
+     1180–1200 too. With Labs on, the share button makes the far run 42px wider and the collision runs on to 1440.
+     And the other end of the same row: from 900 to 980 the back button sat on the copy button (30px at 940, the copy
+     button's centre under the chevron).
+     So the band is not a width. It is measured: the far run drops into the band when the WIDEST the layer group ever
+     gets — every button it holds shown, as with two or more selected — would come within one far-run gap (8px) of it;
+     and the back button drops into the band beside it when the left-hand controls reach it. Measured against the
+     widest group rather than the current one ON PURPOSE: the band costs the stage 40px, and a band that came and went
+     with the selection would move the whole row up and down every time a second layer was shift-clicked.
+     Horizontal positions do not depend on the band (both runs are absolute, the band only moves them down), so a
+     decision can never flip itself back. Re-decided by a ResizeObserver on the row (a window resize), the far run (the
+     share button, the version chip's text), the time pill (it sets where the right column starts) and the group itself
+     (a Viewer's copy hides its buttons with !important, so the widest it can get changes with the role). The measuring
+     never runs inside the observer's own callback — see the note on pcTransportWatchFit. */
+  function pcTransportFit() {
+    const t = document.getElementById('transport');
+    if (!t) return;
+    if (!t._pcBuilt) { t.classList.remove('t-band', 't-band-home'); return; }
+    const tr = t.getBoundingClientRect();
+    if (tr.width < 2) return;                          // not laid out (Home in front, or the editor hidden) — decide when it is
+    const GAP = 8;                                     // = #t-far's own gap, so the chip is never closer to ⋯ than to its neighbours
+    const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? r : null; };
+    const far = document.getElementById('t-far'), home = document.getElementById('t-home'), sel = document.getElementById('t-sel');
+    let band = false, homeDown = false;
+    const farR = far && vis(far);
+    if (farR) {
+      let reach = -Infinity;
+      const right = t.querySelector('.t-right');
+      if (right) Array.prototype.forEach.call(right.children, c => { if (c === sel) return; const r = vis(c); if (r) reach = Math.max(reach, r.right); });
+      if (sel) {
+        /* The widest group, MEASURED: show every button it holds and put its ground on, read the box, put it all back —
+           in one task, so nothing is ever painted. Arithmetic would have to copy the padding, margin, gap and button size
+           out of styles.css, and #425 may yet move copy into the group. */
+        const kids = Array.prototype.slice.call(sel.children), was = kids.map(k => k.style.display), had = sel.classList.contains('has-sel');
+        kids.forEach(k => { k.style.display = ''; });
+        sel.classList.add('has-sel');
+        const r = sel.getBoundingClientRect();
+        if (r.width > 0) reach = Math.max(reach, r.right);
+        kids.forEach((k, i) => { k.style.display = was[i]; });
+        if (!had) sel.classList.remove('has-sel');
+      }
+      band = reach + GAP > farR.left;
+    }
+    const homeR = home && vis(home), left = t.querySelector('.t-left');
+    if (homeR && left) {
+      let from = Infinity;
+      Array.prototype.forEach.call(left.children, c => { const r = vis(c); if (r) from = Math.min(from, r.left); });
+      homeDown = from < homeR.right + GAP;
+    }
+    t.classList.toggle('t-band', band || homeDown);   // the back button can only drop into a band that is there
+    t.classList.toggle('t-band-home', homeDown);
+  }
+  /* ⚠️ THE OBSERVER DECIDES ON THE NEXT FRAME, NOT INSIDE ITS OWN CALLBACK. Toggling the band from inside a
+     ResizeObserver callback moves the stage and the inspector 40px in the middle of the browser's observer pass, and
+     every OTHER observer in the app watching them (canvas-edit, the inspector, the timeline) is then left with a change
+     it cannot be told about until the next frame — which the browser reports as a window error, "ResizeObserver loop
+     completed with undelivered notifications". Measured: five of them in one sweep of 900–1920, none on v17.11, and
+     the app's global handler files each one under Settings → Last error, where it would bury a real one.
+     A WINDOW resize — the common case — is decided at once in its own event, before the frame is laid out, so the row
+     is never painted one frame late; the observer's next-frame pass then finds nothing to change. */
+  let pcFitResizeHooked = false;
+  function pcTransportWatchFit(t) {
+    if (t._fitRO) { try { t._fitRO.disconnect(); } catch (e) {} t._fitRO = null; }
+    if (typeof ResizeObserver !== 'undefined') {
+      let queued = 0;
+      const ro = (t._fitRO = new ResizeObserver(() => {
+        if (queued) return;
+        queued = requestAnimationFrame(() => { queued = 0; pcTransportFit(); });
+      }));
+      [t, document.getElementById('t-far'), document.getElementById('t-sel'), document.getElementById('time-readout')].forEach(el => { if (el) ro.observe(el); });
+    }
+    if (!pcFitResizeHooked) {
+      pcFitResizeHooked = true;
+      window.addEventListener('resize', () => { const tt = document.getElementById('transport'); if (tt && tt._pcBuilt) pcTransportFit(); });
+    }
+    pcTransportFit();
+  }
+  FM.pcTransportFit = pcTransportFit;
   /* THE UNDO for pcTransportLayout (queue 405). Restores every borrowed control to the exact parent and
      position it was taken from, then removes the three wrappers the build created. Without this the row
      could only ever grow: `_pcBuilt` latched and a window narrowing past 701px kept a desktop row on a
@@ -7729,6 +7813,8 @@ window.FM = window.FM || {};
     }
     ['t-home', 't-sel', 't-far'].forEach(id => { const w = document.getElementById(id); if (w && !w.childNodes.length) w.remove(); else if (w) w.remove(); });
     t._pcHomes = null; t._pcBuilt = false;
+    if (t._fitRO) { try { t._fitRO.disconnect(); } catch (e) {} t._fitRO = null; }   // queue 970: the band is a PC row's, and the row is gone
+    t.classList.remove('t-band', 't-band-home');
   }
   FM.pcTransportTeardown = pcTransportTeardown;
   FM.pcTransportLayout = pcTransportLayout;
