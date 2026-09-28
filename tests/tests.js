@@ -107376,4 +107376,273 @@
     } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
   });
 
+  /* ═══ #971 · A FRIEND'S PATH THAT IS DOWN IS SENT NOTHING ═══════════════════════════════════════════════════════════
+   * Two Chromes, the friend's browser SIGSTOPped 25 s while the owner edited: now and then the friend came back, went
+   * Offline six seconds later and stayed there 45-60 s. Chrome's SCTP packet log shows why (collab-link.js, "WHAT THE
+   * FRIEND MISSED…"): the friend's first acknowledgement after the pause inflates SCTP's retransmission timeout to ~45 s,
+   * and in the same instant SCTP sends everything queued behind it — before the owner's own path is writable — so it is
+   * dropped and waits out that timeout with the window full. So the link holds ctl/bulk in its own queue while the peer
+   * connection says the path is down, sheds presence, and pumps the queue the moment it says 'connected'. A peer cannot
+   * be paused inside one page, so the state is dispatched on a REAL RtcLink's peer connection while the real in-page
+   * transport keeps working — which is exactly what makes "handed to the channel while down" visible: it arrives. */
+  function pcState971(pc) {
+    const st = { ice: pc.iceConnectionState, conn: pc.connectionState };
+    Object.defineProperty(pc, 'iceConnectionState', { configurable: true, get: function () { return st.ice; } });
+    Object.defineProperty(pc, 'connectionState', { configurable: true, get: function () { return st.conn; } });
+    st.set = function (ice, conn) {
+      st.ice = ice; st.conn = conn;
+      pc.dispatchEvent(new Event('iceconnectionstatechange'));
+      pc.dispatchEvent(new Event('connectionstatechange'));
+    };
+    st.restore = function () { delete pc.iceConnectionState; delete pc.connectionState; };
+    return st;
+  }
+
+  test('971 a friend’s connection that is down is sent nothing — what the owner does meanwhile waits in order and reaches the friend the moment the connection is back, presence is shed, and down/Offline/close are unchanged', { item: '971', budgetMs: 120000 }, async function () {
+    const C = need921S3('a link whose path is down');
+    /* 1. The link itself. */
+    const pair = await rtcPair921();
+    try {
+      const got = [];
+      pair.g.onmessage = function (ch, msg) { got.push({ ch: ch, msg: msg, at: Date.now() }); };
+      const downs = [];
+      pair.h.ondown = function (d) { downs.push(d); };
+      let why = null;
+      pair.h.onclose = function (w) { why = w; };
+      /* CONTROL: with the path up, a ctl message and a presence frame arrive. */
+      pair.h.send('ctl', { t: 'x971', n: 0 });
+      pair.h.send('pres', { t: 'p971', n: 0 });
+      await until921S6('the control ctl and pres to arrive', function () { return got.filter(function (x) { return x.ch === 'ctl' || x.ch === 'pres'; }).length >= 2 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('CONTROL: with the path up, a ctl message and a presence frame did not both arrive (' + JSON.stringify(got.map(function (x) { return x.ch; })) + ')'); });
+      got.length = 0;
+      const st = pcState971(pair.h.pc);
+      try {
+        /* The path goes: 'disconnected' first (ICE's consent checks stop being answered — about 5-8 s into a pause). */
+        st.set('disconnected', 'disconnected');
+        const big = 'é'.repeat(40000);                  // several ctl fragments, so a held message is held whole
+        const bytes = new Uint8Array(50000); for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 7) & 255;
+        pair.h.send('ctl', { t: 'x971', n: 1 });
+        pair.h.send('pres', { t: 'p971', n: 1 });
+        pair.h.send('ctl', { t: 'x971', n: 2, big: big });
+        pair.h.send('bulk', bytes.buffer.slice(0));
+        await settle921(500);
+        /* …then 'failed' (about 20 s in): the link is DOWN, but not closed. */
+        st.set('disconnected', 'failed');
+        pair.h.send('ctl', { t: 'x971', n: 3 });
+        pair.h.send('pres', { t: 'p971', n: 3 });
+        await settle921(500);
+        if (got.length) throw new Error('while the friend’s connection was down the link handed ' + got.length + ' message(s) to the data channel (' + JSON.stringify(got.map(function (x) { return x.ch + ':' + (x.msg && x.msg.n); })) + ') — on a real path they go out into nothing, and SCTP resends them only when a retransmit timer that doubled through the whole pause runs out: measured, up to a minute after the friend came back, with the friend Offline and everything behind them stuck');
+        if (!pair.h.open) throw new Error('the link was closed while its path was down (' + why + ') — only a failure that lasts the grace may close it');
+        if (pair.h.down !== true || downs.join() !== 'true') throw new Error('a failed connection no longer says it is down (down ' + pair.h.down + ', ondown ' + JSON.stringify(downs) + ') — #971 must not change when a link is down');
+        /* What is held is still COUNTED. Media's §15.5 brake pauses on bufferedAmount, and while the path is down the
+           browser's own buffer says 0 — a sender reading only that would keep reading a clip off disk into the heap. */
+        const heldBulk = pair.h.bufferedAmount('bulk');
+        if (!(heldBulk >= bytes.length)) throw new Error('while the connection was down the link held ' + bytes.length + ' bulk bytes and bufferedAmount(“bulk”) said ' + heldBulk + ' — media pauses on that number (§15.5), so a clip sent to a friend whose phone is away would be read into the heap with nothing to stop it but the receiver’s window');
+        /* Back. */
+        const t0 = Date.now();
+        st.set('connected', 'connected');
+        await until921S6('the held messages to arrive', function () { return got.filter(function (x) { return x.ch !== 'pres'; }).length >= 4 ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('the connection came back and what was held did not arrive within 5 s (' + JSON.stringify(got.map(function (x) { return x.ch + ':' + (x.msg && x.msg.n); })) + ')'); });
+        const took = Date.now() - t0;
+        if (took > 1500) throw new Error('the held messages took ' + took + ' ms to arrive after the connection came back — they should go the moment it does');
+        const ctl = got.filter(function (x) { return x.ch === 'ctl'; }).map(function (x) { return x.msg && x.msg.n; });
+        if (ctl.join() !== '1,2,3') throw new Error('the held ctl messages arrived as ' + JSON.stringify(ctl) + ' — they must all arrive, in the order they were sent');
+        const two = got.filter(function (x) { return x.ch === 'ctl' && x.msg && x.msg.n === 2; })[0];
+        if (!two || two.msg.big !== big) throw new Error('the held fragmented ctl message did not arrive whole');
+        const bin = got.filter(function (x) { return x.ch === 'bulk'; })[0];
+        const arr = bin && bin.msg instanceof ArrayBuffer ? new Uint8Array(bin.msg) : null;
+        if (!arr || arr.length !== bytes.length || arr[49999] !== bytes[49999] || arr[12345] !== bytes[12345]) throw new Error('the held bulk message did not arrive intact (' + (arr ? arr.length : typeof (bin && bin.msg)) + ' bytes)');
+        const pres = got.filter(function (x) { return x.ch === 'pres'; });
+        if (pres.length) throw new Error('presence sent while the connection was down was delivered late (' + JSON.stringify(pres.map(function (x) { return x.msg && x.msg.n; })) + ') — a stale position is worth nothing, and a burst of them on the way back is worse');
+        if (pair.h.shed !== 2) throw new Error('the link says it shed ' + pair.h.shed + ' presence frame(s) — two were sent while the connection was down');
+        if (pair.h.down !== false || downs.join() !== 'true,false') throw new Error('the connection came back and the link does not say so (down ' + pair.h.down + ', ondown ' + JSON.stringify(downs) + ')');
+        /* …and with the path up, presence goes again, at once. */
+        got.length = 0;
+        pair.h.send('pres', { t: 'p971', n: 4 });
+        await until921S6('presence after the recovery', function () { return got.some(function (x) { return x.ch === 'pres'; }) ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('presence did not arrive after the connection came back'); });
+        if (pair.h.bufferedAmount('bulk') >= bytes.length) throw new Error('the connection came back, everything was sent, and bufferedAmount(“bulk”) still says ' + pair.h.bufferedAmount('bulk') + ' — a media sender would sit paused for ever');
+        /* ⚠️ connectionState 'connected' always means send. Chrome computes the legacy iceConnectionState apart from it
+           (it stays 'disconnected' while connectionState is 'failed'), and a link that held on the legacy one while the
+           aggregate says the path works would hold every edit for ever with nothing on screen to say so. */
+        got.length = 0;
+        st.set('disconnected', 'connected');
+        pair.h.send('ctl', { t: 'x971', n: 5 });
+        await until921S6('a ctl message while only the legacy state says disconnected', function () { return got.some(function (x) { return x.ch === 'ctl' && x.msg && x.msg.n === 5; }) ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('connectionState said “connected” and the link held a message because iceConnectionState said “disconnected” — the aggregate is the one that says whether the path works'); });
+      } finally { st.restore(); }
+    } finally { pair.close(); }
+
+    /* 2. Through the owner's own card: Sam joined with a code over a real connection; Sam's connection goes down; the owner
+          adds a layer. Nothing is sent to Sam while it is down, and the layer reaches Sam the moment it is back. */
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        let g = null, st = null;
+        try {
+          await ui.share();
+          document.querySelector('.cs-add').click();
+          const offer = await until921S6('the owner’s code', function () { const c = document.getElementById('collab-offer-code'); return c && /^FM1-/.test(c.textContent) ? c.textContent : null; }, 15000);
+          g = C.link.RtcLink({ self: 'guest', peer: 'host' });
+          const answer = await g.acceptOffer(offer);
+          const gh = g.opened.then(function () { return C.signal.handshake(g, { side: 'guest', key: g.mk, mode: 'conn', fpLocal: g.fpLocal, fpRemote: g.fpRemote }); });
+          gh.catch(function () {});
+          document.querySelector('.cs-answer').value = answer;
+          document.querySelector('.cs-connect').click();
+          const yes = await until921S6('Step 3', function () { return document.querySelector('.cs-sasyes'); }, 20000);
+          await gh;
+          const seen = [];
+          g.onmessage = function (ch, msg) { seen.push({ ch: ch, msg: msg, at: Date.now() }); };
+          g.send('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43', have: { epoch: 0, seq: 0 }, proto: C.PROTO, schema: C.SCHEMA_REV });
+          await settle921(150);
+          yes.click();
+          await until921S6('Sam to be in', function () { return ctx.S.peerIds().length === 1 ? 1 : 0; }, 10000)
+            .catch(function () { throw new Error('setup: Sam was not let in over the real connection'); });
+          const mid = ctx.S.peerIds()[0];
+          const L = ctx.S._eps && ctx.S._eps[mid];
+          if (!L || !L.pc) throw new Error('setup: the owner holds no real link for Sam');
+          const batchWith = function (id) {
+            return seen.filter(function (x) { return x.ch === 'ctl' && x.msg && x.msg.t === 'b' && JSON.stringify(x.msg.ops || []).indexOf(id) >= 0; })[0];
+          };
+          /* CONTROL: with the connection up, the owner's edit reaches Sam as a batch. */
+          const A0 = layer921('Up971');
+          FM.insertLayer(A0); FM.history.commit(); ctx.S.tick('full');
+          await until921S6('the control edit to reach Sam', function () { return batchWith(A0.id) ? 1 : 0; }, 5000)
+            .catch(function () { throw new Error('CONTROL: with Sam’s connection up, the owner’s new layer never reached Sam (' + JSON.stringify(seen.map(function (x) { return x.ch + ':' + (x.msg && x.msg.t); })) + ')'); });
+          /* Down. */
+          st = pcState971(L.pc);
+          st.set('disconnected', 'disconnected');
+          await settle921(300);                                  // anything already in the channel lands first
+          const n0 = seen.length;
+          const A1 = layer921('Late971');
+          FM.insertLayer(A1); FM.history.commit(); ctx.S.tick('full');
+          await settle921(800);
+          if (batchWith(A1.id)) throw new Error('the layer the owner added while Sam’s connection was down was handed to the data channel at once — on a real path it goes out into nothing and reaches Sam only when SCTP’s backed-off resend timer runs out (measured: up to a minute after Sam came back)');
+          const during = seen.slice(n0);
+          if (during.length) throw new Error('while Sam’s connection was down the owner still sent Sam ' + JSON.stringify(during.map(function (x) { return x.ch + ':' + (x.msg && x.msg.t); })));
+          if (!L.open || ctx.S.peerIds().indexOf(mid) < 0) throw new Error('Sam was dropped while the connection was merely down');
+          /* Back: the layer reaches Sam at once. */
+          const t0 = Date.now();
+          st.set('connected', 'connected');
+          await until921S6('the held edit to reach Sam', function () { return batchWith(A1.id) ? 1 : 0; }, 5000)
+            .catch(function () { throw new Error('Sam’s connection came back and the layer added while it was down never reached Sam (' + JSON.stringify(seen.slice(n0).map(function (x) { return x.ch + ':' + (x.msg && x.msg.t); })) + ')'); });
+          const took = batchWith(A1.id).at - t0;
+          if (took > 1500) throw new Error('the layer added while Sam’s connection was down reached Sam ' + took + ' ms after it came back — it should go the moment it does');
+        } finally {
+          if (st) st.restore();
+          if (g) g.close();
+          ui.close();
+        }
+      });
+    });
+  });
+
+  /* ═══ #971 · ONE MESSAGE AT A TIME INTO A BUFFER THAT IS NOT EMPTYING ═════════════════════════════════════════════════
+   * The half of #971 the path-down hold cannot reach: a pause starts seconds before the peer connection notices, and SCTP
+   * stops sending within half a second of it. Measured with two Chromes and six edits in the first 6 s of a 25 s pause,
+   * the hold alone still relapsed 4 runs of 6 (every edit 45.5 s after the friend was back): the edits had been handed to
+   * the data channel before 'disconnected' and sat INSIDE the browser, which sent them the instant the friend's first
+   * acknowledgement arrived — before the owner's path was writable — so they were dropped and waited out a 45 s timeout.
+   * So ctl and pres begin a message only while the channel's own bufferedAmount is 0; the rest wait in the link, where
+   * the hold can keep them. The browser's buffer cannot be filled on demand inside one page, so the number is reported
+   * by the real channel's own property, overridden — the link, the channels and the transport are all real. */
+  function fakeBuffered971(dc) {
+    const real = Object.getOwnPropertyDescriptor(RTCDataChannel.prototype, 'bufferedAmount');
+    const st = { n: null };
+    Object.defineProperty(dc, 'bufferedAmount', { configurable: true, get: function () { return st.n == null ? real.get.call(dc) : st.n; } });
+    st.restore = function () { delete dc.bufferedAmount; };
+    st.drain = function () { st.n = 0; dc.dispatchEvent(new Event('bufferedamountlow')); };
+    return st;
+  }
+
+  test('971 a message is begun on ctl or pres only into an empty browser buffer — the rest wait in the link, in order, and go the moment it empties; a message already begun is not held; bulk is not gated; presence waiting when the path goes is shed', { item: '971', budgetMs: 90000 }, async function () {
+    need921S3('the one-message gate');
+    const pair = await rtcPair921();
+    const fakes = [];
+    try {
+      const got = [];
+      pair.g.onmessage = function (ch, msg) { got.push({ ch: ch, msg: msg }); };
+      const n = function (ch) { return got.filter(function (x) { return x.ch === ch; }).map(function (x) { return x.msg && x.msg.n; }); };
+      const ctl = pair.h.channel('ctl'), pres = pair.h.channel('pres'), bulk = pair.h.channel('bulk');
+      const threshold0 = ctl.bufferedAmountLowThreshold;
+      /* CONTROL: an empty buffer — two ctl messages back to back both arrive, in order. */
+      pair.h.send('ctl', { t: 'g971', n: 1 });
+      pair.h.send('ctl', { t: 'g971', n: 2 });
+      await until921S6('the control ctl messages', function () { return n('ctl').length >= 2 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('CONTROL: with the browser buffer empty, two ctl messages did not both arrive (' + JSON.stringify(n('ctl')) + ')'); });
+      if (n('ctl').join() !== '1,2') throw new Error('CONTROL: the ctl messages arrived as ' + JSON.stringify(n('ctl')));
+      got.length = 0;
+
+      /* 1. ctl: the buffer is not emptying — a new message waits in the link. */
+      const fc = fakeBuffered971(ctl); fakes.push(fc);
+      fc.n = 700;
+      pair.h.send('ctl', { t: 'g971', n: 3 });
+      pair.h.send('ctl', { t: 'g971', n: 4 });
+      await settle921(400);
+      if (n('ctl').length) throw new Error('with ' + fc.n + ' bytes still in the ctl channel’s own buffer the link handed it ' + JSON.stringify(n('ctl')) + ' — measured with two Chromes, what the browser holds when a friend’s phone comes back is sent before the owner’s path is writable, dropped, and waits out a 45 s retransmission timer with everything else behind it');
+      if (pair.h.queued('ctl') !== 2) throw new Error('the link says ' + pair.h.queued('ctl') + ' ctl message(s) are waiting — two were sent into a buffer that was not emptying');
+      if (ctl.bufferedAmountLowThreshold !== 0) throw new Error('the link is waiting for the ctl buffer to empty but asked to be told at ' + ctl.bufferedAmountLowThreshold + ' bytes — it would never hear that it is empty');
+      /* …and the moment it empties, both go, in order. */
+      fc.drain();
+      await until921S6('the held ctl messages', function () { return n('ctl').length >= 2 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('the ctl buffer emptied and the messages held for it never arrived (' + JSON.stringify(n('ctl')) + ')'); });
+      if (n('ctl').join() !== '3,4') throw new Error('the held ctl messages arrived as ' + JSON.stringify(n('ctl')) + ' — both, in the order they were sent');
+      if (ctl.bufferedAmountLowThreshold !== threshold0) throw new Error('after the gate let go the ctl channel’s low-water mark is ' + ctl.bufferedAmountLowThreshold + ', not the flow control’s ' + threshold0 + ' — a big message would stall at its ceiling until the buffer was completely empty');
+      got.length = 0;
+
+      /* 2. A message already begun is not held frame by frame: a three-frame ctl message whose first frame fills the buffer
+            still goes out whole; the small one behind it waits. */
+      fc.n = 0;
+      const big = 'ж'.repeat(Math.round(pair.h.chunkSize() * 2.5));
+      const realSend = ctl.send;
+      let frames = 0;
+      ctl.send = function (f) { frames++; if (frames === 1) fc.n = 900; return realSend.call(ctl, f); };
+      try {
+        pair.h.send('ctl', { t: 'g971', n: 5, big: big });
+        pair.h.send('ctl', { t: 'g971', n: 6 });
+        await until921S6('the begun ctl message', function () { return n('ctl').length >= 1 ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('a ctl message whose first frame went into an empty buffer was held part-way (' + frames + ' frame(s) sent) — only a NEW message waits for the buffer'); });
+      } finally { ctl.send = realSend; }
+      await settle921(300);
+      const five = got.filter(function (x) { return x.msg && x.msg.n === 5; })[0];
+      if (!five || five.msg.big !== big) throw new Error('the begun ctl message did not arrive whole');
+      if (n('ctl').join() !== '5') throw new Error('behind a message that filled the buffer the next one should wait, and ctl delivered ' + JSON.stringify(n('ctl')));
+      fc.drain();
+      await until921S6('the message behind the big one', function () { return n('ctl').indexOf(6) >= 0 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('the message held behind the big one never arrived after the buffer emptied'); });
+      got.length = 0;
+
+      /* 3. bulk is NOT gated — media streams ahead by design (§15.5 is its brake). */
+      const fb = fakeBuffered971(bulk); fakes.push(fb);
+      fb.n = 5000;
+      const bytes = new Uint8Array(3000); for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 13) & 255;
+      pair.h.send('bulk', bytes.buffer.slice(0));
+      pair.h.send('bulk', bytes.buffer.slice(0));
+      await until921S6('bulk with bytes in its buffer', function () { return got.filter(function (x) { return x.ch === 'bulk'; }).length >= 2 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('bulk was held because its buffer was not empty — media is meant to stream up to its 4 MiB ceiling'); });
+      got.length = 0;
+
+      /* 4. pres: gated the same way, and a frame waiting at the gate when the path goes is shed, never sent late. */
+      const fp = fakeBuffered971(pres); fakes.push(fp);
+      fp.n = 300;
+      const shed0 = pair.h.shed;
+      pair.h.send('pres', { t: 'q971', n: 7 });
+      await settle921(300);
+      if (n('pres').length) throw new Error('a presence frame was handed to a pres buffer holding ' + fp.n + ' bytes');
+      const st = pcState971(pair.h.pc);
+      try {
+        st.set('disconnected', 'disconnected');
+        if (pair.h.queued('pres') !== 0 || pair.h.shed !== shed0 + 1) throw new Error('the path went down with a presence frame waiting and it was kept (queued ' + pair.h.queued('pres') + ', shed ' + (pair.h.shed - shed0) + ') — it would be sent, stale, when the path came back');
+        st.set('connected', 'connected');
+        fp.drain();
+        pair.h.send('pres', { t: 'q971', n: 8 });
+        await until921S6('presence after the path came back', function () { return n('pres').indexOf(8) >= 0 ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('presence did not arrive once the path was back and the buffer empty'); });
+        if (n('pres').indexOf(7) >= 0) throw new Error('the presence frame shed when the path went down was delivered late');
+      } finally { st.restore(); }
+    } finally {
+      fakes.forEach(function (f) { f.restore(); });
+      pair.close();
+    }
+  });
+
 })();
