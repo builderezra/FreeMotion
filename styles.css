@@ -8131,16 +8131,18 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
      compares them), and without it the 1.5px borders would make the box 2-3px larger than the group.
      The old 1px outline's room is kept as PADDING (1px 6px instead of 0 5px + a 1px border), so the group is still
      126 x 36 at the same place and nothing else in the row moves.
-     WHITE, not accent: Export is this row's cyan mark on purpose (see #btn-export above), and a cyan frame a few buttons
-     from it reads as a second thing to press. 1.5px is a hairline on a 2x screen; on a 100% PC Chrome snaps it to 1px,
-     measured. (Option A of three he was shown — B is `--sel-corner: var(--accent)`, C is 2px / .85 with 30% 70% arms.)
+     ACCENT — HIS PICK (queue 973). His words, 28 Sep: "Do B for the outlines thing that's blue." v17.07 shipped option A,
+     white at .6, decided while he had not answered, on the grounds that Export is this row's cyan mark (see #btn-export
+     above) and a cyan frame a few buttons from it might read as a second thing to press. He saw all three on the sheet and
+     chose the blue, so the corners are the app's accent; his pick outranks that reasoning. 1.5px is a hairline on a 2x
+     screen; on a 100% PC Chrome snaps it to 1px, measured. (A was rgba(255,255,255,.6); C is 2px / .85 with 30% 70% arms.)
      ⚠️ THIS REVERSES #516's OUTLINE, AND #516 REVERSED #251's RECESS. The newer pick outranks the older; the notes above
      are kept because they are the reason each earlier look existed. */
   #t-sel.has-sel {
     position: relative;                      /* the corners hang off this box */
     padding: 1px 6px; margin: 0 3px;         /* = the old 0 5px + 1px border: still 126 x 36 */
     border-radius: 11px;
-    --sel-corner: rgba(255, 255, 255, .6);
+    --sel-corner: var(--accent);
   }
   #t-sel.has-sel::before,
   #t-sel.has-sel::after {
@@ -10971,8 +10973,17 @@ body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
    The floor (300px, or 86% of a shorter screen) keeps a landscape phone from getting a sliver (measured 440×300 at
    667×375, five rows showing; without it, about two).
    :not(.pb-big) so big keeps --pb-w/--pb-h; .pb-morph's !important caps still win while it animates between the two. */
+/* …and the same rule for small NOTES (queue 975). Ezra, 28 Sep: "you just decide what is best as long as the small version
+   doesn't take up the whole screen and is like a box on the screen and big takes up the whole thing". Small Notes was
+   content-sized (min(420px, 94vw) wide, up to 86% of the screen tall), so with a long list it was the #969 failure again:
+   measured at 380×760 with 20 notes, small 344×654 against big 360×740 — 88% of big's height and 16px narrower. It now
+   takes Help's box exactly, so the two small panels match: 324×416 against big 360×780 at 380×800 (53%), 384×460 against
+   420×936 at his 440×956 (49%); the list scrolls inside, and the yellow band, Add and Done stay whole. `.pb-card` scopes
+   it to the Notes panel that HAS the small/big grip — the pre-export reminder and the comments card are .np-cards too
+   and are not his small/big panels. */
 @media (max-width: 700px) {
-  .shortcuts-card:not(.pb-big) {
+  .shortcuts-card:not(.pb-big),
+  .np-card.pb-card:not(.pb-big) {
     width: calc(100vw - 56px);
     min-width: 0;
     max-height: clamp(min(300px, 86vh), 52vh, 460px);     /* where dvh is missing */
