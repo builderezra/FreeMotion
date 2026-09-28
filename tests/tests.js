@@ -107597,4 +107597,36 @@
       await sleep927(120);
     }
   });
+
+  test('973 the Edit Shape dropdown names the front car "Car (front)", as its Add menu tile does, not "Carfront"', { item: '973' }, async function () {
+    /* From the review of the #973 build. The Shape dropdown in the element card listed every drawn shape by capitalising its
+       internal key, so the shape his Add menu tile and layer name call "Car (front)" was offered as "Carfront" — and the older
+       ones the same way ("Thumbsup", "Pointhand", "Paperplane"). It now takes the Add menu's own names. Read from the real
+       select in the real element card of a Rectangle — the drawn shapes have Edit Points instead, so a parametric shape's
+       card is where this list is offered (turn a rectangle into a car). */
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'Rectangle', x: 540, y: 540, shapeW: 400, shapeH: 300, fill: '#44aaff' });
+      FM.scene = scene([L], { project: { width: 1080, height: 1080, fps: 30, duration: 5, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll();
+      FM.inspector.openCategory('element'); FM.inspector.refresh(); await sleep(160);
+      const lab = [].slice.call(document.querySelectorAll('#inspector .prop-row label')).filter(e => (e.textContent || '').trim() === 'Shape')[0];
+      const sel = lab && lab.parentNode.querySelector('select');
+      if (!sel) throw new Error('setup: the Rectangle\'s element card has no Shape dropdown');
+      const text = v => { const o = [].slice.call(sel.options).filter(x => x.value === v)[0]; return o ? o.textContent : null; };
+      // CONTROL: this is the shape list, it has the Rectangle selected, and one-word shapes still read as their tiles do
+      if (sel.value !== 'rect') throw new Error('setup: the Shape dropdown shows "' + sel.value + '" for a Rectangle');
+      if (text('car') !== 'Car' || text('heart') !== 'Heart' || text('rect') !== 'Rectangle') throw new Error('control: Car / Heart / Rectangle read "' + text('car') + '" / "' + text('heart') + '" / "' + text('rect') + '"');
+      const want = { carfront: 'Car (front)', thumbsup: 'Thumbs up', pointhand: 'Pointing hand', paperplane: 'Paper plane' };
+      const bad = Object.keys(want).filter(k => text(k) !== want[k]).map(k => k + ' reads "' + text(k) + '" where its Add menu tile says "' + want[k] + '"');
+      if (bad.length) throw new Error('the Edit Shape dropdown does not use the Add menu\'s names: ' + bad.join('; '));
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.inspector.openCategory('home'); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(40);
+    }
+  });
 })();

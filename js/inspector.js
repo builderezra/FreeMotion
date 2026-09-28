@@ -6522,7 +6522,7 @@ window.FM = window.FM || {};
         const kr = el('div', 'prop-row'); kr.appendChild(el('label', null, 'Shape'));
         const ksel = document.createElement('select');
         const baseKinds = [['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['line', 'Line'], ['arc', 'Arc'], ['polygon', 'Polygon'], ['star', 'Star'], ['pie', 'Pie'], ['semicircle', 'Semicircle'], ['ring', 'Ring']]
-          .concat(Object.keys(FM.SHAPE_POLYS || {}).map(k => [k, k.charAt(0).toUpperCase() + k.slice(1)]));
+          .concat(Object.keys(FM.SHAPE_POLYS || {}).map(k => [k, FM.addMenu && FM.addMenu.shapeLabel ? FM.addMenu.shapeLabel(k) : k.charAt(0).toUpperCase() + k.slice(1)]));   // the Add menu's names — "Car (front)", not "Carfront" (973 review)
         baseKinds.forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; if (p[0] === layer.shape) o.selected = true; ksel.appendChild(o); });
         ksel.addEventListener('change', () => { layer.shape = ksel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
         kr.appendChild(ksel); body.appendChild(kr);
