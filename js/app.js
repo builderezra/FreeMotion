@@ -8419,6 +8419,18 @@ window.FM = window.FM || {};
         cvDialog.classList.add('hidden');
       };
       FM.closeCanvasDialog = cvClose;
+      /* #978 review: THE SWITCH IN THE PAIR MOVES THE BUTTON IT HANGS FROM. On a PC the Friends block holds the only Work
+         with friends switch, and flipping it adds or takes away the Share button beside Export — which shifts the cog along
+         the transport row. The pair was placed once, at open, so it was left hanging off where its button USED to be: turned
+         on, the tail pointed at the new Share button under the blur, 42 px right of the lifted cog; turned off from a pair
+         Share had opened, `cv-share-src` kept the cog blurred under a tail now pointing at it. Every flip goes through
+         FM.settings.set → apply() → syncLabs and THEN these listeners, so the bar has already moved: re-hang it off the button
+         it hangs from while that is still on screen, else the cog. A no-op in effect on a phone (cvPlace centres it, as it is). */
+      if (FM.settings && FM.settings.onChange) FM.settings.onChange(() => {
+        if (cvDialog.classList.contains('hidden')) return;
+        const onScreen = !!(cvSrc && cvSrc.isConnected && cvSrc.getBoundingClientRect().width > 0);
+        cvPlace(onScreen ? cvSrc : document.getElementById('btn-settings'));
+      });
       /* queue 921 S7 review: A VIEWER OR COMMENTER IS TOLD IN THE CARD, BEFORE THEY TRY — Apply is off and a
          line says why, in words that fit the role. It was a toast from Apply, and the toast (z 60) sat under
          this dialog's own full-screen backdrop (z 100), which stayed open: pressing Apply did nothing

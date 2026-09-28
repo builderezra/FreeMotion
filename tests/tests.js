@@ -107793,4 +107793,82 @@
     } finally { if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200); }
   });
 
+  /* #978 review: THE SWITCH IN THE PAIR MOVES THE BUTTON THE PAIR HANGS FROM. On a PC the Friends block holds the only Work
+     with friends switch, and flipping it adds or takes away the Share button beside Export — which shifts the cog along the
+     transport row. The pair was placed once, at open, so turning it on left the pair and its tail pointing at the new Share
+     button (blurred under the scrim) with the lifted cog 42 px to the left of its corner; and turning it off from a pair Share
+     had opened left `cv-share-src` on, the cog blurred under a tail now pointing at it. His clauses 2 and 3 are that picture:
+     hung off the button, the button sharp. */
+  test('978 on a PC the pair stays hung off its button when the switch in its own Friends block moves the bar — on, the cog shifts and the canvas block and its tail follow it; off from a pair Share opened, it hangs off the cog again with the cog sharp', { item: '978', budgetMs: 90000 }, async function () {
+    const C = need921S7('the Work with friends switch in the PC pair');
+    const was = FM.settings.get('collabLabs');
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(450); }
+    try {
+      await withFakeNet921(async function () { await editorWithShape(async function () { await with945(async function () {
+        await atWideWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+          const body = document.getElementById('cv-fr-body');
+          const cog = document.getElementById('btn-settings');
+          const hung = function (what, src) {
+            const kr = src.getBoundingClientRect(), cr = card.getBoundingClientRect();
+            if (Math.abs(cr.right - kr.right) > 12) throw new Error(what + ': the canvas block’s right edge (' + Math.round(cr.right) + ') is not by its button’s (' + Math.round(kr.left) + '..' + Math.round(kr.right) + ')');
+            const tail = card._popTail;
+            if (!tail || !tail.isConnected) throw new Error(what + ': the canvas block next to the button has no tail');
+            const tr = tail.getBoundingClientRect(), tcx = tr.left + tr.width / 2, kcx = kr.left + kr.width / 2;
+            if (Math.abs(tcx - kcx) > 4) throw new Error(what + ': the tail points at x ' + Math.round(tcx) + ', not at its button (centre ' + Math.round(kcx) + ')');
+            const at = document.elementFromPoint(kcx, kr.top + kr.height / 2);
+            if (!at || (at !== src && !src.contains(at))) throw new Error(what + ': the button the pair hangs from is under the blur — its centre is ' + (at && (at.id || at.className)));
+          };
+          FM.settings.set('collabLabs', false); C.ui.syncLabs();
+          /* ON: the cog opens the pair, ⤢ to Friends, and its one switch turns the feature on. */
+          press978(cog); await entranceDone(dlg); await sleep(60);
+          if (!open945(dlg) || !dlg.classList.contains('cv-side')) throw new Error('setup: the cog did not open the pair side by side at 1280');
+          const k0 = cog.getBoundingClientRect();
+          hung('CONTROL, just opened', cog);
+          document.getElementById('cv-fr-exp').click(); await land945();
+          const sw = body.querySelector('[role=switch][aria-checked=false]');
+          if (!sw) throw new Error('setup: the Friends block with the feature off has no switch');
+          press978(sw);
+          await until921S6('the switch to turn the feature on and put Share beside Export', function () {
+            const b = document.getElementById('btn-share');
+            return C.ui.labsOn() && b && b.parentNode.id !== 'stage' && b.getBoundingClientRect().width > 0 ? b : null;
+          }, 4000);
+          await settle921(80);
+          const k1 = cog.getBoundingClientRect();
+          if (Math.abs(k1.right - k0.right) < 20) throw new Error('setup: turning the feature on did not move the cog (' + Math.round(k0.right) + ' → ' + Math.round(k1.right) + ') — this test would prove nothing');
+          if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('turning the feature on in the block closed the pair or left Friends');
+          hung('after the switch turned the feature on', cog);
+          const sb = document.getElementById('btn-share'), sr = sb.getBoundingClientRect();
+          if (document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2) !== dlg) throw new Error('the Share button the switch added is not under the blur — the pair was not opened from it');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          /* OFF: Share opens the pair hung off itself, and the block's switch turns the feature off — Share leaves the bar. */
+          press978(sb);
+          await hcUntil('Share to open the pair', function () { return !dlg.classList.contains('hidden'); }, 8000);
+          await entranceDone(dlg); await sleep(60);
+          if (!document.body.classList.contains('cv-share-src') || !dlg.classList.contains('cv-fr-big')) throw new Error('setup: Share did not open the pair hung off itself with Friends big');
+          hung('CONTROL, opened from Share', sb);
+          const sw2 = body.querySelector('[role=switch][aria-checked=true]');
+          if (!sw2) throw new Error('setup: the Friends block with the feature on has no on switch');
+          press978(sw2);
+          await until921S6('the switch to turn the feature off', function () {
+            if (!C.ui.labsOn()) return true;
+            const ok = document.querySelector('#fm-ask .fm-ask-ok');
+            if (ok && !document.getElementById('fm-ask').classList.contains('hidden')) ok.click();   // a room kept by an earlier test
+            return false;
+          }, 6000);
+          await settle921(80);
+          if (sb.isConnected && sb.getClientRects().length) throw new Error('setup: the Share button stayed in the bar with the feature off');
+          if (!open945(dlg)) throw new Error('turning the feature off in the block closed the pair');
+          if (document.body.classList.contains('cv-share-src')) throw new Error('the Share button left the bar, but the pair still hangs off it (cv-share-src) — the cog stays blurred under a tail pointing at it');
+          hung('after the switch turned the feature off', cog);
+          document.getElementById('cv-cancel').click(); await sleep(60);
+        }, 1280);
+      }); }); });
+    } finally {
+      FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
+      if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
+    }
+  });
+
 })();
