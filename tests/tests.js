@@ -107376,4 +107376,180 @@
     } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
   });
 
+  /* ═══ #955 — RESIZING THE WINDOW KEEPS THE PLAYHEAD WHERE IT WAS (hunt MEDIUM, found by #941's fixer) ══════════════
+     Measured on v17.11 with a 2 s project: widening the window put the playhead at 0 — 900→1280 and a phone's
+     380→700, from 1.2 s and from 1.9 s — and 1280→1600 dropped it to 0.47 s. The playhead is a fixed line at 50vw with
+     the strip scrolled under it, and the strip is only as wide as (the scrollport + the project) the LAST layout made
+     it. A wider window is a wider scrollport, so until the debounced rebuild re-sizes the strip the scroll range is
+     shorter than where the strip sat, the browser pulls scrollLeft back into range, and the timeline's scroll
+     listener read that pull as a hand scrolling the strip and moved FM.time to it. Narrowing never clamps, which is
+     why only widening lost it. Asserted as what is on screen: after each resize the time is unchanged AND the 2 s
+     clip still sits under the line at that time. A scroll by hand after the resize still moves the playhead — the
+     control that the listener was not simply switched off. */
+  function key955(code) { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: code, bubbles: true, cancelable: true })); }
+  test('955 resizing the window keeps the playhead where it was — 900→1280, 1280→1600, 1280→900, 1600→1280 and a phone 380→700→380, at 1.2 s and 1.9 s of a 2 s project, paused and after a play-pause; a scroll after the resize still moves it', { item: '955', budgetMs: 180000 }, async function () {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to resize the window');
+    const w0 = fe.style.width;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) FM.home.close();
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId, t00 = FM.time;
+    const tl = document.getElementById('timeline'), line = document.getElementById('tl-centerline');
+    if (!tl || !line) throw new Error('setup: #timeline or #tl-centerline is missing');
+    const fps = FM.scene.project.fps || 30;
+    let L = null;
+    const underLine = function () {
+      const clip = document.querySelector('#timeline .clip[data-id="' + L.id + '"]');
+      if (!clip) throw new Error('the 2 s clip is not on the timeline');
+      const lb = line.getBoundingClientRect();
+      const mid = lb.left + (parseFloat(getComputedStyle(line).borderLeftWidth) || 0) / 2;
+      return (mid - clip.getBoundingClientRect().left) / FM._tlPxPerSec();   // the time at which the line crosses the clip
+    };
+    const setW = async function (w) { fe.style.width = w + 'px'; await sleep(450); };   // the resize rebuild is debounced 150 ms
+    try {
+      FM.scene.layers.length = 0;
+      L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0' });
+      L.start = 0; L.duration = 2; FM.scene.layers.push(L);
+      FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.scene.project.duration !== 2) throw new Error('setup: the project is ' + FM.scene.project.duration + ' s long, not 2 s');
+      const pairs = [[900, 1280], [1280, 1600], [1280, 900], [1600, 1280], [380, 700], [700, 380]];
+      const bad = [];
+      let resized = 0;
+      for (const pair of pairs) {
+        for (const at of [1.2, 1.9]) {
+          for (const mode of ['paused', 'play-pause']) {
+            const what = pair[0] + '→' + pair[1] + 'px, ' + mode + ' at ~' + at + ' s';
+            await setW(pair[0]);
+            if (mode === 'paused') {
+              FM.setTime(at);
+            } else {
+              FM.setTime(at - 0.3);
+              key955('Space');
+              const ts = performance.now();
+              while (!FM.playing && performance.now() - ts < 2000) await sleep(20);
+              if (!FM.playing) throw new Error('setup (' + what + '): Space did not start playback');
+              /* Pause on the TIME, not after a fixed sleep: a busy Mac stretching a 250 ms sleep carried 1.6 s to the
+                 2 s end, where playback stops by itself and the second Space STARTS it again. */
+              const tp = performance.now();
+              while (FM.playing && FM.time < at - 0.12 && performance.now() - tp < 2000) await sleep(10);
+              key955('Space');
+              await sleep(60);
+              if (FM.playing) throw new Error('setup (' + what + '): Space did not pause');
+              if (FM.time < at - 0.25 || FM.time > 1.99) throw new Error('setup (' + what + '): the play-pause left the playhead at ' + FM.time.toFixed(3) + ' s');
+            }
+            await sleep(250);
+            const t0 = FM.time, cw0 = tl.clientWidth;
+            /* CONTROL: before the resize the line crosses the clip at the playhead's time, so the measurement works. */
+            const u0 = underLine();
+            if (Math.abs(u0 - t0) > 0.5 / fps + 0.02) throw new Error('setup (' + what + '): before the resize the line crosses the clip at ' + u0.toFixed(3) + ' s while the playhead says ' + t0.toFixed(3) + ' s — this test cannot tell the fix from the bug');
+            await setW(pair[1]);
+            const cw1 = tl.clientWidth;
+            if (Math.abs(cw1 - cw0) < 100 || (cw1 > cw0) !== (pair[1] > pair[0])) throw new Error('setup (' + what + '): the timeline went ' + cw0 + ' → ' + cw1 + 'px, so the window never really resized');
+            resized++;
+            const t1 = FM.time, u1 = underLine();
+            if (Math.abs(t1 - t0) > 1e-6) bad.push(what + ': the playhead moved ' + t0.toFixed(3) + ' → ' + t1.toFixed(3) + ' s');
+            else if (Math.abs(u1 - t1) > 0.5 / fps + 0.02) bad.push(what + ': the playhead says ' + t1.toFixed(3) + ' s but the line crosses the clip at ' + u1.toFixed(3) + ' s');
+            /* CONTROL: a scroll by hand after the resize still drives the playhead. */
+            if (at === 1.2 && mode === 'paused') {
+              tl.scrollLeft = Math.round(0.5 * FM._tlPxPerSec());
+              await sleep(80);
+              if (Math.abs(FM.time - 0.5) > 1.5 / fps) bad.push(what + ': after the resize, scrolling the strip to 0.5 s left the playhead at ' + FM.time.toFixed(3) + ' s — the scroll no longer drives it');
+              await sleep(200);
+            }
+          }
+        }
+      }
+      if (resized !== 24) throw new Error('only ' + resized + ' of 24 resizes were measured');
+      if (bad.length) throw new Error(bad.length + ' of 24 resizes lost the playhead — ' + bad.join(' | '));
+    } finally {
+      if (FM.playing && FM.pause) FM.pause();
+      fe.style.width = w0; await sleep(400);
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.setTime) FM.setTime(Math.min(t00 || 0, FM.scene.project.duration || 0));
+      if (wasHome && FM.home.open) FM.home.open();
+      await sleep(120);
+    }
+  });
+
+  /* The same pull from the two other ways the timeline widens, both measured on v17.11 with the fix reverted: during
+     PLAYBACK, 900→1280 threw the playing transport back from 2.79 s to 0.25 s (the scroll listener's scrub re-anchors
+     the clock); and at 1280 with no window resize at all, opening the PC text editor hides the inspector (queue 519),
+     the timeline widens 973 → 1280px, and the playhead went from 3.2 s to 1.63 s — and stayed there when ✓ closed it.
+     A 4 s project of a shape and a text layer, the frame put back and Home reopened after. */
+  async function with955(fn) {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to resize the window');
+    const w0 = fe.style.width;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) FM.home.close();
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId, t00 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const S = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0' });
+      S.start = 0; S.duration = 4; FM.scene.layers.push(S);
+      const T = FM.makeLayer('text', { text: 'Probe', x: 60, y: 45, size: 40, fill: '#fff' });
+      T.start = 0; T.duration = 4; FM.scene.layers.push(T);
+      FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.scene.project.duration !== 4) throw new Error('setup: the project is ' + FM.scene.project.duration + ' s long, not 4 s');
+      return await fn({ fe: fe, tl: document.getElementById('timeline'), T: T, fps: FM.scene.project.fps || 30 });
+    } finally {
+      if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) { if (FM.textEdit.stop) FM.textEdit.stop(); }
+      if (FM.playing && FM.pause) FM.pause();
+      fe.style.width = w0; await sleep(400);
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.setTime) FM.setTime(Math.min(t00 || 0, FM.scene.project.duration || 0));
+      if (wasHome && FM.home.open) FM.home.open();
+      await sleep(120);
+    }
+  }
+  test('955 widening the window 900→1280 while it plays does not throw the playhead back', { item: '955', budgetMs: 60000 }, async function () {
+    await with955(async function (c) {
+      c.fe.style.width = '900px'; await sleep(450);
+      FM.setTime(2.5); await sleep(200);
+      key955('Space');
+      const ts = performance.now();
+      while (!FM.playing && performance.now() - ts < 2000) await sleep(20);
+      if (!FM.playing) throw new Error('setup: Space did not start playback');
+      await sleep(250);
+      const p0 = FM.time, cw0 = c.tl.clientWidth;
+      if (p0 < 2.55) throw new Error('setup: playback is not moving the playhead (' + p0.toFixed(3) + ' s after 250 ms from 2.5 s)');
+      c.fe.style.width = '1280px';
+      await sleep(120);
+      const p1 = FM.time, playing1 = FM.playing, cw1 = c.tl.clientWidth;
+      key955('Space'); await sleep(60);
+      if (cw1 < cw0 + 100) throw new Error('setup: the timeline went ' + cw0 + ' → ' + cw1 + 'px while playing, so the window never really widened');
+      if (!playing1) throw new Error('widening the window while it played stopped playback');
+      if (p1 < p0 - 0.02) throw new Error('widening the window 900→1280 while it played threw the playhead back from ' + p0.toFixed(3) + ' to ' + p1.toFixed(3) + ' s');
+    });
+  });
+  test('955 opening and closing the PC text editor, which widens the timeline with no window resize, keeps the playhead; a scroll afterwards still moves it', { item: '955', budgetMs: 60000 }, async function () {
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('FM.textEdit is not reachable — this test cannot open the editor');
+    await with955(async function (c) {
+      c.fe.style.width = '1280px'; await sleep(450);
+      FM.selectLayer(c.T.id);
+      if (FM.refreshAll) FM.refreshAll();
+      FM.setTime(3.2); await sleep(300);
+      const cw0 = c.tl.clientWidth, t0 = FM.time;
+      FM.textEdit.start(c.T.id);
+      await sleep(450);                                      // the panel observer's 60 ms debounce, then its rebuild
+      if (!document.body.classList.contains('text-editing')) throw new Error('setup: starting the editor did not put the app into text-editing');
+      const cw1 = c.tl.clientWidth;
+      if (cw1 < cw0 + 100) throw new Error('setup: the timeline did not widen when the inspector hid (' + cw0 + ' → ' + cw1 + 'px) — the case this guards never happened');
+      if (Math.abs(FM.time - t0) > 1e-6) throw new Error('opening the text editor on PC widened the timeline ' + cw0 + ' → ' + cw1 + 'px and moved the playhead ' + t0.toFixed(3) + ' → ' + FM.time.toFixed(3) + ' s');
+      FM.textEdit.stop();
+      await sleep(450);
+      if (Math.abs(FM.time - t0) > 1e-6) throw new Error('closing the text editor moved the playhead ' + t0.toFixed(3) + ' → ' + FM.time.toFixed(3) + ' s');
+      /* CONTROL: a scroll by hand still drives the playhead afterwards. */
+      c.tl.scrollLeft = Math.round(1 * FM._tlPxPerSec());
+      await sleep(80);
+      if (Math.abs(FM.time - 1) > 1.5 / c.fps) throw new Error('after the editor closed, scrolling the strip to 1 s left the playhead at ' + FM.time.toFixed(3) + ' s — the scroll no longer drives it');
+    });
+  });
+
 })();

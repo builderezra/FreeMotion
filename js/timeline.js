@@ -1095,6 +1095,10 @@ window.FM = window.FM || {};
   const SPAN_AT_ZOOM1 = 5;
   function pxPerSec() { return (laneViewW() / SPAN_AT_ZOOM1) * zoom; }
   FM._tlPxPerSec = pxPerSec;   // suite seam, same as FM._tlHeadW: lets a test derive the content width
+  /* The lane width the strip was last sized for (#955). The scroll listener compares it with the lane on screen: a
+     difference means the window or the panel changed width since, so the strip's scroll range is stale and any
+     scroll right now is the BROWSER clamping scrollLeft into it, not a hand. 0 = never sized. */
+  let sizedLaneW = 0;
   // Widen the inner area so the lanes overflow + scroll (heads are sticky-pinned). viewport + content
   // pads both sides so t=0 AND t=duration can each scroll under the fixed centre line (50vw).
   function applyInnerWidth() {
@@ -1115,7 +1119,8 @@ window.FM = window.FM || {};
        left a screenful of dead space no clip could ever reach.
        `laneViewW() + HEAD_W` is the scrollport, and it is read through laneViewW deliberately: that helper
        already freezes its value during a gesture, so a drag cannot make the extent flicker mid-move. */
-    innerEl.style.width = ((laneViewW() + HEAD_W) + content) + 'px';
+    sizedLaneW = laneViewW();   // #955: the lane this strip is now sized for — see the scroll listener
+    innerEl.style.width = ((sizedLaneW + HEAD_W) + content) + 'px';
   }
 
   // Map a clientX to project time, accounting for the head column + the PAD origin shift.
@@ -4511,6 +4516,29 @@ window.FM = window.FM || {};
         // to the start" and dragged the playhead back to 0. Anything that seeks while the editor is
         // open (walking captions cue by cue, for one) was silently undone a frame later.
         if (!timelineEl.clientWidth) return;
+        /* ⚠️ …AND A RESIZED ONE WAS NOT SCROLLED BY A HAND EITHER (#955, hunt MEDIUM). The strip is sized
+         * for the scrollport the last layout saw: scroll range = (scrollport + project) − scrollport = the
+         * project. Widen the window and the scrollport grows while the strip keeps its old width until the
+         * debounced rebuild, so the range shrinks under the playhead's scrollLeft and the browser pulls it
+         * back into range — and this handler read that pull as a scroll and moved the playhead to it.
+         * Measured on v17.11, a 2 s project at 1.2 s or 1.9 s: 900→1280 and a phone's 380→700 put the
+         * playhead at 0, 1280→1600 at 0.47 s; narrowing never clamps, so only widening lost it. The same
+         * pull comes from anything that widens the timeline without resizing the window (the PC text
+         * editor hiding the inspector, a layout switch), and the ResizeObserver fires AFTER the scroll
+         * event, so the check lives here, where the wrong conclusion was drawn.
+         * The lane this strip was sized for differing from the lane on screen means the geometry moved
+         * under the strip: re-size it for the new lane and put the strip back under FM.time, which is
+         * the only record of where the playhead was. It fires at most once per width change — sizing
+         * the strip is what makes the two agree again — so a hand's next scroll drives the playhead as
+         * before. The clips follow on the rebuild the resize / ResizeObserver already schedule.
+         * The one cost, accepted: a hand's scroll that happens to be the FIRST event after a width change
+         * (a desktop scrollbar appearing as rows are added is the everyday case) is not read — one event,
+         * a few px, and the strip stays under the playhead — rather than being read against a stale strip. */
+        if (sizedLaneW && Math.abs(laneViewW() - sizedLaneW) > 0.5) {
+          applyInnerWidth();
+          FM.timeline.updatePlayhead();
+          return;
+        }
         let sL = timelineEl.scrollLeft;
         /* STOP AT THE WALL, IN THIS EVENT (queue 104). Ezra, on PC: "when you swipe left and right on
          * the timeline and it hits the end it glitches a little bit, like it keeps going past the wall
