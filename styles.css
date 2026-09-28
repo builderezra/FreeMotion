@@ -7923,6 +7923,15 @@ body.fm-pushing #toast { z-index: 213; }
   #transport.t-band { align-self: start; height: 40px; }
   #transport.t-band #t-far { top: 100%; bottom: auto; height: 40px; }
   #transport.t-band-home #t-home { top: 100%; height: 40px; transform: none; }
+  /* …and on a narrow window the widest layer group runs off the WINDOW (queue 970 review): with two selected ⋯ was 685–719
+     in a 701px window, past the edge from 701 to 733. On from ~763 down, where the group comes within 8px of the edge. The band has no room for it there, so app.js sets `.t-tight` (measured, like the band) and the right-hand
+     side stops paying for gaps it cannot afford — the #405 answer for narrow phones. 35px: undo · redo · group 6 → 2, the
+     group's 3px margin, inside the group 6 → 0 (34px boxes around 21px glyphs, so the glyphs are still 13px apart). Skip →
+     undo stays 12px, the spacing he asked for (#420/#763): the 4px the gap gives up goes onto skip's own margin. */
+  #transport.t-tight .t-right { gap: 2px; }
+  #transport.t-tight #btn-toend { margin-right: 10px; }
+  #transport.t-tight #t-sel { gap: 0; }
+  #transport.t-tight #t-sel.has-sel { margin-left: 0; }
 
   /* ---- the LAST control comes down off the header (v7.75, queue 229) -------------------------
      Ezra: "no dont reclaim the top bar, i just want you to move the nescesary buttons to the bottoms

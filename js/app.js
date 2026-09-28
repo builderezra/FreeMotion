@@ -7725,36 +7725,49 @@ window.FM = window.FM || {};
      decision can never flip itself back. Re-decided by a ResizeObserver on the row (a window resize), the far run (the
      share button, the version chip's text), the time pill (it sets where the right column starts) and the group itself
      (a Viewer's copy hides its buttons with !important, so the widest it can get changes with the role). The measuring
-     never runs inside the observer's own callback — see the note on pcTransportWatchFit. */
+     never runs inside the observer's own callback — see the note on pcTransportWatchFit.
+     ⚠️ …AND THE GROUP CAN RUN OFF THE WINDOW ITSELF (queue 970 review). The play pill is held on the SCREEN's centre, and
+     on a narrow window the room right of it is narrower than skip · undo · redo · the widest group: measured with two
+     selected, ⋯ was 685–719 in a 701px window and 697–731 at 728, so from 701 to 733 its right edge was past the window
+     and at 701 its centre hit nothing at all (below ~763 the group is within 8px of the edge, which is where this acts).
+     The band cannot take it — its free middle between the back button and the far run is 21px at 701, and ⋯ is 34 — and
+     moving the row left puts the skip button under the inspector (it is already half there at 701). So the row stops paying for gaps it cannot afford, the #405 answer for narrow phones: `.t-tight`
+     closes the right-hand gaps (undo · redo · group 6 → 2, inside the group 6 → 0, the group's own 3px margin) and keeps
+     skip → undo at the 12px he asked for (#420/#763). 35px, which brings the widest group 11px inside a 701px window.
+     Decided against the widest group like the band, and MEASURED WITH THE TIGHTENING OFF, so it cannot flip itself back. */
   function pcTransportFit() {
     const t = document.getElementById('transport');
     if (!t) return;
-    if (!t._pcBuilt) { t.classList.remove('t-band', 't-band-home'); return; }
+    if (!t._pcBuilt) { t.classList.remove('t-band', 't-band-home', 't-tight'); return; }
     const tr = t.getBoundingClientRect();
     if (tr.width < 2) return;                          // not laid out (Home in front, or the editor hidden) — decide when it is
     const GAP = 8;                                     // = #t-far's own gap, so the chip is never closer to ⋯ than to its neighbours
     const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? r : null; };
     const far = document.getElementById('t-far'), home = document.getElementById('t-home'), sel = document.getElementById('t-sel');
-    let band = false, homeDown = false;
+    let band = false, homeDown = false, tight = false;
+    t.classList.remove('t-tight');                     // measured untightened, in this same task — never painted that way
+    /* The widest group, MEASURED: show every button it holds and put its ground on, read the box, put it all back —
+       in one task, so nothing is ever painted. Arithmetic would have to copy the padding, margin, gap and button size
+       out of styles.css, and #425 may yet move copy into the group. */
+    let widest = null;
+    if (sel) {
+      const kids = Array.prototype.slice.call(sel.children), was = kids.map(k => k.style.display), had = sel.classList.contains('has-sel');
+      kids.forEach(k => { k.style.display = ''; });
+      sel.classList.add('has-sel');
+      const r = sel.getBoundingClientRect();
+      if (r.width > 0) widest = r;
+      kids.forEach((k, i) => { k.style.display = was[i]; });
+      if (!had) sel.classList.remove('has-sel');
+    }
     const farR = far && vis(far);
     if (farR) {
       let reach = -Infinity;
       const right = t.querySelector('.t-right');
       if (right) Array.prototype.forEach.call(right.children, c => { if (c === sel) return; const r = vis(c); if (r) reach = Math.max(reach, r.right); });
-      if (sel) {
-        /* The widest group, MEASURED: show every button it holds and put its ground on, read the box, put it all back —
-           in one task, so nothing is ever painted. Arithmetic would have to copy the padding, margin, gap and button size
-           out of styles.css, and #425 may yet move copy into the group. */
-        const kids = Array.prototype.slice.call(sel.children), was = kids.map(k => k.style.display), had = sel.classList.contains('has-sel');
-        kids.forEach(k => { k.style.display = ''; });
-        sel.classList.add('has-sel');
-        const r = sel.getBoundingClientRect();
-        if (r.width > 0) reach = Math.max(reach, r.right);
-        kids.forEach((k, i) => { k.style.display = was[i]; });
-        if (!had) sel.classList.remove('has-sel');
-      }
+      if (widest) reach = Math.max(reach, widest.right);
       band = reach + GAP > farR.left;
     }
+    if (widest) tight = widest.right + GAP > tr.right;
     const homeR = home && vis(home), left = t.querySelector('.t-left');
     if (homeR && left) {
       let from = Infinity;
@@ -7763,6 +7776,7 @@ window.FM = window.FM || {};
     }
     t.classList.toggle('t-band', band || homeDown);   // the back button can only drop into a band that is there
     t.classList.toggle('t-band-home', homeDown);
+    t.classList.toggle('t-tight', tight);
   }
   /* ⚠️ THE OBSERVER DECIDES ON THE NEXT FRAME, NOT INSIDE ITS OWN CALLBACK. Toggling the band from inside a
      ResizeObserver callback moves the stage and the inspector 40px in the middle of the browser's observer pass, and
@@ -7814,7 +7828,7 @@ window.FM = window.FM || {};
     ['t-home', 't-sel', 't-far'].forEach(id => { const w = document.getElementById(id); if (w && !w.childNodes.length) w.remove(); else if (w) w.remove(); });
     t._pcHomes = null; t._pcBuilt = false;
     if (t._fitRO) { try { t._fitRO.disconnect(); } catch (e) {} t._fitRO = null; }   // queue 970: the band is a PC row's, and the row is gone
-    t.classList.remove('t-band', 't-band-home');
+    t.classList.remove('t-band', 't-band-home', 't-tight');
   }
   FM.pcTransportTeardown = pcTransportTeardown;
   FM.pcTransportLayout = pcTransportLayout;

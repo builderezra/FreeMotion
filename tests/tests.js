@@ -107515,4 +107515,129 @@
     }
   });
 
+  test('970 on a narrow PC window (701 to 899) the layer options button (⋯) and the rest of the right-hand controls stay inside the window and take their own click, with one, two and three layers selected', { item: '970', budgetMs: 150000 }, async function () {
+    /* Found by the review of the 970 build: the PC layout starts at 701px, and the sweep above starts at 900. The play pill is
+       held on the SCREEN's centre, so on a narrow window the room right of it is narrower than skip · undo · redo · the
+       widest group: measured on v17.11 with two selected, ⋯ was 685–719 in a 701px window and 697–731 at 728 — its right
+       edge past the window from 701 to 733, and at 701 elementFromPoint on its centre returned nothing at all.
+       So this sweeps every 3px from 701 to 899 with one, two and three selected and asks the page what is on top of ⋯'s
+       centre and corners (4px in) and of the centre and both ends of every other right-hand control, and checks ⋯'s box is
+       inside the window and the version chip is not covered. Then a real click at ⋯'s centre at 701 must open the layer
+       menu, the skip → undo spacing he asked for (#420/#763) must survive the squeeze, and the squeeze must not leak to a
+       window where everything fits.
+       The LEFT end is not asserted here, on purpose: from 701 to ~890 the copy button and the add-row switch sit under the
+       inspector's A/S/D clip keys whatever is selected — the same on v17.11, not this item's ⋯, and moving them is a layout
+       decision (the band has no room for them below ~760), so it is its own item.
+       Fails on v17.11: at 701–733 with two and three selected, ⋯'s right edge is past the window. */
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to sweep the PC widths');
+    const w0 = fe.style.width;
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const nm = el => !el ? 'nothing' : (el.id ? '#' + el.id : (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/)[0] : el.tagName.toLowerCase()));
+    const topAt = (el, x, y) => { const h = document.elementFromPoint(x, y); return (h && (h === el || el.contains(h))) ? null : nm(h); };
+    const box = id => document.getElementById(id).getBoundingClientRect();
+    const setWidth = async function (w) {
+      fe.style.width = w + 'px';
+      window.dispatchEvent(new Event('resize'));
+      await frame(); FM.refreshAll(); await frame(); await sleep(30);
+      if (window.innerWidth !== w) throw new Error('setup: the frame is ' + window.innerWidth + 'px wide, not ' + w);
+    };
+    const survey = function (w, n) {
+      const bad = [];
+      const t = document.getElementById('transport'), right = t && t.querySelector('.t-right');
+      const more = document.getElementById('btn-more-layer'), ver = document.querySelector('#transport .ver');
+      if (!right || !more || !ver || !document.getElementById('t-far')) throw new Error('setup at ' + w + 'px: the PC transport row is not built');
+      const r = more.getBoundingClientRect();
+      // CONTROL — every "nothing covers it" below passes against a ⋯ that is not laid out
+      if (!(r.width >= 30 && r.height >= 30)) throw new Error('control at ' + w + 'px, ' + n + ' selected: ⋯ is ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — not laid out, so no hit test below would mean anything');
+      if (r.left < 0 || r.right > innerWidth) bad.push('⋯ is ' + Math.round(r.left) + '–' + Math.round(r.right) + ', past the edge of the ' + innerWidth + 'px window');
+      [['centre', r.left + r.width / 2, r.top + r.height / 2], ['top-left', r.left + 4, r.top + 4], ['top-right', r.right - 4, r.top + 4],
+       ['bottom-left', r.left + 4, r.bottom - 4], ['bottom-right', r.right - 4, r.bottom - 4]].forEach(function (p) {
+        const on = topAt(more, p[1], p[2]); if (on) bad.push('⋯ ' + p[0] + ' is under ' + on);
+      });
+      const vr = ver.getBoundingClientRect();
+      if (!(vr.width > 20)) bad.push('the version chip is ' + Math.round(vr.width) + 'px wide');
+      [vr.left + 3, vr.left + vr.width / 2, vr.right - 3].forEach(function (x) { const on = topAt(ver, x, vr.top + vr.height / 2); if (on) bad.push('the version chip is covered by ' + on + ' at x ' + Math.round(x)); });
+      let n0 = 0;
+      Array.prototype.forEach.call(right.querySelectorAll('button, [role=button]'), function (b) {
+        const br = b.getBoundingClientRect();
+        if (!(br.width > 4 && br.height > 4) || getComputedStyle(b).visibility === 'hidden') return;
+        n0++;
+        if (br.right > innerWidth) bad.push(nm(b) + ' ends at ' + Math.round(br.right) + ', past the ' + innerWidth + 'px window');
+        [br.left + br.width / 2, br.left + 4, br.right - 4].forEach(function (x) { const on = topAt(b, x, br.top + br.height / 2); if (on) bad.push(nm(b) + ' is under ' + on + ' at x ' + Math.round(x)); });
+      });
+      // CONTROL — skip, undo, redo and the group's buttons (parent · delete · ⋯, and group · mask-group with two or more)
+      if (n0 < (n === 1 ? 6 : 8)) throw new Error('control at ' + w + 'px, ' + n + ' selected: only ' + n0 + ' visible right-hand controls — this is not the real PC row');
+      return bad.length ? w + 'px, ' + n + ' selected: ' + bad.slice(0, 3).join('; ') : '';
+    };
+    try {
+      if (hadHome) FM.home.close();
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      const mk = (name, x) => FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 600, shapeW: 200, shapeH: 200, fill: '#c05030', start: 0, duration: 3 });
+      const L = [mk('n970a', 250), mk('n970b', 540), mk('n970c', 830)];
+      FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      const select = async function (n) {
+        FM.selectLayer(L[0].id);
+        for (let i = 1; i < n; i++) FM.toggleSelect(L[i].id);
+        FM.refreshAll(); await frame();
+        if (FM.selectionIds().length !== n) throw new Error('setup: ' + FM.selectionIds().length + ' selected, not ' + n);
+      };
+      const widths = []; for (let w = 701; w <= 899; w += 3) widths.push(w);
+      const fails = [];
+      for (const n of [1, 2, 3]) {
+        await select(n);
+        for (const w of widths) { window.__fmStep = n + ' selected at ' + w; await setWidth(w); const f = survey(w, n); if (f) fails.push(f); }
+      }
+      if (fails.length) throw new Error(fails.length + ' of ' + widths.length * 3 + ' width × selection states on a narrow PC window have a right-hand control off the window or covered (queue 970) — ' + fails.slice(0, 4).join(' | '));
+
+      /* A REAL CLICK where ⋯ is drawn, at the narrowest PC window with two selected: what is under the pointer gets the click,
+         and it must open the layer menu. */
+      window.__fmStep = 'click ⋯ at 701';
+      await setWidth(701); await select(2);
+      const mr = box('btn-more-layer');
+      const hit = document.elementFromPoint(mr.left + mr.width / 2, mr.top + mr.height / 2);
+      if (!hit) throw new Error('at 701px with two selected nothing is under ⋯\'s centre (' + Math.round(mr.left) + '–' + Math.round(mr.right) + ') — it is off the window (queue 970)');
+      // dispatched on whatever the hit test found (often the icon's <svg>, which has no .click()), bubbling as a real click does
+      hit.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: mr.left + mr.width / 2, clientY: mr.top + mr.height / 2 }));
+      await frame();
+      const opened = !!(FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen());
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      if (!opened) throw new Error('at 701px with two selected a click at ⋯\'s centre landed on ' + nm(hit) + ' and did not open the layer menu (queue 970)');
+
+      /* The squeeze keeps the spacing he asked for: skip → undo stays ~12px (#420 "too close to the undo redo buttons", #763). */
+      const gapSkip = box('btn-undo').left - box('btn-toend').right;
+      if (Math.abs(gapSkip - 12) > 1) throw new Error('at 701px skip → undo is ' + gapSkip.toFixed(1) + 'px, not the 12px he asked for (#420/#763) — the narrow-window squeeze took it');
+      // …and it IS squeezed here (the positive control for the check below): the group's buttons are closer than their usual 6px
+      const inner701 = box('btn-del-layer').left - box('btn-parent').right;
+      if (!(inner701 < 3)) throw new Error('control: at 701px the group\'s buttons are ' + inner701.toFixed(1) + 'px apart — the squeeze that keeps ⋯ on the window is not on, so the leak check below means nothing');
+      /* …and only where it is needed: where the widest group fits, the gaps are their usual 6px. */
+      for (const w of [800, 899, 1280]) {
+        window.__fmStep = 'no squeeze at ' + w;
+        await setWidth(w); await select(2);
+        const inner = box('btn-del-layer').left - box('btn-parent').right, skip = box('btn-undo').left - box('btn-toend').right, ur = box('btn-redo').left - box('btn-undo').right;
+        if (Math.abs(inner - 6) > 1 || Math.abs(skip - 12) > 1 || Math.abs(ur - 6) > 1) throw new Error('at ' + w + 'px the right-hand gaps are squeezed (group ' + inner.toFixed(1) + ', skip → undo ' + skip.toFixed(1) + ', undo → redo ' + ur.toFixed(1) + '; usual 6 / 12 / 6) — the narrow-window squeeze has leaked to a width where everything fits');
+      }
+
+      /* POSITIVE CONTROL for the hit test: something really lying over ⋯ is reported. */
+      await setWidth(701);
+      const lr = box('btn-more-layer'), lid = document.createElement('div');
+      lid.style.cssText = 'position:fixed;z-index:99999;left:' + (lr.left + lr.width / 2 - 3) + 'px;top:' + lr.top + 'px;width:12px;height:' + lr.height + 'px;';
+      document.body.appendChild(lid);
+      try {
+        const got = survey(701, 2);
+        if (!/⋯ centre is under/.test(got)) throw new Error('control: a box laid over ⋯ was not reported by the hit test (' + (got || 'nothing reported') + ') — every pass above proves nothing');
+      } finally { lid.remove(); }
+    } finally {
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(120);
+    }
+  });
+
 })();
