@@ -83,6 +83,17 @@ if glob.glob(os.path.join(FR, '947-A-dark-*.png')):
     p = os.path.join(OUT, '947-A-cancel.jpg')
     made.append((p, strip(rows, 180, '#947 A · Cancel: the card shrinks back into the +', p, ['%d ms' % round(460 * i / 8) for i in [0, 2, 4, 6, 8]])))
 
+# ---- #974 review: A closed before it lands; C's x tapped ----
+if glob.glob(os.path.join(FR, 'npmid-*.png')):
+    rows = [('A · closed 200 ms in (Escape, or a double-tap on the +): it turns round from where the disc is', ['npmid-%02d' % i for i in range(9)])]
+    caps = ['0 ms', '100', '200 close', 'back 0', '36', '72', '108', '144', 'shut']
+    p = os.path.join(OUT, '947-A-closed-mid-flight.jpg')
+    made.append((p, strip(rows, 120, '#947 A · closed before it lands — no jump to the whole card (#974 review)', p, caps)))
+if glob.glob(os.path.join(FR, 'npx-*.png')):
+    rows = [('C landed: + is an x  →  500 ms after a real tap on it', ['npx-00', 'npx-01'])]
+    p = os.path.join(OUT, '947-C-tap-the-x.jpg')
+    made.append((p, strip(rows, 300, '#947 C · a tap on the x closes the card', p)))
+
 # ---- #964: the tap colours ----
 if glob.glob(os.path.join(FR, '964-A-*.png')):
     times = [0, 60, 120, 180, 240, 300, 360, 450, 560, 700, 850, 1000]

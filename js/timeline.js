@@ -3284,10 +3284,29 @@ window.FM = window.FM || {};
      them is seen, and a comparison between them is only fair if each gets the same time on screen. */
   const SHEET_HOLD_MS = 300;
   let fxPressAt = 0;
+  /* ⚠️ A HELD OPEN IS CANCELLED BY LEAVING (#974 review). The hold is a timer, and nothing used to cancel it: a tap on
+     the empty area and then straight away on the back arrow opened Home AND the add sheet behind it (z 63 under Home's
+     200 — invisible, until the next tap anywhere closed it). So at most one open waits; a press anywhere OUTSIDE the
+     timeline drops it (he has moved on to something else), and when it fires it checks the screen is still the empty
+     project with Home shut. */
+  let sheetHoldTimer = 0;
+  function dropHeldOpen() { if (sheetHoldTimer) { clearTimeout(sheetHoldTimer); sheetHoldTimer = 0; } }
+  document.addEventListener('pointerdown', (e) => {
+    if (!sheetHoldTimer) return;
+    const tl = document.getElementById('timeline');
+    if (!tl || !(e.target instanceof Node) || !tl.contains(e.target)) dropHeldOpen();
+  }, true);
   function afterPress(fn) {
     const wait = fxPressAt ? Math.max(0, fxPressAt + SHEET_HOLD_MS - performance.now()) : 0;
     fxPressAt = 0;   // one press buys one hold
-    if (wait > 16) setTimeout(fn, wait); else fn();
+    dropHeldOpen();
+    if (wait > 16) {
+      sheetHoldTimer = setTimeout(function () {
+        sheetHoldTimer = 0;
+        if (!isEmptyStart() || (FM.home && FM.home.isOpen && FM.home.isOpen())) return;
+        fn();
+      }, wait);
+    } else fn();
   }
   FM._areaFx = { area: emptyArea, fire: areaFx, PULSE_MS: FX_PULSE_MS, PULSE_TRAVEL: FX_PULSE_TRAVEL, PRESS_MS: FX_PRESS_MS, CALM_MS: FX_CALM_MS, MAX: FX_MAX, HOLD_MS: SHEET_HOLD_MS };
   FM._isEmptyStart = isEmptyStart;   // seam: the suite asks the real condition, not a copy of it

@@ -2,7 +2,7 @@
 New project card, the real empty project, each option forced through FM.variant.force and SEEKED (paused Web/CSS
 animations) at fixed times, so every frame is exact rather than a lucky screenshot.
 
-Usage: python3 tools/design/974/render.py <port> <outdir> [which ...]      which: 947 964 964start clapper (default all)
+Usage: python3 tools/design/974/render.py <port> <outdir> [which ...]      which: 947 npfix 964 964start clapper (default all)
 Needs the dev server on <port> (tools/serve.sh). Writes PNG frames into <outdir>/frames and composes strips + GIFs
 into <outdir> with tools/design/974/compose.py."""
 import base64, json, os, shutil, sys, tempfile, time
@@ -13,7 +13,7 @@ import _cdp  # noqa: E402
 
 PORT = int(sys.argv[1])
 OUT = sys.argv[2]
-WHICH = sys.argv[3:] or ['947', '964', '964start', 'clapper']
+WHICH = sys.argv[3:] or ['947', 'npfix', '964', '964start', 'clapper']
 FR = os.path.join(OUT, 'frames')
 os.makedirs(FR, exist_ok=True)
 W, H = 390, 844
@@ -101,6 +101,52 @@ try:
             ev(cdp, "(() => { window.__np.forEach(a => a.play()); document.getElementById('hm-dialog').classList.add('hidden'); return 1; })()")
             time.sleep(0.8)
         ev(cdp, "(() => { FM.variant.force('newproject', null); FM.settings.set('homeLight', false); document.documentElement.setAttribute('data-home', 'dark'); return 1; })()")
+
+    if 'npfix' in WHICH:
+        # the #974 review's two New project fixes, on the dark Home
+        ev(cdp, "(async () => { FM.settings.set('homeLight', false); document.documentElement.setAttribute('data-home', 'dark');"
+                " if (!FM.home.isOpen()) FM.home.open(); await new Promise(r => setTimeout(r, 1500));"
+                " const t = document.querySelector('.hm-tab[data-tab=\"projects\"]'); if (t) t.click(); return 1; })()")
+        time.sleep(1.2)
+        # A closed 200 ms in (Escape, or the second tap of a double-tap): the flight turns round from where the disc is
+        ev(cdp, ("(async () => { const d = document.getElementById('hm-dialog'); d.classList.add('hidden');"
+                 " await new Promise(r => setTimeout(r, 60)); FM.variant.force('newproject', 'A');") + HOLD +
+                " document.getElementById('hm-new').click();" + FREE +
+                " window.__np = document.getAnimations().filter(a => /^np947-/.test(a.id || ''));"
+                " window.__np.forEach(a => a.pause()); return window.__np.length; })()")
+        for i, t in enumerate([0, 100, 200]):
+            ev(cdp, "(() => { window.__np.forEach(a => { a.currentTime = %f; }); return 1; })()" % t)
+            snap(cdp, 'npmid-%02d' % i)
+        # every timer held for the one call that closes it (the hide is a timer too), then seeked back down to 0
+        rates = ev(cdp, "(() => { window.__st = window.__st || window.setTimeout; window.setTimeout = function () { return 0; };"
+                        " document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));" + FREE +
+                        " window.__np.forEach(a => a.pause()); return window.__np.map(a => a.playbackRate); })()")
+        meta['npmid-rates'] = sorted(set(round(r, 3) for r in rates or []))
+        for k in range(5):
+            t = 200 - 200 * k / 4
+            ev(cdp, "(() => { window.__np.forEach(a => { a.currentTime = %f; }); return 1; })()" % t)
+            snap(cdp, 'npmid-%02d' % (3 + k))
+        ev(cdp, "(() => { document.getElementById('hm-dialog').classList.add('hidden'); return 1; })()")
+        time.sleep(0.6)
+        snap(cdp, 'npmid-08')
+        # C: a REAL tap on the x the + has turned into, under the card — the card closes, it does not open again
+        ev(cdp, "(() => { FM.variant.force('newproject', 'C'); return 1; })()")
+        o = ev(cdp, "(() => { const r = document.getElementById('hm-new').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+
+        def tap(x, y):
+            cdp.send('Input.dispatchTouchEvent', type='touchStart', touchPoints=[{'x': x, 'y': y}])
+            time.sleep(0.07)
+            cdp.send('Input.dispatchTouchEvent', type='touchEnd', touchPoints=[])
+        tap(o[0], o[1])
+        time.sleep(0.9)
+        snap(cdp, 'npx-00')
+        meta['npx-open'] = ev(cdp, "!document.getElementById('hm-dialog').classList.contains('hidden')")
+        tap(o[0], o[1])
+        time.sleep(0.5)
+        snap(cdp, 'npx-01')
+        meta['npx-after'] = ev(cdp, "({ hidden: document.getElementById('hm-dialog').classList.contains('hidden'),"
+                                    " running: document.getAnimations().filter(a => /^np947-/.test(a.id || '') && a.playState === 'running').length })")
+        ev(cdp, "(() => { FM.variant.force('newproject', null); document.getElementById('hm-dialog').classList.add('hidden'); return 1; })()")
 
     if '964' in WHICH or '964start' in WHICH or 'clapper' in WHICH:
         ev(cdp, "(async () => { if (FM.home.isOpen()) FM.home.close(); await new Promise(r => setTimeout(r, 900));"

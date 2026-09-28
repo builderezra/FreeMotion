@@ -2898,6 +2898,7 @@ window.FM = window.FM || {};
   function npFxLand() {
     const f = npFx;
     if (!f || f.leaving) return;
+    f.landed = true;
     f.anims.forEach(a => { try { a.cancel(); } catch (e) {} });
     f.anims = [];
     f.nodes.forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
@@ -3038,11 +3039,29 @@ window.FM = window.FM || {};
     if (!f || f.v !== 'A' || f.leaving || npFxReduced()) { dlg.classList.add('hidden'); return; }
     const card = dlg.querySelector('.hm-dlg-card');
     f.leaving = true;
+    clearTimeout(f.timer);
+    /* NOT LANDED YET (a double-tap on the +, Escape straight away): turn the flight that is on screen round, from
+       wherever it has got to, at the back flight's speed. Starting the back flight from the card here made the disc jump
+       to the whole card's size for a frame and then shrink (#974 review: 68×76 at the + became 340×554). Only a
+       started animation is played on: play() with a negative rate at time 0 would rewind it to the END — the same jump. */
+    if (!f.landed) {
+      const rate = NP_FX_MS / NP_FX_BACK_MS;
+      let at = 0;
+      f.anims.concat(f.orbAnims).forEach(a => {
+        try {
+          const t = +a.currentTime || 0;
+          at = Math.max(at, t);
+          a.playbackRate = -rate;   // keeps its current time
+          if (t > 0 && a.playState !== 'running') a.play();
+        } catch (e) {}
+      });
+      f.backTimer = setTimeout(() => { if (npFx === f) dlg.classList.add('hidden'); }, at / rate + 30);
+      return;
+    }
     f.anims.forEach(a => { try { a.cancel(); } catch (e) {} });
     f.anims = [];
     f.nodes.forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
     f.nodes = [];
-    clearTimeout(f.timer);
     npFxA(f, dlg, card, true);
     f.backTimer = setTimeout(() => { if (npFx === f) dlg.classList.add('hidden'); }, NP_FX_BACK_MS + 30);
   }
@@ -3179,7 +3198,17 @@ window.FM = window.FM || {};
       // the backdrop — on a phone with the keyboard up, the buttons can be the hardest thing to reach
       dlgEsc = e => { const d = document.getElementById('hm-dialog'); if (e.key === 'Escape' && d && !d.classList.contains('hidden')) { e.preventDefault(); npDismiss(); } };   // queue 947: A runs backwards
       document.addEventListener('keydown', dlgEsc);
-      document.getElementById('hm-dialog').addEventListener('pointerdown', e => { if (e.target && e.target.id === 'hm-dialog') npDismiss(); });
+      /* ⚠️ ON CLICK, NOT POINTERDOWN, and only when the press BEGAN on the backdrop — the rule js/ask.js and the canvas
+         dialog (queue 690) already follow. Closing on the way down handed the rest of a phone tap to what was under the
+         backdrop, because the click is hit-tested after the card has gone: the + sits right there, so a tap on the dimmed +
+         shut the card and opened it again — and #947's option C turns that + into an × that asks to be tapped (#974 review:
+         real touch at 380 and 440, the × reopened the card with a new entrance every time). */
+      let npDownOnScrim = false;
+      document.getElementById('hm-dialog').addEventListener('pointerdown', e => { npDownOnScrim = !!(e.target && e.target.id === 'hm-dialog'); });
+      document.getElementById('hm-dialog').addEventListener('click', e => {
+        const began = npDownOnScrim; npDownOnScrim = false;
+        if (began && e.target && e.target.id === 'hm-dialog') npDismiss();
+      });
       /* queue 947: whatever hides the card (Create, Cancel, Escape, the backdrop, Home closing, a test) ends its entrance
          and gives the + back — see npFxClear. Watched, not called from each route, so no route can forget it. */
       if (window.MutationObserver) new MutationObserver(() => {

@@ -108155,4 +108155,167 @@
     }
   });
 
+  /* ═══ 974 REVIEW — three things the review found, each met the way he would meet it: a REAL finger (tests/_cdp.py's
+     __fmWantInput) at a phone width. A synthetic tap cannot show the first or the third: the first is a click that the
+     browser hit-tests AFTER the press has changed the page, the third a second tap landing inside a timer's window. */
+  async function home974(fn) {
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog');
+    try {
+      return await atPhoneWidth(async function () {
+        return await onScreen924(async function () {
+          if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+          const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+          if (tabBtn) tabBtn.click();
+          dlg.classList.add('hidden');
+          await sleep(300);
+          return await fn(dlg, document.getElementById('hm-new'), dlg.querySelector('.hm-dlg-card'));
+        });
+      });
+    } finally {
+      if (FM.variant && FM.variant.force) FM.variant.force('newproject', null);
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (wasOpen) FM.home.open(); else FM.home.close();
+      await sleep(200);
+    }
+  }
+  const tap974 = (x, y, what) => realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+
+  test('974 review: with #947 C the + turns into an x under the card - a real tap on that x closes the card, it does not open it again', { item: '974', budgetMs: 40000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - there is no option C to turn the + into an x (queue 947 / 974)');
+    const running = () => document.getAnimations().filter(a => /^np947-/.test(a.id || '') && a.playState === 'running');
+    return home974(async function (dlg, orb) {
+      FM.variant.force('newproject', 'C');
+      const O = orb.getBoundingClientRect(), x = O.left + O.width / 2, y = O.top + O.height / 2;
+      hitIs927(x, y, orb, 'the New project +');
+      await tap974(x, y, 'a real tap on the +');
+      await sleep(900);   // C has landed (640 ms): the + stands turned into an x under the card
+      if (dlg.classList.contains('hidden')) throw new Error('CONTROL: a real tap on the + did not open the New project card - nothing below would mean anything');
+      if (FM.variant.last.newproject !== 'C') throw new Error('CONTROL: the card opened with ' + FM.variant.last.newproject + ', not the forced C');
+      const mt = new DOMMatrix(getComputedStyle(orb).transform), deg = Math.round(Math.atan2(mt.b, mt.a) * 180 / Math.PI);
+      if (Math.abs(deg - 135) > 2) throw new Error('CONTROL: the + is turned ' + deg + ' degrees - C leaves it as an x (135) under the card');
+      const hit = document.elementFromPoint(x, y);
+      if (hit !== dlg) throw new Error('setup: the x is under ' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing') + ', not the card\'s backdrop');
+      await tap974(x, y, 'a real tap on the x');
+      await sleep(500);
+      if (!dlg.classList.contains('hidden')) {
+        throw new Error('500 ms after a real tap on the x the New project card is still open' + (running().length ? ' - it OPENED AGAIN, ' + running().length +
+          ' np947 animations running: the backdrop closed on the press and the tap\'s click, hit-tested after the card had gone, landed on the + under it' : ''));
+      }
+      await sleep(400);
+      if (!dlg.classList.contains('hidden')) throw new Error('the card closed on the tap on the x and then came back');
+    });
+  });
+
+  test('974 review: #947 A closed before it lands (a real double-tap on the +, or Escape at once) turns round from where the disc is - it never jumps to the whole card', { item: '974', budgetMs: 40000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - there is no option A to close mid-flight (queue 947 / 974)');
+    return home974(async function (dlg, orb, card) {
+      const disc = () => dlg.querySelector('.np-fx-orb');
+      /* the flying disc's width on every frame, and which frame first comes after the close arrived */
+      function sampler() {
+        const s = { w: [], at: -1, on: true, cw: 0, log: [] }, t0 = performance.now();
+        const mark = () => { if (s.at < 0) s.at = s.w.length; };
+        const note = e => { if (s.log.length < 12) s.log.push(e.type + '@' + Math.round(performance.now() - t0) + (e.target && e.target.id ? '#' + e.target.id : '')); };
+        dlg.addEventListener('click', mark, true);
+        document.addEventListener('keydown', mark, true);
+        ['pointerdown', 'click', 'keydown'].forEach(t => document.addEventListener(t, note, true));
+        (function tick() {
+          const m = disc();
+          s.w.push(m ? m.getBoundingClientRect().width : null);
+          if (!dlg.classList.contains('hidden')) s.cw = Math.max(s.cw, card.getBoundingClientRect().width);
+          if (s.on) requestAnimationFrame(tick);
+        })();
+        s.stop = () => {
+          s.on = false; dlg.removeEventListener('click', mark, true); document.removeEventListener('keydown', mark, true);
+          ['pointerdown', 'click', 'keydown'].forEach(t => document.removeEventListener(t, note, true));
+        };
+        return s;
+      }
+      for (const how of ['a real double-tap on the +', 'Escape 200 ms in']) {
+        FM.variant.force('newproject', 'A');
+        dlg.classList.add('hidden'); await sleep(120);
+        const O = orb.getBoundingClientRect(), x = O.left + O.width / 2, y = O.top + O.height / 2;
+        hitIs927(x, y, orb, 'the New project +');
+        const s = sampler();
+        try {
+          if (how.indexOf('double') >= 0) {
+            /* his double-tap: the second tap lands on the card's backdrop, which now covers the +. The flight is held at
+               150 ms as soon as the first tap has started it: the runner delivers the second tap anywhere from 150 to
+               350 ms later (measured — the page is busy building the card), and by 350 ms the disc is card-sized */
+            const hold = e => {
+              if (!(e.target === orb || orb.contains(e.target))) return;
+              document.removeEventListener('click', hold, true);
+              setTimeout(() => document.getAnimations().filter(a => /^np947-A-/.test(a.id || '')).forEach(a => { a.pause(); a.currentTime = 150; }), 0);
+            };
+            document.addEventListener('click', hold, true);
+            try {
+              await realInput924([{ t: 'touchStart', x: x, y: y, ms: 40 }, { t: 'touchEnd', x: x, y: y, ms: 50 }, { t: 'touchStart', x: x, y: y, ms: 40 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], how);
+            } finally { document.removeEventListener('click', hold, true); }
+          } else {
+            await tap974(x, y, 'a real tap on the +');
+            const list = document.getAnimations().filter(a => /^np947-A-/.test(a.id || ''));
+            if (!list.length) throw new Error('CONTROL: ' + how + ': the + opened the card with no A entrance');
+            list.forEach(a => { a.pause(); a.currentTime = 200; });   // mid-flight, whatever the runner's timing
+            await sleep(60);
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+          }
+          await sleep(700);
+        } finally { s.stop(); }
+        if (s.at < 0) throw new Error('CONTROL: ' + how + ': the close never reached the card');
+        const before = s.w[s.at - 1], after = s.w.slice(s.at).filter(w => w != null);
+        if (!(before > 0)) throw new Error('setup: ' + how + ': there was no disc in flight when the close came (the card had landed first) - nothing to measure (' + s.log.join(' ') + ')');
+        // the jump lands on the whole card, so it can be told apart from any disc a few px narrower than the card
+        if (!(before < s.cw - 12)) throw new Error('setup: ' + how + ': the disc was already ' + Math.round(before) + ' wide of the card\'s ' + Math.round(s.cw) + ' when the close came - no jump could be told apart (' + s.log.join(' ') + ')');
+        const top = Math.max.apply(null, after.concat([0]));
+        if (top > before + 3) throw new Error(how + ': the disc was ' + Math.round(before) + 'px wide when the card was closed, then ' + Math.round(top) + 'px - it jumped to the whole card before shrinking back into the +');
+        if (!after.some(w => w < before - 3) && before > O.width + 6) throw new Error('CONTROL: ' + how + ': after the close the disc never got smaller than ' + Math.round(before) + ' - it did not run backwards at all');
+        if (!dlg.classList.contains('hidden')) throw new Error(how + ': 700 ms after the close the card is still open');
+        /* whole = its full size and upright. Not its exact spot: after a key the focused + takes its :hover/:focus-visible
+           lift (2px up) — measured the same with B, whose close is the plain one, so it is not this entrance's doing */
+        const R = orb.getBoundingClientRect(), om = new DOMMatrix(getComputedStyle(orb).transform);
+        if (Math.abs(R.width - O.width) > 1.5 || Math.abs(R.height - O.height) > 1.5 || Math.abs(om.b) > 0.01) throw new Error(how + ': after the close the + is ' + Math.round(R.width) + 'x' + Math.round(R.height) + ' and turned (' + getComputedStyle(orb).transform + ') - not whole on Home');
+      }
+    });
+  });
+
+  test('974 review: the add menu held for the empty area\'s press is dropped when he leaves - a real tap there, then straight away the back arrow, and the sheet does not open behind Home', { item: '974', budgetMs: 40000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const sheet = document.getElementById('add-sheet');
+    const sheetOpen = () => sheet.classList.contains('open') || document.body.classList.contains('add-open');
+    try {
+      if (wasOpen) { FM.home.close(); await sleep(300); }
+      const id = await FM.projects.create({ name: '974 empty', width: 1080, height: 1920 });
+      if (!id) throw new Error('setup: an empty project could not be made');
+      made.push(id);
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep(300); }
+          FM.selectLayer(null); FM.timeline.rebuild(); await sleep(400);
+          if (!FM._isEmptyStart || !FM._isEmptyStart()) throw new Error('setup: not on the empty project screen');
+          const tl = document.getElementById('timeline'), r = tl.getBoundingClientRect();
+          const x = r.left + 40, y = r.bottom - 40;
+          hitIs927(x, y, tl, 'the empty area');
+          // CONTROL: the same real tap on its own opens the sheet - after the hold, not before
+          await tap974(x, y, 'a real tap on the empty area');
+          if (sheetOpen()) throw new Error('CONTROL: the add menu opened with the tap - there is no hold for the press animation (#964), so this test has nothing to drop');
+          await hcUntil('the add menu to open after the hold', sheetOpen, 2000);
+          FM.mobile.closeAdd(); await sleep(500);
+          if (sheetOpen()) throw new Error('setup: the add menu did not close');
+          // the tap, and the back arrow inside the hold
+          const back = document.getElementById('m-back'), b = back.getBoundingClientRect(), bx = b.left + b.width / 2, by = b.top + b.height / 2;
+          hitIs927(bx, by, back, 'the back arrow');
+          await realInput924([{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 40 }, { t: 'touchStart', x: bx, y: by, ms: 60 }, { t: 'touchEnd', x: bx, y: by, ms: 0 }], 'a tap on the empty area, then the back arrow');
+          await sleep(1200);
+          if (!FM.home.isOpen()) throw new Error('CONTROL: the back arrow did not open Home');
+          if (sheetOpen()) throw new Error('1.2 s after he left for Home the add menu opened behind it (#add-sheet.open, body.add-open) - the held open fired anyway; the next tap anywhere closes it');
+        });
+      });
+    } finally {
+      try { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
