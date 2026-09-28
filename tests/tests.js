@@ -100678,11 +100678,13 @@
     if (wasHome) { FM.home.close(); await sleep(450); }
     try {
     await withLabs921(async function (ui) {
-      await atWideWidth(async function () {
+      /* with945: opening Friends is remembered per device (fm.cvPair) — put it back, or every later PC cog opens on Friends. */
+      await with945(async function () { await atWideWidth(async function () {
         await sleep(300);
         const b = document.getElementById('btn-share');
         if (!b || !b.getBoundingClientRect().width) throw new Error('setup: no Share button beside Export on PC with Labs on');
-        const open = () => !!document.querySelector('.collab-scrim .collab-card');
+        /* #978: the Share button opens Canvas settings with Friends big now (the phone's door), hung off this button. */
+        const open = () => { const d = document.getElementById('canvas-dialog'); return !!d && !d.classList.contains('hidden') && d.classList.contains('cv-fr-big'); };
         /* A click as the browser delivers it: the press goes to whatever is under the pointer when it lands, the click
            to whatever is under it when it LIFTS — hit-tested again, after anything the press did. That second hit-test is
            the whole bug: a backdrop that closes on the press is gone by the lift, so the click lands on the button. */
@@ -100703,7 +100705,7 @@
         await sleep(700);
         if (open()) throw new Error('on PC a second click on the Share button left the Share panel open — it shut on the press and opened again on the release (his words: it just reopens it)');
         ui.close();
-      }, 1280);
+      }, 1280); });
     });
     } finally { if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200); }
   });
@@ -100927,7 +100929,7 @@
   }
   const open945 = function (dlg) { return !dlg.classList.contains('hidden'); };
 
-  test('945 on a phone the cog opens Canvas settings with a Friends bar above the card — both on screen, Apply reachable, the cog spot still backdrop — and a PC sees none of it', { item: '945', budgetMs: 60000 }, async function () {
+  test('945 on a phone the cog opens Canvas settings with a Friends bar above the card — both on screen, Apply reachable, the cog spot still backdrop — and a PC hangs the same pair off its cog', { item: '945', budgetMs: 60000 }, async function () {
     await editorWithShape(async function () {
       await with945(async function () {
         const dlg = document.getElementById('canvas-dialog');
@@ -100962,15 +100964,18 @@
           document.getElementById('cv-cancel').click(); await sleep(60);
           if (open945(dlg)) throw new Error('Cancel did not close it');
         });
-        /* CONTROL: a PC opens the same dialog exactly as before — no pair, no bars. */
+        /* #978: a PC opens the SAME pair (his words: "on pc there isnt a way to access the friends invite menu like there is on
+           mobile") — hung off its cog, not the phone's centred column. Not assumed to be on Canvas: the key is per device. */
         await atWideWidth(async function () {
           document.getElementById('btn-canvas').click();
           await entranceDone(dlg); await sleep(60);
-          if (!open945(dlg)) throw new Error('CONTROL: #btn-canvas did not open Canvas settings at 1280');
-          if (dlg.classList.contains('cv-pair')) throw new Error('on a PC the dialog was put in the phone pair');
-          if (document.getElementById('cv-friends').getClientRects().length) throw new Error('on a PC the Friends block shows — Share lives beside Export there');
-          if (document.getElementById('cv-mini').getClientRects().length) throw new Error('on a PC the Canvas bar shows inside the card');
-          if (dlg.querySelector('.export-card').parentNode !== dlg) throw new Error('the canvas card is no longer a direct child of the dialog — the PC anchor rules need it there');
+          if (!open945(dlg)) throw new Error('#btn-canvas did not open Canvas settings at 1280');
+          if (!dlg.classList.contains('cv-pair') || !document.getElementById('cv-friends').getClientRects().length) throw new Error('on a PC Canvas settings opened without its Friends block — a PC has no way into Friends then (#978)');
+          if (!document.body.classList.contains('cv-anchored')) throw new Error('on a PC the pair is not hung off the cog (no cv-anchored)');
+          const cog = document.getElementById('btn-settings'), card = dlg.querySelector('.export-card');
+          const off = Math.abs(card.getBoundingClientRect().right - cog.getBoundingClientRect().right);
+          if (off > 12) throw new Error('on a PC the canvas card’s right edge is ' + Math.round(off) + ' px from the cog’s — the pair is not hanging off the cog');
+          if (card.parentNode !== dlg) throw new Error('the canvas card is no longer a direct child of the dialog — the PC anchor rules need it there');
           document.getElementById('cv-cancel').click(); await sleep(60);
         }, 1280);
       });
@@ -101176,7 +101181,7 @@
     });
   });
 
-  test('945 with people in, the Friends bar shows Live, the count and their faces; the faces chip opens the pair with Friends big, the chip stays backdrop to close it, and on a PC the person+ opens its own card', { item: '945', budgetMs: 90000 }, async function () {
+  test('945 with people in, the Friends bar shows Live, the count and their faces; the faces chip opens the pair with Friends big, the chip stays backdrop to close it, and on a PC the people door opens the same pair with Friends big', { item: '945', budgetMs: 90000 }, async function () {
     const C = need921S7('the Friends bar with people in');
     await withCollab921([layer921('A')], async function (c) {
       await withLabs921(async function (ui) {
@@ -101206,12 +101211,15 @@
               ui.close();
               if (!dlg.classList.contains('hidden')) throw new Error('ui.close() left the pair up');
             });
-            /* CONTROL: a PC is unchanged — the people door opens the Share card and never the canvas dialog. */
+            /* #978 (Part 2, recommended and built by default): a PC's people door is the phone's — the pair with Friends big,
+               never the old Share card, which armed a room on the first press. */
             await atWideWidth(async function () {
               await ui.openPeople();
-              if (!document.getElementById('collab-share')) throw new Error('CONTROL: on a PC the people door did not open the Share card');
-              if (!document.getElementById('canvas-dialog').classList.contains('hidden')) throw new Error('on a PC the people door opened Canvas settings');
+              const d = document.getElementById('canvas-dialog');
+              if (d.classList.contains('hidden') || !d.classList.contains('cv-fr-big')) throw new Error('on a PC the people door did not open Canvas settings with Friends big');
+              if (document.getElementById('collab-share')) throw new Error('on a PC the people door still opened the old Share card');
               ui.close();
+              if (!d.classList.contains('hidden')) throw new Error('on a PC ui.close() left the pair up');
             }, 1280);
           } finally { C.presence._clock(null); }
         });
@@ -107374,6 +107382,415 @@
         });
       });
     } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
+  });
+
+
+  /* ═══ queue 978 — PC: THE COG OPENS FRIENDS + CANVAS SETTINGS TOGETHER, LIKE THE PHONE, AND THEY SWAP CLEANLY ═════════════
+     His words (28 Sep): "on pc there isnt a way to access the friends invite menu like there is on mobile. - Settings cog then
+     swap between them in a really clean way." Built to the plan (tools/design/plans/2026-09-28-pc-friends-pair/plan.md):
+     option B — side by side where there is room beside the button (Friends left, Canvas right by it, the small one a tile, ⤢
+     slides the line between them), stacked like the phone where there is not — and Part 2: the Share button beside Export
+     opens the same pair with Friends big. EVERY TEST RUNS INSIDE with945: a PC honours fm.cvPair now, and every open writes
+     it, so a test that left it on Friends would hand every later PC test a Canvas card shrunk to a tile. */
+  /* A press as the browser delivers it (the 944 test's): down and up on whatever is under the pointer, then the click on
+     whatever is under it AFTER — hit-tested again, after anything the press did. */
+  function press978(el) {
+    const r = el.getBoundingClientRect();
+    return press978At(r.left + r.width / 2, r.top + r.height / 2);
+  }
+  function press978At(x, y) {
+    const down = document.elementFromPoint(x, y);
+    if (!down) throw new Error('nothing under the pointer at ' + Math.round(x) + ',' + Math.round(y));
+    down.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
+    down.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
+    const up = document.elementFromPoint(x, y);
+    (up && up.isConnected ? up : down).dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+    return { down: down, up: up };
+  }
+  /* The swap's own animations (Web Animations the code made), not the CSS entrances. */
+  function flight978(dlg) {
+    return dlg.getAnimations({ subtree: true }).filter(function (a) { return !(window.CSSAnimation && a instanceof CSSAnimation) && !(window.CSSTransition && a instanceof CSSTransition); });
+  }
+  const R978 = function (r) { return [r.left, r.top, r.right, r.bottom].map(Math.round).join(','); };
+
+  test('978 on a PC the cog opens Canvas settings WITH Friends — hung off the cog, both on screen, nothing scrolls, the cog sharp — and the phone keeps its own pair', { item: '978', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+      for (const w of [1280, 900]) {
+        await atWideWidth(async function () {
+          const cog = document.getElementById('btn-settings'), kr = cog.getBoundingClientRect();
+          if (!(kr.width > 0)) throw new Error('setup: no PC cog at ' + w);
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          if (!open945(dlg)) throw new Error('the cog did not open Canvas settings at ' + w);
+          if (!dlg.classList.contains('cv-pair') || !fr.getClientRects().length) throw new Error('at ' + w + ' the cog opened Canvas settings alone — no Friends (his words: "on pc there isnt a way to access the friends invite menu like there is on mobile")');
+          if (!document.body.classList.contains('cv-anchored')) throw new Error('at ' + w + ' the pair is not hung off the cog');
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('with nothing remembered it opened on Friends');
+          const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+          if (!dlg.classList.contains('cv-side')) throw new Error('at ' + w + ' there is room beside the cog (its right edge is at ' + Math.round(kr.right) + ') but the pair stacked — option B is side by side');
+          if (frr.right > cr.left + 0.5) throw new Error('side by side, Friends (' + R978(frr) + ') is not left of Canvas (' + R978(cr) + ')');
+          if (Math.abs(frr.bottom - cr.bottom) > 4) throw new Error('side by side, Friends (' + Math.round(frr.bottom) + ') and Canvas (' + Math.round(cr.bottom) + ') do not stand on one line');
+          if (Math.abs(cr.right - kr.right) > 12) throw new Error('the canvas card is not lined up with the cog (' + Math.round(cr.right) + ' vs ' + Math.round(kr.right) + ')');
+          if (document.body.classList.contains('cv-up') && cr.bottom > kr.top + 4) throw new Error('the pair is not hanging above the cog (card bottom ' + Math.round(cr.bottom) + ', cog top ' + Math.round(kr.top) + ')');
+          [['the canvas card', cr], ['the Friends block', frr]].forEach(function (p) { const r = p[1]; if (r.top < -1 || r.left < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) throw new Error(p[0] + ' is off screen at ' + w + ': ' + R978(r)); });
+          if (card.scrollHeight > card.clientHeight + 1) throw new Error('the canvas card scrolls: it needs ' + card.scrollHeight + ' and has ' + card.clientHeight + ' (queue 252)');
+          const at = document.elementFromPoint(kr.left + kr.width / 2, kr.top + kr.height / 2);
+          if (!(at && (at === cog || cog.contains(at)))) throw new Error('the cog is under the blur (queue 241): its centre is ' + (at && (at.id || at.className)));
+          if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content is drawn while Friends is the small block');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          if (open945(dlg) || document.body.classList.contains('cv-anchored') || dlg.classList.contains('cv-side')) throw new Error('Cancel left the pair or its anchor behind');
+        }, w);
+      }
+      /* CONTROL — the phone's pair is the phone's: a centred column, not hung off anything, not side by side. */
+      await atPhoneWidth(async function () {
+        document.getElementById('m-settings').click(); await entranceDone(dlg); await sleep(60);
+        if (!open945(dlg) || !dlg.classList.contains('cv-pair')) throw new Error('CONTROL: the phone lost its pair');
+        if (dlg.classList.contains('cv-side') || document.body.classList.contains('cv-anchored')) throw new Error('the PC layout leaked onto the phone (' + dlg.className + ' / ' + document.body.className + ')');
+        const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+        if (frr.bottom > cr.top + 0.5) throw new Error('CONTROL: on the phone the Friends bar is not above the card');
+        if (Math.abs(cr.width - Math.min(420, innerWidth - 24)) > 1) throw new Error('the phone card is ' + cr.width + ' wide, not min(420, 100vw − 24)');
+        document.getElementById('cv-cancel').click(); await sleep(60);
+      }, 380);
+    }); });
+  });
+
+  test('978 on a PC ⤢ swaps them with the flight — the pair stays standing on the cog the whole way — lands Friends big, remembers it, and the tail hangs from the block next to the cog', { item: '978', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () { await withFakeNet921(async function (net) { await with945(async function () {
+      await atWideWidth(async function () {
+        const P = FM.scene.project, w0 = P.width, h0 = P.height, f0 = P.fps;
+        const mm = window.matchMedia;
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+        const cog = document.getElementById('btn-settings');
+        const c0 = net.constructed;
+        try {
+          P.width = 1080; P.height = 1920; P.fps = 30;
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          if (!dlg.classList.contains('cv-pair') || !fr.getClientRects().length) throw new Error('the cog opened Canvas settings with no Friends beside it — nothing to swap (his words: "Settings cog then swap between them")');
+          if (!document.body.classList.contains('cv-up')) throw new Error('setup: at 1280×760 the pair should open upward from the cog');
+          if (!dlg.classList.contains('cv-side')) throw new Error('at 1280 there is room beside the cog, but the pair stacked');
+          const line = card.getBoundingClientRect().bottom, wf0 = fr.getBoundingClientRect().width;
+          document.getElementById('cv-fr-exp').click();
+          const f = flight978(dlg);
+          if (!dlg.classList.contains('cv-flying') || f.length < 2) throw new Error('⤢ swapped with no flight (' + f.length + ' animation(s))');
+          /* Frozen at three points. Tolerance from measurement: the prototype and this build read every bottom at 556 against a
+             line of 556 at these points (553 at 70%, where the easing overshoots); the stacked flight's fault was 193 px. */
+          for (const p of [0.1, 0.3, 0.5]) {
+            f.forEach(function (a) { a.pause(); a.currentTime = p * 460; });
+            const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+            if (Math.abs(cr.bottom - line) > 4 || Math.abs(frr.bottom - line) > 4) throw new Error('at ' + Math.round(p * 100) + '% of the swap the pair has left the cog’s line (' + Math.round(line) + '): Canvas ' + R978(cr) + ', Friends ' + R978(frr));
+            if (!(frr.width > wf0 + 1 && frr.width < 359)) throw new Error('at ' + Math.round(p * 100) + '% Friends is ' + frr.width.toFixed(1) + ' wide (from ' + wf0.toFixed(1) + ' to 360) — its width jumps instead of flying');
+          }
+          f.forEach(function (a) { a.play(); });
+          await land945();
+          if (!dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-flying')) throw new Error('after the flight the pair is not settled on Friends');
+          const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+          if (frr.right > cr.left + 0.5) throw new Error('landed, Friends (' + R978(frr) + ') is not left of Canvas (' + R978(cr) + ')');
+          if (cr.width > 200) throw new Error('landed, the Canvas block did not shrink to its tile (' + cr.width.toFixed(1) + ' wide)');
+          const sub = document.getElementById('cv-mini-sub').textContent;
+          if (sub !== '9:16 · 1080 × 1920 · 30 fps') throw new Error('the Canvas tile reads "' + sub + '"');
+          if (card.style.position || fr.style.position || card.style.width || fr.style.width || card.style.left || fr.style.left) throw new Error('the flight left inline styles on the blocks');
+          if (localStorage.getItem('fm.cvPair') !== 'friends') throw new Error('the swap was not remembered');
+          /* The tail belongs to the block next to the cog — side by side that is always Canvas. Read off the block itself: a
+             tail leaked by another test would answer a document query. */
+          const tail = card._popTail;
+          if (!tail || !tail.isConnected) throw new Error('landed, the canvas block next to the cog has no comic tail');
+          if (Math.abs(tail.getBoundingClientRect().top - cr.bottom) > 2) throw new Error('the tail (top ' + Math.round(tail.getBoundingClientRect().top) + ') does not hang from the canvas block’s foot (' + Math.round(cr.bottom) + ')');
+          if (net.constructed !== c0) throw new Error('opening Friends on a PC opened ' + (net.constructed - c0) + ' relay socket(s)');
+          document.getElementById('cv-mini-exp').click(); await land945();
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('the Canvas ⤢ did not swap back');
+          if (localStorage.getItem('fm.cvPair') !== 'canvas') throw new Error('swapping back was not remembered');
+          if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content stayed drawn after it shrank to its tile');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          /* REDUCED MOTION: the swap lands at once, with no flight, and the tail is still where it belongs. */
+          window.matchMedia = function (q) {
+            if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {}, addListener: function () {}, removeListener: function () {} };
+            return mm.call(window, q);
+          };
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          document.getElementById('cv-fr-exp').click();
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('with reduced motion the swap did not land at once');
+          if (dlg.classList.contains('cv-flying') || flight978(dlg).some(function (a) { return a.playState === 'running'; })) throw new Error('with reduced motion the blocks still fly');
+          const t2 = card._popTail;
+          if (!t2 || !t2.isConnected || Math.abs(t2.getBoundingClientRect().top - card.getBoundingClientRect().bottom) > 2) throw new Error('with reduced motion the swap left the canvas block without its tail at its foot');
+        } finally {
+          window.matchMedia = mm;
+          P.width = w0; P.height = h0; P.fps = f0;
+        }
+      }, 1280);
+    }); }); });
+  });
+
+  test('978 on a PC the second click on the cog closes the pair, Escape closes it, a click outside closes it without applying, the cog reopens on the block open last, and crossing the phone width while it is open keeps the pair and re-hangs it', { item: '978', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () { await withFakeNet921(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+        const body = document.getElementById('cv-fr-body');
+        const cog = document.getElementById('btn-settings');
+        const P = FM.scene.project, w0 = P.width, h0 = P.height;
+        const reopen = async function () { press978(cog); await entranceDone(dlg); await sleep(60); };
+        await reopen();
+        if (!open945(dlg)) throw new Error('setup: the cog did not open Canvas settings');
+        document.getElementById('cv-fr-exp').click(); await land945();
+        if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not bring Friends up on a PC (his words: "Settings cog then swap between them")');
+        press978(cog); await sleep(80);
+        if (open945(dlg)) throw new Error('a second click on the cog did not close the pair (#762)');
+        await reopen();
+        if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('closed on Friends and reopened with the cog — it did not come back to Friends, the block open last');
+        window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape', code: 'Escape' }));
+        await sleep(80);
+        if (open945(dlg)) throw new Error('Escape did not close the pair (#690)');
+        if (body.children.length) throw new Error('Escape left the Friends content drawn in a closed dialog');
+        if (document.body.classList.contains('cv-anchored')) throw new Error('Escape left the cog lifted over the page (cv-anchored)');
+        await reopen();
+        if (!dlg.classList.contains('cv-fr-big')) throw new Error('after Escape the cog did not come back to Friends');
+        document.getElementById('cv-mini-exp').click(); await land945();
+        if (dlg.classList.contains('cv-fr-big')) throw new Error('setup: the Canvas ⤢ did not swap back');
+        const chip = document.querySelector('#canvas-dialog .aspect-chip[data-aspect="16:9"]');
+        if (!chip || !chip.getClientRects().length) throw new Error('setup: no 16:9 chip on the canvas card');
+        chip.click(); await sleep(40);
+        press978At(5, 5); await sleep(80);
+        if (open945(dlg)) throw new Error('a click outside did not close the pair (queue 252)');
+        if (P.width !== w0 || P.height !== h0) throw new Error('a click outside APPLIED the change (' + w0 + '×' + h0 + ' became ' + P.width + '×' + P.height + ')');
+        await reopen();
+        if (dlg.classList.contains('cv-fr-big')) throw new Error('closed on Canvas, but the cog reopened on Friends');
+        document.getElementById('cv-cancel').click(); await sleep(60);
+        /* The oversize warning's door is about the canvas: a bare open is always Canvas, whatever is remembered. */
+        localStorage.setItem('fm.cvPair', 'friends');
+        FM.openCanvasDialog(); await entranceDone(dlg); await sleep(40);
+        if (dlg.classList.contains('cv-fr-big')) throw new Error('a bare FM.openCanvasDialog() (the oversize warning) opened on Friends');
+        document.getElementById('cv-cancel').click(); await sleep(60);
+        /* CROSSING THE PHONE WIDTH WITH IT OPEN: the pair lives at both widths, so it only re-hangs — centred on the phone,
+           off the cog again on the way back — and keeps Friends big with its content. */
+        await reopen();   // on Canvas — the bare open just above remembered Canvas
+        document.getElementById('cv-fr-exp').click(); await land945();
+        if (!dlg.classList.contains('cv-fr-big') || !body.children.length) throw new Error('setup: ⤢ did not bring Friends up with its content');
+        await atPhoneWidth(async function () {
+          await sleep(60);
+          if (!open945(dlg)) throw new Error('narrowing to a phone closed the pair');
+          if (!dlg.classList.contains('cv-pair') || !dlg.classList.contains('cv-fr-big')) throw new Error('narrowing to a phone tore the pair down (' + dlg.className + ')');
+          if (!body.children.length) throw new Error('narrowing to a phone emptied the Friends block');
+          if (document.body.classList.contains('cv-anchored') || dlg.classList.contains('cv-side')) throw new Error('at a phone width the pair is still hung off a cog the phone does not show (' + document.body.className + ' / ' + dlg.className + ')');
+        }, 380);
+        await sleep(60);
+        if (!open945(dlg) || !dlg.classList.contains('cv-fr-big') || !body.children.length) throw new Error('back at 1280 the pair is not still open on Friends with its content (' + dlg.className + ')');
+        if (!document.body.classList.contains('cv-anchored') || !dlg.classList.contains('cv-side')) throw new Error('back at 1280 the pair did not hang off the cog again, side by side (' + document.body.className + ' / ' + dlg.className + ')');
+        const off = Math.abs(card.getBoundingClientRect().right - cog.getBoundingClientRect().right);
+        if (off > 12) throw new Error('back at 1280 the canvas block’s right edge is ' + Math.round(off) + ' px from the cog’s');
+        press978(cog); await sleep(80);
+        if (open945(dlg)) throw new Error('after the crossing a click on the cog did not close the pair');
+      }, 1280);
+    }); }); });
+  });
+
+  test('978 on a PC opening Friends never starts sharing — not the cog, not ⤢, not reopening on Friends — only Start sharing does; Stop leaves Start sharing and nothing re-arms', { item: '978', budgetMs: 120000 }, async function () {
+    const C = need921S7('the Friends block on a PC');
+    await withFakeNet921(async function (net) {
+      await withCollab921([layer921('A')], async function () {
+        C.end();
+        await withLabs921(async function (ui) {
+          await with945(async function () {
+            await atWideWidth(async function () {
+              if (FM.home.isOpen()) FM.home.close();   // the cog on Home opens App settings (the cv-upward test's trap)
+              const pid = FM.projects.currentId();
+              const dlg = document.getElementById('canvas-dialog');
+              const cog = document.getElementById('btn-settings');
+              const c0 = net.constructed;
+              const quiet = function (door) {
+                if (C.session) throw new Error(door + ' started a live session');
+                if (ui._relay()) throw new Error(door + ' started the relay');
+                if (ui._wake()) throw new Error(door + ' took a wake lock');
+                if (net.constructed !== c0) throw new Error(door + ' opened ' + (net.constructed - c0) + ' relay socket(s)');
+                if (hostRec921(pid)) throw new Error(door + ' wrote a host record — the project would start sharing again by itself at its next open');
+                if (ui._locks().indexOf('fm-collab-host-' + pid) >= 0) throw new Error(door + ' took the host lock');
+              };
+              cog.click(); await entranceDone(dlg);
+              if (!dlg.classList.contains('cv-pair') || !document.getElementById('cv-friends').getClientRects().length) throw new Error('on a PC the cog opened Canvas settings with no Friends (his words: "on pc there isnt a way to access the friends invite menu")');
+              quiet('the cog');
+              document.getElementById('cv-fr-exp').click(); await land945();
+              if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not make Friends the big block');
+              if (!document.querySelector('#cv-fr-body .cs-start')) throw new Error('the not-shared Friends block has no Start sharing');
+              quiet('the cog and ⤢');
+              document.getElementById('cv-cancel').click(); await settle921(80);
+              cog.click(); await entranceDone(dlg); await settle921(100);
+              if (!dlg.classList.contains('cv-fr-big')) throw new Error('the cog did not come back to Friends, the block open last');
+              quiet('the cog reopening on Friends');
+              /* CONTROL: Start sharing is the door, and it works. */
+              document.querySelector('#cv-fr-body .cs-start').click();
+              await until921S6('Start sharing to arm a room', function () { return C.session && C.session.isOwner ? C.session : null; }, 8000);
+              if (!hostRec921(pid)) throw new Error('CONTROL: Start sharing armed a session but wrote no host record');
+              await until921S6('the Share panel in the block', function () { return document.querySelector('#cv-fr-body .cs-stop'); }, 4000);
+              document.querySelector('#cv-fr-body .cs-stop').click();
+              (await askOk921()).click();
+              await until921S6('the block to show Start sharing again', function () { return document.querySelector('#cv-fr-body .cs-start'); }, 4000);
+              if (C.session) throw new Error('Stop sharing left a session');
+              await settle921(500);
+              if (C.session) throw new Error('half a second after Stop sharing, something armed a room again by itself');
+              if (hostRec921(pid)) throw new Error('Stop sharing left the host record');
+            }, 1280);
+          });
+        });
+      });
+    });
+  });
+
+  test('978 with the feature off the PC pair shows Friends and its one switch — no DOM, listener or socket added', { item: '978', budgetMs: 90000 }, async function () {
+    const C = need921S7('the Labs-off Friends block on a PC');
+    const was = FM.settings.get('collabLabs');
+    await withFakeNet921(async function (net) {
+      await editorWithShape(async function () {
+        await with945(async function () {
+          await atWideWidth(async function () {
+            try {
+              FM.settings.set('collabLabs', false); C.ui.syncLabs();
+              const c0 = net.constructed;
+              const dlg = document.getElementById('canvas-dialog');
+              const cog = document.getElementById('btn-settings');
+              cog.click(); await entranceDone(dlg);
+              if (!document.getElementById('cv-friends').getClientRects().length) throw new Error('with the feature off a PC’s cog still has no Friends — his clause 1: "on pc there isnt a way to access the friends invite menu"');
+              const sub = document.getElementById('cv-fr-sub').textContent;
+              if (sub !== 'Share live with friends') throw new Error('with the feature off the Friends bar reads "' + sub + '"');
+              document.getElementById('cv-fr-exp').click(); await land945();
+              const bodyEl = document.getElementById('cv-fr-body');
+              const sws = bodyEl.querySelectorAll('[role=switch][aria-checked=false]');
+              if (sws.length !== 1) throw new Error('with the feature off the block shows ' + sws.length + ' off switch(es), not the one that turns live sharing on');
+              if (!/Share this project live and edit it together/.test(bodyEl.textContent)) throw new Error('with the feature off the block does not say what live sharing is');
+              if (bodyEl.querySelector('.cs-start')) throw new Error('with the feature off the block offers Start sharing');
+              if (net.constructed !== c0) throw new Error('opening the block with the feature off opened ' + (net.constructed - c0) + ' relay socket(s)');
+              if (C.ui.isInstalled()) throw new Error('the collab UI installed itself with the feature off');
+              doors23('a PC with the pair open, feature off');   // the cog is the door: nothing else joins the page
+              press978(cog); await settle921(80);
+              if (!dlg.classList.contains('hidden')) throw new Error('the cog did not close the pair');
+            } finally { FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
+          }, 1280);
+        });
+      });
+    });
+  });
+
+  test('978 with no room beside its button the pair stacks like the phone — the big block next to the button, above it or below it', { item: '978', budgetMs: 60000 }, async function () {
+    const mm = window.matchMedia;
+    await editorWithShape(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+        const made = [];
+        /* Placed by INLINE style: popFrom gives the button it hangs from `.pop-src { position: relative }`, and a class rule
+           would lose its position:fixed to that. Right edge 430: under the 562 side by side needs, and far enough right that
+           a 360-wide stack hanging off it still starts on screen (x = 70). */
+        const mk = function (top) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.textContent = '·';
+          b.style.cssText = 'position:fixed;left:400px;top:' + top + 'px;width:30px;height:30px;z-index:1';
+          document.body.appendChild(b); made.push(b); return b;
+        };
+        const inView = function (what) {
+          [['the canvas block', card], ['the Friends block', fr]].forEach(function (p) {
+            const r = p[1].getBoundingClientRect();
+            if (r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) throw new Error(what + ': ' + p[0] + ' is off screen (' + R978(r) + ')');
+          });
+        };
+        try {
+          const low = mk(600), high = mk(60);
+          /* LOW: it opens upward; the small Friends bar sits AWAY from the button — on top — and Canvas stands on the button. */
+          FM.openCanvasDialog({ block: 'canvas', from: low }); await entranceDone(dlg); await sleep(60);
+          if (!dlg.classList.contains('cv-pair') || !document.body.classList.contains('cv-anchored') || !fr.getClientRects().length) throw new Error('the pair is not on the PC — Canvas settings opened ' + (dlg.classList.contains('cv-pair') ? 'un-anchored' : 'without Friends') + ' (his words: "on pc there isnt a way to access the friends invite menu")');
+          if (dlg.classList.contains('cv-side')) throw new Error('with the button\'s right edge at 430 (under 562) the pair still went side by side');
+          if (!document.body.classList.contains('cv-up')) throw new Error('setup: a button at y=600 of 760 should open upward');
+          const lr = low.getBoundingClientRect();
+          let cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+          if (frr.bottom > cr.top + 0.5) throw new Error('stacked, opening upward, the Friends bar (' + R978(frr) + ') is not above the card (' + R978(cr) + ')');
+          if (cr.bottom > lr.top + 4) throw new Error('the card (bottom ' + Math.round(cr.bottom) + ') is not standing on the button (top ' + Math.round(lr.top) + ')');
+          if (Math.abs(cr.right - lr.right) > 12) throw new Error('the stack is not lined up with the button (' + Math.round(cr.right) + ' vs ' + Math.round(lr.right) + ')');
+          inView('opening upward');
+          FM.closeCanvasDialog(); await sleep(60);
+          /* HIGH: it opens downward; Canvas hangs under the button and the small Friends bar sits under IT. */
+          FM.openCanvasDialog({ block: 'canvas', from: high }); await entranceDone(dlg); await sleep(60);
+          if (!dlg.classList.contains('cv-pair') || !document.body.classList.contains('cv-anchored')) throw new Error('the pair is not on the PC (high button)');
+          if (document.body.classList.contains('cv-up') || dlg.classList.contains('cv-side')) throw new Error('setup: a button at y=60 should open the stack downward (' + document.body.className + ' / ' + dlg.className + ')');
+          const hr = high.getBoundingClientRect();
+          cr = card.getBoundingClientRect(); frr = fr.getBoundingClientRect();
+          if (cr.top < hr.bottom - 4) throw new Error('the card (top ' + Math.round(cr.top) + ') does not hang under the button (bottom ' + Math.round(hr.bottom) + ')');
+          if (frr.top < cr.bottom - 0.5) throw new Error('opening downward the small Friends bar (' + R978(frr) + ') is not under the card (' + R978(cr) + ') — the small one sits away from the button');
+          inView('opening downward');
+          document.getElementById('cv-fr-exp').click(); await land945();
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not swap the stacked pair');
+          cr = card.getBoundingClientRect(); frr = fr.getBoundingClientRect();
+          if (frr.top < hr.bottom - 4 || frr.top > hr.bottom + 20) throw new Error('Friends big is not next to the button (its top ' + Math.round(frr.top) + ', the button’s bottom ' + Math.round(hr.bottom) + ')');
+          if (cr.top < frr.bottom - 0.5) throw new Error('the Canvas bar is not below Friends when it opens downward');
+          if (!fr._popTail || !fr._popTail.isConnected) throw new Error('the tail did not move to Friends, the block next to the button');
+          inView('opening downward, Friends big');
+          /* …and with reduced motion (no flight to settle) the tail still follows the block next to the button. */
+          window.matchMedia = function (q) {
+            if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {}, addListener: function () {}, removeListener: function () {} };
+            return mm.call(window, q);
+          };
+          document.getElementById('cv-mini-exp').click(); await sleep(60);
+          window.matchMedia = mm;
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('with reduced motion the swap back did not land at once');
+          if (!card._popTail || !card._popTail.isConnected || fr._popTail) throw new Error('with reduced motion the tail stayed on Friends after Canvas became the block next to the button');
+          FM.closeCanvasDialog(); await sleep(60);
+          /* CONTROL: the cog, with room beside it, is side by side. */
+          FM.openCanvasDialog({ from: document.getElementById('btn-settings') }); await entranceDone(dlg); await sleep(40);
+          if (!dlg.classList.contains('cv-side')) throw new Error('CONTROL: hung off the cog at 1280 the pair is not side by side');
+        } finally {
+          window.matchMedia = mm;
+          FM.closeCanvasDialog();                      // first, so no lifted .pop-src button is removed with its tail up
+          made.forEach(function (b) { b.remove(); });
+        }
+      }, 1280);
+    }); });
+  });
+
+  test('978 on a PC the Share button opens the pair with Friends big, hung off it, starting nothing — and a second click closes it', { item: '978', budgetMs: 90000 }, async function () {
+    const C = need921S7('the Share button on a PC');
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(450); }
+    try {
+      await withFakeNet921(async function (net) {
+        await withLabs921(async function (ui) {
+          await with945(async function () {
+            await atWideWidth(async function () {
+              await sleep(300);
+              const pid = FM.projects.currentId();
+              const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+              const b = document.getElementById('btn-share');
+              if (!b || !b.getBoundingClientRect().width || b.parentNode.id === 'stage') throw new Error('setup: no Share button beside Export on a PC with the feature on');
+              const c0 = net.constructed;
+              const quiet = function (door) {
+                if (C.session) throw new Error(door + ' started a live session');
+                if (ui._relay()) throw new Error(door + ' started the relay');
+                if (ui._wake()) throw new Error(door + ' took a wake lock');
+                if (net.constructed !== c0) throw new Error(door + ' opened ' + (net.constructed - c0) + ' relay socket(s)');
+                if (hostRec921(pid)) throw new Error(door + ' wrote a host record');
+                if (ui._locks().indexOf('fm-collab-host-' + pid) >= 0) throw new Error(door + ' took the host lock');
+              };
+              const first = press978(b);
+              if (first.down !== b && !b.contains(first.down)) throw new Error('setup: the press did not land on the Share button (' + (first.down && (first.down.id || first.down.className)) + ')');
+              await hcUntil('Canvas settings to open', function () { return !dlg.classList.contains('hidden'); }, 8000);
+              await entranceDone(dlg); await sleep(60);
+              if (!dlg.classList.contains('cv-pair') || !dlg.classList.contains('cv-fr-big')) throw new Error('on a PC the Share button did not open Canvas settings with Friends big (' + dlg.className + ')');
+              if (document.getElementById('collab-share') || document.getElementById('collab-profile')) throw new Error('on a PC the Share button still opened the old Share card (or its name prompt)');
+              quiet('the Share button');
+              const br = b.getBoundingClientRect();
+              const at = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
+              if (!at || (at !== b && !b.contains(at))) throw new Error('the Share button is under the blur — its centre is ' + (at && (at.id || at.className)));
+              const right = Math.max(card.getBoundingClientRect().right, fr.getBoundingClientRect().right);
+              if (Math.abs(right - br.right) > 12) throw new Error('the pair (right edge ' + Math.round(right) + ') is not hung off the Share button (' + Math.round(br.right) + ')');
+              if (!document.body.classList.contains('cv-share-src')) throw new Error('hung off Share, the cog was not put back under the blur (no cv-share-src)');
+              press978(b); await sleep(700);
+              if (!dlg.classList.contains('hidden')) throw new Error('a second click on the Share button left the pair open — or opened it again (#944)');
+              quiet('the second click');
+              /* CONTROL: the cog still hangs the pair off the cog. */
+              const cog = document.getElementById('btn-settings');
+              cog.click(); await entranceDone(dlg); await sleep(60);
+              if (dlg.classList.contains('hidden')) throw new Error('CONTROL: the cog did not open Canvas settings after Share');
+              if (document.body.classList.contains('cv-share-src')) throw new Error('CONTROL: after Share, the cog opened the pair still hung off Share');
+              const off = Math.abs(card.getBoundingClientRect().right - cog.getBoundingClientRect().right);
+              if (off > 12) throw new Error('CONTROL: the cog’s pair is ' + Math.round(off) + ' px off the cog');
+              document.getElementById('cv-cancel').click(); await sleep(60);
+            }, 1280);
+          });
+        });
+      });
+    } finally { if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200); }
   });
 
 })();
