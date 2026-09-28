@@ -144,6 +144,11 @@ window.FM = window.FM || {};
     if (FM.carouselPause) FM.carouselPause(row, () => autoPauseUntil, (t) => { autoPauseUntil = t; });
     else row.addEventListener('pointerdown', () => { autoPauseUntil = perfNow() + 3000; });
     sec.appendChild(row);
+    /* A mouse pages it with ‹ › (queue 977: "on pc without trackpad there seems to be no way to slide the new section in
+       effects menu"). The rail is this section, so the row keeps its parent (917.13 finds the title through
+       row.parentElement). A page turn holds the auto-scroll first: its 30 ms tick writes scrollLeft and would cancel the
+       smooth scroll halfway. */
+    if (FM.railArrows) FM.railArrows(sec, row, { item: '.fxb-card', onPage: () => { autoPauseUntil = Math.max(autoPauseUntil, perfNow() + (FM._carouselPauseMs || 8000)); } });
     return { sec: sec, row: row };
   }
 

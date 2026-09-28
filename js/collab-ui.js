@@ -16,7 +16,7 @@
  *   · the S2 inertness test asserts `!document.getElementById('btn-share')` and it stays true unchanged,
  *     which is worth more than saving eight lines of DOM building.
  *
- * ⚠️ …WITH ONE DRAWING THAT RUNS WITH LABS OFF (queue 945): the Friends block in Canvas settings on a phone is static
+ * ⚠️ …WITH ONE DRAWING THAT RUNS WITH LABS OFF (queue 945): the Friends block in Canvas settings on a phone and a PC (#978) is static
  * markup in index.html, and opening it with Labs off draws — into THAT block, with no collab id, no scrim, no listener and
  * no timer — one explanation and the one switch that turns live sharing on (U.renderFriends → drawLabsOff).
  *
@@ -818,21 +818,21 @@ window.FM = window.FM || {};
     shareStep = 'main';
   }
 
-  /* ═══ queue 945 · THE FRIENDS BLOCK (Canvas settings on a phone) ════════════════════════════════════════════
+  /* ═══ queue 945 · THE FRIENDS BLOCK (Canvas settings, every width — #978) ═══════════════════════════════════
      The same content as the Share card, drawn into a HOST — #cv-fr-body, inside #canvas-dialog — instead of into the one
      scrim card. It has its own variable, never `card`: openCard() closes whatever card is up first, so the profile prompt
      that Start sharing or Change… raises would otherwise tear the block out from under itself.
-     ⚠️ OPENING IT NEVER ARMS. The Share button's U.share() arms a room the moment it is pressed (relays, a wake lock,
-     a checkpoint); the block draws what is TRUE — not shared yet, live, a guest, a shared copy — and only its Start
-     sharing button runs the arm. */
+     ⚠️ OPENING IT NEVER ARMS. U.share() arms a room the moment it is called (relays, a wake lock, a checkpoint) — no door
+     reaches it since #978, and the tests still drive it; the block draws what is TRUE — not shared yet, live, a guest, a
+     shared copy — and only its Start sharing button runs the arm. */
   let fhost = null;              // #cv-fr-body while Friends is mounted in it
   let fhostShowedCode = false;   // the room code was drawn there: taking it down starts the code's half hour, as closing the card does
   let fhostObs = null;           // the backstop: anything that hides the dialog with a bare class unmounts the block
   let arming = null;             // the one arm in flight — a double tap on Start sharing cannot arm twice
   let pendingLinkRole = null;    // "New people join as", chosen before there is a room; applied when Start sharing arms
   function friendsDlg() { return document.getElementById('canvas-dialog'); }
-  /* Visible means VISIBLE: the classes say the block is big, and it has a box — above 700px it is display:none whatever
-     the classes say (critic's finding: a redraw into an unseen block spends the one-shot notes). */
+  /* Visible means VISIBLE: the classes say the block is big, and it has a box — a dialog hidden with a bare class has none
+     (critic's finding: a redraw into an unseen block spends the one-shot notes). */
   function friendsVisible() {
     const d = friendsDlg();
     if (!d || d.classList.contains('hidden') || !d.classList.contains('cv-fr-big')) return false;
@@ -1048,7 +1048,7 @@ window.FM = window.FM || {};
      While he shared with nobody in, the person+ on the stage was pixel-identical to not sharing (J1-3), and a friend saw
      nothing that said whose project it was or that it was live (J3-4 — the owner's name lived only in an aria-label). So:
      a red "● LIVE" pill right of the chip for him, and "● Live · <owner>" for a friend, the name as TEXT (§14.9). A tap is
-     the chip's own door (U.openPeople): his Share panel, or their panel with Leave. Offline, ended or off, it goes — the
+     the chip's own door (U.openPeople): the Friends block — his sharing, or their panel with Leave. Offline, ended or off, it goes — the
      banner says those. Re-read from applyRoleClasses, which attach, detach, a role change and every syncBanner run. */
   let liveEl = null;
   function syncLive() {
@@ -1232,8 +1232,9 @@ window.FM = window.FM || {};
     return Promise.resolve(drawShare());
   };
 
-  /* §12.1 arming, steps 1–7 — the Share button's, and since queue 945 the Friends block's Start sharing (the ONLY two doors
-     that may arm; opening the block is not one). Resolves true when a room is live. `arming` makes it one arm however many
+  /* §12.1 arming, steps 1–7 — the Friends block's Start sharing (queue 945), and U.share() (the Share button's until #978,
+     when every door became U.openPeople; the tests still call it). The ONLY ways to arm; opening the block is not one.
+     Resolves true when a room is live. `arming` makes it one arm however many
      times it is pressed: the race check below runs before the async checkpoint, so two taps could both reach C.share. */
   function armShare() {
     if (arming) return arming;
@@ -1483,18 +1484,19 @@ window.FM = window.FM || {};
     });
     if (people.length > 3) faces.appendChild(el('span', 'cv-fr-more', '+' + (people.length - 3)));
   };
-  /* The people door — the stage's person+ and the faces chip. On a phone: Canvas settings with Friends big (a second press
-     closes it, the 944 rule); it NEVER falls back to U.share() there, which arms (critic's finding). On a PC: the Share card. */
-  U.openPeople = function () {
-    if (isPhoneNow()) {
-      const homeUp = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
-      if (homeUp || !FM.openCanvasDialog) return Promise.resolve(null);
-      const d = friendsDlg();
-      if (d && !d.classList.contains('hidden')) { if (FM.closeCanvasDialog) FM.closeCanvasDialog(); return Promise.resolve(null); }
-      FM.openCanvasDialog({ block: 'friends' });
-      return Promise.resolve(null);
-    }
-    return U.share();
+  /* The people door — the Share button beside Export, the stage's person+ and the faces chip, the LIVE pill, Home's "Share
+     live…": Canvas settings with Friends big, at EVERY width (#978 — on a PC it used to be the Share card, which armed a room
+     on the first press). A second press closes it (the 944 rule); it NEVER arms, and never falls back to U.share(), which
+     does (critic's finding) — only the block's Start sharing starts anything.
+     `from` is the button to hang the pair off on a PC: only the Share button passes itself. The chip and the pill pass
+     nothing, so the pair hangs from the cog rather than from a chip at the top left of the preview. */
+  U.openPeople = function (from) {
+    const homeUp = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (homeUp || !FM.openCanvasDialog) return Promise.resolve(null);
+    const d = friendsDlg();
+    if (d && !d.classList.contains('hidden')) { if (FM.closeCanvasDialog) FM.closeCanvasDialog(); return Promise.resolve(null); }
+    FM.openCanvasDialog({ block: 'friends', from: (from && from.nodeType === 1) ? from : null });
+    return Promise.resolve(null);
   };
 
   function drawShare(host) {
@@ -5181,8 +5183,9 @@ window.FM = window.FM || {};
       b.id = 'btn-share';
       b.type = 'button';
       // a second press on the button that opened the card CLOSES it (queue 944) — wherever the card sits
-      /* queue 945: on a phone it opens Canvas settings with Friends big (U.openPeople), which never arms; on a PC, the Share card. */
-      b.addEventListener('click', function (e) { e.stopPropagation(); if (card && card.isConnected) { closeCard(); return; } U.openPeople(); });
+      /* queue 945 / #978: it opens Canvas settings with Friends big (U.openPeople), which never arms — on a phone and on a PC,
+         where the pair hangs off this button. */
+      b.addEventListener('click', function (e) { e.stopPropagation(); if (card && card.isConnected) { closeCard(); return; } U.openPeople(b); });
     }
     const mode = at.stage ? 'stage' : 'bar';
     if (b._mode !== mode) {

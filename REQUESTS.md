@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Sep at v17.11
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Sep at v17.12
 >
-> **State:** v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -32763,7 +32763,7 @@ re-opened #480, which I had marked done and had not fixed.
              ✅ **HE CORRECTED IT (23 Sep), verbatim:** *"Sorry, recall what I just said. I mean, don't fully recall it, but at the very end, I said don't I mean, I said get it working. Don't get it working. Don't do anything with it. Just log it and brainstorm it when you get the chance to once you've finished everything else. Just brainstorm ideas and then relay those ideas back to me. Don't actually do it."*
              So: no plan to build, no prototype, no code, no "getting it working". When — and only when — everything else is done, brainstorm ideas and send them to him.
       5. [ ] 🔒 Build — only after he approves the plan.
-
+      🔗 **28 Sep — HE ASKED FOR THE PLAN (#980):** design + visualizers only, run by the logging chat in tools/design/plans/simple-mode/; still no build until he says so.
 
 - [x] **924 — 🔴 THE ADD SWITCH STILL DOES NOT MOVE LIVE WHILE DRAGGING — and while you drag a LAYER it must show where THAT LAYER is.** (24 Sep, his words in full, verbatim — the fourth time: #438, #533, #570.)
       > *"The switch still doesn't update live. What I mean by this is I'm going to go into more detail because usually like I've asked you this a million times to fix it, but you've never done it. So basically the switch button that basically makes the add layer go to the top or the bottom, it's supposed to move live when you drag the add layer or any layer. When you drag any layer, it should, the level of where the switch is should resemble where that layer is in the project. And also it should update live. Like it should happen while you're dragging, but it currently doesn't. So fix that and make it actually work."*
@@ -33100,8 +33100,7 @@ re-opened #480, which I had marked done and had not fixed.
       ↳ left as it was: Bug 4, not done: a refusal caused by his own change still uses up the step (§10.2 'consumed either way'). I left it because putting the step back would just refuse again on every press. With the flush fix the text-card case no longer refuses at all. The only…
       ✅ **SHIPPED v17.00.**
 
-- [ ] **941 — The seventh real-input bug hunt (26 Sep) — 16 findings, all 16 confirmed by a skeptic and fixed. (hunt HIGH #941)** (26 Sep — found by Claude under #690, NOT his words; his words that started it: *"Keep going"*.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **941 — The seventh real-input bug hunt (26 Sep) — 16 findings, all 16 confirmed by a skeptic and fixed. (hunt HIGH #941)** (26 Sep — found by Claude under #690, NOT his words; his words that started it: *"Keep going"*.)
       **JUMPED: a container of independent findings closed in one release; each confirmed finding has its own "690 …" / "HUNT-…" test that failed before its fix.** Same method as #934/#935/#937/#938/#939/#940 (real touch/mouse input through tests/_cdp.py, one skeptic per finding, a fixer per area, every fix proven against its reverted source). Full detail: `audits/941-hunt.json`.
       ━━ **Home and project management** ━━
       [x] ✅ v17.01 [high] In Select mode a finger swipe on the project list ticks projects instead of scrolling, so with a long library he cannot reach the projects further down — *He taps Select, or holds a card, to clear out his 60+ projects, then swipes up to get to the older ones. The list does not move at all. Every card his finger crosses gets a tick instead. The only thing that scrolls is the 16 px strip beside the cards, so the projects below the first screen cannot…*
@@ -33138,6 +33137,7 @@ re-opened #480, which I had marked done and had not fixed.
       ↳ left as it was: The ?v= cache-busters for js/app.js and js/storage.js were not bumped, as instructed. The release gate must bump them, since both files changed.
       🔍 **Reviewed before shipping — by hand** (the review agents hit the weekly usage limit, 26 Sep, and 4 of 5 failed): the update-flow reviewer's three claims were all real and are fixed with this release — the version chip now goes on to the update when its full-phone question cannot be asked (the escape hatch for a broken build; test 690 when the version chip cannot ask…), asks about the signal again after the question, and drops a collab join it stashed seconds earlier when the update does not happen. The storage half (media release by revision, Save project file for a project that is not open, New project on a full phone) was read end to end and holds.
       ✅ **SHIPPED v17.01** — the fixes are live; this entry stays open until his #944–#948 are done, because the queue gate closes his own requests before my hunt findings (it refused v17.01 for closing this first). Nothing here is left to build.
+      ✅ **CLOSED 28 Sep** — his #944, #945 and #946 are shipped and #947/#948 are built out waiting on his picks, so nothing of his is held behind this any more. Every one of the 16 findings shipped in v17.01 with its own test.
 
 - [x] **942 — Every time the app starts (the loading screen plays), it lands on Home — not inside the last project** (26 Sep)
   His words, verbatim: *"Make it to that every time you load into the app for the first time like in the loading screen plays it puts you in the home menu not in your project"*
@@ -33193,6 +33193,9 @@ re-opened #480, which I had marked done and had not fixed.
   **26 Sep — three options drawn and SENT** (`tools/design/947-options.html`, frames in `tools/design/947/`, clips `947-A/B/C.gif`; every frame is the real Home + the real New project dialog at 390×844, the entrance driven by the throwaway `tools/design/947-proto.js` and frozen at exact points by `tools/design/947-render.py`, both Home looks). A = the orb becomes the card (recommended; Cancel reverses it into the orb); B = a 9:16 canvas outline is drawn out of the + and grows into the card; C = a ripple from the + reveals the dimmed screen and the card rises with a bounce.
   ❓ASK: A, B or C? (A recommended.)
   BUILT OUT UNTIL HE picks A, B or C (the sheet and three clips were sent 26 Sep).
+      ✅ **HE ANSWERED 28 Sep (#974): all three + animations go in the app, one at random each time** — built under #974; the loser(s) are deleted once he says which he likes.
+      ✅ **v17.12 (#974): all three entrances are in the app and one plays at random on every tap of +.** BUILT OUT UNTIL HE says which he likes (the others are then deleted).
+
 
 - [ ] **948 — Templates and Elements: + opens a proper, designed menu; and they are their own things, not reskinned projects** (26 Sep — his words in #944)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -33360,10 +33363,11 @@ re-opened #480, which I had marked done and had not fixed.
       ❓ASK: (1) the 40 renames — OK as they are, or which to cross out? (2) the 70 plain names — keep (recommended) or rename too? (3) the proposed category order — OK?
       BUILT OUT UNTIL HE answers the three picks on the #954 sheet (sent 26 Sep).
 
-- [ ] **955 — Widening the window moves the playhead back to 0 (hunt MEDIUM #955)** (26 Sep — found in passing by the seventh hunt's fixer, #941; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **955 — Widening the window moves the playhead back to 0 (hunt MEDIUM #955)** (26 Sep — found in passing by the seventh hunt's fixer, #941; NOT his words)
       Measured with a throwaway probe: a 2 s project with the playhead at 1.2 s; widening the window put the playhead at 0. Not fixed in #941 (outside its findings).
-      1. [ ] Resizing the window keeps the playhead where it was.
+      1. [x] ✅ v17.12 — Resizing the window keeps the playhead where it was.
+      ✅ **v17.12 — SHIPPED** (queue 955): the strip's scroll range shrank under the playhead while a widened window waited for its 150 ms rebuild, the browser clamped scrollLeft, and the scroll listener read the clamp as a hand scroll. It now re-sizes the strip and puts it back under the playhead instead. 36/36 real resizes keep the time.
+
 
 - [ ] **956 — Reminder: a page of questions he still has to go through and answer (made by another chat)** (26 Sep, ~11:10 AWST, via INBOX — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -33425,6 +33429,9 @@ re-opened #480, which I had marked done and had not fixed.
         - (A) Arrow: `2026-09-26-arrow-and-addmenu/plan.md` §A. MEASURED: `draw()` runs 278–288ms into the intro, while the + is still in its 545ms delay (read as 49.9px wide and 18px low). The tip settles 25.3px from the centre of a 29px +, which is inside it; drawn at rest it lands at 41px. **Fix A1:** draw after the + has landed, with a backup timer. It appears ~0.8s later and stops 12px clear. Decided, not asked.
         - (B) Clapper: `2026-09-26-clapper/plan.md`. The full new SVG and CSS; the phone line goes; it stops behind Home and when a layer is added. ❓ his picks: timing **A (recommended: claps when the empty project opens, then every 6s)** / B once / C non-stop; impact lines **cyan (recommended)** / grey; PC sentence **keep (recommended)**. Not checked on WebKit: the plan's §8 has the fallback.
       ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Arrow: Fix A1 — drawn after the + has landed (it stops 12px clear). Clapper: the recommended A (claps 0.4 s after the empty project opens, then every 6 s; cyan impact lines; the phone's 'Tap +' line gone, the PC sentence kept; stops behind Home, with a layer on the stage and under reduced motion) — his picks were pending and the 23:54 block's rule is to build the recommended option.
+      🔁 **28 Sep, #974:** every clapper option (timing A/B/C, cyan/grey lines) goes into the app and one plays at random each time, so he can decide over use — built under #974.
+      ✅ **v17.12 (#974): the clapper's three timings and two line colours are live at random.** Say which you like and the rest go.
+
 
 - [x] **958 — PC: the separately-draggable Add menu must drag right up to the top of the screen, whatever height the timeline is** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -33499,6 +33506,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#959 (corner lines):** `2026-09-26-corners/plan.md`. CSS only; the group stays 126×36 and the corners follow it at 206px when two layers are selected. ❓ his pick: **A white, as he drew it (recommended)** / B accent blue / C short bold brackets. Four old tests that expect the outline get retuned.
       ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended A: white corner lines, top-right and bottom-left, solid at the corner and fading along both edges; no background, no outline (his drawing). Three old outline tests renamed and retuned (declared). The render at his 2× screen goes to him with the release.
+      ✅ **HE ANSWERED 28 Sep: B, the blue (accent) corner lines** — v17.07 shipped A (white); the change is built under #973.
 
 - [x] **960 — Import media and Import audio match: both get the shiny look, and “Import” is renamed “Import media”** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -33552,6 +33560,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#961 (Car):** `2026-09-26-car/plan.md`. MEASURED at the 34px icon: the current hub is 2.19px (4.1px² open), so it reads as dots. ❓ his pick: **A Material Design Icons side view, Apache-2.0 (recommended)**: 3.34px hubs, same proportions, so saved projects keep their footprint / B Phosphor side view (MIT) / C AIGA front view (public domain). ⚠️ A and B need a licence notice in a public release; add them to BEFORE-PUBLISHING.md.
       ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended A: the Car traced from Material Design Icons' side view (Apache-2.0 — notice added to BEFORE-PUBLISHING.md), open 3.34px hubs at the 34px icon, same footprint for saved projects. The old car test renamed (declared).
+      ✅ **HE ANSWERED 28 Sep: keep the ORIGINAL car AND add the head-on car** — v17.07 replaced it with the Material car; the original comes back and the front view is added under #973.
 
 - [x] **962 — The Eye shape needs to be HEAVILY improved (and a standing steer to the logging chat: PLAN, don't just log)** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -33574,6 +33583,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#962 (Eye):** `2026-09-26-eye/plan.md`. The pupil is stretched 1.66:1 because the shape spawns in a 5:3 box. ⚠️ **Found along the way: the Shape menu has never drawn any icon at its real proportions** (#159's "make them 1-1" never reached the menu; Key, Envelope, Banner and Eye are the worst). The plan fixes that in the same release, or the new eye's icon comes out wrong. ❓ his pick: A Classic / **B Almond + catchlight (recommended)** / C Lashes.
       ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended B: almond + catchlight, a round pupil in an even white ring. Found and fixed with it: the Shape menu now draws EVERY icon at the proportions its shape spawns at (#159's 1:1 never reached the menu — Key, Envelope, Banner and Eye were the worst).
+      ✅ **HE ANSWERED 28 Sep: A (Classic, Material “visibility”)** — v17.07 shipped B; changed under #973 (the Shape-menu proportions fix stays).
 
 - [x] **963 — PC: the Add menu and the layer inspector shrink well — drop the text when too small, or a better dynamic — and behave as ONE system** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -33614,6 +33624,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ PLAN LANDED (26 Sep ~23:54, via INBOX). The block's own rule: "If you reach an item before he has answered, build the RECOMMENDED option: he has now seen the options, so #545 is satisfied." This item's part:
       - **#963 (panel shrinking):** `2026-09-26-panels/plan.md`. The inspector is forced to 3 columns (12px icons at common laptop sizes); the Add menu collapses to a sliver, and at 1440 it splits the nine Elements over 2 pages when they fit on one. One shared rule for both, "tilefit" (CSS + JS in the plan). ❓ his pick: A names drop / B names always stay / **C tiles → chips → icons (recommended)**. The phone is unchanged.
       ✅ **v17.07 — BUILT from the logging chat's reviewed plan** by a workflow builder in an isolated worktree (tests that fail on the base; phone-checked), merged with seven others after a cross-check that trial-merged all eight and ran every item's tests at 900 and 380. Recommended C: one shared shrink rule for the Add menu and the inspector ('tilefit': tiles → chips → icons, js/tilefit.js); a chip never cuts a word ('Adjustm…'); the phone is unchanged. ⚠️ Worth his eye: at the 1280×800 default height the Add menu's tab names drop to icons, and with #958 the menu can rise to the top, where the Elements tab lays out as 2 columns × 5 rows of big tiles. Found by the full suite before shipping and fixed in this release: deselecting a clip drew the Add menu twice (once under the clip keys, then again a task later when they went), so a click landing in between hit tiles that had just been replaced — the keys are now put away before the menu measures.
+      ✅ **HE ANSWERED 28 Sep: “for inspector and add menu do ur recommended one”** — C, which is what v17.07 shipped. Nothing to change (#973 clause 3).
 
 - [ ] **964 — Empty project, phone: tapping the big add area is glitchy — the blue outline misses the top edge and gets stuck; a far better, colourful, whole-area tap animation; the outline PULSES round and goes** (26 Sep, ~20:29 AWST, via INBOX — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -33677,6 +33688,9 @@ re-opened #480, which I had marked done and had not fixed.
         - **What can ship without him:** the outline fix (top edge, not sticking, the travelling pulse) and removing the stuck states. Per #545, the COLOUR option waits for his pick unless he says "do recommended". His picks come back as their own block.
       ⏸ 27 Sep: BUILT in a worktree (outline pulse, stuck states gone, :focus-visible ring, AND the colour + timing) but HELD from v17.07: the plan says the colour and the lap timing wait for his picks (sent in the logging chat as send-pick-and-timing.jpg), and the build did not split the outline fix out. The branch is kept: worktree-wf_9e749931-857-8 (commit 07cdd8d7).
       BUILT OUT UNTIL HE picks the #964 colour (A Aurora recommended), the menu timing and where the lights start — or says "do recommended".
+      ✅ **HE ANSWERED 28 Sep (#974): “make them all happen in the app but it's just random which one”** — the HOLD is lifted: A Aurora / B Rings and sparks / C Key ripple (and both outline starts) are built under #974 and chosen at random each time, until he says which he likes.
+      ✅ **v17.12 (#974): A Aurora / B Rings and sparks / C Key ripple and both outline starts are in the app, one at random on every press, all with the 300 ms hold and 360 ms lap.** BUILT OUT UNTIL HE says which he likes (the others are then deleted).
+
 
 - [x] **965 — Settings: redesign the close ✕ (use the search ✕'s drawn design) — and, his yes, the same drawn ✕ on every close button in the app** (26 Sep, ~20:57 AWST, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -33757,6 +33771,7 @@ re-opened #480, which I had marked done and had not fixed.
 
       Standing instruction — holds nothing in the queue. Clause 5 is context for #923 (this app is the COMPLEX version), NOT approval to start the easy editor.
       Builder's note: ✅ v17.05 — the structural half is in: next.sh prints an IDLE STEER line (his words, the starting menu, the #545 reminder) whenever nothing is ACTIONABLE, and LOOP.md's empty-queue rule points at it.
+      🔁 **RESTATED 28 Sep (in the builder chat), word for word the same:** *"You’re a bunch of ideas of things you can do if you ever run out of things to do which I doubt it but in case you do you can add new effects. You can add new filters. You can add new sound effects you can polish other effects just giving them more features and making them work a bit better and have more customisation like you know more choices always better I’d say like for this we’re definitely trying to keep it as you know like because we’re gonna have two versions the simple version and then the complex version this is the complex version we want as much choice as possible"* — same five clauses as above, nothing new to split; the IDLE STEER already carries it. Answered in chat: it is logged and is what the loop turns to when nothing of his is left.
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -33913,17 +33928,22 @@ re-opened #480, which I had marked done and had not fixed.
       2. [x] ✅ v17.11 — …a clear difference from big.
       3. [x] ✅ v17.11 — (#545) his pick on the render (A recommended, ~half the screen) — build A if no answer has come (the plan's own rule).
       ✅ **v17.11 — SHIPPED** (queue 969): his A (no pick came, the plan's rule) — small Help on a phone is ~half the screen with 28px margins (324×416 against big 360×780 at 380 wide); PC unchanged. Say “Help B” for the 40% version.
+      ✅ **HE ANSWERED 28 Sep (#975): “you just decide what is best as long as the small version doesn't take up the whole screen and is like a box on the screen and big takes up the whole thing”** — A as shipped meets it; Notes gets the same rule under #975.
 
 - [ ] **970 — PC ~1160–1386px wide, two layers selected: the ⋯ layer-options button sits under the version chip and cannot be clicked (hunt MEDIUM #970)** (26 Sep, found by the logging chat's corners planner — NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       - **NEW, found by the corners planner, already on HEAD (hunt MEDIUM):** on a PC window about 1160–~1386px wide with TWO layers selected, the ⋯ layer-options button sits under the version chip and cannot be clicked. The picture is `2026-09-26-corners/finding-1280-two-selected-overlap.png`. Log it as its own hunt item.
       1. [ ] With two layers selected at any PC width, ⋯ is fully clickable (nothing covers it).
+      🔨 **28 Sep — BUILT, HELD FOR HIS EYE** (branch fix-970, commit bebd4560 on 2d06a3f5, reviewed): the cause was #801's band threshold (1160px) measured with ONE layer selected — with two or more the group is 80px wider, so at 1180–1360 (to 1440 with sharing on) the version chip covered ⋯ (37 of 156 width × selection states had a covered control). The fix measures the widest group and drops the right-hand run into a band under the row whenever it would collide: 0 of 156 covered, and 701–899 fixed too. **But it makes the video 40px shorter at those widths** (560 → 520px tall at 1280×800), whether or not anything is selected — a visible change to his PC screen, so it waits for him. Before/after at 1280 sent 28 Sep.
+      ❓ASK: A — the band under the row below ~1380px (the build; video 40px shorter there) · B — keep one row and put the band on only while two or more layers are selected (the row jumps when a second layer is shift-clicked). A recommended.
+      BUILT OUT UNTIL HE picks A or B for the band.
 
-- [ ] **971 — Collab: an edit made while a friend's phone is paused can take up to ~a minute to reach them after they come back (hunt LOW #971)** (27 Sep — found by #967's two-Chrome re-check; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **971 — Collab: an edit made while a friend's phone is paused can take up to ~a minute to reach them after they come back (hunt LOW #971)** (27 Sep — found by #967's two-Chrome re-check; NOT his words)
       Measured (2 of 9 runs, two Chromes, the guest's Chrome SIGSTOPped 25 s while the owner added a layer 3 s in): the guest came back online, then went Offline again and stayed so until ~60 s, while both sides read 'connected' and the owner's send buffer grew (ctl 205→1584, pres 168→9772) — then everything flushed at once and caught up, no data lost. Looks like the SCTP data channel's retransmit backoff after a long outage, not app logic. With no edit during the pause it never happened (3/3).
       Suggested fix (the reviewer's): don't send ctl batches or presence to a member while its link is disconnected/down; flush when it recovers — so no reliable data is queued into a backed-off channel.
-      1. [ ] An edit made while a friend's phone is paused reaches them within a few seconds of their coming back.
+      1. [x] ✅ v17.12 — An edit made while a friend's phone is paused reaches them within a few seconds of their coming back.
+      ✅ **v17.12 — SHIPPED** (queue 971): measured from Chrome's own SCTP packet log — messages queued into a down link were sent the instant the friend's first SACK freed the window, a few ms before the owner's path was writable, dropped, and then waited out a ~45 s retransmit timeout. Now nothing is sent into a down link (queued in order, presence dropped), and a new ctl/presence message waits for the channel's buffer to drain. Two real Chromes: 0 of 20 runs relapsed (was 9 of 31; bursts up to 46 s, now ~0.6 s). Liveness and the 120 s grace unchanged.
+
 
 - [x] **972 — Streamer safety: the friends invite code starts BLURRED each time you open sharing — tap to show** (27 Sep, ~08:57 AWST, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it (plan ready):
@@ -33964,3 +33984,253 @@ re-opened #480, which I had marked done and had not fixed.
       1. [x] ✅ v17.11 — The invite code for friends is blurred when you first open it.
       2. [x] ✅ v17.11 — …so someone streaming or screen-recording does not show it (the QR too — recommended yes, by default if no answer).
       ✅ **v17.11 — SHIPPED** (queue 972): the short code shows a blurred decoy (the real code is never painted) and the QR is blurred, each with “Tap to show”, every time sharing is opened; one tap shows both; a settings flip keeps them shown; closing and Reset frost them again; a refused copy lands in a frosted field (found in review). The QR half was recommended and built by default.
+
+- [x] **973 — His picks: keep the ORIGINAL car and ADD a front-view car; the eye is A; the corner lines are B (blue); the panels stay C** (28 Sep, ~12:28 AWST, via INBOX — his words)
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 28 Sep 2026, ~12:28 AWST — HE ANSWERED the design picks (car, panels, eye, corners). Three of them CHANGE what v17.07 shipped with the recommended defaults
+
+      **His words (verbatim):** "For car keep the original and add the head on-  for inspector and add menu do ur recommended one-  for eyeball do A. Do B for the outlines thing that's blue."
+
+      His clauses:
+      1. **Car (#961):** keep the ORIGINAL car, and ADD the head-on (front-view) car as well.
+      2. **Inspector + Add menu shrink (#963):** the recommended one, C. That is what v17.07 shipped, so nothing to change; record his yes.
+      3. **Eye (#962):** A (Classic, Google Material "visibility"). v17.07 shipped B, so change it.
+      4. **Corner lines (#959):** B, the blue (accent) one. v17.07 shipped A (white), so change it.
+
+      **Logger's plan (not his words). Ready to build:**
+      - **Car:**
+        - (a) **Restore the original `S.car`**, the landmark car from before v17.07. Take the whole block from `git show c6bf38bb^:js/compositor.js` (`S.car = [` at ~13394 there) including its comment, in place of the Material Design Icons car v17.07 put in.
+        - (b) **Add the front-view car as a NEW shape.** Key `carfront`, label `'Car (front)'`, placed right after `['car', 'Car']` in `js/addmenu.js` ~130. Its data is `tools/design/plans/2026-09-26-car/patch-C.js` (the AIGA/US DOT sign, public domain, no licence owed) with `S.car` renamed `S.carfront` and the comment's `__PICK__` replaced by "his 28 Sep pick: keep the original car AND add this one". `SHAPE_ASPECT.carfront = [1, 1]` in `js/app.js` beside `car` (C sits centred in the unit box at 1.207:1). Check every place that lists shape keys (grep `'car'` in js/) so the new key is not missed, e.g. edit points, the menu's proportions fix from #962, saved-project validation, and any shape whitelist (the whitelist-drift rule).
+        - (c) **Tests:**
+          - The old car tests come back with the old car. `car-shape` and `car-aspect` as they were at `c6bf38bb^` (tests.js ~15826, ~20215 there) replace their v17.07 retunes.
+          - The v17.07 test "961 — the Car reads as a car at the Shape menu's 34px" (tests.js ~103719) is FALSE for the original car by design, so retarget it to `carfront` or drop it with a `DROPS TEST:` line.
+          - Add the front car's structural test from `2026-09-26-car/tests_C.js`, retargeted to `carfront`.
+          - Proving check: `carfront` exists in the Shape menu next to Car, and `S.car` equals the pre-v17.07 data. Both fail on HEAD.
+        - (d) If v17.07 added a Material Design Icons licence note for the car to BEFORE-PUBLISHING.md, remove it.
+        - ❓ASK (only if it matters): "the original" is read as the car he had BEFORE this week (the "NOW" row on the sheet he was shown). If he meant the side-view car now in the app, one word keeps that one instead. Build the reading above; don't block.
+      - **Eye → A:** replace `S.eye` with the A array from `tools/design/plans/2026-09-26-eye/plan.md` (the block after "If he picks **A**"), with the comment it gives (Material Icons "visibility", Apache-2.0). Delete the catchlight assertion (`if (s.topo.holes < 2) …`) from the #962 test 1, because A has no catchlight. **Keep v17.07's Shape-menu proportions fix.** Add the Apache-2.0 notice to BEFORE-PUBLISHING.md's licence list if B's MIT note was put there.
+      - **Corners → B:** `styles.css` ~8143: change `--sel-corner: rgba(255, 255, 255, .6);` to `--sel-corner: var(--accent);` and rewrite the comment above it (~8136, "WHITE, not accent…") to say accent was his 28 Sep pick. The corners plan §5.2 says the colour is not pinned by the tests; confirm with `?only=959`.
+      - **#963:** record "his pick C, 28 Sep" in the entry. No change needed for this one.
+      - Bump `?v=` for every changed file (`js/compositor.js`, `js/addmenu.js`, `js/app.js`, `styles.css`). Send one before/after of the car pair, the eye and the corners with the release.
+
+      Clauses (his):
+      1. [x] ✅ v17.12 — Car (#961): keep the ORIGINAL car…
+      2. [x] ✅ v17.12 — …and ADD the head-on (front-view) car as well.
+      3. [x] ✅ v17.12 — Inspector + Add menu shrink (#963): the recommended one, C — already shipped in v17.07; his yes recorded.
+      4. [x] ✅ v17.12 — Eye (#962): A (Classic, Material “visibility”) — v17.07 shipped B, so change it.
+      5. [x] ✅ v17.12 — Corner lines (#959): B, the blue (accent) one — v17.07 shipped A (white), so change it.
+      ✅ **v17.12 — SHIPPED** (queue 973): the original car is back byte-for-byte, “Car (front)” (public domain) sits beside it, the eye is A, the corner lines are the accent blue; #963 C stands. The Edit Shape dropdown now labels shapes as the Add menu does (it said “Carfront”).
+
+
+- [x] **974 — Every animation that has options: put ALL of them in the app and play one AT RANDOM each time, so he decides over time** (28 Sep, ~12:28 AWST, via INBOX — his words)
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 28 Sep 2026, ~12:28 AWST — For every animation that has options, ship ALL of them and pick one AT RANDOM each time, so he can decide over time which is best
+
+      **His words (verbatim):** "Honestly for all of the different button animations - make them all happen in the app but it's just random which one so I can decide which is best over use time"
+
+      His clauses:
+      1. For every animation that has competing options, put ALL of them in the app.
+      2. Which one plays is random, so he lives with them all and decides over time.
+
+      **Logger's plan (not his words). Ready to build:**
+      - **Which animations (every one with open variants today):**
+        - **#964**, the empty-project tap colour: A Aurora / B Rings and sparks / C Key ripple. Plus the outline lights' start: bottom-middle vs the finger's nearest edge. **This lifts #964's HOLD.** Build all three from `tools/design/plans/2026-09-26-emptytap/`: `prod-areafx.js` has A, `prod-press-BC.js` has B and C. Use the recommended 300ms menu hold with the 360ms lap for every variant, because without the hold none of them is seen.
+        - **#957**, the clapperboard: timing A (on open, then every 6s, as shipped) / B once / C non-stop, and impact lines cyan (shipped) / grey. The variants are in `tools/design/plans/2026-09-26-clapper/plan.md`.
+        - **#947**, the New project + animation: A / B / C from `tools/design/947-options.html` and `947-A/B/C.gif`. This lifts #947's "built out until he picks" state.
+        - Any other animation whose options he was sent and has not picked. Grep open entries for animation options with a ❓ASK.
+      - **One shared helper:** `FM.variant(name, list)` in a small new file or an existing util. Each time the animation plays it returns a uniformly random member of `list`, records it in `FM.variant.last[name]`, and appends `{name, pick, t}` to a 50-entry ring in localStorage `fm.variantLog`, so when he says "the one with the rings" it can be confirmed.
+        - **Random per play, not per session.** He asked for "just random which one", and per play lets him compare within one sitting.
+        - The clapper picks once per empty-project open (its timing is the variant) and its line colour per clap.
+        - Honour the existing reduced-motion paths for every variant.
+      - **When he decides:** the chosen one becomes fixed and the losers are DELETED (not left in behind a flag). Write this in each entry as the built-out marker (“…until he says which he likes”, the classifier's phrase — written only AFTER the variants ship) so the classifier files it correctly.
+      - Tests:
+        - For each animation, stub `Math.random` (or give `FM.variant` a test seam) to force each member in turn, and assert that member's element or class appears. That proves every variant actually runs. Fails on HEAD because there is no `FM.variant`.
+        - A test that 60 unforced plays hit every variant at least once, as a control that the randomness is not stuck on one.
+        - Keep each variant's own proving test from its plan.
+
+      Clauses (his):
+      1. [x] ✅ v17.12 — For every animation with competing options (#964's tap colours, #957's clapper timing/colour, #947's + animation, and any other sent and unpicked), put ALL of them in the app.
+      2. [x] ✅ v17.12 — Which one plays is random, so he lives with them all and decides over time.
+      ✅ **v17.12 — SHIPPED** (queue 974): js/variant.js — FM.variant picks at random every play and logs it (fm.variantLog, newest 50 per animation). In the app: #964 A/B/C + both outline starts (per press), #957 timing A/B/C (per empty-project open) and cyan/grey lines (per clap), #947 A/B/C (per tap on +). No other unpicked animation options were found. Review fixes: C's × closes the card, A turns round if closed mid-flight, the 300 ms hold is dropped if he leaves the empty project.
+
+
+- [x] **975 — Small vs big panels: the builder decides the details — SMALL is a box on the screen, BIG is the whole screen (Notes too)** (28 Sep, ~12:28 AWST, via INBOX — his words)
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 28 Sep 2026, ~12:28 AWST — Small vs big panels: builder decides the details. The rule is that small is a BOX on the screen and big is the whole screen
+
+      **His words (verbatim):** "What you have drafted up for the small vs big settings menus, you just decide what is best as long as the small version doesn't take up the whole screen and is like a box on the screen and big takes up the whole thing"
+
+      His clauses:
+      1. For the small/big panels, decide what is best yourself…
+      2. …as long as SMALL never takes up the whole screen and is a box on the screen,
+      3. …and BIG takes up the whole screen.
+
+      **Logger's plan (not his words):**
+      - Help already meets this (v17.11 #969, A: about half the screen). Record his "you decide" there as the answer.
+      - **Apply the same rule to Notes (`.np-card`), which does NOT meet it yet:** small Notes is content-sized (`styles.css` ~7374 `width: min(420px, 94vw); max-height: min(86vh, 86dvh)`), so with a long list of notes the small card grows to ~86% of a phone screen, the same failure #969 fixed for Help.
+      - Fix: in the same `@media (max-width: 700px)` block as #969's rule, add `.np-card:not(.pb-big) { max-height: clamp(min(300px, 86vh), 52vh, 460px); max-height: clamp(min(300px, 86dvh), 52dvh, 460px); }`. The list scrolls inside, and Add/Done stay visible (check the footer). Width is already a box at 94vw; consider `calc(100vw - 56px)` plus `min-width: 0` to match Help. Bump `styles.css?v=`.
+      - Test: seed 20 notes, then open Notes small at 380 and 440. Height ≤ 60% of big's, and big still fills the screen as the positive control. Fails on HEAD with enough notes.
+
+      Clauses (his):
+      1. [x] ✅ v17.12 — For the small/big panels, decide what is best yourself…
+      2. [x] ✅ v17.12 — …as long as SMALL never takes up the whole screen and is a box on the screen (Help meets it since v17.11; Notes does not yet)…
+      3. [x] ✅ v17.12 — …and BIG takes up the whole screen.
+      ✅ **v17.12 — SHIPPED** (queue 975): small Notes on a phone is the same box as small Help (324×416 against big 360×780 at 380 with 20 notes; was 344×688); Add and Done stay whole; PC unchanged. Only Notes and Help have the small/big grip, and both now meet his rule.
+
+
+- [x] **976 — PC (and Mac sometimes): the filter menus' sideways rows show a tacky WHITE scrollbar** (28 Sep, ~13:53 AWST, via INBOX — his words)
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 28 Sep 2026, ~13:53 AWST — PC (and Mac sometimes): the filter menus' sideways rows show a tacky WHITE scrollbar
+
+      **His words (verbatim):** "On pc to slide through the filter menus theres a white slider bar that looks really tacky, and it shows up on mac sometimes too, i think this stemmed from the main use of sliding being trackerpad"
+
+      His clauses:
+      1. On PC, the filter menus' sideways-sliding rows show a white scrollbar that looks really tacky.
+      2. It sometimes shows on Mac too.
+      3. His read of the cause: sliding was designed around a trackpad.
+
+      **Logger's plan (not his words). The cause is found in the code; the full plan with rendered options follows as its own block:**
+      - `styles.css` ~7808–7812: `@media (hover: hover) and (pointer: fine) { .flt-grid { scrollbar-width: thin; } .flt-grid::-webkit-scrollbar { display: block; height: 6px; } .flt-grid::-webkit-scrollbar-thumb { background: var(--line); … } }`. This was added on purpose ("a desktop pointer has no swipe, so the rail keeps a visible bar there").
+      - **Why it is WHITE:** since Chrome 121, once the standard `scrollbar-width` (or `scrollbar-color`) is set on an element, Chrome IGNORES that element's `::-webkit-scrollbar*` rules. So the dark `var(--line)` thumb never applies and Chrome draws its default light bar. His point stands: the bar only exists because a mouse cannot swipe.
+      - **On Mac:** macOS draws a bar whenever "Show scroll bars" is "Always", or a mouse is connected. That fits "sometimes". To be confirmed in the plan.
+      - Direction: replace the bar with mouse-friendly controls instead of restyling it. Recommended: no bar anywhere, arrow buttons at the row's ends that appear on hover when there is more to see, plus the existing page dots (`.flt-dots`, #565). Trackpad swipe and shift+wheel keep working. The options are being rendered for him (#545).
+
+      Clauses (his):
+      1. [x] ✅ v17.12 — On PC, the filter menus' sideways-sliding rows show a white scrollbar that looks really tacky.
+      2. [x] ✅ v17.12 — It sometimes shows on Mac too.
+      3. [x] ✅ v17.12 — (his read of the cause) sliding was designed around a trackpad — make it work for a mouse without the bar.
+      ⏳ PLAN PENDING: the logging chat is drawing ONE plan with rendered options for this and #977 together (tools/design/plans/2026-09-28-rail-scrollbar/, in progress) — build both when its PLAN READY block lands.
+      ✅ PLAN LANDED (28 Sep ~18:01, via INBOX — covers #976 AND #977; moved whole):
+
+
+      ### 28 Sep 2026, ~18:01 AWST — PLAN READY for #976 (the white scrollbar on PC filter rows) and #977 (the effects menu's New row a mouse cannot slide). Build them together
+
+      **Logger's plan (not his words). Full plan: `tools/design/plans/2026-09-28-rail-scrollbar/plan.md`.** Verbatim code is in `code/`: `rail-arrows.js` (a new `js/rail-arrows.js`, `FM.railArrows`), `rail.css` and `tests-rail.js` (queue numbers 976/977 already filled in). `review-apply.py` is a trial-apply script, **to be run only in a scratch copy, never in the repo.**
+      - Reviewed twice. The first reviewer stalled; the re-run gave "ready after fixes":
+        - Trial-applied cleanly in a `git archive HEAD` copy at v17.11 (2d06a3f5), with every anchor matching exactly once.
+        - The new tests FAIL on HEAD for the right reason, and 976 test 1, 977 test 3, 565, 463 and 917.13 PASS on the build.
+        - Removing the attach-once guard turns test 1 red.
+        - Two script bugs were fixed: the helper was never copied, and styles.css was patched by line number instead of by text.
+      - **The cause, confirmed by measurement plus the Chrome docs:** `styles.css` ~7809–7813 sets `scrollbar-width: thin` on `.flt-grid` for a desktop pointer. Since Chrome 121 that standard property disables the element's `::-webkit-scrollbar` rules, so the dark thumb never applied and Chrome drew its default light bar. A Mac draws it too with a mouse or "always show scroll bars".
+      - **Option A (recommended):**
+        - No bar. Round ‹ › buttons appear at a row's ends on mouse-over, only when there is more that way. A click moves one page and snaps to tiles, and two quick clicks move two pages. The #565 dots are kept, trackpad swipe and shift+wheel still work, and it is keyboard-reachable.
+        - The same helper goes on the **New row in BOTH the effects and audio-effects browsers**, holding the auto-scroll while it pages.
+        - Touch and phone are unchanged (measured at 380).
+        - Other options drawn and sent: B (a thin dark bar on hover), C (the wheel slides the row, but it grabs the panel's scrolling for about 24 wheel clicks), A2 (the Add menu's ‹ • • › under each row).
+      - ❓ his picks, sent at ~18:01 (`rail-options.jpg`, `new-row.png`, `other-bars-D.png`). **Pending. If no answer when you reach this: build A + the New row, as the plan says.**
+        - ❓ASK 1: A / B / C / A2. **A recommended.**
+        - ❓ASK 2: the arrows on the New rows too. Recommended yes, and it is his own #977, so build it.
+        - ❓ASK 3 (my finding, hunt tier): the template "Insert your Media" slot row shows the same white bar at 8+ slots. Same arrows? Recommended yes. Plan §6.5; build only on his yes.
+        - ❓ASK 4 (my finding, hunt tier): **D**, one line `body:not(.home-open){color-scheme:dark}` that darkens the inspector's up-down bar and the timeline's sideways bar, which are also white on PC. Recommended yes. Plan §6.8; build only on his yes.
+      - Not run in review: test 2 (it needs `tests/_cdp.py`'s real-input driver), test 931 (the New strip pause, real input), the 380 pass and the full suite. The audio browser's arrow height (`--rail-arrow-y`) is unmeasured. Run these per plan §9.
+      ✅ **v17.12 — SHIPPED** (queue 976, with #977): option A by the plan's rule — no bar (the white bar was Chrome ignoring the dark thumb once scrollbar-width was set), round ‹ › on mouse-over only where there is more, one page per click, never clicking through to a tile at a row's end, dots that count real places; trackpad, shift+wheel and touch unchanged. NOT built (need his yes): §6.5 the template slot row, §6.8 “D” darkening the inspector's and timeline's own white bars.
+
+
+- [x] **977 — PC without a trackpad: the effects menu's “New” row cannot be slid at all** (28 Sep, ~13:54 AWST, via INBOX — his words)
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 28 Sep 2026, ~13:54 AWST — PC without a trackpad: the effects menu's "New" row cannot be slid at all
+
+      **His words (verbatim):** "also on pc without trackpad there seems to be no way to slide the new section in effects menu"
+
+      His clauses:
+      1. On PC with no trackpad (a mouse), the "New" section of the effects menu has no way to slide sideways.
+
+      **Logger's plan (not his words):**
+      - The row is `.fxb-featured`, built in `js/fx-browser.js` ~1057. The same class is used by the audio-effects browser, `js/audio-fx-browser.js` ~134, which has the same problem. `styles.css` ~1905: `overflow-x: auto; scrollbar-width: none;` plus `::-webkit-scrollbar { display: none }`, with no desktop fallback at all, no arrows or dots. A mouse wheel scrolls the sheet vertically and cannot reach the cards off to the right. Shift+wheel works, but nobody knows it.
+      - **This is the same fix as the white-scrollbar block above.** One shared "sideways row for a mouse" treatment for EVERY horizontal rail: no native bar, hover arrows at the row ends when there is more in that direction, and trackpad swipe kept. The plan being drawn for the filter rows is being extended to cover `.fxb-featured` (both browsers) and every other rail a mouse cannot scroll today. It arrives as one PLAN READY block covering both requests. Build them together.
+
+      Clauses (his):
+      1. [x] ✅ v17.12 — On PC with no trackpad (a mouse), the “New” section of the effects menu has no way to slide sideways (the audio-effects browser's row too).
+      ⏳ PLAN PENDING: the same plan as #976 (one shared “sideways row for a mouse” treatment for every rail) — build with #976 when its PLAN READY block lands.
+      ✅ PLAN LANDED (28 Sep ~18:01) — the one plan for #976 and #977 is moved whole into #976; build them together (A + the New rows by the plan's own rule if no pick has come).
+      ✅ **v17.12 — SHIPPED** (queue 977): the effects browser's New row and the audio browser's Featured row have the same ‹ › for a mouse; a click pages and holds the auto-scroll.
+
+
+- [x] **978 — PC: the settings cog opens Friends + Canvas settings together, like the phone, and they swap cleanly** (28 Sep, ~13:59 AWST (plan ready ~14:40), via INBOX — his words)
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 28 Sep 2026, ~13:59 AWST — PC: bring the phone's Friends + Canvas settings pair to PC. The settings cog opens both, and they swap cleanly
+
+      **His words (verbatim):** "on pc there isnt a way to access the friends invite menu like there is on mobile. - Settings cog then swap between them in a really clean way."
+
+      His clauses:
+      1. On PC there is no way into the friends invite menu the way there is on mobile.
+      2. Make it work like mobile: the Settings cog, then swap between them (Friends ↔ Canvas settings) in a really clean way.
+
+      **Logger's plan (not his words). Code located; a full plan with rendered PC options follows as its own block:**
+      - On the phone this is #945 (v17.04): `js/app.js` ~8183–8430 (the FRIENDS BESIDE CANVAS SETTINGS pair, the FLIP swap ~8236, `openCanvasDialog({ block: 'last' })` ~8427 remembering the last block), and `js/collab-ui.js` ~821+ (the Friends block, `U.renderFriends`). It is gated to the phone.
+      - On PC today, the invite lives on the **Share button beside Export** (v17.02, #944). The PC Canvas settings card hangs from the cog and opens upward (#241/#252). He wants the same door as the phone.
+      - Direction: reuse #945's pair on PC. Canvas settings from the cog opens WITH the Friends block, one small and one big, and ⤢ swaps them with the same FLIP flight; reopening lands on the last block.
+        - ❓ASK: keep the Share button beside Export as a shortcut that opens the same pair with Friends big, like the phone's person+? **Recommended: yes**, because it is how people look for sharing on PC.
+        - PC has the width for a side-by-side layout, so the plan renders both "stacked like the phone" and "side by side" at 900/1280/1920 for him to pick (#545). **Don't start before the PLAN READY block lands.**
+
+      ### 28 Sep 2026, ~14:40 AWST — PLAN READY: PC Friends + Canvas settings from the cog (the block above, "on pc there isnt a way to access the friends invite menu")
+
+      **Logger's plan (not his words). Full plan: `tools/design/plans/2026-09-28-pc-friends-pair/plan.md`.** Reviewed by a second reader ("ready after fixes", 14 fixes applied in the file: `cvPlace` written out in full, exact cut/insert boundaries in `openCanvasDialog`, `setTimeout` instead of rAF in `cvOnWidth` per LOOP rule 11, a reduced-motion specificity fix, in-flight widths corrected, test wrappers tightened).
+      - MEASURED (v17.11, real app):
+        - With the feature off, a PC has NO door to Friends at all. The phone's person+ is `display:none` above 700px.
+        - With it on, Share beside Export opens a different centred card that starts sharing on the first press, which the phone never does.
+        - Four gates keep the pair phone-only:
+          - `openCanvasDialog`'s phone check (`js/app.js` ~8380);
+          - all the pair CSS inside the phone-only media rule (`styles.css` ~3461–3538);
+          - `cvOnWidth` tearing the pair down across the phone width (~8296);
+          - `U.openPeople` (`js/collab-ui.js` ~1488) routing a PC to the old Share card.
+      - Options drawn in the real app at 900/1280/1920 and SENT to him (`comparison.jpg`, `A-swap.jpg`, `B-swap.jpg`, `fit.jpg`):
+        - A, stacked like the phone. Its crossing flight lifts the pair up to 193px off the cog for a third of the swap, and 58% of the Friends list is visible at 1280×800.
+        - **B, side by side (recommended).** Friends sits left, Canvas beside the cog, and ⤢ slides the divider. Both blocks stay on the cog's row within 3px the whole way, and 83% of the Friends list is visible. It falls back to A's stack when the window is too narrow (cog right edge < 562px, a window of about 744px).
+        - ❓ASK 1: A or B. **His pick: pending.** If none has arrived when you reach this, build B.
+      - Decided: the cog reopens on the last block (per device, like the phone); opening the pair never starts sharing; with the feature off the pair shows the one switch.
+        - ❓ASK 2: Share beside Export opens this same pair with Friends big. **Recommended yes**, and the faces chip, LIVE pill and Home's "Share live…" follow. **Pending.** Part 2 of the plan is built only on his yes, or by default if no answer.
+      - Code: Part 1 (the cog) buildable now. Version bumps are in the plan (`styles.css` → 735, `app.js` → 462, `collab-ui.js` → 16); re-read them from your tree. Seven new tests (T1–T7) are written to fail on HEAD, with a phone control unchanged at 380 and a pixel check that the phone is identical. The plan names the 945/944 tests to retune and when. **Every new test must run inside `with945`**, because the PC now honours `fm.cvPair`.
+
+      Clauses (his):
+      1. [x] ✅ v17.12 — On PC there is no way into the friends invite menu the way there is on mobile.
+      2. [x] ✅ v17.12 — Make it work like mobile: the Settings cog, then swap between them (Friends ↔ Canvas settings)…
+      3. [x] ✅ v17.12 — …in a really clean way.
+      4. [x] ✅ v17.12 — (#545) options drawn and sent (A stacked / B side by side, B recommended) — build B if no pick has come (the plan's rule).
+      5. [x] ✅ v17.12 — (ASK 2) Share beside Export opens the same pair with Friends big — recommended yes, built by default if no answer (Part 2 of the plan).
+      ✅ **v17.12 — SHIPPED** (queue 978): B side by side (his pick was pending — the plan's rule), stacked like the phone below ~744px; Part 2 by default: Share beside Export opens the pair with Friends big and no longer starts sharing. Say “pair A” for the stacked look everywhere, or “Share separate” to put Share back.
+
+
+- [ ] **979 — PC 720–890px wide: the copy button and the add-row switch sit under the inspector's A/S/D clip keys (hunt LOW #979)** (28 Sep — found by #970's reviewer; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Pre-existing (identical on v17.11): the transport row is centred on the screen while the inspector is a fixed 300px, so the row's left cluster spills under the clip keys — elementFromPoint on the copy button (#btn-layermenu) returns #key-d/#key-s at 720–860px, whatever the selection; at 701–720 the back button's right end sits under #tl-headtap.
+      1. [ ] At every PC width from 701px, every control on the transport row takes its own click.
+
+- [ ] **980 — PLAN (do NOT build): the simple “CapCut / Premiere Pro” editor alongside today's “After Effects” one — a quick switch, project conversion, and two-mode live collab** (28 Sep, ~23:39 AWST, via INBOX — his words)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+
+
+      ### 28 Sep 2026, ~23:39 AWST — PLAN (do NOT build): the simple "CapCut / Premiere Pro" editor alongside today's "After Effects" one, with a quick switch, project conversion, and two-mode live collab
+
+      **His words (verbatim):** "I want you to brain storm and figure out how we're going to integrate the CapCut version into this. So like pretty much all the same features we've got now, like, you know, but like we've already talked about this. It's basically like a simple version and a complicated version. And right now we've got the complicated version, but there needs to be a way to quickly switch over to the simple version. That is basically like Premiere Pro. Right now we're basically building the After Effects version, but there needs to be a Premiere Pro version. And I just want you to think about how that's all going to work, how you're going to easily be able to switch over to it, whether we should allow you to turn a project that's already in the Premiere. I mean, that's already in the After Effects version into the Premiere Pro version and so forth. How switching them around is going to work. and how someone using the CapCut version or Premiere Pro version is going to be able to do a collab with someone who is also using the After Effects slash a light motion version. Like how are they both going to work on it at the same time and not interfere? This is a big job and I want you to think out every little bit of it and Basically, you're going to have to try and explain to me how it's going to work, how you foresee it happening, and don't build it until I say to do it, but definitely build visualizers and describe how it's going to work and how the code is going to implement. So if I do agree on it, then it'll be easy to actually go for it and do it. And yeah, just work on that. It's going to be a big project. Feel free to use lots of agents. You know, I don't care if you burn through my usage. I've got a lot of usage that I'm not even getting through. And yeah, you know, get this going. Make it good. Make it actually feel good. And pretty much what we were building before is a simple way to have a complex system with lots of different ways to edit it. Like what we have now is fairly simple to use once you learn it, but it has a lot in it but basically this other version is like gonna be very dumbed down very simple like someone who doesn't even know how to edit can figure it out like and it's also gonna be there just to be useful for someone who is experienced but just wants to quickly put together something nice and quick kind of like Premiere Pro so take a lot of notes from Premiere Pro you know just a quick and easy way to put clips together make them look nice you know maybe add some text and some captions But you're not necessarily doing super advanced 3D effects and lots of stuff. So yeah, I think it would be cool to have that as an option. See how much stuff is in CapCut because people think CapCut is pretty good and simple. So whatever level of complicatedness CapCut is, we can probably get away with, especially for the mobile side. The PC side, like it's, you know, it's pretty much just going to be like, if you are on PC and on mobile, you don't have to learn both. Like they're both, they both essentially function the same kind of like how it already is now. So yeah, get to that. It's a big job. Take it seriously. Put a lot of effort into it. Make sure you have a loop running. So you just keep going and just that loop just keeps on ticking every minute and you don't stop until it's all done. And You've got all the visualizers from in. You, you know, keep rethinking it through, seeing if there's anything, you know, like how is it going to work? How are you going to decide when you start a project? How is it all going to work out? Like definitely as well, because basically how CapCut's timeline works is like, it's all just on one timeline where like, it's like clip after clip after clip, but with After Effects and like, well, what we're doing free motion It's like the timeline is just like, it's all, it can all go anywhere. You can drag any layer anywhere, put anything on top of anything. Like it's not just like add a clip and then it gets put on the timeline and you decide which order it goes in. And then if you want to look at the overlays, you go to the overlay section, effects, you go to the effects section. It's no, it's like, it's all there. It's all sitting in front of you. And you have to know how to use it and how to layer it, etc. So yeah, get to it."
+
+      His clauses:
+      1. Design how a simple "CapCut / Premiere Pro" editor is integrated alongside today's complex "After Effects / Alight Motion" FreeMotion, with pretty much the same features underneath.
+      2. A way to switch QUICKLY between the two.
+      3. Decide whether an existing complex-mode project can be turned into a simple-mode one (and back), and how switching around works.
+      4. Live collab between a simple-mode user and a complex-mode user on the same project at the same time, without interfering.
+      5. Think out every bit. Explain how it will work and how the code will implement it. **Build VISUALIZERS. DO NOT BUILD THE FEATURE until he says.**
+      6. Simple mode is very dumbed down (a non-editor can figure it out) and also fast for an experienced person. Take notes from Premiere Pro: clips together, make them look nice, text, captions. No advanced 3D effects.
+      7. Research CapCut. Its level of complexity is acceptable, especially on mobile.
+      8. PC and mobile work the same, so nobody learns two apps (as now).
+      9. Decide how a project starts in one mode or the other.
+      10. The heart of it: the timeline model. CapCut is one main track, clip after clip, with overlays/effects/text in their own sections; FreeMotion is layers anywhere on top of anything.
+      11. Use lots of agents. Keep a loop ticking every minute until it is all done. Keep rethinking it.
+
+      **Logger's note (not his words):** this is the go-ahead to PLAN #923 ("easy editor and deep editor, needs his approval before any build"). The approval is for planning and visualizers ONLY. #966 clause 5 ("this is the complex version") is context. **The LOGGING chat is running the whole design project**, with its own every-minute loop in that chat, at his request. Everything lands in `tools/design/plans/simple-mode/` (see `STATUS.md` there). **Builder: log this as a numbered item with `BUILT OUT UNTIL HE says to build the simple mode`, so it is never handed out as work, and do not touch the feature code for it.** Link #923 to it.
+
+      Clauses (his):
+      1. [ ] Design how a simple “CapCut / Premiere Pro” editor is integrated alongside today's complex “After Effects / Alight Motion” FreeMotion, with pretty much the same features underneath.
+      2. [ ] A way to switch QUICKLY between the two.
+      3. [ ] Decide whether an existing complex-mode project can be turned into a simple-mode one (and back), and how switching around works.
+      4. [ ] Live collab between a simple-mode user and a complex-mode user on the same project at the same time, without interfering.
+      5. [ ] Think out every bit; explain how it will work and how the code will implement it; build VISUALIZERS — DO NOT BUILD THE FEATURE until he says.
+      6. [ ] Simple mode is very dumbed down (a non-editor can figure it out) and fast for an experienced person — notes from Premiere Pro: clips together, make them look nice, text, captions; no advanced 3D effects.
+      7. [ ] Research CapCut — its level of complexity is acceptable, especially on mobile.
+      8. [ ] PC and mobile work the same, so nobody learns two apps.
+      9. [ ] Decide how a project starts in one mode or the other.
+      10. [ ] The heart of it: the timeline model (CapCut's one main track with overlays/effects/text in their own sections, vs FreeMotion's layers anywhere).
+      11. [ ] Use lots of agents; keep a loop ticking every minute until it is all done; keep rethinking it (the LOGGING chat runs this design project, at his request).
+      The design project runs in the LOGGING chat (tools/design/plans/simple-mode/, STATUS.md there); this chat does not touch the feature code for it. Linked from #923.
+      BUILT OUT UNTIL HE says to build the simple mode.

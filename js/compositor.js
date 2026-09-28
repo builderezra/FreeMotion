@@ -13367,46 +13367,91 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         [0.3692,0.1452,1],[0.3646,0.1278],[0.3795,0.0992,1],[0.4045,0.0823,1],[0.467,0.0656,1]
       ],
     ];
-    /* CAR — rebuilt from a published pictogram (queue 961). His words, 26 Sep: *"The car shape needs to be improved."*
-       The v5.33 car was drawn from named landmarks with its tyres as separate rings sitting in arches, and its own comment
-       recorded the flaw: the tyre-to-arch gap was 0.023 of the box, 0.59px at the Add menu's 34px icon, so the ring ran
-       into the body and the wheels read as dots. Done the way the people finally landed (#929): traced from a real
-       pictogram rather than drawn — Pictogrammers Material Design Icons `car-side` (Apache-2.0,
-       pictogrammers.com, library/mdi/icon/car-side), option A of three on the options sheet (A this, B Phosphor
-       `car-profile`, C the AIGA transport sign) — decided under rule 16 while he had not answered; say "car B" or "car C"
-       to change it (tools/design/plans/2026-09-26-car/). Converted by the plan's build.py: every arc is split into equal
-       pieces so a smooth point's handle is the same both sides (FM.pointCtrl handles are symmetric), a kink stays a corner,
-       and the drawing sits at its own 1.833:1 proportion centred in the unit box — so SHAPE_ASPECT.car stays [1, 1] and
-       every Car already in a saved project keeps round wheels.
-       Like every published car pictogram the tyre is PART of the silhouette, a round bump below the body, and the hub is
-       the hole: nothing can close up at icon size. Measured through FM.renderScene at 1x in the icon's 25.5px box: hubs
-       3.34px across (were 2.19), 7.9px² open each (were 4.1), wheels 4px below the body (were 2). 40 points, was 84.
-       The body winds clockwise and every hole anticlockwise, so nonzero fill leaves the windows and hubs open. */
+    /* CAR — redrawn v5.33. Ezra had rejected it twice ("you did such a shit job on the wheels for the
+       car shape", then "fix the car shape again, but use other agents to hold you accountable coz you
+       keep doing shit"), so five candidates were drawn independently against a harness that renders a
+       shape at 520px AND at the 34px add-menu size, and three judges scored the PICTURES on three
+       lenses — silhouette, drawing craft, icon legibility. This one won all three, 8/8/8; the shape it
+       replaces scored 2/2/2 from every judge. One of them named the old problem exactly: its ink box
+       was 57x58px, literally square, and a car in profile is a wide shape — so it read as a bubble-van
+       blob with rings printed on top of it, tyres crossing the floor line, and a V-notch bitten out of
+       the front bumper.
+
+       It is a POLYLINE OF NAMED LANDMARKS (rocker, cowl, beltline, tailgate shoulder, arch lip) with a
+       true circular fillet at each corner, so every panel is dead straight and every curve is a radius
+       that was chosen rather than traced — which is what kills the wobble. The 5-element points carry
+       MANUAL bezier handles ([x, y, 1, hx, hy], honoured by FM.pointCtrl) so the arcs are real circles
+       rather than Catmull-Rom approximations through them.
+
+       Verified geometry: the body winds one way and all four holes the other, so nonzero fill leaves
+       the windows and hubs open; both wheel centres sit on y = 0.662 with equal radii and concentric
+       hubs; the body bottom is 0.710 against a tyre bottom of 0.760, so nothing hangs below the ground
+       line; and the tyres are strictly inside the body's x extent.
+
+       Known weak point, recorded rather than papered over: the tyre-to-arch gap is 0.023 normalised,
+       sub-pixel below about 60px, so at the 34px icon the arches close up and the wheels read as hub
+       dots on the body. The icon judge still placed it top of the six. */
     S.car = [
-      // body — roof, windscreen, bonnet, nose, front wheel, sill, rear wheel, tail, rear screen (the tyres are the bumps)
+      // outer body — rear valance, rear arch, sill, front arch, front valance, nose, bonnet,
+      // windscreen, roof, backlight, tailgate
       [
-        [0.6745,0.2382],[0.8055,0.4127],[0.8927,0.4127,1,0.0484,0],[0.98,0.5,1,0,0.0484],[0.98,0.6309],[0.8927,0.6309],
-        [0.8824,0.6819,1,-0.0066,0.0157],[0.8544,0.7235,1,-0.0178,0.0178],[0.7618,0.7618,1,-0.0361,0],
-        [0.6693,0.7235,1,-0.0178,-0.0178],[0.6412,0.6819,1,-0.0066,-0.0157],[0.6309,0.6309],[0.3691,0.6309],
-        [0.3588,0.6819,1,-0.0066,0.0157],[0.3307,0.7235,1,-0.0178,0.0178],[0.2382,0.7618,1,-0.0361,0],
-        [0.1456,0.7235,1,-0.0178,-0.0178],[0.1176,0.6819,1,-0.0066,-0.0157],[0.1073,0.6309],[0.02,0.6309],
-        [0.02,0.5,1,0,-0.0242],[0.0455,0.4382,1,0.0158,-0.0158],[0.1073,0.4127],[0.2382,0.2382],
+        [0.915,0.71,1,-0.0088,0],[0.899,0.694,1,0,-0.0088],[0.899,0.662,1,0,-0.0321],[0.8636,0.5764,1,-0.0227,-0.0227],[0.778,0.541,1,-0.0321,0],[0.6924,0.5764,1,-0.0227,0.0227],[0.657,0.662,1,0,0.0321],[0.657,0.694,1,0,0.0088],[0.641,0.71,1,-0.0088,0],[0.365,0.71,1,-0.0088,0],[0.349,0.694,1,0,-0.0088],[0.349,0.662,1,0,-0.0321],[0.3136,0.5764,1,-0.0227,-0.0227],[0.228,0.541,1,-0.0321,0],[0.1424,0.5764,1,-0.0227,0.0227],[0.107,0.662,1,0,0.0321],[0.107,0.694,1,0,0.0088],[0.091,0.71,1,-0.0088,0],[0.0566,0.71,1,-0.016,0],[0.0267,0.6814,1,-0.0007,-0.016],[0.0225,0.5912,1,-0.0003,-0.0068],[0.0249,0.5712,1,0.0019,-0.0065],[0.0492,0.4905,1,0.0019,-0.0063],[0.0583,0.4733,1,0.0041,-0.0051],[0.2354,0.2555,1,0.008,-0.0098],[0.268,0.24,1,0.0126,0],[0.5352,0.24,1,0.0131,0],[0.5686,0.2566,1,0.0079,0.0104],[0.6981,0.4266,1,0.0051,0.0067],[0.719,0.4389,1,0.0083,0.0012],[0.9099,0.4661,1,0.0127,0.0018],[0.9402,0.4866,1,0.0065,0.0111],[0.9746,0.5457,1,0.0035,0.0061],[0.98,0.5658,1,0,0.0071],[0.98,0.6788,1,0,0.0172],[0.9488,0.71,1,-0.0172,0],
       ],
-      // rear side window (hole — winds opposite the body so nonzero fill leaves it open)
+      // front window (hole — winds opposite the body so nonzero fill leaves it open)
       [
-        [0.4345,0.3036],[0.2709,0.3036],[0.1884,0.4127],[0.4345,0.4127],
+        [0.436,0.288,1,-0.0072,0],[0.423,0.301,1,0,0.0072],[0.423,0.412,1,0,0.0072],[0.436,0.425,1,0.0072,0],[0.6128,0.425,1,0.0108,0],[0.6231,0.4041,1,-0.0065,-0.0086],[0.5386,0.2931,1,-0.0025,-0.0032],[0.5283,0.288,1,-0.0041,0],
       ],
-      // front side window (hole)
+      // rear window (hole)
       [
-        [0.5,0.3036],[0.5,0.4127],[0.7243,0.4127],[0.6418,0.3036],
+        [0.2744,0.288,1,-0.0039,0],[0.2643,0.2928,1,-0.0025,0.003],[0.174,0.4038,1,-0.0069,0.0085],[0.1841,0.425,1,0.0109,0],[0.364,0.425,1,0.0072,0],[0.377,0.412,1,0,-0.0072],[0.377,0.301,1,0,-0.0072],[0.364,0.288,1,-0.0072,0],
       ],
-      // rear hub (hole)
+      // front tyre, then its hub (hole)
       [
-        [0.2382,0.5655,1,-0.0361,0],[0.1727,0.6309,1,0,0.0361],[0.2382,0.6964,1,0.0361,0],[0.3036,0.6309,1,0,-0.0361],
+        [0.876,0.662,1,0,0.026],[0.8473,0.7313,1,-0.0184,0.0184],[0.778,0.76,1,-0.026,0],[0.7087,0.7313,1,-0.0184,-0.0184],[0.68,0.662,1,0,-0.026],[0.7087,0.5927,1,0.0184,-0.0184],[0.778,0.564,1,0.026,0],[0.8473,0.5927,1,0.0184,0.0184],
       ],
-      // front hub (hole)
       [
-        [0.7618,0.5655,1,-0.0361,0],[0.6964,0.6309,1,0,0.0361],[0.7618,0.6964,1,0.0361,0],[0.8273,0.6309,1,0,-0.0361],
+        [0.821,0.662,1,0,-0.0114],[0.8084,0.6316,1,-0.0081,-0.0081],[0.778,0.619,1,-0.0114,0],[0.7476,0.6316,1,-0.0081,0.0081],[0.735,0.662,1,0,0.0114],[0.7476,0.6924,1,0.0081,0.0081],[0.778,0.705,1,0.0114,0],[0.8084,0.6924,1,0.0081,-0.0081],
+      ],
+      // rear tyre, then its hub (hole)
+      [
+        [0.326,0.662,1,0,0.026],[0.2973,0.7313,1,-0.0184,0.0184],[0.228,0.76,1,-0.026,0],[0.1587,0.7313,1,-0.0184,-0.0184],[0.13,0.662,1,0,-0.026],[0.1587,0.5927,1,0.0184,-0.0184],[0.228,0.564,1,0.026,0],[0.2973,0.5927,1,0.0184,0.0184],
+      ],
+      [
+        [0.271,0.662,1,0,-0.0114],[0.2584,0.6316,1,-0.0081,-0.0081],[0.228,0.619,1,-0.0114,0],[0.1976,0.6316,1,-0.0081,0.0081],[0.185,0.662,1,0,0.0114],[0.1976,0.6924,1,0.0081,0.0081],[0.228,0.705,1,0.0114,0],[0.2584,0.6924,1,0.0081,-0.0081],
+      ],
+    ];
+    /* CAR (FRONT) — added beside the car above, never in place of it (queue 973). His words, 28 Sep: *"For car keep the
+       original and add the head on"*. The AIGA / US DOT transport sign's car (Car Rental and Taxi, 1974, public domain, so no
+       licence is owed) — the same sign family as the people he picked in #929 ("Do the airport sign"); option C on the #961
+       sheet (tools/design/plans/2026-09-26-car/), and his 28 Sep pick: keep the original car AND add this one.
+       A FRONT view: the windscreen and the two headlights are the holes, the wheels are the two feet below the bumper.
+       Converted by that plan's build.py: every arc is split into equal pieces so a smooth point's handle is the same both
+       sides (FM.pointCtrl handles are symmetric) and a kink stays a corner. It sits at its own 1.207:1 proportion centred in
+       the unit box, so SHAPE_ASPECT.carfront is [1, 1] — the car's rule, for the car's reason. At the Add menu's 34px the
+       headlights are 3.42px across, 9.0px² open each. The body winds one way and every hole the other, so nonzero fill
+       leaves the windscreen and headlights open. */
+    S.carfront = [
+      // body — roof, windscreen pillar, wing, bumper, right foot, under-bumper, left foot, wing, pillar
+      [
+        [0.4997,0.1024],[0.5929,0.1025],[0.7068,0.1042,1,0.043,-0.0015],[0.8096,0.1666,1,0.0229,0.05],[0.8923,0.3732],
+        [0.9582,0.4141,1,0.0142,0.0175],[0.98,0.4694,1,0.0007,0.0179],[0.98,0.7401],[0.9007,0.7401],
+        [0.9007,0.8312,1,0.0038,0.0868],[0.7591,0.8304,1,-0.0032,-0.0911],[0.7574,0.741],[0.2427,0.741],
+        [0.241,0.8305,1,-0.0032,0.0911],[0.0993,0.8313,1,0.0038,-0.0868],[0.0993,0.7401],[0.02,0.7401],
+        [0.02,0.4694,1,0.0007,-0.0179],[0.0418,0.4141,1,0.0142,-0.0175],[0.1077,0.3733],[0.1904,0.1666,1,0.0229,-0.05],
+        [0.2933,0.1042,1,0.043,0.0015],[0.4072,0.1025],
+      ],
+      // windscreen (hole — winds opposite the body so nonzero fill leaves it open)
+      [
+        [0.3028,0.176],[0.2702,0.1829,1,-0.009,0.0054],[0.2496,0.2132,1,-0.0046,0.0156],[0.1908,0.3691],[0.81,0.3699],
+        [0.7505,0.2096,1,-0.0145,-0.0323],[0.6873,0.1774,1,-0.0342,0.0008],[0.314,0.1762,1,-0.0038,-0.0002],
+      ],
+      // left headlight (hole)
+      [
+        [0.1057,0.5171,1,0,0.037],[0.1727,0.5842,1,0.037,0],[0.2398,0.5171,1,0,-0.037],[0.1727,0.4501,1,-0.037,0],
+      ],
+      // right headlight (hole)
+      [
+        [0.764,0.5171,1,0,0.037],[0.831,0.5842,1,0.037,0],[0.8981,0.5171,1,0,-0.037],[0.831,0.4501,1,-0.037,0],
       ],
     ];
     // ---- squircle + additions ----
@@ -13446,22 +13491,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     })();
     S.crown = [[[0.06,0.30],[0.27,0.60],[0.5,0.22],[0.73,0.60],[0.94,0.30],
                 [0.90,0.84],[0.855,0.88,1],[0.145,0.88],[0.10,0.84]]];
-    /* EYE — redrawn (queue 962). His words, 26 Sep: *"the eye shape needs to be heavily improved."* The old one was a thin almond
-       ring around a pupil drawn as a circle in the UNIT box — and the box it spawns in is 1.5 x 0.9, so the "round" pupil rendered as
-       a 1.66:1 ellipse and the white beside it was 3.2x wider than the white above it (measured at 512x307).
-       Traced from Bootstrap Icons "eye-fill" (MIT, github.com/twbs/icons): a pointed almond whose lids leave the corners with no
-       handle — so the corners are true corners here and the tops carry the SVG's own (±5, 0) handles, exactly — a white iris ring
-       (r 3.5 of a 16-wide eye) and a solid pupil (r 2.5). The catchlight is ours, up-left of the pupil where Fluent Emoji's "Eye"
-       (MIT, github.com/microsoft/fluentui-emoji) puts its highlight. Option B of three; plan and build.py in tools/design/plans/2026-09-26-eye/.
+    /* EYE — redrawn (queue 962), and his pick A (queue 973). His words, 26 Sep: *"the eye shape needs to be heavily improved."*;
+       28 Sep, choosing from the sheet: *"for eyeball do A"*. The old one was a thin almond ring around a pupil drawn as a circle in
+       the UNIT box — and the box it spawns in is 1.5 x 0.9, so the "round" pupil rendered as a 1.66:1 ellipse and the white beside
+       it was 3.2x wider than the white above it (measured at 512x307).
+       Traced from Google Material Icons "visibility" (Apache-2.0, github.com/google/material-design-icons): a solid almond with
+       blunt tips, a wide white iris ring and a solid pupil — the classic "show password" eye. Material's lids leave the corners
+       along a handle, which a corner point here cannot carry, so the lids are refitted to one top handle each (a Nelder-Mead fit
+       on the quarter curve): worst deviation 0.26 % of the eye's width. Option A of three (B was Bootstrap Icons "eye-fill" with a
+       catchlight, which v17.07 shipped; C added lashes); plan and build.py in tools/design/plans/2026-09-26-eye/.
        Drawn in the reference's own units, then mapped into the 5:3 box with x scaled by 0.6 against y, so every circle is a circle
-       in the SPAWNED box; SHAPE_ASPECT.eye is unchanged, so eyes already in projects keep their proportions.
-       Each sub-path is written already wound — lids clockwise, iris ring anticlockwise, pupil clockwise, catchlight anticlockwise —
-       because holeS() reverses the ORDER of points but not a manual handle's direction, which would turn every handle backwards. */
+       in the SPAWNED box; SHAPE_ASPECT.eye is unchanged, so eyes already in projects keep their proportions. Measured at 512x307:
+       pupil 116x115 (1.009:1), white 39px above it and 38px beside it.
+       Each sub-path is written already wound — lids clockwise, iris ring anticlockwise, pupil clockwise — because holeS()
+       reverses the ORDER of points but not a manual handle's direction, which would turn every handle backwards. */
     S.eye = [
-      [[0.0898,0.5],[0.5,0.03,1,0.2564,0.0],[0.9102,0.5],[0.5,0.97,1,-0.2564,0.0]],                                                // lids
-      [[0.5,0.2009,1,-0.0991,0.0],[0.3205,0.5,1,0.0,0.1652],[0.5,0.7991,1,0.0991,0.0],[0.6795,0.5,1,0.0,-0.1652]],                  // iris ring (hole)
-      [[0.5,0.2864,1,0.0708,0.0],[0.6282,0.5,1,0.0,0.118],[0.5,0.7136,1,-0.0708,0.0],[0.3718,0.5,1,0.0,-0.118]],                    // pupil
-      [[0.4615,0.3654,1,-0.0234,0.0],[0.4192,0.4359,1,0.0,0.0389],[0.4615,0.5064,1,0.0234,0.0],[0.5038,0.4359,1,0.0,-0.0389]],      // catchlight (hole)
+      [[0.0864,0.5],[0.5,0.03,1,0.3102,0.0],[0.9136,0.5],[0.5,0.97,1,-0.3102,0.0]],                                                // lids
+      [[0.5,0.1867,1,-0.1038,0.0],[0.312,0.5,1,0.0,0.173],[0.5,0.8133,1,0.1038,0.0],[0.688,0.5,1,0.0,-0.173]],                      // iris ring (hole)
+      [[0.5,0.312,1,0.0623,0.0],[0.6128,0.5,1,0.0,0.1038],[0.5,0.688,1,-0.0623,0.0],[0.3872,0.5,1,0.0,-0.1038]],                    // pupil
     ];
     S.note = [
       rot(circleS(0.335, 0.775, 0.175, 0.135, 10), 0.335, 0.775, -0.34),        // tilted head

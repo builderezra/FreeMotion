@@ -5865,93 +5865,7 @@
     }
   });
 
-  test('571 clause 3: pressing the empty timeline answers from the point you touched', { item: '571' }, async function () {
-    /* Queue 571 clause 3. Ezra: "do a nice little colourful reaction when you press on this screen,
-     * something that comes from where you tapped, like those keyboards that light but based on what
-     * button you press."
-     * TWO requirements in that sentence, and the second is the one easy to drop: it must come FROM the
-     * touch point, AND its colour must depend on WHERE that point was. A single fixed-colour ripple
-     * satisfies the first and quietly ignores the half he described most specifically — so the hue is
-     * asserted to CHANGE with position, not merely to exist.
-     * \u26a0 NOTHING HERE MEASURES MOTION. LOOP rule 11, confirmed again while building this: the preview
-     * pane reported document.hidden true, rAF fired 0 frames in 450ms, and a control animation sat at
-     * currentTime 0. So the animation cannot be timed from a run there, and asserting it would be
-     * asserting the pane's throttling. What IS checkable is structural: the element exists, in the right
-     * place, with the right hue, and it cleans itself up.
-     * \u26a0 THE TEARDOWN IS A setTimeout AND THAT IS LOAD-BEARING — an animationend listener never fires
-     * in a throttled tab, so the nodes would accumulate for as long as the app stayed open. This test
-     * would still pass with animationend in a live tab, which is why the reason is written here. */
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const layers0 = FM.scene.layers.slice();
-    try {
-      return await atPhoneWidth(async function () {
-        FM.scene.layers.length = 0;
-        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
-        await sleep(260);
-        const panel = document.getElementById('timeline-panel');
-        const tl = document.getElementById('timeline');
-        if (!panel || !panel.classList.contains('tl-empty-start')) throw new Error('not on the empty-start screen, so this is measuring the wrong thing');
-        if (typeof FM._tapBurst !== 'function') throw new Error('FM._tapBurst is missing — pressing the empty screen has no reaction at all (queue 571 clause 3)');
-        [].slice.call(tl.querySelectorAll('.tl-tapburst')).forEach(function (n) { n.remove(); });
-
-        const r = tl.getBoundingClientRect();
-        /* \u26a0 EVERY pointerdown IS CLOSED WITH A pointerup, AND THAT IS NOT TIDINESS — IT IS THE BUG
-           THIS TEST CAUSED. The first version pressed 27 times and never released, which left the
-           timeline's gesture state machine mid-gesture for every test that ran afterwards. THREE
-           unrelated tests went red — the flick tests and the phone-hold-to-move test — all reporting
-           "the fixture is not producing a real gesture", which is their own guard telling the truth
-           about a state THIS test had corrupted. A synthetic gesture has to finish, exactly like a real
-           finger does. (LOOP rule 17 is the same lesson from the effects browser: a test that leaves
-           machinery running is a test that breaks its neighbours.)
-           pointerup does NOT synthesise a click, so this cannot open the add sheet by accident — the
-           burst still fires on the down, which is what is being measured. */
-        const press = function (dx, dy) {
-          const opts = { bubbles: true, cancelable: true, clientX: r.left + dx, clientY: r.top + dy, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0 };
-          tl.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, opts, { buttons: 1 })));
-          tl.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, opts, { buttons: 0 })));
-        };
-
-        press(40, 60);
-        await sleep(40);
-        const bursts = [].slice.call(tl.querySelectorAll('.tl-tapburst'));
-        if (bursts.length !== 1) throw new Error('pressing the empty timeline produced ' + bursts.length + ' reactions, not one (queue 571 clause 3)');
-        const px = parseFloat(bursts[0].style.left), py = parseFloat(bursts[0].style.top);
-        if (Math.abs(px - 40) > 1 || Math.abs(py - 60) > 1) throw new Error('the reaction appeared at ' + px + ',' + py + ' but the press was at 40,60 — it has to come from the point he touched');
-        const hueA = bursts[0].style.getPropertyValue('--burst-h');
-        if (!hueA) throw new Error('the reaction has no colour of its own');
-
-        press(300, 320);
-        await sleep(40);
-        const all = [].slice.call(tl.querySelectorAll('.tl-tapburst'));
-        const hueB = all[all.length - 1].style.getPropertyValue('--burst-h');
-        if (hueA === hueB) throw new Error('two presses far apart both came out hue ' + hueA + ' — his ask was "like those keyboards that light but based on what button you press", so the colour has to follow the position');
-
-        for (let i = 0; i < 25; i++) press(100 + i, 100 + i);
-        const capped = tl.querySelectorAll('.tl-tapburst').length;
-        if (capped > 8) throw new Error(capped + ' reactions are live at once — a fast tapper builds a pile of nodes (queue 571 clause 3)');
-
-        await sleep(1000);
-        const leaked = tl.querySelectorAll('.tl-tapburst').length;
-        if (leaked !== 0) throw new Error(leaked + ' reaction nodes survived a second after the last press — they are not torn down, and in a backgrounded tab that leaks for as long as the app is open');
-
-        // --- CONTROL: this is the EMPTY screen's behaviour. With a layer, pressing must do nothing. ---
-        const L = FM.makeLayer('shape', { name: 'X', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
-        L.start = 0; L.duration = 3; FM.scene.layers.push(L);
-        FM.refreshAll(); FM.timeline.rebuild();
-        await sleep(260);
-        press(190, 200);
-        await sleep(60);
-        const onReal = tl.querySelectorAll('.tl-tapburst').length;
-        if (onReal !== 0) throw new Error('CONTROL FAILED — pressing a timeline that HAS layers also throws the reaction, so it fires over real clips while he is scrubbing. He asked for it on "this screen", the empty one.');
-      });
-    } finally {
-      const tl2 = document.getElementById('timeline');
-      if (tl2) [].slice.call(tl2.querySelectorAll('.tl-tapburst')).forEach(function (n) { n.remove(); });
-      FM.scene.layers.length = 0;
-      layers0.forEach(function (l) { FM.scene.layers.push(l); });
-      FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
-    }
-  });
+  // 571 clause 3 moved to the 964 tests: the burst became the whole-area press
 
   test('572: the effects BROWSER warns before you spend the pick, not after', { item: '572' }, async function () {
     /* Queue 572. Ezra, for the FOURTH time: "These effects still don't work, you've tried to fix it so
@@ -15797,41 +15711,42 @@
     });
   });
 
-  test('the car shape is car-shaped: level wheels, open holes, the wheels part of the silhouette', { item: 'car-shape' }, function () {
-    // v5.33, retuned for queue 961. Still pins the properties that were actually wrong in the car he rejected
-    // twice (a square blob, rings printed on a body, a floor line through the tyres) — but the tyres are no longer
-    // separate rings sitting in arches. Every published car pictogram draws the tyre AS PART OF the silhouette, a
-    // round bump below the body, with the hub as the hole: that is what keeps the wheel legible at icon size, where
-    // the old 0.023 arch gap closed up.
+  test('the car shape is car-shaped: level wheels, open holes, nothing below the ground line', { item: 'car-shape' }, function () {
+    // v5.33. Rejected twice by eye, so this pins the properties that were actually wrong rather than
+    // the look. The old shape had rings printed on a blobby body with the floor line running straight
+    // through them, tyres below the floor, and an ink box that was literally square (57x58) — which is
+    // why all three judges called it a bubble-van blob.
     const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.car;
-    if (!car || car.length < 4) throw new Error('FM.SHAPE_POLYS.car is missing or too simple');
-    const H = carHubs(car), b = H.body;
-    if ((b.x1 - b.x0) < (b.y1 - b.y0) * 1.4) {
-      throw new Error('the car is ' + (b.x1 - b.x0).toFixed(2) + ' wide by ' + (b.y1 - b.y0).toFixed(2) + ' tall — a car in profile is a WIDE shape; this is the blob the old one was');
-    }
-    if (H.holes < 3) throw new Error('only ' + H.holes + ' sub-paths wind against the body — the windows/hubs would fill in solid');
-    if (H.hubs.length !== 2) throw new Error('could not find two round wheel hubs in the shape (found ' + H.hubs.length + ')');
-    const [w1, w2] = H.hubs;
-    if (Math.abs(w1.cy - w2.cy) > 0.005) throw new Error('the wheels are not level (hub centres at y ' + w1.cy.toFixed(3) + ' and ' + w2.cy.toFixed(3) + ')');
-    if (Math.abs(w1.r - w2.r) > 0.005) throw new Error('the two wheels are different sizes');
-    if (w1.cx - w1.r < b.x0 || w2.cx + w2.r > b.x1) throw new Error('a wheel pokes outside the body outline');
-    // The tyre is the silhouette: under each hub the BODY outline reaches well below where it runs between the wheels.
-    // (read off the outline's on-curve points joined straight — plenty for "is the bottom here or there")
-    const lowestAt = xq => {
-      let m = -1;
-      const o = car[0];
-      for (let i = 0; i < o.length; i++) {
-        const p = o[i], q = o[(i + 1) % o.length];
-        if (p[0] === q[0] || (p[0] - xq) * (q[0] - xq) > 0) continue;
-        m = Math.max(m, p[1] + (q[1] - p[1]) * (xq - p[0]) / (q[0] - p[0]));
-      }
-      return m;
+    if (!car || car.length < 5) throw new Error('FM.SHAPE_POLYS.car is missing or too simple');
+    const bbox = sub => sub.reduce((a, p) => ({
+      x0: Math.min(a.x0, p[0]), x1: Math.max(a.x1, p[0]),
+      y0: Math.min(a.y0, p[1]), y1: Math.max(a.y1, p[1]),
+    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
+    const area = sub => {   // signed — the sign IS the winding, which decides whether a hole fills in
+      let s = 0;
+      for (let i = 0; i < sub.length; i++) { const a = sub[i], b = sub[(i + 1) % sub.length]; s += a[0] * b[1] - b[0] * a[1]; }
+      return s / 2;
     };
-    const between = lowestAt((w1.cx + w2.cx) / 2);
-    [w1, w2].forEach((w, j) => {
-      const under = lowestAt(w.cx);
-      if (!(under - between > w.r)) throw new Error('the ' + (j ? 'front' : 'rear') + ' tyre is not part of the silhouette: the body reaches y ' + under.toFixed(3) + ' under its hub against ' + between.toFixed(3) + ' between the wheels — a separate ring in an arch, which closes up at icon size');
-    });
+    const body = bbox(car[0]);
+    if ((body.x1 - body.x0) < (body.y1 - body.y0) * 1.4) {
+      throw new Error('the car is ' + (body.x1 - body.x0).toFixed(2) + ' wide by ' + (body.y1 - body.y0).toFixed(2) + ' tall — a car in profile is a WIDE shape; this is the blob the old one was');
+    }
+    // Holes must wind against the body, or nonzero fill paints them solid.
+    const bodyWind = Math.sign(area(car[0]));
+    const holes = car.slice(1).filter(sub => Math.sign(area(sub)) !== bodyWind);
+    if (holes.length < 3) throw new Error('only ' + holes.length + ' sub-paths wind against the body — the windows/hubs would fill in solid');
+    // The two tyres: same size, same centre line.
+    const rings = car.slice(1).map(bbox).filter(b => (b.x1 - b.x0) > 0.12 && Math.abs((b.x1 - b.x0) - (b.y1 - b.y0)) < 0.02);
+    if (rings.length < 2) throw new Error('could not find two round wheels in the shape');
+    const [w1, w2] = rings.slice(0, 2);
+    const cy1 = (w1.y0 + w1.y1) / 2, cy2 = (w2.y0 + w2.y1) / 2;
+    if (Math.abs(cy1 - cy2) > 0.005) throw new Error('the wheels are not level (centres at y ' + cy1.toFixed(3) + ' and ' + cy2.toFixed(3) + ')');
+    if (Math.abs((w1.x1 - w1.x0) - (w2.x1 - w2.x0)) > 0.01) throw new Error('the two wheels are different sizes');
+    // Tyres sit IN arches: they reach below the body's underside, and stay inside its width.
+    if (!(Math.max(w1.y1, w2.y1) > body.y1)) throw new Error('the tyres do not reach below the body — they are discs laid on a slab, not wheels in arches');
+    if (Math.min(w1.x0, w2.x0) < body.x0 - 0.001 || Math.max(w1.x1, w2.x1) > body.x1 + 0.001) {
+      throw new Error('a wheel pokes outside the body outline');
+    }
   });
 
   test('camera focus blur is symmetric about the focus plane', { item: 'cam-focus' }, function () {
@@ -20189,10 +20104,12 @@
 
 
   test('shapes: an added Car renders with ROUND wheels', { item: 'car-aspect' }, function () {
-    // v5.65, retuned for queue 961. SHAPE_ASPECT.car must stay [1, 1]: the drawing carries its own proportion
-    // inside the unit box, so any other box stretches the wheels by exactly the box ratio ("really wide and
-    // streched out"). The v5.33 car's tyres were separate ink blobs; the rebuilt car's tyre is part of the
-    // silhouette, so the wheel is measured by its HUB — the round hole — off the rendered image.
+    // v5.65: SHAPE_ASPECT.car still carried [1.76, 0.57] from the v3.96 image trace, but the v5.33
+    // redraw carries its own proportion inside the unit box (ink 0.9576 x 0.5200 of it) and draws
+    // both tyres as true circles there. The box only scales that drawing, so a non-square box turned
+    // every wheel into an ellipse by exactly the box ratio - 3.09:1, "really wide and streched out".
+    // Measured in PIXELS, not read off the declaration: the two tyres are separate ink blobs from the
+    // body (the arch cavity is open at the bottom), so each wheel's bbox comes off the rendered image.
     var savedScene = FM.scene, commit = FM.history.commit, autosave = FM.storage.autosave,
         save = FM.storage.save, dirty = FM.storage.markDirty;
     FM.history.commit = function () {}; FM.storage.autosave = function () {};
@@ -20207,54 +20124,48 @@
       FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
     }
     if (!L || L.shape !== 'car') throw new Error('FM.addShapeLayer("car") did not add a car layer');
-    var S = 680;
-    function hubsAt(w, h) {
-      // position lives in layer.transform, NOT on the layer - a top-level x/y here is silently ignored
-      var cl = Object.assign({}, L, { start: 0, duration: 5, fill: '#ffffff',
-        transform: Object.assign({}, L.transform, { x: S / 2, y: S / 2 }), shapeW: w, shapeH: h });
-      var c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
-      FM.renderScene(x, scene([cl], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
-      var d = x.getImageData(0, 0, S, S).data, n = S * S, bg = new Uint8Array(n), i;
-      for (i = 0; i < n; i++) bg[i] = d[i * 4] <= 127 ? 1 : 0;
-      for (i = 0; i < S; i++) {
-        if (!bg[i] || !bg[(S - 1) * S + i] || !bg[i * S] || !bg[i * S + S - 1])
-          throw new Error('the car render touches the canvas edge at ' + w + 'x' + h + ' - it is clipped, refusing to measure it');
+    // Same box ratio, rendered big enough that the 0.023-normalized tyre/arch gap survives even when
+    // the aspect is wrong (so a failure reports the ellipse, not "could not find the wheels").
+    var k = 600 / Math.max(L.shapeW, L.shapeH), S = 680;
+    // position lives in layer.transform, NOT on the layer - a top-level x/y here is silently ignored
+    // and the car renders half off the canvas (which is how this test first failed, on a good fix)
+    var cl = Object.assign({}, L, { start: 0, duration: 5, fill: '#ffffff',
+      transform: Object.assign({}, L.transform, { x: S / 2, y: S / 2 }),
+      shapeW: Math.round(L.shapeW * k), shapeH: Math.round(L.shapeH * k) });
+    var c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(x, scene([cl], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
+    var d = x.getImageData(0, 0, S, S).data, n = S * S, mask = new Uint8Array(n), i;
+    for (i = 0; i < n; i++) mask[i] = d[i * 4] > 127 ? 1 : 0;
+    var lab = new Int32Array(n).fill(-1), st = new Int32Array(n), blobs = [];
+    for (var p = 0; p < n; p++) {
+      if (!mask[p] || lab[p] >= 0) continue;
+      var id = blobs.length, sp = 0, cnt = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      st[sp++] = p; lab[p] = id;
+      while (sp > 0) {
+        var q = st[--sp], qx = q % S, qy = (q / S) | 0;
+        cnt++;
+        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+        if (qx > 0     && mask[q - 1] && lab[q - 1] < 0) { lab[q - 1] = id; st[sp++] = q - 1; }
+        if (qx < S - 1 && mask[q + 1] && lab[q + 1] < 0) { lab[q + 1] = id; st[sp++] = q + 1; }
+        if (qy > 0     && mask[q - S] && lab[q - S] < 0) { lab[q - S] = id; st[sp++] = q - S; }
+        if (qy < S - 1 && mask[q + S] && lab[q + S] < 0) { lab[q + S] = id; st[sp++] = q + S; }
       }
-      // the HOLES: background not reachable from the border
-      var lab = new Int32Array(n).fill(-1), st = new Int32Array(n), sp = 0, holes = [], id, p, q, qx, qy;
-      var flood = function (seed, tag, rec) {
-        sp = 0; st[sp++] = seed; lab[seed] = tag;
-        while (sp > 0) {
-          q = st[--sp]; qx = q % S; qy = (q / S) | 0;
-          if (rec) { rec.n++; if (qx < rec.x0) rec.x0 = qx; if (qx > rec.x1) rec.x1 = qx; if (qy < rec.y0) rec.y0 = qy; if (qy > rec.y1) rec.y1 = qy; }
-          if (qx > 0     && bg[q - 1] && lab[q - 1] < 0) { lab[q - 1] = tag; st[sp++] = q - 1; }
-          if (qx < S - 1 && bg[q + 1] && lab[q + 1] < 0) { lab[q + 1] = tag; st[sp++] = q + 1; }
-          if (qy > 0     && bg[q - S] && lab[q - S] < 0) { lab[q - S] = tag; st[sp++] = q - S; }
-          if (qy < S - 1 && bg[q + S] && lab[q + S] < 0) { lab[q + S] = tag; st[sp++] = q + S; }
-        }
-      };
-      flood(0, 0, null);
-      for (p = 0; p < n; p++) {
-        if (!bg[p] || lab[p] >= 0) continue;
-        var rec = { n: 0, x0: 1e9, y0: 1e9, x1: -1, y1: -1 };
-        flood(p, holes.length + 1, rec);
-        if (rec.n > 40) holes.push({ n: rec.n, x0: rec.x0, w: rec.x1 - rec.x0 + 1, h: rec.y1 - rec.y0 + 1, cy: (rec.y0 + rec.y1) / 2 });
-      }
-      // the hubs are the two holes lowest in the picture (the windows are above them)
-      return holes.sort(function (a, b) { return b.cy - a.cy; }).slice(0, 2).sort(function (a, b) { return a.x0 - b.x0; });
+      if (cnt > 40) blobs.push({ n: cnt, x0: x0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
     }
-    var k = 600 / Math.max(L.shapeW, L.shapeH);
-    var hubs = hubsAt(Math.round(L.shapeW * k), Math.round(L.shapeH * k));
-    if (hubs.length !== 2) throw new Error('could not find the two wheel hubs as holes in the rendered car');
-    hubs.forEach(function (hb, j) {
-      if (Math.abs(hb.w - hb.h) > 1)
-        throw new Error((j ? 'front' : 'rear') + ' hub is ' + hb.w + 'x' + hb.h + 'px (' + (hb.w / hb.h).toFixed(2) +
+    if (!blobs.length) throw new Error('the car rendered nothing at ' + cl.shapeW + 'x' + cl.shapeH);
+    // never measure a clipped picture: any ink on the border means part of the car is off-canvas
+    for (i = 0; i < S; i++) {
+      if (mask[i] || mask[(S - 1) * S + i] || mask[i * S] || mask[i * S + S - 1])
+        throw new Error('the car render touches the canvas edge - it is clipped, refusing to measure it');
+    }
+    if (blobs.length !== 3) throw new Error('expected 3 ink blobs (body + 2 tyres), got ' + blobs.length +
+      ' at box ' + cl.shapeW + 'x' + cl.shapeH + ' - the wheels cannot be isolated, which itself means the car is distorted');
+    blobs.sort(function (a, b) { return b.n - a.n; });
+    blobs.slice(1).sort(function (a, b) { return a.x0 - b.x0; }).forEach(function (wl, j) {
+      if (Math.abs(wl.w - wl.h) > 1)
+        throw new Error((j ? 'front' : 'rear') + ' wheel is ' + wl.w + 'x' + wl.h + 'px (' + (wl.w / wl.h).toFixed(2) +
           ':1), not a circle - SHAPE_ASPECT.car must stay square, but a Car spawned at ' + L.shapeW + 'x' + L.shapeH);
     });
-    // CONTROL: the same measure on a car deliberately stretched 3:2 must SEE the ellipse, or the check above proves nothing.
-    var bad = hubsAt(600, 400);
-    if (bad.length !== 2 || Math.abs(bad[0].w - bad[0].h) < 4)
-      throw new Error('control failed: a car stretched to 600x400 still measured round hubs (' + (bad[0] ? bad[0].w + 'x' + bad[0].h : 'none') + ') — this measurement cannot see a stretched wheel');
   });
 
   /* ---- queue 45 (v5.70) — one options layout for every layer ------------------------------------
@@ -68448,12 +68359,14 @@
       const a = entrance(card);
       dlg.classList.add('hidden');
       if (!a.length) throw new Error('the New project card appears in one frame with no animation (' + want + ')');
-      if (!a.some(x => want.test(x.animationName))) throw new Error('the New project card animates with ' + animNames(a) + ', not the ' + want + ' its neighbours use');
+      /* #947 (built under #974): the + no longer opens with the pop/hinge its neighbours use — his words, it should not be
+         "the same you've done for everything else". Its entrance is its own (Web Animations named np947-<A|B|C>-…). */
+      if (!a.some(x => want.test(x.animationName || x.id || ''))) throw new Error('the New project card animates with ' + (a.map(x => x.animationName || x.id || '?').join(', ')) + ', not ' + want);
     };
     try {
       if (!wasOpen) { FM.home.open(); await sleep(600); }
-      await atPhoneWidth(() => once(/fm-hinge-panel/));
-      await atWideWidth(() => once(/pop-grow/));
+      await atPhoneWidth(() => once(/^np947-[ABC]-/));
+      await atWideWidth(() => once(/^np947-[ABC]-/));
     } finally {
       dlg.classList.add('hidden');
       if (!wasOpen) FM.home.close();
@@ -78885,7 +78798,8 @@
      and was nothing of the kind. The suite cannot guarantee it is fronted, so asserting progress here
      would be a flaky test that fails for a reason unrelated to the feature. The travel was verified by
      hand with a control (rAF frame count) and sampled through the motion; what a test CAN hold is that
-     the element exists in both states, spans the whole row, and is armed by a press. */
+     the element exists, spans the whole row, and is armed by a press — on the SLIM row since queue 964, which
+     gave the empty screen the area pulse instead (tested by '964 clause 6'). */
   test('616: the add row has a press pulse, wired and full-width', { item: '616' }, async function () {
     const keep = FM.scene.layers.slice();
     try {
@@ -78897,9 +78811,8 @@
           const row = document.querySelector('.tl-addrow');
           if (!row) throw new Error('no add row on screen in the ' + what + ' state');
           const pulse = row.querySelector('.tl-addrow-pulse');
-          /* BOTH states matter. The resting decoration lives on ::before, which is switched OFF
-             entirely in the empty state — and the empty state is the screen he photographed. */
-          if (!pulse) throw new Error('the ' + what + ' add row has no .tl-addrow-pulse — queue 616 needs it in BOTH states, because ::before is content:none when the project is empty');
+          /* The empty state's pulse is the AREA pulse now (queue 964, test '964 clause 6'); this holds the slim row. */
+          if (!pulse) throw new Error('the ' + what + ' add row has no .tl-addrow-pulse (queue 616)');
           const rr = row.getBoundingClientRect(), pr = pulse.getBoundingClientRect();
           if (rr.width - pr.width > 6) {
             throw new Error('the pulse is ' + Math.round(pr.width) + 'px on a ' + Math.round(rr.width) + 'px row (' + what + ') — queue 616: "not cut off on the sides". It must span the row, not stop at the project end like the resting box does.');
@@ -78911,7 +78824,6 @@
           pulse.classList.remove('is-pulsing');
         };
         FM.scene.layers.length = 0;
-        await check('empty');
         FM.addShapeLayer('rect'); FM.addShapeLayer('rect');
         FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 6; });
         await check('slim');
@@ -83252,8 +83164,12 @@
         const v = FM.fxThumbs.effectDoesNothing(put('#ff8a3d', type), 0);
         if (v === true) throw new Error(type + ' is reported as doing nothing on a plain shape — the probe renders under the ghost flag and this kernel passes the picture through under that flag, so on == off is the probe\'s own blindness, not the effect\'s (queue 794)');
       }
-      const dead = FM.fxThumbs.effectDoesNothing(put('#cc22cc', 'channelremap'), 0);
-      if (dead !== true) throw new Error('control: Channel Remap on a flat #cc22cc fill must still be called dead (got ' + dead + ') — the probe has gone quiet on everything');
+      /* null is the probe's own "too dear to ask right now" (a render over its 45 ms budget — one slow frame in a full-suite
+         run, 29 Sep) — not a verdict either way, so ask again before calling the probe quiet. */
+      const L794 = put('#cc22cc', 'channelremap');
+      let dead = null;
+      for (let k = 0; k < 3 && dead === null; k++) { if (k) await sleep(150); dead = FM.fxThumbs.effectDoesNothing(L794, 0); }
+      if (dead !== true) throw new Error('control: Channel Remap on a flat #cc22cc fill must still be called dead (got ' + dead + ' three times) — the probe has gone quiet on everything');
     } finally {
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
       FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
@@ -92160,7 +92076,7 @@
           const before = new Set(FM.projects.list().map(p => p.id));
           await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
           const wide = await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden') ? d.querySelector('.hm-aspect[data-aspect="16:9"]') : null; }, 4000);
-          await sleep(350);
+          await sleep(700);   // #947/#974: the + has its own 640 ms entrance now (one of three at random) - a real finger waits for the card to land
           await h3aTap(wide, 'a tap on 16:9 Wide');
           await sleep(150);
           const said = (document.getElementById('hm-new-size') || {}).textContent || '';
@@ -92218,7 +92134,7 @@
           const before = new Set(FM.projects.list().map(p => p.id));
           await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
           const custom = await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden') ? d.querySelector('.hm-aspect[data-aspect="custom"]') : null; }, 4000);
-          await sleep(350);
+          await sleep(700);   // #947/#974: the + has its own 640 ms entrance now (one of three at random) - a real finger waits for the card to land
           await h3aTap(custom, 'a tap on Custom');
           await sleep(150);
           await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
@@ -100084,7 +100000,7 @@
           FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
           await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
           await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden'); }, 4000);
-          await sleep(350);
+          await sleep(700);   // #947/#974: the + has its own 640 ms entrance now (one of three at random) - a real finger waits for the card to land
           newName = (document.getElementById('hm-new-name') || {}).value || '';
           await h3aTap(document.getElementById('hm-create'), 'a tap on Create');
           await sleep(1500);
@@ -100678,11 +100594,13 @@
     if (wasHome) { FM.home.close(); await sleep(450); }
     try {
     await withLabs921(async function (ui) {
-      await atWideWidth(async function () {
+      /* with945: opening Friends is remembered per device (fm.cvPair) — put it back, or every later PC cog opens on Friends. */
+      await with945(async function () { await atWideWidth(async function () {
         await sleep(300);
         const b = document.getElementById('btn-share');
         if (!b || !b.getBoundingClientRect().width) throw new Error('setup: no Share button beside Export on PC with Labs on');
-        const open = () => !!document.querySelector('.collab-scrim .collab-card');
+        /* #978: the Share button opens Canvas settings with Friends big now (the phone's door), hung off this button. */
+        const open = () => { const d = document.getElementById('canvas-dialog'); return !!d && !d.classList.contains('hidden') && d.classList.contains('cv-fr-big'); };
         /* A click as the browser delivers it: the press goes to whatever is under the pointer when it lands, the click
            to whatever is under it when it LIFTS — hit-tested again, after anything the press did. That second hit-test is
            the whole bug: a backdrop that closes on the press is gone by the lift, so the click lands on the button. */
@@ -100703,7 +100621,7 @@
         await sleep(700);
         if (open()) throw new Error('on PC a second click on the Share button left the Share panel open — it shut on the press and opened again on the release (his words: it just reopens it)');
         ui.close();
-      }, 1280);
+      }, 1280); });
     });
     } finally { if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200); }
   });
@@ -100927,7 +100845,7 @@
   }
   const open945 = function (dlg) { return !dlg.classList.contains('hidden'); };
 
-  test('945 on a phone the cog opens Canvas settings with a Friends bar above the card — both on screen, Apply reachable, the cog spot still backdrop — and a PC sees none of it', { item: '945', budgetMs: 60000 }, async function () {
+  test('945 on a phone the cog opens Canvas settings with a Friends bar above the card — both on screen, Apply reachable, the cog spot still backdrop — and a PC hangs the same pair off its cog', { item: '945', budgetMs: 60000 }, async function () {
     await editorWithShape(async function () {
       await with945(async function () {
         const dlg = document.getElementById('canvas-dialog');
@@ -100962,15 +100880,18 @@
           document.getElementById('cv-cancel').click(); await sleep(60);
           if (open945(dlg)) throw new Error('Cancel did not close it');
         });
-        /* CONTROL: a PC opens the same dialog exactly as before — no pair, no bars. */
+        /* #978: a PC opens the SAME pair (his words: "on pc there isnt a way to access the friends invite menu like there is on
+           mobile") — hung off its cog, not the phone's centred column. Not assumed to be on Canvas: the key is per device. */
         await atWideWidth(async function () {
           document.getElementById('btn-canvas').click();
           await entranceDone(dlg); await sleep(60);
-          if (!open945(dlg)) throw new Error('CONTROL: #btn-canvas did not open Canvas settings at 1280');
-          if (dlg.classList.contains('cv-pair')) throw new Error('on a PC the dialog was put in the phone pair');
-          if (document.getElementById('cv-friends').getClientRects().length) throw new Error('on a PC the Friends block shows — Share lives beside Export there');
-          if (document.getElementById('cv-mini').getClientRects().length) throw new Error('on a PC the Canvas bar shows inside the card');
-          if (dlg.querySelector('.export-card').parentNode !== dlg) throw new Error('the canvas card is no longer a direct child of the dialog — the PC anchor rules need it there');
+          if (!open945(dlg)) throw new Error('#btn-canvas did not open Canvas settings at 1280');
+          if (!dlg.classList.contains('cv-pair') || !document.getElementById('cv-friends').getClientRects().length) throw new Error('on a PC Canvas settings opened without its Friends block — a PC has no way into Friends then (#978)');
+          if (!document.body.classList.contains('cv-anchored')) throw new Error('on a PC the pair is not hung off the cog (no cv-anchored)');
+          const cog = document.getElementById('btn-settings'), card = dlg.querySelector('.export-card');
+          const off = Math.abs(card.getBoundingClientRect().right - cog.getBoundingClientRect().right);
+          if (off > 12) throw new Error('on a PC the canvas card’s right edge is ' + Math.round(off) + ' px from the cog’s — the pair is not hanging off the cog');
+          if (card.parentNode !== dlg) throw new Error('the canvas card is no longer a direct child of the dialog — the PC anchor rules need it there');
           document.getElementById('cv-cancel').click(); await sleep(60);
         }, 1280);
       });
@@ -101176,7 +101097,7 @@
     });
   });
 
-  test('945 with people in, the Friends bar shows Live, the count and their faces; the faces chip opens the pair with Friends big, the chip stays backdrop to close it, and on a PC the person+ opens its own card', { item: '945', budgetMs: 90000 }, async function () {
+  test('945 with people in, the Friends bar shows Live, the count and their faces; the faces chip opens the pair with Friends big, the chip stays backdrop to close it, and on a PC the people door opens the same pair with Friends big', { item: '945', budgetMs: 90000 }, async function () {
     const C = need921S7('the Friends bar with people in');
     await withCollab921([layer921('A')], async function (c) {
       await withLabs921(async function (ui) {
@@ -101206,12 +101127,15 @@
               ui.close();
               if (!dlg.classList.contains('hidden')) throw new Error('ui.close() left the pair up');
             });
-            /* CONTROL: a PC is unchanged — the people door opens the Share card and never the canvas dialog. */
+            /* #978 (Part 2, recommended and built by default): a PC's people door is the phone's — the pair with Friends big,
+               never the old Share card, which armed a room on the first press. */
             await atWideWidth(async function () {
               await ui.openPeople();
-              if (!document.getElementById('collab-share')) throw new Error('CONTROL: on a PC the people door did not open the Share card');
-              if (!document.getElementById('canvas-dialog').classList.contains('hidden')) throw new Error('on a PC the people door opened Canvas settings');
+              const d = document.getElementById('canvas-dialog');
+              if (d.classList.contains('hidden') || !d.classList.contains('cv-fr-big')) throw new Error('on a PC the people door did not open Canvas settings with Friends big');
+              if (document.getElementById('collab-share')) throw new Error('on a PC the people door still opened the old Share card');
               ui.close();
+              if (!d.classList.contains('hidden')) throw new Error('on a PC ui.close() left the pair up');
             }, 1280);
           } finally { C.presence._clock(null); }
         });
@@ -103462,6 +103386,14 @@
     const claps = () => d.getAnimations({ subtree: true }).filter(a => /^dh-/.test(a.animationName || ''));
     try {
       if (homeWasOpen) FM.home.close();
+      /* #974 put every clapper option in at random; this test is timing A with the cyan lines (the ones this test was
+         written for — the other two timings have their own test, '974 the clapper's three timings…'). The pick happens
+         as the hint comes on screen, so bring it on fresh: a layer on, then off. */
+      if (FM.variant && FM.variant.force) {
+        FM.variant.force('clapper.timing', 'A'); FM.variant.force('clapper.lines', 'cyan');
+        FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: '957', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+        FM.refreshAll(); await sleep(40);
+      }
       FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(80);
       if (d.classList.contains('hidden') || !(d.getBoundingClientRect().width > 0)) throw new Error('the empty-canvas hint is not on screen with no layers, so there is nothing to watch');
       const stick = d.querySelector('.dh-stick');
@@ -103543,6 +103475,7 @@
       FM.scene.layers.length = 0; FM.refreshAll(); await sleep(80);
       if (!claps().length) throw new Error('with the stage empty again the clap did not come back');
     } finally {
+      if (FM.variant && FM.variant.force) { FM.variant.force('clapper.timing', null); FM.variant.force('clapper.lines', null); }
       FM.scene.layers = layers0;
       if (FM.selectLayer) FM.selectLayer(sel0 || null);
       if (FM.refreshAll) FM.refreshAll();
@@ -103691,76 +103624,13 @@
       await sleep(60);
     }
   });
-  /* ---- the Car, rebuilt from a published pictogram (queue 961) ---------------------------------------------------
-     Ezra, 26 Sep: "The car shape needs to be improved." Rebuilt the way the people finally landed (#929): traced from a
-     real published pictogram instead of drawn from landmarks — Pictogrammers Material Design Icons `car-side`,
-     Apache-2.0 — through the plan's converter into this format. Three tests: the new proof (the wheels read at the
-     menu's 34px), and the two older car tests retuned to the new construction, where the tyre is PART of the
-     silhouette and the hub is the hole, exactly as every published car pictogram draws it. ---- */
-
-  // Shared by the three: the car's two wheel hubs, found in the DATA — the round holes in the lower half.
-  function carHubs(car) {
-    const bbox = sub => sub.reduce((a, p) => ({
-      x0: Math.min(a.x0, p[0]), x1: Math.max(a.x1, p[0]), y0: Math.min(a.y0, p[1]), y1: Math.max(a.y1, p[1]),
-    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
-    const area = sub => {   // signed — the sign IS the winding, which decides whether a hole fills in
-      let s = 0;
-      for (let i = 0; i < sub.length; i++) { const a = sub[i], b = sub[(i + 1) % sub.length]; s += a[0] * b[1] - b[0] * a[1]; }
-      return s / 2;
-    };
-    const body = bbox(car[0]), wind = Math.sign(area(car[0])), midY = (body.y0 + body.y1) / 2;
-    const hubs = car.slice(1).filter(sub => Math.sign(area(sub)) !== wind).map(bbox)
-      .filter(b => Math.abs((b.x1 - b.x0) - (b.y1 - b.y0)) < 0.01 && (b.y0 + b.y1) / 2 > midY)
-      .map(b => ({ cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, r: (b.x1 - b.x0) / 2 }))
-      .sort((a, b) => a.cx - b.cx);
-    return { body: body, hubs: hubs, holes: car.slice(1).filter(sub => Math.sign(area(sub)) !== wind).length };
-  }
-
-  test('961 — the Car reads as a car at the Shape menu\'s 34px: open hubs, wheels below the body', { item: '961' }, function () {
-    /* The v17.02 car's own comment named its weak point: the tyre-to-arch gap is 0.023 of the box, 0.59px at the
-       menu's icon, so the tyre ring runs into the body and the wheels read as small dots. Measured for the plan,
-       FM.renderScene at 1x into the icon's own 25.5px box: the v17.02 hubs are 2.19px across, 4.1px² of open area
-       each; the MDI car's are 3.34px, 7.9px². 6px² sits between them. Measured at 1x on purpose — at arm's length a
-       CSS pixel is about what an eye resolves, whatever the screen's DPR. */
-    const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.car;
-    if (!car || !FM.renderScene || !FM.makeLayer) throw new Error('seams missing: SHAPE_POLYS.car / renderScene / makeLayer');
-    // The menu icon's box, as js/addmenu.js icoPoly builds it: the longer side of SHAPE_ASPECT fills 18 of the
-    // 24-unit viewBox, and the tile shows that viewBox at 34px.
-    const asp = (FM.SHAPE_ASPECT && FM.SHAPE_ASPECT.car) || [1, 1];
-    const S = 34, k = (18 / Math.max(asp[0], asp[1])) * S / 24, bw = asp[0] * k, bh = asp[1] * k;
-    const ox = (S - bw) / 2, oy = (S - bh) / 2;
-    const c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
-    const L = FM.makeLayer('shape', { shape: 'car', name: 'Car', x: S / 2, y: S / 2, shapeW: bw, shapeH: bh, fill: '#ffffff', start: 0, duration: 5 });
-    FM.renderScene(x, scene([L], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
-    const d = x.getImageData(0, 0, S, S).data, ink = (px, py) => d[(py * S + px) * 4] / 255;
-    let total = 0;
-    for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) total += ink(px, py);
-    if (total < 60) throw new Error('the car drew only ' + total.toFixed(1) + 'px² of ink at 34px — nothing to measure');
-    const H = carHubs(car);
-    if (H.hubs.length !== 2) throw new Error('expected two round wheel hubs (holes in the lower half of the car), found ' + H.hubs.length);
-    const bottom = col => { let b = -1; for (let py = 0; py < S; py++) if (ink(col, py) >= 0.5) b = py; return b + 1; };
-    const mid = Math.floor(ox + ((H.hubs[0].cx + H.hubs[1].cx) / 2) * bw);
-    H.hubs.forEach((h, j) => {
-      const cx = ox + h.cx * bw, cy = oy + h.cy * bh, r = h.r * bw, which = j ? 'front' : 'rear';
-      let open = 0, ring = 0, ringN = 0;
-      for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
-        const dist = Math.hypot(px + 0.5 - cx, py + 0.5 - cy);
-        if (dist <= r + 0.75) open += 1 - ink(px, py);
-        else if (dist <= r + 1.4) { ring += ink(px, py); ringN++; }
-      }
-      // CONTROL: the hole must be IN ink. A hub located off the car would read as wide open and pass for nothing.
-      if (!ringN || ring / ringN < 0.5) throw new Error('the ' + which + ' hub is not surrounded by tyre at 34px (ring ink ' + (ringN ? (ring / ringN).toFixed(2) : 'none') + ') — the measurement is not looking at a wheel');
-      if (open < 6) throw new Error('the ' + which + ' wheel\'s hub is ' + open.toFixed(1) + 'px² of open space at the menu\'s 34px (' + (2 * r).toFixed(2) + 'px across) — it reads as a dot, not a wheel; 6px² is the line (v17.02 measured 4.1, the MDI car 7.9)');
-      const hang = bottom(Math.floor(cx)) - bottom(mid);
-      if (hang < 2) throw new Error('the ' + which + ' wheel hangs ' + hang + 'px below the body at 34px — the wheels have to stand proud of the underside to read (v17.02: 2, the MDI car: 4)');
-    });
-  });
 
   /* ═══ QUEUE 962 — THE EYE, TRACED FROM A REAL PICTOGRAM, AND THE SHAPE MENU AT ITS REAL PROPORTIONS ════════════════════════
      His words, 26 Sep: *"the eye shape needs to be heavily improved."* The old eye was a thin almond ring around a pupil drawn as a
      circle in the UNIT box — and the box it spawns in is 1.5 x 0.9 (SHAPE_ASPECT.eye), so the pupil rendered as a 1.66:1 ellipse and
      the white beside it was 3.2x wider than the white above it (512x307: pupil 174x105, white 94px beside vs 29px above). Now it is
-     Bootstrap Icons' "eye-fill" (MIT) with a catchlight, drawn so that its circles are circles in the SPAWNED box.
+     Google Material Icons' "visibility" (Apache-2.0) — his pick A, 28 Sep (queue 973; v17.07 shipped B, Bootstrap's "eye-fill" with
+     a catchlight) — drawn so that its circles are circles in the SPAWNED box.
      The menu half: the Shape tab's icons were built when addmenu.js loads, before app.js defines FM.SHAPE_ASPECT, so every shape icon
      was drawn in a square (queue 159 never reached the real menu). The new eye, drawn for 5:3, would have come out TALL there. */
   function eyeParts(w, h) {
@@ -103789,11 +103659,12 @@
     return { topo: topo, P: P, pw: P.x1 - P.x0 + 1, ph: P.y1 - P.y0 + 1, gapTop: P.y0 - 1 - y, gapSide: x - P.x1 - 1 };
   }
 
-  test('962 the eye has a round pupil in an even white ring, with a catchlight — in the box it spawns and at the menu-icon size', { item: '962' }, function () {
+  test('962 the eye has a round pupil in an even white ring — in the box it spawns and at the menu-icon size', { item: '962' }, function () {
     const box = figSpawnBox('eye');
     /* The icon: the Shape tab's svg is 34px and icoPoly draws the eye in 18 of its 24 units at SHAPE_ASPECT, so at the phone's 2x
        the eye's box is 51x31 device pixels (measured 26 Sep: svg 34x34 at 380 and 440 wide). Tolerances from measurement:
-       the new eye reads 1.008:1 and 1.00x at the spawn box and exactly 1:1 / 1.0x at 51x31; the old one 1.657:1 / 3.24x and 1.55:1 / 3.0x. */
+       his A reads 1.009:1 and 0.97x at the spawn box and 1:1 / 1.0x at 51x31 (B, which v17.07 shipped, read 1.008:1 / 1.00x);
+       the old one 1.657:1 / 3.24x and 1.55:1 / 3.0x. The catchlight check B carried is gone with B (queue 973): A has none. */
     [[box.w, box.h, 'a ' + box.w + 'x' + box.h + ' render of the ' + box.raw + ' box it spawns in', 0.05, 1.3], [51, 31, 'the 51x31 menu icon', 0.2, 1.6]].forEach(function (c) {
       const s = eyeParts(c[0], c[1]), where = c[2];
       // POSITIVE CONTROL: a pupil standing clear of the lids inside an enclosed white. Without it the ratios below could pass on a
@@ -103802,8 +103673,6 @@
       const asp = s.pw / s.ph;
       if (Math.abs(asp - 1) > c[3]) throw new Error('at ' + where + ' the pupil renders ' + s.pw + 'x' + s.ph + ' (' + asp.toFixed(2) + ':1) — an ellipse, so it was drawn round in the unit box and stretched by SHAPE_ASPECT.eye');
       if (!(s.gapTop > 0) || s.gapSide / s.gapTop > c[4]) throw new Error('at ' + where + ' the white beside the pupil is ' + s.gapSide + 'px and above it ' + s.gapTop + 'px (' + (s.gapSide / Math.max(1, s.gapTop)).toFixed(2) + 'x) — the iris is not an even ring');
-      // B: the catchlight is a second enclosed white, and it survives at the icon size (measured: 2 holes at 51x31)
-      if (s.topo.holes < 2) throw new Error('at ' + where + ' the eye has ' + s.topo.holes + ' enclosed white(s) — the catchlight in the pupil is missing or has closed up');
     });
   });
 
@@ -107374,6 +107243,2766 @@
         });
       });
     } finally { if (had) Object.defineProperty(navigator, 'clipboard', had); else delete navigator.clipboard; }
+  });
+
+  /* ═══ #955 — RESIZING THE WINDOW KEEPS THE PLAYHEAD WHERE IT WAS (hunt MEDIUM, found by #941's fixer) ══════════════
+     Measured on v17.11 with a 2 s project: widening the window put the playhead at 0 — 900→1280 and a phone's
+     380→700, from 1.2 s and from 1.9 s — and 1280→1600 dropped it to 0.47 s. The playhead is a fixed line at 50vw with
+     the strip scrolled under it, and the strip is only as wide as (the scrollport + the project) the LAST layout made
+     it. A wider window is a wider scrollport, so until the debounced rebuild re-sizes the strip the scroll range is
+     shorter than where the strip sat, the browser pulls scrollLeft back into range, and the timeline's scroll
+     listener read that pull as a hand scrolling the strip and moved FM.time to it. Narrowing never clamps, which is
+     why only widening lost it. Asserted as what is on screen: after each resize the time is unchanged AND the 2 s
+     clip still sits under the line at that time. A scroll by hand after the resize still moves the playhead — the
+     control that the listener was not simply switched off. */
+  function key955(code) { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: code, bubbles: true, cancelable: true })); }
+  test('955 resizing the window keeps the playhead where it was — 900→1280, 1280→1600, 1280→900, 1600→1280 and a phone 380→700→380, at 1.2 s and 1.9 s of a 2 s project, paused and after a play-pause; a scroll after the resize still moves it', { item: '955', budgetMs: 180000 }, async function () {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to resize the window');
+    const w0 = fe.style.width;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) FM.home.close();
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId, t00 = FM.time;
+    const tl = document.getElementById('timeline'), line = document.getElementById('tl-centerline');
+    if (!tl || !line) throw new Error('setup: #timeline or #tl-centerline is missing');
+    const fps = FM.scene.project.fps || 30;
+    let L = null;
+    const underLine = function () {
+      const clip = document.querySelector('#timeline .clip[data-id="' + L.id + '"]');
+      if (!clip) throw new Error('the 2 s clip is not on the timeline');
+      const lb = line.getBoundingClientRect();
+      const mid = lb.left + (parseFloat(getComputedStyle(line).borderLeftWidth) || 0) / 2;
+      return (mid - clip.getBoundingClientRect().left) / FM._tlPxPerSec();   // the time at which the line crosses the clip
+    };
+    const setW = async function (w) { fe.style.width = w + 'px'; await sleep(450); };   // the resize rebuild is debounced 150 ms
+    try {
+      FM.scene.layers.length = 0;
+      L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0' });
+      L.start = 0; L.duration = 2; FM.scene.layers.push(L);
+      FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.scene.project.duration !== 2) throw new Error('setup: the project is ' + FM.scene.project.duration + ' s long, not 2 s');
+      const pairs = [[900, 1280], [1280, 1600], [1280, 900], [1600, 1280], [380, 700], [700, 380]];
+      const bad = [];
+      let resized = 0;
+      for (const pair of pairs) {
+        for (const at of [1.2, 1.9]) {
+          for (const mode of ['paused', 'play-pause']) {
+            const what = pair[0] + '→' + pair[1] + 'px, ' + mode + ' at ~' + at + ' s';
+            await setW(pair[0]);
+            if (mode === 'paused') {
+              FM.setTime(at);
+            } else {
+              FM.setTime(at - 0.3);
+              key955('Space');
+              const ts = performance.now();
+              while (!FM.playing && performance.now() - ts < 2000) await sleep(20);
+              if (!FM.playing) throw new Error('setup (' + what + '): Space did not start playback');
+              /* Pause on the TIME, not after a fixed sleep: a busy Mac stretching a 250 ms sleep carried 1.6 s to the
+                 2 s end, where playback stops by itself and the second Space STARTS it again. */
+              const tp = performance.now();
+              while (FM.playing && FM.time < at - 0.12 && performance.now() - tp < 2000) await sleep(10);
+              key955('Space');
+              await sleep(60);
+              if (FM.playing) throw new Error('setup (' + what + '): Space did not pause');
+              if (FM.time < at - 0.25 || FM.time > 1.99) throw new Error('setup (' + what + '): the play-pause left the playhead at ' + FM.time.toFixed(3) + ' s');
+            }
+            await sleep(250);
+            const t0 = FM.time, cw0 = tl.clientWidth;
+            /* CONTROL: before the resize the line crosses the clip at the playhead's time, so the measurement works. */
+            const u0 = underLine();
+            if (Math.abs(u0 - t0) > 0.5 / fps + 0.02) throw new Error('setup (' + what + '): before the resize the line crosses the clip at ' + u0.toFixed(3) + ' s while the playhead says ' + t0.toFixed(3) + ' s — this test cannot tell the fix from the bug');
+            await setW(pair[1]);
+            const cw1 = tl.clientWidth;
+            if (Math.abs(cw1 - cw0) < 100 || (cw1 > cw0) !== (pair[1] > pair[0])) throw new Error('setup (' + what + '): the timeline went ' + cw0 + ' → ' + cw1 + 'px, so the window never really resized');
+            resized++;
+            const t1 = FM.time, u1 = underLine();
+            if (Math.abs(t1 - t0) > 1e-6) bad.push(what + ': the playhead moved ' + t0.toFixed(3) + ' → ' + t1.toFixed(3) + ' s');
+            else if (Math.abs(u1 - t1) > 0.5 / fps + 0.02) bad.push(what + ': the playhead says ' + t1.toFixed(3) + ' s but the line crosses the clip at ' + u1.toFixed(3) + ' s');
+            /* CONTROL: a scroll by hand after the resize still drives the playhead. */
+            if (at === 1.2 && mode === 'paused') {
+              tl.scrollLeft = Math.round(0.5 * FM._tlPxPerSec());
+              await sleep(80);
+              if (Math.abs(FM.time - 0.5) > 1.5 / fps) bad.push(what + ': after the resize, scrolling the strip to 0.5 s left the playhead at ' + FM.time.toFixed(3) + ' s — the scroll no longer drives it');
+              await sleep(200);
+            }
+          }
+        }
+      }
+      if (resized !== 24) throw new Error('only ' + resized + ' of 24 resizes were measured');
+      if (bad.length) throw new Error(bad.length + ' of 24 resizes lost the playhead — ' + bad.join(' | '));
+    } finally {
+      if (FM.playing && FM.pause) FM.pause();
+      fe.style.width = w0; await sleep(400);
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.setTime) FM.setTime(Math.min(t00 || 0, FM.scene.project.duration || 0));
+      if (wasHome && FM.home.open) FM.home.open();
+      await sleep(120);
+    }
+  });
+
+  /* The same pull from the two other ways the timeline widens, both measured on v17.11 with the fix reverted: during
+     PLAYBACK, 900→1280 threw the playing transport back from 2.79 s to 0.25 s (the scroll listener's scrub re-anchors
+     the clock); and at 1280 with no window resize at all, opening the PC text editor hides the inspector (queue 519),
+     the timeline widens 973 → 1280px, and the playhead went from 3.2 s to 1.63 s — and stayed there when ✓ closed it.
+     A 4 s project of a shape and a text layer, the frame put back and Home reopened after. */
+  async function with955(fn) {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to resize the window');
+    const w0 = fe.style.width;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) FM.home.close();
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId, t00 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const S = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0' });
+      S.start = 0; S.duration = 4; FM.scene.layers.push(S);
+      const T = FM.makeLayer('text', { text: 'Probe', x: 60, y: 45, size: 40, fill: '#fff' });
+      T.start = 0; T.duration = 4; FM.scene.layers.push(T);
+      FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.scene.project.duration !== 4) throw new Error('setup: the project is ' + FM.scene.project.duration + ' s long, not 4 s');
+      return await fn({ fe: fe, tl: document.getElementById('timeline'), T: T, fps: FM.scene.project.fps || 30 });
+    } finally {
+      if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) { if (FM.textEdit.stop) FM.textEdit.stop(); }
+      if (FM.playing && FM.pause) FM.pause();
+      fe.style.width = w0; await sleep(400);
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.setTime) FM.setTime(Math.min(t00 || 0, FM.scene.project.duration || 0));
+      if (wasHome && FM.home.open) FM.home.open();
+      await sleep(120);
+    }
+  }
+  test('955 widening the window 900→1280 while it plays does not throw the playhead back', { item: '955', budgetMs: 60000 }, async function () {
+    await with955(async function (c) {
+      c.fe.style.width = '900px'; await sleep(450);
+      FM.setTime(2.5); await sleep(200);
+      key955('Space');
+      const ts = performance.now();
+      while (!FM.playing && performance.now() - ts < 2000) await sleep(20);
+      if (!FM.playing) throw new Error('setup: Space did not start playback');
+      await sleep(250);
+      const p0 = FM.time, cw0 = c.tl.clientWidth;
+      if (p0 < 2.55) throw new Error('setup: playback is not moving the playhead (' + p0.toFixed(3) + ' s after 250 ms from 2.5 s)');
+      c.fe.style.width = '1280px';
+      await sleep(120);
+      const p1 = FM.time, playing1 = FM.playing, cw1 = c.tl.clientWidth;
+      key955('Space'); await sleep(60);
+      if (cw1 < cw0 + 100) throw new Error('setup: the timeline went ' + cw0 + ' → ' + cw1 + 'px while playing, so the window never really widened');
+      if (!playing1) throw new Error('widening the window while it played stopped playback');
+      if (p1 < p0 - 0.02) throw new Error('widening the window 900→1280 while it played threw the playhead back from ' + p0.toFixed(3) + ' to ' + p1.toFixed(3) + ' s');
+    });
+  });
+  test('955 opening and closing the PC text editor, which widens the timeline with no window resize, keeps the playhead; a scroll afterwards still moves it', { item: '955', budgetMs: 60000 }, async function () {
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('FM.textEdit is not reachable — this test cannot open the editor');
+    await with955(async function (c) {
+      c.fe.style.width = '1280px'; await sleep(450);
+      FM.selectLayer(c.T.id);
+      if (FM.refreshAll) FM.refreshAll();
+      FM.setTime(3.2); await sleep(300);
+      const cw0 = c.tl.clientWidth, t0 = FM.time;
+      FM.textEdit.start(c.T.id);
+      await sleep(450);                                      // the panel observer's 60 ms debounce, then its rebuild
+      if (!document.body.classList.contains('text-editing')) throw new Error('setup: starting the editor did not put the app into text-editing');
+      const cw1 = c.tl.clientWidth;
+      if (cw1 < cw0 + 100) throw new Error('setup: the timeline did not widen when the inspector hid (' + cw0 + ' → ' + cw1 + 'px) — the case this guards never happened');
+      if (Math.abs(FM.time - t0) > 1e-6) throw new Error('opening the text editor on PC widened the timeline ' + cw0 + ' → ' + cw1 + 'px and moved the playhead ' + t0.toFixed(3) + ' → ' + FM.time.toFixed(3) + ' s');
+      FM.textEdit.stop();
+      await sleep(450);
+      if (Math.abs(FM.time - t0) > 1e-6) throw new Error('closing the text editor moved the playhead ' + t0.toFixed(3) + ' → ' + FM.time.toFixed(3) + ' s');
+      /* CONTROL: a scroll by hand still drives the playhead afterwards. */
+      c.tl.scrollLeft = Math.round(1 * FM._tlPxPerSec());
+      await sleep(80);
+      if (Math.abs(FM.time - 1) > 1.5 / c.fps) throw new Error('after the editor closed, scrolling the strip to 1 s left the playhead at ' + FM.time.toFixed(3) + ' s — the scroll no longer drives it');
+    });
+  });
+
+  /* ═══ #971 · A FRIEND'S PATH THAT IS DOWN IS SENT NOTHING ═══════════════════════════════════════════════════════════
+   * Two Chromes, the friend's browser SIGSTOPped 25 s while the owner edited: now and then the friend came back, went
+   * Offline six seconds later and stayed there 45-60 s. Chrome's SCTP packet log shows why (collab-link.js, "WHAT THE
+   * FRIEND MISSED…"): the friend's first acknowledgement after the pause inflates SCTP's retransmission timeout to ~45 s,
+   * and in the same instant SCTP sends everything queued behind it — before the owner's own path is writable — so it is
+   * dropped and waits out that timeout with the window full. So the link holds ctl/bulk in its own queue while the peer
+   * connection says the path is down, sheds presence, and pumps the queue the moment it says 'connected'. A peer cannot
+   * be paused inside one page, so the state is dispatched on a REAL RtcLink's peer connection while the real in-page
+   * transport keeps working — which is exactly what makes "handed to the channel while down" visible: it arrives. */
+  function pcState971(pc) {
+    const st = { ice: pc.iceConnectionState, conn: pc.connectionState };
+    Object.defineProperty(pc, 'iceConnectionState', { configurable: true, get: function () { return st.ice; } });
+    Object.defineProperty(pc, 'connectionState', { configurable: true, get: function () { return st.conn; } });
+    st.set = function (ice, conn) {
+      st.ice = ice; st.conn = conn;
+      pc.dispatchEvent(new Event('iceconnectionstatechange'));
+      pc.dispatchEvent(new Event('connectionstatechange'));
+    };
+    st.restore = function () { delete pc.iceConnectionState; delete pc.connectionState; };
+    return st;
+  }
+
+  test('971 a friend’s connection that is down is sent nothing — what the owner does meanwhile waits in order and reaches the friend the moment the connection is back, presence is shed, and down/Offline/close are unchanged', { item: '971', budgetMs: 120000 }, async function () {
+    const C = need921S3('a link whose path is down');
+    /* 1. The link itself. */
+    const pair = await rtcPair921();
+    try {
+      const got = [];
+      pair.g.onmessage = function (ch, msg) { got.push({ ch: ch, msg: msg, at: Date.now() }); };
+      const downs = [];
+      pair.h.ondown = function (d) { downs.push(d); };
+      let why = null;
+      pair.h.onclose = function (w) { why = w; };
+      /* CONTROL: with the path up, a ctl message and a presence frame arrive. */
+      pair.h.send('ctl', { t: 'x971', n: 0 });
+      pair.h.send('pres', { t: 'p971', n: 0 });
+      await until921S6('the control ctl and pres to arrive', function () { return got.filter(function (x) { return x.ch === 'ctl' || x.ch === 'pres'; }).length >= 2 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('CONTROL: with the path up, a ctl message and a presence frame did not both arrive (' + JSON.stringify(got.map(function (x) { return x.ch; })) + ')'); });
+      got.length = 0;
+      const st = pcState971(pair.h.pc);
+      try {
+        /* The path goes: 'disconnected' first (ICE's consent checks stop being answered — about 5-8 s into a pause). */
+        st.set('disconnected', 'disconnected');
+        const big = 'é'.repeat(40000);                  // several ctl fragments, so a held message is held whole
+        const bytes = new Uint8Array(50000); for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 7) & 255;
+        pair.h.send('ctl', { t: 'x971', n: 1 });
+        pair.h.send('pres', { t: 'p971', n: 1 });
+        pair.h.send('ctl', { t: 'x971', n: 2, big: big });
+        pair.h.send('bulk', bytes.buffer.slice(0));
+        await settle921(500);
+        /* …then 'failed' (about 20 s in): the link is DOWN, but not closed. */
+        st.set('disconnected', 'failed');
+        pair.h.send('ctl', { t: 'x971', n: 3 });
+        pair.h.send('pres', { t: 'p971', n: 3 });
+        await settle921(500);
+        if (got.length) throw new Error('while the friend’s connection was down the link handed ' + got.length + ' message(s) to the data channel (' + JSON.stringify(got.map(function (x) { return x.ch + ':' + (x.msg && x.msg.n); })) + ') — on a real path they go out into nothing, and SCTP resends them only when a retransmit timer that doubled through the whole pause runs out: measured, up to a minute after the friend came back, with the friend Offline and everything behind them stuck');
+        if (!pair.h.open) throw new Error('the link was closed while its path was down (' + why + ') — only a failure that lasts the grace may close it');
+        if (pair.h.down !== true || downs.join() !== 'true') throw new Error('a failed connection no longer says it is down (down ' + pair.h.down + ', ondown ' + JSON.stringify(downs) + ') — #971 must not change when a link is down');
+        /* What is held is still COUNTED. Media's §15.5 brake pauses on bufferedAmount, and while the path is down the
+           browser's own buffer says 0 — a sender reading only that would keep reading a clip off disk into the heap. */
+        const heldBulk = pair.h.bufferedAmount('bulk');
+        if (!(heldBulk >= bytes.length)) throw new Error('while the connection was down the link held ' + bytes.length + ' bulk bytes and bufferedAmount(“bulk”) said ' + heldBulk + ' — media pauses on that number (§15.5), so a clip sent to a friend whose phone is away would be read into the heap with nothing to stop it but the receiver’s window');
+        /* Back. */
+        const t0 = Date.now();
+        st.set('connected', 'connected');
+        await until921S6('the held messages to arrive', function () { return got.filter(function (x) { return x.ch !== 'pres'; }).length >= 4 ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('the connection came back and what was held did not arrive within 5 s (' + JSON.stringify(got.map(function (x) { return x.ch + ':' + (x.msg && x.msg.n); })) + ')'); });
+        const took = Date.now() - t0;
+        if (took > 1500) throw new Error('the held messages took ' + took + ' ms to arrive after the connection came back — they should go the moment it does');
+        const ctl = got.filter(function (x) { return x.ch === 'ctl'; }).map(function (x) { return x.msg && x.msg.n; });
+        if (ctl.join() !== '1,2,3') throw new Error('the held ctl messages arrived as ' + JSON.stringify(ctl) + ' — they must all arrive, in the order they were sent');
+        const two = got.filter(function (x) { return x.ch === 'ctl' && x.msg && x.msg.n === 2; })[0];
+        if (!two || two.msg.big !== big) throw new Error('the held fragmented ctl message did not arrive whole');
+        const bin = got.filter(function (x) { return x.ch === 'bulk'; })[0];
+        const arr = bin && bin.msg instanceof ArrayBuffer ? new Uint8Array(bin.msg) : null;
+        if (!arr || arr.length !== bytes.length || arr[49999] !== bytes[49999] || arr[12345] !== bytes[12345]) throw new Error('the held bulk message did not arrive intact (' + (arr ? arr.length : typeof (bin && bin.msg)) + ' bytes)');
+        const pres = got.filter(function (x) { return x.ch === 'pres'; });
+        if (pres.length) throw new Error('presence sent while the connection was down was delivered late (' + JSON.stringify(pres.map(function (x) { return x.msg && x.msg.n; })) + ') — a stale position is worth nothing, and a burst of them on the way back is worse');
+        if (pair.h.shed !== 2) throw new Error('the link says it shed ' + pair.h.shed + ' presence frame(s) — two were sent while the connection was down');
+        if (pair.h.down !== false || downs.join() !== 'true,false') throw new Error('the connection came back and the link does not say so (down ' + pair.h.down + ', ondown ' + JSON.stringify(downs) + ')');
+        /* …and with the path up, presence goes again, at once. */
+        got.length = 0;
+        pair.h.send('pres', { t: 'p971', n: 4 });
+        await until921S6('presence after the recovery', function () { return got.some(function (x) { return x.ch === 'pres'; }) ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('presence did not arrive after the connection came back'); });
+        if (pair.h.bufferedAmount('bulk') >= bytes.length) throw new Error('the connection came back, everything was sent, and bufferedAmount(“bulk”) still says ' + pair.h.bufferedAmount('bulk') + ' — a media sender would sit paused for ever');
+        /* ⚠️ connectionState 'connected' always means send. Chrome computes the legacy iceConnectionState apart from it
+           (it stays 'disconnected' while connectionState is 'failed'), and a link that held on the legacy one while the
+           aggregate says the path works would hold every edit for ever with nothing on screen to say so. */
+        got.length = 0;
+        st.set('disconnected', 'connected');
+        pair.h.send('ctl', { t: 'x971', n: 5 });
+        await until921S6('a ctl message while only the legacy state says disconnected', function () { return got.some(function (x) { return x.ch === 'ctl' && x.msg && x.msg.n === 5; }) ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('connectionState said “connected” and the link held a message because iceConnectionState said “disconnected” — the aggregate is the one that says whether the path works'); });
+      } finally { st.restore(); }
+    } finally { pair.close(); }
+
+    /* 2. Through the owner's own card: Sam joined with a code over a real connection; Sam's connection goes down; the owner
+          adds a layer. Nothing is sent to Sam while it is down, and the layer reaches Sam the moment it is back. */
+    await withLabs921(async function (ui) {
+      await withCollab921([layer921('A')], async function (ctx) {
+        let g = null, st = null;
+        try {
+          await ui.share();
+          document.querySelector('.cs-add').click();
+          const offer = await until921S6('the owner’s code', function () { const c = document.getElementById('collab-offer-code'); return c && /^FM1-/.test(c.textContent) ? c.textContent : null; }, 15000);
+          g = C.link.RtcLink({ self: 'guest', peer: 'host' });
+          const answer = await g.acceptOffer(offer);
+          const gh = g.opened.then(function () { return C.signal.handshake(g, { side: 'guest', key: g.mk, mode: 'conn', fpLocal: g.fpLocal, fpRemote: g.fpRemote }); });
+          gh.catch(function () {});
+          document.querySelector('.cs-answer').value = answer;
+          document.querySelector('.cs-connect').click();
+          const yes = await until921S6('Step 3', function () { return document.querySelector('.cs-sasyes'); }, 20000);
+          await gh;
+          const seen = [];
+          g.onmessage = function (ch, msg) { seen.push({ ch: ch, msg: msg, at: Date.now() }); };
+          g.send('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43', have: { epoch: 0, seq: 0 }, proto: C.PROTO, schema: C.SCHEMA_REV });
+          await settle921(150);
+          yes.click();
+          await until921S6('Sam to be in', function () { return ctx.S.peerIds().length === 1 ? 1 : 0; }, 10000)
+            .catch(function () { throw new Error('setup: Sam was not let in over the real connection'); });
+          const mid = ctx.S.peerIds()[0];
+          const L = ctx.S._eps && ctx.S._eps[mid];
+          if (!L || !L.pc) throw new Error('setup: the owner holds no real link for Sam');
+          const batchWith = function (id) {
+            return seen.filter(function (x) { return x.ch === 'ctl' && x.msg && x.msg.t === 'b' && JSON.stringify(x.msg.ops || []).indexOf(id) >= 0; })[0];
+          };
+          /* CONTROL: with the connection up, the owner's edit reaches Sam as a batch. */
+          const A0 = layer921('Up971');
+          FM.insertLayer(A0); FM.history.commit(); ctx.S.tick('full');
+          await until921S6('the control edit to reach Sam', function () { return batchWith(A0.id) ? 1 : 0; }, 5000)
+            .catch(function () { throw new Error('CONTROL: with Sam’s connection up, the owner’s new layer never reached Sam (' + JSON.stringify(seen.map(function (x) { return x.ch + ':' + (x.msg && x.msg.t); })) + ')'); });
+          /* Down. */
+          st = pcState971(L.pc);
+          st.set('disconnected', 'disconnected');
+          await settle921(300);                                  // anything already in the channel lands first
+          const n0 = seen.length;
+          const A1 = layer921('Late971');
+          FM.insertLayer(A1); FM.history.commit(); ctx.S.tick('full');
+          await settle921(800);
+          if (batchWith(A1.id)) throw new Error('the layer the owner added while Sam’s connection was down was handed to the data channel at once — on a real path it goes out into nothing and reaches Sam only when SCTP’s backed-off resend timer runs out (measured: up to a minute after Sam came back)');
+          const during = seen.slice(n0);
+          if (during.length) throw new Error('while Sam’s connection was down the owner still sent Sam ' + JSON.stringify(during.map(function (x) { return x.ch + ':' + (x.msg && x.msg.t); })));
+          if (!L.open || ctx.S.peerIds().indexOf(mid) < 0) throw new Error('Sam was dropped while the connection was merely down');
+          /* Back: the layer reaches Sam at once. */
+          const t0 = Date.now();
+          st.set('connected', 'connected');
+          await until921S6('the held edit to reach Sam', function () { return batchWith(A1.id) ? 1 : 0; }, 5000)
+            .catch(function () { throw new Error('Sam’s connection came back and the layer added while it was down never reached Sam (' + JSON.stringify(seen.slice(n0).map(function (x) { return x.ch + ':' + (x.msg && x.msg.t); })) + ')'); });
+          const took = batchWith(A1.id).at - t0;
+          if (took > 1500) throw new Error('the layer added while Sam’s connection was down reached Sam ' + took + ' ms after it came back — it should go the moment it does');
+        } finally {
+          if (st) st.restore();
+          if (g) g.close();
+          ui.close();
+        }
+      });
+    });
+  });
+
+  /* ═══ #971 · ONE MESSAGE AT A TIME INTO A BUFFER THAT IS NOT EMPTYING ═════════════════════════════════════════════════
+   * The half of #971 the path-down hold cannot reach: a pause starts seconds before the peer connection notices, and SCTP
+   * stops sending within half a second of it. Measured with two Chromes and six edits in the first 6 s of a 25 s pause,
+   * the hold alone still relapsed 4 runs of 6 (every edit 45.5 s after the friend was back): the edits had been handed to
+   * the data channel before 'disconnected' and sat INSIDE the browser, which sent them the instant the friend's first
+   * acknowledgement arrived — before the owner's path was writable — so they were dropped and waited out a 45 s timeout.
+   * So ctl and pres begin a message only while the channel's own bufferedAmount is 0; the rest wait in the link, where
+   * the hold can keep them. The browser's buffer cannot be filled on demand inside one page, so the number is reported
+   * by the real channel's own property, overridden — the link, the channels and the transport are all real. */
+  function fakeBuffered971(dc) {
+    const real = Object.getOwnPropertyDescriptor(RTCDataChannel.prototype, 'bufferedAmount');
+    const st = { n: null };
+    Object.defineProperty(dc, 'bufferedAmount', { configurable: true, get: function () { return st.n == null ? real.get.call(dc) : st.n; } });
+    st.restore = function () { delete dc.bufferedAmount; };
+    st.drain = function () { st.n = 0; dc.dispatchEvent(new Event('bufferedamountlow')); };
+    return st;
+  }
+
+  test('971 a message is begun on ctl or pres only into an empty browser buffer — the rest wait in the link, in order, and go the moment it empties; a message already begun is not held; bulk is not gated; presence waiting when the path goes is shed', { item: '971', budgetMs: 90000 }, async function () {
+    need921S3('the one-message gate');
+    const pair = await rtcPair921();
+    const fakes = [];
+    try {
+      const got = [];
+      pair.g.onmessage = function (ch, msg) { got.push({ ch: ch, msg: msg }); };
+      const n = function (ch) { return got.filter(function (x) { return x.ch === ch; }).map(function (x) { return x.msg && x.msg.n; }); };
+      const ctl = pair.h.channel('ctl'), pres = pair.h.channel('pres'), bulk = pair.h.channel('bulk');
+      const threshold0 = ctl.bufferedAmountLowThreshold;
+      /* CONTROL: an empty buffer — two ctl messages back to back both arrive, in order. */
+      pair.h.send('ctl', { t: 'g971', n: 1 });
+      pair.h.send('ctl', { t: 'g971', n: 2 });
+      await until921S6('the control ctl messages', function () { return n('ctl').length >= 2 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('CONTROL: with the browser buffer empty, two ctl messages did not both arrive (' + JSON.stringify(n('ctl')) + ')'); });
+      if (n('ctl').join() !== '1,2') throw new Error('CONTROL: the ctl messages arrived as ' + JSON.stringify(n('ctl')));
+      got.length = 0;
+
+      /* 1. ctl: the buffer is not emptying — a new message waits in the link. */
+      const fc = fakeBuffered971(ctl); fakes.push(fc);
+      fc.n = 700;
+      pair.h.send('ctl', { t: 'g971', n: 3 });
+      pair.h.send('ctl', { t: 'g971', n: 4 });
+      await settle921(400);
+      if (n('ctl').length) throw new Error('with ' + fc.n + ' bytes still in the ctl channel’s own buffer the link handed it ' + JSON.stringify(n('ctl')) + ' — measured with two Chromes, what the browser holds when a friend’s phone comes back is sent before the owner’s path is writable, dropped, and waits out a 45 s retransmission timer with everything else behind it');
+      if (pair.h.queued('ctl') !== 2) throw new Error('the link says ' + pair.h.queued('ctl') + ' ctl message(s) are waiting — two were sent into a buffer that was not emptying');
+      if (ctl.bufferedAmountLowThreshold !== 0) throw new Error('the link is waiting for the ctl buffer to empty but asked to be told at ' + ctl.bufferedAmountLowThreshold + ' bytes — it would never hear that it is empty');
+      /* …and the moment it empties, both go, in order. */
+      fc.drain();
+      await until921S6('the held ctl messages', function () { return n('ctl').length >= 2 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('the ctl buffer emptied and the messages held for it never arrived (' + JSON.stringify(n('ctl')) + ')'); });
+      if (n('ctl').join() !== '3,4') throw new Error('the held ctl messages arrived as ' + JSON.stringify(n('ctl')) + ' — both, in the order they were sent');
+      if (ctl.bufferedAmountLowThreshold !== threshold0) throw new Error('after the gate let go the ctl channel’s low-water mark is ' + ctl.bufferedAmountLowThreshold + ', not the flow control’s ' + threshold0 + ' — a big message would stall at its ceiling until the buffer was completely empty');
+      got.length = 0;
+
+      /* 2. A message already begun is not held frame by frame: a three-frame ctl message whose first frame fills the buffer
+            still goes out whole; the small one behind it waits. */
+      fc.n = 0;
+      const big = 'ж'.repeat(Math.round(pair.h.chunkSize() * 2.5));
+      const realSend = ctl.send;
+      let frames = 0;
+      ctl.send = function (f) { frames++; if (frames === 1) fc.n = 900; return realSend.call(ctl, f); };
+      try {
+        pair.h.send('ctl', { t: 'g971', n: 5, big: big });
+        pair.h.send('ctl', { t: 'g971', n: 6 });
+        await until921S6('the begun ctl message', function () { return n('ctl').length >= 1 ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('a ctl message whose first frame went into an empty buffer was held part-way (' + frames + ' frame(s) sent) — only a NEW message waits for the buffer'); });
+      } finally { ctl.send = realSend; }
+      await settle921(300);
+      const five = got.filter(function (x) { return x.msg && x.msg.n === 5; })[0];
+      if (!five || five.msg.big !== big) throw new Error('the begun ctl message did not arrive whole');
+      if (n('ctl').join() !== '5') throw new Error('behind a message that filled the buffer the next one should wait, and ctl delivered ' + JSON.stringify(n('ctl')));
+      fc.drain();
+      await until921S6('the message behind the big one', function () { return n('ctl').indexOf(6) >= 0 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('the message held behind the big one never arrived after the buffer emptied'); });
+      got.length = 0;
+
+      /* 3. bulk is NOT gated — media streams ahead by design (§15.5 is its brake). */
+      const fb = fakeBuffered971(bulk); fakes.push(fb);
+      fb.n = 5000;
+      const bytes = new Uint8Array(3000); for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 13) & 255;
+      pair.h.send('bulk', bytes.buffer.slice(0));
+      pair.h.send('bulk', bytes.buffer.slice(0));
+      await until921S6('bulk with bytes in its buffer', function () { return got.filter(function (x) { return x.ch === 'bulk'; }).length >= 2 ? 1 : 0; }, 5000)
+        .catch(function () { throw new Error('bulk was held because its buffer was not empty — media is meant to stream up to its 4 MiB ceiling'); });
+      got.length = 0;
+
+      /* 4. pres: gated the same way, and a frame waiting at the gate when the path goes is shed, never sent late. */
+      const fp = fakeBuffered971(pres); fakes.push(fp);
+      fp.n = 300;
+      const shed0 = pair.h.shed;
+      pair.h.send('pres', { t: 'q971', n: 7 });
+      await settle921(300);
+      if (n('pres').length) throw new Error('a presence frame was handed to a pres buffer holding ' + fp.n + ' bytes');
+      const st = pcState971(pair.h.pc);
+      try {
+        st.set('disconnected', 'disconnected');
+        if (pair.h.queued('pres') !== 0 || pair.h.shed !== shed0 + 1) throw new Error('the path went down with a presence frame waiting and it was kept (queued ' + pair.h.queued('pres') + ', shed ' + (pair.h.shed - shed0) + ') — it would be sent, stale, when the path came back');
+        st.set('connected', 'connected');
+        fp.drain();
+        pair.h.send('pres', { t: 'q971', n: 8 });
+        await until921S6('presence after the path came back', function () { return n('pres').indexOf(8) >= 0 ? 1 : 0; }, 5000)
+          .catch(function () { throw new Error('presence did not arrive once the path was back and the buffer empty'); });
+        if (n('pres').indexOf(7) >= 0) throw new Error('the presence frame shed when the path went down was delivered late');
+      } finally { st.restore(); }
+    } finally {
+      fakes.forEach(function (f) { f.restore(); });
+      pair.close();
+    }
+  });
+
+  /* ═══ 973 — HIS PICKS FROM THE #959 / #961 / #962 SHEETS ══════════════════════════════════════════════════════════════════
+   * His words (28 Sep): "For car keep the original and add the head on-  for inspector and add menu do ur recommended one-  for
+   * eyeball do A. Do B for the outlines thing that's blue."
+   * v17.07 had shipped the recommended defaults while he was away: a Material Design Icons side car in place of the v5.33 car,
+   * the Bootstrap eye with a catchlight (B), and white corner lines (A). So: the v5.33 car is back (its own two tests, restored
+   * as they were before v17.07, pin it), the AIGA front view is added BESIDE it as `carfront` / "Car (front)", the eye is
+   * Material's "visibility" (A), and the corners are the accent. The inspector/Add-menu shrink (#963) was already his pick C. */
+
+  // The car's two round holes in its lower half, found in the DATA. On the front car these are the headlights.
+  function carHubs(car) {
+    const bbox = sub => sub.reduce((a, p) => ({
+      x0: Math.min(a.x0, p[0]), x1: Math.max(a.x1, p[0]), y0: Math.min(a.y0, p[1]), y1: Math.max(a.y1, p[1]),
+    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
+    const area = sub => {   // signed — the sign IS the winding, which decides whether a hole fills in
+      let s = 0;
+      for (let i = 0; i < sub.length; i++) { const a = sub[i], b = sub[(i + 1) % sub.length]; s += a[0] * b[1] - b[0] * a[1]; }
+      return s / 2;
+    };
+    const body = bbox(car[0]), wind = Math.sign(area(car[0])), midY = (body.y0 + body.y1) / 2;
+    const hubs = car.slice(1).filter(sub => Math.sign(area(sub)) !== wind).map(bbox)
+      .filter(b => Math.abs((b.x1 - b.x0) - (b.y1 - b.y0)) < 0.01 && (b.y0 + b.y1) / 2 > midY)
+      .map(b => ({ cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, r: (b.x1 - b.x0) / 2 }))
+      .sort((a, b) => a.cx - b.cx);
+    return { body: body, hubs: hubs, holes: car.slice(1).filter(sub => Math.sign(area(sub)) !== wind).length };
+  }
+
+  test('973 the Shape menu has Car and then Car (front): Car is the original v5.33 car again, and each tile adds its own shape', { item: '973' }, async function () {
+    /* "keep the original and add the head on". The original is the v5.33 landmark car — 7 sub-paths (body, two windows, two
+       tyre rings, two hubs), 84 points; v17.07's traced car was 5 and 40. Pinned by count here and by geometry in the two car
+       tests restored from before v17.07 ('car-shape', 'car-aspect'). */
+    const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.car, front = FM.SHAPE_POLYS && FM.SHAPE_POLYS.carfront;
+    if (!car) throw new Error('FM.SHAPE_POLYS.car is gone');
+    const pts = car.reduce((n, s) => n + s.length, 0);
+    if (car.length !== 7 || pts !== 84) throw new Error('the Car is ' + car.length + ' sub-paths / ' + pts + ' points — the original (v5.33) car is 7 / 84; he said "keep the original"');
+    if (!front) throw new Error('there is no front-view car (FM.SHAPE_POLYS.carfront) — he said "add the head on"');
+    const asp = FM.SHAPE_ASPECT && FM.SHAPE_ASPECT.carfront;
+    if (!asp || asp[0] !== asp[1]) throw new Error('SHAPE_ASPECT.carfront is ' + JSON.stringify(asp) + ' — it must be square, like the car: the drawing carries its own 1.207:1 inside the box');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    const savedScene = FM.scene, commit = FM.history.commit, autosave = FM.storage.autosave, save = FM.storage.save, dirty = FM.storage.markDirty;
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep(80);
+      const tb = host.querySelector('.addmenu-tab[data-key="shape"]');
+      if (!tb) throw new Error('setup: the Add menu has no Shape tab');
+      tb.click(); await sleep(80);
+      const tiles = [].slice.call(host.querySelectorAll('button')).filter(b => b.title && b.querySelector('.addmenu-ic svg path'));
+      const names = tiles.map(b => b.title);
+      const i = names.indexOf('Car'), j = names.indexOf('Car (front)');
+      // CONTROL: the menu was read at all — the Car's neighbours are there
+      if (names.indexOf('Woman') < 0 || names.indexOf('Cross') < 0) throw new Error('setup: only found ' + names.length + ' shape tiles (' + names.join(', ') + ') — this is not reading the Shape tab');
+      if (i < 0) throw new Error('the Car tile is gone from the Shape menu');
+      if (j < 0) throw new Error('there is no "Car (front)" tile in the Shape menu (tiles: ' + names.join(', ') + ')');
+      if (j !== i + 1) throw new Error('"Car (front)" is tile ' + j + ' and Car is tile ' + i + ' — it belongs right after Car');
+      const d = tiles[j].querySelector('.addmenu-ic svg path').getAttribute('d') || '';
+      if ((d.match(/Z/g) || []).length !== front.length) throw new Error('the Car (front) icon draws ' + (d.match(/Z/g) || []).length + ' closed paths, but the shape has ' + front.length + ' — the tile is not drawn from its own data');
+      FM.history.commit = function () {}; FM.storage.autosave = function () {}; FM.storage.save = function () {}; FM.storage.markDirty = function () {};
+      const got = [];
+      for (const k of [i, j]) {
+        FM.scene = { project: { width: 1080, height: 1080, fps: 30, duration: 5, background: '#000000' }, layers: [], selectedId: null, selectedIds: [] };
+        tiles[k].click(); await sleep(40);
+        const L = FM.scene.layers[0];
+        got.push(L ? L.shape + ' "' + L.name + '" ' + Math.round(L.shapeW) + 'x' + Math.round(L.shapeH) : 'nothing');
+      }
+      if (!/^car "Car" (\d+)x\1$/.test(got[0])) throw new Error('the Car tile added ' + got[0] + ' — want a square car layer named Car');
+      if (!/^carfront "Car \(front\)" (\d+)x\1$/.test(got[1])) throw new Error('the Car (front) tile added ' + got[1] + ' — want a square carfront layer named "Car (front)"');
+    } finally {
+      FM.scene = savedScene;
+      FM.history.commit = commit; FM.storage.autosave = autosave; FM.storage.save = save; FM.storage.markDirty = dirty;
+      host.remove();
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('973 the front car reads at the Shape menu\'s 34px: open headlights, feet below the bumper', { item: '973' }, function () {
+    /* Retargeted from v17.07's "961 — the Car reads as a car at the Shape menu's 34px" (the plan's option-C variant): the
+       original car fails it by design — its own comment records the arches closing up at icon size, and he chose it anyway.
+       Measured for the #961 plan, FM.renderScene at 1x in the icon's own 25.5px box: the v5.33 car's round holes (its hubs)
+       are 2.19px across, 4.1px² open; the AIGA car's headlights 3.42px, 9.0px², and its feet hang 4px below the bumper. */
+    const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.carfront;
+    if (!car || !FM.renderScene || !FM.makeLayer) throw new Error('seams missing: SHAPE_POLYS.carfront / renderScene / makeLayer');
+    const asp = (FM.SHAPE_ASPECT && FM.SHAPE_ASPECT.carfront) || [1, 1];
+    const S = 34, k = (18 / Math.max(asp[0], asp[1])) * S / 24, bw = asp[0] * k, bh = asp[1] * k;
+    const ox = (S - bw) / 2, oy = (S - bh) / 2;
+    const c = offscreen(S, S), x = c.getContext('2d', { willReadFrequently: true });
+    const L = FM.makeLayer('shape', { shape: 'carfront', name: 'Car (front)', x: S / 2, y: S / 2, shapeW: bw, shapeH: bh, fill: '#ffffff', start: 0, duration: 5 });
+    FM.renderScene(x, scene([L], { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' } }), 0);
+    const d = x.getImageData(0, 0, S, S).data, ink = (px, py) => d[(py * S + px) * 4] / 255;
+    let total = 0;
+    for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) total += ink(px, py);
+    if (total < 60) throw new Error('the front car drew only ' + total.toFixed(1) + 'px² of ink at 34px — nothing to measure');
+    const H = carHubs(car);
+    if (H.hubs.length !== 2) throw new Error('expected two round headlights (holes in the lower half of the car), found ' + H.hubs.length);
+    const bottom = col => { let b = -1; for (let py = 0; py < S; py++) if (ink(col, py) >= 0.5) b = py; return b + 1; };
+    const mid = Math.floor(ox + ((H.hubs[0].cx + H.hubs[1].cx) / 2) * bw);
+    H.hubs.forEach((h, j) => {
+      const cx = ox + h.cx * bw, cy = oy + h.cy * bh, r = h.r * bw, which = j ? 'right' : 'left';
+      let open = 0, ring = 0, ringN = 0;
+      for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+        const dist = Math.hypot(px + 0.5 - cx, py + 0.5 - cy);
+        if (dist <= r + 0.75) open += 1 - ink(px, py);
+        else if (dist <= r + 1.4) { ring += ink(px, py); ringN++; }
+      }
+      // CONTROL: the hole must be IN ink. A headlight located off the car would read as wide open and pass for nothing.
+      if (!ringN || ring / ringN < 0.5) throw new Error('the ' + which + ' headlight is not surrounded by body at 34px (ring ink ' + (ringN ? (ring / ringN).toFixed(2) : 'none') + ') — the measurement is not looking at a headlight');
+      if (open < 6) throw new Error('the ' + which + ' headlight is ' + open.toFixed(1) + 'px² of open space at the menu\'s 34px — it reads as a speck; 6px² is the line (the v5.33 car\'s hubs 4.1, the AIGA headlights 9.0)');
+      const hang = bottom(Math.floor(cx)) - bottom(mid);
+      if (hang < 2) throw new Error('the ' + which + ' foot hangs ' + hang + 'px below the bumper at 34px — a front view needs its wheels to show (AIGA: 4)');
+    });
+  });
+
+  test('973 the front car is car-shaped: a symmetric front view, open windscreen and headlights, feet below the bumper', { item: '973' }, function () {
+    // From the #961 plan's option-C structural test (tests_C.js), retargeted from `car` to `carfront`.
+    const car = FM.SHAPE_POLYS && FM.SHAPE_POLYS.carfront;
+    if (!car || car.length < 4) throw new Error('FM.SHAPE_POLYS.carfront is missing or too simple');
+    const H = carHubs(car), b = H.body, mx = (b.x0 + b.x1) / 2;
+    const lopsided = car[0].filter(p => !car[0].some(q => Math.abs((2 * mx - p[0]) - q[0]) < 0.005 && Math.abs(p[1] - q[1]) < 0.005));
+    if (lopsided.length) throw new Error(lopsided.length + ' body points have no mirror partner — a front view leans, e.g. [' + lopsided[0].slice(0, 2).join(', ') + ']');
+    if (H.holes < 3) throw new Error('only ' + H.holes + ' sub-paths wind against the body — the windscreen/headlights would fill in solid');
+    if (H.hubs.length !== 2) throw new Error('could not find two round headlights in the shape (found ' + H.hubs.length + ')');
+    const [w1, w2] = H.hubs;
+    if (Math.abs(w1.cy - w2.cy) > 0.005) throw new Error('the headlights are not level');
+    if (Math.abs(w1.r - w2.r) > 0.005) throw new Error('the two headlights are different sizes');
+    const lowestAt = xq => {
+      let m = -1;
+      const o = car[0];
+      for (let i = 0; i < o.length; i++) {
+        const p = o[i], q = o[(i + 1) % o.length];
+        if (p[0] === q[0] || (p[0] - xq) * (q[0] - xq) > 0) continue;
+        m = Math.max(m, p[1] + (q[1] - p[1]) * (xq - p[0]) / (q[0] - p[0]));
+      }
+      return m;
+    };
+    const between = lowestAt(mx);
+    [w1, w2].forEach((w, j) => {
+      if (!(lowestAt(w.cx) - between > 0.05)) throw new Error('no ' + (j ? 'right' : 'left') + ' foot below the bumper under its headlight — a front-view car stands on its wheels');
+    });
+  });
+
+  test('973 the eye is his pick A: one wide white ring round the pupil and no catchlight, in the box it spawns and at the menu-icon size', { item: '973' }, function () {
+    /* A is Material Icons "visibility": its white ring is about 9% of the eye's width, Bootstrap's (B, which v17.07 shipped)
+       about 6%, and B carries a catchlight — a second enclosed white inside the pupil. Measured at the 512x307 spawn box: A's
+       white above the pupil 39px, B's 26; at the 51x31 menu icon 4 and 3. 33px sits between them at 512. */
+    const box = figSpawnBox('eye');
+    [[box.w, box.h, 'a ' + box.w + 'x' + box.h + ' render of the ' + box.raw + ' box it spawns in', 33], [51, 31, 'the 51x31 menu icon', 0]].forEach(function (c) {
+      const s = eyeParts(c[0], c[1]), where = c[2];
+      // POSITIVE CONTROL: the eye drew, and its pupil stands clear of the lids inside an enclosed white
+      if (s.topo.components < 2 || s.topo.holes < 1 || !s.P) throw new Error('at ' + where + ' the eye renders ' + s.topo.components + ' ink part(s) and ' + s.topo.holes + ' enclosed white(s) — no pupil standing clear of the lids to measure');
+      if (s.topo.holes !== 1) throw new Error('at ' + where + ' the eye has ' + s.topo.holes + ' enclosed whites — A has one, the ring round the pupil; a second is B\'s catchlight (he picked A)');
+      if (s.topo.components !== 2) throw new Error('at ' + where + ' the eye is ' + s.topo.components + ' ink parts — A is two, the lids and the pupil');
+      if (s.gapTop < c[3]) throw new Error('at ' + where + ' the white ring above the pupil is ' + s.gapTop + 'px — A\'s is 39 at 512 wide (B\'s thin ring was 26); this is not his pick A');
+    });
+  });
+
+  test('973 on PC the selection corner lines are the accent blue, not white', { item: '973', budgetMs: 30000 }, async function () {
+    /* "Do B for the outlines thing that's blue." v17.07 drew the #959 corners white at .6 (option A). The check reads the
+       colour the corners actually compute and compares it with what the accent computes in the same place. */
+    const rgb = c => (String(c).match(/[\d.]+/g) || []).map(Number);
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const A = FM.makeLayer('shape', { name: 'k973a', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#c05030', start: 0, duration: 3 });
+      FM.scene = scene([A], { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      await atWideWidth(async function () {
+        FM.selectLayer(A.id); FM.refreshAll(); await sleep(250);
+        const sel = document.getElementById('t-sel');
+        if (!sel || !sel.classList.contains('has-sel')) throw new Error('setup: the PC layer-action group is not up with a layer selected at ' + innerWidth + 'px');
+        // what the accent is HERE (a probe inside the group, so any theme override on the way down applies to it too)
+        const probe = document.createElement('i');
+        probe.style.cssText = 'position:absolute;width:0;height:0;color:var(--accent)';
+        sel.appendChild(probe);
+        const accent = rgb(getComputedStyle(probe).color);
+        probe.remove();
+        // CONTROL: the accent resolved to a real colour, and not white/grey — or "equals the accent" could pass on white
+        if (accent.length < 3 || (Math.max(accent[0], accent[1], accent[2]) - Math.min(accent[0], accent[1], accent[2])) < 60) throw new Error('control: the accent computes as ' + JSON.stringify(accent) + ' — not a colour this check can tell from white');
+        [['::before', 'Top', 'top-right'], ['::after', 'Bottom', 'bottom-left']].forEach(function (k) {
+          const p = getComputedStyle(sel, k[0]);
+          // CONTROL: the corner is drawn at all (the 959 test owns its shape; this one only its colour)
+          if (p.content === 'none' || !((parseFloat(p['border' + k[1] + 'Width']) || 0) >= 1)) throw new Error('control: the ' + k[2] + ' corner line is not drawn (' + p.content + ', ' + p['border' + k[1] + 'Width'] + ')');
+          const col = rgb(p['border' + k[1] + 'Color']);
+          const alpha = col.length > 3 ? col[3] : 1;
+          const off = Math.max(Math.abs(col[0] - accent[0]), Math.abs(col[1] - accent[1]), Math.abs(col[2] - accent[2]));
+          if (off > 3 || alpha < 0.9) throw new Error('the ' + k[2] + ' corner line is ' + p['border' + k[1] + 'Color'] + ' — he picked B, the blue (the accent, rgb(' + accent.slice(0, 3).join(', ') + '))');
+        });
+      }, 1280);
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* ═══ 975 — SMALL IS A BOX ON THE SCREEN, BIG IS THE WHOLE SCREEN (Notes too) ═════════════════════════════════════════════
+   * His words (28 Sep): "What you have drafted up for the small vs big settings menus, you just decide what is best as long as
+   * the small version doesn't take up the whole screen and is like a box on the screen and big takes up the whole thing".
+   * Help met it since v17.11 (#969). Small Notes did not: it was content-sized up to 86% of the screen, so a long list of notes
+   * made small nearly the size of big. Driven with a real finger (tests/_cdp.py's __fmWantInput). */
+  test('975 phone — with 20 notes, small Notes is a box (at most 60% of big\'s height and 30px narrower) with Add and Done whole, and big still fills the screen, at 380 and 440; PC unchanged', { item: '975', budgetMs: 150000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const P = FM.scene.project, hadNotes = Object.prototype.hasOwnProperty.call(P, 'notes'), notes0 = P.notes;
+    const commit = FM.history.commit, dirty = FM.storage.markDirty;
+    tidy927();
+    function card975() { return document.querySelector('.np-scrim:not(.np-closing) .np-card'); }
+    async function tap(el, what) {
+      const q = rect927(el);
+      aim927(q.cx);
+      hitIs927(q.cx, q.cy, el, what);
+      await realInput924([{ t: 'touchStart', x: q.cx, y: q.cy, ms: 70 }, { t: 'touchEnd', x: q.cx, y: q.cy, ms: 0 }], what);
+    }
+    async function phone(W) {
+      const where = 'phone ' + W + '×' + innerHeight;
+      FM.notepad.open(); await sleep927(650);
+      const card = card975();
+      if (!card || !card._panelSize) throw new Error(where + ': setup: Notes did not open with its size grip');
+      if (card.classList.contains('pb-big')) throw new Error(where + ': setup: it opened BIG — the remembered size was not cleared');
+      const rows = card.querySelectorAll('.np-row').length;
+      if (rows !== 20) throw new Error(where + ': setup: the list shows ' + rows + ' notes, not the 20 seeded');
+      const small = rect927(card);
+      /* still USABLE small: the list scrolls inside, and the yellow band, Add and Done are whole and take a press */
+      const list = card.querySelector('.np-list'), add = card.querySelector('.np-add'), done = card.querySelector('.np-done'), head = card.querySelector('.np-head');
+      if (!(list.scrollHeight > list.clientHeight + 4)) throw new Error(where + ': small, the list does not scroll inside the card (' + list.scrollHeight + ' in ' + list.clientHeight + ') — the rest of the notes are unreachable');
+      [[head, 'the Notes band'], [add, '+ Add a note'], [done, 'Done']].forEach(function (p) {
+        const r = rect927(p[0]);
+        if (r.h < 20 || r.t < small.t - 0.5 || r.b > small.b + 0.5 || r.b > innerHeight) throw new Error(where + ': small, ' + p[1] + ' is cut off (' + fmt927(r) + ' in a card at ' + fmt927(small) + ')');
+      });
+      const ar = rect927(add);
+      hitIs927(ar.cx, ar.cy, add, where + ': + Add a note');
+      if (small.l < 0 || small.t < 0 || small.r > innerWidth || small.b > innerHeight) throw new Error(where + ': small runs off the screen (' + fmt927(small) + ')');
+      const lb = rect927(list);
+      const shown = [].filter.call(card.querySelectorAll('.np-row'), r => { const q = r.getBoundingClientRect(); return q.height > 0 && q.top >= lb.t - 1 && q.bottom <= lb.b + 1; }).length;
+      // measured: 3 of this mix whole (plus part of a 4th) at 380×760, 4 at 440; 4 one-line notes at 380. Two would be a sliver.
+      if (shown < 3) throw new Error(where + ': small shows only ' + shown + ' notes without scrolling — too small to be worth opening');
+      /* a real finger on the grip: small → big */
+      await tap(grip927(card), where + ': a tap on the grip of small');
+      await sleep927(650);
+      if (!card.classList.contains('pb-big')) throw new Error(where + ': a tap on the grip did not make it big');
+      const big = rect927(card);
+      /* THE CONTROL: big still takes up the whole screen. Without it, "small is 60% of big" could pass by breaking big. */
+      if (!(big.w >= innerWidth * 0.9 && big.h >= innerHeight * 0.85)) throw new Error(where + ': control: big is ' + fmt927(big) + ' in a ' + innerWidth + '×' + innerHeight + ' screen — "big takes up the whole thing"');
+      if (!(small.h <= big.h * 0.6)) throw new Error(where + ': small is ' + fmt927(small) + ' and big ' + fmt927(big) + ' — small is ' + Math.round(small.h / big.h * 100) + '% of big’s height. He said small must not "take up the whole screen"; on a phone it is 60% of big or less, like Help');
+      if (!(small.w <= big.w - 30)) throw new Error(where + ': small is only ' + Math.round(big.w - small.w) + 'px narrower than big (' + Math.round(small.w) + ' against ' + Math.round(big.w) + ') — "like a box on the screen" means clear of the edges, 30px narrower or more');
+      if (small.h < innerHeight * 0.3 || small.w < innerWidth * 0.7) throw new Error(where + ': small went too far — ' + fmt927(small) + ' in a ' + innerWidth + '×' + innerHeight + ' screen');
+      /* and back: a second tap returns it to the same small box */
+      await tap(grip927(card), where + ': a tap on the grip of big');
+      await sleep927(650);
+      if (card.classList.contains('pb-big')) throw new Error(where + ': a second tap on the grip did not make it small again');
+      if (!near927(rect927(card), small, 2)) throw new Error(where + ': back to small at ' + fmt927(rect927(card)) + ', not where it was (' + fmt927(small) + ')');
+      /* and Done, pressed for real, still closes it at the new size */
+      await tap(card.querySelector('.np-done'), where + ': Done on small');
+      await sleep927(700);
+      if (card975()) throw new Error(where + ': a real tap on Done did not close the small Notes');
+      aim927(0);
+      return { small: small, big: big };
+    }
+    try {
+      FM.history.commit = function () {}; FM.storage.markDirty = function () {};
+      const seeded = [];
+      for (let i = 0; i < 20; i++) seeded.push({ id: 'n975_' + i, text: 'Note ' + (i + 1) + (i % 3 ? '' : ' — a longer one, so a few of the rows wrap onto a second line like real notes do'), remind: i % 4 === 0 });
+      P.notes = seeded;
+      if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
+      for (const W of [380, 440]) {
+        await atPhoneWidth(async function () {
+          await onScreen924(async function () { await phone(W); });
+        }, W);
+        tidy927();
+      }
+      /* PC is not what he asked about: small Notes there keeps its 420px card. The phone rule moved out of its media query
+         would make it calc(100vw − 56px) = 1224 wide, which this catches. */
+      await atWideWidth(async function () {
+        FM.notepad.open(); await sleep927(650);
+        const card = card975();
+        if (!card || card.classList.contains('pb-big')) throw new Error('PC: setup: small Notes did not open');
+        const w = card.getBoundingClientRect().width;
+        if (Math.abs(w - 420) > 2) throw new Error('PC: small Notes is ' + Math.round(w) + 'px wide — it is 420 there; the phone rule leaked onto PC');
+        FM.notepad.close({ now: true }); await sleep927(150);
+      }, 1280);
+    } finally {
+      tidy927();
+      FM.history.commit = commit; FM.storage.markDirty = dirty;
+      if (hadNotes) P.notes = notes0; else delete P.notes;
+      try { if (FM.notepad.sync) FM.notepad.sync(); } catch (e) {}
+      try { if (hadHome && !FM.home.isOpen()) FM.home.open(); else if (!hadHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep927(120);
+    }
+  });
+
+  test('973 the Edit Shape dropdown names the front car “Car (front)”, as its Add menu tile does, not “Carfront”', { item: '973' }, async function () {
+    /* From the review of the #973 build. The Shape dropdown in the element card listed every drawn shape by capitalising its
+       internal key, so the shape his Add menu tile and layer name call "Car (front)" was offered as "Carfront" — and the older
+       ones the same way ("Thumbsup", "Pointhand", "Paperplane"). It now takes the Add menu's own names. Read from the real
+       select in the real element card of a Rectangle — the drawn shapes have Edit Points instead, so a parametric shape's
+       card is where this list is offered (turn a rectangle into a car). */
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'Rectangle', x: 540, y: 540, shapeW: 400, shapeH: 300, fill: '#44aaff' });
+      FM.scene = scene([L], { project: { width: 1080, height: 1080, fps: 30, duration: 5, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll();
+      FM.inspector.openCategory('element'); FM.inspector.refresh(); await sleep(160);
+      const lab = [].slice.call(document.querySelectorAll('#inspector .prop-row label')).filter(e => (e.textContent || '').trim() === 'Shape')[0];
+      const sel = lab && lab.parentNode.querySelector('select');
+      if (!sel) throw new Error('setup: the Rectangle\'s element card has no Shape dropdown');
+      const text = v => { const o = [].slice.call(sel.options).filter(x => x.value === v)[0]; return o ? o.textContent : null; };
+      // CONTROL: this is the shape list, it has the Rectangle selected, and one-word shapes still read as their tiles do
+      if (sel.value !== 'rect') throw new Error('setup: the Shape dropdown shows "' + sel.value + '" for a Rectangle');
+      if (text('car') !== 'Car' || text('heart') !== 'Heart' || text('rect') !== 'Rectangle') throw new Error('control: Car / Heart / Rectangle read "' + text('car') + '" / "' + text('heart') + '" / "' + text('rect') + '"');
+      const want = { carfront: 'Car (front)', thumbsup: 'Thumbs up', pointhand: 'Pointing hand', paperplane: 'Paper plane' };
+      const bad = Object.keys(want).filter(k => text(k) !== want[k]).map(k => k + ' reads "' + text(k) + '" where its Add menu tile says "' + want[k] + '"');
+      if (bad.length) throw new Error('the Edit Shape dropdown does not use the Add menu\'s names: ' + bad.join('; '));
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.inspector.openCategory('home'); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(40);
+    }
+  });
+  /* 964 — the empty project's add area, from one dictated message (26 Sep). His clauses, numbered in REQUESTS.md:
+     1 the blue outline does not reach the TOP; 2 it stays there (stuck); 3 the tap animation looks bad; 4 play it across
+     the WHOLE area, much more colourful; 5 the lines must look good and GO AWAY; 6 they PULSE all the way round, not all
+     lines at once. Shared setup: an empty project at phone width, then put everything back. */
+  async function onEmptyArea964(fn) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(260);
+        const panel = document.getElementById('timeline-panel');
+        const tl = document.getElementById('timeline');
+        const row = document.querySelector('.tl-addrow');
+        if (!panel || !panel.classList.contains('tl-empty-start') || !row || !row.classList.contains('tl-addrow--empty')) {
+          throw new Error('not on the empty-project screen (.tl-empty-start + .tl-addrow--empty), so this would measure the wrong thing');
+        }
+        [].slice.call(panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+        const ruler = document.getElementById('tl-rulerrow').getBoundingClientRect();
+        const tr = tl.getBoundingClientRect();
+        // THE AREA, measured here rather than asked of the code under test: #timeline below the sticky ruler row.
+        const area = { left: tr.left, right: tr.left + tl.clientWidth, top: ruler.bottom, bottom: tr.bottom };
+        area.width = area.right - area.left; area.height = area.bottom - area.top;
+        /* ⚠️ EVERY pointerdown IS CLOSED WITH A pointerup — the 571 lesson: an unfinished synthetic gesture left the
+           timeline mid-gesture and turned three unrelated tests red. pointerup does not synthesise a click, so this
+           cannot open the add sheet. */
+        const press = function (x, y, on) {
+          const t = on || tl;
+          const o = { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0 };
+          t.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, o, { buttons: 1 })));
+          t.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, o, { buttons: 0 })));
+        };
+        return await fn({ panel: panel, tl: tl, row: row, area: area, press: press, sleep: sleep });
+      });
+    } finally {
+      if (FM.variant && FM.variant.force) { FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null); }   // #974's seam, cleared for the next test
+      const p = document.getElementById('timeline-panel');
+      if (p) [].slice.call(p.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      FM.scene.layers.length = 0;
+      layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  }
+
+  test('964 clause 2: after a tap the empty area keeps no outline - not on focus, not on hover', { item: '964' }, async function () {
+    /* MEASURED 26 Sep at 380x800 and 440x956: a tap focuses the row (tabIndex 0), focus SURVIVES openAdd() and
+       closeAdd(), so `#timeline:focus-within` stayed true and the inset box stayed painted after the menu closed —
+       "it just stays there". row.focus() is that state. Measured too: in this runner a script focus does NOT match
+       :focus-visible, so it stands for a finger, not a keyboard (asserted below as a control). */
+    return onEmptyArea964(async function (c) {
+      /* The app sits in run.html's frame, and Chrome matches :focus / :focus-within only in a FOCUSED document - so
+         give the frame the keyboard first (the 690c helpers do the same), or the control below fails for the runner's
+         reason, not the app's. */
+      window.focus();
+      await c.sleep(60);
+      c.row.focus();
+      if (!c.tl.matches(':focus-within')) throw new Error('CONTROL: focusing the row did not put #timeline in :focus-within, so the stuck state was never reproduced');
+      if (c.row.matches(':focus-visible')) throw new Error('CONTROL: this focus reads as a KEYBOARD focus in this runner, so it cannot stand in for a tap');
+      const cs = getComputedStyle(c.tl);
+      if (cs.boxShadow !== 'none') throw new Error('the empty area still draws a box while the tapped row keeps focus (' + cs.boxShadow + ') - the outline that "just stays there" (queue 964 clause 2)');
+      /* :hover CANNOT BE SYNTHESISED - script pointer events do not move the hover state, and iOS leaves :hover on the
+         last thing tapped. So the RULES are what is checked: nothing may paint the empty timeline on :hover/:focus-within. */
+      const bad = [];
+      const walk = function (list) {
+        for (const ru of list) {
+          if (ru.cssRules && !ru.selectorText) { walk(ru.cssRules); continue; }
+          const sel = ru.selectorText || '';
+          if (!/tl-empty-start/.test(sel) || !/#timeline:(hover|focus-within)/.test(sel)) continue;
+          const st = ru.style;
+          if ((st.boxShadow && st.boxShadow !== 'none') || (st.outlineStyle && st.outlineStyle !== 'none') || (st.borderColor && !/transparent/.test(st.borderColor))) bad.push(sel);
+        }
+      };
+      for (const sh of document.styleSheets) { let rs = null; try { rs = sh.cssRules; } catch (e) { continue; } walk(rs); }
+      if (bad.length) throw new Error('a rule still paints the empty area on :hover/:focus-within, which iOS keeps on after a tap: ' + bad.join(' | '));
+      // POSITIVE CONTROL: the same read DOES see a box when one is there - otherwise a broken read passes the check above.
+      c.tl.style.boxShadow = 'inset 0 0 0 1px rgb(255, 0, 0)';
+      const seen = getComputedStyle(c.tl).boxShadow;
+      c.tl.style.boxShadow = '';
+      if (seen === 'none') throw new Error('CONTROL: getComputedStyle did not see an inline box-shadow, so the check above proves nothing');
+    });
+  });
+
+  test('964 clauses 1 5 6: a press sends the outline all the way round incl. the top, one side after another, then it is gone', { item: '964', budgetMs: 8000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      // #974: both starts are in at random; this is the bottom-middle one (the nearest-edge start has its own test)
+      if (FM.variant && FM.variant.force) FM.variant.force('emptytap.start', 'bottom');
+      c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height * 0.36);   // on the +
+      const host = c.panel.querySelector('.tl-areafx--pulse');
+      if (!host) throw new Error('pressing the empty area drew no travelling outline (queue 964 clause 6)');
+      /* CLAUSE 1 - THE TOP. The old box was an inset shadow on #timeline, and #tl-rulerrow (its sticky, opaque
+         descendant, z-index 7) painted over its top 22px, so the top line never showed. The pulse must start at or below
+         the ruler's bottom AND be stacked above it. */
+      const hr = host.getBoundingClientRect();
+      if (hr.top < c.area.top - 1) throw new Error('the pulse box starts ' + Math.round(c.area.top - hr.top) + 'px up under the ruler row, where its top line cannot be seen (clause 1)');
+      if (Math.abs(hr.bottom - c.area.bottom) > 1 || Math.abs(hr.left - c.area.left) > 1 || Math.abs(hr.right - c.area.right) > 1) throw new Error('the pulse box ' + JSON.stringify([hr.left, hr.top, hr.right, hr.bottom]) + ' is not the area ' + JSON.stringify(c.area));
+      const zr = +getComputedStyle(document.getElementById('tl-rulerrow')).zIndex, zp = +getComputedStyle(host).zIndex;
+      if (!(zp > zr)) throw new Error('the pulse (z ' + zp + ') is not stacked above the ruler row (z ' + zr + ')');
+      /* SEEK, DON'T WAIT. A paused Web Animation reports its style at any currentTime, with or without frames - the
+         571/616 notes: this runner can fire 0 rAF when it is not fronted, so timing the real motion would be flaky. */
+      const cores = [].slice.call(host.querySelectorAll('path.fx-core'));
+      if (cores.length !== 2) throw new Error('expected two travelling lights (one per side), found ' + cores.length);
+      const T = FM._areaFx.PULSE_TRAVEL;
+      const at = function (p, t) {
+        p.getAnimations().forEach(function (an) { an.pause(); an.currentTime = t; });
+        const len = parseFloat(p.style.strokeDasharray);
+        const off = parseFloat(getComputedStyle(p).strokeDashoffset);
+        const L = p.getTotalLength();
+        const pt = p.getPointAtLength(Math.max(0, Math.min(L, len - off)));
+        return { x: hr.left + pt.x, y: hr.top + pt.y };
+      };
+      const seen = { left: 0, right: 0, top: 0, bottom: 0 };
+      for (let k = 0; k <= 24; k++) {
+        cores.forEach(function (p) {
+          const q = at(p, T * k / 24);
+          if (q.x <= hr.left + 8) seen.left++;
+          if (q.x >= hr.right - 8) seen.right++;
+          if (q.y <= hr.top + 8) seen.top++;
+          if (q.y >= hr.bottom - 40) seen.bottom++;
+        });
+      }
+      const miss = Object.keys(seen).filter(function (k) { return !seen[k]; });
+      if (miss.length) throw new Error('the lights never reached the ' + miss.join(', ') + ' edge - "all the way around it" (queue 964 clauses 1 and 6): ' + JSON.stringify(seen));
+      // CLAUSE 6 - ONE AFTER ANOTHER. A quarter of the way in, neither light may be in the top 40% yet ...
+      const q1 = cores.map(function (p) { return at(p, T * 0.25); });
+      if (q1.some(function (q) { return q.y < hr.top + hr.height * 0.4; })) throw new Error('a quarter of the way through, a light is already near the top ' + JSON.stringify(q1) + ' - the lines are appearing at once, not travelling (clause 6)');
+      // ... and the drawn line is still growing then (the old #616 band lit a whole side and the top together).
+      const tr = host.querySelector('path.fx-trail');
+      tr.getAnimations().forEach(function (an) { an.pause(); an.currentTime = T * 0.25; });
+      const drawn = 1 - parseFloat(getComputedStyle(tr).strokeDashoffset) / tr.getTotalLength();
+      if (!(drawn > 0.05 && drawn < 0.6)) throw new Error('a quarter of the way in, the trail has drawn ' + Math.round(drawn * 100) + '% of its side - it must grow, not appear');
+      // POSITIVE CONTROL for the two negatives above: the same read DOES report the top - both finish at the top-centre.
+      const qe = cores.map(function (p) { return at(p, T); });
+      if (qe.some(function (q) { return Math.abs(q.x - (hr.left + hr.width / 2)) > 6 || q.y > hr.top + 8; })) throw new Error('the two lights do not meet at the top-centre: ' + JSON.stringify(qe));
+      // CLAUSE 5 - IT GOES AWAY. Real time, because the teardown is a setTimeout by design (it must not wait on frames).
+      await c.sleep(FM._areaFx.PULSE_MS + 400);
+      if (c.panel.querySelector('.tl-areafx--pulse')) throw new Error('the outline is still in the page ' + (FM._areaFx.PULSE_MS + 400) + 'ms after the press - it has to GO AWAY (clause 5)');
+      if (getComputedStyle(c.tl).boxShadow !== 'none') throw new Error('after the pulse, #timeline still paints a box (' + getComputedStyle(c.tl).boxShadow + ')');
+    });
+  });
+
+  test('964 clauses 3 4: a press floods the WHOLE area with colour from the finger, coloured by the spot, and cleans up', { item: '964', budgetMs: 8000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      const a = c.area;
+      // #974: all three colours are in at random; this is A, Aurora (B and C have their own coverage tests)
+      if (FM.variant && FM.variant.force) FM.variant.force('emptytap.colour', 'A');
+      c.press(a.left + 40, a.top + 60);
+      const host = c.panel.querySelector('.tl-areafx--press');
+      if (!host) {
+        const old = c.tl.querySelector('.tl-tapburst');
+        throw new Error('pressing the empty area made no whole-area colour layer' + (old ? ' - only the old ' + Math.round(old.getBoundingClientRect().width || 104) + 'px .tl-tapburst, the "small little touch thing" he asked to replace' : '') + ' (queue 964 clause 4)');
+      }
+      // FROM THE FINGER (#571's first half): the layer records the press point, and its white-hot core is centred there.
+      if (Math.abs(+host.dataset.x - 40) > 1.5 || Math.abs(+host.dataset.y - 60) > 1.5) throw new Error('the colour layer recorded the press at ' + host.dataset.x + ',' + host.dataset.y + ', not 40,60');
+      const core = host.querySelector('.fx-core');
+      core.getAnimations().forEach(function (an) { an.pause(); an.currentTime = 1; });
+      const cr = core.getBoundingClientRect();
+      if (Math.abs(cr.left + cr.width / 2 - (a.left + 40)) > 2 || Math.abs(cr.top + cr.height / 2 - (a.top + 60)) > 2) throw new Error('the flash does not start under the finger');
+      /* THE WHOLE AREA (clause 4). Geometric, from the live boxes: a sample point is lit when it lies inside a colour
+         curtain's visible ellipse (80% of its radial gradient's closest-side) while that curtain is at least 35%
+         opaque. Best moment over the first half of the animation; >= 90% of a 12x12 grid. The old burst was one
+         104px bloom - about 6% of the area at 380px. */
+      const curtains = [].slice.call(host.querySelectorAll('.fx-curtain'));
+      if (curtains.length < 3) throw new Error('the colour layer has ' + curtains.length + ' colour curtains - not enough to fill anything');
+      let best = 0, bestT = 0;
+      for (let t = 60; t <= FM._areaFx.PRESS_MS * 0.5; t += 30) {
+        host.getAnimations({ subtree: true }).forEach(function (an) { an.pause(); an.currentTime = t; });
+        const shapes = curtains.map(function (el) {
+          const r = el.getBoundingClientRect();
+          return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, rx: r.width / 2 * 0.8, ry: r.height / 2 * 0.8, op: +getComputedStyle(el).opacity };
+        }).filter(function (s) { return s.op >= 0.35 && s.rx > 0 && s.ry > 0; });
+        let lit = 0;
+        for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+          const px = a.left + a.width * (i + 0.5) / 12, py = a.top + a.height * (j + 0.5) / 12;
+          if (shapes.some(function (s) { const dx = (px - s.cx) / s.rx, dy = (py - s.cy) / s.ry; return dx * dx + dy * dy <= 1; })) lit++;
+        }
+        if (lit / 144 > best) { best = lit / 144; bestT = t; }
+      }
+      if (best < 0.9) throw new Error('at its fullest (' + bestT + 'ms) the colour reaches ' + Math.round(best * 100) + '% of the area - he asked for it to "cook up the whole area" (clause 4)');
+      host.getAnimations({ subtree: true }).forEach(function (an) { an.play(); });
+      // COLOUR BY THE SPOT (#571's keyboard): a press at the far corner answers in a different colour.
+      c.press(a.right - 40, a.bottom - 40);
+      const hosts = c.panel.querySelectorAll('.tl-areafx--press');
+      const hB = +hosts[hosts.length - 1].dataset.h, hA = +host.dataset.h;
+      const dh = Math.min(Math.abs(hA - hB), 360 - Math.abs(hA - hB));
+      if (dh < 30) throw new Error('two presses at opposite corners came out hue ' + hA + ' and ' + hB + ' - the colour must follow the position (#571: "based on what button you press")');
+      // CAPPED, and TORN DOWN - a drum-roll must not pile up nodes, and nothing may outlive the animation.
+      for (let i = 0; i < 25; i++) c.press(a.left + 100 + i, a.top + 100 + i);
+      const live = c.panel.querySelectorAll('.tl-areafx--press').length, laps = c.panel.querySelectorAll('.tl-areafx--pulse').length;
+      if (live > FM._areaFx.MAX) throw new Error(live + ' colour layers live at once (cap ' + FM._areaFx.MAX + ')');
+      if (laps > 1) throw new Error(laps + ' outline laps live at once - a second tap must not stack another');
+      await c.sleep(Math.max(FM._areaFx.PRESS_MS, FM._areaFx.PULSE_MS) + 450);
+      const left = c.panel.querySelectorAll('.tl-areafx').length;
+      if (left) throw new Error(left + ' press layers survived their animation - they must be torn down on a timer');
+      // CONTROL: with a layer in the project the same press does nothing (the empty screen only).
+      const L = FM.makeLayer('shape', { name: 'X', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3; FM.scene.layers.push(L);
+      FM.refreshAll(); FM.timeline.rebuild();
+      await c.sleep(260);
+      c.press(a.left + 190, a.top + 200);
+      await c.sleep(40);
+      if (c.panel.querySelectorAll('.tl-areafx').length) throw new Error('CONTROL FAILED - a press on a timeline WITH layers also floods it with colour; this is for the empty screen only');
+    });
+  });
+
+  test('964: asked for less motion, a press is acknowledged by one short still fade - nothing travels or grows', { item: '964', budgetMs: 6000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      const realMM = window.matchMedia;
+      window.matchMedia = function (q) {
+        if (/prefers-reduced-motion:\s*reduce/.test(q)) return { matches: true, media: q, onchange: null, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+        return realMM.call(window, q);
+      };
+      try {
+        c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height / 2);
+      } finally { window.matchMedia = realMM; }
+      if (c.panel.querySelector('.tl-areafx--pulse, .tl-areafx--press')) throw new Error('with reduced motion asked for, the press still sends the travelling outline or the colour flood');
+      const calm = c.panel.querySelector('.tl-areafx--calm');
+      if (!calm) throw new Error('with reduced motion asked for, the press shows nothing at all - it must still be acknowledged, just without motion');
+      const anims = calm.getAnimations({ subtree: true });
+      if (!anims.length) throw new Error('the reduced-motion acknowledgement never fades - it would stay on screen');
+      anims.forEach(function (an) {
+        const d = an.effect.getTiming().duration;
+        if (d > 300) throw new Error('the reduced-motion fade runs ' + d + 'ms - keep it short');
+        an.effect.getKeyframes().forEach(function (k) { if (k.transform && k.transform !== 'none') throw new Error('the reduced-motion fade moves or scales (' + k.transform + ')'); });
+      });
+      await c.sleep(FM._areaFx.CALM_MS + 300);
+      if (c.panel.querySelector('.tl-areafx')) throw new Error('the reduced-motion fade is still in the page after it finished');
+    });
+  });
+
+  test('964 clause 6: on the empty screen the old row-sized pulse no longer fires - the area pulse replaces it; the slim row keeps #616', { item: '964' }, async function () {
+    /* The #616 pulse is a band that climbs the ROW's box and lights both sides and the whole top line at once. In
+       the empty state the row is a 300px box in the middle of the area, so a tap there drew a SECOND outline, not
+       the area's - one that does exactly "all the lines appear at once". */
+    return onEmptyArea964(async function (c) {
+      const p = c.row.querySelector('.tl-addrow-pulse');
+      c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height * 0.36, c.row);
+      const firing = p && p.classList.contains('is-pulsing') && getComputedStyle(p).display !== 'none';
+      if (firing) throw new Error('pressing the empty area still fires the row-sized #616 pulse - a second box whose lines all light at once (clause 6)');
+      if (!c.panel.querySelector('.tl-areafx--pulse')) throw new Error('CONTROL: the same press drew no area pulse either, so this is not testing the replacement');
+      // CONTROL: the slim row (a project with layers) keeps #616 exactly as he approved it.
+      FM.addShapeLayer('rect');
+      FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 6; });
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
+      await c.sleep(300);
+      const slim = document.querySelector('.tl-addrow');
+      const sp = slim && slim.querySelector('.tl-addrow-pulse');
+      if (!sp) throw new Error('CONTROL FAILED - the slim add row lost its #616 pulse');
+      slim.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      slim.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      if (!sp.classList.contains('is-pulsing') || getComputedStyle(sp).display === 'none') throw new Error('CONTROL FAILED - pressing the slim add row no longer plays its #616 pulse');
+      sp.classList.remove('is-pulsing');
+    });
+  });
+
+  /* ONLY IF HE PICKS A HOLD (ASK 2). With SHEET_HOLD_MS = 0 this test is deleted, not skipped. */
+  test('964: the add menu waits a beat after a press on the empty area, counted from the press - never after a bare click', { item: '964', budgetMs: 6000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM._areaFx || !(FM._areaFx.HOLD_MS >= 0)) throw new Error('FM._areaFx.HOLD_MS is missing - there is no hold, so the menu covers the press animation within ~100ms of the finger lifting (measured: 59% at 50ms, 98% at 100ms)');
+      const real = FM.mobile.openAdd;
+      const calls = [];
+      FM.mobile.openAdd = function () { calls.push(performance.now()); };
+      try {
+        const HOLD = FM._areaFx.HOLD_MS;
+        if (!(HOLD > 0)) throw new Error('HOLD_MS is ' + HOLD + ' - with no hold this test should have been removed');
+        const t0 = performance.now();
+        c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height * 0.36, c.row);
+        c.row.click();
+        if (calls.length) throw new Error('the add menu opened ' + Math.round(calls[0] - t0) + 'ms after the press - the colour is covered before it is seen (measured: the sheet covers 59% of the area 50ms into its swing, 98% at 100ms)');
+        await c.sleep(HOLD + 120);
+        if (calls.length !== 1) throw new Error('after the hold the add menu opened ' + calls.length + ' times, not once');
+        if (calls[0] - t0 < HOLD - 25) throw new Error('the menu opened ' + Math.round(calls[0] - t0) + 'ms after the press, short of the ' + HOLD + 'ms hold');
+        // CONTROL: a click with no press before it (the keyboard's Enter path, and every older test) is NOT delayed.
+        calls.length = 0;
+        c.row.click();
+        if (calls.length !== 1) throw new Error('CONTROL FAILED - a bare click (no press) was delayed too; the hold must count from a press');
+      } finally { FM.mobile.openAdd = real; }
+    });
+  });
+
+  /* ═══ 974 — EVERY ANIMATION WITH OPTIONS: ALL OF THEM IN THE APP, ONE AT RANDOM EACH TIME ═══════════════════════════
+     Ezra, 28 Sep: "Honestly for all of the different button animations - make them all happen in the app but it's just
+     random which one so I can decide which is best over use time".
+     His clauses: (1) every animation with competing options has ALL of them in the app; (2) which one plays is random.
+     So each option is FORCED in turn through FM.variant.force (the seam) and seen to PLAY, by what it draws — the proof
+     that every one is really there — and the same real route is then played 60 times UNFORCED and must reach every
+     option: the control that the randomness is not stuck on one. (Missing one of three in 60 fair picks: 3·(2/3)^60 ≈
+     1e-10; one of two: 2·(1/2)^60 ≈ 2e-18 — a red here is never bad luck.) */
+  test('974 FM.variant picks at random on every play, remembers the last pick, logs it (50 per animation) and can be forced', { item: '974' }, async function () {
+    if (!FM.variant || typeof FM.variant !== 'function') throw new Error('FM.variant is missing - there is no shared way to play one of several options at random (queue 974)');
+    const KEY = 'fm.variantLog';
+    let saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    try {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      const seen = {};
+      for (let i = 0; i < 60; i++) {
+        const p = FM.variant('t974.a', ['x', 'y', 'z']);
+        if (['x', 'y', 'z'].indexOf(p) < 0) throw new Error('FM.variant returned ' + p + ', which is not one of the options');
+        if (FM.variant.last['t974.a'] !== p) throw new Error('FM.variant.last does not hold the pick just made (' + FM.variant.last['t974.a'] + ' vs ' + p + ')');
+        seen[p] = (seen[p] || 0) + 1;
+      }
+      if (Object.keys(seen).length !== 3) throw new Error('60 plays picked only ' + JSON.stringify(seen) + ' - the pick is not random per play (his clause 2)');
+      const mine = FM.variant.log().filter(e => e.name === 't974.a');
+      if (mine.length !== 50) throw new Error('after 60 plays the log keeps ' + mine.length + ' of them; it is a ring of the newest 50');
+      if (!mine.every(e => typeof e.t === 'number' && ['x', 'y', 'z'].indexOf(e.pick) >= 0)) throw new Error('a log entry is not {name, pick, t}: ' + JSON.stringify(mine[0]));
+      if (mine[mine.length - 1].pick !== FM.variant.last['t974.a']) throw new Error('the newest log entry is not the last pick');
+      let raw = [];
+      try { raw = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) {}
+      if (raw.filter(e => e.name === 't974.a').length !== 50) throw new Error('the log is not kept in localStorage "' + KEY + '", so it cannot be read back when he names the one he liked');
+      // one chatty animation (the clapper logs every clap) cannot push another one's picks out
+      FM.variant('t974.b', ['p']);
+      for (let i = 0; i < 60; i++) FM.variant('t974.a', ['x', 'y', 'z']);
+      if (!FM.variant.log().some(e => e.name === 't974.b')) throw new Error('60 plays of one animation pushed another animation\'s pick out of the log');
+      // THE SEAM: a forced pick holds; a force that is not an option is ignored; clearing it brings the dice back
+      FM.variant.force('t974.a', 'y');
+      for (let i = 0; i < 20; i++) if (FM.variant('t974.a', ['x', 'y', 'z']) !== 'y') throw new Error('a forced pick did not hold');
+      FM.variant.force('t974.a', 'not-an-option');
+      const s2 = {};
+      for (let i = 0; i < 60; i++) s2[FM.variant('t974.a', ['x', 'y', 'z'])] = 1;
+      if (Object.keys(s2).length !== 3) throw new Error('forcing something that is not an option stuck the pick: ' + JSON.stringify(s2));
+      FM.variant.force('t974.a', null);
+      const s3 = {};
+      for (let i = 0; i < 60; i++) s3[FM.variant('t974.a', ['x', 'y', 'z'])] = 1;
+      if (Object.keys(s3).length !== 3) throw new Error('clearing the force did not bring the random pick back: ' + JSON.stringify(s3));
+    } finally {
+      if (FM.variant && FM.variant.force) FM.variant.force('t974.a', null);
+      if (FM.variant && FM.variant.last) { delete FM.variant.last['t974.a']; delete FM.variant.last['t974.b']; }
+      try { if (saved === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved); } catch (e) {}
+    }
+  });
+
+  /* #964's tap colour. Each option is recognised by what only it draws: A six colour curtains, B three rings and thirty
+     sparks, C one canvas of keys (drawn through its own seam, since a canvas has no Web Animation to read). */
+  test('974 the empty area\'s tap colour: A Aurora, B Rings and sparks and C Key ripple each play when chosen, and 60 real presses play all three', { item: '974', budgetMs: 30000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - only one tap colour can ever play (queue 974)');
+      const clear = () => [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
+      const keysLit = function (host, t) {
+        const cv = host.querySelector('canvas.fx-keys');
+        if (!cv || typeof host._fxDraw !== 'function') return -1;
+        host._fxSeeking = true; host._fxDraw(t);
+        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let lit = 0;
+        for (let i = 3; i < d.length; i += 4 * 97) if (d[i] > 40) lit++;
+        return lit;
+      };
+      const marks = function (host) {
+        return { curtains: host.querySelectorAll('.fx-curtain:not(.fx-ring)').length, rings: host.querySelectorAll('.fx-ring').length,
+                 sparks: host.querySelectorAll('.fx-spark').length, keys: host.querySelectorAll('canvas.fx-keys').length,
+                 moving: host.getAnimations({ subtree: true }).length };
+      };
+      const at = { x: c.area.left + c.area.width / 2, y: c.area.top + c.area.height * 0.36 };   // on the +
+      for (const v of ['A', 'B', 'C']) {
+        FM.variant.force('emptytap.colour', v); clear();
+        c.press(at.x, at.y);
+        const host = c.panel.querySelector('.tl-areafx--press');
+        if (!host) throw new Error('with ' + v + ' chosen, a press made no colour layer at all');
+        if (host.dataset.variant !== v) throw new Error('with ' + v + ' chosen, the colour layer says it is "' + host.dataset.variant + '"');
+        const m = marks(host);
+        if (v === 'A' && !(m.curtains === 6 && !m.rings && !m.keys && m.moving)) throw new Error('A (Aurora) does not play: ' + JSON.stringify(m) + ' - it is six moving colour curtains');
+        if (v === 'B' && !(m.rings === 3 && m.sparks >= 20 && !m.keys && m.moving)) throw new Error('B (Rings and sparks) does not play: ' + JSON.stringify(m) + ' - it is three moving rings and thirty sparks');
+        if (v === 'C') {
+          if (!(m.keys === 1 && !m.rings && !m.curtains)) throw new Error('C (Key ripple) does not play: ' + JSON.stringify(m) + ' - it is one canvas of keys');
+          const early = keysLit(host, 0), mid = keysLit(host, 300);
+          if (!(mid > early)) throw new Error('C\'s keys do not light up as the wave passes (' + early + ' lit at 0ms, ' + mid + ' at 300ms)');
+        }
+        if (host.dataset.x !== String(Math.round(at.x - c.area.left))) throw new Error(v + ' does not start from the finger (x ' + host.dataset.x + ')');
+      }
+      clear();
+      FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null);
+      const got = {}, starts = {};
+      for (let i = 0; i < 60; i++) {
+        clear();
+        c.press(c.area.left + 30 + (i * 37) % (c.area.width - 60), c.area.top + 30 + (i * 53) % (c.area.height - 60));
+        const host = c.panel.querySelector('.tl-areafx--press'), pulse = c.panel.querySelector('.tl-areafx--pulse');
+        if (!host || !pulse) throw new Error('unforced press ' + (i + 1) + ' of 60 played ' + (host ? 'no outline' : 'no colour'));
+        got[host.dataset.variant] = (got[host.dataset.variant] || 0) + 1;
+        starts[pulse.dataset.start] = (starts[pulse.dataset.start] || 0) + 1;
+        if (FM.variant.last['emptytap.colour'] !== host.dataset.variant) throw new Error('FM.variant.last names ' + FM.variant.last['emptytap.colour'] + ' but ' + host.dataset.variant + ' played');
+      }
+      clear();
+      if (Object.keys(got).sort().join() !== 'A,B,C') throw new Error('60 unforced presses played the colours ' + JSON.stringify(got) + ' - all three must come up at random (his clause 2)');
+      if (Object.keys(starts).sort().join() !== 'bottom,nearest') throw new Error('60 unforced presses started the outline ' + JSON.stringify(starts) + ' - both starts must come up');
+    });
+  });
+
+  /* B's own proof (the plan's appendix: "a ring is lit only on its band, not inside it", so decide by measuring).
+     A grid point is lit at a moment when it lies in a ring's bright band — 0.70 to 0.98 of its radius: the gradient is
+     clear to 70%, .85 at 88%, .95 at 93%, clear at 100% — while that ring is at least 15% opaque. MEASURED 28 Sep at
+     380x800: the rings SWEEP 98.6% of a 12x12 grid in their first second from a press on the +, 97.2% from the top-left
+     corner; the fullest single moment is 69% (rings are rings), so the sweep is what is held, at 90%. */
+  test('974 option B, Rings and sparks: its rings sweep the WHOLE area out from the finger', { item: '974', budgetMs: 10000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option B cannot be chosen (queue 974)');
+      const a = c.area;
+      FM.variant.force('emptytap.colour', 'B');
+      for (const p of [[a.left + a.width / 2, a.top + a.height * 0.36, 'on the +'], [a.left + 40, a.top + 60, 'in the top-left corner']]) {
+        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
+        c.press(p[0], p[1]);
+        const host = c.panel.querySelector('.tl-areafx--press');
+        const rings = host ? [].slice.call(host.querySelectorAll('.fx-ring')) : [];
+        if (rings.length !== 3) throw new Error('a press ' + p[2] + ' with B chosen made ' + rings.length + ' rings, not three');
+        const lit = new Set();
+        let fromFinger = false;
+        for (let t = 0; t <= 1000; t += 20) {
+          host.getAnimations({ subtree: true }).forEach(an => { an.pause(); an.currentTime = t; });
+          const shapes = rings.map(el => { const r = el.getBoundingClientRect(); return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, R: r.width / 2, op: +getComputedStyle(el).opacity }; });
+          if (t === 100 && shapes.some(s => Math.hypot(s.cx - p[0], s.cy - p[1]) < 2)) fromFinger = true;
+          for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+            const x = a.left + a.width * (i + 0.5) / 12, y = a.top + a.height * (j + 0.5) / 12;
+            if (shapes.some(s => { if (s.op < 0.15) return false; const d = Math.hypot(x - s.cx, y - s.cy); return d >= 0.7 * s.R && d <= 0.98 * s.R; })) lit.add(i * 12 + j);
+          }
+        }
+        if (!fromFinger) throw new Error('B\'s rings are not centred on the press ' + p[2]);
+        if (lit.size / 144 < 0.9) throw new Error('pressed ' + p[2] + ', B\'s rings sweep ' + Math.round(lit.size / 1.44) + '% of the area - he asked for it to "cook up the whole area" (#964 clause 4)');
+      }
+    });
+  });
+
+  /* C's own proof (the plan's appendix: seek the canvas through host._fxDraw and read pixels). A grid point counts when
+     the brightest pixel within 6px of it has alpha > 40 (a point can land in the 6px gap between two keys). MEASURED
+     28 Sep at 380x800: the fullest moment lights 98.6% of a 12x12 grid from a press on the +, 97.2% from the top-left
+     corner (the wave is a band, so it is the best frame of 60..900ms that is held, at 90%). */
+  test('974 option C, Key ripple: its wave of keys lights the WHOLE area out from the finger', { item: '974', budgetMs: 10000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option C cannot be chosen (queue 974)');
+      const a = c.area;
+      FM.variant.force('emptytap.colour', 'C');
+      for (const p of [[a.left + a.width / 2, a.top + a.height * 0.36, 'on the +'], [a.left + 40, a.top + 60, 'in the top-left corner']]) {
+        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
+        c.press(p[0], p[1]);
+        const host = c.panel.querySelector('.tl-areafx--press');
+        const cv = host && host.querySelector('canvas.fx-keys');
+        if (!cv || typeof host._fxDraw !== 'function') throw new Error('a press ' + p[2] + ' with C chosen drew no key canvas');
+        host._fxSeeking = true;
+        const g = cv.getContext('2d'), k = cv.width / a.width;
+        const litAt = function (t) {
+          host._fxDraw(t);
+          const img = g.getImageData(0, 0, cv.width, cv.height).data;
+          const on = [];
+          for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+            const x = Math.round(a.width * (i + 0.5) / 12 * k), y = Math.round(a.height * (j + 0.5) / 12 * k);
+            let m = 0;
+            for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++) {
+              const xx = Math.min(cv.width - 1, Math.max(0, x + dx * 2)), yy = Math.min(cv.height - 1, Math.max(0, y + dy * 2));
+              m = Math.max(m, img[(yy * cv.width + xx) * 4 + 3]);
+            }
+            on.push(m > 40);
+          }
+          return on;
+        };
+        // from the finger: early on, the key under the finger is lit and the far corner is not
+        const e = litAt(90);
+        const gi = (px, py) => Math.min(11, Math.max(0, Math.floor((px - a.left) / a.width * 12))) * 12 + Math.min(11, Math.max(0, Math.floor((py - a.top) / a.height * 12)));
+        const farX = p[0] - a.left < a.width / 2 ? a.right - 5 : a.left + 5, farY = p[1] - a.top < a.height / 2 ? a.bottom - 5 : a.top + 5;
+        if (!e[gi(p[0], p[1])] || e[gi(farX, farY)]) throw new Error('90ms after a press ' + p[2] + ', C has not started at the finger and spread from it (finger lit: ' + e[gi(p[0], p[1])] + ', far corner lit: ' + e[gi(farX, farY)] + ')');
+        let best = 0, bestT = 0;
+        for (let t = 60; t <= 900; t += 30) { const n = litAt(t).filter(Boolean).length / 144; if (n > best) { best = n; bestT = t; } }
+        if (best < 0.9) throw new Error('pressed ' + p[2] + ', C\'s keys light at most ' + Math.round(best * 100) + '% of the area (at ' + bestT + 'ms) - he asked for the whole area (#964 clause 4)');
+      }
+    });
+  });
+
+  /* #964 ASK 3's second option. The two lights start at the rim point nearest the finger, one each way round, and meet
+     half the rim away. Seeked, like the bottom-middle test ('964 clauses 1 5 6'), and with that start as the CONTROL:
+     the same press with the bottom-middle start must begin at the bottom-centre, or this test could not tell them apart. */
+  test('974 the outline\'s other start: from the edge nearest the finger, both ways round, meeting on the far side', { item: '974', budgetMs: 10000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the outline can only start one way (queue 974)');
+      const a = c.area, T = FM._areaFx.PULSE_TRAVEL;
+      const lap = function (start, px, py) {
+        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
+        FM.variant.force('emptytap.start', start);
+        c.press(px, py);
+        const host = c.panel.querySelector('.tl-areafx--pulse');
+        if (!host) throw new Error('a press drew no outline (start ' + start + ')');
+        if (host.dataset.start !== start) throw new Error('with the ' + start + ' start chosen, the outline says it started "' + host.dataset.start + '"');
+        const hr = host.getBoundingClientRect();
+        const cores = [].slice.call(host.querySelectorAll('path.fx-core'));
+        if (cores.length !== 2) throw new Error('expected two travelling lights, found ' + cores.length);
+        const at = function (t) {
+          return cores.map(function (p) {
+            p.getAnimations().forEach(function (an) { an.pause(); an.currentTime = t; });
+            const len = parseFloat(p.style.strokeDasharray), off = parseFloat(getComputedStyle(p).strokeDashoffset), L = p.getTotalLength();
+            const pt = p.getPointAtLength(Math.max(0, Math.min(L, len - off)));
+            return { x: hr.left + pt.x, y: hr.top + pt.y };
+          });
+        };
+        return { host: host, hr: hr, at: at };
+      };
+      // pressed near the LEFT edge, half-way down
+      const px = a.left + 20, py = a.top + a.height * 0.5;
+      const L1 = lap('nearest', px, py), hr = L1.hr;
+      const s0 = L1.at(0);
+      s0.forEach(function (q) { if (Math.abs(q.x - (hr.left + 4)) > 6 || Math.abs(q.y - py) > 8) throw new Error('pressed near the left edge at y=' + Math.round(py) + ', a light starts at ' + JSON.stringify(q) + ' - not the nearest point of the rim'); });
+      const q15 = L1.at(T * 0.15);
+      if (!((q15[0].y < py - 10 && q15[1].y > py + 10) || (q15[1].y < py - 10 && q15[0].y > py + 10))) throw new Error('the two lights do not go opposite ways round from the finger: ' + JSON.stringify(q15));
+      const seen = { left: 0, right: 0, top: 0, bottom: 0 };
+      for (let k = 0; k <= 24; k++) L1.at(T * k / 24).forEach(function (q) {
+        if (q.x <= hr.left + 8) seen.left++;
+        if (q.x >= hr.right - 8) seen.right++;
+        if (q.y <= hr.top + 8) seen.top++;
+        if (q.y >= hr.bottom - 40) seen.bottom++;
+      });
+      const miss = Object.keys(seen).filter(function (k) { return !seen[k]; });
+      if (miss.length) throw new Error('from the nearest edge the lights never reached the ' + miss.join(', ') + ' edge - "all the way around it": ' + JSON.stringify(seen));
+      const e = L1.at(T);
+      if (Math.hypot(e[0].x - e[1].x, e[0].y - e[1].y) > 6) throw new Error('the two lights do not meet: ' + JSON.stringify(e));
+      if (e[0].x < hr.right - 12) throw new Error('from the left edge they meet at x=' + Math.round(e[0].x) + ' - not on the far (right) side');
+      // the start FOLLOWS the finger: near the right edge, low down, it starts there
+      const px2 = a.right - 30, py2 = a.bottom - 60;
+      const L2 = lap('nearest', px2, py2);
+      L2.at(0).forEach(function (q) { if (Math.abs(q.x - (L2.hr.right - 4)) > 6 || Math.abs(q.y - py2) > 8) throw new Error('pressed near the right edge at y=' + Math.round(py2) + ', a light starts at ' + JSON.stringify(q)); });
+      // CONTROL: the same left-edge press with the bottom-middle start begins at the bottom-centre
+      const L3 = lap('bottom', px, py);
+      L3.at(0).forEach(function (q) { if (Math.abs(q.x - (L3.hr.left + L3.hr.width / 2)) > 6 || q.y < L3.hr.bottom - 40) throw new Error('CONTROL: the bottom-middle start began at ' + JSON.stringify(q) + ', so this test cannot tell the two starts apart'); });
+    });
+  });
+
+  /* #957's clapper: timing A (open, then every 6 s), B (once), C (non-stop), and grey or cyan impact lines. The timing is
+     picked each time the empty project comes on screen, so each check brings it on fresh (a layer on, then off). */
+  async function clapFresh974(timing, lines) {
+    if (FM.variant && FM.variant.force) { FM.variant.force('clapper.timing', timing); FM.variant.force('clapper.lines', lines === undefined ? null : lines); }
+    FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: '974', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+    FM.refreshAll(); await sleep(30);
+    FM.scene.layers.length = 0; FM.selectLayer(null); FM.refreshAll(); await sleep(60);
+    const d = document.getElementById('drop-hint');
+    if (!d || d.classList.contains('hidden') || !(d.getBoundingClientRect().width > 0)) throw new Error('the empty-canvas clapper is not on screen with no layers, so there is nothing to watch');
+    return d;
+  }
+  async function onEmptyStage974(fn) {
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(60);
+      return await fn();
+    } finally {
+      if (FM.variant && FM.variant.force) { FM.variant.force('clapper.timing', null); FM.variant.force('clapper.lines', null); }
+      FM.scene.layers = layers0;
+      if (FM.selectLayer) FM.selectLayer(sel0 || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  }
+  /* The same measurement as '957 the empty project clapper…', seeked and read off the drawing through its live CTM. */
+  function clapSample974(d, upto) {
+    const board = d.querySelector('.dh-body > path'), bar = d.querySelector('.dh-stick').querySelectorAll('path')[1];
+    const lines = [].slice.call(d.querySelectorAll('.dh-whack path'));
+    const running = d.getAnimations({ subtree: true }).filter(a => /^dh-/.test(a.animationName || ''));
+    const clap = running.filter(a => /^dh-clap/.test(a.animationName))[0];
+    if (!clap) return { running: running };
+    const tm = clap.effect.getComputedTiming();
+    const inBoard = (el, x, y) => new DOMPoint(x, y).matrixTransform(el.getScreenCTM()).matrixTransform(board.getScreenCTM().inverse());
+    const at = function (ms) {
+      running.forEach(a => { a.pause(); a.currentTime = tm.delay + ms; });
+      const H = inBoard(bar, 3.2, 8.9), R = inBoard(bar, 21, 6.5);
+      return { ms: ms, deg: Math.atan2(H.y - R.y, R.x - H.x) * 180 / Math.PI, hinge: Math.hypot(H.x - 3.2, H.y - 8.9), tipY: R.y,
+               ink: Math.max.apply(null, lines.map(p => +getComputedStyle(p).opacity)),
+               out: Math.min.apply(null, lines.map(p => { const b = p.getBBox(); return inBoard(p, b.x, b.y).x - 21; })) };
+    };
+    const S = [];
+    for (let ms = 0; ms <= (upto || 1200); ms += 10) S.push(at(ms));
+    return { running: running, clap: clap, tm: tm, S: S, at: at };
+  }
+  test('974 the clapper\'s three timings each play as drawn: A open then every 6 s, B one clap then shut, C non-stop', { item: '974', budgetMs: 20000 }, async function () {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // nothing claps there, by design ('957 the empty project clapper…' holds that)
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the clapper can only ever play one timing (queue 974)');
+    return onEmptyStage974(async function () {
+      const want = { A: { name: 'dh-clap', it: Infinity, lo: 4000, hi: 8000 }, B: { name: 'dh-clap-b', it: 1, lo: 700, hi: 1600 }, C: { name: 'dh-clap-c', it: Infinity, lo: 1200, hi: 2000 } };
+      for (const v of ['A', 'B', 'C']) {
+        const d = await clapFresh974(v, 'cyan');
+        const m = clapSample974(d);
+        if (!m.clap) throw new Error('with timing ' + v + ' chosen nothing animates the stick (running: ' + (m.running.map(a => a.animationName).join(', ') || 'none') + ')');
+        const w = want[v];
+        if (m.clap.animationName !== w.name) throw new Error('with timing ' + v + ' chosen the stick runs ' + m.clap.animationName + ', not ' + w.name);
+        if (m.tm.iterations !== w.it) throw new Error('timing ' + v + ' plays ' + m.tm.iterations + ' time(s), not ' + w.it);
+        if (!(m.tm.duration >= w.lo && m.tm.duration <= w.hi)) throw new Error('timing ' + v + '\'s cycle is ' + m.tm.duration + 'ms, not ' + w.lo + '-' + w.hi);
+        if (m.running.length !== 5) throw new Error('timing ' + v + ' runs ' + m.running.length + ' clapper animations (stick, board, three lines = 5): ' + m.running.map(a => a.animationName).join(', '));
+        if (m.running.some(a => a.effect.getComputedTiming().duration !== m.tm.duration)) throw new Error('timing ' + v + '\'s stick, board and lines are out of step: ' + m.running.map(a => a.animationName + ' ' + a.effect.getComputedTiming().duration).join(', '));
+        const S = m.S, s0 = S[0];
+        if (!(s0.deg > 20)) throw new Error('timing ' + v + ': at the start the stick is ' + s0.deg.toFixed(1) + '° open - it does not start open');
+        if (s0.ink > 0.05) throw new Error('timing ' + v + ': the impact lines show before the slam');
+        const off = S.filter(s => s.hinge > 0.3)[0];
+        if (off) throw new Error('timing ' + v + ': at ' + off.ms + 'ms the hinge has moved ' + off.hinge.toFixed(2) + ' units off the board\'s corner');
+        const hit = S.filter(s => s.deg < 1)[0];
+        if (!hit) throw new Error('timing ' + v + ': the stick never shuts in the first 1.2 s');
+        if (Math.abs(hit.tipY - 8.9) > 0.4) throw new Error('timing ' + v + ': shut, the tip is at y=' + hit.tipY.toFixed(2) + ', not on the board');
+        const lastOpen = S.filter(s => s.ms < hit.ms && s.deg > 0.8 * s0.deg).pop();
+        if (!lastOpen || hit.ms - lastOpen.ms > 150) throw new Error('timing ' + v + ': it takes ' + (lastOpen ? hit.ms - lastOpen.ms : '?') + 'ms from open to shut - a close, not a slam');
+        const burst = S.filter(s => s.ms >= hit.ms - 10 && s.ms <= hit.ms + 80 && s.ink > 0.5)[0];
+        if (!burst || burst.out < -0.5) throw new Error('timing ' + v + ': no impact lines out of the tip within 80ms of the slam at ' + hit.ms + 'ms');
+        if (S.filter(s => s.ms >= hit.ms + 400 && s.ink > 0.05)[0]) throw new Error('timing ' + v + ': the impact lines still show 400ms after the slam');
+        if (v === 'B') {
+          // ONCE: long after its one clap it is still shut, lines gone (the plan's §6 check for B)
+          const late = m.at(m.tm.duration + 2000);
+          if (!(late.deg < 1) || late.ink > 0.05) throw new Error('timing B: 2 s after its clap the stick is ' + late.deg.toFixed(1) + '° open (lines ' + late.ink + ') - it is meant to clap once and stay shut');
+        } else {
+          // AGAIN: one cycle on, it is open again for the next clap
+          const again = m.at(m.tm.duration);
+          if (!(again.deg > 20)) throw new Error('timing ' + v + ': at the start of its next cycle the stick is ' + again.deg.toFixed(1) + '° open - it does not come back for another clap');
+        }
+        m.running.forEach(a => a.play());
+        // the timing classes must not outrank the Home off switch (the reduced-motion rule is the same kind of rule)
+        FM.home.open(); await sleep(120);
+        const behind = d.getAnimations({ subtree: true }).filter(a => /^dh-/.test(a.animationName || '')).length;
+        FM.home.close(); await sleep(120);
+        if (behind) throw new Error('with timing ' + v + ' the clapper keeps animating behind Home (' + behind + ')');
+      }
+      // CONTROL: 60 unforced openings of the empty project reach all three timings and both line colours
+      FM.variant.force('clapper.timing', null); FM.variant.force('clapper.lines', null);
+      const d = document.getElementById('drop-hint'), got = {}, cols = {};
+      for (let i = 0; i < 60; i++) {
+        FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', name: '974', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#f00' }));
+        FM.refreshAll(); await sleep(0);
+        FM.scene.layers.length = 0; FM.refreshAll(); await sleep(0);
+        const t = ['a', 'b', 'c'].filter(k => d.classList.contains('dh-t-' + k));
+        if (t.length !== 1) throw new Error('opening ' + (i + 1) + ' of 60 left the clapper with timing classes ' + JSON.stringify(t));
+        if (FM.variant.last['clapper.timing'] !== t[0].toUpperCase()) throw new Error('FM.variant.last names timing ' + FM.variant.last['clapper.timing'] + ' but ' + t[0].toUpperCase() + ' is on');
+        got[t[0]] = 1; cols[d.classList.contains('dh-grey') ? 'grey' : 'cyan'] = 1;
+      }
+      if (Object.keys(got).sort().join() !== 'a,b,c') throw new Error('60 unforced openings played the timings ' + JSON.stringify(got) + ' - all three must come up at random');
+      if (Object.keys(cols).sort().join() !== 'cyan,grey') throw new Error('60 unforced openings drew the lines ' + JSON.stringify(cols) + ' - both colours must come up');
+    });
+  });
+
+  test('974 the clapper\'s impact lines: cyan or grey, a new pick on every clap', { item: '974', budgetMs: 20000 }, async function () {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the clapper\'s lines can only ever be one colour (queue 974)');
+    return onEmptyStage974(async function () {
+      const accent = (function () {
+        const p = document.createElement('span'); p.style.color = 'var(--accent)';
+        document.getElementById('drop-hint').appendChild(p);
+        const c = getComputedStyle(p).color; p.remove(); return c;
+      })();
+      let d = await clapFresh974('C', 'grey');
+      const g = d.querySelector('.dh-whack'), icon = d.querySelector('.dh-icon svg');
+      const grey = getComputedStyle(g).stroke, ink = getComputedStyle(icon).color;
+      if (grey !== ink) throw new Error('with grey chosen the lines are ' + grey + ', not the clapper\'s own ' + ink);
+      d = await clapFresh974('C', 'cyan');
+      const cyan = getComputedStyle(d.querySelector('.dh-whack')).stroke;
+      if (cyan !== accent) throw new Error('with cyan chosen the lines are ' + cyan + ', not the accent ' + accent);
+      if (cyan === grey) throw new Error('CONTROL: cyan and grey came out the same colour (' + cyan + '), so neither check above means anything');
+      /* EVERY CLAP picks again. Real time (a seek does not fire animationiteration — measured), on timing C: 0.4 s delay +
+         two 1.6 s laps. Counted in the log, which is exactly what he would be read back. */
+      d = await clapFresh974('C');
+      // counted by time, not by length: the log keeps the newest 50 per animation, so a full log does not grow
+      const since = Date.now() + 1;
+      const count = () => FM.variant.log().filter(e => e.name === 'clapper.lines' && e.t >= since).length;
+      const n0 = count();
+      const stick = d.querySelector('.dh-stick').getAnimations()[0];
+      const t0 = stick ? stick.currentTime : null;
+      await sleep(400 + 1600 * 2 + 400);
+      const moved = stick ? stick.currentTime - t0 : 0;
+      if (!(moved > 3000)) throw new Error('CONTROL: the clap\'s clock moved ' + moved + 'ms in 4.4 s, so animations are not running here and this cannot count claps');
+      const n1 = count();
+      if (n1 - n0 < 2) throw new Error('two claps went by and the line colour was picked ' + (n1 - n0) + ' more time(s) - it is picked again on every clap');
+    });
+  });
+
+  /* ═══ #947 — THE NEW PROJECT + GETS ITS OWN ENTRANCE (all three of its options, one at random, per #974) ═══════════════
+     His words (#944): the + to make a new project should not open "the same you've done for everything else"; it should
+     "actually look really good and be really well thought out". The three drawn options (tools/design/947-options.html)
+     are each forced and SEEKED at the points that make them what they are, measured against the real + and the real card:
+       A · the flying disc starts ON the + and lands AS the card, the + itself shrinks away into it, the card's own
+           surface waits for the landing;
+       B · a 9:16 frame starts on the +, its outline draws itself by 42%, and it lands as the card;
+       C · the screen opens as a circle from the +'s centre, reaching the farthest corner by 55%, and the + turns 135°.
+     Then the part that matters most on Home afterwards: nothing outlives the card, and the + is whole again. */
+  test('947 the New project + opens with its own entrance - A the orb becomes the card, B a canvas is drawn, C a ripple opens it - and gives the + back', { item: '947', budgetMs: 40000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the + has no entrance options to play (queue 947 / 974)');
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog'), card = dlg.querySelector('.hm-dlg-card'), orb = document.getElementById('hm-new');
+    const np = () => document.getAnimations().filter(a => /^np947-/.test(a.id || ''));
+    const seek = (list, t) => list.forEach(a => { a.pause(); a.currentTime = t; });
+    const near = (r, s, tol) => Math.abs(r.left - s.left) <= tol && Math.abs(r.top - s.top) <= tol && Math.abs(r.width - s.width) <= tol && Math.abs(r.height - s.height) <= tol;
+    const box = r => '[' + [r.left, r.top, r.width, r.height].map(Math.round).join(', ') + ']';
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      await sleep(80);
+      for (const width of ['phone', 'pc']) {
+        await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
+          for (const v of ['A', 'B', 'C']) {
+            FM.variant.force('newproject', v);
+            dlg.classList.add('hidden'); await sleep(40);
+            const O = orb.getBoundingClientRect();
+            if (!(O.width > 20)) throw new Error(width + ': the + is not on screen (' + box(O) + ') before it is pressed');
+            orb.click();
+            if (dlg.classList.contains('hidden')) throw new Error(width + ': tapping + did not open the New project card');
+            const list = np();
+            if (!list.length) throw new Error(width + ', ' + v + ': the card opened with no entrance of its own');
+            const stray = list.filter(a => a.id.indexOf('np947-' + v + '-') !== 0);
+            if (stray.length) throw new Error(width + ': with ' + v + ' chosen, ' + stray[0].id + ' also plays');
+            const pop = card.getAnimations().concat(dlg.getAnimations()).filter(a => a.animationName);
+            if (pop.length) throw new Error(width + ', ' + v + ': the card still pops like every other card (' + pop.map(a => a.animationName).join(', ') + ') - #947 asked for an entrance of its own');
+            seek(list, 640);
+            const Cr = card.getBoundingClientRect();
+            if (v === 'A') {
+              const m = dlg.querySelector('.np-fx-orb');
+              if (!m) throw new Error(width + ', A: no flying disc');
+              seek(list, 0);
+              if (!near(m.getBoundingClientRect(), O, 2)) throw new Error(width + ', A: the disc starts at ' + box(m.getBoundingClientRect()) + ', not on the + ' + box(O));
+              if (getComputedStyle(card).backgroundColor !== 'rgba(0, 0, 0, 0)') throw new Error(width + ', A: the card\'s own surface shows before the disc lands (' + getComputedStyle(card).backgroundColor + ')');
+              seek(list, 320);
+              if (orb.getBoundingClientRect().width > 2) throw new Error(width + ', A: half-way through, the + is still ' + Math.round(orb.getBoundingClientRect().width) + 'px wide - the orb itself is meant to become the card');
+              seek(list, 640);
+              if (!near(m.getBoundingClientRect(), Cr, 2)) throw new Error(width + ', A: the disc lands at ' + box(m.getBoundingClientRect()) + ', not as the card ' + box(Cr));
+              if (getComputedStyle(card).backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error(width + ', A: landed, the card has no surface of its own');
+            } else if (v === 'B') {
+              const fr = dlg.querySelector('.np-fx-frame'), out = fr && fr.querySelector('.np-fx-outline');
+              if (!fr || !out) throw new Error(width + ', B: no frame being drawn');
+              seek(list, 0);
+              const f0 = fr.getBoundingClientRect();
+              if (Math.hypot(f0.left + f0.width / 2 - (O.left + O.width / 2), f0.top + f0.height / 2 - (O.top + O.height / 2)) > 2) throw new Error(width + ', B: the frame does not rise out of the + (' + box(f0) + ' vs ' + box(O) + ')');
+              if (Math.abs(f0.height / f0.width - 16 / 9) > 0.05) throw new Error(width + ', B: the frame is ' + (f0.height / f0.width).toFixed(2) + ' tall per wide - a new project\'s 9:16 canvas is 1.78');
+              if (Math.abs(parseFloat(getComputedStyle(out).strokeDashoffset) - 1) > 0.01) throw new Error(width + ', B: the outline is already drawn at the start');
+              seek(list, 0.42 * 640);
+              if (Math.abs(parseFloat(getComputedStyle(out).strokeDashoffset)) > 0.01) throw new Error(width + ', B: the outline is not drawn in full by 42% (' + getComputedStyle(out).strokeDashoffset + ')');
+              seek(list, 640);
+              if (!near(fr.getBoundingClientRect(), Cr, 2)) throw new Error(width + ', B: the frame lands at ' + box(fr.getBoundingClientRect()) + ', not as the card ' + box(Cr));
+            } else {
+              const cx = O.left + O.width / 2, cy = O.top + O.height / 2;
+              const clip = () => { const m = /circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)/.exec(getComputedStyle(dlg).clipPath || ''); return m ? { r: +m[1], x: +m[2], y: +m[3] } : null; };
+              seek(list, 0);
+              const c0 = clip();
+              if (!c0 || c0.r > 1 || Math.hypot(c0.x - cx, c0.y - cy) > 2) throw new Error(width + ', C: the screen does not open from the +\'s centre (' + getComputedStyle(dlg).clipPath + ')');
+              if (+getComputedStyle(card).opacity > 0.05) throw new Error(width + ', C: the card is visible before the ripple has opened the screen');
+              const ring = document.querySelector('.np-fx-ring');
+              if (!ring) throw new Error(width + ', C: no ring spreads from the +');
+              seek(list, 0.55 * 640);
+              const far = Math.max(Math.hypot(cx, cy), Math.hypot(innerWidth - cx, cy), Math.hypot(cx, innerHeight - cy), Math.hypot(innerWidth - cx, innerHeight - cy));
+              const c1 = clip();
+              if (!c1 || c1.r < far - 1) throw new Error(width + ', C: by 55% the opening is ' + (c1 ? Math.round(c1.r) : '?') + 'px, short of the farthest corner at ' + Math.round(far) + 'px');
+              seek(list, 640);
+              const mt = new DOMMatrix(getComputedStyle(orb).transform), deg = Math.round(Math.atan2(mt.b, mt.a) * 180 / Math.PI);
+              if (Math.abs(deg - 135) > 1) throw new Error(width + ', C: the + turns ' + deg + '° - it is meant to turn 135° into an ×');
+            }
+            // IT LANDS AND CLEANS UP on a timer; only the +'s own pose stays while the card is open
+            list.forEach(a => a.play());
+            await sleep(640 + 250);
+            if (document.querySelector('.np-fx')) throw new Error(width + ', ' + v + ': the entrance\'s layers are still in the page after it landed');
+            const still = np().filter(a => !/-button$/.test(a.id));
+            if (still.length) throw new Error(width + ', ' + v + ': ' + still.map(a => a.id).join(', ') + ' still running after the card landed');
+            // …and the card goes, the + is whole
+            dlg.classList.add('hidden'); await sleep(40);
+            if (np().length) throw new Error(width + ', ' + v + ': ' + np().map(a => a.id).join(', ') + ' outlived the card');
+            const back = orb.getBoundingClientRect();
+            if (!near(back, O, 1)) throw new Error(width + ', ' + v + ': after the card closed the + is ' + box(back) + ', not the ' + box(O) + ' it was - it would be missing or turned on Home');
+            if (card.style.animation || dlg.style.animation) throw new Error(width + ', ' + v + ': the card keeps its entrance switch-off after it closed');
+          }
+        });
+      }
+      // REDUCED MOTION: no entrance at all - and the card still opens (the control)
+      const realMM = window.matchMedia;
+      window.matchMedia = function (q) {
+        if (/prefers-reduced-motion:\s*reduce/.test(q)) return { matches: true, media: q, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } };
+        return realMM.call(window, q);
+      };
+      try {
+        FM.variant.force('newproject', null);
+        dlg.classList.add('hidden'); await sleep(40);
+        orb.click();
+        if (dlg.classList.contains('hidden')) throw new Error('CONTROL: under reduced motion tapping + did not open the card at all');
+        if (np().length || document.querySelector('.np-fx')) throw new Error('with reduced motion asked for, the + still flies/draws/ripples into the card');
+      } finally { window.matchMedia = realMM; }
+    } finally {
+      FM.variant.force('newproject', null);
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (!wasOpen) FM.home.close();
+    }
+  });
+
+  test('947 A: Cancel runs the entrance backwards - the card shrinks back into the + - then it closes and the + is whole', { item: '947', budgetMs: 15000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option A cannot be chosen (queue 947 / 974)');
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog'), card = dlg.querySelector('.hm-dlg-card'), orb = document.getElementById('hm-new');
+    const np = () => document.getAnimations().filter(a => /^np947-/.test(a.id || ''));
+    const near = (r, s, tol) => Math.abs(r.left - s.left) <= tol && Math.abs(r.top - s.top) <= tol && Math.abs(r.width - s.width) <= tol && Math.abs(r.height - s.height) <= tol;
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      await sleep(80);
+      await atPhoneWidth(async function () {
+        FM.variant.force('newproject', 'A');
+        dlg.classList.add('hidden'); await sleep(40);
+        const O = orb.getBoundingClientRect();
+        orb.click();
+        await sleep(640 + 200);
+        const Cr = card.getBoundingClientRect();
+        document.getElementById('hm-cancel').click();
+        if (dlg.classList.contains('hidden')) throw new Error('Cancel closed the card at once - with A the card is meant to shrink back into the + first');
+        const back = np();
+        const m = dlg.querySelector('.np-fx-orb');
+        if (!m || !back.length) throw new Error('Cancel ran no reverse flight (no disc, ' + back.length + ' animations)');
+        const dur = back.map(a => a.effect.getComputedTiming().duration).reduce((x, y) => Math.max(x, y), 0);
+        back.forEach(a => { a.pause(); a.currentTime = 0; });
+        if (!near(m.getBoundingClientRect(), Cr, 2)) throw new Error('the reverse flight does not start as the card');
+        back.forEach(a => { a.currentTime = dur; });
+        if (!near(m.getBoundingClientRect(), O, 2)) throw new Error('the reverse flight does not end on the + (' + JSON.stringify(m.getBoundingClientRect()) + ')');
+        back.forEach(a => { a.currentTime = 0; a.play(); });
+        await sleep(dur + 250);
+        if (!dlg.classList.contains('hidden')) throw new Error('after running backwards the card did not close');
+        if (np().length || document.querySelector('.np-fx')) throw new Error('the reverse flight outlived the card');
+        if (!near(orb.getBoundingClientRect(), O, 1)) throw new Error('after Cancel the + is not whole on Home');
+        // CONTROL: B keeps the plain close - Cancel hides it at once, so the check above is about A, not about Cancel
+        FM.variant.force('newproject', 'B');
+        orb.click(); await sleep(60);
+        document.getElementById('hm-cancel').click();
+        if (!dlg.classList.contains('hidden')) throw new Error('CONTROL: with B, Cancel did not close the card at once');
+      });
+    } finally {
+      FM.variant.force('newproject', null);
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (!wasOpen) FM.home.close();
+    }
+  });
+
+  test('974 the New project +: 60 real taps open it with all three entrances at random', { item: '974', budgetMs: 30000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the + only ever opens one way (queue 974)');
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog'), orb = document.getElementById('hm-new');
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      await sleep(80);
+      FM.variant.force('newproject', null);
+      const got = {};
+      for (let i = 0; i < 60; i++) {
+        dlg.classList.add('hidden'); await sleep(0);
+        orb.click();
+        const ids = document.getAnimations().map(a => a.id || '').filter(id => /^np947-/.test(id));
+        const v = (ids[0] || '').charAt(6);
+        if (!v) throw new Error('tap ' + (i + 1) + ' of 60 opened the card with no entrance');
+        if (FM.variant.last.newproject !== v) throw new Error('FM.variant.last names ' + FM.variant.last.newproject + ' but ' + v + ' played');
+        got[v] = (got[v] || 0) + 1;
+      }
+      if (Object.keys(got).sort().join() !== 'A,B,C') throw new Error('60 taps on + opened with ' + JSON.stringify(got) + ' - all three entrances must come up at random (#974 clause 2)');
+    } finally {
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (!wasOpen) FM.home.close();
+    }
+  });
+
+  /* ═══ 974 REVIEW — three things the review found, each met the way he would meet it: a REAL finger (tests/_cdp.py's
+     __fmWantInput) at a phone width. A synthetic tap cannot show the first or the third: the first is a click that the
+     browser hit-tests AFTER the press has changed the page, the third a second tap landing inside a timer's window. */
+  async function home974(fn) {
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog');
+    try {
+      return await atPhoneWidth(async function () {
+        return await onScreen924(async function () {
+          if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+          const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+          if (tabBtn) tabBtn.click();
+          dlg.classList.add('hidden');
+          await sleep(300);
+          return await fn(dlg, document.getElementById('hm-new'), dlg.querySelector('.hm-dlg-card'));
+        });
+      });
+    } finally {
+      if (FM.variant && FM.variant.force) FM.variant.force('newproject', null);
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (wasOpen) FM.home.open(); else FM.home.close();
+      await sleep(200);
+    }
+  }
+  const tap974 = (x, y, what) => realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
+
+  test('974 review: with #947 C the + turns into an x under the card - a real tap on that x closes the card, it does not open it again', { item: '974', budgetMs: 40000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - there is no option C to turn the + into an x (queue 947 / 974)');
+    const running = () => document.getAnimations().filter(a => /^np947-/.test(a.id || '') && a.playState === 'running');
+    return home974(async function (dlg, orb) {
+      FM.variant.force('newproject', 'C');
+      const O = orb.getBoundingClientRect(), x = O.left + O.width / 2, y = O.top + O.height / 2;
+      hitIs927(x, y, orb, 'the New project +');
+      await tap974(x, y, 'a real tap on the +');
+      await sleep(900);   // C has landed (640 ms): the + stands turned into an x under the card
+      if (dlg.classList.contains('hidden')) throw new Error('CONTROL: a real tap on the + did not open the New project card - nothing below would mean anything');
+      if (FM.variant.last.newproject !== 'C') throw new Error('CONTROL: the card opened with ' + FM.variant.last.newproject + ', not the forced C');
+      const mt = new DOMMatrix(getComputedStyle(orb).transform), deg = Math.round(Math.atan2(mt.b, mt.a) * 180 / Math.PI);
+      if (Math.abs(deg - 135) > 2) throw new Error('CONTROL: the + is turned ' + deg + ' degrees - C leaves it as an x (135) under the card');
+      const hit = document.elementFromPoint(x, y);
+      if (hit !== dlg) throw new Error('setup: the x is under ' + (hit ? (hit.id || hit.className || hit.tagName) : 'nothing') + ', not the card\'s backdrop');
+      await tap974(x, y, 'a real tap on the x');
+      await sleep(500);
+      if (!dlg.classList.contains('hidden')) {
+        throw new Error('500 ms after a real tap on the x the New project card is still open' + (running().length ? ' - it OPENED AGAIN, ' + running().length +
+          ' np947 animations running: the backdrop closed on the press and the tap\'s click, hit-tested after the card had gone, landed on the + under it' : ''));
+      }
+      await sleep(400);
+      if (!dlg.classList.contains('hidden')) throw new Error('the card closed on the tap on the x and then came back');
+    });
+  });
+
+  test('974 review: #947 A closed before it lands (a real double-tap on the +, or Escape at once) turns round from where the disc is - it never jumps to the whole card', { item: '974', budgetMs: 40000 }, async function () {
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - there is no option A to close mid-flight (queue 947 / 974)');
+    return home974(async function (dlg, orb, card) {
+      const disc = () => dlg.querySelector('.np-fx-orb');
+      /* the flying disc's width on every frame, and which frame first comes after the close arrived */
+      function sampler() {
+        const s = { w: [], at: -1, on: true, cw: 0, log: [] }, t0 = performance.now();
+        const mark = () => { if (s.at < 0) s.at = s.w.length; };
+        const note = e => { if (s.log.length < 12) s.log.push(e.type + '@' + Math.round(performance.now() - t0) + (e.target && e.target.id ? '#' + e.target.id : '')); };
+        dlg.addEventListener('click', mark, true);
+        document.addEventListener('keydown', mark, true);
+        ['pointerdown', 'click', 'keydown'].forEach(t => document.addEventListener(t, note, true));
+        (function tick() {
+          const m = disc();
+          s.w.push(m ? m.getBoundingClientRect().width : null);
+          if (!dlg.classList.contains('hidden')) s.cw = Math.max(s.cw, card.getBoundingClientRect().width);
+          if (s.on) requestAnimationFrame(tick);
+        })();
+        s.stop = () => {
+          s.on = false; dlg.removeEventListener('click', mark, true); document.removeEventListener('keydown', mark, true);
+          ['pointerdown', 'click', 'keydown'].forEach(t => document.removeEventListener(t, note, true));
+        };
+        return s;
+      }
+      for (const how of ['a real double-tap on the +', 'Escape 200 ms in']) {
+        FM.variant.force('newproject', 'A');
+        dlg.classList.add('hidden'); await sleep(120);
+        const O = orb.getBoundingClientRect(), x = O.left + O.width / 2, y = O.top + O.height / 2;
+        hitIs927(x, y, orb, 'the New project +');
+        const s = sampler();
+        try {
+          if (how.indexOf('double') >= 0) {
+            /* his double-tap: the second tap lands on the card's backdrop, which now covers the +. The flight is held at
+               150 ms as soon as the first tap has started it: the runner delivers the second tap anywhere from 150 to
+               350 ms later (measured — the page is busy building the card), and by 350 ms the disc is card-sized */
+            const hold = e => {
+              if (!(e.target === orb || orb.contains(e.target))) return;
+              document.removeEventListener('click', hold, true);
+              setTimeout(() => document.getAnimations().filter(a => /^np947-A-/.test(a.id || '')).forEach(a => { a.pause(); a.currentTime = 150; }), 0);
+            };
+            document.addEventListener('click', hold, true);
+            try {
+              await realInput924([{ t: 'touchStart', x: x, y: y, ms: 40 }, { t: 'touchEnd', x: x, y: y, ms: 50 }, { t: 'touchStart', x: x, y: y, ms: 40 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], how);
+            } finally { document.removeEventListener('click', hold, true); }
+          } else {
+            await tap974(x, y, 'a real tap on the +');
+            const list = document.getAnimations().filter(a => /^np947-A-/.test(a.id || ''));
+            if (!list.length) throw new Error('CONTROL: ' + how + ': the + opened the card with no A entrance');
+            list.forEach(a => { a.pause(); a.currentTime = 200; });   // mid-flight, whatever the runner's timing
+            await sleep(60);
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+          }
+          await sleep(700);
+        } finally { s.stop(); }
+        if (s.at < 0) throw new Error('CONTROL: ' + how + ': the close never reached the card');
+        const before = s.w[s.at - 1], after = s.w.slice(s.at).filter(w => w != null);
+        if (!(before > 0)) throw new Error('setup: ' + how + ': there was no disc in flight when the close came (the card had landed first) - nothing to measure (' + s.log.join(' ') + ')');
+        // the jump lands on the whole card, so it can be told apart from any disc a few px narrower than the card
+        if (!(before < s.cw - 12)) throw new Error('setup: ' + how + ': the disc was already ' + Math.round(before) + ' wide of the card\'s ' + Math.round(s.cw) + ' when the close came - no jump could be told apart (' + s.log.join(' ') + ')');
+        const top = Math.max.apply(null, after.concat([0]));
+        if (top > before + 3) throw new Error(how + ': the disc was ' + Math.round(before) + 'px wide when the card was closed, then ' + Math.round(top) + 'px - it jumped to the whole card before shrinking back into the +');
+        if (!after.some(w => w < before - 3) && before > O.width + 6) throw new Error('CONTROL: ' + how + ': after the close the disc never got smaller than ' + Math.round(before) + ' - it did not run backwards at all');
+        if (!dlg.classList.contains('hidden')) throw new Error(how + ': 700 ms after the close the card is still open');
+        /* whole = its full size and upright. Not its exact spot: after a key the focused + takes its :hover/:focus-visible
+           lift (2px up) — measured the same with B, whose close is the plain one, so it is not this entrance's doing */
+        const R = orb.getBoundingClientRect(), om = new DOMMatrix(getComputedStyle(orb).transform);
+        if (Math.abs(R.width - O.width) > 1.5 || Math.abs(R.height - O.height) > 1.5 || Math.abs(om.b) > 0.01) throw new Error(how + ': after the close the + is ' + Math.round(R.width) + 'x' + Math.round(R.height) + ' and turned (' + getComputedStyle(orb).transform + ') - not whole on Home');
+      }
+    });
+  });
+
+  test('974 review: the add menu held for the empty area\'s press is dropped when he leaves - a real tap there, then straight away the back arrow, and the sheet does not open behind Home', { item: '974', budgetMs: 40000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const sheet = document.getElementById('add-sheet');
+    const sheetOpen = () => sheet.classList.contains('open') || document.body.classList.contains('add-open');
+    try {
+      if (wasOpen) { FM.home.close(); await sleep(300); }
+      const id = await FM.projects.create({ name: '974 empty', width: 1080, height: 1920 });
+      if (!id) throw new Error('setup: an empty project could not be made');
+      made.push(id);
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep(300); }
+          FM.selectLayer(null); FM.timeline.rebuild(); await sleep(400);
+          if (!FM._isEmptyStart || !FM._isEmptyStart()) throw new Error('setup: not on the empty project screen');
+          const tl = document.getElementById('timeline'), r = tl.getBoundingClientRect();
+          const x = r.left + 40, y = r.bottom - 40;
+          hitIs927(x, y, tl, 'the empty area');
+          // CONTROL: the same real tap on its own opens the sheet - after the hold, not before
+          await tap974(x, y, 'a real tap on the empty area');
+          if (sheetOpen()) throw new Error('CONTROL: the add menu opened with the tap - there is no hold for the press animation (#964), so this test has nothing to drop');
+          await hcUntil('the add menu to open after the hold', sheetOpen, 2000);
+          FM.mobile.closeAdd(); await sleep(500);
+          if (sheetOpen()) throw new Error('setup: the add menu did not close');
+          // the tap, and the back arrow inside the hold
+          const back = document.getElementById('m-back'), b = back.getBoundingClientRect(), bx = b.left + b.width / 2, by = b.top + b.height / 2;
+          hitIs927(bx, by, back, 'the back arrow');
+          await realInput924([{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 40 }, { t: 'touchStart', x: bx, y: by, ms: 60 }, { t: 'touchEnd', x: bx, y: by, ms: 0 }], 'a tap on the empty area, then the back arrow');
+          await sleep(1200);
+          if (!FM.home.isOpen()) throw new Error('CONTROL: the back arrow did not open Home');
+          if (sheetOpen()) throw new Error('1.2 s after he left for Home the add menu opened behind it (#add-sheet.open, body.add-open) - the held open fired anyway; the next tap anywhere closes it');
+        });
+      });
+    } finally {
+      try { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* Queue 976. Ezra, 28 Sep: "On pc to slide through the filter menus theres a white slider bar that looks really tacky,
+     and it shows up on mac sometimes too, i think this stemmed from the main use of sliding being trackerpad".
+     The bar was `scrollbar-width: thin` under (hover: hover) and (pointer: fine), and since Chrome 121 that standard
+     property switches OFF the ::-webkit-scrollbar rules written to make it dark, so it drew the browser's light bar.
+     A mouse gets ‹ › instead (js/rail-arrows.js). This test is the synthetic half — the structure, the paging and the
+     control; the next one drives a REAL mouse for the hover and the hit-test, which no script event can prove. */
+  test('976: on a mouse a filter row has no scrollbar — ‹ › at its ends page it, one page of whole tiles at a time', { item: '976' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;   // 30 generating canvases are not what this is about (LOOP rule 17)
+    if (realMount) FM.fxThumbs.mountFilter = function () {};
+    let favedForTest = null;
+    // a smooth scroll's end is only observable once it stops moving
+    const settle = async (g) => { let last = -1, same = 0; const t0 = Date.now();
+      while (Date.now() - t0 < 2500) { await sleep(40); if (Math.abs(g.scrollLeft - last) < 0.5) { if (++same >= 3) return; } else same = 0; last = g.scrollLeft; } };
+    try {
+      if (homeWasOpen) FM.home.close();
+      // THE ROW THAT FITS, made real the way queue 565's test makes it: one favourite = a one-tile Favourites row
+      favedForTest = (FM.filters.faves && !FM.filters.faves().length) ? FM.filters.all()[0].id : null;
+      if (favedForTest) FM.filters.toggleFave(favedForTest);
+      await sleep(150);
+      const L = FM.makeLayer('shape', { name: 'rail', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#c05030' });
+      L.start = 0; L.duration = 4; L.effects = [];
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+      FM.inspector.openCategory('effects'); await sleep(250);
+      FM.inspector.openFxTab('filters'); await sleep(600);
+      const grids = [].slice.call(document.getElementById('inspector-panel').querySelectorAll('.flt-grid'));
+      if (grids.length < 2) throw new Error('only ' + grids.length + ' filter rows rendered');
+
+      // 1. NO NATIVE BAR, on any pointer. On HEAD a desktop pointer reads `thin` here and an 11px gutter below.
+      grids.forEach((g, i) => {
+        const sw = getComputedStyle(g).scrollbarWidth, gutter = g.offsetHeight - g.clientHeight;
+        if (sw !== 'none') throw new Error('filter row ' + i + ' asks for a native scrollbar (scrollbar-width: ' + sw + ') — on a PC, and on a Mac with a mouse, that is the white bar he called tacky');
+        if (gutter > 0) throw new Error('filter row ' + i + ' reserves ' + gutter + 'px for a scrollbar');
+      });
+      // 2. every row sits in a rail with its two arrows — and its dots stay its next sibling (queue 565's contract)
+      grids.forEach((g, i) => {
+        const rail = g.parentElement;
+        if (!rail || !rail.classList.contains('fm-rail')) throw new Error('filter row ' + i + ' is not inside a .fm-rail — nothing can put ‹ › at its ends');
+        if (!g.nextElementSibling || !g.nextElementSibling.classList.contains('flt-dots')) throw new Error('filter row ' + i + ' lost its dots as its next sibling (queue 565)');
+        if (rail.querySelectorAll(':scope > .fm-rail-arrow').length !== 2) throw new Error('filter row ' + i + ' has ' + rail.querySelectorAll(':scope > .fm-rail-arrow').length + ' arrows, not 2');
+      });
+      // …and ONCE: attaching again to a rail that has arrows must not add a second pair (review, 28 Sep)
+      { const r0 = grids[0].parentElement; FM.railArrows(r0, grids[0], { item: '.flt-tile' });
+        const n0 = r0.querySelectorAll(':scope > .fm-rail-arrow').length;
+        if (n0 !== 2) throw new Error('attaching the arrows twice to one row gave it ' + n0 + ' arrows — a rebuild would stack them'); }
+      const over = grids.filter(g => g.scrollWidth > g.clientWidth + 4), fits = grids.filter(g => g.scrollWidth <= g.clientWidth + 4);
+      // CONTROL: both kinds of row must exist, or half of what follows proved nothing
+      if (!over.length) throw new Error('no filter row overflows, so paging was never tested');
+      if (!fits.length) throw new Error('every filter row overflows, so "a row that fits offers no arrow" was never tested');
+      fits.forEach(g => { const r = g.parentElement;
+        if (r.classList.contains('can-l') || r.classList.contains('can-r')) throw new Error('a row that fits (' + g.children.length + ' tile) offers an arrow: ' + r.className); });
+
+      const g = over[0], rail = g.parentElement;
+      const next = rail.querySelector('.fm-rail-arrow--next'), prev = rail.querySelector('.fm-rail-arrow--prev');
+      /* THE TOUCH HALF, read from the stylesheet: both suite passes run on a desktop pointer (380 is a narrow MOUSE), so no
+         pass ever sees (hover: none). What keeps the phone untouched is that the only rule drawing an arrow lives inside
+         (hover: hover) and (pointer: fine), over a bare `display: none` — so check exactly that. */
+      const rules = [].concat.apply([], [].slice.call(document.styleSheets).map(ss => { try { return [].slice.call(ss.cssRules); } catch (e) { return []; } }));
+      const bare = rules.some(r => r.selectorText === '.fm-rail-arrow' && r.style.display === 'none');
+      const gated = rules.some(r => r.media && /hover:\s*hover/.test(r.media.mediaText) && /pointer:\s*fine/.test(r.media.mediaText)
+        && [].slice.call(r.cssRules).some(x => x.selectorText === '.fm-rail-arrow' && x.style.display === 'flex'));
+      if (!bare || !gated) throw new Error('the arrows are not drawn ONLY for a mouse (bare display:none ' + bare + ', shown inside (hover: hover) and (pointer: fine) ' + gated + ') — the phone was to stay exactly as it was');
+      if (!fine) return;   // (not reached by either suite pass; kept so a real touch run cannot misread the mouse half)
+      if (next.tabIndex !== -1 || next.getAttribute('aria-hidden') !== 'true') throw new Error('the › is in the tab order / the accessibility tree — the tiles are the keyboard path');
+      // 3. at rest: only "more to the right"
+      g.scrollLeft = 0; await sleep(120);
+      if (!rail.classList.contains('can-r') || rail.classList.contains('can-l')) throw new Error('at rest the row says ' + rail.className + ' — expected can-r only');
+      // 4. › moves ONE PAGE OF WHOLE TILES: a tile plus its gap, times the tiles that fit (4 here — measured, not assumed)
+      const tile = g.querySelector('.flt-tile'), gap = parseFloat(getComputedStyle(g).columnGap) || 0;
+      const stride = tile.getBoundingClientRect().width + gap, per = Math.floor((g.clientWidth + gap + 1) / stride);
+      const max = g.scrollWidth - g.clientWidth;
+      next.click(); await settle(g);
+      const want = Math.min(max, per * stride);
+      if (Math.abs(g.scrollLeft - want) > 2) throw new Error('one › moved the row to ' + g.scrollLeft.toFixed(1) + ', not one page of ' + per + ' tiles (' + want.toFixed(1) + ')');
+      if (!rail.classList.contains('can-l')) throw new Error('after a page the ‹ is not offered (' + rail.className + ')');
+      // …and the dots agree with the arrows: not on the last dot while › still has somewhere to go
+      const dots = [].slice.call(g.nextElementSibling.children), on = () => dots.findIndex(d => d.classList.contains('on'));
+      if (rail.classList.contains('can-r') && on() === dots.length - 1) throw new Error('the last dot is lit while › still offers more — the dots and the arrows disagree about where the end is');
+      // 5. keep going: it stops AT the real end, and › goes away there
+      for (let k = 0; k < 10 && rail.classList.contains('can-r'); k++) { next.click(); await settle(g); }
+      if (Math.abs(g.scrollLeft - max) > 1) throw new Error('the › stopped at ' + g.scrollLeft.toFixed(1) + ', short of the end (' + max + ')');
+      if (rail.classList.contains('can-r')) throw new Error('at the end the › is still offered');
+      if (on() !== dots.length - 1) throw new Error('at the end the lit dot is ' + on() + ' of ' + dots.length);
+      // 6. ‹ all the way home
+      for (let k = 0; k < 10 && rail.classList.contains('can-l'); k++) { prev.click(); await settle(g); }
+      if (g.scrollLeft > 1) throw new Error('the ‹ did not bring the row home (scrollLeft ' + g.scrollLeft.toFixed(1) + ')');
+      // 7. an arrow is not a tile: nothing got picked by all that clicking
+      if (document.querySelectorAll('.flt-tile.is-picked').length) throw new Error('clicking the arrows picked a filter');
+      // 8. the keyboard route: focusing a tile off to the right brings the row to it
+      const far = g.querySelectorAll('.flt-tile')[per + 2];
+      if (far) { far.focus(); await sleep(250);
+        if (!(g.scrollLeft > 0)) throw new Error('focusing tile ' + (per + 3) + ' did not scroll the row to it — a keyboard could not reach it'); }
+    } finally {
+      if (favedForTest && FM.filters.isFave(favedForTest)) FM.filters.toggleFave(favedForTest);
+      if (realMount) FM.fxThumbs.mountFilter = realMount;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  /* Queue 976, with a REAL mouse (tests/_cdp.py's __fmWantInput, see 924): the hover that shows ‹ ›, the hit-test that
+     proves the arrow is on top of the tile under it, a sideways wheel that still scrolls the row natively, and a plain
+     vertical wheel over the row that scrolls the PANEL — the thing option C would have broken. */
+  test('976: a real mouse over a filter row shows ›, clicking it pages, a sideways wheel still slides the row and a vertical one still scrolls the panel', { item: '976', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;   // a finger has nothing to hover
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;
+    if (realMount) FM.fxThumbs.mountFilter = function () {};
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          if (homeWasOpen) FM.home.close();
+          const L = FM.makeLayer('shape', { name: 'rail', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#c05030' });
+          L.start = 0; L.duration = 4; L.effects = [];
+          FM.scene.layers.length = 0; FM.scene.layers.push(L);
+          FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+          FM.inspector.openCategory('effects'); await sleep(250);
+          FM.inspector.openFxTab('filters'); await sleep(600);
+          const g = [].slice.call(document.querySelectorAll('#inspector-panel .flt-grid')).filter(x => x.scrollWidth > x.clientWidth + 4)[0];
+          if (!g) throw new Error('setup: no filter row overflows');
+          g.scrollIntoView({ block: 'center' }); await sleep(200);
+          const rail = g.parentElement, next = rail.querySelector('.fm-rail-arrow--next');
+          if (!next) throw new Error('the filter row has no › — a mouse has no way along it but a native bar');
+          const r = g.getBoundingClientRect(), mid = { x: r.left + r.width * 0.4, y: r.top + r.height / 2 };
+          if (r.top < 0 || r.bottom > innerHeight) throw new Error('setup: the row is off screen (' + Math.round(r.top) + '..' + Math.round(r.bottom) + ')');
+          // CONTROL: pointer away from the row — the › is not showing
+          await realInput924([{ t: 'mouseMove', x: 5, y: 5, ms: 250 }], 'pointer away');
+          if (getComputedStyle(next).visibility !== 'hidden') throw new Error('CONTROL: with the pointer away the › is showing — then the hover below proves nothing');
+          await realInput924([{ t: 'mouseMove', x: mid.x, y: mid.y, ms: 250 }], 'pointer over the row');
+          if (getComputedStyle(next).visibility !== 'visible' || parseFloat(getComputedStyle(next).opacity) < 0.99) throw new Error('with the pointer over a row that has more, the › is not showing');
+          const b = next.getBoundingClientRect(), c = { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+          if (document.elementFromPoint(c.x, c.y) !== next && !next.contains(document.elementFromPoint(c.x, c.y))) throw new Error('the › is showing but the tile under it takes the click (' + (document.elementFromPoint(c.x, c.y) || {}).className + ')');
+          const s0 = g.scrollLeft;
+          await realInput924([{ t: 'mouseMove', x: c.x, y: c.y, ms: 30 }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 700 }], 'a real click on ›');
+          if (!(g.scrollLeft > s0 + g.clientWidth * 0.8)) throw new Error('a real click on › moved the row ' + (g.scrollLeft - s0).toFixed(1) + 'px, not about a page (' + g.clientWidth + ')');
+          if (document.querySelectorAll('.flt-tile.is-picked').length) throw new Error('the real click on › picked the filter under it');
+          // a sideways wheel (a trackpad swipe, or shift+wheel on Windows) is still the browser's own
+          g.scrollLeft = 0; await sleep(150);
+          await realInput924([{ t: 'mouseMove', x: mid.x, y: mid.y, ms: 30 }, { t: 'wheel', x: mid.x, y: mid.y, dx: 120, dy: 0, ms: 400 }], 'a sideways wheel over the row');
+          if (!(g.scrollLeft > 20)) throw new Error('a real sideways wheel no longer slides the row (scrollLeft ' + g.scrollLeft + ')');
+          // a plain wheel over the row scrolls the PANEL, not the row
+          g.scrollLeft = 0; await sleep(150);
+          const panel = document.getElementById('inspector'), p0 = panel.scrollTop;
+          await realInput924([{ t: 'wheel', x: mid.x, y: mid.y, dx: 0, dy: 120, ms: 400 }], 'a plain wheel over the row');
+          if (g.scrollLeft > 1) throw new Error('a plain wheel over the row slid it sideways (' + g.scrollLeft + ') — the panel’s own scroll is being caught');
+          if (!(panel.scrollTop > p0)) throw new Error('a plain wheel over the row did not scroll the panel (' + p0 + ' → ' + panel.scrollTop + ')');
+        }, 1280);
+      });
+    } finally {
+      if (realMount) FM.fxThumbs.mountFilter = realMount;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  /* Queue 977. Ezra, 28 Sep: "also on pc without trackpad there seems to be no way to slide the new section in effects
+     menu". The same helper on the New row — and a page turn must PAUSE the auto-scroll, whose 30 ms tick would
+     otherwise cancel the smooth scroll halfway and carry on as if nothing had been clicked. */
+  test('977: on a mouse the effects menu’s New row has ‹ ›, and › pages it and pauses the auto-scroll', { item: '977' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#c04070' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); await sleep(160);
+      FM.fxBrowser.open(L); await sleep(500);
+      const row = document.querySelector('#fx-browser .fxb-featured');
+      if (!row) throw new Error('the New row did not render');
+      const sec = row.parentElement;
+      if (!sec.classList.contains('fm-rail')) throw new Error('the New row’s section is not a .fm-rail — a mouse has no way to slide it');
+      if (getComputedStyle(row).scrollbarWidth !== 'none') throw new Error('the New row asks for a native scrollbar');
+      const next = sec.querySelector(':scope > .fm-rail-arrow--next');
+      if (!next) throw new Error('the New row has no ›');
+      if (!matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        if (getComputedStyle(next).display !== 'none') throw new Error('the › is drawn on a touch screen');
+        return;
+      }
+      if (!(row.scrollWidth - row.clientWidth > 100)) throw new Error('setup: the New row does not overflow (' + row.scrollWidth + ' in ' + row.clientWidth + ')');
+      row.scrollLeft = 0; row._autoLeft = 0; await sleep(100);
+      if (!sec.classList.contains('can-r')) throw new Error('at the start the New row does not offer › (' + sec.className + ')');
+      const card = row.querySelector('.fxb-card'), stride = card.getBoundingClientRect().width + (parseFloat(getComputedStyle(row).columnGap) || 0);
+      next.click();
+      if (!(FM._fxAutoPausedFor() > 1000)) throw new Error('a page turn did not pause the auto-scroll (' + Math.round(FM._fxAutoPausedFor()) + ' ms left) — its tick would cancel the smooth scroll');
+      await sleep(900);
+      const at = row.scrollLeft;
+      if (!(at >= stride - 2)) throw new Error('one › moved the New row ' + at.toFixed(1) + 'px — not even one card (' + stride.toFixed(1) + ')');
+      if (Math.abs(at / stride - Math.round(at / stride)) > 0.03) throw new Error('the › left the New row between cards (' + at.toFixed(1) + ' / ' + stride.toFixed(1) + ') — it should land on a card');
+      await sleep(600);
+      if (Math.abs(row.scrollLeft - at) > 1) throw new Error('after the page turn the New row carried on moving (' + at.toFixed(1) + ' → ' + row.scrollLeft.toFixed(1) + ') — the auto-scroll was not held');
+      if (!sec.classList.contains('can-l')) throw new Error('after a page the New row does not offer ‹');
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); await sleep(100);
+    }
+  });
+
+  /* Queue 977, the audio half. His words were about the effects menu's New row; the entry's own clause adds "the
+     audio-effects browser's row too", which has the same carousel and the same missing route for a mouse. Its pictures
+     sit 12px higher in their cards than the effects row's (measured docked at 900, 1280 and 1920), so the effects row's
+     47px put this ›'s centre 46px down a 70px picture, off its middle; styles.css gives it 36px. The effects row is
+     measured here too, the same way, as the CONTROL: the plan measured its arrow 34px down its picture, so if this
+     measurement disagreed with that, it would be the measurement that is broken. Measured on the docked PC column (1280),
+     the layout a mouse sees; a touch screen draws no arrow at all. */
+  test('977: the audio effects browser’s Featured row has ‹ › too — on a PC each row’s › sits on the middle of its pictures, and › pages the audio row and holds its auto-scroll', { item: '977', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const sideOk0 = FM.fxAudioSideOk;
+    try {
+      if (homeWasOpen) FM.home.close();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#4070c0' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); await sleep(160);
+      FM.fxAudioSideOk = function () { return true; };   // a shape has no sound; the gate is not what this is about (as 922)
+      await atWideWidth(async function () {
+        const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+        for (const which of ['effects', 'audio']) {
+          const root = document.getElementById(which === 'audio' ? 'afx-browser' : 'fx-browser');
+          if (which === 'audio') FM.audioFxBrowser.open(L); else FM.fxBrowser.open(L);
+          await sleep(600);
+          if (root.classList.contains('hidden')) throw new Error('setup: the ' + which + ' browser did not open');
+          const row = root.querySelector('.fxb-featured');
+          if (!row) throw new Error('the ' + which + ' browser drew no New/Featured row');
+          const sec = row.parentElement;
+          if (!sec.classList.contains('fm-rail')) throw new Error('the ' + which + ' browser’s New/Featured row is not a .fm-rail — a mouse has no way to slide it');
+          if (getComputedStyle(row).scrollbarWidth !== 'none') throw new Error('the ' + which + ' row asks for a native scrollbar');
+          const next = sec.querySelector(':scope > .fm-rail-arrow--next'), prev = sec.querySelector(':scope > .fm-rail-arrow--prev');
+          if (!next || !prev) throw new Error('the ' + which + ' row has no ‹ ›');
+          if (!fine) {
+            if (getComputedStyle(next).display !== 'none') throw new Error('the ' + which + ' row’s › is drawn on a touch screen');
+          } else {
+            if (!root.classList.contains('fxb-in-inspector')) throw new Error('setup: at 1280 the ' + which + ' browser is not docked in the inspector column, which is the PC layout this measures');
+            const th = row.querySelector('.fxb-card .fxb-thumb');
+            if (!th) throw new Error('setup: the ' + which + ' row’s first card has no picture to measure against');
+            const t = th.getBoundingClientRect(), n = next.getBoundingClientRect();
+            if (!(n.height > 20)) throw new Error('setup: the ' + which + ' row’s › has no box (' + n.height + 'px) — it cannot be measured');
+            const off = (n.top + n.bottom) / 2 - (t.top + t.bottom) / 2;
+            if (Math.abs(off) > 6) throw new Error('the ' + which + ' row’s › sits ' + off.toFixed(1) + 'px from the middle of its ' + Math.round(t.height) + 'px pictures (' + Math.round((n.top + n.bottom) / 2 - t.top) + 'px down) — its --rail-arrow-y is not measured for this row');
+          }
+          if (which === 'audio' && fine) {
+            if (!(row.scrollWidth - row.clientWidth > 100)) throw new Error('setup: the audio row does not overflow (' + row.scrollWidth + ' in ' + row.clientWidth + ')');
+            row.scrollLeft = 0; row._autoLeft = 0; await sleep(120);
+            if (!sec.classList.contains('can-r')) throw new Error('at the start the audio row does not offer › (' + sec.className + ')');
+            const card = row.querySelector('.fxb-card'), stride = card.getBoundingClientRect().width + (parseFloat(getComputedStyle(row).columnGap) || 0);
+            next.click();
+            await sleep(900);
+            const at = row.scrollLeft;
+            if (!(at >= stride - 2)) throw new Error('one › moved the audio row ' + at.toFixed(1) + 'px — not even one card (' + stride.toFixed(1) + ')');
+            if (Math.abs(at / stride - Math.round(at / stride)) > 0.03) throw new Error('the › left the audio row between cards (' + at.toFixed(1) + ' / ' + stride.toFixed(1) + ')');
+            await sleep(600);
+            if (Math.abs(row.scrollLeft - at) > 1) throw new Error('after the page turn the audio row carried on moving (' + at.toFixed(1) + ' → ' + row.scrollLeft.toFixed(1) + ') — its auto-scroll was not held');
+            if (!sec.classList.contains('can-l')) throw new Error('after a page the audio row does not offer ‹');
+          }
+          if (which === 'audio') FM.audioFxBrowser.close(); else FM.fxBrowser.close();
+          await sleep(200);
+        }
+      }, 1280);
+    } finally {
+      FM.fxAudioSideOk = sideOk0;
+      try { if (FM.audioFxBrowser && FM.audioFxBrowser.close) FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.refreshAll(); await sleep(100);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  /* ═══ 976/977 REVIEW (29 Sep) — WHAT A MOUSE DOES AT A ROW'S END ════════════════════════════════════════════════════
+   * Clicking › until it stops is the most natural thing to do with a mouse, and the build hid the › the moment the row
+   * reached its end — so the NEXT click on that same spot went through to the tile underneath and picked it: a filter he
+   * never chose, previewed on his canvas, "Add 1 filter" up (measured with a real mouse: Cinematic at 1280, the third
+   * click picked Desert; the effects New row's last click picked Light Wrap). Cinematic makes it likely, because its last
+   * step is short (273 → 342) and looks like nothing moved, so he clicks again. The first 976 test could not see it: a
+   * script's click() on the element cannot miss the element. These use the driver's REAL mouse, which hit-tests. */
+  // Slide the on-screen frame so `el` sits in the middle of what the driver's window can reach — the 380 pass's window is
+  // 380 wide, and a docked PC panel at a 1280 frame sits far past that (the same move as aim927).
+  function aim976(el) {
+    const fe = window.frameElement, topW = (window.top && window.top.innerWidth) || 380, r = el.getBoundingClientRect();
+    fe.style.left = (r.right > topW - 8 ? Math.round(topW / 2 - (r.left + r.right) / 2) : 0) + 'px';
+    return { x: 5 - (parseFloat(fe.style.left) || 0), y: 5 };   // a point in reach and well away from any row
+  }
+  function mid976(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+  // his click: press and release on one spot, a beat apart, with nothing moved in between
+  function click976(p, what) { return realInput924([{ t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 450 }], what); }
+  /* › until the row stops and ONE MORE on the same spot, then ‹ until it is home and one more; then the pointer leaves and
+     comes back, and the spent ‹ must be gone. `hits()` is every real click that reached a tile/card. Returns the ‹'s spot. */
+  async function spend976(sc, rail, hits, away, what) {
+    const next = rail.querySelector(':scope > .fm-rail-arrow--next'), prev = rail.querySelector(':scope > .fm-rail-arrow--prev');
+    const max = sc.scrollWidth - sc.clientWidth, r = sc.getBoundingClientRect(), over = { x: r.left + r.width * 0.4, y: r.top + r.height / 2 };
+    if (r.top < 0 || r.bottom > innerHeight) throw new Error('setup: the ' + what + ' is off screen (' + Math.round(r.top) + '..' + Math.round(r.bottom) + ')');
+    await realInput924([{ t: 'mouseMove', x: over.x, y: over.y, ms: 250 }], 'pointer over the ' + what);
+    if (getComputedStyle(next).visibility !== 'visible') throw new Error('setup: with the pointer over the ' + what + ', which has more, the › is not showing');
+    const nc = mid976(next);
+    await realInput924([{ t: 'mouseMove', x: nc.x, y: nc.y, ms: 150 }], 'pointer onto the ' + what + '’s ›');
+    let clicks = 0;
+    while (rail.classList.contains('can-r') && clicks < 14) await click976(nc, 'the ' + what + '’s › click ' + (++clicks));
+    // CONTROL: the clicks really paged it to its end, or there was never an end to click through
+    if (Math.abs(sc.scrollLeft - max) > 2) throw new Error('CONTROL: ' + clicks + ' real clicks on the ' + what + '’s › left it at ' + sc.scrollLeft.toFixed(1) + ' of ' + max);
+    if (hits().length) throw new Error('paging the ' + what + ' with › reached a tile under it (' + hits().join(', ') + ') before the end');
+    await click976(nc, 'one more › click at the ' + what + '’s end');
+    if (hits().length) throw new Error('one more click on the › at the end of the ' + what + ' went through to the tile under it (' + hits().join(', ') + ') — the › hid, and something he never chose got picked');
+    if (Math.abs(sc.scrollLeft - max) > 2) throw new Error('a click on the spent › moved the ' + what + ' (' + sc.scrollLeft.toFixed(1) + ' of ' + max + ')');
+    const pc = mid976(prev);
+    await realInput924([{ t: 'mouseMove', x: pc.x, y: pc.y, ms: 150 }], 'pointer onto the ' + what + '’s ‹');
+    clicks = 0;
+    while (rail.classList.contains('can-l') && clicks < 14) await click976(pc, 'the ' + what + '’s ‹ click ' + (++clicks));
+    if (sc.scrollLeft > 1) throw new Error('CONTROL: ' + clicks + ' real clicks on the ' + what + '’s ‹ left it at ' + sc.scrollLeft.toFixed(1) + ', not home');
+    await click976(pc, 'one more ‹ click at the ' + what + '’s start');
+    if (hits().length) throw new Error('one more click on the ‹ back at the start of the ' + what + ' went through to the tile under it (' + hits().join(', ') + ')');
+    // once he has moved on, a spent arrow goes: an arrow only belongs on a side that has more
+    await realInput924([{ t: 'mouseMove', x: away.x, y: away.y, ms: 250 }, { t: 'mouseMove', x: over.x, y: over.y, ms: 250 }], 'pointer away from the ' + what + ' and back');
+    if (getComputedStyle(prev).visibility !== 'hidden') throw new Error('after the pointer left the ' + what + ' and came back, the spent ‹ is still showing at its start');
+    if (getComputedStyle(next).visibility !== 'visible') throw new Error('after the pointer left the ' + what + ' and came back, the › is not offered at its start');
+    return pc;
+  }
+
+  test('976: a real mouse clicking › until a filter row stops, and ‹ until it is home, never picks the tile under the arrow', { item: '976', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;   // a finger has no arrows to click
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;
+    if (realMount) FM.fxThumbs.mountFilter = function () {};
+    const hit = [];   // every real click that reached a filter tile, whatever the tile then did with it
+    const onClick = (e) => { const t = e.target && e.target.closest && e.target.closest('.flt-tile'); if (t) hit.push(t.dataset.fltid); };
+    window.addEventListener('click', onClick, true);
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          if (homeWasOpen) FM.home.close();
+          const L = FM.makeLayer('shape', { name: 'rail', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#c05030' });
+          L.start = 0; L.duration = 4; L.effects = [];
+          FM.scene.layers.length = 0; FM.scene.layers.push(L);
+          FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+          FM.inspector.openCategory('effects'); await sleep(250);
+          FM.inspector.openFxTab('filters'); await sleep(600);
+          // the row with the most tiles: the most › stops, and at 1280 (Cinematic) a last step so short it looks like nothing moved
+          const g = [].slice.call(document.querySelectorAll('#inspector-panel .flt-grid')).filter(x => x.scrollWidth > x.clientWidth + 4)
+            .sort((a, b) => b.children.length - a.children.length)[0];
+          if (!g) throw new Error('setup: no filter row overflows');
+          g.scrollIntoView({ block: 'center' }); g.scrollLeft = 0; await sleep(250);
+          const rail = g.parentElement, away = aim976(rail); await sleep(80);
+          const picked = () => [].slice.call(document.querySelectorAll('#inspector-panel .flt-tile.is-picked')).map(t => t.dataset.fltid);
+          const hits = () => hit.concat(picked());
+          const pc = await spend976(g, rail, hits, away, 'filter row');
+          /* POSITIVE CONTROL: with the ‹ gone, a real click on that very spot DOES reach the tile under it and pick it — so the
+             "nothing picked" above was the arrow taking the click, not a spot where no click could have picked anything. */
+          await click976(pc, 'a click where the ‹ was, with it gone');
+          if (hit.length !== 1 || picked().length !== 1) throw new Error('CONTROL: a real click where the ‹ sat, with the ‹ gone, reached ' + hit.length + ' tile(s) and picked ' + picked().length + ' — then "nothing picked" above proved nothing');
+          const clr = document.querySelector('#inspector-panel .flt-commit .fxb-commit-clear');
+          if (clr) clr.click();
+        }, 1280);
+      });
+    } finally {
+      window.removeEventListener('click', onClick, true);
+      if (realMount) FM.fxThumbs.mountFilter = realMount;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  test('977: a real mouse clicking › until the New row stops, and ‹ until it is home, never reaches the card under the arrow — in the effects and the audio browser', { item: '977', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;   // a finger has no arrows to click
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const sideOk0 = FM.fxAudioSideOk;
+    /* Every real click that reaches a card is recorded AND stopped here, in the capture phase before the card hears it — so
+       a click that gets through adds nothing to the layer (an audio card ADDS on a click; an effects card picks). */
+    const hit = [];
+    const onClick = (e) => { const c = e.target && e.target.closest && e.target.closest('.fxb-card'); if (c) { hit.push(c.title || c.textContent); e.stopPropagation(); e.preventDefault(); } };
+    window.addEventListener('click', onClick, true);
+    try {
+      if (homeWasOpen) FM.home.close();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#4070c0' });
+      L.start = 0; L.duration = 5;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); await sleep(160);
+      FM.fxAudioSideOk = function () { return true; };   // a shape has no sound; the gate is not what this is about (as 922)
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          for (const which of ['effects', 'audio']) {
+            const root = document.getElementById(which === 'audio' ? 'afx-browser' : 'fx-browser');
+            if (which === 'audio') FM.audioFxBrowser.open(L); else FM.fxBrowser.open(L);
+            await sleep(700);
+            if (root.classList.contains('hidden')) throw new Error('setup: the ' + which + ' browser did not open');
+            const row = root.querySelector('.fxb-featured');
+            if (!row) throw new Error('the ' + which + ' browser drew no New/Featured row');
+            if (!(row.scrollWidth - row.clientWidth > 100)) throw new Error('setup: the ' + which + ' row does not overflow (' + row.scrollWidth + ' in ' + row.clientWidth + ')');
+            row.scrollIntoView({ block: 'center' });   // the docked audio browser draws its Featured row near the frame's foot
+            row.scrollLeft = 0; row._autoLeft = 0; await sleep(150);
+            const sec = row.parentElement, away = aim976(sec); await sleep(80);
+            hit.length = 0;
+            const pc = await spend976(row, sec, () => hit.slice(), away, which + ' browser’s New row');
+            // POSITIVE CONTROL, as in the filter test: with the ‹ gone, a real click on its spot DOES reach the card under it
+            await click976(pc, 'a click where the ' + which + ' row’s ‹ was, with it gone');
+            if (hit.length !== 1) throw new Error('CONTROL: a real click where the ' + which + ' row’s ‹ sat, with the ‹ gone, reached ' + hit.length + ' card(s) — then "nothing reached" above proved nothing');
+            hit.length = 0;
+            if (which === 'audio') FM.audioFxBrowser.close(); else FM.fxBrowser.close();
+            await sleep(200);
+          }
+        }, 1280);
+      });
+    } finally {
+      window.removeEventListener('click', onClick, true);
+      FM.fxAudioSideOk = sideOk0;
+      try { if (FM.audioFxBrowser && FM.audioFxBrowser.close) FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.refreshAll(); await sleep(100);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+  /* Queue 976 review, finding 2. The build made the dots agree with the arrows about WHERE the row is, but still counted
+     them as ceil(scrollWidth / clientWidth), which ignores the gap: a row of exactly two pages (eight tiles where four fit)
+     drew THREE dots, one › took it from the first to the last, and the middle one could never be lit. Measured at 1280 on
+     Retro / Analogue and Stylised. The case is BUILT here — a Favourites row of exactly two pages — so it does not rest on
+     how many filters a section happens to hold; every other row is checked the same way beside it. */
+  test('976: a filter row draws one dot for each place › can take it — a row of exactly two pages has two dots, not three', { item: '976', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;
+    if (realMount) FM.fxThumbs.mountFilter = function () {};
+    let faves0 = null;
+    try { faves0 = localStorage.getItem('fm.filterFaves'); } catch (e) {}
+    const settle = async (g) => { let last = -1, same = 0; const t0 = Date.now();
+      while (Date.now() - t0 < 2500) { await sleep(40); if (Math.abs(g.scrollLeft - last) < 0.5) { if (++same >= 3) return; } else same = 0; last = g.scrollLeft; } };
+    try {
+      if (homeWasOpen) FM.home.close();
+      // eight favourites = a Favourites row of exactly two pages (a filter tile is a quarter of the row, less its gaps)
+      localStorage.setItem('fm.filterFaves', JSON.stringify(FM.filters.all().slice(0, 8).map(f => f.id)));
+      const L = FM.makeLayer('shape', { name: 'dots', shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#c05030' });
+      L.start = 0; L.duration = 4; L.effects = [];
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+      FM.inspector.openCategory('effects'); await sleep(250);
+      FM.inspector.openFxTab('filters'); await sleep(600);
+      const grids = [].slice.call(document.querySelectorAll('#inspector-panel .flt-grid')).filter(g => g.scrollWidth > g.clientWidth + 4);
+      if (!grids.length) throw new Error('setup: no filter row overflows');
+      const bad = [], seen = [];
+      let twoPages = 0, threePlus = 0;
+      for (const g of grids) {
+        const rail = g.parentElement, next = rail.querySelector(':scope > .fm-rail-arrow--next');
+        const label = rail.previousElementSibling ? rail.previousElementSibling.textContent : '?';
+        const geo = FM._railGeometry(g, '.flt-tile');
+        const dots = () => [].slice.call(g.nextElementSibling.children), lit = () => dots().findIndex(d => d.classList.contains('on'));
+        g.scrollLeft = 0; await settle(g);
+        const lits = [lit()];
+        let stops = 0;
+        while (rail.classList.contains('can-r') && stops < 12) { next.click(); await settle(g); stops++; lits.push(lit()); }
+        if (Math.abs(g.scrollLeft - (g.scrollWidth - g.clientWidth)) > 2) throw new Error('setup: › stopped short of the end of ' + label + ' (' + g.scrollLeft + ')');
+        seen.push(label + ' ' + g.children.length + ' tiles: ' + dots().length + ' dots, ' + (stops + 1) + ' places');
+        if (g.children.length === 2 * geo.per) twoPages++;
+        if (stops >= 2) threePlus++;
+        if (dots().length !== stops + 1) bad.push(label + ' (' + g.children.length + ' tiles) draws ' + dots().length + ' dots for ' + (stops + 1) + ' places › can take it');
+        else if (lits.join() !== lits.map((_, i) => i).join()) bad.push(label + ': paging lit dots ' + lits.join(' → '));
+        g.scrollLeft = 0;
+      }
+      // CONTROLS: the row the bug lived in (exactly two pages) and a row of three places or more must both have been paged
+      if (!twoPages) throw new Error('CONTROL: no row of exactly two pages was paged (' + seen.join('; ') + ') — the case the dots got wrong was never tested');
+      if (!threePlus) throw new Error('CONTROL: no row needed two › or more (' + seen.join('; ') + ') — a middle dot was never tested');
+      if (bad.length) throw new Error('the dots under a filter row do not count the places › takes it: ' + bad.join('; '));
+    } finally {
+      try { if (faves0 === null) localStorage.removeItem('fm.filterFaves'); else localStorage.setItem('fm.filterFaves', faves0); } catch (e) {}
+      if (realMount) FM.fxThumbs.mountFilter = realMount;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(150);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  });
+
+
+  /* ═══ queue 978 — PC: THE COG OPENS FRIENDS + CANVAS SETTINGS TOGETHER, LIKE THE PHONE, AND THEY SWAP CLEANLY ═════════════
+     His words (28 Sep): "on pc there isnt a way to access the friends invite menu like there is on mobile. - Settings cog then
+     swap between them in a really clean way." Built to the plan (tools/design/plans/2026-09-28-pc-friends-pair/plan.md):
+     option B — side by side where there is room beside the button (Friends left, Canvas right by it, the small one a tile, ⤢
+     slides the line between them), stacked like the phone where there is not — and Part 2: the Share button beside Export
+     opens the same pair with Friends big. EVERY TEST RUNS INSIDE with945: a PC honours fm.cvPair now, and every open writes
+     it, so a test that left it on Friends would hand every later PC test a Canvas card shrunk to a tile. */
+  /* A press as the browser delivers it (the 944 test's): down and up on whatever is under the pointer, then the click on
+     whatever is under it AFTER — hit-tested again, after anything the press did. */
+  function press978(el) {
+    const r = el.getBoundingClientRect();
+    return press978At(r.left + r.width / 2, r.top + r.height / 2);
+  }
+  function press978At(x, y) {
+    const down = document.elementFromPoint(x, y);
+    if (!down) throw new Error('nothing under the pointer at ' + Math.round(x) + ',' + Math.round(y));
+    down.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
+    down.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
+    const up = document.elementFromPoint(x, y);
+    (up && up.isConnected ? up : down).dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+    return { down: down, up: up };
+  }
+  /* The swap's own animations (Web Animations the code made), not the CSS entrances. */
+  function flight978(dlg) {
+    return dlg.getAnimations({ subtree: true }).filter(function (a) { return !(window.CSSAnimation && a instanceof CSSAnimation) && !(window.CSSTransition && a instanceof CSSTransition); });
+  }
+  const R978 = function (r) { return [r.left, r.top, r.right, r.bottom].map(Math.round).join(','); };
+
+  test('978 on a PC the cog opens Canvas settings WITH Friends — hung off the cog, both on screen, nothing scrolls, the cog sharp — and the phone keeps its own pair', { item: '978', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+      for (const w of [1280, 900]) {
+        await atWideWidth(async function () {
+          const cog = document.getElementById('btn-settings'), kr = cog.getBoundingClientRect();
+          if (!(kr.width > 0)) throw new Error('setup: no PC cog at ' + w);
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          if (!open945(dlg)) throw new Error('the cog did not open Canvas settings at ' + w);
+          if (!dlg.classList.contains('cv-pair') || !fr.getClientRects().length) throw new Error('at ' + w + ' the cog opened Canvas settings alone — no Friends (his words: "on pc there isnt a way to access the friends invite menu like there is on mobile")');
+          if (!document.body.classList.contains('cv-anchored')) throw new Error('at ' + w + ' the pair is not hung off the cog');
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('with nothing remembered it opened on Friends');
+          const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+          if (!dlg.classList.contains('cv-side')) throw new Error('at ' + w + ' there is room beside the cog (its right edge is at ' + Math.round(kr.right) + ') but the pair stacked — option B is side by side');
+          if (frr.right > cr.left + 0.5) throw new Error('side by side, Friends (' + R978(frr) + ') is not left of Canvas (' + R978(cr) + ')');
+          if (Math.abs(frr.bottom - cr.bottom) > 4) throw new Error('side by side, Friends (' + Math.round(frr.bottom) + ') and Canvas (' + Math.round(cr.bottom) + ') do not stand on one line');
+          if (Math.abs(cr.right - kr.right) > 12) throw new Error('the canvas card is not lined up with the cog (' + Math.round(cr.right) + ' vs ' + Math.round(kr.right) + ')');
+          if (document.body.classList.contains('cv-up') && cr.bottom > kr.top + 4) throw new Error('the pair is not hanging above the cog (card bottom ' + Math.round(cr.bottom) + ', cog top ' + Math.round(kr.top) + ')');
+          [['the canvas card', cr], ['the Friends block', frr]].forEach(function (p) { const r = p[1]; if (r.top < -1 || r.left < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) throw new Error(p[0] + ' is off screen at ' + w + ': ' + R978(r)); });
+          if (card.scrollHeight > card.clientHeight + 1) throw new Error('the canvas card scrolls: it needs ' + card.scrollHeight + ' and has ' + card.clientHeight + ' (queue 252)');
+          const at = document.elementFromPoint(kr.left + kr.width / 2, kr.top + kr.height / 2);
+          if (!(at && (at === cog || cog.contains(at)))) throw new Error('the cog is under the blur (queue 241): its centre is ' + (at && (at.id || at.className)));
+          if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content is drawn while Friends is the small block');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          if (open945(dlg) || document.body.classList.contains('cv-anchored') || dlg.classList.contains('cv-side')) throw new Error('Cancel left the pair or its anchor behind');
+        }, w);
+      }
+      /* CONTROL — the phone's pair is the phone's: a centred column, not hung off anything, not side by side. */
+      await atPhoneWidth(async function () {
+        document.getElementById('m-settings').click(); await entranceDone(dlg); await sleep(60);
+        if (!open945(dlg) || !dlg.classList.contains('cv-pair')) throw new Error('CONTROL: the phone lost its pair');
+        if (dlg.classList.contains('cv-side') || document.body.classList.contains('cv-anchored')) throw new Error('the PC layout leaked onto the phone (' + dlg.className + ' / ' + document.body.className + ')');
+        const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+        if (frr.bottom > cr.top + 0.5) throw new Error('CONTROL: on the phone the Friends bar is not above the card');
+        if (Math.abs(cr.width - Math.min(420, innerWidth - 24)) > 1) throw new Error('the phone card is ' + cr.width + ' wide, not min(420, 100vw − 24)');
+        document.getElementById('cv-cancel').click(); await sleep(60);
+      }, 380);
+    }); });
+  });
+
+  test('978 on a PC ⤢ swaps them with the flight — the pair stays standing on the cog the whole way — lands Friends big, remembers it, and the tail hangs from the block next to the cog', { item: '978', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () { await withFakeNet921(async function (net) { await with945(async function () {
+      await atWideWidth(async function () {
+        const P = FM.scene.project, w0 = P.width, h0 = P.height, f0 = P.fps;
+        const mm = window.matchMedia;
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+        const cog = document.getElementById('btn-settings');
+        const c0 = net.constructed;
+        try {
+          P.width = 1080; P.height = 1920; P.fps = 30;
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          if (!dlg.classList.contains('cv-pair') || !fr.getClientRects().length) throw new Error('the cog opened Canvas settings with no Friends beside it — nothing to swap (his words: "Settings cog then swap between them")');
+          if (!document.body.classList.contains('cv-up')) throw new Error('setup: at 1280×760 the pair should open upward from the cog');
+          if (!dlg.classList.contains('cv-side')) throw new Error('at 1280 there is room beside the cog, but the pair stacked');
+          const line = card.getBoundingClientRect().bottom, wf0 = fr.getBoundingClientRect().width;
+          document.getElementById('cv-fr-exp').click();
+          const f = flight978(dlg);
+          if (!dlg.classList.contains('cv-flying') || f.length < 2) throw new Error('⤢ swapped with no flight (' + f.length + ' animation(s))');
+          /* Frozen at three points. Tolerance from measurement: the prototype and this build read every bottom at 556 against a
+             line of 556 at these points (553 at 70%, where the easing overshoots); the stacked flight's fault was 193 px. */
+          for (const p of [0.1, 0.3, 0.5]) {
+            f.forEach(function (a) { a.pause(); a.currentTime = p * 460; });
+            const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+            if (Math.abs(cr.bottom - line) > 4 || Math.abs(frr.bottom - line) > 4) throw new Error('at ' + Math.round(p * 100) + '% of the swap the pair has left the cog’s line (' + Math.round(line) + '): Canvas ' + R978(cr) + ', Friends ' + R978(frr));
+            if (!(frr.width > wf0 + 1 && frr.width < 359)) throw new Error('at ' + Math.round(p * 100) + '% Friends is ' + frr.width.toFixed(1) + ' wide (from ' + wf0.toFixed(1) + ' to 360) — its width jumps instead of flying');
+          }
+          f.forEach(function (a) { a.play(); });
+          await land945();
+          if (!dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-flying')) throw new Error('after the flight the pair is not settled on Friends');
+          const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+          if (frr.right > cr.left + 0.5) throw new Error('landed, Friends (' + R978(frr) + ') is not left of Canvas (' + R978(cr) + ')');
+          if (cr.width > 200) throw new Error('landed, the Canvas block did not shrink to its tile (' + cr.width.toFixed(1) + ' wide)');
+          const sub = document.getElementById('cv-mini-sub').textContent;
+          if (sub !== '9:16 · 1080 × 1920 · 30 fps') throw new Error('the Canvas tile reads "' + sub + '"');
+          if (card.style.position || fr.style.position || card.style.width || fr.style.width || card.style.left || fr.style.left) throw new Error('the flight left inline styles on the blocks');
+          if (localStorage.getItem('fm.cvPair') !== 'friends') throw new Error('the swap was not remembered');
+          /* The tail belongs to the block next to the cog — side by side that is always Canvas. Read off the block itself: a
+             tail leaked by another test would answer a document query. */
+          const tail = card._popTail;
+          if (!tail || !tail.isConnected) throw new Error('landed, the canvas block next to the cog has no comic tail');
+          if (Math.abs(tail.getBoundingClientRect().top - cr.bottom) > 2) throw new Error('the tail (top ' + Math.round(tail.getBoundingClientRect().top) + ') does not hang from the canvas block’s foot (' + Math.round(cr.bottom) + ')');
+          if (net.constructed !== c0) throw new Error('opening Friends on a PC opened ' + (net.constructed - c0) + ' relay socket(s)');
+          document.getElementById('cv-mini-exp').click(); await land945();
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('the Canvas ⤢ did not swap back');
+          if (localStorage.getItem('fm.cvPair') !== 'canvas') throw new Error('swapping back was not remembered');
+          if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content stayed drawn after it shrank to its tile');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          /* REDUCED MOTION: the swap lands at once, with no flight, and the tail is still where it belongs. */
+          window.matchMedia = function (q) {
+            if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {}, addListener: function () {}, removeListener: function () {} };
+            return mm.call(window, q);
+          };
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          document.getElementById('cv-fr-exp').click();
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('with reduced motion the swap did not land at once');
+          if (dlg.classList.contains('cv-flying') || flight978(dlg).some(function (a) { return a.playState === 'running'; })) throw new Error('with reduced motion the blocks still fly');
+          const t2 = card._popTail;
+          if (!t2 || !t2.isConnected || Math.abs(t2.getBoundingClientRect().top - card.getBoundingClientRect().bottom) > 2) throw new Error('with reduced motion the swap left the canvas block without its tail at its foot');
+        } finally {
+          window.matchMedia = mm;
+          P.width = w0; P.height = h0; P.fps = f0;
+        }
+      }, 1280);
+    }); }); });
+  });
+
+  test('978 on a PC the second click on the cog closes the pair, Escape closes it, a click outside closes it without applying, the cog reopens on the block open last, and crossing the phone width while it is open keeps the pair and re-hangs it', { item: '978', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () { await withFakeNet921(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+        const body = document.getElementById('cv-fr-body');
+        const cog = document.getElementById('btn-settings');
+        const P = FM.scene.project, w0 = P.width, h0 = P.height;
+        const reopen = async function () { press978(cog); await entranceDone(dlg); await sleep(60); };
+        await reopen();
+        if (!open945(dlg)) throw new Error('setup: the cog did not open Canvas settings');
+        document.getElementById('cv-fr-exp').click(); await land945();
+        if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not bring Friends up on a PC (his words: "Settings cog then swap between them")');
+        press978(cog); await sleep(80);
+        if (open945(dlg)) throw new Error('a second click on the cog did not close the pair (#762)');
+        await reopen();
+        if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('closed on Friends and reopened with the cog — it did not come back to Friends, the block open last');
+        window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape', code: 'Escape' }));
+        await sleep(80);
+        if (open945(dlg)) throw new Error('Escape did not close the pair (#690)');
+        if (body.children.length) throw new Error('Escape left the Friends content drawn in a closed dialog');
+        if (document.body.classList.contains('cv-anchored')) throw new Error('Escape left the cog lifted over the page (cv-anchored)');
+        await reopen();
+        if (!dlg.classList.contains('cv-fr-big')) throw new Error('after Escape the cog did not come back to Friends');
+        document.getElementById('cv-mini-exp').click(); await land945();
+        if (dlg.classList.contains('cv-fr-big')) throw new Error('setup: the Canvas ⤢ did not swap back');
+        const chip = document.querySelector('#canvas-dialog .aspect-chip[data-aspect="16:9"]');
+        if (!chip || !chip.getClientRects().length) throw new Error('setup: no 16:9 chip on the canvas card');
+        chip.click(); await sleep(40);
+        press978At(5, 5); await sleep(80);
+        if (open945(dlg)) throw new Error('a click outside did not close the pair (queue 252)');
+        if (P.width !== w0 || P.height !== h0) throw new Error('a click outside APPLIED the change (' + w0 + '×' + h0 + ' became ' + P.width + '×' + P.height + ')');
+        await reopen();
+        if (dlg.classList.contains('cv-fr-big')) throw new Error('closed on Canvas, but the cog reopened on Friends');
+        document.getElementById('cv-cancel').click(); await sleep(60);
+        /* The oversize warning's door is about the canvas: a bare open is always Canvas, whatever is remembered. */
+        localStorage.setItem('fm.cvPair', 'friends');
+        FM.openCanvasDialog(); await entranceDone(dlg); await sleep(40);
+        if (dlg.classList.contains('cv-fr-big')) throw new Error('a bare FM.openCanvasDialog() (the oversize warning) opened on Friends');
+        document.getElementById('cv-cancel').click(); await sleep(60);
+        /* CROSSING THE PHONE WIDTH WITH IT OPEN: the pair lives at both widths, so it only re-hangs — centred on the phone,
+           off the cog again on the way back — and keeps Friends big with its content. */
+        await reopen();   // on Canvas — the bare open just above remembered Canvas
+        document.getElementById('cv-fr-exp').click(); await land945();
+        if (!dlg.classList.contains('cv-fr-big') || !body.children.length) throw new Error('setup: ⤢ did not bring Friends up with its content');
+        await atPhoneWidth(async function () {
+          await sleep(60);
+          if (!open945(dlg)) throw new Error('narrowing to a phone closed the pair');
+          if (!dlg.classList.contains('cv-pair') || !dlg.classList.contains('cv-fr-big')) throw new Error('narrowing to a phone tore the pair down (' + dlg.className + ')');
+          if (!body.children.length) throw new Error('narrowing to a phone emptied the Friends block');
+          if (document.body.classList.contains('cv-anchored') || dlg.classList.contains('cv-side')) throw new Error('at a phone width the pair is still hung off a cog the phone does not show (' + document.body.className + ' / ' + dlg.className + ')');
+        }, 380);
+        await sleep(60);
+        if (!open945(dlg) || !dlg.classList.contains('cv-fr-big') || !body.children.length) throw new Error('back at 1280 the pair is not still open on Friends with its content (' + dlg.className + ')');
+        if (!document.body.classList.contains('cv-anchored') || !dlg.classList.contains('cv-side')) throw new Error('back at 1280 the pair did not hang off the cog again, side by side (' + document.body.className + ' / ' + dlg.className + ')');
+        const off = Math.abs(card.getBoundingClientRect().right - cog.getBoundingClientRect().right);
+        if (off > 12) throw new Error('back at 1280 the canvas block’s right edge is ' + Math.round(off) + ' px from the cog’s');
+        press978(cog); await sleep(80);
+        if (open945(dlg)) throw new Error('after the crossing a click on the cog did not close the pair');
+      }, 1280);
+    }); }); });
+  });
+
+  test('978 on a PC opening Friends never starts sharing — not the cog, not ⤢, not reopening on Friends — only Start sharing does; Stop leaves Start sharing and nothing re-arms', { item: '978', budgetMs: 120000 }, async function () {
+    const C = need921S7('the Friends block on a PC');
+    await withFakeNet921(async function (net) {
+      await withCollab921([layer921('A')], async function () {
+        C.end();
+        await withLabs921(async function (ui) {
+          await with945(async function () {
+            await atWideWidth(async function () {
+              if (FM.home.isOpen()) FM.home.close();   // the cog on Home opens App settings (the cv-upward test's trap)
+              const pid = FM.projects.currentId();
+              const dlg = document.getElementById('canvas-dialog');
+              const cog = document.getElementById('btn-settings');
+              const c0 = net.constructed;
+              const quiet = function (door) {
+                if (C.session) throw new Error(door + ' started a live session');
+                if (ui._relay()) throw new Error(door + ' started the relay');
+                if (ui._wake()) throw new Error(door + ' took a wake lock');
+                if (net.constructed !== c0) throw new Error(door + ' opened ' + (net.constructed - c0) + ' relay socket(s)');
+                if (hostRec921(pid)) throw new Error(door + ' wrote a host record — the project would start sharing again by itself at its next open');
+                if (ui._locks().indexOf('fm-collab-host-' + pid) >= 0) throw new Error(door + ' took the host lock');
+              };
+              cog.click(); await entranceDone(dlg);
+              if (!dlg.classList.contains('cv-pair') || !document.getElementById('cv-friends').getClientRects().length) throw new Error('on a PC the cog opened Canvas settings with no Friends (his words: "on pc there isnt a way to access the friends invite menu")');
+              quiet('the cog');
+              document.getElementById('cv-fr-exp').click(); await land945();
+              if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not make Friends the big block');
+              if (!document.querySelector('#cv-fr-body .cs-start')) throw new Error('the not-shared Friends block has no Start sharing');
+              quiet('the cog and ⤢');
+              document.getElementById('cv-cancel').click(); await settle921(80);
+              cog.click(); await entranceDone(dlg); await settle921(100);
+              if (!dlg.classList.contains('cv-fr-big')) throw new Error('the cog did not come back to Friends, the block open last');
+              quiet('the cog reopening on Friends');
+              /* CONTROL: Start sharing is the door, and it works. */
+              document.querySelector('#cv-fr-body .cs-start').click();
+              await until921S6('Start sharing to arm a room', function () { return C.session && C.session.isOwner ? C.session : null; }, 8000);
+              if (!hostRec921(pid)) throw new Error('CONTROL: Start sharing armed a session but wrote no host record');
+              await until921S6('the Share panel in the block', function () { return document.querySelector('#cv-fr-body .cs-stop'); }, 4000);
+              document.querySelector('#cv-fr-body .cs-stop').click();
+              (await askOk921()).click();
+              await until921S6('the block to show Start sharing again', function () { return document.querySelector('#cv-fr-body .cs-start'); }, 4000);
+              if (C.session) throw new Error('Stop sharing left a session');
+              await settle921(500);
+              if (C.session) throw new Error('half a second after Stop sharing, something armed a room again by itself');
+              if (hostRec921(pid)) throw new Error('Stop sharing left the host record');
+            }, 1280);
+          });
+        });
+      });
+    });
+  });
+
+  test('978 with the feature off the PC pair shows Friends and its one switch — no DOM, listener or socket added', { item: '978', budgetMs: 90000 }, async function () {
+    const C = need921S7('the Labs-off Friends block on a PC');
+    const was = FM.settings.get('collabLabs');
+    await withFakeNet921(async function (net) {
+      await editorWithShape(async function () {
+        await with945(async function () {
+          await atWideWidth(async function () {
+            try {
+              FM.settings.set('collabLabs', false); C.ui.syncLabs();
+              const c0 = net.constructed;
+              const dlg = document.getElementById('canvas-dialog');
+              const cog = document.getElementById('btn-settings');
+              cog.click(); await entranceDone(dlg);
+              if (!document.getElementById('cv-friends').getClientRects().length) throw new Error('with the feature off a PC’s cog still has no Friends — his clause 1: "on pc there isnt a way to access the friends invite menu"');
+              const sub = document.getElementById('cv-fr-sub').textContent;
+              if (sub !== 'Share live with friends') throw new Error('with the feature off the Friends bar reads "' + sub + '"');
+              document.getElementById('cv-fr-exp').click(); await land945();
+              const bodyEl = document.getElementById('cv-fr-body');
+              const sws = bodyEl.querySelectorAll('[role=switch][aria-checked=false]');
+              if (sws.length !== 1) throw new Error('with the feature off the block shows ' + sws.length + ' off switch(es), not the one that turns live sharing on');
+              if (!/Share this project live and edit it together/.test(bodyEl.textContent)) throw new Error('with the feature off the block does not say what live sharing is');
+              if (bodyEl.querySelector('.cs-start')) throw new Error('with the feature off the block offers Start sharing');
+              if (net.constructed !== c0) throw new Error('opening the block with the feature off opened ' + (net.constructed - c0) + ' relay socket(s)');
+              if (C.ui.isInstalled()) throw new Error('the collab UI installed itself with the feature off');
+              doors23('a PC with the pair open, feature off');   // the cog is the door: nothing else joins the page
+              press978(cog); await settle921(80);
+              if (!dlg.classList.contains('hidden')) throw new Error('the cog did not close the pair');
+            } finally { FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
+          }, 1280);
+        });
+      });
+    });
+  });
+
+  test('978 with no room beside its button the pair stacks like the phone — the big block next to the button, above it or below it', { item: '978', budgetMs: 60000 }, async function () {
+    const mm = window.matchMedia;
+    await editorWithShape(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+        const made = [];
+        /* Placed by INLINE style: popFrom gives the button it hangs from `.pop-src { position: relative }`, and a class rule
+           would lose its position:fixed to that. Right edge 430: under the 562 side by side needs, and far enough right that
+           a 360-wide stack hanging off it still starts on screen (x = 70). */
+        const mk = function (top) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.textContent = '·';
+          b.style.cssText = 'position:fixed;left:400px;top:' + top + 'px;width:30px;height:30px;z-index:1';
+          document.body.appendChild(b); made.push(b); return b;
+        };
+        const inView = function (what) {
+          [['the canvas block', card], ['the Friends block', fr]].forEach(function (p) {
+            const r = p[1].getBoundingClientRect();
+            if (r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) throw new Error(what + ': ' + p[0] + ' is off screen (' + R978(r) + ')');
+          });
+        };
+        try {
+          const low = mk(600), high = mk(60);
+          /* LOW: it opens upward; the small Friends bar sits AWAY from the button — on top — and Canvas stands on the button. */
+          FM.openCanvasDialog({ block: 'canvas', from: low }); await entranceDone(dlg); await sleep(60);
+          if (!dlg.classList.contains('cv-pair') || !document.body.classList.contains('cv-anchored') || !fr.getClientRects().length) throw new Error('the pair is not on the PC — Canvas settings opened ' + (dlg.classList.contains('cv-pair') ? 'un-anchored' : 'without Friends') + ' (his words: "on pc there isnt a way to access the friends invite menu")');
+          if (dlg.classList.contains('cv-side')) throw new Error('with the button\'s right edge at 430 (under 562) the pair still went side by side');
+          if (!document.body.classList.contains('cv-up')) throw new Error('setup: a button at y=600 of 760 should open upward');
+          const lr = low.getBoundingClientRect();
+          let cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+          if (frr.bottom > cr.top + 0.5) throw new Error('stacked, opening upward, the Friends bar (' + R978(frr) + ') is not above the card (' + R978(cr) + ')');
+          if (cr.bottom > lr.top + 4) throw new Error('the card (bottom ' + Math.round(cr.bottom) + ') is not standing on the button (top ' + Math.round(lr.top) + ')');
+          if (Math.abs(cr.right - lr.right) > 12) throw new Error('the stack is not lined up with the button (' + Math.round(cr.right) + ' vs ' + Math.round(lr.right) + ')');
+          inView('opening upward');
+          FM.closeCanvasDialog(); await sleep(60);
+          /* HIGH: it opens downward; Canvas hangs under the button and the small Friends bar sits under IT. */
+          FM.openCanvasDialog({ block: 'canvas', from: high }); await entranceDone(dlg); await sleep(60);
+          if (!dlg.classList.contains('cv-pair') || !document.body.classList.contains('cv-anchored')) throw new Error('the pair is not on the PC (high button)');
+          if (document.body.classList.contains('cv-up') || dlg.classList.contains('cv-side')) throw new Error('setup: a button at y=60 should open the stack downward (' + document.body.className + ' / ' + dlg.className + ')');
+          const hr = high.getBoundingClientRect();
+          cr = card.getBoundingClientRect(); frr = fr.getBoundingClientRect();
+          if (cr.top < hr.bottom - 4) throw new Error('the card (top ' + Math.round(cr.top) + ') does not hang under the button (bottom ' + Math.round(hr.bottom) + ')');
+          if (frr.top < cr.bottom - 0.5) throw new Error('opening downward the small Friends bar (' + R978(frr) + ') is not under the card (' + R978(cr) + ') — the small one sits away from the button');
+          inView('opening downward');
+          document.getElementById('cv-fr-exp').click(); await land945();
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not swap the stacked pair');
+          cr = card.getBoundingClientRect(); frr = fr.getBoundingClientRect();
+          if (frr.top < hr.bottom - 4 || frr.top > hr.bottom + 20) throw new Error('Friends big is not next to the button (its top ' + Math.round(frr.top) + ', the button’s bottom ' + Math.round(hr.bottom) + ')');
+          if (cr.top < frr.bottom - 0.5) throw new Error('the Canvas bar is not below Friends when it opens downward');
+          if (!fr._popTail || !fr._popTail.isConnected) throw new Error('the tail did not move to Friends, the block next to the button');
+          inView('opening downward, Friends big');
+          /* …and with reduced motion (no flight to settle) the tail still follows the block next to the button. */
+          window.matchMedia = function (q) {
+            if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {}, addListener: function () {}, removeListener: function () {} };
+            return mm.call(window, q);
+          };
+          document.getElementById('cv-mini-exp').click(); await sleep(60);
+          window.matchMedia = mm;
+          if (dlg.classList.contains('cv-fr-big')) throw new Error('with reduced motion the swap back did not land at once');
+          if (!card._popTail || !card._popTail.isConnected || fr._popTail) throw new Error('with reduced motion the tail stayed on Friends after Canvas became the block next to the button');
+          FM.closeCanvasDialog(); await sleep(60);
+          /* CONTROL: the cog, with room beside it, is side by side. */
+          FM.openCanvasDialog({ from: document.getElementById('btn-settings') }); await entranceDone(dlg); await sleep(40);
+          if (!dlg.classList.contains('cv-side')) throw new Error('CONTROL: hung off the cog at 1280 the pair is not side by side');
+        } finally {
+          window.matchMedia = mm;
+          FM.closeCanvasDialog();                      // first, so no lifted .pop-src button is removed with its tail up
+          made.forEach(function (b) { b.remove(); });
+        }
+      }, 1280);
+    }); });
+  });
+
+  test('978 on a PC the Share button opens the pair with Friends big, hung off it, starting nothing — and a second click closes it', { item: '978', budgetMs: 90000 }, async function () {
+    const C = need921S7('the Share button on a PC');
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(450); }
+    try {
+      await withFakeNet921(async function (net) {
+        await withLabs921(async function (ui) {
+          await with945(async function () {
+            await atWideWidth(async function () {
+              await sleep(300);
+              const pid = FM.projects.currentId();
+              const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+              const b = document.getElementById('btn-share');
+              if (!b || !b.getBoundingClientRect().width || b.parentNode.id === 'stage') throw new Error('setup: no Share button beside Export on a PC with the feature on');
+              const c0 = net.constructed;
+              const quiet = function (door) {
+                if (C.session) throw new Error(door + ' started a live session');
+                if (ui._relay()) throw new Error(door + ' started the relay');
+                if (ui._wake()) throw new Error(door + ' took a wake lock');
+                if (net.constructed !== c0) throw new Error(door + ' opened ' + (net.constructed - c0) + ' relay socket(s)');
+                if (hostRec921(pid)) throw new Error(door + ' wrote a host record');
+                if (ui._locks().indexOf('fm-collab-host-' + pid) >= 0) throw new Error(door + ' took the host lock');
+              };
+              const first = press978(b);
+              if (first.down !== b && !b.contains(first.down)) throw new Error('setup: the press did not land on the Share button (' + (first.down && (first.down.id || first.down.className)) + ')');
+              await hcUntil('Canvas settings to open', function () { return !dlg.classList.contains('hidden'); }, 8000);
+              await entranceDone(dlg); await sleep(60);
+              if (!dlg.classList.contains('cv-pair') || !dlg.classList.contains('cv-fr-big')) throw new Error('on a PC the Share button did not open Canvas settings with Friends big (' + dlg.className + ')');
+              if (document.getElementById('collab-share') || document.getElementById('collab-profile')) throw new Error('on a PC the Share button still opened the old Share card (or its name prompt)');
+              quiet('the Share button');
+              const br = b.getBoundingClientRect();
+              const at = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
+              if (!at || (at !== b && !b.contains(at))) throw new Error('the Share button is under the blur — its centre is ' + (at && (at.id || at.className)));
+              const right = Math.max(card.getBoundingClientRect().right, fr.getBoundingClientRect().right);
+              if (Math.abs(right - br.right) > 12) throw new Error('the pair (right edge ' + Math.round(right) + ') is not hung off the Share button (' + Math.round(br.right) + ')');
+              if (!document.body.classList.contains('cv-share-src')) throw new Error('hung off Share, the cog was not put back under the blur (no cv-share-src)');
+              press978(b); await sleep(700);
+              if (!dlg.classList.contains('hidden')) throw new Error('a second click on the Share button left the pair open — or opened it again (#944)');
+              quiet('the second click');
+              /* CONTROL: the cog still hangs the pair off the cog. */
+              const cog = document.getElementById('btn-settings');
+              cog.click(); await entranceDone(dlg); await sleep(60);
+              if (dlg.classList.contains('hidden')) throw new Error('CONTROL: the cog did not open Canvas settings after Share');
+              if (document.body.classList.contains('cv-share-src')) throw new Error('CONTROL: after Share, the cog opened the pair still hung off Share');
+              const off = Math.abs(card.getBoundingClientRect().right - cog.getBoundingClientRect().right);
+              if (off > 12) throw new Error('CONTROL: the cog’s pair is ' + Math.round(off) + ' px off the cog');
+              document.getElementById('cv-cancel').click(); await sleep(60);
+            }, 1280);
+          });
+        });
+      });
+    } finally { if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200); }
+  });
+
+  /* #978 review: THE SWITCH IN THE PAIR MOVES THE BUTTON THE PAIR HANGS FROM. On a PC the Friends block holds the only Work
+     with friends switch, and flipping it adds or takes away the Share button beside Export — which shifts the cog along the
+     transport row. The pair was placed once, at open, so turning it on left the pair and its tail pointing at the new Share
+     button (blurred under the scrim) with the lifted cog 42 px to the left of its corner; and turning it off from a pair Share
+     had opened left `cv-share-src` on, the cog blurred under a tail now pointing at it. His clauses 2 and 3 are that picture:
+     hung off the button, the button sharp. */
+  test('978 on a PC the pair stays hung off its button when the switch in its own Friends block moves the bar — on, the cog shifts and the canvas block and its tail follow it; off from a pair Share opened, it hangs off the cog again with the cog sharp', { item: '978', budgetMs: 90000 }, async function () {
+    const C = need921S7('the Work with friends switch in the PC pair');
+    const was = FM.settings.get('collabLabs');
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(450); }
+    try {
+      await withFakeNet921(async function () { await editorWithShape(async function () { await with945(async function () {
+        await atWideWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+          const body = document.getElementById('cv-fr-body');
+          const cog = document.getElementById('btn-settings');
+          const hung = function (what, src) {
+            const kr = src.getBoundingClientRect(), cr = card.getBoundingClientRect();
+            if (Math.abs(cr.right - kr.right) > 12) throw new Error(what + ': the canvas block’s right edge (' + Math.round(cr.right) + ') is not by its button’s (' + Math.round(kr.left) + '..' + Math.round(kr.right) + ')');
+            const tail = card._popTail;
+            if (!tail || !tail.isConnected) throw new Error(what + ': the canvas block next to the button has no tail');
+            const tr = tail.getBoundingClientRect(), tcx = tr.left + tr.width / 2, kcx = kr.left + kr.width / 2;
+            if (Math.abs(tcx - kcx) > 4) throw new Error(what + ': the tail points at x ' + Math.round(tcx) + ', not at its button (centre ' + Math.round(kcx) + ')');
+            const at = document.elementFromPoint(kcx, kr.top + kr.height / 2);
+            if (!at || (at !== src && !src.contains(at))) throw new Error(what + ': the button the pair hangs from is under the blur — its centre is ' + (at && (at.id || at.className)));
+          };
+          FM.settings.set('collabLabs', false); C.ui.syncLabs();
+          /* ON: the cog opens the pair, ⤢ to Friends, and its one switch turns the feature on. */
+          press978(cog); await entranceDone(dlg); await sleep(60);
+          if (!open945(dlg) || !dlg.classList.contains('cv-side')) throw new Error('setup: the cog did not open the pair side by side at 1280');
+          const k0 = cog.getBoundingClientRect();
+          hung('CONTROL, just opened', cog);
+          document.getElementById('cv-fr-exp').click(); await land945();
+          const sw = body.querySelector('[role=switch][aria-checked=false]');
+          if (!sw) throw new Error('setup: the Friends block with the feature off has no switch');
+          press978(sw);
+          await until921S6('the switch to turn the feature on and put Share beside Export', function () {
+            const b = document.getElementById('btn-share');
+            return C.ui.labsOn() && b && b.parentNode.id !== 'stage' && b.getBoundingClientRect().width > 0 ? b : null;
+          }, 4000);
+          await settle921(80);
+          const k1 = cog.getBoundingClientRect();
+          if (Math.abs(k1.right - k0.right) < 20) throw new Error('setup: turning the feature on did not move the cog (' + Math.round(k0.right) + ' → ' + Math.round(k1.right) + ') — this test would prove nothing');
+          if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('turning the feature on in the block closed the pair or left Friends');
+          hung('after the switch turned the feature on', cog);
+          const sb = document.getElementById('btn-share'), sr = sb.getBoundingClientRect();
+          if (document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2) !== dlg) throw new Error('the Share button the switch added is not under the blur — the pair was not opened from it');
+          document.getElementById('cv-cancel').click(); await sleep(60);
+          /* OFF: Share opens the pair hung off itself, and the block's switch turns the feature off — Share leaves the bar. */
+          press978(sb);
+          await hcUntil('Share to open the pair', function () { return !dlg.classList.contains('hidden'); }, 8000);
+          await entranceDone(dlg); await sleep(60);
+          if (!document.body.classList.contains('cv-share-src') || !dlg.classList.contains('cv-fr-big')) throw new Error('setup: Share did not open the pair hung off itself with Friends big');
+          hung('CONTROL, opened from Share', sb);
+          const sw2 = body.querySelector('[role=switch][aria-checked=true]');
+          if (!sw2) throw new Error('setup: the Friends block with the feature on has no on switch');
+          press978(sw2);
+          await until921S6('the switch to turn the feature off', function () {
+            if (!C.ui.labsOn()) return true;
+            const ok = document.querySelector('#fm-ask .fm-ask-ok');
+            if (ok && !document.getElementById('fm-ask').classList.contains('hidden')) ok.click();   // a room kept by an earlier test
+            return false;
+          }, 6000);
+          await settle921(80);
+          if (sb.isConnected && sb.getClientRects().length) throw new Error('setup: the Share button stayed in the bar with the feature off');
+          if (!open945(dlg)) throw new Error('turning the feature off in the block closed the pair');
+          if (document.body.classList.contains('cv-share-src')) throw new Error('the Share button left the bar, but the pair still hangs off it (cv-share-src) — the cog stays blurred under a tail pointing at it');
+          hung('after the switch turned the feature off', cog);
+          document.getElementById('cv-cancel').click(); await sleep(60);
+        }, 1280);
+      }); }); });
+    } finally {
+      FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
+      if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
+    }
   });
 
 })();

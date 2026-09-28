@@ -1,0 +1,7 @@
+$ osascript -l JavaScript engine-tests.js "$PWD"    (2026-09-29 05:18 AWST, macOS JavaScriptCore via JXA)
+Random sweep: 1000 seeded projects x 6 commands, 7949 ms
+  applied: closeGap 290, deleteClip 555, duplicate 503, insert 526, makeMain 398, makeOverlay 552, reorder 320, speed 408, split 467, trimHead 527, trimTail 544
+  refused (valid refusals, document unchanged): closeGap 268, duplicate 43, insert 18, makeMain 136, reorder 234, speed 94, split 65, trimHead 44
+SAMPLE checks: 84 assertions over 16 cases
+
+PASS: 459798 passed, 0 failed

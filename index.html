@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=734">
+<link rel="stylesheet" href="styles.css?v=736">
 <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.11</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.12</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1014,7 +1014,8 @@
         <button id="cv-cancel" class="btn">Cancel</button>
         <button id="cv-go" class="btn btn-accent">Apply</button>
       </div>
-      <!-- queue 945: Canvas settings SHRUNK to a bar, shown only on a phone while Friends is the big block. LAST in the card on
+      <!-- queue 945: Canvas settings SHRUNK to a bar (a tile, side by side on a PC), shown while Friends is the big block — the
+           pair, every width (#978). LAST in the card on
            purpose: code and tests find this card's first button, and the ⤢ here must never be it. -->
       <div class="cv-mini" id="cv-mini">
         <span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a1.5 1.5 0 0 1 1.5 1.5v15A1.5 1.5 0 0 1 16 21H8a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 8 3z"/></svg></span>
@@ -1025,8 +1026,9 @@
         <button type="button" class="cv-mini-exp" id="cv-mini-exp" aria-label="Open Canvas settings" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg></button>
       </div>
     </div>
-    <!-- queue 945: FRIENDS — the live-sharing block that opens WITH Canvas settings on a phone (his design: a bar above the
-         card; ⤢ swaps them, and the small one always sits on top). Display:none on a PC, where Share lives beside Export.
+    <!-- queue 945: FRIENDS — the live-sharing block that opens WITH Canvas settings (his design: a bar above the card; ⤢ swaps
+         them, and the small one always sits on top). The pair, every width (#978): on a PC it hangs off the cog, side by side
+         where there is room, and the Share button beside Export opens it with Friends big.
          AFTER the canvas card, so every "the dialog's first .export-card / first button" lookup still finds the canvas.
          The body is drawn by js/collab-ui.js (U.renderFriends) and never starts sharing by being opened. -->
     <div id="cv-friends" role="group" aria-label="Friends">
@@ -1043,6 +1045,7 @@
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=12"></script>
   <script src="js/drawn-x.js?v=1"></script>
+  <script src="js/variant.js?v=1"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
   <script src="js/settings.js?v=50"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
@@ -1057,16 +1060,17 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=4"></script>
   <script src="js/gl-color.js?v=3"></script>
-  <script src="js/compositor.js?v=195"></script>
+  <script src="js/compositor.js?v=196"></script>
   <script src="js/fx-registry.js?v=25.23"></script>
   <script src="js/filters.js?v=17"></script>
   <script src="js/fx-presets.js?v=11"></script>
   <script src="js/fx-thumbs.js?v=52"></script>
-  <script src="js/timeline.js?v=257"></script>
+  <script src="js/timeline.js?v=259"></script>
   <script src="js/tilefit.js?v=1"></script>
-  <script src="js/addmenu.js?v=81"></script>
-  <script src="js/inspector.js?v=393"></script>
-  <script src="js/fx-browser.js?v=96"></script>
+  <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
+  <script src="js/addmenu.js?v=83"></script>
+  <script src="js/inspector.js?v=395"></script>
+  <script src="js/fx-browser.js?v=97"></script>
   <script src="js/elements-browser.js?v=4"></script>
   <script src="js/color-wheel.js?v=53"></script>
   <script src="js/canvas-edit.js?v=121"></script>
@@ -1087,14 +1091,14 @@
   <script src="js/audio-fx.js?v=11"></script>
   <script src="js/audio-play.js?v=65"></script>
   <script src="js/audio-fx-live.js?v=10"></script>
-  <script src="js/audio-fx-browser.js?v=12"></script>
+  <script src="js/audio-fx-browser.js?v=13"></script>
   <script src="js/history.js?v=37"></script>
   <script src="js/storage.js?v=57"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
   <script src="js/home-arrow.js?v=2"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
-  <script src="js/home.js?v=189"></script>
+  <script src="js/home.js?v=191"></script>
   <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -1106,7 +1110,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=58"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=461"></script>
+  <script src="js/app.js?v=463"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
@@ -1133,7 +1137,7 @@
        the per-device engine and `bridge` is the only file that knows both the engine and FM.scene.
        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
   <script src="js/collab-signal.js?v=5"></script>
-  <script src="js/collab-link.js?v=8"></script>
+  <script src="js/collab-link.js?v=9"></script>
   <script src="js/collab-session.js?v=12"></script>
   <script src="js/collab-bridge.js?v=11"></script>
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
@@ -1148,7 +1152,7 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=15"></script>
+  <script src="js/collab-ui.js?v=16"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->

@@ -152,14 +152,15 @@ proportions that read well but not the exact contour. Everything else in the sha
 original geometry and is fine. The tracing pipeline itself is in the v3.96 commit message if it's
 useful again on assets we own.
 
-**The car is no longer one of them (queue 961).** It was redrawn from landmarks in v5.33 and is now traced from
-Pictogrammers Material Design Icons `car-side`, **Apache License 2.0**: free to ship, but a public release must carry
-the notice — "Material Design Icons by Pictogrammers, Apache License 2.0" plus the licence text, in the app's
-credits/about or a NOTICE file.
+**The car is no longer one of them.** It was redrawn from named landmarks in v5.33 — our own geometry, not a trace — and
+that is the car in the app again: v17.07 swapped it for a Material Design Icons trace, and his 28 Sep pick (queue 973) was
+"keep the original and add the head on", so the MDI car and its Apache notice are gone. The **front-view car** added beside
+it (`carfront`, "Car (front)") is the AIGA / US DOT transport sign's car, **public domain** — nothing owed, the same as the
+people from #929.
 
-**The eye (queue 962)** is traced from Bootstrap Icons `eye-fill`, **MIT** (the catchlight's placement follows Fluent
-Emoji's `Eye`, also MIT): the same kind of notice belongs beside the car's — the copyright line from Bootstrap Icons'
-LICENSE file and the MIT text. (The people from #929 are AIGA/US DOT symbol signs, public domain — nothing owed.)
+**The eye (queues 962, 973)** is traced from Google Material Icons `visibility`, **Apache License 2.0** — his pick A. Free to
+ship, but a public release must carry the notice: "Material Icons by Google, Apache License 2.0" plus the licence text, in
+the app's credits/about or a NOTICE file. (The Bootstrap Icons `eye-fill` eye v17.07 shipped, and its MIT notice, are gone.)
 
 ## 9. Launch readiness — not about identity, still a blocker
 

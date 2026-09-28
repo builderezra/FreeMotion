@@ -1,0 +1,51 @@
+/* ---- SIDEWAYS ROWS ON A MOUSE (queue 976) — js/rail-arrows.js ------------------------------------------------------
+   A desktop pointer pages a sideways row with ‹ › instead of a scrollbar: shown while the pointer is over the row, only on
+   a side that has more, over a soft fade on that side. Touch gets none of it — every rule that draws anything is inside
+   (hover: hover) and (pointer: fine). The row itself keeps `scrollbar-width: none` everywhere, so there is no bar to
+   come out white (see the note in js/rail-arrows.js for why the old desktop bar did). */
+.fm-rail { position: relative; }
+.fm-rail-arrow { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .fm-rail-arrow {
+    display: flex; align-items: center; justify-content: center;
+    position: absolute; top: calc(var(--rail-sc-top, 0px) + var(--rail-arrow-y, 40px)); transform: translateY(-50%); z-index: 3;
+    width: 28px; height: 28px; padding: 0; border-radius: 50%;
+    border: 1px solid var(--line); color: var(--text);
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .45);
+    cursor: pointer; opacity: 0; visibility: hidden;
+    transition: opacity .15s ease, visibility 0s linear .15s, border-color .15s ease;
+  }
+  .fm-rail-arrow svg { width: 14px; height: 14px; display: block; }
+  .fm-rail-arrow--prev { left: var(--rail-arrow-x, 2px); }
+  .fm-rail-arrow--next { right: var(--rail-arrow-x, 2px); }
+  .fm-rail-arrow:hover { border-color: color-mix(in srgb, var(--accent, #4d8bf0) 60%, transparent); }
+  .fm-rail.can-l:hover > .fm-rail-arrow--prev,
+  .fm-rail.can-r:hover > .fm-rail-arrow--next {
+    opacity: 1; visibility: visible;
+    transition: opacity .15s ease, visibility 0s, border-color .15s ease;
+  }
+  /* the soft edge, on the side that has more */
+  .fm-rail.can-r > .fm-rail-sc {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+            mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  }
+  .fm-rail.can-l > .fm-rail-sc {
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent);
+            mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent);
+  }
+  .fm-rail.can-l.can-r > .fm-rail-sc {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+            mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  }
+  /* a keyboard focus ring at the row's edge must not sit under the fade */
+  .fm-rail:has(:focus-visible) > .fm-rail-sc { -webkit-mask-image: none; mask-image: none; }
+}
+@media (prefers-reduced-motion: reduce) { .fm-rail-arrow { transition: none; } }
+/* Where each row's arrows sit: on the picture, below the tile's ★ (filter tile: ★ ends 24px down, arrow starts 30px). */
+.flt-rail { --rail-arrow-y: 44px; }
+/* The New row (queue 977): the rail is its own .fxb-section, 14px inside the sheet while the row bleeds to the sheet's
+   edges (queue 917 finding 13) — so -8px puts the arrows 6px from the sheet's edge. On a PC the browser is docked in
+   the inspector (.fxb-in-inspector: 112px cards, 70px picture) and 47px lands the arrow's centre 34px down that
+   picture (measured at 900, 1280 and 1920) — its middle. */
+.fxb-section.fm-rail { --rail-arrow-y: 47px; --rail-arrow-x: -8px; }

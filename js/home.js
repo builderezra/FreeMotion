@@ -2854,8 +2854,222 @@ window.FM = window.FM || {};
      it. Picking one writes the controls below and leaves you on the dialog, so you still name the
      project and still press Create; nothing is created behind your back.
      Names are user text and go in by textContent, never innerHTML. */
+  /* ═══ THE NEW PROJECT + GETS ITS OWN ENTRANCE — ALL THREE, ONE AT RANDOM (queue 947, played by queue 974) ═══════════
+     #947, his words: the + to make a new project should not open the way everything else does — it should "actually
+     look really good and be really well thought out". Three were drawn and sent 26 Sep (tools/design/947-options.html,
+     947-A/B/C.gif, driven by the throwaway tools/design/947-proto.js). On 28 Sep, #974: *"make them all happen in the
+     app but it's just random which one so I can decide which is best over use time"*. So FM.variant picks one EVERY
+     time the + opens the card:
+       A · the orb BECOMES the card — the disc swells and travels up, circle to rounded card, its colours draining into
+           the card's own as it lands; the fields rise in one by one. Cancel runs it BACKWARDS, into the orb.
+       B · a blank canvas is DRAWN — a 9:16 frame rises out of the +, its outline drawing itself in the orb's colours,
+           pauses, then grows into the card and fills; the fields rise in.
+       C · a ripple OPENS it — a ring in the orb's colours spreads from the + and the dimmed screen opens behind it as a
+           growing circle; the card rises from below with a small overshoot, and the + turns into an ×.
+     The keyframes are the prototype's, now PLAYED rather than paused-and-seeked. Everything is Web Animations with an
+     id 'np947-<option>-<part>', so the suite can find exactly these. The card's CSS pop/hinge (and the scrim's bloom) are
+     switched off inline for the open, since this entrance replaces them.
+     ⚠️ NOTHING OUTLIVES THE CARD. The flying layers are removed on a TIMER once the card has landed (#571: animations do
+     not advance in a background tab, so nothing may wait on `finished`), and EVERYTHING — the orb's own transform above
+     all, which A shrinks to nothing and C turns into an × — is cancelled the moment the dialog is hidden, by whatever
+     route (Create, Cancel, Escape, the backdrop, Home closing). That is a MutationObserver on the dialog's class, not a
+     line in each route, because a route added later would otherwise leave the + invisible on Home.
+     Reduced motion: no entrance at all, as the CSS already does for the card. Numbers and computed styles only reach
+     these nodes — nothing he typed. When he picks, the winner stays and the other two branches are DELETED. */
+  const NP_FX_MS = 640;
+  const NP_FX_BACK_MS = 460;
+  let npFx = null;   // the entrance of the card on screen: { v, anims, orbAnims, nodes, timer, O, leaving }
+  function npFxReduced() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+  }
+  function npFxClear() {
+    const f = npFx;
+    npFx = null;
+    if (!f) return;
+    clearTimeout(f.timer); clearTimeout(f.backTimer);
+    f.anims.concat(f.orbAnims).forEach(a => { try { a.cancel(); } catch (e) {} });
+    f.nodes.forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+    const dlg = document.getElementById('hm-dialog'), card = dlg && dlg.querySelector('.hm-dlg-card');
+    if (dlg) dlg.style.animation = '';
+    if (card) { card.style.animation = ''; card.style.position = ''; card.style.zIndex = ''; }
+  }
+  /* The entrance has landed: the layers go, the card is its plain self. Only the orb stays as the entrance left it
+     (A: gone into the card; C: turned to an ×) until the card goes away. */
+  function npFxLand() {
+    const f = npFx;
+    if (!f || f.leaving) return;
+    f.landed = true;
+    f.anims.forEach(a => { try { a.cancel(); } catch (e) {} });
+    f.anims = [];
+    f.nodes.forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+    f.nodes = [];
+  }
+  function npFxStagger(f, card, from, opts) {
+    const kids = Array.prototype.slice.call(card.querySelectorAll('.hm-dlg-title, .hm-dlg-scroll > *, .hm-dlg-actions'));
+    kids.slice(0, 14).forEach((k, i) => {
+      const s = Math.min(.82, from + i * .035), e = Math.min(1, s + .22);
+      f.anims.push(npKf(f, k, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 0, transform: 'translateY(12px)', offset: s }, { opacity: 1, transform: 'none', offset: e }, { opacity: 1, transform: 'none' }], 'fields', opts));
+    });
+  }
+  function npKf(f, el, frames, part, opts) {
+    const a = el.animate(frames, Object.assign({ duration: NP_FX_MS, fill: 'both' }, opts || {}));
+    a.id = 'np947-' + f.v + '-' + part;
+    return a;
+  }
+  function npFxLayer(dlg, card) {
+    const d = document.createElement('div');
+    d.className = 'np-fx';
+    d.setAttribute('aria-hidden', 'true');
+    d.style.cssText = 'position:fixed;pointer-events:none;box-sizing:border-box;';
+    dlg.insertBefore(d, card);
+    return d;
+  }
+  const npBox = (l, t, w, h, r) => ({ left: l + 'px', top: t + 'px', width: w + 'px', height: h + 'px', borderRadius: r });
+  /* A's flight, both ways: forward on the open, `back` on Cancel (the card shrinks into the orb). */
+  function npFxA(f, dlg, card, back) {
+    const O = f.O, C = card.getBoundingClientRect(), cc = getComputedStyle(card);
+    const opts = back ? { duration: NP_FX_BACK_MS, direction: 'reverse' } : null;
+    const scrim = getComputedStyle(dlg).backgroundColor;
+    f.anims.push(npKf(f, dlg, [{ backgroundColor: 'rgba(4,6,10,0)' }, { backgroundColor: scrim, offset: .45 }, { backgroundColor: scrim }], 'scrim', opts));
+    const m = npFxLayer(dlg, card);
+    m.classList.add('np-fx-orb');
+    m.style.backgroundImage = f.orbPaint; m.style.boxShadow = cc.boxShadow;
+    f.nodes.push(m);
+    f.anims.push(npKf(f, m, [npBox(O.left, O.top, O.width, O.height, O.width / 2 + 'px'), Object.assign(npBox(C.left, C.top - 10, C.width, C.height + 10, cc.borderRadius), { offset: .62 }), npBox(C.left, C.top, C.width, C.height, cc.borderRadius)],
+      'orb', Object.assign({ easing: 'cubic-bezier(.45,0,.2,1)' }, opts || {})));
+    const paint = document.createElement('div');
+    paint.style.cssText = 'position:absolute;inset:0;border-radius:inherit;border:' + cc.borderTopWidth + ' ' + cc.borderTopStyle + ' ' + cc.borderTopColor + ';background:' + cc.backgroundColor + ';';
+    m.appendChild(paint);
+    f.anims.push(npKf(f, paint, [{ opacity: 0 }, { opacity: 0, offset: .36 }, { opacity: 1, offset: .8 }, { opacity: 1 }], 'paint', opts));
+    // the orb's + rides along on the flying disc, and turns away
+    const plus = document.createElement('div');
+    plus.style.cssText = 'position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;background:linear-gradient(#fff,#fff) center/100% 3px no-repeat,linear-gradient(#fff,#fff) center/3px 100% no-repeat;border-radius:2px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));';
+    m.appendChild(plus);
+    f.anims.push(npKf(f, plus, [{ opacity: 1, transform: 'rotate(0deg)' }, { opacity: 0, transform: 'rotate(90deg) scale(.6)', offset: .18 }, { opacity: 0, transform: 'rotate(90deg)' }], 'plus', opts));
+    f.anims.push(npKf(f, card, npFxSurface(cc), 'surface', opts));
+    /* scaled away, not faded: the orb's + is a knock-out, and animating its opacity isolates it and fills the + in */
+    f.orbAnims.forEach(a => { try { a.cancel(); } catch (e) {} });
+    f.orbAnims = [npKf(f, f.orb, [{ transform: 'translateX(-50%) rotate(0deg) scale(1)' }, { transform: 'translateX(-50%) rotate(90deg) scale(.001)', offset: .2 }, { transform: 'translateX(-50%) scale(.001)' }], 'button', opts)];
+    npFxStagger(f, card, .5, opts);
+  }
+  /* The card's own surface (tint, blur, rim) waits for the flight to land, or it shows as a ghost box from frame 1. */
+  function npFxSurface(cc) {
+    const bare = { backgroundColor: 'rgba(0,0,0,0)', backgroundImage: 'none', borderColor: 'rgba(0,0,0,0)', boxShadow: 'none', backdropFilter: 'none', webkitBackdropFilter: 'none' };
+    const full = { backgroundColor: cc.backgroundColor, backgroundImage: cc.backgroundImage, borderColor: cc.borderTopColor, boxShadow: cc.boxShadow, backdropFilter: cc.backdropFilter || 'none', webkitBackdropFilter: cc.webkitBackdropFilter || cc.backdropFilter || 'none' };
+    return [bare, Object.assign({ offset: .96 }, bare), full];
+  }
+  function npFxB(f, dlg, card) {
+    const O = f.O, C = card.getBoundingClientRect(), cc = getComputedStyle(card);
+    const ox = O.left + O.width / 2, oy = O.top + O.height / 2;
+    const scrim = getComputedStyle(dlg).backgroundColor;
+    f.anims.push(npKf(f, dlg, [{ backgroundColor: 'rgba(4,6,10,0)' }, { backgroundColor: scrim, offset: .35 }, { backgroundColor: scrim }], 'scrim'));
+    const fr = npFxLayer(dlg, card);
+    fr.classList.add('np-fx-frame');
+    f.nodes.push(fr);
+    const fw = 22, fh = fw * 16 / 9, mid = { w: 120, h: 120 * 16 / 9 };
+    const my = Math.max(60, C.top + C.height / 2 - mid.h / 2);
+    f.anims.push(npKf(f, fr, [npBox(ox - fw / 2, oy - fh / 2, fw, fh, '4px'), Object.assign(npBox(C.left + C.width / 2 - mid.w / 2, my, mid.w, mid.h, '8px'), { offset: .4 }),
+      Object.assign(npBox(C.left + C.width / 2 - mid.w / 2, my, mid.w, mid.h, '8px'), { offset: .48 }), npBox(C.left, C.top, C.width, C.height, cc.borderRadius)], 'frame', { easing: 'cubic-bezier(.4,0,.2,1)' }));
+    const NS = 'http://www.w3.org/2000/svg';
+    const s = document.createElementNS(NS, 'svg');
+    s.setAttribute('width', '100%'); s.setAttribute('height', '100%'); s.style.cssText = 'position:absolute;inset:0;overflow:visible;';
+    const gid = 'np947g' + (++npFxSeq);
+    // constants only — nothing user-supplied reaches this markup
+    s.innerHTML = '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7FD4FF"/><stop offset=".35" stop-color="#6BF0C8"/><stop offset=".7" stop-color="#8FB8FF"/><stop offset="1" stop-color="#C86BFF"/></linearGradient></defs>';
+    const r = document.createElementNS(NS, 'rect');
+    r.setAttribute('class', 'np-fx-outline');
+    r.setAttribute('x', '1.5'); r.setAttribute('y', '1.5'); r.setAttribute('pathLength', '1');
+    r.style.cssText = 'width:calc(100% - 3px);height:calc(100% - 3px);fill:none;stroke:url(#' + gid + ');stroke-width:4;rx:6px;stroke-dasharray:1;';
+    s.appendChild(r);
+    fr.appendChild(s);
+    f.anims.push(npKf(f, r, [{ strokeDashoffset: 1 }, { strokeDashoffset: 0, offset: .42 }, { strokeDashoffset: 0, offset: .8 }, { strokeDashoffset: 0, opacity: 0 }], 'outline'));
+    const glow = document.createElement('div');
+    glow.style.cssText = 'position:absolute;inset:0;border-radius:inherit;box-shadow:0 0 30px rgba(80,180,255,.75), inset 0 0 22px rgba(200,107,255,.35);';
+    fr.appendChild(glow);
+    f.anims.push(npKf(f, glow, [{ opacity: 0 }, { opacity: 1, offset: .4 }, { opacity: 1, offset: .55 }, { opacity: 0 }], 'glow'));
+    const paint = document.createElement('div');
+    paint.style.cssText = 'position:absolute;inset:0;border-radius:inherit;background:' + cc.backgroundColor + ';border:' + cc.borderTopWidth + ' ' + cc.borderTopStyle + ' ' + cc.borderTopColor + ';';
+    fr.insertBefore(paint, s);
+    f.anims.push(npKf(f, paint, [{ opacity: 0 }, { opacity: 0, offset: .5 }, { opacity: 1, offset: .82 }, { opacity: 1 }], 'paint'));
+    f.anims.push(npKf(f, card, npFxSurface(cc), 'surface'));
+    f.orbAnims = [npKf(f, f.orb, [{ transform: 'translateX(-50%) scale(1)' }, { transform: 'translateX(-50%) scale(.86)', offset: .12 }, { transform: 'translateX(-50%) scale(1)', offset: .3 }, { transform: 'translateX(-50%) scale(1)' }], 'button')];
+    npFxStagger(f, card, .58);
+  }
+  function npFxC(f, dlg, card) {
+    const O = f.O;
+    const ox = O.left + O.width / 2, oy = O.top + O.height / 2;
+    const far = Math.hypot(Math.max(ox, innerWidth - ox), Math.max(oy, innerHeight - oy));
+    const circ = rad => 'circle(' + rad + 'px at ' + ox + 'px ' + oy + 'px)';
+    f.anims.push(npKf(f, dlg, [{ clipPath: circ(0) }, { clipPath: circ(far), offset: .55 }, { clipPath: circ(far) }], 'reveal', { easing: 'cubic-bezier(.3,0,.2,1)' }));
+    const ring = document.createElement('div');
+    ring.className = 'np-fx np-fx-ring';
+    ring.setAttribute('aria-hidden', 'true');
+    ring.style.cssText = 'position:fixed;pointer-events:none;border-radius:50%;z-index:211;padding:3px;box-sizing:border-box;background:' + f.orbPaint +
+      ';-webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 10px rgba(127,212,255,.7));';
+    document.body.appendChild(ring);
+    f.nodes.push(ring);
+    const R = rad => npBox(ox - rad, oy - rad, rad * 2, rad * 2, '50%');
+    f.anims.push(npKf(f, ring, [Object.assign(R(29), { opacity: 1 }), Object.assign(R(far * .62), { opacity: .9, offset: .45 }), Object.assign(R(far), { opacity: 0, offset: .62 }), Object.assign(R(far), { opacity: 0 })], 'ring', { easing: 'cubic-bezier(.3,0,.2,1)' }));
+    f.anims.push(npKf(f, card, [{ opacity: 0, transform: 'translateY(90px) scale(.92)' }, { opacity: 0, transform: 'translateY(90px) scale(.92)', offset: .22 }, { opacity: 1, transform: 'translateY(-8px) scale(1.01)', offset: .7 }, { opacity: 1, transform: 'none' }], 'card', { easing: 'cubic-bezier(.3,0,.3,1)' }));
+    f.orbAnims = [npKf(f, f.orb, [{ transform: 'translateX(-50%) rotate(0deg)' }, { transform: 'translateX(-50%) rotate(135deg)', offset: .5 }, { transform: 'translateX(-50%) rotate(135deg)' }], 'button', { easing: 'cubic-bezier(.3,0,.2,1)' })];
+    npFxStagger(f, card, .45);
+  }
+  let npFxSeq = 0;
+  function npEntrance(dlg, orb, O) {
+    npFxClear();
+    if (npFxReduced() || !FM.variant || !orb || !(O && O.width > 0) || !dlg.animate) return;
+    const card = dlg.querySelector('.hm-dlg-card');
+    if (!card) return;
+    const v = FM.variant('newproject', ['A', 'B', 'C']);
+    dlg.style.animation = 'none'; card.style.animation = 'none';   // this entrance replaces the scrim's bloom and the card's pop
+    card.style.position = 'relative'; card.style.zIndex = '2';        // the card's fields ride ABOVE the flying layer
+    const f = npFx = { v: v, anims: [], orbAnims: [], nodes: [], O: O, orb: orb, orbPaint: getComputedStyle(orb).backgroundImage, leaving: false };
+    dlg.dataset.entrance = v;
+    if (v === 'B') npFxB(f, dlg, card);
+    else if (v === 'C') npFxC(f, dlg, card);
+    else npFxA(f, dlg, card, false);
+    f.timer = setTimeout(npFxLand, NP_FX_MS + 40);
+  }
+  /* Cancel, Escape and the backdrop all come here. A runs its flight backwards into the orb, then hides; B and C (and
+     reduced motion, and a card whose entrance is gone) hide at once, as the card always has. */
+  function npDismiss() {
+    const dlg = document.getElementById('hm-dialog');
+    if (!dlg || dlg.classList.contains('hidden')) return;
+    const f = npFx;
+    if (!f || f.v !== 'A' || f.leaving || npFxReduced()) { dlg.classList.add('hidden'); return; }
+    const card = dlg.querySelector('.hm-dlg-card');
+    f.leaving = true;
+    clearTimeout(f.timer);
+    /* NOT LANDED YET (a double-tap on the +, Escape straight away): turn the flight that is on screen round, from
+       wherever it has got to, at the back flight's speed. Starting the back flight from the card here made the disc jump
+       to the whole card's size for a frame and then shrink (#974 review: 68×76 at the + became 340×554). Only a
+       started animation is played on: play() with a negative rate at time 0 would rewind it to the END — the same jump. */
+    if (!f.landed) {
+      const rate = NP_FX_MS / NP_FX_BACK_MS;
+      let at = 0;
+      f.anims.concat(f.orbAnims).forEach(a => {
+        try {
+          const t = +a.currentTime || 0;
+          at = Math.max(at, t);
+          a.playbackRate = -rate;   // keeps its current time
+          if (t > 0 && a.playState !== 'running') a.play();
+        } catch (e) {}
+      });
+      f.backTimer = setTimeout(() => { if (npFx === f) dlg.classList.add('hidden'); }, at / rate + 30);
+      return;
+    }
+    f.anims.forEach(a => { try { a.cancel(); } catch (e) {} });
+    f.anims = [];
+    f.nodes.forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
+    f.nodes = [];
+    npFxA(f, dlg, card, true);
+    f.backTimer = setTimeout(() => { if (npFx === f) dlg.classList.add('hidden'); }, NP_FX_BACK_MS + 30);
+  }
+
   function newProjectDialog() {
     const dlg = document.getElementById('hm-dialog');
+    const orb = document.getElementById('hm-new');
+    const orbRect = orb ? orb.getBoundingClientRect() : null;   // read BEFORE the card covers it (#947's flight starts here)
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(NEWP_KEY)) || {}; } catch (e) {}
     npAspect = NP_ASPECTS.indexOf(saved.aspect) >= 0 ? saved.aspect : '9:16';
@@ -2883,6 +3097,7 @@ window.FM = window.FM || {};
     input.value = 'Project ' + nth;
     npUpdate();
     dlg.classList.remove('hidden');
+    npEntrance(dlg, orb, orbRect);   // queue 947 / 974: the +'s own entrance, one of three at random
     // Focus the name field on a real keyboard only. On a phone, auto-focus throws the software
     // keyboard up the instant the dialog opens and pushes Create/Cancel off the visual viewport
     // (measured: a 667pt screen leaves ~380pt, the card is ~550pt) — the name already has a sane
@@ -2981,9 +3196,25 @@ window.FM = window.FM || {};
       }
       // modal manners for the (now much bigger) new-project dialog: Escape closes, so does a tap on
       // the backdrop — on a phone with the keyboard up, the buttons can be the hardest thing to reach
-      dlgEsc = e => { const d = document.getElementById('hm-dialog'); if (e.key === 'Escape' && d && !d.classList.contains('hidden')) { e.preventDefault(); d.classList.add('hidden'); } };
+      dlgEsc = e => { const d = document.getElementById('hm-dialog'); if (e.key === 'Escape' && d && !d.classList.contains('hidden')) { e.preventDefault(); npDismiss(); } };   // queue 947: A runs backwards
       document.addEventListener('keydown', dlgEsc);
-      document.getElementById('hm-dialog').addEventListener('pointerdown', e => { if (e.target && e.target.id === 'hm-dialog') e.currentTarget.classList.add('hidden'); });
+      /* ⚠️ ON CLICK, NOT POINTERDOWN, and only when the press BEGAN on the backdrop — the rule js/ask.js and the canvas
+         dialog (queue 690) already follow. Closing on the way down handed the rest of a phone tap to what was under the
+         backdrop, because the click is hit-tested after the card has gone: the + sits right there, so a tap on the dimmed +
+         shut the card and opened it again — and #947's option C turns that + into an × that asks to be tapped (#974 review:
+         real touch at 380 and 440, the × reopened the card with a new entrance every time). */
+      let npDownOnScrim = false;
+      document.getElementById('hm-dialog').addEventListener('pointerdown', e => { npDownOnScrim = !!(e.target && e.target.id === 'hm-dialog'); });
+      document.getElementById('hm-dialog').addEventListener('click', e => {
+        const began = npDownOnScrim; npDownOnScrim = false;
+        if (began && e.target && e.target.id === 'hm-dialog') npDismiss();
+      });
+      /* queue 947: whatever hides the card (Create, Cancel, Escape, the backdrop, Home closing, a test) ends its entrance
+         and gives the + back — see npFxClear. Watched, not called from each route, so no route can forget it. */
+      if (window.MutationObserver) new MutationObserver(() => {
+        const d = document.getElementById('hm-dialog');
+        if (npFx && d && d.classList.contains('hidden')) npFxClear();
+      }).observe(document.getElementById('hm-dialog'), { attributes: true, attributeFilter: ['class'] });
       // new-project dialog wiring
       const dlg = document.getElementById('hm-dialog');
       dlg.querySelectorAll('.hm-aspect').forEach(b => b.addEventListener('click', () => { npAspect = b.dataset.aspect; npUpdate(); }));
@@ -2998,7 +3229,7 @@ window.FM = window.FM || {};
       ['hm-new-w', 'hm-new-h', 'hm-new-fps-num'].forEach(id => { const inp = npEl(id); if (inp) inp.addEventListener('input', npUpdate); });
       npEl('hm-new-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); createFromDialog(); } });
       dlg.querySelector('#hm-create').addEventListener('click', createFromDialog);
-      dlg.querySelector('#hm-cancel').addEventListener('click', () => dlg.classList.add('hidden'));
+      dlg.querySelector('#hm-cancel').addEventListener('click', npDismiss);   // queue 947: A shrinks back into the orb
     },
     open() {
       if (!root) return;

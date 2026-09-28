@@ -144,7 +144,7 @@ window.FM = window.FM || {};
     ['bookmark', 'Bookmark'], ['pointhand', 'Pointing hand'], ['flame', 'Flame'], ['banner', 'Banner'], ['ribbon', 'Silk ribbon'], ['wreath', 'Wreath'],
     ['diamond', 'Diamond'], ['plane', 'Plane'], ['umbrella', 'Umbrella'], ['bomb', 'Bomb'],
     ['boat', 'Boat'], ['magnifier', 'Magnifier'], ['key', 'Key'], ['sun', 'Sun'], ['person', 'Person'],
-    ['rocket', 'Rocket'], ['envelope', 'Envelope'], ['woman', 'Woman'], ['car', 'Car'],
+    ['rocket', 'Rocket'], ['envelope', 'Envelope'], ['woman', 'Woman'], ['car', 'Car'], ['carfront', 'Car (front)'],   // queue 973: the front view beside the original, not instead of it
     ['cross', 'Cross'], ['pin', 'Map pin'], ['lock', 'Lock'],   // (squircle is promoted to the top pair, next to Square)
     ['gear', 'Gear'], ['crown', 'Crown'], ['eye', 'Eye'], ['note', 'Music note'],
     ['starburst', 'Starburst'], ['clock', 'Clock'],
@@ -973,6 +973,13 @@ window.FM = window.FM || {};
        colour that no longer exists and quietly falling back — the comment above BY_LABEL says exactly
        that. Exposed so a rename test can check the key moved with the label (queue 412). */
     _tileHue: function (label) { return BY_LABEL[label] || null; },
+    /* The name a drawn shape goes by, for the element card's Shape dropdown (queue 973 review). It capitalised the raw key,
+       so the shape this menu adds as "Car (front)" was offered there as "Carfront" (and "Thumbsup", "Pointhand"). The
+       labels live in LIB_SHAPES; a key with no tile (or a one-word one) still reads as the capitalised key. */
+    shapeLabel: function (key) {
+      for (var i = 0; i < LIB_SHAPES.length; i++) if (LIB_SHAPES[i][0] === key) return LIB_SHAPES[i][1];
+      return key.charAt(0).toUpperCase() + key.slice(1);
+    },
     // container: where to render. opts: { variant: 'panel' | 'sheet', onAfterAdd, onClose }
     render: function (container, opts) {
       opts = opts || {};

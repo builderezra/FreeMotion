@@ -1095,6 +1095,10 @@ window.FM = window.FM || {};
   const SPAN_AT_ZOOM1 = 5;
   function pxPerSec() { return (laneViewW() / SPAN_AT_ZOOM1) * zoom; }
   FM._tlPxPerSec = pxPerSec;   // suite seam, same as FM._tlHeadW: lets a test derive the content width
+  /* The lane width the strip was last sized for (#955). The scroll listener compares it with the lane on screen: a
+     difference means the window or the panel changed width since, so the strip's scroll range is stale and any
+     scroll right now is the BROWSER clamping scrollLeft into it, not a hand. 0 = never sized. */
+  let sizedLaneW = 0;
   // Widen the inner area so the lanes overflow + scroll (heads are sticky-pinned). viewport + content
   // pads both sides so t=0 AND t=duration can each scroll under the fixed centre line (50vw).
   function applyInnerWidth() {
@@ -1115,7 +1119,8 @@ window.FM = window.FM || {};
        left a screenful of dead space no clip could ever reach.
        `laneViewW() + HEAD_W` is the scrollport, and it is read through laneViewW deliberately: that helper
        already freezes its value during a gesture, so a drag cannot make the extent flicker mid-move. */
-    innerEl.style.width = ((laneViewW() + HEAD_W) + content) + 'px';
+    sizedLaneW = laneViewW();   // #955: the lane this strip is now sized for — see the scroll listener
+    innerEl.style.width = ((sizedLaneW + HEAD_W) + content) + 'px';
   }
 
   // Map a clientX to project time, accounting for the head column + the PAD origin shift.
@@ -2860,6 +2865,9 @@ window.FM = window.FM || {};
   function applyEmptyStart() {
     const tlPanel = document.getElementById('timeline-panel');
     if (tlPanel) tlPanel.classList.toggle('tl-empty-start', isEmptyStart());
+    // queue 964: the keyboard ring (styles.css, :has(.tl-addrow:focus-visible)) starts below the ruler row, like the pulse
+    const tlEl = document.getElementById('timeline'), rulerEl = document.getElementById('tl-rulerrow');
+    if (tlPanel && tlEl && rulerEl && isEmptyStart()) tlPanel.style.setProperty('--tl-area-top', (tlEl.offsetTop + rulerEl.offsetHeight) + 'px');
     bindEmptyTap(tlPanel);
   }
   /* ⚠️ A TAP ANYWHERE IN THE EMPTY TIMELINE OPENS THE ADD SHEET — queue 571 clause 2. Ezra: *"make it
@@ -2885,9 +2893,10 @@ window.FM = window.FM || {};
       /* The add row has its OWN click handler — letting this one fire too would open the sheet twice.
          Everything else here is a control that means something on its own. */
       if (e.target.closest && e.target.closest('.tl-addrow, button, input, select, textarea, a, [role="button"], #tl-ruler, .tl-ruler')) return;
-      if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd();
+      afterPress(function () { if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd(); });   // queue 964: after the press animation's beat
     });
-    /* ⚠️ THE BURST IS ON pointerdown, NOT click — queue 571 clause 3. Ezra: *"do a nice little
+    /* ⚠️ THE AREA'S PRESS (OUTLINE + COLOUR) IS ON pointerdown, NOT click — queue 964 (replacing #571 clause 3).
+       #571's brief still holds. Ezra: *"do a nice little
        colourful reaction when you press on this screen, something that comes from where you tapped,
        like those keyboards that light but based on what button you press."*
        **"When you PRESS"** is the word doing the work. A reaction fired on `click` arrives after the
@@ -2898,44 +2907,413 @@ window.FM = window.FM || {};
        he is most likely to press would be the opposite of what he described. */
     tl.addEventListener('pointerdown', (e) => {
       if (!tlPanel.classList.contains('tl-empty-start')) return;
-      tapBurst(tl, e.clientX, e.clientY);
+      fxPressAt = performance.now();         // the menu hold counts from the PRESS (queue 964, ASK 2)
+      areaFx(tl, e.clientX, e.clientY);
     });
   }
 
-  /* ---- THE COLOURFUL PRESS (queue 571 clause 3) --------------------------------------------------
-   * His analogy is exact and it is the design brief: *"like those keyboards that light but based on
-   * what button you press"* — two requirements, not one. It must come FROM the point of contact, and
-   * its colour must DEPEND on where that point was. A single fixed-colour ripple would satisfy the
-   * first half and quietly drop the second, which is the half he described most specifically.
-   * So the hue is a function of position: x sweeps it through 300° across the screen and y nudges it
-   * another 60°, which means every part of the screen has its own colour and the same spot always
-   * answers the same way — a keyboard, not a random flash.
-   * ⚠️ TEARDOWN IS A setTimeout, NOT an animationend LISTENER. rAF and CSS animations do not advance
-   * in a backgrounded tab, so an element removed on `animationend` can survive forever if the phone
-   * locks mid-press — the app would collect invisible divs for as long as it stays open. This repo has
-   * already been bitten by exactly that (js/popfrom.js), so it uses the same defence.
-   * ⚠️ CAPPED. A drum-roll of taps must not build a pile of live nodes; anything past the cap simply
-   * does not spawn, which is invisible at that speed and cannot leak. */
-  const BURST_MS = 620;
-  const BURST_MAX = 6;
-  function tapBurst(host, clientX, clientY) {
-    if (!host) return;
-    // Someone who has asked the OS for less motion is not asking for a lightshow.
-    try { if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (_) {}
-    if (host.querySelectorAll('.tl-tapburst').length >= BURST_MAX) return;
-    const r = host.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    const x = clientX - r.left, y = clientY - r.top;
-    const hue = Math.round(((x / r.width) * 300 + (y / r.height) * 60)) % 360;
-    const b = document.createElement('div');
-    b.className = 'tl-tapburst';
-    b.style.left = x + 'px';
-    b.style.top = y + 'px';
-    b.style.setProperty('--burst-h', String(hue));
-    host.appendChild(b);
-    setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, BURST_MS + 120);
+  /* ---- THE EMPTY AREA ANSWERS A PRESS (queue 964 — replaces #571's small burst and #600's resting box) ----
+   * Ezra, 26 Sep, on the empty project: *"the blue bar that's supposed to go around. The edges doesn't fully go
+   * around the edges at the top and also it just stays there [gets stuck]"* … *"the animation you made for like
+   * when you tap on the screen looks really shitty"* … *"actually play in that whole … touch pad area … something
+   * a lot more colourful"* … *"make sure that like the blue lines in the outside actually look good and actually go
+   * away like they actually pulse when you tap on it … and they pulse all the way around it not just like all the
+   * lines appear at once"*.
+   * MEASURED at 380x800 and 440x956 before this was written (plan: tools/design/plans/2026-09-26-emptytap/plan.md):
+   *   - THE TOP WAS MISSING because the old box was an inset box-shadow on #timeline, and #tl-rulerrow (22px,
+   *     sticky, z-index 7, opaque rgb(10,20,26)) sits inside #timeline (first child of #tl-inner) — a descendant paints over its
+   *     parent's background, and an inset shadow IS background. elementFromPoint along #timeline's top edge
+   *     returned .tl-headspace / #tl-ruler at every sample; the sides started at the ruler's bottom (y 435).
+   *   - IT STUCK because it was a STATE (:hover / :focus-within), not an event. The row is tabIndex 0, so a tap
+   *     focuses it; measured: focus stays on the row through openAdd() AND closeAdd(), so :focus-within is still
+   *     true and the box is still painted when the menu goes away. iOS keeps :hover after a tap as well.
+   * So the outline is now an EVENT: drawn on pointerdown, travelling, and removed — nothing about it is a state
+   * that can be left on. It lives in #timeline-panel, OUTSIDE the scroller, above the ruler row (z-index 8), and
+   * its box is measured from the ruler's bottom to #timeline's bottom: the area you can actually see.
+   * ⚠️ TEARDOWN IS A setTimeout, NOT animationend/finish — kept from #571: animations do not advance in a
+   * backgrounded tab, and a node waiting for them would live for as long as the app does.
+   * ⚠️ ONLY transform AND opacity ARE ANIMATED on the colour layer (plus stroke-dashoffset on a few SVG paths), so
+   * the press keeps running on the compositor while openAdd() builds the menu on the main thread. */
+  /* bottom-centre → up both sides → meet at the top. 360, not the 620 first drawn: the plan's ASK 2 (a, recommended)
+     pairs it with the 300 ms menu hold below — the held sheet reaches the area's top line ~400 ms after the press, so a
+     620 ms lap would meet UNDER the menu and he would never see the lights join at the top (his clause 1 again). */
+  const FX_PULSE_TRAVEL = 360;
+  const FX_PULSE_MS = 1100;      // …then the trail fades out
+  const FX_PRESS_MS = 950;
+  const FX_CALM_MS = 260;        // reduced motion: one short fade, no travel, no growth
+  const FX_MAX = 3;              // live colour layers; a drum-roll of taps cannot pile up nodes
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  let fxSafeBottom = null;
+  let fxSeq = 0;
+  function fxReduced() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (_) { return false; }
   }
-  FM._tapBurst = tapBurst;   // seam: the suite drives the real thing, not a copy of it
+  /* env(safe-area-inset-bottom) as a number: the pulse's bottom corners must clear the iPhone's rounded screen
+     corners, which a desktop never has. Read once — it does not change while the app runs in one orientation. */
+  function fxSafeBottomPx() {
+    if (fxSafeBottom !== null) return fxSafeBottom;
+    const p = document.createElement('div');
+    p.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px)';
+    document.body.appendChild(p);
+    fxSafeBottom = parseFloat(getComputedStyle(p).paddingBottom) || 0;
+    p.remove();
+    return fxSafeBottom;
+  }
+  /* THE AREA — what he calls the touch pad: #timeline's box below the sticky ruler row. One function, used by the
+     outline, the colour and the keyboard ring alike, so the three cannot disagree about where the edges are. */
+  function emptyArea(tl) {
+    const r = tl.getBoundingClientRect();
+    const ruler = document.getElementById('tl-rulerrow');
+    const top = ruler ? Math.min(r.bottom, Math.max(r.top, ruler.getBoundingClientRect().bottom)) : r.top;
+    return { left: r.left, top: top, width: tl.clientWidth || r.width, height: r.bottom - top, bottom: r.bottom };
+  }
+  function fxHost(a, cls) {
+    const panel = document.getElementById('timeline-panel');
+    if (!panel) return null;
+    const pr = panel.getBoundingClientRect();
+    const el = document.createElement('div');
+    el.className = 'tl-areafx ' + cls;
+    el.setAttribute('aria-hidden', 'true');
+    el.style.left = (a.left - pr.left - panel.clientLeft) + 'px';
+    el.style.top = (a.top - pr.top - panel.clientTop) + 'px';
+    el.style.width = a.width + 'px';
+    el.style.height = a.height + 'px';
+    panel.appendChild(el);
+    return el;
+  }
+  function fxTeardown(el, ms) { setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, ms); }
+  // #571's keyboard, kept: every spot has its own colour and the same spot always answers the same way.
+  function fxHue(a, x, y) { return Math.round(((x - a.left) / a.width) * 300 + ((y - a.top) / a.height) * 60) % 360; }
+
+  /* ---- THE OUTLINE: two lights race round BOTH ways from one point and meet on the far side ----
+     His two briefs in one shape: #616 *"pulse from the bottom to the top and actually go across the top line"*, and
+     now *"all the way around it not just like all the lines appear at once"*. Each half is its own <path>, so both
+     lights cover the same distance and meet exactly on the far side. A drawn-on trail follows each head and fades once
+     they meet — the lines GO AWAY (his clause 5).
+     WHERE THEY START is one of his open options (queue 974 — every option plays, one at random, until he picks):
+       'bottom'  — from the bottom-middle, up both sides, meeting at the top-centre (the plan's recommendation, which
+                   matches his #616 "from the bottom to the top"): bottom-centre → corner → side → corner → top-centre.
+       'nearest' — from the point of the edge NEAREST his finger, both ways round, meeting half the perimeter away.
+                   The rounded box is walked as a polyline (≤3px steps, arcs included), cut at the nearest point and
+                   again half its length on; the two halves run from the cut outwards.
+     SVG dashes, not a conic gradient: a conic maps ANGLE, and on a 380x365 box it would crawl and then snap across
+     the corners (the #616 note makes the same argument for the slim row). A dash moves at constant speed along the
+     real perimeter at any aspect ratio. Lengths come from getTotalLength() in px — not `pathLength`, which older
+     WebKit ignored for dashes. */
+  function fxRim(W, H, sb) {
+    const IN = 4;
+    return { x0: IN, x1: W - IN, T: IN, B: H - Math.max(IN, Math.round(sb * 0.6)), rt: 14, rb: sb > 0 ? 34 : 14, cx: W / 2 };   // big bottom corners clear the phone's rounded screen
+  }
+  /* The whole rim as points, from the bottom-centre going left (bottom → left side → top → right side → bottom). */
+  function fxRimPoints(g) {
+    const pts = [], STEP = 3;
+    const line = function (xa, ya, xb, yb) {
+      const n = Math.max(1, Math.ceil(Math.hypot(xb - xa, yb - ya) / STEP));
+      for (let i = 0; i < n; i++) pts.push([xa + (xb - xa) * i / n, ya + (yb - ya) * i / n]);
+    };
+    const arc = function (ccx, ccy, r, a0, a1) {
+      const n = Math.max(2, Math.ceil(r * Math.abs(a1 - a0) / STEP));
+      for (let i = 0; i < n; i++) { const t = a0 + (a1 - a0) * i / n; pts.push([ccx + r * Math.cos(t), ccy + r * Math.sin(t)]); }
+    };
+    const P = Math.PI;
+    line(g.cx, g.B, g.x0 + g.rb, g.B);
+    arc(g.x0 + g.rb, g.B - g.rb, g.rb, P / 2, P);
+    line(g.x0, g.B - g.rb, g.x0, g.T + g.rt);
+    arc(g.x0 + g.rt, g.T + g.rt, g.rt, P, 1.5 * P);
+    line(g.x0 + g.rt, g.T, g.x1 - g.rt, g.T);
+    arc(g.x1 - g.rt, g.T + g.rt, g.rt, 1.5 * P, 2 * P);
+    line(g.x1, g.T + g.rt, g.x1, g.B - g.rb);
+    arc(g.x1 - g.rb, g.B - g.rb, g.rb, 0, P / 2);
+    line(g.x1 - g.rb, g.B, g.cx, g.B);
+    return pts;
+  }
+  /* The two halves for a start point: [pathA, pathB, meet]. 'bottom' keeps the exact arcs first drawn for it. */
+  function fxHalves(g, start, lx, ly) {
+    if (start !== 'nearest') {
+      const half = function (s) {   // s = -1 left, +1 right
+        const xe = s < 0 ? g.x0 : g.x1, sw = s < 0 ? 1 : 0;
+        return 'M' + g.cx + ',' + g.B + ' L' + (xe - s * g.rb) + ',' + g.B + ' A' + g.rb + ',' + g.rb + ' 0 0 ' + sw + ' ' + xe + ',' + (g.B - g.rb) +
+          ' L' + xe + ',' + (g.T + g.rt) + ' A' + g.rt + ',' + g.rt + ' 0 0 ' + sw + ' ' + (xe - s * g.rt) + ',' + g.T + ' L' + g.cx + ',' + g.T;
+      };
+      return { a: half(-1), b: half(1), from: [g.cx, g.B], meet: [g.cx, g.T] };
+    }
+    const pts = fxRimPoints(g), N = pts.length;
+    let i0 = 0, best = Infinity;
+    pts.forEach(function (p, i) { const d = Math.hypot(p[0] - lx, p[1] - ly); if (d < best) { best = d; i0 = i; } });
+    const seg = function (i) { const p = pts[i % N], q = pts[(i + 1) % N]; return Math.hypot(q[0] - p[0], q[1] - p[1]); };
+    let total = 0;
+    for (let i = 0; i < N; i++) total += seg(i);
+    let run = 0, k = 0;
+    while (k < N && run + seg(i0 + k) <= total / 2) { run += seg(i0 + k); k++; }
+    const im = (i0 + k) % N;
+    const walk = function (dir) {
+      const out = [];
+      for (let j = 0, i = i0; j <= N; j++, i = (i + dir + N) % N) { out.push(pts[i]); if (i === im) break; }
+      return 'M' + out.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' L');
+    };
+    return { a: walk(1), b: walk(-1), from: pts[i0], meet: pts[im] };
+  }
+  function areaPulse(a, x, y) {
+    const host = fxHost(a, 'tl-areafx--pulse');
+    if (!host) return null;
+    const W = a.width, H = a.height, sb = fxSafeBottomPx();
+    const g = fxRim(W, H, sb);
+    const start = (FM.variant && FM.variant('emptytap.start', ['bottom', 'nearest'])) || 'bottom';   // queue 974
+    const halves = fxHalves(g, start, (x === undefined ? g.cx : x - a.left), (y === undefined ? g.B : y - a.top));
+    host.dataset.start = start;
+    const mx = halves.meet[0], my = halves.meet[1];
+    const id = 'fxp' + (++fxSeq);
+    const svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    // numbers and constants only — nothing user-supplied reaches this markup
+    svg.innerHTML = '<defs><linearGradient id="' + id + 't" x1="' + halves.from[0] + '" y1="' + halves.from[1] + '" x2="' + mx + '" y2="' + my + '" gradientUnits="userSpaceOnUse">' +
+      '<stop offset="0" stop-color="#5ac7ed"/><stop offset=".55" stop-color="#96e8ff"/><stop offset="1" stop-color="#c9b8ff"/></linearGradient>' +
+      '<radialGradient id="' + id + 'm"><stop offset="0" stop-color="#fff"/><stop offset=".35" stop-color="#b9f1ff" stop-opacity=".8"/>' +
+      '<stop offset="1" stop-color="#96e8ff" stop-opacity="0"/></radialGradient></defs>';
+    host.appendChild(svg);   // attached BEFORE getTotalLength — detached paths measure 0 in some engines
+    const ease = 'cubic-bezier(.33,0,.2,1)';
+    const travelEnd = FX_PULSE_TRAVEL / FX_PULSE_MS;
+    [halves.a, halves.b].forEach(function (d) {
+      const mk = function (cls, stroke, w, op) {
+        const p = document.createElementNS(SVGNS, 'path');
+        p.setAttribute('class', cls); p.setAttribute('d', d); p.setAttribute('fill', 'none');
+        p.setAttribute('stroke', stroke); p.setAttribute('stroke-width', w); p.setAttribute('stroke-linecap', 'round');
+        p.setAttribute('stroke-opacity', op);
+        svg.appendChild(p);
+        return p;
+      };
+      const trails = [mk('fx-trail', 'url(#' + id + 't)', 6, 0.22), mk('fx-trail', 'url(#' + id + 't)', 1.6, 1)];
+      const heads = [[mk('fx-head', '#5ac7ed', 10, 0.22), 110], [mk('fx-head', '#96e8ff', 5, 0.45), 70], [mk('fx-head fx-core', '#f2fdff', 2.4, 1), 40]];
+      const L = trails[1].getTotalLength();
+      trails.forEach(function (tp) {
+        tp.style.strokeDasharray = L + ' ' + L;
+        tp.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: FX_PULSE_TRAVEL, easing: ease, fill: 'forwards' });
+        tp.animate([{ opacity: 0.95 }, { opacity: 0.95, offset: travelEnd }, { opacity: 0 }], { duration: FX_PULSE_MS, fill: 'forwards' });
+      });
+      heads.forEach(function (hd) {
+        const p = hd[0], len = hd[1];
+        p.style.strokeDasharray = len + ' ' + (L * 2);
+        p.animate([{ strokeDashoffset: len }, { strokeDashoffset: len - L }], { duration: FX_PULSE_TRAVEL, easing: ease, fill: 'forwards' });
+        p.animate([{ opacity: 0 }, { opacity: 1, offset: 0.06 }, { opacity: 1, offset: (FX_PULSE_TRAVEL - 40) / FX_PULSE_MS },
+          { opacity: 0, offset: (FX_PULSE_TRAVEL + 140) / FX_PULSE_MS }, { opacity: 0 }], { duration: FX_PULSE_MS, fill: 'forwards' });
+      });
+    });
+    // where they meet: one soft flash on the far side, then nothing
+    const meet = document.createElementNS(SVGNS, 'circle');
+    meet.setAttribute('class', 'fx-meet'); meet.setAttribute('cx', mx); meet.setAttribute('cy', my); meet.setAttribute('r', 30);
+    meet.setAttribute('fill', 'url(#' + id + 'm)');
+    meet.style.transformBox = 'view-box'; meet.style.transformOrigin = mx + 'px ' + my + 'px';
+    svg.appendChild(meet);
+    meet.animate([{ opacity: 0, transform: 'scale(.2)' }, { opacity: 0, transform: 'scale(.2)', offset: (FX_PULSE_TRAVEL - 60) / FX_PULSE_MS },
+      { opacity: 1, transform: 'scale(1)', offset: (FX_PULSE_TRAVEL + 60) / FX_PULSE_MS }, { opacity: 0, transform: 'scale(1.6)' }],
+      { duration: FX_PULSE_MS, fill: 'forwards' });
+    fxTeardown(host, FX_PULSE_MS + 150);
+    return host;
+  }
+
+  /* ---- THE COLOUR — ALL THREE OPTIONS, ONE AT RANDOM PER PRESS (queue 974) ----
+     Ezra, 28 Sep: *"make them all happen in the app but it's just random which one so I can decide which is best over
+     use time"*. So the plan's three options (tools/design/plans/2026-09-26-emptytap/: A in prod-areafx.js, B and C in
+     prod-press-BC.js) all ship, and FM.variant picks one on every press. When he picks, the winner stays and the other
+     two functions are DELETED. Each returns the same host (.tl-areafx--press with dataset x/y/h) and names itself in
+     dataset.variant, so "the one with the rings" can be matched to the log (FM.variant.log()). */
+  function areaPress(a, x, y) {
+    const v = (FM.variant && FM.variant('emptytap.colour', ['A', 'B', 'C'])) || 'A';
+    const host = v === 'B' ? pressRings(a, x, y) : v === 'C' ? pressKeys(a, x, y) : pressAurora(a, x, y);
+    if (host) host.dataset.variant = v;
+    return host;
+  }
+
+  /* OPTION A, "AURORA" (the plan's recommendation). Six soft colour curtains leave the finger and spread to fill the
+     WHOLE area (clause 4: *"not just a small little touch thing … cook up the whole area"*), over a tint of the same
+     palette, with a white-hot flash where he touched. The palette starts at the hue of the spot he pressed (#571's
+     keyboard). Everything is transform and opacity on eight elements; `mix-blend-mode: screen` on the layer makes
+     colour ADD light to the dark wash instead of greying it, and leaves the white caption white. */
+  function pressAurora(a, x, y) {
+    const host = fxHost(a, 'tl-areafx--press');
+    if (!host) return null;
+    const W = a.width, H = a.height, lx = x - a.left, ly = y - a.top, h = fxHue(a, x, y), N = 6;
+    host.dataset.x = String(Math.round(lx)); host.dataset.y = String(Math.round(ly)); host.dataset.h = String(h);
+    const add = function (cls, css) { const d = document.createElement('div'); d.className = cls; d.style.cssText = css; host.appendChild(d); return d; };
+    const tint = add('fx-tint', 'width:' + W + 'px;height:' + H + 'px;background:linear-gradient(90deg,hsla(' + h + ',95%,55%,.20),hsla(' +
+      (h + 80) + ',95%,55%,.16),hsla(' + (h + 160) + ',95%,55%,.20))');
+    tint.animate([{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0 }], { duration: FX_PRESS_MS, fill: 'both' });
+    const CW = Math.round(W / 2.6), CH = Math.round(H * 1.5);
+    for (let i = 0; i < N; i++) {
+      const hh = (h + i * 42) % 360;
+      const tx = W * (i + 0.5) / N, drift = (i % 2 ? 1 : -1) * 18;
+      const c = add('fx-curtain', 'width:' + CW + 'px;height:' + CH + 'px;background:radial-gradient(closest-side,hsla(' + hh + ',100%,70%,.95),hsla(' +
+        (hh + 18) + ',100%,60%,.55) 45%,hsla(' + (hh + 30) + ',100%,55%,0) 100%)');
+      const y0 = ly - CH / 2, y1 = H / 2 - CH / 2;
+      c.animate([
+        { transform: 'translate(' + (lx - CW / 2) + 'px,' + y0 + 'px) scale(.12,.18)', opacity: 0 },
+        { transform: 'translate(' + (tx - CW / 2) + 'px,' + y1 + 'px) scale(.85,.9)', opacity: 0.95, offset: 0.32 },
+        { transform: 'translate(' + (tx - CW / 2 + drift) + 'px,' + y1 + 'px) scale(1.15,1.05) skewX(' + (drift / 3) + 'deg)', opacity: 0 }
+      ], { duration: FX_PRESS_MS, delay: Math.abs(tx - lx) / W * 90, easing: 'cubic-bezier(.2,.75,.3,1)', fill: 'both' });
+    }
+    const core = add('fx-core', 'width:160px;height:160px;background:radial-gradient(closest-side,rgba(255,255,255,.95),hsla(' + h +
+      ',100%,78%,.6) 38%,hsla(' + h + ',100%,70%,0))');
+    core.animate([{ transform: 'translate(' + (lx - 80) + 'px,' + (ly - 80) + 'px) scale(.15)', opacity: 1 },
+      { transform: 'translate(' + (lx - 80) + 'px,' + (ly - 80) + 'px) scale(1.4)', opacity: 0 }],
+      { duration: 380, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'both' });
+    fxTeardown(host, FX_PRESS_MS + 200);
+    return host;
+  }
+
+  /* OPTION B, "RINGS + SPARKS" (prod-press-BC.js, verbatim but for its name). A tinted flash, then three thick glowing
+     colour rings chase each other out to the far corner while thirty sparks fly outward. Transform + opacity only. */
+  function pressRings(a, x, y) {
+    const host = fxHost(a, 'tl-areafx--press');
+    if (!host) return null;
+    const W = a.width, H = a.height, lx = x - a.left, ly = y - a.top, h = fxHue(a, x, y);
+    host.dataset.x = String(Math.round(lx)); host.dataset.y = String(Math.round(ly)); host.dataset.h = String(h);
+    const far = Math.max(Math.hypot(lx, ly), Math.hypot(W - lx, ly), Math.hypot(lx, H - ly), Math.hypot(W - lx, H - ly));
+    const add = function (cls, css) { const d = document.createElement('div'); d.className = cls; d.style.cssText = css; host.appendChild(d); return d; };
+    const tint = add('fx-tint', 'width:' + W + 'px;height:' + H + 'px;background:radial-gradient(circle at ' + lx + 'px ' + ly + 'px,hsla(' + h +
+      ',95%,62%,.30),hsla(' + (h + 60) + ',90%,58%,.14) 45%,hsla(' + (h + 120) + ',90%,58%,.06))');
+    tint.animate([{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 0 }], { duration: FX_PRESS_MS, fill: 'both' });
+    const R = 160;
+    for (let i = 0; i < 3; i++) {
+      const hh = (h + i * 55) % 360;
+      const ring = add('fx-curtain fx-ring', 'width:' + (2 * R) + 'px;height:' + (2 * R) + 'px;background:radial-gradient(closest-side,hsla(' + hh +
+        ',95%,62%,0) 70%,hsla(' + hh + ',95%,66%,.85) 88%,hsla(' + (hh + 20) + ',100%,85%,.95) 93%,hsla(' + hh + ',95%,62%,0) 100%)');
+      ring.animate([{ transform: 'translate(' + (lx - R) + 'px,' + (ly - R) + 'px) scale(.04)', opacity: 1 }, { opacity: 0.85, offset: 0.55 },
+        { transform: 'translate(' + (lx - R) + 'px,' + (ly - R) + 'px) scale(' + (far * (1 - i * 0.18) / R) + ')', opacity: 0 }],
+        { duration: 720, delay: i * 110, easing: 'cubic-bezier(.2,.75,.3,1)', fill: 'both' });
+    }
+    const N = 30;
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2 + (i % 2) * 0.12, dist = far * (0.42 + ((i * 37) % 11) / 11 * 0.5);
+      const hh = (h + i * 16) % 360, sz = 6 + (i % 4) * 3;
+      const s = add('fx-spark', 'width:' + sz + 'px;height:' + sz + 'px;background:hsl(' + hh + ',100%,70%);box-shadow:0 0 ' + (sz * 1.6) + 'px hsla(' + hh + ',100%,65%,.9)');
+      s.animate([{ transform: 'translate(' + (lx - sz / 2) + 'px,' + (ly - sz / 2) + 'px) scale(.4)', opacity: 1 }, { opacity: 1, offset: 0.6 },
+        { transform: 'translate(' + (lx + Math.cos(ang) * dist - sz / 2) + 'px,' + (ly + Math.sin(ang) * dist - sz / 2) + 'px) scale(1)', opacity: 0 }],
+        { duration: 820, delay: (i % 3) * 30, easing: 'cubic-bezier(.12,.8,.3,1)', fill: 'both' });
+    }
+    const core = add('fx-core', 'width:120px;height:120px;background:radial-gradient(closest-side,rgba(255,255,255,.95),hsla(' + h + ',100%,78%,.5) 40%,hsla(' + h + ',100%,70%,0))');
+    core.animate([{ transform: 'translate(' + (lx - 60) + 'px,' + (ly - 60) + 'px) scale(.15)', opacity: 1 },
+      { transform: 'translate(' + (lx - 60) + 'px,' + (ly - 60) + 'px) scale(1.3)', opacity: 0 }], { duration: 340, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'both' });
+    fxTeardown(host, FX_PRESS_MS + 200);
+    return host;
+  }
+
+  /* OPTION C, "KEY RIPPLE" (prod-press-BC.js, verbatim but for its name). The area becomes a keyboard: rounded keys,
+     each coloured by its own position (#571's analogy taken literally), light in a wave from the finger and fade behind
+     it. ONE canvas redrawn per frame on the main thread, DPR capped at 2. host._fxDraw(t) draws any moment — the suite
+     seeks it that way, since a canvas has no Web Animation to pause. */
+  function pressKeys(a, x, y) {
+    const host = fxHost(a, 'tl-areafx--press');
+    if (!host) return null;
+    const W = a.width, H = a.height, lx = x - a.left, ly = y - a.top, h = fxHue(a, x, y);
+    host.dataset.x = String(Math.round(lx)); host.dataset.y = String(Math.round(ly)); host.dataset.h = String(h);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cv = document.createElement('canvas');
+    cv.className = 'fx-keys'; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    cv.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;border-radius:0';
+    host.appendChild(cv);
+    const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    const K = 34, GAP = 6, cols = Math.ceil(W / (K + GAP)) + 1, rows = Math.ceil(H / (K + GAP)) + 1;
+    const ox = (W - cols * (K + GAP) + GAP) / 2, oy = (H - rows * (K + GAP) + GAP) / 2;
+    const far = Math.max(Math.hypot(lx, ly), Math.hypot(W - lx, ly), Math.hypot(lx, H - ly), Math.hypot(W - lx, H - ly));
+    const SPEED = far / 480;   // the wave reaches the farthest key at 480 ms
+    const rr = function (x0, y0, w, hh, r) { if (g.roundRect) { g.beginPath(); g.roundRect(x0, y0, w, hh, r); } else { g.beginPath(); g.rect(x0, y0, w, hh); } };
+    const draw = function (t) {
+      g.clearRect(0, 0, W, H);
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const kx = ox + c * (K + GAP), ky = oy + r * (K + GAP), mx = kx + K / 2, my = ky + K / 2;
+        const dt = t - Math.hypot(mx - lx, my - ly) / SPEED;
+        if (dt < 0) continue;
+        const v = dt < 70 ? dt / 70 : Math.exp(-(dt - 70) / 170);
+        if (v < 0.02) continue;
+        const hue = Math.round((mx / W) * 300 + (my / H) * 60) % 360;   // each KEY has its own colour (#571)
+        g.globalAlpha = v * 0.35; g.fillStyle = 'hsl(' + hue + ',100%,62%)'; rr(kx - 5, ky - 5, K + 10, K + 10, 12); g.fill();
+        const kk = K * (0.82 + 0.18 * Math.min(1, dt / 90));
+        g.globalAlpha = v * 0.9; g.fillStyle = 'hsl(' + hue + ',96%,' + (60 + v * 18) + '%)'; rr(mx - kk / 2, my - kk / 2, kk, kk, 8); g.fill();
+      }
+      const cv0 = Math.max(0, 1 - t / 260);
+      if (cv0 > 0) {
+        const cg = g.createRadialGradient(lx, ly, 0, lx, ly, 64);
+        cg.addColorStop(0, 'rgba(255,255,255,' + (0.9 * cv0) + ')'); cg.addColorStop(1, 'rgba(255,255,255,0)');
+        g.globalAlpha = 1; g.fillStyle = cg; g.fillRect(0, 0, W, H);
+      }
+    };
+    host._fxDraw = draw;   // seam: the suite draws a chosen moment and reads pixels (getImageData) instead of timing frames
+    const t0 = performance.now();
+    const tick = function () {
+      if (!host.parentNode || host._fxSeeking) return;
+      const t = performance.now() - t0; draw(t);
+      if (t < FX_PRESS_MS) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    fxTeardown(host, FX_PRESS_MS + 200);
+    return host;
+  }
+
+  /* Asked the OS for less motion: the press is still ACKNOWLEDGED — a flat wash of the spot's colour and a still
+     outline, faded in and out once. Nothing travels, nothing grows. (#571 showed nothing at all here.) */
+  function areaCalm(a, x, y) {
+    const host = fxHost(a, 'tl-areafx--calm');
+    if (!host) return null;
+    const h = fxHue(a, x, y);
+    host.dataset.h = String(h);
+    host.style.background = 'hsla(' + h + ',90%,60%,.16)';
+    host.style.boxShadow = 'inset 0 0 0 1.5px rgba(150,232,255,.75)';
+    host.style.borderRadius = '14px';
+    host.animate([{ opacity: 0 }, { opacity: 1, offset: 0.35 }, { opacity: 0 }], { duration: FX_CALM_MS, easing: 'ease-out', fill: 'forwards' });
+    fxTeardown(host, FX_CALM_MS + 120);
+    return host;
+  }
+
+  /* THE ONE ENTRY POINT — the pointerdown listener in bindEmptyTap calls this, and so does the suite. */
+  function areaFx(tl, clientX, clientY) {
+    if (!tl) return;
+    const a = emptyArea(tl);
+    if (!(a.width > 0) || !(a.height > 0)) return;
+    const panel = document.getElementById('timeline-panel');
+    if (!panel) return;
+    if (fxReduced()) {
+      if (!panel.querySelector('.tl-areafx--calm')) areaCalm(a, clientX, clientY);
+      return;
+    }
+    // one lap at a time: a second tap mid-lap does not restart it (a restart reads as a jump)
+    if (!panel.querySelector('.tl-areafx--pulse')) areaPulse(a, clientX, clientY);
+    if (panel.querySelectorAll('.tl-areafx--press').length < FX_MAX) areaPress(a, clientX, clientY);
+  }
+
+  /* ---- HOLD THE MENU A BEAT (the plan's ASK 2, recommended a: 300 ms with the 360 ms lap; 0 restores the old timing) ----
+     MEASURED at 380px (seeking the sheet's own fm-hinge-up): it covers 59% of this area 50 ms after it starts and
+     98% at 100 ms, and it starts on click — the finger's LIFT, ~100 ms after the press on a quick tap. So without a
+     hold he sees ~150 ms of any press animation, however good it is. The hold counts from the PRESS, not the click, so a slow press waits for
+     nothing extra, a keyboard Enter (no press) is never delayed, and it applies to the EMPTY state only.
+     queue 974: the same hold and the same 360 ms lap for EVERY colour option and both starts — without the hold none of
+     them is seen, and a comparison between them is only fair if each gets the same time on screen. */
+  const SHEET_HOLD_MS = 300;
+  let fxPressAt = 0;
+  /* ⚠️ A HELD OPEN IS CANCELLED BY LEAVING (#974 review). The hold is a timer, and nothing used to cancel it: a tap on
+     the empty area and then straight away on the back arrow opened Home AND the add sheet behind it (z 63 under Home's
+     200 — invisible, until the next tap anywhere closed it). So at most one open waits; a press anywhere OUTSIDE the
+     timeline drops it (he has moved on to something else), and when it fires it checks the screen is still the empty
+     project with Home shut. */
+  let sheetHoldTimer = 0;
+  function dropHeldOpen() { if (sheetHoldTimer) { clearTimeout(sheetHoldTimer); sheetHoldTimer = 0; } }
+  document.addEventListener('pointerdown', (e) => {
+    if (!sheetHoldTimer) return;
+    const tl = document.getElementById('timeline');
+    if (!tl || !(e.target instanceof Node) || !tl.contains(e.target)) dropHeldOpen();
+  }, true);
+  function afterPress(fn) {
+    const wait = fxPressAt ? Math.max(0, fxPressAt + SHEET_HOLD_MS - performance.now()) : 0;
+    fxPressAt = 0;   // one press buys one hold
+    dropHeldOpen();
+    if (wait > 16) {
+      sheetHoldTimer = setTimeout(function () {
+        sheetHoldTimer = 0;
+        if (!isEmptyStart() || (FM.home && FM.home.isOpen && FM.home.isOpen())) return;
+        fn();
+      }, wait);
+    } else fn();
+  }
+  FM._areaFx = { area: emptyArea, fire: areaFx, PULSE_MS: FX_PULSE_MS, PULSE_TRAVEL: FX_PULSE_TRAVEL, PRESS_MS: FX_PRESS_MS, CALM_MS: FX_CALM_MS, MAX: FX_MAX, HOLD_MS: SHEET_HOLD_MS };
   FM._isEmptyStart = isEmptyStart;   // seam: the suite asks the real condition, not a copy of it
 
   function buildAddRow() {
@@ -3020,13 +3398,17 @@ window.FM = window.FM || {};
       pulse.classList.add('is-pulsing');
     };
     pulse.addEventListener('animationend', () => pulse.classList.remove('is-pulsing'));
-    row.addEventListener('pointerdown', firePulse);
+    // queue 964: on the empty screen the AREA pulse answers a press; this row-sized band would be a second box
+    if (!empty) row.addEventListener('pointerdown', firePulse);
     const open = (e) => {
       if (e) { e.preventDefault(); e.stopPropagation(); }
       /* On a phone this is the sheet the + button used to open. On PC there is no + and no sheet — the
          add menu IS the inspector band whenever nothing is selected — so "open the add menu" is a
          deselect. Clause 9: "you would just click on them line". */
-      if (phone) { if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd(); }
+      if (phone) {
+        const go = function () { if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd(); };
+        if (empty) afterPress(go); else go();   // queue 964: only the empty screen waits for its press animation
+      }
       else if (FM.selectLayer) FM.selectLayer(null);
     };
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); });
@@ -4511,6 +4893,29 @@ window.FM = window.FM || {};
         // to the start" and dragged the playhead back to 0. Anything that seeks while the editor is
         // open (walking captions cue by cue, for one) was silently undone a frame later.
         if (!timelineEl.clientWidth) return;
+        /* ⚠️ …AND A RESIZED ONE WAS NOT SCROLLED BY A HAND EITHER (#955, hunt MEDIUM). The strip is sized
+         * for the scrollport the last layout saw: scroll range = (scrollport + project) − scrollport = the
+         * project. Widen the window and the scrollport grows while the strip keeps its old width until the
+         * debounced rebuild, so the range shrinks under the playhead's scrollLeft and the browser pulls it
+         * back into range — and this handler read that pull as a scroll and moved the playhead to it.
+         * Measured on v17.11, a 2 s project at 1.2 s or 1.9 s: 900→1280 and a phone's 380→700 put the
+         * playhead at 0, 1280→1600 at 0.47 s; narrowing never clamps, so only widening lost it. The same
+         * pull comes from anything that widens the timeline without resizing the window (the PC text
+         * editor hiding the inspector, a layout switch), and the ResizeObserver fires AFTER the scroll
+         * event, so the check lives here, where the wrong conclusion was drawn.
+         * The lane this strip was sized for differing from the lane on screen means the geometry moved
+         * under the strip: re-size it for the new lane and put the strip back under FM.time, which is
+         * the only record of where the playhead was. It fires at most once per width change — sizing
+         * the strip is what makes the two agree again — so a hand's next scroll drives the playhead as
+         * before. The clips follow on the rebuild the resize / ResizeObserver already schedule.
+         * The one cost, accepted: a hand's scroll that happens to be the FIRST event after a width change
+         * (a desktop scrollbar appearing as rows are added is the everyday case) is not read — one event,
+         * a few px, and the strip stays under the playhead — rather than being read against a stale strip. */
+        if (sizedLaneW && Math.abs(laneViewW() - sizedLaneW) > 0.5) {
+          applyInnerWidth();
+          FM.timeline.updatePlayhead();
+          return;
+        }
         let sL = timelineEl.scrollLeft;
         /* STOP AT THE WALL, IN THIS EVENT (queue 104). Ezra, on PC: "when you swipe left and right on
          * the timeline and it hits the end it glitches a little bit, like it keeps going past the wall

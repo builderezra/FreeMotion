@@ -263,6 +263,8 @@ window.FM = window.FM || {};
 
     const chans = Object.create(null);
     let closed = false, openedResolve = null, openedReject = null, msgId = 0, downT = null;
+    let stalled = false;                 // #971: the path is down — hold ctl/bulk in our own queue, shed pres (watchState)
+    ep.shed = 0;                         // #971: presence frames not sent because the path was down
 
     ep.opened = new Promise(function (res, rej) { openedResolve = res; openedReject = rej; });
     /* An unhandled rejection on a link nobody awaited is a console error on a feature behind a Labs
@@ -274,9 +276,15 @@ window.FM = window.FM || {};
       if (name === 'pres') { init.ordered = false; init.maxRetransmits = 0; }
       const dc = pc.createDataChannel(name, init);
       dc.binaryType = 'arraybuffer';
-      const st = { dc: dc, q: [], high: name === 'bulk' ? BULK_HIGH : CTL_HIGH, parts: null, waiting: false };
+      const st = { dc: dc, q: [], high: name === 'bulk' ? BULK_HIGH : CTL_HIGH, parts: null, waiting: false, gated: false };
       dc.bufferedAmountLowThreshold = Math.floor(st.high / 2);
-      dc.onbufferedamountlow = function () { st.waiting = false; pump(name); };
+      dc.onbufferedamountlow = function () {
+        st.waiting = false;
+        /* #971: a message held at the gate in pump() waits for the browser's buffer to be EMPTY, so the threshold was
+           dropped to 0 for it; put the flow-control one back before pumping (pump sets it again if it has to wait). */
+        if (st.gated) { st.gated = false; dc.bufferedAmountLowThreshold = Math.floor(st.high / 2); }
+        pump(name);
+      };
       dc.onmessage = function (e) {
         /* S8 review: a link that has not been let in yet (a knock the owner has not answered) is QUIET — every
            frame is counted and dropped unread, never reassembled or parsed; past its budget the link is closed. */
@@ -323,11 +331,18 @@ window.FM = window.FM || {};
     function pump(name) {
       const st = chans[name];
       if (!st || closed) return;
+      if (stalled) return;                     // #971: held here until the path is back (see "A LINK THAT IS DOWN IS SENT NOTHING")
       const dc = st.dc;
       while (st.q.length) {
         if (dc.readyState !== 'open') return;
-        if (dc.bufferedAmount > st.high) { st.waiting = true; return; }
         const head = st.q[0];
+        /* #971: ctl and pres start a new message only into an EMPTY browser buffer (see "ONE MESSAGE AT A TIME"
+           below). A message already begun keeps going under the ceiling, so a big one is not slowed frame by frame. */
+        if (name !== 'bulk' && head.i === 0 && dc.bufferedAmount > 0) {
+          if (!st.gated) { st.gated = true; dc.bufferedAmountLowThreshold = 0; }
+          return;
+        }
+        if (dc.bufferedAmount > st.high) { st.waiting = true; return; }
         let frame;
         if (head.kind === 'text') {
           frame = head.parts[head.i++];
@@ -410,6 +425,9 @@ window.FM = window.FM || {};
       const st = chans[ch];
       /* A channel that is still CONNECTING queues (its onopen pumps it); only one that is closing or closed drops. */
       if (!st || st.dc.readyState === 'closing' || st.dc.readyState === 'closed') { ep.dropped++; return false; }
+      /* #971: presence is a position about to be replaced, sent every 2 s whatever happens — one sent into a path that is
+         down is never worth sending late, and a burst of stale ones on the way back is worse than none. */
+      if (stalled && ch === 'pres') { ep.shed++; return false; }
       ep.sent++;
       if (msg instanceof ArrayBuffer || ArrayBuffer.isView(msg)) {
         const bytes = msg instanceof ArrayBuffer ? new Uint8Array(msg) : new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength);
@@ -460,7 +478,21 @@ window.FM = window.FM || {};
        unordered/no-retransmit shape, and those are properties of the RTCDataChannel itself. Nothing in
        the app reads this. */
     ep.channel = function (ch) { const st = chans[ch]; return st ? st.dc : null; };
-    ep.bufferedAmount = function (ch) { const st = chans[ch || 'bulk']; return st ? st.dc.bufferedAmount : 0; };
+    /* #971: while the path is down the link holds back what it is given (see "A LINK THAT IS DOWN IS SENT NOTHING"), and
+       those bytes are counted here too — the browser's own number stays at 0 then, and every brake that reads this one
+       (media's §15.5 pause at 4 MiB, presence's busy check) would otherwise see an empty pipe and keep filling the heap.
+       With the path up the link holds bytes only for a moment — a ctl/pres message at the gate in pump() until the
+       browser's buffer empties, or the rest of a message over the ceiling — so the number is the browser's, as it was. */
+    function heldBytes(st) {
+      let n = 0;
+      for (let k = 0; k < st.q.length; k++) {
+        const it = st.q[k];
+        if (it.kind === 'text') { for (let j = it.i; j < it.parts.length; j++) n += it.parts[j].length; }
+        else n += Math.max(0, it.bytes.length - it.i * it.size);
+      }
+      return n;
+    }
+    ep.bufferedAmount = function (ch) { const st = chans[ch || 'bulk']; return st ? st.dc.bufferedAmount + (stalled ? heldBytes(st) : 0) : 0; };
     ep.queued = function (ch) { const st = chans[ch || 'bulk']; return st ? st.q.length : 0; };
 
     ep.close = function (why) {
@@ -507,11 +539,55 @@ window.FM = window.FM || {};
       ep.down = on;
       if (typeof ep.ondown === 'function') { try { ep.ondown(on); } catch (e) {} }
     }
+    /* ═══ #971 · WHAT THE FRIEND MISSED WHILE THEIR PHONE WAS AWAY REACHES THEM SECONDS AFTER IT IS BACK, NOT A MINUTE ══════
+     * Two Chromes, the friend's whole browser SIGSTOPped for 25 s while the owner edited: now and then the friend came
+     * back, synced, went Offline six seconds later and stayed there 45-60 s — then everything arrived at once. Chrome's
+     * own SCTP packet log (dcsctp, `--v=1`) on a run that did it shows the whole mechanism, and none of it is a guess:
+     *   1. Everything the owner sent during the pause stays unacknowledged until the friend is back. A presence frame
+     *      (`maxRetransmits: 0`) is never resent, so when the friend's first acknowledgement arrives it counts as a 24-
+     *      second round trip — two of them took SCTP's retransmission timeout from well under a second to about 45 s.
+     *   2. That same acknowledgement frees the window, and SCTP sends everything that queued up behind it AT ONCE — in
+     *      the few milliseconds before the owner's own ICE path is writable again (the friend can be heard before it can
+     *      be answered). Those packets are dropped on the owner's side: 14 chunks, none ever reached the friend.
+     *   3. They wait for the retransmission timer — the 45 s one — and they fill the window, so nothing newer can go
+     *      either. The friend reads Offline after 6 s of that. The resend 45.3 s later is what finally lands it all.
+     * Step 1 cannot be helped from here. Step 2 is what this avoids, in two parts:
+     *   · A LINK THAT IS DOWN IS SENT NOTHING. While the peer connection says the path is down ('disconnected' or
+     *     'failed'), ctl and bulk wait in this link's own queue and presence — a position about to be replaced — is
+     *     shed. The moment it says 'connected' (the path writable again) the queue is pumped, in order.
+     *   · ONE MESSAGE AT A TIME INTO A BUFFER THAT IS NOT EMPTYING. The pause starts seconds before the peer connection
+     *     notices it, and SCTP stops sending within half a second of it (its window fills with what the friend has not
+     *     acknowledged). Everything handed to a data channel after that sits inside the browser, where this code can no
+     *     longer hold it back — and it is exactly what step 2 sends into the void. So ctl and pres begin a message only
+     *     when the channel's `bufferedAmount` is 0: at most one message waits inside SCTP, the rest wait here. On a
+     *     healthy link the buffer empties within a millisecond of each send, so this costs one event-loop turn per
+     *     message; a message already begun (a snapshot is many frames) still runs under the ceiling. bulk is not gated —
+     *     media streams up to 4 MiB ahead by design, and a friend paused mid-transfer can still wait for the timer.
+     * Measured, two Chromes paired by the swap code, the friend SIGSTOPped 25 s. An edit 3 s and another 12 s in: before
+     * this 3 runs of 21 relapsed (the 12 s edit 59-60 s after the friend was back); the hold alone 0 of 21; both 0 of 10,
+     * the 12 s edit 0.6 s after every time. Six edits in the first 6 s: before 6 of 10 relapsed (24-46 s); the hold
+     * alone 4 of 6 (45.5 s); both 0 of 10 (0.6 s, once 3.1 s). An edit every second of the pause: before 1 of 4, both
+     * 0 of 4 (0.6 s).
+     * Nothing about WHEN a link is down, Offline or closed changes here: 'failed' is still held for the grace below,
+     * silence is still only Offline.
+     * ⚠️ connectionState 'connected' ALWAYS MEANS SEND. The two states are not computed from the same thing in Chrome
+     * (above: 'failed' on one while the legacy one says 'disconnected'), and holding on the legacy one while the aggregate
+     * says the path works would hold every edit for ever with nothing to show for it. */
+    function stalledNow() {
+      const i = pc.iceConnectionState, c = pc.connectionState;
+      if (c === 'connected') return false;
+      return c === 'disconnected' || c === 'failed' || i === 'disconnected' || i === 'failed';
+    }
     function watchState() {
       if (closed) return;
       const ice = pc.iceConnectionState;
       if (ice === 'connected' || ice === 'completed' || pc.connectionState === 'connected') everUp = true;
       if (pc.connectionState === 'closed') { ep.close('ice'); return; }
+      const was = stalled;
+      stalled = everUp && stalledNow();
+      /* #971: presence waiting at the gate when the path goes is stale by the time it is back — shed it with the rest. */
+      if (!was && stalled && chans.pres) { ep.shed += chans.pres.q.length; chans.pres.q.length = 0; }
+      if (was && !stalled) CHANNELS.forEach(function (n) { pump(n); });
       if (!failedNow()) {
         if (downT) { clearTimeout(downT); downT = null; }
         sayDown(false);

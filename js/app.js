@@ -804,6 +804,47 @@ window.FM = window.FM || {};
     dropHint.classList.toggle('hidden', FM.scene.layers.length > 0);
   }
 
+  /* ═══ THE CLAPPER'S OPTIONS, ALL LIVE, ONE AT RANDOM (queue 974) ═══════════════════════════════════════════════
+     Ezra, 28 Sep: *"make them all happen in the app but it's just random which one so I can decide which is best over
+     use time"*. #957's clapper had two open picks — its timing (A: open, then every 6 s · B: once · C: non-stop) and
+     its impact lines (cyan · grey). Both now play, chosen by FM.variant (js/variant.js):
+       · the TIMING once per empty-project open — each time #drop-hint comes on screen, which is exactly when its CSS
+         animation restarts: a layer removed, Home closed, the app opened into an empty project. The class lands in the
+         same task (a MutationObserver microtask), before the first frame, so the clap starts in the chosen timing.
+       · the LINE COLOUR on every clap — once as it opens, and again at each lap of the stick (animationiteration, at
+         the open pose, where the lines are invisible, so a colour never changes mid-hit). B claps once, so its first
+         pick is its only one.
+     The keyframes and the custom properties that choose between them are in styles.css (THE CLAP). Nothing is picked
+     under reduced motion: nothing plays there. When he picks, the chosen class becomes the CSS default and this goes. */
+  const CLAP_TIMINGS = ['A', 'B', 'C'], CLAP_LINES = ['cyan', 'grey'];
+  function clapReduced() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+  }
+  function clapLines() {
+    if (!FM.variant || clapReduced()) return;
+    dropHint.classList.toggle('dh-grey', FM.variant('clapper.lines', CLAP_LINES) === 'grey');
+  }
+  function watchClapper() {
+    if (!dropHint || dropHint._clapWatch || !window.MutationObserver) return;
+    dropHint._clapWatch = true;
+    let shown = false;
+    const check = function () {
+      const on = !dropHint.classList.contains('hidden') && !document.body.classList.contains('home-open');
+      if (on && !shown && FM.variant && !clapReduced()) {
+        const t = String(FM.variant('clapper.timing', CLAP_TIMINGS) || 'A').toLowerCase();
+        dropHint.classList.remove('dh-t-a', 'dh-t-b', 'dh-t-c');
+        dropHint.classList.add('dh-t-' + t);
+        clapLines();
+      }
+      shown = on;
+    };
+    dropHint.addEventListener('animationiteration', function (e) { if (/^dh-clap/.test(e.animationName || '')) clapLines(); });
+    const mo = new MutationObserver(check);
+    mo.observe(dropHint, { attributes: true, attributeFilter: ['class'] });
+    mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    check();
+  }
+
   // Keep the composition EXACTLY as long as its clips — grows when a clip extends past the end,
   // shrinks when the furthest clip ends earlier. Runs on every refresh so the timeline never has
   // trailing empty space. Empty project keeps its configured length.
@@ -3121,15 +3162,19 @@ window.FM = window.FM || {};
     // these six come from traced references, so their aspect IS the reference's aspect
     check: [1.11, 0.9], thumbsup: [1.04, 0.96], pointhand: [0.94, 1.07],
     envelope: [1.33, 0.75], key: [0.7, 1.44],
-    // CAR IS NOT ONE OF THEM — it must stay SQUARE. Since queue 961 the car is traced from Material Design
-    // Icons `car-side`, but it is placed at its OWN proportion INSIDE the unit box (ink 0.9600 x 0.5236 of
-    // it, i.e. 1.833:1) with the hubs as true circles there — the v5.33 car did the same at 1.841:1, which is
-    // why every Car already saved in a project keeps round wheels. The box only SCALES that drawing, so
-    // anything but 1:1 turns every wheel into an ellipse by exactly the box ratio. The stale 1.76 x 0.57
-    // left from the v3.96 trace is 3.093:1, which stretched the car to 5.695:1 of ink and the wheels to
-    // 3.1:1 — Ezra: "really wide and streched out".
+    // CAR IS NOT ONE OF THEM ANY MORE — it must stay SQUARE. The v5.33 redraw stopped being a trace:
+    // it is a landmark polyline carrying its OWN proportion inside the unit box (ink measures
+    // 0.9576 x 0.5200 of it, i.e. 1.841:1) and it draws both tyres as true circles there. The box only
+    // SCALES that drawing, so anything but 1:1 turns every wheel into an ellipse by exactly the box
+    // ratio. The stale 1.76 x 0.57 left from the v3.96 trace is 3.093:1, which stretched the car to
+    // 5.695:1 of ink and the wheels to 3.1:1 — Ezra: "really wide and streched out".
+    // (Queue 973: v17.07 swapped this car for a traced one; his 28 Sep pick was "keep the original and
+    // add the head on", so this is the v5.33 car again and the front view is `carfront` below.)
     // To draw a BIGGER car, scale both numbers together (e.g. [1.4, 1.4]); never one of them.
     car: [1, 1],
+    // The FRONT-view car (queue 973), square for the same reason: the AIGA sign's drawing sits at its own
+    // 1.207:1 inside the unit box (ink 0.9600 x 0.7952) with round headlights, so any other box squashes them.
+    carfront: [1, 1],
     // added shapes
     // A squircle is an app-icon shape — it's only itself when it's square. (Was 1.35:1, which made
     // the "Apple corners" pair at the top of the Shape tab spawn as a squashed rounded rectangle.)
@@ -6659,6 +6704,7 @@ window.FM = window.FM || {};
     ctx = canvas.getContext('2d');
     readoutEl = document.getElementById('time-readout');
     dropHint = document.getElementById('drop-hint');
+    watchClapper();   // queue 974: the clapper's timing and line colour, one at random
     setupTimelineResizer();
     /* TAP THE TIMECODE → PLAY / PAUSE (queue 364 clause 1). Ezra drew an arrow from the ▶ down to the
        pill: "Make it so that the play button is now the project time pill and when you press on it it
@@ -8180,12 +8226,16 @@ window.FM = window.FM || {};
         for (let i = 0; i < fpsSel.options.length; i++) if (fpsSel.options[i].value === v) return true;
         return false;
       };
-      /* ═══ FRIENDS BESIDE CANVAS SETTINGS — the phone pair (queue 945) ═══════════════════════════════════════════
+      /* ═══ FRIENDS BESIDE CANVAS SETTINGS — the pair, phone and PC (queue 945, queue 978) ═════════════════════════
          His design, picked from drawn options (tools/design/945-options.html, "do everything u recommend"): on a phone the
          dialog opens with a Friends bar above the canvas card; ⤢ swaps them — the one opened becomes the big card, the other
          shrinks to a bar, and the SMALL ONE ALWAYS SITS ON TOP (his words: "the canvas settings are small at the top"). The
-         cog comes back to whichever he had open last, per device. PC is untouched: `cv-pair` is only ever set at phone
-         width, and every rule that shows or moves the pair is keyed on it (styles.css).
+         cog comes back to whichever he had open last, per device.
+         A PC HAS IT TOO since #978 — his words: "on pc there isnt a way to access the friends invite menu like there is on
+         mobile. - Settings cog then swap between them in a really clean way." There the pair hangs off the cog as the card
+         alone did: side by side where there is room (Friends left, Canvas right by the cog, the small one a tile; ⤢ slides the
+         line between them — option B, tools/design/plans/2026-09-28-pc-friends-pair), stacked like the phone where there is
+         not. What may not reach a PC is the phone's LAYOUT (styles.css keeps it in the phone query), not the pair.
          The Friends content is js/collab-ui.js's (U.renderFriends); opening it never starts sharing. */
       const cvCard = cvDialog.querySelector('.export-card');
       const cvFr = document.getElementById('cv-friends');
@@ -8195,6 +8245,18 @@ window.FM = window.FM || {};
       const CV_PAIR_KEY = 'fm.cvPair';   // its own key: FM.settings' load() whitelist would drop it, and it is not a project fact
       const cvPhoneMq = window.matchMedia ? window.matchMedia('(max-width: 700px)') : null;
       let cvFlight = [];
+      const CV_SIDE_NEED = 546 + 16;   // side by side needs Friends 360 + gap 10 + tile 176 left of the button's right edge, and 16 of margin
+      let cvSrc = null;                // the control the pair hangs from on a PC (the cog, or the Share button beside Export)
+      /* The block next to the button: side by side it is always Canvas; stacked it is the big one (the small one sits away). */
+      const cvAnchorBlock = () => (cvDialog.classList.contains('cv-side') || !cvDialog.classList.contains('cv-fr-big')) ? cvCard : cvFr;
+      /* THE COMIC TAIL FOLLOWS THAT BLOCK (queue 548: decorate, never move). Unpop and pop in one task, so the opener's
+         `.pop-src` lift never drops for a frame. No-op when not anchored (a phone). */
+      const cvAim = () => {
+        if (FM._cvPop) { FM._cvPop(); FM._cvPop = null; }
+        if (!document.body.classList.contains('cv-anchored') || !cvSrc || !FM.popFrom) return;
+        const b = cvAnchorBlock();
+        if (b) FM._cvPop = FM.popFrom(b, cvSrc, { placed: true });
+      };
       const cvUi = () => (FM.collab && FM.collab.ui) || null;
       const cvPairLast = () => { try { return localStorage.getItem(CV_PAIR_KEY) === 'friends' ? 'friends' : 'canvas'; } catch (e) { return 'canvas'; } };
       const cvPairBig = () => (cvDialog.classList.contains('cv-fr-big') ? 'friends' : 'canvas');
@@ -8256,7 +8318,7 @@ window.FM = window.FM || {};
           if (b && b.focus) { try { b.focus({ preventScroll: true }); } catch (e) {} }
         };
         const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-        if (reduce || !cvCard || !cvFr || !cvCard.animate) { cvPairApply(to); cvPairSettle(); refocus(); return; }
+        if (reduce || !cvCard || !cvFr || !cvCard.animate) { cvPairApply(to); cvPairSettle(); cvAim(); refocus(); return; }
         const blocks = [cvCard, cvFr];
         const cardShrinks = to === 'friends';
         const st = cardShrinks ? cvCard.scrollTop : 0;
@@ -8277,7 +8339,10 @@ window.FM = window.FM || {};
         const anim = (node, frames, o) => { if (node && node.animate) cvFlight.push(node.animate(frames, Object.assign({ duration: DUR, fill: 'both' }, o || {}))); };
         blocks.forEach((b, i) => {
           const growing = (b === cvFr) === (to === 'friends');
-          anim(b, [{ top: first[i].top + 'px', height: first[i].height + 'px' }, { top: last[i].top + 'px', height: last[i].height + 'px' }], { easing: EASE });
+          /* `left` and `width` fly too (#978): side by side on a PC the line between the blocks slides, so each block's width
+             changes. Where they do not change — the phone, and a PC's stacked fallback — those two keyframes are inert. */
+          anim(b, [{ left: first[i].left + 'px', width: first[i].width + 'px', top: first[i].top + 'px', height: first[i].height + 'px' },
+                   { left: last[i].left + 'px', width: last[i].width + 'px', top: last[i].top + 'px', height: last[i].height + 'px' }], { easing: EASE });
           const bar = b === cvCard ? cvMini : cvFrBar;
           const content = b === cvCard ? Array.prototype.filter.call(cvCard.children, k => k !== cvMini) : [cvFrBody];
           /* the bar leaves early and the content arrives late, so the two are never read on top of each other */
@@ -8285,66 +8350,26 @@ window.FM = window.FM || {};
           content.forEach(c => anim(c, growing ? [{ opacity: 0 }, { opacity: 0, offset: .15 }, { opacity: 1, offset: .6 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0, offset: .25 }, { opacity: 0 }]));
         });
         const mine = cvFlight.slice();
-        Promise.all(mine.map(a => a.finished)).then(() => { if (cvFlight.length && cvFlight[0] === mine[0]) cvPairSettle(); }, () => {});
+        Promise.all(mine.map(a => a.finished)).then(() => { if (cvFlight.length && cvFlight[0] === mine[0]) { cvPairSettle(); cvAim(); } }, () => {});
         refocus();
       };
       if (cvFrBar) cvFrBar.addEventListener('click', () => cvPairSwap('friends'));
       if (cvMini) cvMini.addEventListener('click', () => cvPairSwap('canvas'));
-      /* A window that crosses the phone breakpoint while the dialog is up (a phone turned to a landscape wider than 700px is
-         a PC here, by design) leaves the pair: the Friends block vanishes above 700px, so its content must not go on being
-         treated as on screen (critic's finding — redraws would spend the one-shot notes nobody could see). */
-      const cvOnWidth = () => {
-        if (cvDialog.classList.contains('hidden')) return;
-        const phone = !!(cvPhoneMq && cvPhoneMq.matches);
-        if (phone === cvDialog.classList.contains('cv-pair')) return;
-        cvPairSettle();
-        cvDialog.classList.toggle('cv-pair', phone);
-        cvDialog.classList.remove('cv-fr-big');
-        friendsUnmount();
-        if (phone) cvPairApply('canvas', false);
-      };
-      let cvWidthOn = false;
-      const cvWatchWidth = (on) => {
-        if (!cvPhoneMq || on === cvWidthOn) return;
-        cvWidthOn = on;
-        try {
-          if (on) { if (cvPhoneMq.addEventListener) cvPhoneMq.addEventListener('change', cvOnWidth); else if (cvPhoneMq.addListener) cvPhoneMq.addListener(cvOnWidth); }
-          else { if (cvPhoneMq.removeEventListener) cvPhoneMq.removeEventListener('change', cvOnWidth); else if (cvPhoneMq.removeListener) cvPhoneMq.removeListener(cvOnWidth); }
-        } catch (e) {}
-      };
-      /* THE OPEN PATH ON ITS OWN (queue 762). The button below toggles; the oversize warning's tap (FM.warnOversizeProject)
-         calls this directly so it always OPENS — a toggle there closed a dialog that was already up. */
-      /* `opts.block`: 'friends' (the person+ / people chip), 'last' (the cog — his last block, queue 945), or nothing
-         (Canvas big: the oversize warning's tap is about the canvas size, and every bare call opens the canvas). */
-      const openCanvasDialog = (opts) => {
-        const o = opts || {};
-        cvPairSettle();
-        cvDetect();
-        // seed the custom W/H inputs from the live project so switching to Custom starts sensible
-        const cw = document.getElementById('cv-cw'), ch = document.getElementById('cv-ch');
-        if (cw) cw.value = FM.scene.project.width; if (ch) ch.value = FM.scene.project.height;
-        // sync the fps control to the live project (a non-preset fps opens as Custom)
-        const cur = String(FM.scene.project.fps || 30);
-        if (fpsSel) {
-          if (fpsHasRow(cur)) { fpsSel.value = cur; if (fpsCustomRow) fpsCustomRow.classList.add('hidden'); }
-          else { fpsSel.value = 'custom'; if (fpsNum) fpsNum.value = cur; if (fpsCustomRow) fpsCustomRow.classList.remove('hidden'); }
-        }
-        const pb = FM.scene.project.background;
-        cvBg = /^#[0-9a-f]{6}$/i.test(String(pb || '')) ? pb : 'none';
-        cvBgSync();
-        cvUpdate();
-        /* ANCHOR IT TO THE COG on desktop (queue 241 b/c). Ezra: "on pc make the canvas settings row
-         * show up next to where the button is instead of the middle and make it kinda of come out of
-         * the button… so the settings button wouldnt be blured like everything else."
-         * The cog's position is only knowable at runtime — it lives in the transport row, whose x moves
-         * with the layout and whose y moves with the timeline's drag height — so the two coordinates go
-         * out as CSS variables and the stylesheet does the rest. The button that OPENED the dialog is
-         * used rather than #btn-settings by name, because on desktop the cog forwards its click here
-         * and on the phone this dialog has other doors; anchoring to whichever control was actually
-         * pressed is right in both cases and needs no special-casing.
-         * `cv-anchored` is what lifts the cog out of the scrim's blur, and it goes on <body> because
-         * the button is not inside the dialog. */
-        const src = (FM.settings && FM.settings.lastCanvasOpener) || document.getElementById('btn-settings');
+      /* ANCHOR IT TO THE COG on desktop (queue 241 b/c). Ezra: "on pc make the canvas settings row
+       * show up next to where the button is instead of the middle and make it kinda of come out of
+       * the button… so the settings button wouldnt be blured like everything else."
+       * The cog's position is only knowable at runtime — it lives in the transport row, whose x moves
+       * with the layout and whose y moves with the timeline's drag height — so the two coordinates go
+       * out as CSS variables and the stylesheet does the rest. The button that OPENED the dialog is
+       * used rather than #btn-settings by name, because on desktop the cog forwards its click here
+       * and on the phone this dialog has other doors; anchoring to whichever control was actually
+       * pressed is right in both cases and needs no special-casing.
+       * `cv-anchored` is what lifts the cog out of the scrim's blur, and it goes on <body> because
+       * the button is not inside the dialog.
+       * #978: its own function now, so a window crossing the phone width can hang the pair again (cvOnWidth), and it
+       * decides the PC's layout of the pair — side by side (`cv-side`) when there is room left of the button, else stacked. */
+      const cvPlace = (src) => {
+        cvSrc = src || null;
         const sr = src && src.getBoundingClientRect();
         if (sr && sr.width > 0 && window.matchMedia('(min-width: 701px)').matches) {
           cvDialog.style.setProperty('--cv-anchor-right', Math.max(8, Math.round(window.innerWidth - sr.right)) + 'px');
@@ -8362,27 +8387,68 @@ window.FM = window.FM || {};
           cvDialog.style.setProperty('--cv-anchor-top', Math.round(sr.bottom + 8) + 'px');
           cvDialog.style.setProperty('--cv-anchor-bottom', Math.max(8, Math.round(window.innerHeight - sr.top + 8)) + 'px');
           document.body.classList.add('cv-anchored');
-          /* THE TAIL, and ONLY the tail (queue 548). The cog already pops from its button with its own
-             cv-grow, and two suite tests pin that placement — so it takes the comic tail the other three
-             now have and keeps everything else. `placed: true` is what says "decorate, do not move". */
-          if (FM.popFrom) {
-            if (FM._cvPop) { FM._cvPop(); FM._cvPop = null; }
-            const cvCard = cvDialog.querySelector('.export-card');
-            if (cvCard) FM._cvPop = FM.popFrom(cvCard, src, { placed: true });
-          }
+          cvDialog.classList.toggle('cv-side', sr.right >= CV_SIDE_NEED);                    // room for side by side, else stacked
+          document.body.classList.toggle('cv-share-src', !!src && src.id === 'btn-share');   // hung off the Share button: the cog goes back under the blur
         } else {
           cvDialog.style.removeProperty('--cv-anchor-right');
           cvDialog.style.removeProperty('--cv-anchor-top');
-        cvDialog.style.removeProperty('--cv-anchor-bottom');
-        document.body.classList.remove('cv-up');
-          (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
+          cvDialog.style.removeProperty('--cv-anchor-bottom');
+          document.body.classList.remove('cv-anchored', 'cv-up', 'cv-share-src');
+          cvDialog.classList.remove('cv-side');
         }
-        /* queue 945: the phone pair. Decided at open, like the PC anchor above. */
-        const phone = !!(cvPhoneMq && cvPhoneMq.matches);
-        cvDialog.classList.toggle('cv-pair', phone);
-        if (phone) cvPairApply(o.block === 'friends' ? 'friends' : o.block === 'last' ? cvPairLast() : 'canvas');
-        else cvDialog.classList.remove('cv-fr-big');
+        /* THE TAIL, and ONLY the tail (queue 548). The cog already pops from its button with its own cv-grow, and suite
+           tests pin that placement — so it takes the comic tail the other three have and keeps everything else. cvAim
+           unpops first, and is a no-op when not anchored (a phone). */
+        cvAim();
+      };
+      /* A window that crosses the phone breakpoint while the dialog is up (a phone turned to a landscape wider than 700px is
+         a PC here, by design): the pair lives at both widths (#978), so a crossing only re-hangs it — off the button on a PC,
+         centred on a phone — and keeps whichever block was big. `setTimeout`, not rAF: rAF fires no frames in a tab that is
+         not fronted (popfrom.js's RETRY note, LOOP.md rule 11), and the placement must wait for the new width's layout to
+         have moved the cog. */
+      const cvOnWidth = () => {
+        if (cvDialog.classList.contains('hidden')) return;
+        cvPairSettle();
+        setTimeout(() => { if (!cvDialog.classList.contains('hidden')) cvPlace(cvSrc); }, 0);
+      };
+      let cvWidthOn = false;
+      const cvWatchWidth = (on) => {
+        if (!cvPhoneMq || on === cvWidthOn) return;
+        cvWidthOn = on;
+        try {
+          if (on) { if (cvPhoneMq.addEventListener) cvPhoneMq.addEventListener('change', cvOnWidth); else if (cvPhoneMq.addListener) cvPhoneMq.addListener(cvOnWidth); }
+          else { if (cvPhoneMq.removeEventListener) cvPhoneMq.removeEventListener('change', cvOnWidth); else if (cvPhoneMq.removeListener) cvPhoneMq.removeListener(cvOnWidth); }
+        } catch (e) {}
+      };
+      /* THE OPEN PATH ON ITS OWN (queue 762). The button below toggles; the oversize warning's tap (FM.warnOversizeProject)
+         calls this directly so it always OPENS — a toggle there closed a dialog that was already up. */
+      /* `opts.block`: 'friends' (the person+ / people chip / Share button), 'last' (the cog — his last block, queue 945), or
+         nothing (Canvas big: the oversize warning's tap is about the canvas size, and every bare call opens the canvas).
+         `opts.from` (#978): the control to hang the pair off on a PC — the Share button beside Export; else the control that
+         last opened it (FM.settings.lastCanvasOpener), else the cog. */
+      const openCanvasDialog = (opts) => {
+        const o = opts || {};
+        cvPairSettle();
+        cvDetect();
+        // seed the custom W/H inputs from the live project so switching to Custom starts sensible
+        const cw = document.getElementById('cv-cw'), ch = document.getElementById('cv-ch');
+        if (cw) cw.value = FM.scene.project.width; if (ch) ch.value = FM.scene.project.height;
+        // sync the fps control to the live project (a non-preset fps opens as Custom)
+        const cur = String(FM.scene.project.fps || 30);
+        if (fpsSel) {
+          if (fpsHasRow(cur)) { fpsSel.value = cur; if (fpsCustomRow) fpsCustomRow.classList.add('hidden'); }
+          else { fpsSel.value = 'custom'; if (fpsNum) fpsNum.value = cur; if (fpsCustomRow) fpsCustomRow.classList.remove('hidden'); }
+        }
+        const pb = FM.scene.project.background;
+        cvBg = /^#[0-9a-f]{6}$/i.test(String(pb || '')) ? pb : 'none';
+        cvBgSync();
+        cvUpdate();
+        /* queue 945 / queue 978: THE PAIR AT EVERY WIDTH, decided before the placement, because the tail is aimed at the block
+           next to the button. Anchored to the cog on a PC (cvPlace, above); centred on a phone. */
+        cvDialog.classList.add('cv-pair');
+        cvPairApply(o.block === 'friends' ? 'friends' : o.block === 'last' ? cvPairLast() : 'canvas');
         if (!cvDialog.classList.contains('cv-fr-big')) friendsUnmount();
+        cvPlace(o.from || (FM.settings && FM.settings.lastCanvasOpener) || document.getElementById('btn-settings'));
         cvWatchWidth(true);
         cvRoleNote();
         cvDialog.classList.remove('hidden');
@@ -8394,10 +8460,23 @@ window.FM = window.FM || {};
         cvPairSettle();
         friendsUnmount();
         cvWatchWidth(false);
-        (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
+        cvSrc = null; cvDialog.classList.remove('cv-side');
+        (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up', 'cv-share-src'));
         cvDialog.classList.add('hidden');
       };
       FM.closeCanvasDialog = cvClose;
+      /* #978 review: THE SWITCH IN THE PAIR MOVES THE BUTTON IT HANGS FROM. On a PC the Friends block holds the only Work
+         with friends switch, and flipping it adds or takes away the Share button beside Export — which shifts the cog along
+         the transport row. The pair was placed once, at open, so it was left hanging off where its button USED to be: turned
+         on, the tail pointed at the new Share button under the blur, 42 px right of the lifted cog; turned off from a pair
+         Share had opened, `cv-share-src` kept the cog blurred under a tail now pointing at it. Every flip goes through
+         FM.settings.set → apply() → syncLabs and THEN these listeners, so the bar has already moved: re-hang it off the button
+         it hangs from while that is still on screen, else the cog. A no-op in effect on a phone (cvPlace centres it, as it is). */
+      if (FM.settings && FM.settings.onChange) FM.settings.onChange(() => {
+        if (cvDialog.classList.contains('hidden')) return;
+        const onScreen = !!(cvSrc && cvSrc.isConnected && cvSrc.getBoundingClientRect().width > 0);
+        cvPlace(onScreen ? cvSrc : document.getElementById('btn-settings'));
+      });
       /* queue 921 S7 review: A VIEWER OR COMMENTER IS TOLD IN THE CARD, BEFORE THEY TRY — Apply is off and a
          line says why, in words that fit the role. It was a toast from Apply, and the toast (z 60) sat under
          this dialog's own full-screen backdrop (z 100), which stayed open: pressing Apply did nothing
