@@ -1939,10 +1939,14 @@ window.FM = window.FM || {};
         host.classList.toggle('hidden', n === 0);
         for (let i = 0; i < n; i++) host.appendChild(el('span', 'addmenu-dot' + (i === 0 ? ' on' : '')));
       };
+      /* A page is one ‹ › step (queue 976): the row's width plus one gap = the whole tiles that fit. Spreading the scroll
+         position evenly over the dots lit the LAST dot one page early — Cinematic at 1280: one › lands at 273 of 342 and
+         273/342 × 2 rounds to 2 — so the dots said "the end" while › still offered more. The last dot now means the end. */
       const mark = () => {
         if (!count) return;
-        const max = Math.max(1, grid.scrollWidth - grid.clientWidth);
-        const i = Math.round((grid.scrollLeft / max) * (count - 1));
+        const max = grid.scrollWidth - grid.clientWidth;
+        const pageW = Math.max(1, grid.clientWidth + (parseFloat(getComputedStyle(grid).columnGap) || 0));
+        const i = grid.scrollLeft >= max - 2 ? count - 1 : Math.min(count - 2, Math.round(grid.scrollLeft / pageW));
         [].forEach.call(host.children, (d, k) => d.classList.toggle('on', k === i));
       };
       grid.addEventListener('scroll', mark, { passive: true });
@@ -1956,6 +1960,20 @@ window.FM = window.FM || {};
       build();
       setTimeout(() => { build(); mark(); }, 0);
       return host;
+    }
+
+    /* ⚠️ A MOUSE PAGES A FILTER ROW WITH ‹ ›, NOT A SCROLLBAR (queue 976). Ezra: "On pc to slide through the filter menus
+       theres a white slider bar that looks really tacky, and it shows up on mac sometimes too, i think this stemmed from
+       the main use of sliding being trackerpad". The bar was `scrollbar-width: thin` for a desktop pointer, and since
+       Chrome 121 that standard property turns the ::-webkit rules that made it dark OFF — measured 11px and light.
+       See js/rail-arrows.js. The rail holds the grid AND its dots, so `grid.nextElementSibling` is still the dot host
+       (queue 565's test reads it). */
+    function filterRail(grid) {
+      const rail = el('div', 'flt-rail');
+      rail.appendChild(grid);
+      rail.appendChild(rowDots(grid));
+      if (FM.railArrows) FM.railArrows(rail, grid, { item: '.flt-tile' });
+      return rail;
     }
 
     const paintFilterPicks = () => {
@@ -2086,8 +2104,7 @@ window.FM = window.FM || {};
       s.appendChild(el('div', 'insp-sub-label', 'Favourites'));
       const fwrap = el('div', 'flt-grid');
       favs.forEach(f => fwrap.appendChild(mkTile(f)));
-      s.appendChild(fwrap);
-      s.appendChild(rowDots(fwrap));
+      s.appendChild(filterRail(fwrap));
     }
     (FM.filters.sections() || []).forEach(sec => {
       const list = FM.filters.bySection(sec.key);
@@ -2095,8 +2112,7 @@ window.FM = window.FM || {};
       s.appendChild(el('div', 'insp-sub-label', sec.label));
       const wrap = el('div', 'flt-grid');
       list.forEach(f => wrap.appendChild(mkTile(f)));
-      s.appendChild(wrap);
-      s.appendChild(rowDots(wrap));
+      s.appendChild(filterRail(wrap));
     });
 
     /* The commit bar. Hidden until something is picked — an empty "Add 0 filters" sitting under the
