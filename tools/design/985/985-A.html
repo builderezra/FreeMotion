@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><title>985 — A</title><style>
+:root { --bg:#0b0f18; --panel:#131a26; --line:#263043; --text:#eef2f8; --dim:#9aa6b8; --faint:#66728a; --accent:#29d9bb; --warn:#f2a93b; }
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 34px 36px 40px; width: max-content; }
+h1 { max-width: 1400px; font-size: 30px; font-weight: 800; letter-spacing: -.4px; }
+.sub { color: var(--dim); font-size: 16px; margin-top: 6px; max-width: 1180px; }
+.quote { color: var(--text); font-style: italic; }
+.row { display: flex; gap: 26px; margin-top: 28px; align-items: flex-start; }
+.fig { flex: none; }
+.fig .lab { font-size: 13px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--faint); margin: 0 2px 8px; }
+.fig img { display: block; border-radius: 26px; border: 1px solid var(--line); }
+.fig.pc img { border-radius: 12px; }
+.fig .cap { font-size: 14px; color: var(--dim); margin: 10px 2px 0; line-height: 1.4; }
+.fig .cap b { color: var(--text); font-weight: 650; }
+.colhead { display: flex; align-items: center; gap: 10px; margin: 0 2px 10px; min-height: 30px; }
+.colhead .t { font-size: 19px; font-weight: 800; }
+.rec { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 13px; background: var(--accent); color: #062a23; font-size: 13px; font-weight: 800; letter-spacing: .2px; }
+.now { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 13px; background: #2a3344; color: var(--dim); font-size: 13px; font-weight: 800; }
+.notes { flex: 1 1 0; min-width: 360px; max-width: 460px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+.notes h3 { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; }
+.notes h3:first-child { margin-top: 0; }
+.notes p, .notes li { font-size: 15px; color: var(--dim); }
+.notes ul { padding-left: 18px; }
+.notes b { color: var(--text); }
+.foot { max-width: 1200px; margin-top: 26px; color: var(--faint); font-size: 13px; }
+</style></head><body><h1>A · “What you’ll get” card + Adjust rows &nbsp;<span class="rec">★ Recommended</span></h1><div class="sub">It opens on the answer: a picture, a plain one-line summary and the file size. Five buttons pick what to make. Four rows read like sentences (Size, Smoothness, Quality, Part) and open in place, with Recommended on the default. Everything expert sits in <b>More options</b>, which says <b>“1 on”</b> when anything in it is changed. Opening it and pressing Export still takes no decisions.</div><div class="row"><div class="fig" style="width:300px"><div class="lab">Phone · first glance</div><img src="shots/phone-A.png" style="width:300px"><div class="cap"><b>What you see first:</b> the summary, 5 buttons, 4 rows, More options, one Export.</div></div><div class="fig" style="width:300px"><div class="lab">Phone · Size opened</div><img src="shots/phone-A-size.png" style="width:300px"><div class="cap"><b>What you see first:</b> every size with its own MB; Recommended on the default; “Exact size…” last.</div></div><div class="fig" style="width:300px"><div class="lab">Phone · More options opened</div><img src="shots/phone-A-more.png" style="width:300px"><div class="cap"><b>What you see first:</b> one layer picked, so it turns amber and More options says “1 on”.</div></div><div class="fig" style="width:300px"><div class="lab">Phone · GIF picked</div><img src="shots/phone-A-gif.png" style="width:300px"><div class="cap"><b>What you see first:</b> the GIF limit said up front; See-through appears, Quality goes.</div></div><div class="fig" style="width:300px"><div class="lab">Phone · Sound picked</div><img src="shots/phone-A-sound.png" style="width:300px"><div class="cap"><b>What you see first:</b> no picture rows: just Sound file (WAV / M4A) and Part.</div></div></div><div class="row"><div class="fig pc" style="width:506px"><div class="lab">PC 1280×800 · first glance</div><img src="shots/pc-A-crop.png" style="width:506px"><div class="cap"><b>What you see first:</b> the picture on the left, the choices on the right, all above Export.</div></div><div class="fig pc" style="width:506px"><div class="lab">PC · Size opened</div><img src="shots/pc-A-size-crop.png" style="width:506px"><div class="cap"><b>What you see first:</b> the same list, opened in place; the picture and summary stay put.</div></div><div class="fig pc" style="width:506px"><div class="lab">PC · More options opened</div><img src="shots/pc-A-more-crop.png" style="width:506px"><div class="cap"><b>What you see first:</b> amber “Only the ‘Title’ layer” under the summary: never silent.</div></div></div><div class="foot">tools/design/985 · throwaway prototypes (985-proto.js) drawn inside the real app’s export card with its own colours and controls; no app code changed. Where every one of today’s settings lives in A, B and C: mapping.md.</div></body></html>

@@ -374,7 +374,56 @@ function run(argv) {
     const ed = E.editor(VIS.sample('aroll')); ed.run('trimTail', { id: 'a1', dur: 26 });
     ok(near(L(ed, 'end').start, 26), 'trimming the A-roll pulls the end card with it');
   });
-  out.push('SAMPLE checks: ' + (pass + fail - beforeSample) + ' assertions over 16 cases');
+  /* a caption that runs across the seam an Insert opens (Q20, handoff-kit 2): never words over the new clip. All three
+     failed before the kit's fix and pass after it. */
+  sample('insert at a cut a caption runs across', () => {
+    const d = VIS.sample('beach'); d.layers.find(l => l.id === 'cap').captions.find(x => x.text === 'So cold!').end = 7.4;
+    const ed = E.editor(d); const r = ed.run('insert', { clips: [{ name: 'Ice cream', duration: 2, srcDur: 7.5 }], at: 2 });
+    const cap = ed.doc.layers.find(l => l.id === 'cap');
+    const over = cap.captions.filter(q => Math.min(cap.start + q.end, 9.1) - Math.max(cap.start + q.start, 7.1) > 1e-6);
+    ok(r.ok && over.length === 0, 'insert at a cut a caption runs across: no words over the new clip (Q20)');
+    ok(cap.captions.filter(q => q.text === 'So cold!').length === 2, 'the caption splits into a part before and a part after');
+  });
+  sample('insert at a cut a caption ends on', () => {
+    const d = VIS.sample('beach'); d.layers.find(l => l.id === 'cap').captions.find(x => x.text === 'So cold!').end = 7.1;
+    const ed = E.editor(d); const r = ed.run('insert', { clips: [{ name: 'Ice cream', duration: 2, srcDur: 7.5 }], at: 2 });
+    const q = cueAt(ed, 'So cold!');
+    ok(r.ok && q && near(q[0], 5.6) && near(q[1], 7.1), 'a caption ending exactly on the seam stays at 5.6-7.1: ' + q);
+    ok(L(ed, 'cap').captions.filter(x => x.text === 'So cold!').length === 1, 'and is not split');
+  });
+  sample('lengthening trim under a caption that runs across', () => {
+    const d = VIS.sample('beach'); d.layers.find(l => l.id === 'cap').captions.find(x => x.text === 'So cold!').end = 7.4;
+    const ed = E.editor(d); const r = ed.run('trimTail', { id: 'c2', dur: 5.7 });
+    const cap = L(ed, 'cap'), parts = cap.captions.filter(x => x.text === 'So cold!').map(x => [cap.start + x.start, cap.start + x.end]);
+    ok(r.ok && parts.length && near(parts[0][0], 5.6) && near(parts[0][1], 7.1), 'a lengthening tail trim keeps the first half at 5.6-7.1: ' + JSON.stringify(parts));
+  });
+  /* §3.6 trims on a crossfade (handoff-v9 1): the trim runs, stops at 2·amt, and the owner's fade keys move with the cut */
+  sample('trimTail of the clip that fades out', () => {
+    const d = VIS.sample('beach'), LL = new Map(d.layers.map(l => [l.id, l])), w = LL.get('c2');
+    w.duration += 0.6; w.kf.opacity = [{ t: 7.1, v: 1 }, { t: 7.7, v: 0 }];
+    d.layers.splice(d.layers.indexOf(w), 1); d.layers.splice(d.layers.indexOf(LL.get('c4')), 0, w);   // Waves on top: it fades out
+    const ed = E.editor(d), r = ed.run('trimTail', { id: 'c2', dur: 3.3 });
+    const W = ed.doc.layers.find(l => l.id === 'c2'), S = ed.doc.layers.find(l => l.id === 'c3');
+    ok(r.ok, 'a tail trim of the clip that fades out runs (§3.6)');
+    ok(near(S.start, 6.1) && near(W.kf.opacity[0].t, 6.1) && near(W.kf.opacity[1].t, 6.7), 'the fade moves with the cut, over the same 0.6 s');
+    ok(E.classify(ed.doc).entry('c3').seam.kind === 'blend', 'still a crossfade');
+    const r2 = ed.run('trimTail', { id: 'c2', dur: 0.5 });
+    ok(r2.ok && near(L(ed, 'c2').duration, 1.2), 'a trim stops at twice the fade (1.2 s)');
+    ok(E.classify(ed.doc).entry('c3').seam.kind === 'blend', 'and the crossfade is still there');
+    const j = JSON.stringify(d); ed.undo(); ed.undo(); ok(JSON.stringify(ed.doc) === j, 'undo back to the start is byte-exact');
+  });
+  sample('trimHead of the clip that fades in', () => {
+    const d = VIS.sample('beach'), LL = new Map(d.layers.map(l => [l.id, l]));
+    LL.get('c2').duration += 0.6;                                                  // Waves runs 0.6 s under Sandcastle
+    LL.get('c3').kf = { opacity: [{ t: 7.1, v: 0 }, { t: 7.7, v: 1 }, { t: 9.0, v: 0.8 }] };   // Sandcastle (above) fades in
+    const ed = E.editor(d); ok(E.classify(ed.doc).entry('c3').seam.kind === 'blend', 'the fixture is a crossfade');
+    const r = ed.run('trimHead', { id: 'c3', by: 0.5 });
+    const S = L(ed, 'c3'), op = S.kf.opacity;
+    ok(r.ok && near(S.start, 7.1) && near(S.duration, 2.75) && near(S.trimStart, 0.5), 'a head trim of the clip that fades in runs (§3.6)');
+    ok(op.length === 3 && near(op[0].t, 7.1) && near(op[1].t, 7.7) && near(op[2].t, 8.5), 'the fade stays over the overlap, later keys move −0.5: ' + JSON.stringify(op));
+    ok(E.classify(ed.doc).entry('c3').seam.kind === 'blend', 'still a crossfade');
+  });
+  out.push('SAMPLE checks: ' + (pass + fail - beforeSample) + ' assertions over 21 cases');
 
   out.push('');
   out.push((fail ? 'FAIL' : 'PASS') + ': ' + pass + ' passed, ' + fail + ' failed');

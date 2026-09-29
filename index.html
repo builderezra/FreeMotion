@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=736">
+<link rel="stylesheet" href="styles.css?v=738">
 <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.12</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.13</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1028,7 +1028,7 @@
     </div>
     <!-- queue 945: FRIENDS — the live-sharing block that opens WITH Canvas settings (his design: a bar above the card; ⤢ swaps
          them, and the small one always sits on top). The pair, every width (#978): on a PC it hangs off the cog, side by side
-         where there is room, and the Share button beside Export opens it with Friends big.
+         where there is room (the Share button beside Export that also opened it went with #983 — the cog is the PC's door).
          AFTER the canvas card, so every "the dialog's first .export-card / first button" lookup still finds the canvas.
          The body is drawn by js/collab-ui.js (U.renderFriends) and never starts sharing by being opened. -->
     <div id="cv-friends" role="group" aria-label="Friends">
@@ -1045,8 +1045,8 @@
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=12"></script>
   <script src="js/drawn-x.js?v=1"></script>
-  <script src="js/variant.js?v=1"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
-  <script src="js/settings.js?v=50"></script>
+  <script src="js/variant.js?v=2"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
+  <script src="js/settings.js?v=51"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=13"></script>
@@ -1065,7 +1065,7 @@
   <script src="js/filters.js?v=17"></script>
   <script src="js/fx-presets.js?v=11"></script>
   <script src="js/fx-thumbs.js?v=52"></script>
-  <script src="js/timeline.js?v=259"></script>
+  <script src="js/timeline.js?v=261"></script>
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
   <script src="js/addmenu.js?v=83"></script>
@@ -1085,7 +1085,7 @@
   <script src="js/motion-path.js?v=9"></script>
   <script src="js/touchup-tool.js?v=3"></script>
   <script src="js/eyedropper.js?v=2"></script>
-  <script src="js/text-edit.js?v=24"></script>
+  <script src="js/text-edit.js?v=26"></script>
   <script src="js/tracker.js?v=10"></script>
   <script src="js/frames.js?v=21"></script>
   <script src="js/audio-fx.js?v=11"></script>
@@ -1097,20 +1097,20 @@
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
-  <script src="js/home-arrow.js?v=2"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
-  <script src="js/home.js?v=191"></script>
+  <script src="js/home-arrow.js?v=4"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
+  <script src="js/home.js?v=193"></script>
   <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
   <script src="js/exporter.js?v=125"></script>
   <script src="js/sample.js?v=10"></script>
   <script src="js/contextmenu.js?v=47"></script>
-  <script src="js/ask.js?v=3"></script>
+  <script src="js/ask.js?v=4"></script>
   <script src="js/shortcuts.js?v=85"></script>
   <script src="js/captions-vad.js?v=1"></script>
-  <script src="js/captions.js?v=58"></script>
+  <script src="js/captions.js?v=60"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=463"></script>
+  <script src="js/app.js?v=465"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
@@ -1152,7 +1152,7 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=16"></script>
+  <script src="js/collab-ui.js?v=17"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->

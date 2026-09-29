@@ -336,6 +336,11 @@ window.FM = window.FM || {};
   FM.captionsEditor = {
     mount(container, layer) {
       container.innerHTML = '';
+      /* WHAT THIS LIST WAS DRAWN FROM (#984). Every row holds its caption and its layer by reference, so a list whose
+         captions were since replaced (an undo, Detect speech from another copy of this list) looks right and edits
+         objects that are no longer in the project. The PC captions box sits beside the timeline and redraws itself
+         when this no longer matches — js/text-edit.js capsStale. */
+      container._capDrawn = (layer && Array.isArray(layer.captions)) ? { layer: layer, cues: layer.captions.slice() } : null;
       if (!layer || !Array.isArray(layer.captions)) return;
 
       // Detection FIRST. It is the reason to use captions at all, and the Aa sheet is a 46vh
@@ -559,6 +564,9 @@ window.FM = window.FM || {};
           if (rerender) rerender(); else FM.requestRender();
           if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
           if (FM.inspector) FM.inspector.refresh();
+          /* The text editor may be open on this layer — Detect speech is in its Aa sheet — and a plain text layer has
+             just become a caption track under it: it rebuilds itself as the captions editor (#984 review). */
+          if (FM.textEdit && FM.textEdit.cuesChanged) FM.textEdit.cuesChanged();
         } catch (err) {
           btn.textContent = label; btn.disabled = false;
           if (FM.reportError) FM.reportError('detecting speech for captions', err);   // queue 674: the raw message goes to Settings → Last error, not the screen

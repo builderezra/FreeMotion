@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Sep at v17.12
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Sep at v17.13
 >
-> **State:** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.13 — **your New project + animation is the ripple** (#947, your pick — Cancel closes it at once); **“Tap here to start creating” opens the menu straight away**, with the glowing lines round the menu's edges (#981); **the old PC Share button is gone** — the cog is the way in (#983); **on PC the captions menu opens where the Add menu is**, and the timeline stays squished (#984); the clapper rests between snaps (#988); the Home arrow draws once after a refresh (#989); **Toggle dark mode** (#990); “Project 1” clears itself when you name a project (#991); narrow PC windows: every button takes its own click (#979). **Your picks waiting: #982 Join icon (A–D), #985 export (A–C), #987 note colours (A–C), #970 (A/B).** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -33185,16 +33185,21 @@ re-opened #480, which I had marked done and had not fixed.
 - [x] **946 — Mobile: the settings cog does its little rotate animation, like on PC** (26 Sep — his words in #944) — ✅ v17.03
   1. [x] The cog rotates when tapped on mobile, the same as on PC (today only PC does it). ✅ v17.03 — the phone's editor cog (#m-settings) and Home's cog both turn on every press (one helper, FM.cogTurn); test `946 the phone cog and the Home cog…` counts the running animation on each, twice, and checks the phone cog does NOT turn again by itself when it comes back from being hidden (the first ship's full suite caught that replay: the class was left on).
 
-- [ ] **947 — The New project + gets its own animation, really well thought out** (26 Sep — his words in #944)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
-  1. [ ] Pressing + to create a new project gets a DIFFERENT animation from the one used everywhere else.
-  2. [ ] It should "actually look really good and be really well thought out".
-  3. [ ] (his standing design rule, #545) options drawn and shown to him before it ships.
+- [x] **947 — The New project + gets its own animation, really well thought out** (26 Sep — his words in #944)
+  1. [x] ✅ v17.13 — Pressing + to create a new project gets a DIFFERENT animation from the one used everywhere else.
+  2. [x] ✅ v17.13 — It should "actually look really good and be really well thought out".
+  3. [x] ✅ v17.13 — (his standing design rule, #545) options drawn and shown to him before it ships.
   **26 Sep — three options drawn and SENT** (`tools/design/947-options.html`, frames in `tools/design/947/`, clips `947-A/B/C.gif`; every frame is the real Home + the real New project dialog at 390×844, the entrance driven by the throwaway `tools/design/947-proto.js` and frozen at exact points by `tools/design/947-render.py`, both Home looks). A = the orb becomes the card (recommended; Cancel reverses it into the orb); B = a 9:16 canvas outline is drawn out of the + and grows into the card; C = a ripple from the + reveals the dimmed screen and the card rises with a bounce.
   ❓ASK: A, B or C? (A recommended.)
   BUILT OUT UNTIL HE picks A, B or C (the sheet and three clips were sent 26 Sep).
       ✅ **HE ANSWERED 28 Sep (#974): all three + animations go in the app, one at random each time** — built under #974; the loser(s) are deleted once he says which he likes.
-      ✅ **v17.12 (#974): all three entrances are in the app and one plays at random on every tap of +.** BUILT OUT UNTIL HE says which he likes (the others are then deleted).
+      ✅ **v17.12 (#974): all three entrances are in the app and one plays at random on every tap of +.** built out until he says which he likes (the others are then deleted) — ANSWERED 29 Sep, below.
+      ✅ **HE ANSWERED, 29 Sep (in the builder chat), verbatim:** *"My fave animation for pressing the create button is the one where the white line pulses out. I also like that when you press cancel it goes away straight away."*
+      His clauses:
+      1. [x] ✅ v17.13 — Keep the entrance where "the white line pulses out" when the + (create) is pressed — read as **C**, the thin ring in the +'s pale colours that spreads out from it (B draws a frame's outline, A swells the orb into the card; neither pulses out). If he meant the frame (B), one word swaps it.
+      2. [x] ✅ v17.13 — Keep Cancel making the card go away STRAIGHT AWAY (C already hides at once; A's run-backwards close goes with A).
+      3. [x] ✅ v17.13 — (the #974 rule) the winner becomes fixed and the other two entrances (A, B) are deleted, not left behind a flag.
+      ✅ **v17.13 — SHIPPED** (queue 947): his pick, the ripple (C), is the only entrance; A and B are deleted. Cancel/Escape/the backdrop close at once. Review fix: the circle ran on the dialog itself, so for ~640 ms every tap went through to Home — it now runs on its own scrim. Say “B” if he meant the frame one.
 
 
 - [ ] **948 — Templates and Elements: + opens a proper, designed menu; and they are their own things, not reskinned projects** (26 Sep — his words in #944)
@@ -33690,6 +33695,8 @@ re-opened #480, which I had marked done and had not fixed.
       BUILT OUT UNTIL HE picks the #964 colour (A Aurora recommended), the menu timing and where the lights start — or says "do recommended".
       ✅ **HE ANSWERED 28 Sep (#974): “make them all happen in the app but it's just random which one”** — the HOLD is lifted: A Aurora / B Rings and sparks / C Key ripple (and both outline starts) are built under #974 and chosen at random each time, until he says which he likes.
       ✅ **v17.12 (#974): A Aurora / B Rings and sparks / C Key ripple and both outline starts are in the app, one at random on every press, all with the 300 ms hold and 360 ms lap.** BUILT OUT UNTIL HE says which he likes (the others are then deleted).
+      ✅ **HE ANSWERED ASK 2 (how long the menu waits), 29 Sep: no wait — the menu pops up straight away, with the glowing border lines on its edges as it opens.** Built under #981.
+      ✅ **v17.13 (#981): the menu now opens straight away for every variant, with the glowing lines on its edges.** The three colours and both starts stay random — BUILT OUT UNTIL HE says which he likes (the others are then deleted).
 
 
 - [x] **965 — Settings: redesign the close ✕ (use the search ✕'s drawn design) — and, his yes, the same drawn ✕ on every close button in the app** (26 Sep, ~20:57 AWST, via INBOX — his words)
@@ -34191,10 +34198,11 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v17.12 — SHIPPED** (queue 978): B side by side (his pick was pending — the plan's rule), stacked like the phone below ~744px; Part 2 by default: Share beside Export opens the pair with Friends big and no longer starts sharing. Say “pair A” for the stacked look everywhere, or “Share separate” to put Share back.
 
 
-- [ ] **979 — PC 720–890px wide: the copy button and the add-row switch sit under the inspector's A/S/D clip keys (hunt LOW #979)** (28 Sep — found by #970's reviewer; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **979 — PC 720–890px wide: the copy button and the add-row switch sit under the inspector's A/S/D clip keys (hunt LOW #979)** (28 Sep — found by #970's reviewer; NOT his words)
       Pre-existing (identical on v17.11): the transport row is centred on the screen while the inspector is a fixed 300px, so the row's left cluster spills under the clip keys — elementFromPoint on the copy button (#btn-layermenu) returns #key-d/#key-s at 720–860px, whatever the selection; at 701–720 the back button's right end sits under #tl-headtap.
-      1. [ ] At every PC width from 701px, every control on the transport row takes its own click.
+      1. [x] ✅ v17.13 — At every PC width from 701px, every control on the transport row takes its own click.
+      ✅ **v17.13 — SHIPPED** (queue 979): every transport control takes its own click from 701px (the left track keeps its content width and Back moves clear); 900–964 had copy's centre under Back (clicking copy left the project), and 1161–1206 with one layer selected put ⋯ under the version chip (a click force-reloaded the app) — the band line moved 1160 → 1226px. #970's measured band stays held for his pick.
+
 
 - [ ] **980 — PLAN (do NOT build): the simple “CapCut / Premiere Pro” editor alongside today's “After Effects” one — a quick switch, project conversion, and two-mode live collab** (28 Sep, ~23:39 AWST, via INBOX — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -34233,4 +34241,184 @@ re-opened #480, which I had marked done and had not fixed.
       10. [ ] The heart of it: the timeline model (CapCut's one main track with overlays/effects/text in their own sections, vs FreeMotion's layers anywhere).
       11. [ ] Use lots of agents; keep a loop ticking every minute until it is all done; keep rethinking it (the LOGGING chat runs this design project, at his request).
       The design project runs in the LOGGING chat (tools/design/plans/simple-mode/, STATUS.md there); this chat does not touch the feature code for it. Linked from #923.
+      📝 Moved from INBOX.md whole (29 Sep ~10:19, logger's progress note):
+
+
+      ### 29 Sep 2026, ~10:19 AWST — Logger's note: the simple-mode design so far (the "PLAN, do NOT build" block). Nothing for the builder to do yet
+
+      **Logger's note (not his words).** For the entry's record only. **Still planning, and no build until he says.**
+      - Folder: `tools/design/plans/simple-mode/`:
+        - `STATUS.md`: the steps and log.
+        - `research/`: 6 notes.
+        - `DESIGN.md`: 4,240 lines, 352 holes patched, final decisions D1–D21 in §17.
+        - `SUMMARY.md`: two phone screens, plain words.
+        - `vis/`: the visualizers.
+      - The visualizers are published for him at https://claude.ai/artifact/9TWddZCGHH1aNyJDiXZbZB.
+      - The Phase 0/1 build plan (`BUILD-PLAN.md`) is being written and reviewed now. It lands in the same folder.
+      - Core design: one project, two editors, like DaVinci Resolve's Cut and Edit pages. `start` stays the only stored time. Optional `sm` flags on layers. Magnetism lives in the Simple editor's commands, each one undo step and one collab tx. The Full editor is unchanged. Any project opens in either editor with nothing converted.
+      - **Do not build any of it until his go-ahead (D15).**
+      📝 Moved from INBOX.md whole (29 Sep ~16:02, logger's progress note):
+
+
+      ### 29 Sep 2026, ~16:02 AWST — Logger's note for #980 (simple mode): the BUILD PLAN is ready, and it is still NOT to be built until he says (D15)
+
+      **Logger's note (not his words).**
+      - `tools/design/plans/simple-mode/BUILD-PLAN.md` holds Phase 1 as three shippable steps, each logged `queue 980 (partial)`:
+        - 1.1: four Full fixes.
+        - 1.2: the invisible engine, `js/spine.js` and `js/spine-words.js`, plus `SCHEMA_REV 3`.
+        - 1.3: the preview behind Settings → "Simple editor", off by default.
+        - 1.4 (friends see each other in Simple) is anchors only.
+      - Exact code, anchors, `?v=` bumps and 24 tests. It was rehearsed on a scratch copy of the tree at HEAD `ea1ff320` plus the uncommitted v17.13 work: each step's tests fail before it and pass after, at 1280 and 380.
+      - One real suite break was found and fixed in the plan (`967 B4 1 one name`).
+      - Reviewed "ready after fixes", with the review in §13.
+      - **Line numbers will have drifted by the time he says go**, so re-anchor on the quoted text, as the plan says.
+      - The visualizers are republished (Version 2, same link). His D1–D21 answers will arrive as their own block.
       BUILT OUT UNTIL HE says to build the simple mode.
+
+
+- [x] **981 — Empty project: the add menu pops up STRAIGHT AWAY when he taps “Tap here to start creating” (no wait — the menu is see-through, so the animation still shows underneath), and the glowing white border lines appear on the add menu's edges as it opens** (29 Sep, in the builder chat — his words)
+      **His words (verbatim):** *"I actually have a problem with every animation when you press on the tap here to start creating area, that being the menu takes too long to pop up - since the menu is clear anyways, it doesnt matter if it pops up straight away as you can see the animations underneath. Maybe when u fix this make sure the white lines on the borders that glow, appear on the edges of the add menu as it loads up"*
+      Clauses (his):
+      1. [x] ✅ v17.13 — For EVERY one of the tap animations (#964's A Aurora / B Rings and sparks / C Key ripple, both outline starts), the add menu pops up straight away — no hold (today it waits 300 ms, with a 360 ms lap, so the animation is seen first).
+      2. [x] ✅ v17.13 — Why that is fine: the add menu is clear (see-through), so the tap animation still shows underneath it.
+      3. [x] ✅ v17.13 — The glowing white lines on the area's borders (the outline lights) appear on the EDGES OF THE ADD MENU as it loads up.
+      Builder's context (not his words): this answers #964's ASK 2 (how long the menu waits — 300 ms was the recommendation) with "no wait"; the variants stay random until he picks one (#974).
+      ✅ **v17.13 — SHIPPED** (queue 981): no hold — the menu opens inside the tap's own click for every variant; the colour keeps playing under it; the glowing lap runs round the menu's edges (same colours and speed as the area's outline, meeting at the top as the menu lands), then fades; reduced motion: no lights, menu still at once. Review fixes: a quick double-tap can't pick a card as the menu swings in; a second Enter doesn't relight a settled menu.
+
+
+- [ ] **982 — Home: the Join button becomes a simple ICON instead of the word “Join” — the top bar is getting cluttered** (29 Sep, in the builder chat — his words)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      **His words (verbatim):** *"Change the join button in the home menu to just be a simple icon instead of saying join, because its getting cluttered."*
+      Clauses (his):
+      1. [ ] Home's Join button (the worded pill beside Select, #967 batch 2 / v17.08) becomes a simple icon…
+      2. [ ] …instead of the word “Join”…
+      3. [ ] …because the Home top bar is getting cluttered.
+      4. [ ] (#545) icon options drawn in the real Home bar at 390 (light and dark) and at 24px, shown to him before it ships.
+      Builder's context (not his words): the #967 sheet's question 4 offered B “a drawn icon (person with an arrow going in) at 24px”; the word pill was built as the recommendation. The icon must still say “Join” to a screen reader and on hover (aria-label/title), and keep a 44px tap target.
+      **29 Sep — four icons drawn and SENT** (`tools/design/982/982-options.png`, drawn over the real Home by the throwaway `982-proto.js`): A arrow into a doorway (**recommended** — sharpest at phone size, shares no shape with Share/+/Search), B an open door (blurs at 18px), C arrow into a person (a near-twin of Share's person+), D arrow through a link (reads as "copy link"). Build notes in the sheet: same 38px circle as Search and the cog, aria-label/title "Join", a 44px tap target via ::after, the freed 19px goes back to the wordmark.
+      ❓ASK: A, B, C or D — or "do recommended".
+      BUILT OUT UNTIL HE picks an icon (A recommended); if no answer by the time it is reached, build A (rule 16) — he asked for it and has seen the options.
+
+
+- [x] **983 — PC: remove the button that was originally for inviting friends (the Share button beside Export) — the settings cog has it now** (29 Sep, in the builder chat — his words)
+      **His words (verbatim):** *"on pc get rid of the button that was originally to invite friends, as we now have it built into the settings cog"*
+      Clauses (his):
+      1. [x] ✅ v17.13 — On PC, remove the button that was originally there to invite friends (the Share button beside Export, #944 / v17.02; since v17.12 #978 it opened the Friends + Canvas pair)…
+      2. [x] ✅ v17.13 — …because inviting friends is now built into the settings cog (#978).
+      Builder's context (not his words): the phone's person+ on the video is a different door and stays (he named PC). The faces chip, the LIVE pill and Home's “Share live…” route through the same pair and are not this button. #978's ASK 2 (“keep Share beside Export as a shortcut”) is now answered NO.
+      ✅ **v17.13 — SHIPPED** (queue 983): the PC Share button is gone in every state (not hidden with a gap — the row re-flows, 42px narrower with sharing on); the cog opens Friends; the faces chip, LIVE and Home's Share live… hang the pair off the cog. The phone's person+ is unchanged. #978's ASK 2 is answered no.
+
+
+- [x] **984 — The captions menu should open where the Add menu is and leave the timeline squished as usual — today it takes up space badly and opens the timeline fully** (29 Sep, in the builder chat — his words)
+      **His words (verbatim):** *"when u open the captions menu it takes up space really badly and opens up the timline fully when it could just go where the add menu is and leave the timeline squished like it usually is"*
+      Clauses (his):
+      1. [x] ✅ v17.13 — Opening the captions menu takes up space really badly…
+      2. [x] ✅ v17.13 — …and opens the timeline up fully.
+      3. [x] ✅ v17.13 — It should go where the Add menu is…
+      4. [x] ✅ v17.13 — …and leave the timeline squished like it usually is.
+      Builder's context (not his words): he did not name PC or phone — measure the captions menu's opening in BOTH layouts (PC Studio band, phone sheet), fix wherever it grows the timeline, and show him a before/after at the width it happens on.
+      ✅ **v17.13 — SHIPPED** (queue 984): measured — it was PC only: opening the captions menu hid the Add menu's column and the timeline widened into it (973→1280px at 1280) while the editor floated over the canvas and its caption list dropped over the timeline. Now the captions menu fills the Add menu's box exactly and the timeline keeps its place and size; every captions control is inside the box (it scrolls). Review fixes: starting captions from a plain text's Aa → Detect speech switches to the captions menu; sheets inside the box cover it edge to edge. The phone is unchanged (its editor is full-screen and the timeline is hidden there, not opened).
+
+
+- [ ] **985 — The Export menu's settings should make sense at first glance to someone who doesn't know how exporting works — keep every function; learn from CapCut, don't copy it** (29 Sep, in the builder chat — his words)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      **His words (verbatim):** *"the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I dont want to lose any function but i want it to actually make sense at first glance. Capcut does a really good job of this but dont fully copy"*
+      Clauses (his):
+      1. [ ] The Export menu's settings are daunting for someone who doesn't know how it works — make them make sense at first glance.
+      2. [ ] Don't lose ANY function (every setting and option there today stays reachable).
+      3. [ ] CapCut does this really well — take notes from it…
+      4. [ ] …but don't fully copy it.
+      5. [ ] (#545) options drawn through the real app (phone and PC) and shown to him before it ships.
+      Builder's context (not his words): inventory every control in the export dialog first (so clause 2 is checkable — a list of every setting, and where each lives in the new design); then draw 2–3 options.
+      **29 Sep — inventory taken and three designs drawn and SENT** (`tools/design/985/`: `985-compare.jpg` NOW | A | B | C at phone size, one sheet per option with phone + PC + opened states, and `mapping.md` giving every one of today's 34 export settings a home in each option — clause 2 is checkable line by line). All drawn inside the real app by the throwaway `985-proto.js`; no app code changed.
+      A · “What you'll get” (**recommended**): opens on a picture of the video, its length and “about 34 MB”; five buttons for what to make (Video, GIF, Picture, Sound, Frames); four plain rows (Size, Smoothness, Quality, Part) with Recommended on each default; everything expert one tap away in More options (which says “1 on” when something in it is changed); the button reads “Export video · about 34 MB”.
+      B · “Pick a goal”: six goal tiles (Best quality, Smaller to send, GIF, Picture, Sound only, Frame by frame), each saying what you'll get; Part always shown; Fine-tune opens every exact control.
+      C · “Sliders + size”: a Video/GIF/Picture/Sound/Frames switch, the file size in big type, three sliders with a star on the recommended stop; Exact numbers and More open the typed boxes and the expert switches.
+      ❓ASK: A, B or C — or "do recommended".
+      BUILT OUT UNTIL HE picks A, B or C for the export card.
+
+- [ ] **986 — Bugs found reading every effect, filter and sound for the #966 backlog — 26 likely real, C1 a filter on an adjustment layer renders nothing (hunt HIGH #986)** (29 Sep — found by the #966 inventory agents, NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full evidence with file:line and a suggested fix for each: `tools/design/plans/2026-09-29-idle-backlog/backlog.md` §C “Likely real bugs” (the “weak by design” list below it is LOW and belongs to the polish batches). Reproduce each before fixing — these were found by READING the code (R), not yet run.
+      1. [ ] **C1 HIGH** — A filter on an ADJUSTMENT layer renders nothing.
+      2. [ ] **C2 MEDIUM** — The Limiter's Ceiling is not a ceiling
+      3. [ ] **C3 MEDIUM** — Chroma Key Pro despill always suppresses GREEN
+      4. [ ] **C4 MEDIUM** — Only the first enabled Chroma Key and the first Luma Key on a layer run
+      5. [ ] **C5 MEDIUM** — Film Grain "Grain size" has no `unit:'px'`
+      6. [ ] **C6 MEDIUM** — Night Vision's scanlines (`y%3`) and sensor noise are per PLATE pixel, and the kernel takes no ps
+      7. [ ] **C7 MEDIUM** — 
+      8. [ ] **C8 MEDIUM** — Vignette has two renderers that disagree.
+      9. [ ] **C9 MEDIUM** — A filter saved with "Save this effect as preset…" cannot be found again.
+      10. [ ] **C10 MEDIUM** — The sound-effect ▶ is not what Add produces.
+      11. [ ] **C11 LOW** — Every noise buffer of the same length and colour is identical
+      12. [ ] **C12 LOW** — The sound row's "playing" highlight clears only on its own timer
+      13. [ ] **C13 LOW** — Audio-effect search misses the words people use
+      14. [ ] **C14 LOW** — The Compressor's knee is never set
+      15. [ ] **C15 MEDIUM** — Ring Mod drives `playbackRate` = Hz on a 1 s buffer
+      16. [ ] **C16 LOW** — The Flanger's swept DelayNode sits in its own feedback cycle
+      17. [ ] **C17 LOW** — The Phaser's 1 ms feedback delay is in a cycle
+      18. [ ] **C18 LOW** — Bit Crush bits 13–16 ≈ dry.
+      19. [ ] **C22 MEDIUM** — Drop Shadow never draws beneath partially transparent pixels
+      20. [ ] **C24 MEDIUM** — On a device where `ctx.filter` does not work (the reason the GPU colour fallback exists, #661), these effects silently lose their blur.
+      21. [ ] **C27 MEDIUM** — Shake, Swing, Spin and Pulse, plus Trail and Scatter Array, never get the `expand` plate
+      22. [ ] **C39 MEDIUM** — Mirror sizes its plate from the PROJECT
+      23. [ ] **C40 LOW** — Chroma Key Pro "View: Matte" writes alpha 255 for every pixel, including transparent ones
+      24. [ ] **C41 LOW** — Sharpen leaves an r-pixel border unsharpened
+      25. [ ] **C52 LOW** — The filter tile-pick preview uses raw recipe params via `Object.assign`
+      26. [ ] **C60 LOW** — Find Edges' 3×3 Sobel (compositor.js:5068-5105) and Emboss's ±1 px kernel (5123-5149) work in plate pixels.
+
+- [ ] **987 — In a collab edit, each note shows a colour indicator of WHO left it** (29 Sep, in the builder chat — his words)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      **His words (verbatim):** *"If you’re doing a collab edit - there should be a colour indicator based on who left the note."*
+      Clauses (his):
+      1. [ ] When a project is being edited together (Work with friends)…
+      2. [ ] …every note carries a colour indicator…
+      3. [ ] …in the colour of the person who left it.
+      4. [ ] (#545) the indicator drawn as options and shown to him before it ships.
+      Builder's context (not his words): first check what “note” covers in a shared project — the Notes panel (notepad) and/or Comments — whether notes sync between people today, and whether an author is recorded; each person already has a colour (the presence cursors, the people list).
+      **29 Sep — facts checked and three indicators drawn and SENT** (`tools/design/987/987-options.png`, drawn in the real app with fake people): Notes DO sync between people in a live session but record no author; Comments already show each person's face in their colour. A dot + name · B colour stripe · C their face (**recommended** — the same initial-in-a-circle as the people chip on the video and in Comments). Build plan (about one release): the host stamps `by:{mid,name,color}` on new notes (so nobody can post as someone else), the Notes panel shows the face while shared, AND two real gaps found on the way — an open Notes panel does not update when a friend changes notes, and ✕ deletes by position so after a friend's delete it can remove the WRONG note — both fixed with it. Also: the role text says Commenters “leave notes” where it means comments.
+      ❓ASK: A, B or C — or "do recommended".
+      BUILT OUT UNTIL HE picks A, B or C for the note colours.
+
+
+- [x] **988 — The empty project clapper snaps again too fast — it repeats almost instantly; it should repeat a bit slower** (29 Sep, in the builder chat — his words)
+      **His words (verbatim):** *"The snap animation for when a project is empty goes too fast - like it repeats instantly but should repeat a bit slower"*
+      His screenshot (v17.12, an empty project on his iPhone, the clapperboard circled): `tools/design/988/2026-09-29-clapper-too-fast.jpg`.
+      Clauses (his):
+      1. [x] ✅ v17.13 — The empty project's clapper snap goes too fast…
+      2. [x] ✅ v17.13 — …it repeats (almost) instantly…
+      3. [x] ✅ v17.13 — …it should repeat a bit slower.
+      Builder's context (not his words): since v17.12 (#974) the clapper's timing is random per open — A every 6 s, B once, C non-stop (~1.6 s). “Repeats instantly” is C; slow the repeat (e.g. C to a few seconds) and keep the timings random until he picks, or retire C — the entry says which was done.
+      ✅ **v17.13 — SHIPPED** (queue 988): “repeats instantly” was timing C (a 1.6 s lap that lay shut 0.3 s); it is now a 3.6 s lap that rests 2.3 s shut between claps; the clap's own motion is unchanged; A (every 6 s) and B (once) unchanged; still random until he picks.
+
+
+- [x] **989 — The drawn arrow on Home is buggy: after a refresh it draws from the middle and from the start at the same time** (29 Sep, in the builder chat — his words)
+      **His words (verbatim):** *"The drawn arrow is currently a bit buggy and broken when you refresh the page it draws from the middle and start at ththe same time"*
+      Clauses (his):
+      1. [x] ✅ v17.13 — The drawn arrow (Home's arrow to the +, #936/#957) is buggy…
+      2. [x] ✅ v17.13 — …when the page is refreshed it draws from the middle and from the start at the same time (it should draw once, from its start).
+      Builder's context (not his words): reproduce with a real reload (cold boot onto the empty Projects tab, light and dark Home, phone and PC) before fixing — likely two draw passes racing (boot + a re-render) or a dash offset reset mid-draw.
+      ✅ **v17.13 — SHIPPED** (queue 989): reproduced with real reloads — ~0.45 s in, Home's thumbnail grab re-rendered the grid, which cleared the half-drawn arrow (at the curl) and started a new one from the start. A redraw now continues the arrow already up, a finished arrow stays finished (review fix), and Home opening still plays the draw-on once. Not checked on his iPhone.
+
+
+- [x] **990 — The dark/light mode setting just says “Toggle dark mode” — no explanation under it** (29 Sep, in the builder chat — his words)
+      **His words (verbatim):** *"Make the dark mode light mode toggle just say toggle dark mode and get rid of explanation"*
+      Clauses (his):
+      1. [x] ✅ v17.13 — The dark mode / light mode switch in Settings is labelled just “Toggle dark mode”…
+      2. [x] ✅ v17.13 — …and its explanation text is removed.
+      Builder's context (not his words): today it is “New light look” with a paragraph about the white projects screen (Settings); check the switch's sense still reads right with the new label (on = dark? — the label must match what ON does), and every other place that names it.
+      ✅ **v17.13 — SHIPPED** (queue 990): the row reads exactly “Toggle dark mode” with no explanation; ON = dark; the stored setting keeps its meaning so every saved look is unchanged.
+
+
+- [x] **991 — Phone: naming a project, the default “Project 1” text clears itself when he starts typing** (29 Sep, in the builder chat — his words)
+      **His words (verbatim):** *"On mobile when naming a project you have to delete the text saying project 1 before you start typing - just make it auto delete that when you want to name ur project"*
+      Clauses (his):
+      1. [x] ✅ v17.13 — On mobile, when naming a project, he has to delete the text “Project 1” before typing…
+      2. [x] ✅ v17.13 — …make it clear itself automatically when he goes to name the project.
+      Builder's context (not his words): the New project dialog's name field (and Rename…) — e.g. select-all on focus so the first keystroke replaces it, or show the default as a placeholder that is used if he types nothing; check iOS Safari (select-on-focus behaves differently there) and that an untouched name still creates “Project N”.
+      ✅ **v17.13 — SHIPPED** (queue 991): tapping (phone) or clicking (PC) into the name field clears the suggested “Project N” (shown as the placeholder), so typing starts fresh; left empty it comes back and Create still makes “Project N”; Rename selects its text the same way. Not measured on iOS Safari itself.
+
+- [ ] **992 — Late in a full suite run a Home project card ends up ON TOP of the + (New project) on PC, so a click on the + lands on the card (hunt MEDIUM #992)** (29 Sep — found by v17.13's ship, NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Found by #991's PC test: in the full suite (never in slices from test 1600 on, never alone) the + at 1280 was covered — elementFromPoint at its centre returned an `.hm-card` for 6 s. The + is `position: fixed` at the bottom, so a card over it means a card was raised above it (a drag, a lifted/pressed state, a z-index left behind) or the + lost its layer — by an earlier test, or by app state he could reach. The 991 test now opens the dialog through the +'s own handler when the + is covered, so this finding no longer blocks the ship — but it must be explained.
+      1. [ ] Find what puts a card over the + (bisect the full suite with the cover probe; the runner cuts a FAIL line at "<", so use " > " in the probe's path) and fix it at the cause — the test that leaks it, or the app if a real user can reach it.

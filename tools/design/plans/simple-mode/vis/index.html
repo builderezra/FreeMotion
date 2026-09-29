@@ -1,5 +1,20 @@
-<title>Quick and Full</title>
+<title>One Project, Two Editors</title>
 <link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="v11.css">
+<link rel="stylesheet" href="v5.css">
+<link rel="stylesheet" href="v1.css">
+<style>
+/* The top of the hub stays short, so every page starts on the first screen (QA 29 Sep: it started ~1,420 px down on a phone).
+   Beach day is a one-line card that opens on a tap (its .h-fold rules are in kit.css); the page list starts folded on a
+   phone (kit.js initHub); the header is tighter there. */
+@media (max-width: 699px) {
+  .h-page { padding-top: 12px; }
+  .h-head { gap: 10px; padding-bottom: 16px; }
+  .h-head > .h-eyebrow { font-size: 11px; letter-spacing: .05em; }
+  .h-names { gap: 4px 14px; font-size: 14px; }
+  .h-main { padding-top: 14px; gap: 16px; }
+}
+</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -16,15 +31,22 @@
     </ul>
   </header>
 
-  <section class="h-sample" aria-labelledby="vis-sample-title">
-    <div>
-      <h2 id="vis-sample-title">Beach day</h2>
-      <p>The sample project most pages use: four clips, a title on Waves, a shell sticker on Sandcastle, captions, and a song.</p>
-      <p>Flip between the two editors. It is the same project both times. Nothing is converted. Tap a clip or an item to pick it, and drag along the numbers at the top to move the playhead.</p>
-      <p>Everything on these pages is a drawing of the app. Nothing here changes FreeMotion.</p>
-    </div>
-    <div class="h-sample-demo" id="vis-sample-demo"></div>
-  </section>
+  <!-- Beach day folds away. QA (29 Sep): on a phone every page started about 1,420 px down, under a full sample phone. -->
+  <div class="h-fold" id="vis-sample-fold">
+    <button type="button" class="h-fold-sum" aria-expanded="false" aria-controls="vis-sample">
+      <span class="h-fold-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M9 15.5h2.4M13 15.5h2M9 18.2h6"/><path d="M10.6 7.2v4.6l3.8-2.3z" fill="currentColor" stroke="none"/></svg></span>
+      <span class="h-fold-txt"><span class="h-fold-name" id="vis-sample-title">Beach day</span><span class="h-fold-sub">The sample project. Try it in Quick and in Full.</span></span>
+      <span class="h-fold-cue" aria-hidden="true"><span class="h-fold-show">Show</span><span class="h-fold-hide">Hide</span></span>
+    </button>
+    <section class="h-sample" id="vis-sample" aria-labelledby="vis-sample-title" hidden>
+      <div>
+        <p>The sample project most pages use: four clips, a title on Waves, a shell sticker on Sandcastle, captions, and a song.</p>
+        <p>Flip between the two editors. It is the same project both times. Nothing is converted. Tap a clip or an item to pick it, and drag along the numbers at the top to move the playhead.</p>
+        <p>Everything on these pages is a drawing of the app. Nothing here changes FreeMotion.</p>
+      </div>
+      <div class="h-sample-demo" id="vis-sample-demo"></div>
+    </section>
+  </div>
 
   <div class="h-main">
     <nav class="h-toc" id="vis-toc" aria-label="Pages"></nav>
@@ -47,3 +69,19 @@
 <script src="v10.js"></script>
 <script src="v11.js"></script>
 <script src="v12.js"></script>
+<script>
+/* Beach day starts folded at every width and opens on a tap. It is drawn while hidden, so it is drawn again the moment it opens
+   (it measures itself). A plain hidden section rather than <details>: a phone frame drawn inside a closed <details> set off a
+   ResizeObserver warning on every load. The page list starting folded on a phone is kit.js's own (initHub). */
+(function () {
+  var btn = document.querySelector('#vis-sample-fold > .h-fold-sum'), sec = document.getElementById('vis-sample');
+  if (btn && sec) btn.addEventListener('click', function () {
+    var open = btn.getAttribute('aria-expanded') !== 'true';
+    btn.setAttribute('aria-expanded', String(open));
+    sec.hidden = !open;
+    if (!open) return;
+    var b = document.querySelector('#vis-sample-demo .h-seg [aria-pressed="true"]');
+    if (b) b.click();
+  });
+})();
+</script>

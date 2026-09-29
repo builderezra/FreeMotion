@@ -6365,7 +6365,7 @@ window.FM = window.FM || {};
        unless it has been registered, so getPropertyValue hands back the token stream the stylesheet wrote
        — measured on a fresh profile at 1280x800: "clamp(232px, 30vh, 300px)" — and parseInt of that is
        NaN. All four readers below then fell to their fallback of 232 while the real band was 240 (300 on
-       a 1080p window; 40 more below 1160px, where the transport hangs under the row). Measured
+       a 1080p window; 40 more below 1226px, where the transport hangs under the row). Measured
        consequences, all three from this one line-pattern: a 10px drag DOWN on the add menu's handle
        detached the panel at 232px inside a 240px row and opened an 8px strip of bare background above it;
        a CLICK on the timeline divider persisted 232, so the next load opened with a shorter band than the
@@ -7602,14 +7602,17 @@ window.FM = window.FM || {};
      and the button is gone until something calls install again, which nothing does. Re-syncing here
      covers both directions with one line: on a teardown it is rebuilt beside Export back in the top
      bar, and on a build it is re-homed beside Export wherever the far list has just put it. Labs off
-     makes it a no-op — `syncLabs` builds nothing at all when the switch is off. */
-  function pcSyncShare() { if (window.FM && FM.collab && FM.collab.ui) { try { FM.collab.ui.syncLabs(); } catch (e) {} } }
+     makes it a no-op — `syncLabs` builds nothing at all when the switch is off.
+     #983: GONE, with the button. His words: "on pc get rid of the button that was originally to invite friends, as we now
+     have it built into the settings cog". There is no Share in this row in any state now — the one #btn-share is the phone's
+     person+ on the video (collab-ui.js shareHost), which a build or a teardown of this row never touches — so the re-sync
+     (pcSyncShare → syncLabs on every build and teardown) had nothing left to do and went too. */
 
   function pcTransportLayout() {
     const t = document.getElementById('transport');
     if (!t) return;
     const pc = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
-    if (!pc) { if (t._pcBuilt) { pcTransportTeardown(t); pcSyncShare(); } return; }   // …and a narrowed window gives them back (queue 405)
+    if (!pc) { if (t._pcBuilt) pcTransportTeardown(t); return; }   // …and a narrowed window gives them back (queue 405)
     if (t._pcBuilt) return;                // idempotent: refreshAll calls this a lot
     const right = t.querySelector('.t-right');
     const menu = document.getElementById('btn-layermenu');
@@ -7703,12 +7706,17 @@ window.FM = window.FM || {};
          Export in the top bar: the switch can be turned on after this build has already latched
          `_pcBuilt`, and also before it, and a button that is only correct in one of those two orders is
          a button that is in the wrong place half the time. */
-      ['btn-help', 'btn-notes', 'btn-settings', 'btn-share', 'btn-export', 'btn-opts', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
+      /* #983: …and it LEFT this list — "on pc get rid of the button that was originally to invite friends, as we now have it
+         built into the settings cog". The cog opens Friends beside Canvas settings (#978), so the row is ver · ? · notes ·
+         cog · Export · options · ⛶ with the feature on or off, sharing or not. ⚠️ It must NOT come back here as an id: the one
+         #btn-share is the person+ on the VIDEO now, and `grab` takes by id wherever a node is — it would lift the phone's
+         door off the stage into this row. */
+      ['btn-help', 'btn-notes', 'btn-settings', 'btn-export', 'btn-opts', 'btn-amfit'].forEach(id => { const b = grab(id); if (b) far.appendChild(b); });
     if (far.childNodes.length) t.appendChild(far);
 
     t._pcBuilt = true;
     pcTransportSync();
-    pcSyncShare();
+    pcTransportWatchRoom(t);   // queue 979
   }
   /* "they only show up when they should, not always there."
    *
@@ -7752,6 +7760,80 @@ window.FM = window.FM || {};
       lm.setAttribute('aria-disabled', 'false');
     }
   }
+  /* ---- THE RIGHT-HAND RUN FITS THE WINDOW (queue 979) ----------------------------------------------------------------
+     styles.css now holds the left group inside the row (its track has its content as a floor, and the back button's
+     width is reserved), so on a narrow window play slides right — and the right-hand run (skip · undo · redo · the
+     layer group) slides with it. Measured with only that in place (every 3px, 701–1012): with two selected ⋯ ran past
+     the window's edge from 701 to ~872px (past the row's 14px inset to ~887), with one selected to ~791 (~806). So the
+     row steps down, as far as it must and no further:
+       1. `.t-snug` closes the gaps (skip → undo keeps its 12px, #420/#763);
+       2. `.t-small` takes the row's boxes to 28px — the #405 floor, the glyphs keep their 21px;
+       3. `.t-fold` takes Group and Masking group off the row. Only these two, because they are the only ones that are
+          ALSO in ⋯: FM.layerMenuItems lists "Group selection" and "Masking group" whenever two or more are selected,
+          which is exactly when these buttons show. Parent is in no menu and delete was taken out of ⋯ on his word
+          (#221), so both stay. Measured: with 1 and 2 in place ⋯ still ended at ~754 in a 701px window with two
+          selected — 53px past the edge — and the two buttons are 56px.
+     Decided against the WIDEST the layer group can get — every button it holds shown, as with two or more selected —
+     so the row never re-flows when a second layer is shift-clicked; the same reason #970 measures its band that way.
+     Each step is measured with the ones after it off, in this one task, so nothing is painted part-way and a decision
+     cannot flip itself back. The limit is the row's own edge padding (14px), the same inset the far run keeps; on the
+     very narrowest windows the last step still ends inside the window rather than inside that inset (at 701, ⋯ is 667–695
+     and its group's edge ~698),
+     which is the most the row can do without a second band (#970's pick). */
+  function pcTransportRoom() {
+    const t = document.getElementById('transport');
+    if (!t) return;
+    /* The PC row outlives a narrowed window until the next refresh tears it down (#405), and every rule these classes
+       drive is inside the 701px block — so below it there is nothing to decide, and nothing is measured. */
+    const pc = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
+    if (!t._pcBuilt || !pc) { t.classList.remove('t-snug', 't-small', 't-fold'); return; }
+    const tr = t.getBoundingClientRect();
+    if (tr.width < 2) return;                                   // not laid out (Home in front) — the observer decides when it is
+    const right = t.querySelector('.t-right'), sel = document.getElementById('t-sel');
+    if (!right) return;
+    const kids = sel ? Array.prototype.slice.call(sel.children) : [];
+    const was = kids.map(k => k.style.display), had = !!(sel && sel.classList.contains('has-sel'));
+    const reach = () => {
+      let r = -Infinity;
+      Array.prototype.forEach.call(right.children, c => { const b = c.getBoundingClientRect(); if (b.width > 0 && b.height > 0) r = Math.max(r, b.right); });
+      return r;
+    };
+    try {
+      kids.forEach(k => { k.style.display = ''; });
+      if (sel) sel.classList.add('has-sel');
+      const limit = tr.right - 14;
+      t.classList.remove('t-snug', 't-small', 't-fold');
+      for (const step of ['t-snug', 't-small', 't-fold']) {
+        if (reach() <= limit) break;
+        t.classList.add(step);
+      }
+    } finally {
+      kids.forEach((k, i) => { k.style.display = was[i]; });
+      if (sel && !had) sel.classList.remove('has-sel');
+    }
+  }
+  /* Re-decided on a window resize, and by a ResizeObserver on the row (the panel changes width without one — the PC text
+     editor folds the inspector away, #519; measured at 760 with two selected: .t-snug .t-small .t-fold → .t-snug while
+     it is open, and back when it closes), on the pill (its width is the font's) and on the layer group (a Viewer's copy hides
+     its buttons with !important, which the measuring cannot un-hide, so the widest it can get changes with the role).
+     On the next animation frame: a resize's own handlers (timeline.js republishes --tl-panel-left, which sets where
+     play sits) run first, and a frame requested from a resize event still runs before that frame is painted; deciding
+     inside an observer callback is what #970 measured raising "ResizeObserver loop completed with undelivered
+     notifications". */
+  let pcRoomQueued = 0, pcRoomResizeHooked = false;
+  function pcTransportRoomSoon() {
+    if (pcRoomQueued) return;
+    pcRoomQueued = requestAnimationFrame(() => { pcRoomQueued = 0; pcTransportRoom(); });
+  }
+  function pcTransportWatchRoom(t) {
+    if (t._roomRO) { try { t._roomRO.disconnect(); } catch (e) {} t._roomRO = null; }
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = (t._roomRO = new ResizeObserver(pcTransportRoomSoon));
+      [t, document.getElementById('time-readout'), document.getElementById('t-sel')].forEach(el => { if (el) ro.observe(el); });
+    }
+    if (!pcRoomResizeHooked) { pcRoomResizeHooked = true; window.addEventListener('resize', pcTransportRoomSoon); }
+    pcTransportRoom();
+  }
   /* THE UNDO for pcTransportLayout (queue 405). Restores every borrowed control to the exact parent and
      position it was taken from, then removes the three wrappers the build created. Without this the row
      could only ever grow: `_pcBuilt` latched and a window narrowing past 701px kept a desktop row on a
@@ -7775,6 +7857,8 @@ window.FM = window.FM || {};
     }
     ['t-home', 't-sel', 't-far'].forEach(id => { const w = document.getElementById(id); if (w && !w.childNodes.length) w.remove(); else if (w) w.remove(); });
     t._pcHomes = null; t._pcBuilt = false;
+    if (t._roomRO) { try { t._roomRO.disconnect(); } catch (e) {} t._roomRO = null; }   // queue 979: the fit is the PC row's, and the row is gone
+    t.classList.remove('t-snug', 't-small', 't-fold');
   }
   FM.pcTransportTeardown = pcTransportTeardown;
   FM.pcTransportLayout = pcTransportLayout;
@@ -8246,7 +8330,7 @@ window.FM = window.FM || {};
       const cvPhoneMq = window.matchMedia ? window.matchMedia('(max-width: 700px)') : null;
       let cvFlight = [];
       const CV_SIDE_NEED = 546 + 16;   // side by side needs Friends 360 + gap 10 + tile 176 left of the button's right edge, and 16 of margin
-      let cvSrc = null;                // the control the pair hangs from on a PC (the cog, or the Share button beside Export)
+      let cvSrc = null;                // the control the pair hangs from on a PC (the cog — the Share button beside Export went with #983)
       /* The block next to the button: side by side it is always Canvas; stacked it is the big one (the small one sits away). */
       const cvAnchorBlock = () => (cvDialog.classList.contains('cv-side') || !cvDialog.classList.contains('cv-fr-big')) ? cvCard : cvFr;
       /* THE COMIC TAIL FOLLOWS THAT BLOCK (queue 548: decorate, never move). Unpop and pop in one task, so the opener's
@@ -8367,8 +8451,12 @@ window.FM = window.FM || {};
        * `cv-anchored` is what lifts the cog out of the scrim's blur, and it goes on <body> because
        * the button is not inside the dialog.
        * #978: its own function now, so a window crossing the phone width can hang the pair again (cvOnWidth), and it
-       * decides the PC's layout of the pair — side by side (`cv-side`) when there is room left of the button, else stacked. */
+       * decides the PC's layout of the pair — side by side (`cv-side`) when there is room left of the button, else stacked.
+       * #983: A DOOR WITH NO BOX ON A PC HANGS IT FROM THE COG. The phone's person+ passes itself, and above 700 px it has no
+       * box — so a pair it opened on a phone, and a window then widened to a PC's, was left un-anchored in the middle (before
+       * #983 the width listener moved the button beside Export and the pair followed it there). The cog is the PC's door. */
       const cvPlace = (src) => {
+        if (src && !(src.getBoundingClientRect().width > 0) && window.matchMedia('(min-width: 701px)').matches) src = document.getElementById('btn-settings') || src;
         cvSrc = src || null;
         const sr = src && src.getBoundingClientRect();
         if (sr && sr.width > 0 && window.matchMedia('(min-width: 701px)').matches) {
@@ -8388,12 +8476,13 @@ window.FM = window.FM || {};
           cvDialog.style.setProperty('--cv-anchor-bottom', Math.max(8, Math.round(window.innerHeight - sr.top + 8)) + 'px');
           document.body.classList.add('cv-anchored');
           cvDialog.classList.toggle('cv-side', sr.right >= CV_SIDE_NEED);                    // room for side by side, else stacked
-          document.body.classList.toggle('cv-share-src', !!src && src.id === 'btn-share');   // hung off the Share button: the cog goes back under the blur
+          /* (#983: `cv-share-src`, which put the cog back under the blur while the pair hung off the Share button beside
+             Export, went with that button.) */
         } else {
           cvDialog.style.removeProperty('--cv-anchor-right');
           cvDialog.style.removeProperty('--cv-anchor-top');
           cvDialog.style.removeProperty('--cv-anchor-bottom');
-          document.body.classList.remove('cv-anchored', 'cv-up', 'cv-share-src');
+          document.body.classList.remove('cv-anchored', 'cv-up');
           cvDialog.classList.remove('cv-side');
         }
         /* THE TAIL, and ONLY the tail (queue 548). The cog already pops from its button with its own cv-grow, and suite
@@ -8406,10 +8495,19 @@ window.FM = window.FM || {};
          centred on a phone — and keeps whichever block was big. `setTimeout`, not rAF: rAF fires no frames in a tab that is
          not fronted (popfrom.js's RETRY note, LOOP.md rule 11), and the placement must wait for the new width's layout to
          have moved the cog. */
+      /* #983 review: AND BUILD THE PC ROW FIRST. A resize never builds it (only refreshAll and syncTopBar do), so a window
+         widened from a phone's — where any edit tears the row down — still had the cog in the hidden top bar, with no box:
+         the pair a person+ opened there stayed in the middle, and stayed there after the row came back. Measured with a real
+         mouse and real resizes (anchored:false, pair's right edge 820 against the cog's 1140). Only on the way to a PC: a
+         narrowing leaves the row to the next refresh, as it did before. */
       const cvOnWidth = () => {
         if (cvDialog.classList.contains('hidden')) return;
         cvPairSettle();
-        setTimeout(() => { if (!cvDialog.classList.contains('hidden')) cvPlace(cvSrc); }, 0);
+        setTimeout(() => {
+          if (cvDialog.classList.contains('hidden')) return;
+          if (FM.pcTransportLayout && window.matchMedia('(min-width: 701px)').matches) FM.pcTransportLayout();
+          cvPlace(cvSrc);
+        }, 0);
       };
       let cvWidthOn = false;
       const cvWatchWidth = (on) => {
@@ -8422,10 +8520,12 @@ window.FM = window.FM || {};
       };
       /* THE OPEN PATH ON ITS OWN (queue 762). The button below toggles; the oversize warning's tap (FM.warnOversizeProject)
          calls this directly so it always OPENS — a toggle there closed a dialog that was already up. */
-      /* `opts.block`: 'friends' (the person+ / people chip / Share button), 'last' (the cog — his last block, queue 945), or
-         nothing (Canvas big: the oversize warning's tap is about the canvas size, and every bare call opens the canvas).
-         `opts.from` (#978): the control to hang the pair off on a PC — the Share button beside Export; else the control that
-         last opened it (FM.settings.lastCanvasOpener), else the cog. */
+      /* `opts.block`: 'friends' (the person+ / people chip / LIVE / Home's Share live…), 'last' (the cog — his last block,
+         queue 945), or nothing (Canvas big: the oversize warning's tap is about the canvas size, and every bare call opens the
+         canvas).
+         `opts.from` (#978): the control to hang the pair off on a PC; else the control that last opened it
+         (FM.settings.lastCanvasOpener), else the cog. Since #983 no door on a PC passes one — the Share button beside Export
+         was the only one — so on a PC the pair always hangs from the cog. */
       const openCanvasDialog = (opts) => {
         const o = opts || {};
         cvPairSettle();
@@ -8461,7 +8561,7 @@ window.FM = window.FM || {};
         friendsUnmount();
         cvWatchWidth(false);
         cvSrc = null; cvDialog.classList.remove('cv-side');
-        (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up', 'cv-share-src'));
+        (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         cvDialog.classList.add('hidden');
       };
       FM.closeCanvasDialog = cvClose;
@@ -8471,7 +8571,9 @@ window.FM = window.FM || {};
          on, the tail pointed at the new Share button under the blur, 42 px right of the lifted cog; turned off from a pair
          Share had opened, `cv-share-src` kept the cog blurred under a tail now pointing at it. Every flip goes through
          FM.settings.set → apply() → syncLabs and THEN these listeners, so the bar has already moved: re-hang it off the button
-         it hangs from while that is still on screen, else the cog. A no-op in effect on a phone (cvPlace centres it, as it is). */
+         it hangs from while that is still on screen, else the cog. A no-op in effect on a phone (cvPlace centres it, as it is).
+         #983: the switch no longer moves anything in the row — Share beside Export is gone in every state — so on a PC this
+         re-hangs the pair off the cog where it already is. Kept as the guard for any setting that does move the row. */
       if (FM.settings && FM.settings.onChange) FM.settings.onChange(() => {
         if (cvDialog.classList.contains('hidden')) return;
         const onScreen = !!(cvSrc && cvSrc.isConnected && cvSrc.getBoundingClientRect().width > 0);

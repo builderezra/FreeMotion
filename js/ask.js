@@ -152,7 +152,11 @@ window.FM = window.FM || {};
        here would leave him tapping the field first, which the native prompt() never asked of him. The name
        is selected so typing replaces it, which is what prompt() did too. A confirm focuses its answer, so
        Enter is OK there as it was. */
-    if (withInput) { input.focus(); try { input.select(); } catch (e) {} }
+    /* queue 991 (Rename…, his "you have to delete the text saying project 1 before you start typing"): iOS Safari is known
+       to ignore select() on a text field (not measured here — no iPhone in this build), which would leave the caret at the
+       end so the name he types is added to the old one. It honours setSelectionRange, so the whole name is selected that
+       way as well; everywhere else the two select exactly the same thing. */
+    if (withInput) { input.focus(); try { input.select(); } catch (e) {} try { input.setSelectionRange(0, input.value.length); } catch (e) {} }
     else okBtn.focus();
     return new Promise(resolve => { pending = { resolve, withInput, cancelValue: opts.cancelValue === undefined ? null : opts.cancelValue }; });
   };

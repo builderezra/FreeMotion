@@ -422,9 +422,31 @@
     const e = R.main[i], n = R.main[i + 1]; let f = 0;
     if (e && ['blend', 'overlap'].includes(e.seam.kind) && i > 0) f = Math.max(f, 2 * e.seam.amt);
     if (n && ['blend', 'overlap'].includes(n.seam.kind)) f = Math.max(f, 2 * n.seam.amt);
-    return f;
+    // a hair over 2·amt: a trim that lands exactly on the floor can come back as a plain overlap by float noise alone
+    // (0.6000000000000005 against half of 1.1999999999999993), and the crossfade would turn into a red chip
+    return f ? f + 1e-12 : 0;
   }
   function blendOwner(R, a, b) { return R.z.get(a.id) < R.z.get(b.id) ? a : b; }   // the upper clip owns the fade
+  /* §3.6 trims on a blend seam: the owner's fade keys (its opacity keys inside the overlap, the same window the classifier
+     reads) are set apart and move by `d`; its other opacity keys go through the seam's map `m`, so the list stays sorted.
+     A cut drops keys strictly inside (a, b) and leaves riderKeys' clean-step pair at a; a key exactly on a stays (its value
+     is the value just before the cut). ownFirst: the fade keys sit before the others (a fade-in) or after them (a fade-out). */
+  function moveFade(x, isOwned, d, m, ownFirst) {
+    const ks = x.kf && x.kf.opacity; if (!ks || !ks.length) return;
+    const orig = ks.map(k => ({ t: k.t, v: k.v }));
+    const own = orig.filter(k => isOwned(k.t)).map(k => ({ t: k.t + d, v: k.v }));
+    let rest = orig.filter(k => !isOwned(k.t));
+    if (m.type === 'cut') {
+      const len = m.b - m.a, out = rest.filter(k => k.t <= m.a);
+      const cutAny = rest.some(k => k.t > m.a && k.t < m.b);
+      if (cutAny && orig.some(k => k.t <= m.a) && orig.some(k => k.t >= m.b)) out.push({ t: m.a, v: valueAt(orig, m.a) }, { t: m.a, v: valueAt(orig, m.b) });
+      rest.filter(k => k.t >= m.b).forEach(k => out.push({ t: k.t - len, v: k.v }));
+      rest = out;
+    } else rest = rest.map(k => ({ t: mapT(m, k.t, false), v: k.v }));
+    const all = ownFirst ? own.concat(rest) : rest.concat(own);
+    all.sort((p, q) => p.t - q.t);                       // stable: equal times keep the order above
+    ks.length = 0; all.forEach(k => ks.push(k));
+  }
 
   /* ---------------------------------- commands (§3.6) ---------------------------------- */
   const C = {};
@@ -500,12 +522,20 @@
     if (want < old && old < R.minLen - 1e-6) return refuse('This clip is already as short as it can go');
     want = Math.max(want, R.minLen);
     if (l.type === 'video' && l.srcDur != null) want = Math.min(want, (l.srcDur - (l.trimStart || 0)) / sp);
-    if (n && n.seam.kind === 'blend' && blendOwner(R, c, n) === c) return refuse('That clip fades into the next one');   // plain: the design moves its owned keys (§3.6)
+    // §3.6: on a blend seam c|n the trim stops at 2·amt (seamFloor). When c owns the fade (it fades out over n), its fade
+    // keys move with the cut by the landed dt, so the fade still ends at c's new end over the same amt (the seam's map:
+    // the Delete map over [n.start + dt, n.start) for dt < 0, the Insert map at n.start for dt > 0). When n owns it, the
+    // ripple carries n's keys.
+    const owns = !!(n && n.seam.kind === 'blend' && blendOwner(R, c, n) === c);
     want = Math.max(want, seamFloor(R, i));
     const dt = want - old;
     if (Math.abs(dt) < 1e-9) return refuse(dur > old ? 'Not enough footage' : 'Nothing more to trim');
     const P = newPlan('Trim ' + nameOf(l));
-    P.writes.push({ id, fn: x => { x.duration = want; } });
+    if (owns) {
+      const ns = n.start, lo = ns - R.eps, hi = c.end + R.eps;
+      const m = dt < 0 ? { type: 'cut', a: ns + dt, b: ns } : { type: 'insert', at: ns, d: dt };
+      P.writes.push({ id, fn: x => { x.duration = want; moveFade(x, t => t >= lo && t <= hi, dt, m, false); } });
+    } else P.writes.push({ id, fn: x => { x.duration = want; } });
     const newEnd = c.start + want;
     // D6 slide-back. Plain extension: the cut-off is the new end OR where the next clip now starts, whichever is
     // earlier, so a follower never ends up starting inside the next clip's overlap (it would re-home there).
@@ -537,11 +567,22 @@
     if (L > 0 && l.duration < R.minLen - 1e-6) return refuse('This clip is already as short as it can go');
     L = Math.min(L, l.duration - R.minLen);
     if (l.type === 'video' || l.audioOnly) L = Math.max(L, -(l.trimStart || 0) / sp);
-    if (c.seam.kind === 'blend' && p && blendOwner(R, p, c) === c) return refuse('That clip fades in from the one before');
+    // §3.6: on a blend seam p|c the trim stops at 2·amt (seamFloor). When c owns the fade (it fades in over p), its fade
+    // keys (t ≤ p.end + eps) are exempt from the −L, so the fade stays over the overlap; its other opacity keys go through
+    // the Delete map over [p.end, p.end + L) (L > 0) or the Insert map at p.end (L < 0). When p owns it, nothing moves at the seam.
+    const owns = !!(c.seam.kind === 'blend' && p && blendOwner(R, p, c) === c);
     L = Math.min(L, l.duration - seamFloor(R, i));
     if (Math.abs(L) < 1e-9) return refuse(by > 0 ? 'Nothing more to trim' : 'Not enough footage');
     const P = newPlan('Trim ' + nameOf(l));
-    P.writes.push({ id, fn: x => { x.duration -= L; if (x.type === 'video' || x.audioOnly) x.trimStart = (x.trimStart || 0) + L * sp; shiftKeys(x, -L); } });
+    const pe = owns ? p.end : 0, fadeKeys = t => t <= pe + R.eps;
+    const fm = L > 0 ? { type: 'cut', a: pe, b: pe + L } : { type: 'insert', at: pe, d: -L };
+    P.writes.push({ id, fn: x => {
+      x.duration -= L; if (x.type === 'video' || x.audioOnly) x.trimStart = (x.trimStart || 0) + L * sp;
+      if (!owns) { shiftKeys(x, -L); return; }
+      const op = x.kf && x.kf.opacity;                                   // the opacity list is mapped on its own
+      kfLists(x).forEach(a => { if (a !== op) a.forEach(k => { k.t -= L; }); });
+      moveFade(x, fadeKeys, 0, fm, true);
+    } });
     const newEnd = c.end - L;
     for (const f of R.followers[id]) {
       const u = R.units[f]; const s2 = Math.max(c.start, u.start - L); if (s2 !== u.start) addMove(P, f, s2 - u.start);
@@ -756,7 +797,17 @@
         if (q.e - q.s < E.MIN_CUE - 1e-9) { dropped++; return false; }
         return true;
       }
-      const s = mapT(m, q.s, false), e = mapT(m, q.e, true); q.s = s; q.e = e;
+      let s, e;
+      if (m.type === 'insert') {
+        // Insert / Append / Put in the clip row / a lengthening trim (§3.5, Q20): after splitAt(seam) a cue lies wholly
+        // before the seam or wholly after it. One that ends AT the seam stays before it: f(t) = t + D for t ≥ seam used to
+        // send its end past the new clip, so "So cold!" showed over Ice cream from 7.1 to 9.1 s (QA 29 Sep, V9).
+        // Within eps of the seam counts as on it, the same tolerance the split uses.
+        if (q.s >= m.at - R.eps) { s = q.s + m.d; e = q.e + m.d; }
+        else if (q.e <= m.at + R.eps) { s = q.s; e = Math.min(q.e, m.at); }
+        else { s = mapT(m, q.s, false); e = mapT(m, q.e, true); }
+      } else { s = mapT(m, q.s, false); e = mapT(m, q.e, true); }
+      q.s = s; q.e = e;
       if (e - s < E.MIN_CUE - 1e-9) { if (e - s > 1e-9) dropped++; return false; }   // collapsed to nothing: went with its clip
       return true;
     });
@@ -949,7 +1000,36 @@
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.8-2.4 2-2.4 3.7"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/>',
     notes: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
     personAdd: '<circle cx="9" cy="8" r="3.5"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><path d="M19 7.5v6M16 10.5h6"/>',
-    editor: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 10v10"/>',
+    /* The switch glyph (DESIGN §6.1; the final glyph is D16): it shows the editor you are IN. Quick = a row of clips,
+       Full = stacked bars, and the way back from Full = ‹ plus the row of clips. The same paths V1 draws; V12's shots match. */
+    quick: '<rect x="2" y="7.5" width="6" height="9" rx="1.6"/><rect x="9" y="7.5" width="6" height="9" rx="1.6"/><rect x="16" y="7.5" width="6" height="9" rx="1.6"/>',
+    full: '<rect x="3" y="4" width="10" height="4" rx="1.3"/><rect x="8" y="10" width="13" height="4" rx="1.3"/><rect x="5" y="16" width="9" height="4" rx="1.3"/>',
+    backQuick: '<path d="M5.6 8.3L2.6 12l3 3.7"/><rect x="8" y="8.5" width="4" height="7" rx="1.1"/><rect x="13" y="8.5" width="4" height="7" rx="1.1"/><rect x="18" y="8.5" width="4" height="7" rx="1.1"/>',
+    /* "editor" is Full's mark wherever a page means Full (Open in Full, the Full card on New project). It used to be a
+       window with panes, a third symbol for the same idea (QA 29 Sep). */
+    editor: '<rect x="3" y="4" width="10" height="4" rx="1.3"/><rect x="8" y="10" width="13" height="4" rx="1.3"/><rect x="5" y="16" width="9" height="4" rx="1.3"/>',
+    /* the rest of the main-clip tray (§8.5), the same drawings V2 uses */
+    length: '<path d="M3.5 5v14M20.5 5v14M7 12h10M10 9l-3 3 3 3M14 9l3 3-3 3"/>',
+    earlier: '<rect x="12" y="6" width="8.5" height="12" rx="2"/><path d="M8.5 9l-3.5 3 3.5 3M5 12h5"/>',
+    later: '<rect x="3.5" y="6" width="8.5" height="12" rx="2"/><path d="M15.5 9l3.5 3-3.5 3M19 12h-5"/>',
+    replace: '<path d="M4.5 10a7.5 7.5 0 0 1 13-3.5L19 8M19.5 14a7.5 7.5 0 0 1-13 3.5L5 16"/><path d="M19 3.8V8h-4.2M5 20.2V16h4.2"/>',
+    reverse: '<path d="M19.5 8H6M9 5L6 8l3 3M4.5 16H18M15 13l3 3-3 3"/>',
+    soundout: '<path d="M3 12h1.5M6.5 8.5v7M10 5.5v13M13.5 9v6"/><path d="M16.5 12h5M19 9.5l2.5 2.5-2.5 2.5"/>',
+    /* the item trays (§8.5, VIS.ITEM_TRAYS): the drawings V3 made for them */
+    editwords: '<path d="M4 6h11M9.5 6v12M18 7v11M16 7h4M16 18h4"/>',
+    style: '<path d="M3.5 18l4.5-12 4.5 12M5.2 13.5h5.6"/><circle cx="17.5" cy="15" r="3"/><path d="M20.5 11.5V18"/>',
+    animate: '<path d="M10 7l8 5-8 5z"/><path d="M3 9h3.5M2.5 12h4M3 15h3.5"/>',
+    blend: '<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>',
+    removecolour: '<path d="M12.5 8.5l3 3-7.5 7.5H5v-3z"/><path d="M15.5 4.5a2.1 2.1 0 0 1 3 3l-2.5 2.5-3-3z"/>',
+    forward: '<rect x="3.5" y="10" width="10" height="10" rx="2"/><rect x="10.5" y="4" width="10" height="10" rx="2" fill="currentColor" fill-opacity=".28"/>',
+    backward: '<rect x="10.5" y="4" width="10" height="10" rx="2"/><rect x="3.5" y="10" width="10" height="10" rx="2" fill="currentColor" fill-opacity=".28"/>',
+    fade: '<path d="M3 18h4L17 6h4"/><path d="M3 21h18" opacity=".45"/>',
+    voice: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+    endswith: '<path d="M3 12h12.5M11.5 8l4 4-4 4"/><path d="M20 5v14"/>',
+    findspeech: '<path d="M3 12h1.5M6 9v6M9 6.5v11M12 9.5v5"/><circle cx="17" cy="12.5" r="3.5"/><path d="M19.6 15.1L22 17.5"/>',
+    editlines: '<path d="M4 7h11M4 12h8M4 17h5"/><path d="M13 19.5l.8-3.3 5.7-5.7 2.5 2.5-5.7 5.7z"/>',
+    strength: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+    change: '<path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5"/>',
     link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -968,19 +1048,84 @@
   VIS.QUICK_TOOLS = [
     { id: 'clips', label: 'Clips', icon: 'clips' }, { id: 'text', label: 'Text', icon: 'text' },
     { id: 'captions', label: 'Captions', icon: 'captions' }, { id: 'sound', label: 'Sound', icon: 'music' },
-    { id: 'overlay', label: 'Overlay', icon: 'overlay' }, { id: 'look', label: 'Look', icon: 'look' },
+    // "Look for all", not "Look": it always acts on every clip, and the trays' Look acts on the pick (§8.5, §8.9, T20)
+    { id: 'overlay', label: 'Overlay', icon: 'overlay' }, { id: 'look', label: 'Look for all', icon: 'look' },
     { id: 'effects', label: 'Effects', icon: 'effects' }, { id: 'ask', label: 'Ask', icon: 'ask' }
   ];
+  /* The main-clip tray, the whole §8.5 row, left to right, with 🗑 pinned at the right end (the row scrolls under it).
+     The clip's copy is 'duplicateClip', not 'duplicate': that id is the item tray's plain copy, and a page that handles
+     'duplicate' as an item copy must not turn a clip into an overlay. */
   VIS.CLIP_TRAY = [
     { id: 'speed', label: 'Speed', icon: 'speed' }, { id: 'volume', label: 'Volume', icon: 'sound' },
     { id: 'lift', label: 'Lift off', icon: 'lift' }, { id: 'look', label: 'Look', icon: 'look' },
-    { id: 'crop', label: 'Crop', icon: 'crop' }, { id: 'delete', label: 'Delete', icon: 'delete' }
+    { id: 'crop', label: 'Crop', icon: 'crop' }, { id: 'length', label: 'Length', icon: 'length' },
+    { id: 'earlier', label: 'Move earlier', icon: 'earlier' }, { id: 'later', label: 'Move later', icon: 'later' },
+    { id: 'effects', label: 'Effects', icon: 'effects' }, { id: 'replace', label: 'Replace', icon: 'replace' },
+    { id: 'duplicateClip', label: 'Duplicate', icon: 'duplicate' }, { id: 'reverse', label: 'Reverse', icon: 'reverse' },
+    { id: 'soundout', label: 'Take sound out', icon: 'soundout' }, { id: 'delete', label: 'Delete', icon: 'delete' }
   ];
+  /* The old one-size item tray. Kept only because pages still read it (V1, V4, V6, V11); it is NOT the design. A picked
+     item shows its own kind's row: use VIS.itemTray(R, id), or VIS.ITEM_TRAYS below. */
   VIS.ITEM_TRAY = [
     { id: 'edit', label: 'Edit', icon: 'text' }, { id: 'stay', label: 'Stay put', icon: 'pin' },
     { id: 'look', label: 'Look', icon: 'look' }, { id: 'duplicate', label: 'Copy', icon: 'duplicate' },
     { id: 'delete', label: 'Delete', icon: 'delete' }
   ];
+  /* The item trays, one per kind (DESIGN §8.5, left to right, 🗑 pinned at the right end), exactly V3's lists, so a tapped
+     title shows the same row on every page (QA 29 Sep: V1 and V4 showed Edit · Stay put · Look · Copy · Delete for all).
+     `video: true` tools show only on a video overlay. Captions' last two are one two-way choice (a pressed pair). */
+  VIS.ITEM_TRAYS = {
+    text: [
+      { id: 'editwords', label: 'Edit words', icon: 'editwords' }, { id: 'style', label: 'Style', icon: 'style' },
+      { id: 'animate', label: 'Animate', icon: 'animate' }, { id: 'effects', label: 'Effects', icon: 'effects' },
+      { id: 'copy', label: 'Duplicate', icon: 'duplicate' }, { id: 'stay', label: 'Stay put', icon: 'pin' },
+      { id: 'delete', label: 'Delete', icon: 'delete' }
+    ],
+    overlay: [
+      { id: 'into', label: 'Into row', icon: 'drop', title: 'Put in the clip row' }, { id: 'blend', label: 'Blend', icon: 'blend' },
+      { id: 'volume', label: 'Volume', icon: 'sound', video: true }, { id: 'look', label: 'Look', icon: 'look' },
+      { id: 'ovspeed', label: 'Speed', icon: 'speed', video: true }, { id: 'effects', label: 'Effects', icon: 'effects' },
+      { id: 'removecolour', label: 'Remove a colour', icon: 'removecolour' }, { id: 'crop', label: 'Crop', icon: 'crop' },
+      { id: 'forward', label: 'Forward', icon: 'forward' }, { id: 'backward', label: 'Back', icon: 'backward' },
+      { id: 'stay', label: 'Stay put', icon: 'pin' }, { id: 'delete', label: 'Delete', icon: 'delete' }
+    ],
+    captions: [
+      { id: 'editlines', label: 'Edit lines', icon: 'editlines' }, { id: 'capstyle', label: 'Style', icon: 'style' },
+      { id: 'findspeech', label: 'Find speech', icon: 'findspeech' },
+      { id: 'capfollow', label: 'Follows the clips', icon: 'link', pair: 'capmode' },
+      { id: 'capstay', label: 'Stays with the sound', icon: 'pin', pair: 'capmode' },
+      { id: 'delete', label: 'Delete', icon: 'delete' }
+    ],
+    sound: [
+      { id: 'volume', label: 'Volume', icon: 'sound' }, { id: 'fade', label: 'Fade', icon: 'fade' },
+      { id: 'endswith', label: 'Ends with the video', icon: 'endswith' }, { id: 'sndspeed', label: 'Speed', icon: 'speed' },
+      { id: 'voice', label: 'Voice', icon: 'voice' }, { id: 'stay', label: 'Stay put', icon: 'pin' },
+      { id: 'delete', label: 'Delete', icon: 'delete' }
+    ],
+    effect: [
+      { id: 'change', label: 'Change effect', icon: 'change' }, { id: 'strength', label: 'Strength', icon: 'strength' },
+      { id: 'stay', label: 'Stay put', icon: 'pin' }, { id: 'delete', label: 'Delete', icon: 'delete' }
+    ]
+  };
+  /* Which item tray a unit gets, the way V3 picks it: captions by kind, anything in the sound row as sound, an effect
+     segment as effect, text as text, everything else (stickers, pictures, shapes, blocks) as an overlay. */
+  VIS.itemTrayKind = u => !u ? null : u.kind === 'captions' ? 'captions' : u.section === 'audio' ? 'sound'
+    : u.kind === 'effect' ? 'effect' : u.kind === 'text' ? 'text' : 'overlay';
+  /* The picked item's row, with its states: Stay put / Stays with the sound / Ends with the video pressed when on, and a
+     video-only tool left out on anything that is not a video. The main clip's row is VIS.CLIP_TRAY. */
+  VIS.itemTray = function (R, id) {
+    const u = R && R.units && R.units[id]; const k = VIS.itemTrayKind(u); if (!k) return [];
+    const l = u.lead, stay = E.hasFlag(l, 'stay');
+    return VIS.ITEM_TRAYS[k].filter(t => !t.video || l.type === 'video').map(t => {
+      const c = Object.assign({}, t);
+      if (t.id === 'stay') c.pressed = stay;
+      else if (t.id === 'capfollow') c.pressed = !stay;
+      else if (t.id === 'capstay') c.pressed = stay;
+      else if (t.id === 'endswith') c.pressed = E.hasFlag(l, 'tail');
+      else if (t.id === 'effects') c.on = (l.fx || []).length > 0;
+      return c;
+    });
+  };
   VIS.SECTION_COLOR = { captions: '#f2c14e', text: '#b18cff', overlay: '#4fb3ff', effect: '#ff7aa2', audio: '#3fd6a4', behind: '#8195a0' };
   VIS.SECTION_NAME = { captions: 'Captions', text: 'Text', overlay: 'Overlays', effect: 'Effects', behind: 'Behind', audio: 'Sound' };
 
@@ -1001,10 +1146,12 @@
   VIS.toolbar = function (host, tools, opts) {
     opts = opts || {};
     host.innerHTML = '';
+    if (host.classList && host.classList.contains('fm-tray')) trayWheel(host);
     const buttons = {};
     tools.forEach(t => {
       const b = el('button', 'fm-tool' + (t.on ? ' on' : ''), VIS.icon(t.icon) + (opts.iconsOnly ? '' : '<span class="tl">' + esc(t.label) + '</span>'));
-      b.type = 'button'; b.dataset.tool = t.id; b.title = t.label; b.setAttribute('aria-label', t.label);
+      b.type = 'button'; b.dataset.tool = t.id; b.title = t.title || t.label; b.setAttribute('aria-label', t.title || t.label);
+      if (t.pressed != null) b.setAttribute('aria-pressed', String(!!t.pressed));
       if (t.disabled) b.disabled = true;
       b.addEventListener('click', () => { if (t.onClick) t.onClick(t, b); if (opts.onClick) opts.onClick(t.id, b); });
       host.appendChild(b); buttons[t.id] = b;
@@ -1017,13 +1164,22 @@
   VIS.chip = function (text, kind, icon) { const c = el('span', 'fm-chip' + (kind ? ' ' + kind : ''), (icon ? VIS.icon(icon) : '') + '<span>' + esc(text) + '</span>'); return c; };
   VIS.lockBadge = function () { return el('span', 'fm-lock', VIS.icon('lock')); };
   VIS.fullBadge = function () { return el('span', 'fm-badge-full', '✦'); };
+  /* The toast's default place: over the bottom of the picture, never over the timeline. At the old fixed 118 px it sat over
+     the clip row on a phone, and a toast with a button caught taps meant for a clip for up to 4 s (QA V3 29 Sep). Worked out
+     in the frame's own (unscaled) pixels; a root with no picture keeps kit.css's 118 px. */
+  function overPicture(root) {
+    const st = root.querySelector('.fm-stagewrap'); if (!st || !root.offsetHeight) return 118;
+    const rr = root.getBoundingClientRect(), sr = st.getBoundingClientRect(), s = rr.height / root.offsetHeight || 1;
+    if (!sr.height) return 118;
+    return Math.max(8, Math.round((rr.bottom - sr.bottom) / s + 10));
+  }
   VIS.toast = function (root, text, action, opts) {
     opts = opts || {};
     let t = root.querySelector(':scope > .fm-toast');
     if (!t) { t = el('div', 'fm-toast'); t.setAttribute('role', 'status'); root.appendChild(t); }
     t.innerHTML = '<span>' + esc(text) + '</span>';
     if (action) { const b = el('button', '', esc(action.label)); b.type = 'button'; b.addEventListener('click', () => { hide(); action.run && action.run(); }); t.appendChild(b); }
-    if (opts.bottom != null) t.style.bottom = opts.bottom + 'px';
+    t.style.bottom = (opts.bottom != null ? opts.bottom : overPicture(root)) + 'px';
     clearTimeout(t._tm);
     requestAnimationFrame(() => t.classList.add('show'));
     function hide() { t.classList.remove('show'); }
@@ -1036,14 +1192,21 @@
   /* ---------------------------------- frames ---------------------------------- */
   function playbarHTML(editor) {
     const ib = (ic, label, extra) => '<button type="button" class="fm-ibtn' + (extra || '') + '" data-act="' + ic + '" aria-label="' + label + '" title="' + label + '">' + VIS.icon(ic) + '</button>';
-    const sw = '<button type="button" class="fm-switch" data-act="switch" aria-label="Switch editor">' + VIS.icon('editor') + '<span>' + (editor === 'full' ? 'Quick' : 'Full') + '</span></button>';
+    // §6.1: the icon shows the editor you are IN (a row of clips in Quick, stacked bars in Full); the words name the action
+    const to = editor === 'full' ? 'Quick' : 'Full';
+    const sw = '<button type="button" class="fm-ibtn fm-swslot" data-act="switch" aria-label="Switch to ' + to + ' editor" title="Switch to ' + to + ' editor">' + VIS.icon(editor === 'full' ? 'full' : 'quick') + '</button>';
     return '<div class="fm-side">' + ib('more', 'More') + ib('split', 'Split') + sw + ib('toStart', 'To start') + '</div>' +
       '<button type="button" class="fm-time" data-act="play" aria-label="Play">00:00:00</button>' +
       '<div class="fm-side">' + ib('toEnd', 'To end') + ib('undo', 'Undo') + ib('redo', 'Redo') + ib('fit', 'Full screen') + '</div>';
   }
   VIS.phoneFrame = function (host, opts) {
     opts = opts || {};
-    const root = el('div', 'fm fm-phone');
+    const PW = opts.width || 380;                              // drawn at a real phone width…
+    // …or, where the page is narrower (a 380 px screen leaves ~340 px), drawn as that narrower phone at full size rather
+    // than a 380 one shrunk to 0.85, which made the tool names 8.4 px (QA 29 Sep). Below MINW it scales, as before.
+    const MINW = Math.min(PW, opts.minWidth || 326);
+    const outer = el('div', 'fm-fit-outer'), box = el('div', 'fm-fit-box'), root = el('div', 'fm fm-phone');
+    root.style.width = (PW + 14) + 'px';
     root.innerHTML =
       '<div class="fm-topbar">' +
         '<button type="button" class="fm-ibtn" data-act="back" aria-label="Projects">' + VIS.icon('back') + '</button>' +
@@ -1058,10 +1221,10 @@
       '<div class="fm-tlwrap"></div>' +
       '<div class="fm-tray"><div class="fm-say"></div></div>' +
       '<div class="fm-tools"></div>';
-    host.appendChild(root);
+    box.appendChild(root); outer.appendChild(box); host.appendChild(outer);
     const q = s => root.querySelector(s);
-    const f = { root, topbar: q('.fm-topbar'), stage: q('.fm-stagewrap'), playbar: q('.fm-playbar'), time: q('.fm-time'),
-                timeline: q('.fm-tlwrap'), tray: q('.fm-tray'), say: q('.fm-say'), tools: q('.fm-tools'), switchBtn: q('.fm-switch') };
+    const f = { root, outer, scale: 1, topbar: q('.fm-topbar'), stage: q('.fm-stagewrap'), playbar: q('.fm-playbar'), time: q('.fm-time'),
+                timeline: q('.fm-tlwrap'), tray: q('.fm-tray'), say: q('.fm-say'), tools: q('.fm-tools'), switchBtn: q('.fm-swslot') };
     f.stage.style.height = (opts.stageH || 210) + 'px';
     f.timeline.style.height = (opts.tlH || 210) + 'px';
     if (opts.editor !== 'full' && opts.tools !== false) f.toolbar = VIS.toolbar(f.tools, opts.tools || VIS.QUICK_TOOLS, { onClick: opts.onTool });
@@ -1070,8 +1233,52 @@
     f.setTime(0);
     f.setSay = html => { f.say.innerHTML = html; };
     f.on = (act, fn) => root.addEventListener('click', e => { const b = e.target.closest('[data-act="' + act + '"]'); if (b && root.contains(b)) fn(e, b); });
+    f.fit = () => {
+      // Hidden (another page is open, a folded card): measure nothing and keep the last size. Reading 0 here used to
+      // fall back to full size and pin the box at 394 px, which then held a narrow grid cell open for good (QA, V1).
+      if (!outer.isConnected || !outer.getClientRects().length) return;
+      const full = PW + 14, floor = MINW + 14;
+      // measure the room with the box out of the way, so an old size can never hold the container open
+      const keep = box.style.width; box.style.width = '0px';
+      let w = outer.clientWidth; box.style.width = keep;
+      if (!w) w = full;                                        // a shrink-to-fit parent: draw the full phone
+      // An outer whose own CSS fixes its height (contain: size with an aspect ratio, V11) keeps the full phone, scaled:
+      // a narrower phone is taller for its width and would be cut off at the bottom.
+      const fixed = /size|strict/.test(getComputedStyle(outer).contain || '');
+      const dw = fixed ? full : Math.round(Math.max(floor, Math.min(full, w)));
+      if (root.style.width !== dw + 'px') root.style.width = dw + 'px';
+      const inner = dw - 14;
+      root.classList.toggle('fm-w31', inner < 372 && inner >= 346);   // the app's smaller play-bar tiers (styles.css:2590-2603)
+      root.classList.toggle('fm-w28', inner < 346);
+      let s = Math.min(1, w / dw);
+      if (fixed && outer.clientHeight && root.offsetHeight) s = Math.min(s, outer.clientHeight / root.offsetHeight);
+      root.style.transform = s < 1 ? 'scale(' + s + ')' : '';
+      box.style.width = (dw * s) + 'px'; box.style.height = (root.offsetHeight * s) + 'px';
+      f.scale = s;
+    };
+    f.fit();
+    // fitted on the next frame, not inside the observer: resizing the box from within it set off "ResizeObserver loop
+    // completed with undelivered notifications" on the console
+    let fitQueued = false;
+    const fitSoon = () => { if (fitQueued) return; fitQueued = true; requestAnimationFrame(() => { fitQueued = false; f.fit(); }); };
+    if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(fitSoon); ro.observe(outer); ro.observe(root); }
+    else window.addEventListener('resize', fitSoon);
+    // §8.8 (his #171): in Quick, Notes hides while a clip or an item is picked. visibility, not display, so ? never slides.
+    // Read from the drawing itself (a picked tile, item or bar in Quick's timeline), so every page gets it without a call.
+    const syncPick = () => { const on = !!f.timeline.querySelector('.fm-quick .sel'); if (root.classList.contains('fm-picked') !== on) root.classList.toggle('fm-picked', on); };
+    if (typeof MutationObserver !== 'undefined') new MutationObserver(syncPick).observe(f.timeline, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+    trayWheel(f.tray);
     return f;
   };
+  /* A tray that is wider than its row scrolls sideways by touch; with a mouse the wheel scrolls it too. */
+  function trayWheel(tray) {
+    if (!tray || tray._wheel) return; tray._wheel = true;
+    tray.addEventListener('wheel', e => {
+      if (tray.scrollWidth <= tray.clientWidth + 1 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      const before = tray.scrollLeft; tray.scrollLeft += e.deltaY;
+      if (tray.scrollLeft !== before) e.preventDefault();
+    }, { passive: false });
+  }
   VIS.pcFrame = function (host, opts) {
     opts = opts || {};
     const W = opts.width || 1100, H = opts.height || 680;
@@ -1087,7 +1294,7 @@
         '<div class="fm-band"><div class="fm-panel"></div><div class="fm-tray"><div class="fm-say"></div></div><div class="fm-tools"></div></div>' +
         '<div class="fm-tlpanel"><div class="fm-transport">' +
           ib('back', 'Projects') + ib('split', 'Split') +
-          '<button type="button" class="fm-switch" data-act="switch" aria-label="Switch editor">' + VIS.icon('editor') + '<span>' + (opts.editor === 'full' ? 'Quick' : 'Full') + '</span></button>' +
+          '<button type="button" class="fm-switch" data-act="switch" aria-label="Switch to ' + (opts.editor === 'full' ? 'Quick' : 'Full') + ' editor" title="Switch to ' + (opts.editor === 'full' ? 'Quick' : 'Full') + ' editor">' + VIS.icon(opts.editor === 'full' ? 'full' : 'quick') + '<span>' + (opts.editor === 'full' ? 'Quick' : 'Full') + '</span></button>' +
           ib('toStart', 'To start') + '<button type="button" class="fm-time" data-act="play" aria-label="Play">00:00:00</button>' + ib('toEnd', 'To end') +
           ib('undo', 'Undo') + ib('redo', 'Redo') + ib('help', 'Help') + ib('notes', 'Notes') + ib('gear', 'Settings') +
           '<button type="button" class="fm-export" data-act="export">' + VIS.icon('export') + 'Export</button>' + ib('more', 'More') + ib('fit', 'Full screen') +
@@ -1103,6 +1310,7 @@
     f.on = (act, fn) => root.addEventListener('click', e => { const b = e.target.closest('[data-act="' + act + '"]'); if (b && root.contains(b)) fn(e, b); });
     const minScale = opts.minScale == null ? 0.5 : opts.minScale;
     f.fit = () => {
+      if (!outer.isConnected || !outer.getClientRects().length) return;   // hidden: keep the last size (see phoneFrame)
       const w = outer.clientWidth || W; let s = Math.min(1, w / W);
       const fits = s >= minScale; if (!fits) s = minScale;
       outer.classList.toggle('fits', fits);
@@ -1113,6 +1321,7 @@
     f.fit();
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => f.fit()).observe(outer);
     else window.addEventListener('resize', f.fit);
+    trayWheel(f.tray);
     return f;
   };
 
@@ -1128,6 +1337,13 @@
     const ops = l => { const a = l.kf && l.kf.opacity; const v = a && a.length ? valueAt(a, t) : (l.opacity == null ? 1 : l.opacity); return Math.max(0, Math.min(1, v)); };
     const layers = doc.layers.slice().reverse();                         // bottom first
     let drew = false;
+    // A shape is drawn as a bar low on the picture (a lower third). A text in the same group as a bar sits ON the bar:
+    // "Chef Mia" used to float at the text default, above the bar or over its end (QA 29 Sep, V5 and V11).
+    const BAR = { x: 0.06, y: 0.72, w: 0.46, h: 0.11 };
+    const barMate = l => {
+      if (!l.parent) return null;
+      return doc.layers.find(x => x !== l && x.parent === l.parent && x.type === 'shape' && !/^mask-/.test(x.blendMode || '')) || null;
+    };
     layers.forEach(l => {
       if (l.visible === false || l.audioOnly || l.type === 'camera' || l.type === 'group' || l.type === 'null') return;
       if (!(t >= l.start && t < l.start + l.duration)) return;
@@ -1138,11 +1354,17 @@
         const q = l.captions.find(c => t - l.start >= c.start && t - l.start < c.end);
         if (!q) return;
         d = el('div', 'cv-cap', '<span>' + esc(q.text) + '</span>'); d.style.fontSize = Math.max(8, H * 0.034) + 'px';
+      } else if (l.type === 'text' && barMate(l)) {
+        d = el('div', 'cv-text cv-onbar', '<span>' + esc(l.text || l.name) + '</span>');
+        d.style.left = (BAR.x * 100) + '%'; d.style.width = (BAR.w * 100) + '%'; d.style.right = 'auto';
+        d.style.top = (BAR.y * 100) + '%'; d.style.height = (BAR.h * 100) + '%';
+        d.style.fontSize = Math.max(8, Math.min(H * 0.07, H * BAR.h * 0.62)) + 'px';
       } else if (l.type === 'text') {
         d = el('div', 'cv-text', esc(l.text || l.name)); d.style.fontSize = Math.max(9, H * 0.07) + 'px';
         d.style.top = ((tr.y != null ? tr.y : 0.42) * 100) + '%';
       } else if (l.type === 'shape') {
-        d = el('div', 'cv-pip'); d.style.background = VIS.thumb(l); d.style.left = '8%'; d.style.width = '42%'; d.style.top = '76%'; d.style.height = '5%'; d.style.outline = 'none';
+        d = el('div', 'cv-pip'); d.style.background = VIS.thumb(l); d.style.outline = 'none';
+        d.style.left = (BAR.x * 100) + '%'; d.style.width = (BAR.w * 100) + '%'; d.style.top = (BAR.y * 100) + '%'; d.style.height = (BAR.h * 100) + '%';
       } else if (tr.scale != null && tr.scale < 0.95) {
         d = el('div', 'cv-pip'); d.style.background = VIS.thumb(l);
         const s = tr.scale, cx = tr.x != null ? tr.x : 0.5, cy = tr.y != null ? tr.y : 0.5;
@@ -1236,12 +1458,31 @@
     let open = opts.open;
     if (open == null) open = (selUnit && ORDER.includes(selUnit.section)) ? selUnit.section : (present[0] || null);
     const allOpen = open === 'all';
+    /* A short chip's name may run on past the chip's end, over the empty lane, up to the next thing in that lane, so
+       "Here we go" reads "Here we go" or "Here we…" rather than "H…" (QA 29 Sep). The chip itself still shows the length. */
+    const spill = (node, label, left, width, nextX, pad) => {
+      const room = Math.floor(nextX - left - pad - 3);
+      if (room <= width - 2 * pad) return width - 2 * pad - 2;
+      node.classList.add('spill'); label.style.maxWidth = room + 'px';
+      return room;
+    };
+    // A caption line with room for fewer than three letters shows no words at all rather than "H…" (its words are in the
+    // chip's title, and on the picture when the playhead is on it)
+    let measureCtx = null;
+    const textW = (s, px, wt) => {
+      if (!measureCtx) { try { measureCtx = document.createElement('canvas').getContext('2d'); } catch (e) { return s.length * px * 0.58; } }
+      if (!measureCtx) return s.length * px * 0.58;
+      measureCtx.font = (wt || 600) + ' ' + px + 'px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, sans-serif';
+      return measureCtx.measureText(s).width;
+    };
     const laneRow = (sec, ids, secEl, i) => {
       const row = el('div', 'fm-row');
       const head = el('div', 'fm-head', i === 0 ? GLYPH[sec] : '');
       head.title = VIS.SECTION_NAME[sec];
       row.appendChild(head);
       const lane = el('div', 'fm-lane'); lane.style.width = W + 'px';
+      const starts = ids.map(id => R.units[id].start).sort((a, b) => a - b);
+      const nextAfter = t => { const n = starts.find(s => s > t + 1e-6); return n == null ? W / api.pps : n; };
       ids.forEach(id => {
         const u = R.units[id], l = u.lead;
         if (sec === 'captions') {
@@ -1249,13 +1490,23 @@
           box.style.left = (u.start * api.pps) + 'px'; box.style.width = Math.max(6, u.duration * api.pps) + 'px';
           box.style.background = 'transparent'; box.style.border = '1px dashed rgba(242,193,78,.35)';
           lane.appendChild(box);
-          (l.captions || []).forEach(q => { if (q.end <= 0 || q.start >= l.duration) return; const c = el('div', 'fm-cue', esc(q.text)); c.style.left = ((l.start + q.start) * api.pps) + 'px'; c.style.width = Math.max(4, (q.end - q.start) * api.pps - 1) + 'px'; lane.appendChild(c); });
+          const cues = (l.captions || []).filter(q => !(q.end <= 0 || q.start >= l.duration)).slice().sort((a, b) => a.start - b.start);
+          cues.forEach((q, k) => {
+            const c = el('div', 'fm-cue', '<span>' + esc(q.text) + '</span>'); c.title = q.text;
+            const x = (l.start + q.start) * api.pps, w = Math.max(4, (q.end - q.start) * api.pps - 1);
+            c.style.left = x + 'px'; c.style.width = w + 'px'; lane.appendChild(c);
+            const nx = k + 1 < cues.length ? (l.start + cues[k + 1].start) * api.pps : Math.min(W, nextAfter(u.start) * api.pps);
+            const room = spill(c, c.firstChild, x, w, nx, 4);
+            if (textW(q.text, 9.5) > room && textW(q.text.slice(0, 3) + '…', 9.5) > room) c.firstChild.textContent = '';
+          });
           api.items.set(id, box); tap(box, id, { kind: 'captions', unit: u }, opts);
           return;
         }
         const it = el('div', 'fm-item s-' + sec + (u.kind === 'block' ? ' block' : '') + (opts.selected === id ? ' sel' : '') + (E.hasFlag(l, 'stay') ? ' stay' : ''),
           (u.kind === 'block' ? '✦ ' : '') + '<span>' + esc(l.name || l.text || id) + '</span>');
+        it.title = l.name || l.text || id;
         it.style.left = (u.start * api.pps) + 'px'; it.style.width = Math.max(8, u.duration * api.pps) + 'px';
+        spill(it, it.querySelector('span'), u.start * api.pps, Math.max(8, u.duration * api.pps), nextAfter(u.start) * api.pps, 7);
         if (l.visible === false) it.style.opacity = '.45';
         if (l.locked) it.appendChild(VIS.lockBadge());
         lane.appendChild(it); api.items.set(id, it);
@@ -1300,6 +1551,19 @@
     const clipRow = el('div', 'fm-row fm-cliprow');
     clipRow.appendChild(el('div', 'fm-head', VIS.icon(doc.project.sm && doc.project.sm.muteClips ? 'mute' : 'sound')));
     const lane = el('div', 'fm-lane'); lane.style.width = W + 'px';
+    /* A clip too narrow for its name lets it run on over the empty space after it: a gap up to the next clip, or the end of
+       the row up to the + (under the gap's chip, which sits above the names). At a page's 'fit' zoom a 3-second cutaway is
+       ~22 px on a phone and read "C…" (QA V5 29 Sep). With room for fewer than three letters the name shows none, the same
+       rule as the captions; it is in the tile's tooltip, and in the tray's words when tapped. */
+    const addX = opts.addButton !== false ? R.trackEnd * api.pps + 8 : W;
+    const spillName = (tile, e, i, x, w) => {
+      const lbl = tile.querySelector('.lbl'); if (!lbl) return;
+      const name = lbl.textContent; tile.title = name;
+      const next = R.main[i + 1], room = (next ? next.start * api.pps : addX) - (x + w);
+      let avail = w - 12;
+      if (room > 10) { avail = w - 6 + room - 8; tile.classList.add('spill'); lbl.style.maxWidth = Math.floor(avail) + 'px'; }
+      if (name.length > 2 && textW(name.slice(0, 3) + '…', 10.5, 700) > avail && textW(name, 10.5, 700) > avail) lbl.style.visibility = 'hidden';
+    };
     R.main.forEach((e, i) => {
       const x = e.start * api.pps, w = Math.max(6, (e.end - e.start) * api.pps);
       if (e.seam.kind === 'gap') {
@@ -1318,12 +1582,17 @@
         if ((l.speed || 1) !== 1) tile.querySelector('.len').textContent += ' · ' + (l.speed) + '×';
       }
       tile.style.left = x + 'px'; tile.style.width = w + 'px';
+      if (!e.slot) spillName(tile, e, i, x, w);
       lane.appendChild(tile); api.items.set(e.id, tile);
       tap(tile, e.id, { kind: e.slot ? 'slot' : 'main', entry: e }, opts);
       if (e.seam.kind === 'gap' || e.seam.kind === 'overlap') {
-        const chip = el('button', 'fm-seam ' + e.seam.kind, (e.seam.kind === 'gap' ? '' : '−') + VIS.fmt(e.seam.amt));
+        const txt = (e.seam.kind === 'gap' ? '' : '−') + VIS.fmt(e.seam.amt);
+        const chip = el('button', 'fm-seam ' + e.seam.kind, txt);
         chip.type = 'button'; chip.title = e.seam.kind === 'gap' ? 'Close gap' : 'Fix overlap'; chip.setAttribute('aria-label', chip.title);
-        chip.style.left = (e.start * api.pps) + 'px';
+        // centred on the gap block (a gap) or on the stretch both clips share (an overlap), in the band between the tiles'
+        // lengths and names (kit.css): it used to sit on the next clip's corner, over "3.8s" and Street's length (QA, V5)
+        const prevEnd = i ? R.main[i - 1].end : 0, cx = (prevEnd + e.start) / 2 * api.pps, cw = Math.max(32, Math.round(12 + 6.3 * txt.length));
+        chip.style.left = cx + 'px'; chip.style.width = cw + 'px';
         chip.addEventListener('click', ev => { ev.stopPropagation(); if (opts.onSeam) opts.onSeam(e.id, e.seam.kind, e); });
         lane.appendChild(chip);
       }
@@ -1361,14 +1630,14 @@
   };
 
   /* ---------------------------------- the hub ---------------------------------- */
+  /* In number order, so the list and Previous / Next read V1, V2, V3 … V12 (QA 29 Sep: they ran V2, V3, V1 … V11, V10).
+     No group is named after its only page ("Roadmap › The roadmap"): the last three share one group. */
   const GROUPS = [
-    { name: 'Try it', ids: ['v2', 'v3', 'v1', 'v4'] },
+    { name: 'Try it', ids: ['v1', 'v2', 'v3', 'v4'] },
     { name: 'Old projects', ids: ['v5'] },
     { name: 'Working together', ids: ['v6'] },
     { name: "How it's built", ids: ['v7', 'v8', 'v9'] },
-    { name: 'Roadmap', ids: ['v11'] },
-    { name: 'Your decisions', ids: ['v10'] },
-    { name: 'Chrome check', ids: ['v12'] }
+    { name: 'Next steps', ids: ['v10', 'v11', 'v12'] }
   ];
   const PLAN = {
     v1: { title: 'The switch', blurb: 'One button flips between Quick and Full. Every clip keeps its place, and the playhead and what you picked stay put.' },
@@ -1381,8 +1650,9 @@
     v8: { title: 'The data', blurb: 'The only new things saved in a project, and everything that is worked out instead of saved.' },
     v9: { title: 'The ripple maths', blurb: 'Before and after, for every kind of edit, down to the keyframes and the caption timings.' },
     v10: { title: 'Your decisions', blurb: 'Every choice that is yours to make, each with a picture and a recommended pick. One button sends your answers.' },
-    v11: { title: 'The roadmap', blurb: 'What you can hold after each step, drawn as the screen you would see. Step 1 first.' },
-    v12: { title: 'Chrome check', blurb: 'The buttons that sit over the video, checked at phone and PC sizes, alone and with a friend.' }
+    v11: { title: 'The roadmap', blurb: 'What you can hold after each phase, drawn as the screen you would see. Phase 1 first.' },
+    // "Chrome" is designer talk, and reads as the Google browser (QA 29 Sep); v12.js now registers this name itself
+    v12: { title: 'Buttons on the video', blurb: 'The buttons that sit over the video, checked at phone and PC sizes, alone and with a friend.' }
   };
   const regs = new Map();
   const hub = { ready: false };
@@ -1415,7 +1685,7 @@
     hub.ready = true;
     const hosts = new Map();                              // id -> {wrap, mounted}
     let current = null;
-    const details = el('details'); details.open = true;
+    const details = el('details');
     const summary = el('summary', '', '<span>Pages</span><span class="h-cur"></span>');
     details.appendChild(summary);
     const groupsEl = el('div', 'h-groups');
@@ -1423,6 +1693,7 @@
     toc.appendChild(details);
     const wide = window.matchMedia ? window.matchMedia('(min-width: 960px)') : { matches: true };
     const syncWide = () => { if (wide.matches) details.open = true; };
+    details.open = wide.matches;                             // a phone starts with the list folded (its bar names the open page)
     if (wide.addEventListener) wide.addEventListener('change', syncWide); else if (wide.addListener) wide.addListener(syncWide);
 
     function buildNav() {
@@ -1505,15 +1776,21 @@
     function draw() {
       seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ed === editor)));
       frameHost.innerHTML = '';
-      const f = VIS.phoneFrame(frameHost, { name: 'Beach day', editor, stageH: 190, tlH: editor === 'full' ? 262 : 214 });
+      // Full has no tray and no tool row, so its timeline takes their height and the phone stays the same size
+      const f = VIS.phoneFrame(frameHost, { name: 'Beach day', editor, stageH: 190, tlH: editor === 'full' ? 322 : 214 });
       f.setTime(t, 30);
       VIS.stage(f.stage, doc, t, { selected: sel });
-      const common = { time: t, selected: sel, onTap: id => { sel = sel === id ? null : id; draw(); }, onScrub: x => { t = Math.min(x, doc.project.duration - 0.01); draw(); }, onOpen: s => { openSec = s; draw(); } };
-      if (editor === 'full') VIS.drawFull(f.timeline, doc, common);
-      else VIS.drawQuick(f.timeline, doc, Object.assign({ open: openSec }, common));
+      let api = null;
+      // Moving the playhead only moves the playhead: redrawing the whole phone threw away the ruler the finger or the
+      // mouse was dragging, so only the first touch counted (QA 29 Sep)
+      const scrub = x => { t = Math.max(0, Math.min(x, doc.project.duration - 0.01)); if (api && api.setTime) api.setTime(t); f.setTime(t, 30); VIS.stage(f.stage, doc, t, { selected: sel }); };
+      const common = { time: t, selected: sel, onTap: id => { sel = sel === id ? null : id; draw(); }, onScrub: scrub, onOpen: s => { openSec = s; draw(); } };
+      if (editor === 'full') api = VIS.drawFull(f.timeline, doc, common);
+      else api = VIS.drawQuick(f.timeline, doc, Object.assign({ open: openSec }, common));
       const R = E.classify(doc);
-      if (sel && R.isMain(sel)) { f.tray.innerHTML = ''; VIS.toolbar(f.tray, VIS.CLIP_TRAY); }
-      else if (sel) { f.tray.innerHTML = ''; VIS.toolbar(f.tray, VIS.ITEM_TRAY); }
+      if (editor === 'full') f.tray.style.display = 'none';            // Full's pick shows on its bar and in the picture
+      else if (sel && R.isMain(sel)) { f.tray.innerHTML = ''; VIS.toolbar(f.tray, VIS.CLIP_TRAY); }
+      else if (sel) { f.tray.innerHTML = ''; VIS.toolbar(f.tray, VIS.itemTray(R, sel)); }
       else f.setSay('<b>4 clips</b> · 0:14 · tap a clip to pick it');
       f.on('switch', () => { editor = editor === 'quick' ? 'full' : 'quick'; draw(); });
     }

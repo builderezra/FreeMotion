@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><title>985 — C</title><style>
+:root { --bg:#0b0f18; --panel:#131a26; --line:#263043; --text:#eef2f8; --dim:#9aa6b8; --faint:#66728a; --accent:#29d9bb; --warn:#f2a93b; }
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 34px 36px 40px; width: max-content; }
+h1 { max-width: 1400px; font-size: 30px; font-weight: 800; letter-spacing: -.4px; }
+.sub { color: var(--dim); font-size: 16px; margin-top: 6px; max-width: 1180px; }
+.quote { color: var(--text); font-style: italic; }
+.row { display: flex; gap: 26px; margin-top: 28px; align-items: flex-start; }
+.fig { flex: none; }
+.fig .lab { font-size: 13px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--faint); margin: 0 2px 8px; }
+.fig img { display: block; border-radius: 26px; border: 1px solid var(--line); }
+.fig.pc img { border-radius: 12px; }
+.fig .cap { font-size: 14px; color: var(--dim); margin: 10px 2px 0; line-height: 1.4; }
+.fig .cap b { color: var(--text); font-weight: 650; }
+.colhead { display: flex; align-items: center; gap: 10px; margin: 0 2px 10px; min-height: 30px; }
+.colhead .t { font-size: 19px; font-weight: 800; }
+.rec { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 13px; background: var(--accent); color: #062a23; font-size: 13px; font-weight: 800; letter-spacing: .2px; }
+.now { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 13px; background: #2a3344; color: var(--dim); font-size: 13px; font-weight: 800; }
+.notes { flex: 1 1 0; min-width: 360px; max-width: 460px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+.notes h3 { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; }
+.notes h3:first-child { margin-top: 0; }
+.notes p, .notes li { font-size: 15px; color: var(--dim); }
+.notes ul { padding-left: 18px; }
+.notes b { color: var(--text); }
+.foot { max-width: 1200px; margin-top: 26px; color: var(--faint); font-size: 13px; }
+</style></head><body><h1>C · Plain-language sliders + a live file size</h1><div class="sub">A Video / GIF / Picture / Sound / Frames switch, the file size in big type, and three stepped sliders (Sharpness, Smoothness, Quality ↔ file size), each with a ★ on its recommended stop. The switch and the size stay pinned at the top as the card scrolls. Exact numbers and More are one tap away.</div><div class="row"><div class="fig" style="width:320px"><div class="lab">Phone · first glance</div><img src="shots/phone-C.png" style="width:320px"><div class="cap"><b>What you see first:</b> “about 34 MB” and three sliders; the size moves as you drag.</div></div><div class="fig" style="width:320px"><div class="lab">Phone · Exact numbers opened</div><img src="shots/phone-C-exact.png" style="width:320px"><div class="cap"><b>What you see first:</b> W×H and fps boxes under the sliders.</div></div><div class="fig" style="width:320px"><div class="lab">Phone · More opened</div><img src="shots/phone-C-more.png" style="width:320px"><div class="cap"><b>What you see first:</b> Part, Only one layer (“1 on”, amber under the size), See-through.</div></div><div class="notes"><h3>Good</h3><ul><li>The size-against-quality trade-off is the easiest to feel.</li><li>The shortest first screen of the three.</li></ul><h3>Weaker than A</h3><ul><li>The closest to CapCut’s own look, which he said not to fully copy.</li><li>The Sharpness stops change with every project (a 720p project has three), and rates like 24 or 29.97 fall between notches.</li><li>Small targets for a thumb at 380 px, and a slider is easy to nudge by accident.</li><li>Part is hidden under More, but it is a real first-timer question.</li></ul></div></div><div class="row"><div class="fig pc" style="width:394px"><div class="lab">PC 1280×800 · first glance</div><img src="shots/pc-C-crop.png" style="width:394px"><div class="cap"><b>What you see first:</b> the same card, popping out of Export.</div></div><div class="fig pc" style="width:394px"><div class="lab">PC · Exact numbers opened</div><img src="shots/pc-C-exact-crop.png" style="width:394px"><div class="cap"><b>What you see first:</b> the boxes open under the sliders; the size stays pinned.</div></div><div class="fig pc" style="width:394px"><div class="lab">PC · More opened</div><img src="shots/pc-C-more-crop.png" style="width:394px"><div class="cap"><b>What you see first:</b> Part as three buttons, one layer picked, See-through.</div></div></div><div class="foot">tools/design/985 · throwaway prototypes (985-proto.js) drawn inside the real app’s export card with its own colours and controls; no app code changed. Where every one of today’s settings lives in A, B and C: mapping.md.</div></body></html>

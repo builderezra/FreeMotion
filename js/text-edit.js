@@ -15,6 +15,7 @@ window.FM = window.FM || {};
   let unwatch = null;                // FM.screen.watch()'s one-call unsubscribe
   let stageRO = null;                // ResizeObserver on #stage (desktop card anchor)
   let cueNav = null;                 // the ‹ n/N › strip shown on a caption track
+  let capsBox = null, capsList = null;   // #984: the caption list inside the PC captions box (a caption track only)
 
   /* ---- which editor am I? --------------------------------------------------
    * PHONE: a full-screen takeover — toolbar on the top edge, field docked just under it (#439), the
@@ -147,6 +148,52 @@ window.FM = window.FM || {};
     updateCueNav();
     const l = layer(), box = (pop && popKind === 'extras') ? pop.querySelector('.cap-list') : null;
     if (box && l && FM.captionsEditor) FM.captionsEditor.mount(box, l);
+    refreshCaps();   // …and the PC captions box's own copy of the list (#984)
+  }
+  /* THE CAPTION LIST IN THE PC CAPTIONS BOX (#984). Drawn only while the editor sits in the Add menu's box — on the
+     phone, and on PC when that box cannot be used, the list stays where it always was (the Aa sheet), so nothing
+     draws a list nobody can see. The same captions.js builder as the Aa sheet and the inspector's Captions card, so
+     the three can never drift into different editors. */
+  function mountCaps() {
+    if (!active || !capsList || !panel || !panel.classList.contains('te-capdock')) return;
+    const l = layer();
+    if (l && FM.captionsEditor) FM.captionsEditor.mount(capsList, l);
+  }
+  /* Redraw the box's list only when it no longer shows the captions — a caption dragged on the timeline beside it, an
+     undo, a list edited in the Aa sheet or the inspector. Compared row by row with what is drawn, so the redraw that
+     the list's own buttons already did is not done twice, and never while a field in it has the caret: rebuilding
+     would throw away the number being typed. */
+  function capsStale(l) {
+    const cues = cueList(l), rows = capsList.querySelectorAll('.cap-row'), drawn = capsList._capDrawn;
+    if (!drawn || drawn.layer !== l || rows.length !== cues.length || drawn.cues.length !== cues.length) return true;
+    for (let i = 0; i < cues.length; i++) {
+      if (drawn.cues[i] !== cues[i]) return true;   // the same words in a replaced caption are still the wrong row
+      const t = rows[i].querySelectorAll('.cap-time'), tx = rows[i].querySelector('.cap-text');
+      if (t.length < 2 || +t[0].value !== +cues[i].start || +t[1].value !== +cues[i].end) return true;
+      if (!tx || tx.textContent !== ((cues[i].text || '').trim() || 'Empty — tap to type')) return true;
+    }
+    return false;
+  }
+  function refreshCaps() {
+    if (!active || !capsList || !panel || !panel.classList.contains('te-capdock')) return;
+    const l = layer();
+    if (!l || capsList.contains(document.activeElement) || !capsStale(l)) return;
+    mountCaps();
+  }
+  /* What he types shows in the list as he types it — the row is the same caption, so reading the old words beside the
+     field would look like the typing went nowhere. One row's label, not a redraw: the list is rebuilt only when its
+     rows change. */
+  function syncCapRow() {
+    if (!capsList || !active || !active.cap) return;
+    const c = activeCue(), l = layer();
+    if (!c || !l) return;
+    const k = cueList(l).indexOf(c);
+    const row = capsList.querySelectorAll('.cap-row')[k];
+    const t = row && row.querySelector('.cap-text');
+    if (!t) return;
+    const s = (c.text || '').trim();
+    t.textContent = s || 'Empty — tap to type';   // textContent: caption text is his data, never innerHTML
+    t.classList.toggle('cap-empty', !s);
   }
   function updateCueNav() {
     if (!cueNav) return;
@@ -189,7 +236,11 @@ window.FM = window.FM || {};
   }
 
   // ---- transient sub-popover (font rail / size slider / colour) ------------
-  function closePop() { if (pop && pop.parentElement) pop.parentElement.removeChild(pop); pop = null; popKind = ''; popBtn = null; popBuild = null; if (bar) bar.querySelectorAll('.te-btn.on').forEach(b => b.classList.remove('on')); reflowForPop(); }   // give the canvas its band back (queue 602)
+  function closePop() {
+    const wasExtras = popKind === 'extras';
+    if (pop && pop.parentElement) pop.parentElement.removeChild(pop); pop = null; popKind = ''; popBtn = null; popBuild = null; if (bar) bar.querySelectorAll('.te-btn.on').forEach(b => b.classList.remove('on')); reflowForPop();   // give the canvas its band back (queue 602)
+    if (wasExtras) refreshCaps();   // #984: the Aa sheet's list may have changed the captions under the box's own list
+  }
   /* Re-run the layout because the sheet's presence changes how much chrome stands between the top of
      the screen and the canvas (queue 602). Nothing else fires: a padding change raises no resize event,
      and opening a popover raises no viewport event either — which is exactly why the canvas used to sit
@@ -199,12 +250,38 @@ window.FM = window.FM || {};
   function reflowForPop() { if (active && bar && FM.screen && FM.screen.metrics) onViewport(); }
   function positionPop() {
     if (!pop) return;
+    pop.style.height = '';   // only the PC captions box sets one (#984 review) — a window resized out of it mid-sheet
     if (isDesktop()) {
       // The card is docked at the BOTTOM of the stage, so a popover hung UNDER the toolbar the way the
       // phone hangs it would land on the text field it belongs to. Open upwards instead, width-matched
       // to the card — .te-pop's base left:8/right:8 is the phone's full-window inset, which on a 2000px
       // window measured a 1984px-wide rail holding cards that are 76-108px each.
       if (!panel) return;
+      /* #984 — IN THE CAPTIONS BOX, A SHEET OPENS INSIDE THE BOX. The editor fills the Add menu's box there, so the
+         column rule below would put the sheet under the card's bottom edge, which is the bottom of the window. Under
+         the toolbar instead, over the rest of the box, scrolling inside it: the toolbar stays on top, so the button
+         that opened a sheet still closes it and ✓ is always there. Every kind scrolls here, not only Aa and the font
+         list — the box is short, and a colour picker taller than it would otherwise run off the bottom of the screen. */
+      const capDock = panel.classList.contains('te-capdock') && !!bar;
+      pop.classList.toggle('te-pop-capdock', capDock);
+      pop.style.overflowY = '';
+      if (!capDock && popKind !== 'extras' && popKind !== 'font') pop.style.maxHeight = '';   // a window resized out of the box mid-sheet
+      /* …and it COVERS the box under the toolbar, edge to edge (#984 review). It used to stop 6 px short of the box's
+         sides and bottom and 4 px under the toolbar, with round corners, and the box's own list showed through the gaps —
+         at 1920x1080 the top of "+ Add cue at playhead" under the sheet's bottom edge. Square, and exactly the rest of the
+         box, so nothing of the box can peek round it (styles.css .te-pop-capdock). */
+      if (capDock) {
+        const pr = panel.getBoundingClientRect(), top = Math.round(bar.getBoundingClientRect().bottom);
+        const h = Math.max(60, Math.round(pr.bottom) - top);
+        pop.style.bottom = 'auto';
+        pop.style.left = Math.round(pr.left) + 'px';
+        pop.style.width = Math.round(pr.width) + 'px';
+        pop.style.top = top + 'px';
+        pop.style.height = h + 'px';
+        pop.style.maxHeight = h + 'px';
+        pop.style.overflowY = 'auto';
+        return;
+      }
       /* #147 — Ezra: "this pop up menu on pc is so shit, it literally covers up the text while you
        * edit it, get it off the canvas… you could just put it in the add menu, so it doesnt take up
        * real estate on the screen."
@@ -467,6 +544,61 @@ window.FM = window.FM || {};
     return null;
   }
 
+  /* ═══ #984 — THE CAPTIONS EDITOR GOES WHERE THE ADD MENU IS ═══════════════════════════════════════════════════════
+   * Ezra, 29 Sep: "when u open the captions menu it takes up space really badly and opens up the timline fully when it
+   * could just go where the add menu is and leave the timeline squished like it usually is".
+   * MEASURED on v17.12 (PC, Studio): Add → Captions opens this editor, and editing text hides #inspector-panel and
+   * collapses its column (queue 519), so the timeline widened into the Add menu's place — 973 → 1280 px at 1280x800,
+   * 600 → 900 at 900x800 — while the card floated 560x185 over the bottom of the stage, and its Aa sheet (the caption
+   * list) dropped down over the timeline. Its height never changed; what "opens up fully" is the width.
+   * So on a caption track the editor takes the Add menu's own box — the column is kept, only its contents are hidden
+   * (queue 519's point: no option card is live behind the editor) — and fills it exactly: the toolbar on top, the
+   * caption strip and the field, then the caption list, scrolling inside the box when it is taller. The timeline
+   * never moves. A plain text layer is untouched — the request is the captions menu.
+   * Not when the box is unusable: too small, or partly under a software keyboard (a phone held sideways is over the
+   * 701px gate). The editor then floats as before rather than typing into a field nobody can see. */
+  const CAPDOCK_MIN_W = 240, CAPDOCK_MIN_H = 120;
+  function capDockRect(m) {
+    const col = document.getElementById('inspector-panel');
+    if (!active || !active.cap || !col) { document.body.classList.remove('te-cap-dock'); return null; }
+    document.body.classList.add('te-cap-dock');   // the column shows (its contents do not) — measure the box it really has
+    const cr = col.getBoundingClientRect();
+    if (cr.width >= CAPDOCK_MIN_W && cr.height >= CAPDOCK_MIN_H && cr.bottom <= m.bottom + 1 && cr.top >= m.top - 1) return cr;
+    document.body.classList.remove('te-cap-dock');
+    return null;
+  }
+  function leaveCapDock() {
+    document.body.classList.remove('te-cap-dock');
+    if (panel && panel.classList.contains('te-capdock')) {
+      panel.classList.remove('te-capdock');
+      panel.style.height = '';
+    }
+  }
+  /* A PLAIN TEXT SESSION WHOSE LAYER BECAME A CAPTION TRACK UNDER IT (#984, review). Add → Text, type, Aa, Detect speech:
+     detection turns the layer into a caption track, and the editor stayed a plain-text session — measured at 1280x800,
+     the timeline stayed opened up to the full width, the card still floated over the stage, the Aa sheet still offered
+     "+ Use as caption track" with no caption rows, and the next words went into layer.text, which a caption track never
+     shows. So the editor is rebuilt as the captions editor, the way resync() does after an undo — on PC that is the Add
+     menu's box and the timeline goes back to its squished width.
+     It picks up the caption his words were carried onto (captions.detect gives the layer's text to the first cue it
+     finds), so the field still shows what he was typing and the next letter lands on it — rather than a blank caption
+     made in the gap the playhead happens to be in. Only this direction: a caption track whose last caption is deleted
+     keeps the captions menu open, so a new one can be added from it.
+     The Aa sheet he pressed Detect in opens again, fresh, where the list is not already on screen (the phone; the PC
+     card when the box is too small): it vanishing under his finger would read as the button closing everything. */
+  function becameTrack(l) {
+    const typed = input ? input.value : '', cues = cueList(l);
+    let c = typed.trim() ? cues.find(x => (x.text || '') === typed) : null;
+    if (!c && FM.captions.indexAt(l, FM.time) < 0) c = cues[0];
+    if (c && FM.scrubTime) FM.scrubTime((l.start || 0) + c.start + Math.min(0.05, (c.end - c.start) / 2));
+    const aa = popKind === 'extras';
+    FM.textEdit.start(l.id);
+    if (aa && active && active.cap && panel && bar && !panel.classList.contains('te-capdock')) {
+      const b = bar.querySelector('.te-extras');
+      if (b) openPop('extras', buildExtrasPop, b);
+    }
+  }
+
   function layoutDesktop(m) {
     const stage = document.getElementById('stage');
     if (!panel || !stage) return;
@@ -474,6 +606,22 @@ window.FM = window.FM || {};
     // mid-edit would otherwise leave a stale offset fighting the card's flex column.
     if (bar) bar.style.top = '';
     if (dock) { dock.style.bottom = ''; dock.style.top = ''; }
+    const cd = capDockRect(m);
+    if (cd) {
+      const fresh = !panel.classList.contains('te-capdock');
+      panel.classList.remove('te-docked');
+      panel.classList.add('te-capdock');
+      panel.style.left = Math.round(cd.left) + 'px';
+      panel.style.top = Math.round(cd.top) + 'px';
+      panel.style.width = Math.round(cd.width) + 'px';
+      panel.style.height = Math.round(cd.height) + 'px';
+      panel.style.bottom = 'auto';
+      stage.style.paddingTop = '';
+      stage.style.paddingBottom = '';   // the canvas keeps every pixel it had
+      if (fresh || (capsList && !capsList.firstChild)) mountCaps();
+      return;
+    }
+    leaveCapDock();
     /* DOCKED IN THE SIDE COLUMN — the answer to "makes it smaller" (#147).
      * v6.96 moved the Aa panel here and fixed the half he was looking at; the CARD was still costing
      * the canvas a band at the bottom of the stage. Measured at 1280x860: 169px of #stage padding out
@@ -540,6 +688,7 @@ window.FM = window.FM || {};
       if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update();
       return;
     }
+    leaveCapDock();   // #984 is PC-only: a window dragged under 701px mid-edit takes the phone's own editor
     // iOS scrolls the whole page up when the keyboard opens, dragging position:fixed elements with it.
     // Re-pin the top toolbar to the top of the VISIBLE (visual) viewport, and the dock just above the
     // keyboard, so neither gets shoved off-screen.
@@ -612,6 +761,7 @@ window.FM = window.FM || {};
   function onInput() {
     const l = layer(); if (!l) return;
     writeField(l);
+    syncCapRow();   // #984: the caption's row in the PC captions box reads what is being typed
     FM.requestRender();
   }
 
@@ -679,9 +829,10 @@ window.FM = window.FM || {};
   function teardown() {
     active = null;
     closePop();
+    leaveCapDock();   // #984: the Add menu's box gets its own contents back
     if (panel && panel.parentElement) panel.parentElement.removeChild(panel);
     panel = null; bar = null; dock = null;
-    input = null; cueNav = null;
+    input = null; cueNav = null; capsBox = null; capsList = null;
     if (stageRO) { stageRO.disconnect(); stageRO = null; }
     // Drop the keyboard-lift — BOTH paddings. Leaving the inline padding-top behind would strand the
     // canvas hundreds of px down the stage for the rest of the session, long after the editor closed.
@@ -782,6 +933,19 @@ window.FM = window.FM || {};
       input.setAttribute('placeholder', boundCue ? 'Type this caption…' : 'Type your text…');
       dock.appendChild(input);
       panel.appendChild(dock);
+      /* #984: a caption track's list, under the field — shown only while the editor sits in the PC Add menu's box
+         (CSS: .te-panel.te-capdock .te-caps), drawn by layoutDesktop when it docks there. */
+      if (cueNav) {
+        capsBox = elc('div', 'te-caps');
+        capsBox.appendChild(elc('div', 'cap-title', 'Captions'));
+        capsList = elc('div', 'cap-list');
+        capsBox.appendChild(capsList);
+        panel.appendChild(capsBox);
+        // Anything else that re-times a caption while the box is open (a clip trimmed on the timeline beside it) is
+        // caught when the mouse comes back to the box. Mouse only: a finger's enter comes with its press, and
+        // redrawing then would move the row out from under it.
+        panel.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') refreshCaps(); });
+      }
       input.addEventListener('input', onInput);
       input.addEventListener('keydown', e => {
         e.stopPropagation();
@@ -864,9 +1028,15 @@ window.FM = window.FM || {};
       if (input && input.value !== v) { input.value = v; const n = v.length; try { input.setSelectionRange(n, n); } catch (_) {} }
       updateBarLabels();
       updateCueNav();
+      refreshCaps();   // #984: every caption is a new object after a restore — the box's rows must be the restored ones
     },
     // The Aa sheet's caption list changed (✕, a new Start or End, + Add cue, Detect speech): the n / N label follows.
-    cuesChanged() { if (active) updateCueNav(); },
+    cuesChanged() {
+      if (!active) return;
+      const l = layer();
+      if (l && !active.cap && isCapTrack(l)) { becameTrack(l); return; }   // #984 review: Detect speech from a plain text's Aa sheet
+      updateCueNav(); refreshCaps();   // …and the PC captions box's list follows (#984)
+    },
     /* The caption this session is typing into, or null — read by app.js render() so the paused preview draws it
        settled rather than on the first frame of its entrance (queue 690, seventh hunt). Pure: no rebinding here,
        it is asked on every frame. */

@@ -1484,12 +1484,12 @@ window.FM = window.FM || {};
     });
     if (people.length > 3) faces.appendChild(el('span', 'cv-fr-more', '+' + (people.length - 3)));
   };
-  /* The people door — the Share button beside Export, the stage's person+ and the faces chip, the LIVE pill, Home's "Share
-     live…": Canvas settings with Friends big, at EVERY width (#978 — on a PC it used to be the Share card, which armed a room
-     on the first press). A second press closes it (the 944 rule); it NEVER arms, and never falls back to U.share(), which
-     does (critic's finding) — only the block's Start sharing starts anything.
-     `from` is the button to hang the pair off on a PC: only the Share button passes itself. The chip and the pill pass
-     nothing, so the pair hangs from the cog rather than from a chip at the top left of the preview. */
+  /* The people door — the stage's person+ and the faces chip, the LIVE pill, Home's "Share live…": Canvas settings with
+     Friends big, at EVERY width (#978 — on a PC it used to be the Share card, which armed a room on the first press). A second
+     press closes it (the 944 rule); it NEVER arms, and never falls back to U.share(), which does (critic's finding) — only the
+     block's Start sharing starts anything.
+     `from` is the button to hang the pair off on a PC. Only the person+ passes itself, and it has no box above 700 px (#983 —
+     the Share button beside Export that used to pass itself is gone), so on a PC every door hangs the pair from the cog. */
   U.openPeople = function (from) {
     const homeUp = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (homeUp || !FM.openCanvasDialog) return Promise.resolve(null);
@@ -5131,7 +5131,15 @@ window.FM = window.FM || {};
   };
   U.isInstalled = function () { return installed; };
 
-  const SHARE_SVG = 'M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v13M8 7l4-4 4 4';
+  /* 📐 #983 — ON A PC THERE IS NO SHARE BUTTON AT ALL; THE TWO NOTES BELOW ARE ITS HISTORY. His words, 29 Sep: "on pc get
+     rid of the button that was originally to invite friends, as we now have it built into the settings cog". Since #978 the
+     cog opens Friends beside Canvas settings, and Share beside Export only opened that same pair — a second door to one
+     room, 42 px of the transport row. So there is ONE #btn-share and it is the phone's person+ on the video, at every width
+     and with the switch on or off: app.js's transport row no longer lists it, and above 700 px styles.css gives it no box
+     (the rule the Labs-off door has had since #967 batch 2), so the row lays out as if it never existed. It stays IN the page
+     at a PC width rather than being taken out, because a window narrowed to a phone must have it back, and noticing that
+     needs a width listener — which §23 does not allow a solo user (the Labs-off door has none for the same reason). The
+     re-home-on-width listener install() used to add went with the bar: there is only one home now. */
 
   /* ⚠️ IT LIVES BESIDE EXPORT, WHEREVER EXPORT CURRENTLY IS — AND ON A PHONE THAT IS A DIFFERENT BAR.
      On a desktop `pcTransportLayout` MOVES #btn-export out of #topbar and down into the transport row,
@@ -5159,23 +5167,18 @@ window.FM = window.FM || {};
      (styles.css hides it while #collab-people is on the stage). Drawn against two other fixes first —
      the version chip shrunk to its icon (the name gets 69 px, and a signed-off chip loses its words) and
      the four bar icons narrowed (breaks the #189 notes/cog gap he approved) — see COLLAB-DESIGN.md §19.
-     On a desktop nothing moves: beside Export, wherever Export currently lives. */
+     On a desktop nothing moves: beside Export, wherever Export currently lives.
+     #983: …and now the desktop is gone from this too — the one home is the video, at every width (the note above). */
   function shareHost() {
-    const phone = !window.matchMedia || window.matchMedia('(max-width: 700px)').matches;
     const st = document.getElementById('stage');
-    const d = document.getElementById('btn-export');
-    if (phone && st) return { before: null, parent: st, phone: true, stage: true };
-    if (d && d.parentNode) return { before: d, parent: d.parentNode, phone: false };
-    if (st) return { before: null, parent: st, phone: true, stage: true };
-    return null;
+    return st ? { parent: st } : null;
   }
 
   const INVITE_SVG = 'M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M19 8v6M16 11h6';
-  /* `door` (#967 batch 2): the Labs-off door — always on the video, whatever the width (a PC's CSS hides it, so no width
-     listener is needed with the feature off), wearing `.cs-door` so an install knows to take it back and re-home it. */
+  /* `door` (#967 batch 2): the Labs-off door, wearing `.cs-door`. Since #983 the button is on the video with the feature on
+     as well, so the class is all that differs — and neither needs a width listener: above 700 px styles.css hides both. */
   function makeShareButton(door) {
-    const st = document.getElementById('stage');
-    const at = door ? (st ? { before: null, parent: st, phone: true, stage: true } : null) : shareHost();
+    const at = shareHost();
     let b = document.getElementById('btn-share');
     if (!at) return b || null;
     if (!b) {
@@ -5183,33 +5186,28 @@ window.FM = window.FM || {};
       b.id = 'btn-share';
       b.type = 'button';
       // a second press on the button that opened the card CLOSES it (queue 944) — wherever the card sits
-      /* queue 945 / #978: it opens Canvas settings with Friends big (U.openPeople), which never arms — on a phone and on a PC,
-         where the pair hangs off this button. */
+      /* queue 945 / #978: it opens Canvas settings with Friends big (U.openPeople), which never arms. On a phone only since
+         #983 — on a PC the cog is the way in, and this button has no box there. */
       b.addEventListener('click', function (e) { e.stopPropagation(); if (card && card.isConnected) { closeCard(); return; } U.openPeople(b); });
-    }
-    const mode = at.stage ? 'stage' : 'bar';
-    if (b._mode !== mode) {
-      b._mode = mode;
-      b.textContent = '';
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('viewBox', '0 0 24 24');
       svg.setAttribute('fill', 'none');
       svg.setAttribute('stroke', 'currentColor');
-      svg.setAttribute('stroke-width', at.stage ? '1.9' : '1.8');
+      svg.setAttribute('stroke-width', '1.9');
       svg.setAttribute('stroke-linecap', 'round');
       svg.setAttribute('stroke-linejoin', 'round');
-      svg.setAttribute('class', at.stage ? 'cp-plus' : 'ico');
+      svg.setAttribute('class', 'cp-plus');
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', at.stage ? INVITE_SVG : SHARE_SVG);
+      path.setAttribute('d', INVITE_SVG);
       svg.appendChild(path);
       b.appendChild(svg);
-      b.title = at.stage ? 'Share this project live — invite people' : 'Share this project live';
+      b.title = 'Share this project live — invite people';
       b.setAttribute('aria-label', 'Share live');   // #967 B4: the action's one name
     }
-    /* The stage version wears the people chip's own classes, so it IS that chip at rest: the same size,
-       place and glass, and the same rules hide it (text editing, a phone selection). */
-    b.className = at.stage ? 'collab-people cp-invite cs-stagebtn' + (door ? ' cs-door' : '') : 'btn icon-btn';
-    if (b.parentNode !== at.parent || (at.before ? b.nextSibling !== at.before : false)) at.parent.insertBefore(b, at.before);
+    /* It wears the people chip's own classes, so it IS that chip at rest: the same size, place and glass, and the same rules
+       hide it (text editing, a live session's faces, and — #983 — any width above a phone's). */
+    b.className = 'collab-people cp-invite cs-stagebtn' + (door ? ' cs-door' : '');
+    if (b.parentNode !== at.parent) at.parent.appendChild(b);
     return b;
   }
 
@@ -5255,27 +5253,18 @@ window.FM = window.FM || {};
      missing until the next flip of the switch, which is the kind of "it works on my machine" the S0/S1
      notes keep warning about. Both makers return whatever is already there, so calling this on every
      Home build and every settings change costs two getElementById. */
-  /* The breakpoint the share button's home depends on, watched only while the UI is installed — §23
-     promises a solo user not one listener. `change` fires on the crossing, not on every resize. */
-  let widthWatch = null, onWidth = null;
+  /* (#983: the `(max-width: 700px)` listener that re-homed the share button across the breakpoint lived here, installed with
+     the UI. The button has one home now, the video, so there is nothing to re-home and no listener.) */
 
   U.install = function () {
     const first = !installed;
     installed = true;
-    shareBtn = makeShareButton();            // an ENSURE and a RE-HOME: the bar it belongs in can change
+    shareBtn = makeShareButton();            // an ENSURE: the Labs-off door becomes the feature's person+ (it drops .cs-door)
     /* S7: comments and the role courtesies exist while Labs is on — the ruler marks for a project that has
        comments, and whatever the current session's role says. */
     if (C.comments && C.comments.install) { try { C.comments.install(); } catch (e) { C.lastError = e; } }
     applyRoleClasses();
     if (!joinBtn || !joinBtn.isConnected) joinBtn = makeJoinButton();
-    if (!widthWatch && window.matchMedia) {
-      try {
-        widthWatch = window.matchMedia('(max-width: 700px)');
-        onWidth = function () { if (installed) shareBtn = makeShareButton(); };
-        if (widthWatch.addEventListener) widthWatch.addEventListener('change', onWidth);
-        else if (widthWatch.addListener) widthWatch.addListener(onWidth);
-      } catch (e) { widthWatch = null; onWidth = null; }
-    }
     return first;
   };
 
@@ -5299,16 +5288,12 @@ window.FM = window.FM || {};
        install re-create it, so the module's own reference goes stale — and §23's promise is about what
        is IN THE PAGE, not about what this file remembers putting there. (queue 921 S3)
        #967 batch 2: the bar's Share goes (a node the transport row borrowed must never come back — pcTransportTeardown
-       skips a detached one); the person+ on the video and Home's Join STAY, as the two doors syncDoors keeps with Labs off. */
+       skips a detached one); the person+ on the video and Home's Join STAY, as the two doors syncDoors keeps with Labs off.
+       #983: there is no bar's Share any more, so this only ever finds the person+ and leaves it — kept as the guard. */
     const sb = document.getElementById('btn-share');
     if (sb && sb.parentNode && sb.parentNode.id !== 'stage') sb.parentNode.removeChild(sb);
     shareBtn = null;
     if (tillTapOff) tillTapOff();               // #967 batch 2 review: the sticky "You're in"'s listener goes with the switch
-    if (widthWatch && onWidth) {
-      if (widthWatch.removeEventListener) widthWatch.removeEventListener('change', onWidth);
-      else if (widthWatch.removeListener) widthWatch.removeListener(onWidth);
-    }
-    widthWatch = null; onWidth = null;
     dropOffer();
     shareNote = null;
     if (joinLink) { try { joinLink.close(); } catch (e) {} joinLink = null; }

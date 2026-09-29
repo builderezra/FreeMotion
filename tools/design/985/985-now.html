@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><title>985 — today</title><style>
+:root { --bg:#0b0f18; --panel:#131a26; --line:#263043; --text:#eef2f8; --dim:#9aa6b8; --faint:#66728a; --accent:#29d9bb; --warn:#f2a93b; }
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 34px 36px 40px; width: max-content; }
+h1 { max-width: 1400px; font-size: 30px; font-weight: 800; letter-spacing: -.4px; }
+.sub { color: var(--dim); font-size: 16px; margin-top: 6px; max-width: 1180px; }
+.quote { color: var(--text); font-style: italic; }
+.row { display: flex; gap: 26px; margin-top: 28px; align-items: flex-start; }
+.fig { flex: none; }
+.fig .lab { font-size: 13px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--faint); margin: 0 2px 8px; }
+.fig img { display: block; border-radius: 26px; border: 1px solid var(--line); }
+.fig.pc img { border-radius: 12px; }
+.fig .cap { font-size: 14px; color: var(--dim); margin: 10px 2px 0; line-height: 1.4; }
+.fig .cap b { color: var(--text); font-weight: 650; }
+.colhead { display: flex; align-items: center; gap: 10px; margin: 0 2px 10px; min-height: 30px; }
+.colhead .t { font-size: 19px; font-weight: 800; }
+.rec { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 13px; background: var(--accent); color: #062a23; font-size: 13px; font-weight: 800; letter-spacing: .2px; }
+.now { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 13px; background: #2a3344; color: var(--dim); font-size: 13px; font-weight: 800; }
+.notes { flex: 1 1 0; min-width: 360px; max-width: 460px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+.notes h3 { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; }
+.notes h3:first-child { margin-top: 0; }
+.notes p, .notes li { font-size: 15px; color: var(--dim); }
+.notes ul { padding-left: 18px; }
+.notes b { color: var(--text); }
+.foot { max-width: 1200px; margin-top: 26px; color: var(--faint); font-size: 13px; }
+</style></head><body><h1>Now · today’s Export card (the reference)</h1><div class="sub">The same project, phone and PC. Every control is a dropdown of equal weight, and two more rows appear when “Custom” is picked.</div><div class="row"><div class="fig" style="width:340px"><div class="colhead"><span class="t">Now</span><span class="now">Today</span></div><div class="lab">Phone · as it opens</div><img src="shots/phone-now.png" style="width:340px"><div class="cap"><b>What you see first:</b> six dropdowns of equal weight, then Cancel / Export MP4.</div></div><div class="fig" style="width:340px"><div class="colhead"><span class="t">&nbsp;</span></div><div class="lab">Phone · Custom size + Custom fps picked</div><img src="shots/phone-now-custom.png" style="width:340px"><div class="cap"><b>What you see first:</b> two more rows (W×H and fps boxes) slot in between.</div></div><div class="notes"><h3>What makes it daunting</h3><ul><li><b>Six questions first</b>, all the same size, before anything says what you will get.</li><li><b>Jargon:</b> fps, ZIP, WAV / M4A, “Resolution”, and “Loop region (if set)”, which the buttons that set it call <i>export marks</i>.</li><li><b>No length, no file size, no picture</b> until the render has finished.</li><li>“Export just this layer” sits among the everyday rows, so a one-layer export is easy to miss.</li></ul></div></div><div class="row"><div class="fig pc" style="width:472px"><div class="lab">PC 1280×800 · as it opens</div><img src="shots/pc-now-crop.png" style="width:472px"><div class="cap"><b>What you see first:</b> the same six dropdowns, popping out of Export.</div></div><div class="fig pc" style="width:472px"><div class="lab">PC · Custom size + Custom fps picked</div><img src="shots/pc-now-custom-crop.png" style="width:472px"><div class="cap"><b>What you see first:</b> eight rows.</div></div></div><div class="foot">tools/design/985 · throwaway prototypes (985-proto.js) drawn inside the real app’s export card with its own colours and controls; no app code changed. Where every one of today’s settings lives in A, B and C: mapping.md.</div></body></html>

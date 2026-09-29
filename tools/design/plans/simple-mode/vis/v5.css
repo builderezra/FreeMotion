@@ -1,0 +1,138 @@
+/* V5 — An old project in Quick. Hub-side layout (h- tokens, light and dark) and a few mock-side pieces (fm tokens). */
+
+.v5 { display: grid; gap: 26px; min-width: 0; }
+.v5 > * { min-width: 0; }
+.v5-lede { margin: 0; font-size: 16.5px; line-height: 1.5; max-width: 64ch; text-wrap: pretty; }
+.v5-sec { display: grid; gap: 14px; padding-top: 22px; border-top: 1px solid var(--h-rule); min-width: 0; }
+.v5-sec > * { min-width: 0; }
+.v5-headrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.v5-h { font-family: var(--h-display); font-size: 24px; line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+.v5-tag { font-family: var(--h-mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--h-muted); }
+.v5-sub { font-family: var(--h-display); font-size: 19px; line-height: 1.2; margin: 0 0 8px; }
+.v5-note { margin: 0; }
+/* small labels match the kit's eyebrow (.h-eyebrow, 11.5 px); the card rule `.v5-side .h-card p` (15 px) used to win here */
+.v5-lbl, .v5-side .h-card p.v5-lbl { margin: 14px 0 6px; font-family: var(--h-mono); font-size: 11.5px; line-height: 1.3; font-weight: 400; letter-spacing: .08em; text-transform: uppercase; color: var(--h-muted); }
+
+/* controls row: the editor toggle and the counter */
+.v5-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.v5-bytes {
+  display: inline-flex; align-items: baseline; gap: 7px; padding: 8px 14px; border-radius: 999px;
+  background: var(--h-surface); border: 1px solid var(--h-rule); font-size: 14px; color: var(--h-muted);
+  transition: border-color .25s, background .25s;
+}
+.v5-bytes b { font-family: var(--h-mono); font-size: 19px; font-weight: 600; color: var(--h-good); font-variant-numeric: tabular-nums; min-width: 1ch; }
+.v5-bytes.wrote { border-color: var(--h-accent); background: var(--h-accent-soft); }
+.v5-bytes.wrote b { color: var(--h-accent); }
+.v5-bytes.pulse { animation: v5-pulse .6s cubic-bezier(.2, .8, .2, 1); }
+@keyframes v5-pulse { 0% { transform: scale(1); } 35% { transform: scale(1.06); } 100% { transform: scale(1); } }
+
+/* phone + side cards */
+.v5-grid { display: grid; gap: 18px; align-items: start; }
+@media (min-width: 760px) { .v5-grid { grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 24px; } }
+.v5-phone { position: relative; min-width: 0; }
+.v5-frame[hidden] { display: none; }
+.v5-frame.enter { animation: v5-in .24s cubic-bezier(.2, .8, .2, 1); }
+@keyframes v5-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.v5-side { display: grid; gap: 14px; min-width: 0; }
+.v5-side .h-card p { margin: 0 0 9px; font-size: 15px; line-height: 1.45; }
+.v5-side .h-card p:last-child { margin-bottom: 0; }
+
+/* why card */
+.v5-why.flash { animation: v5-in .22s cubic-bezier(.2, .8, .2, 1); }
+.v5-whyhead { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 6px 12px; margin-bottom: 8px; }
+.v5-whyhead .v5-sub { margin: 0; }
+.v5-type { margin: 2px 0 0 !important; font-size: 13px !important; color: var(--h-muted); }
+.v5-dest { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1.2 var(--h-body); padding: 5px 10px; border-radius: 999px;
+  background: var(--h-surface-2); color: var(--h-ink); border: 1px solid var(--h-rule); max-width: 100%; }
+.v5-dest i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); }
+.v5-star { color: #8a74e8; font-weight: 700; }
+:root:not([data-theme="light"]) .v5-star { color: #b3a4ff; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .v5-star { color: #6f58d6; } }
+
+/* saved card */
+.v5-saved { margin: 0 0 12px; padding-left: 18px; display: grid; gap: 5px; font-size: 14.5px; line-height: 1.4; }
+.v5-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.v5-log li { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; padding: 6px 10px; border-radius: 8px; background: var(--h-surface-2); color: var(--h-muted); }
+.v5-log li span { min-width: 0; overflow-wrap: anywhere; }
+.v5-log li b { font-family: var(--h-mono); font-size: 12.5px; font-weight: 600; color: var(--h-good); white-space: nowrap; }
+.v5-log li.wrote { background: var(--h-accent-soft); color: var(--h-ink); }
+.v5-log li.wrote b { color: var(--h-accent); }
+.v5-log li.new { animation: v5-in .25s cubic-bezier(.2, .8, .2, 1); }
+
+/* where everything went */
+.v5-where { display: grid; gap: 8px; }
+.v5-where .v5-sub { margin: 0; }
+.v5-wlist { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.v5-wlist { max-width: 760px; }
+.v5-wlist li { min-width: 0; }
+.v5-wrow {
+  width: 100%; display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-areas: "sw nm" "sw to"; column-gap: 10px; row-gap: 4px;
+  align-items: center; text-align: left; border: 1px solid var(--h-rule); background: var(--h-surface); color: var(--h-ink);
+  border-radius: 12px; padding: 7px 10px; min-height: 48px; cursor: pointer; font: 15px/1.25 var(--h-body);
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+@media (min-width: 520px) { .v5-wrow { grid-template-columns: 34px minmax(0, 1fr) auto; grid-template-areas: "sw nm to"; } }
+.v5-wrow:hover { background: var(--h-accent-soft); }
+.v5-wrow.on { border-color: var(--h-accent); box-shadow: 0 0 0 1px var(--h-accent); }
+.v5-wrow.member { margin-left: 18px; width: calc(100% - 18px); }
+.v5-wrow .sw { grid-area: sw; width: 34px; height: 24px; border-radius: 5px; display: grid; place-items: center; font: 800 10px/1 var(--h-body); color: #fff; }
+.v5-wrow .nm { grid-area: nm; min-width: 0; }
+.v5-wrow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v5-wrow .nm .t { font-weight: 700; }
+.v5-wrow .nm small { color: var(--h-muted); font-size: 12.5px; margin-left: 4px; }
+.v5-wrow .to { grid-area: to; display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.v5-wrow .arr { color: var(--h-faint); }
+.v5-wrow[aria-expanded="true"] { border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; }
+.v5-wreason { margin: -1px 0 0; padding: 10px 12px 4px 54px; border: 1px solid var(--h-rule); border-top: 0; border-radius: 0 0 12px 12px; background: var(--h-surface); font-size: 14.5px; line-height: 1.45; animation: v5-in .2s cubic-bezier(.2, .8, .2, 1); }
+.v5-wlist li:has(.member) .v5-wreason { margin-left: 18px; }
+.v5-wreason p { margin: 0 0 8px; }
+
+/* part 2: the three questions and the delete result */
+.v5-q, .v5-res { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 10px; }
+.v5-q li, .v5-res li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14.5px; line-height: 1.4; }
+.v5-q li i, .v5-res li i { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-style: normal; background: var(--h-surface-2); color: var(--h-faint); transition: background .2s, color .2s; }
+.v5-q li i svg, .v5-res li i svg { width: 16px; height: 16px; }
+.v5-q li.yes i, .v5-res li.yes i { background: color-mix(in srgb, var(--h-good) 18%, transparent); color: var(--h-good); }
+.v5-q li.no i, .v5-res li.no i { background: color-mix(in srgb, var(--h-warn) 18%, transparent); color: var(--h-warn); }
+.v5-q li.skip { opacity: .55; }
+.v5-q li.skip div > span::after { content: " (the first draft never asked)"; font-style: italic; }
+.v5-q b, .v5-res b { font-weight: 700; }
+.v5-q span { display: block; color: var(--h-muted); }
+.v5-sublines { display: block; margin-top: 4px; color: var(--h-muted); font-size: 13.5px; }
+.v5-verdict { padding: 10px 12px; border-radius: 10px; font-size: 14.5px; }
+.v5-verdict.good { background: color-mix(in srgb, var(--h-good) 12%, transparent); }
+.v5-verdict.bad { background: color-mix(in srgb, var(--h-warn) 12%, transparent); }
+.v5-try .h-row { margin-top: 4px; }
+
+/* the other fix: two small pictures */
+.v5-other { display: grid; gap: 12px; }
+.v5-other .v5-sub { margin: 0; }
+.v5-minis { display: flex; flex-wrap: wrap; gap: 18px; }
+.v5-minifig { margin: 0; display: grid; gap: 6px; justify-items: start; width: 132px; }
+.v5-minifig figcaption { font-size: 13px; line-height: 1.35; color: var(--h-muted); }
+.v5-mini { position: relative; width: 96px; aspect-ratio: 9 / 16; border-radius: 7px; overflow: hidden; background: #000; box-shadow: 0 0 0 1px var(--h-rule), 0 6px 16px rgba(0, 0, 0, .18); }
+.v5-mini i { position: absolute; display: block; }
+.v5-mini .bd { inset: 0; background: radial-gradient(60% 40% at 50% 45%, #f1b58a, transparent 70%), linear-gradient(160deg, #b57a5a, #4d3a52); filter: blur(3px); transform: scale(1.1); }
+.v5-mini .bd.top { filter: blur(3px) saturate(.9); }
+.v5-mini .clip { left: 0; right: 0; top: 34%; height: 32%; background: linear-gradient(135deg, #f0a66e, #6d4a86); box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); }
+.v5-mini .clip::after { content: ""; position: absolute; left: 38%; top: 22%; width: 22%; height: 58%; border-radius: 40% 40% 12% 12%; background: rgba(40, 22, 30, .55); }
+.v5-mk { position: absolute; right: 5px; bottom: 5px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff; z-index: 3; }
+.v5-mk svg { width: 14px; height: 14px; }
+.v5-mk.no { background: #c65b2a; }
+.v5-mk.yes { background: #1c7d5c; }
+
+/* ---- mock-side pieces ---- */
+.fm .v5-traytools { display: flex; flex: none; gap: 2px; }
+.fm .v5-traytools .fm-tool { min-width: 60px; }
+.fm .v5-more {
+  display: inline-flex; align-items: center; height: 32px; margin-left: 4px; padding: 0 10px; border: 1px solid rgba(155, 135, 245, .55);
+  border-radius: 9px; background: rgba(155, 135, 245, .16); color: #c3b6ff; font-weight: 600; font-size: 12px; cursor: pointer; vertical-align: middle;
+}
+.fm .v5-more:hover { background: rgba(155, 135, 245, .26); }
+.fm-phone.v5-swap .fm-tlwrap { animation: v5-in .24s cubic-bezier(.2, .8, .2, 1); }
+.v5 .fm-item .fm-badge-full { top: 4px; right: 3px; }
+.v5 .fm-tile .fm-badge-full { top: auto; bottom: 4px; right: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .v5-frame.enter, .v5-why.flash, .v5-log li.new, .v5-bytes.pulse, .v5-wreason, .fm-phone.v5-swap .fm-tlwrap { animation: none; }
+}

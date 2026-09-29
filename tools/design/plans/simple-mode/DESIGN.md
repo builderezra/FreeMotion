@@ -79,7 +79,7 @@ main-track engine is `FM.spine` and the stored key is `sm`. The code never says 
 | 20 | All three: presence and collab-media draw on Full's timeline DOM, so remote selections would not show in Simple (buildability §5) | One `FM.timeline.host()` interface (clip boxes, inner layer, ruler, scroller, head width, time↔x) that both timelines answer; presence heads, taps, pointer time, follow-scroll and comment marks all draw through it (§10.3) [checked: `js/collab-presence.js:1012`, `:1020`; `js/collab-media.js:1325`]. |
 | 21 | C: derived starts rewrite the Full editor (push and swap), override ~30 `start` writers, and change the wire first (all three judges) | Not adopted. C's derived layout stays on file as the Phase 8 upgrade path, only if measured seams call for it. Its **clip time on the wire**, **keep my frame**, **lease protects content not time**, **undo labels** and **semantic fuzz** are grafted. |
 | 22 | C's graft needs care: the keyframe conversion set must equal the shift set; `js/ai-ops.js:116` writes `start` with no shift; the Full drag shifts keyframes only on release (soundness §4) | One shared collector `FM.timedLists(layer)` (today's `animatedProps` lists **plus every cue's effect lists**, Q3) feeds `shiftLayerKeyframes`, `scaleLayerKeyframes` and the wire conversion, so they cannot disagree. The Full drag shifts per move; `ai-ops` shifts. T14 checks a named roster of every `start` writer, in two lists (moves the animation / keeps keyframes absolute) (§10.4). |
-| 23 | All three: the Assistant (#856) is missing as an easy door; no "first ten seconds" drawn end to end; no check against the collab chrome (ezra-fit §8) | **Ask** in the project tools when a key is set (D12). The first ten seconds are §7.3 and visualizer V2. The chrome check is visualizer V12 and test T12. |
+| 23 | All three: the Assistant (#856) is missing as an easy door; no "first ten seconds" drawn end to end; no check against the collab chrome (ezra-fit §8) | **Ask** in the project tools when a key is set (D12). The first ten seconds are §7.3 and visualizer V2. The check against it is visualizer V12, **Buttons on the video**, and test T12. |
 
 ---
 
@@ -1186,8 +1186,11 @@ measured forms.
 equals the owner's own profile name (case-insensitive, trimmed) or the member is marked `self` (§10.4 4c): then *"your phone"*
 when `rec.dev === 'phone'` (`js/collab-ui.js:2504`, already shown on the knock card as "Ezra (phone)", `:4091`), *"your
 computer"* otherwise, and *"your other device"* when two same-name members share a `dev`. On a guest whose host name
-(`hostLabel`, `:3825`) equals its own, the owner reads *"the device that started sharing"*. It feeds `live`, `away`, `busy`,
-`locked by` and `view`.
+(`hostLabel`, `:3825`) equals its own, the owner reads *"your other device"*: a short device name, like the owner's side
+has, and the most the guest can truthfully say, since `hello`'s `dev` travels guest → host only (`js/collab-session.js:1454`)
+and nothing tells a guest which kind of device started sharing (so never *"your Mac"*). The old *"the device that started
+sharing"* was 31 characters, about 250 px of the 348 px row before the rest of the line (V6 moment 9, handoff-v6 note 3). It
+feeds `live`, `away`, `busy`, `locked by`, `view` and 4d's moved and kept lines (§10.4).
 Every line that names an item uses one helper, `FM.spine.itemWord(lid)` (the naming rule, §8.9): a main clip is *"Clip N"*
 (its 1-based position on the main track in the committed scene when the line is shown), a text or caption item is its first
 words in quotes cut to 16 characters with an ellipsis, anything else is its kind (*"the sticker"*, *"the image"*, *"the video on
@@ -1249,6 +1252,12 @@ Undo or Do-it-anyway pill caught taps meant for a clip; and `#toast` has no role
    outline under `FM.reducedMotion()`). The pressed tool stays mounted and keeps focus, so Move earlier can be pressed three
    times in a row by thumb or by Enter (when every line replaced the tray, the button vanished under the focus after one press
    and a second tap landed on text that only dismissed it).
+   **The one button-less line that does take the tray is a remote ripple's** *"Sam moved 4 clips"* (§10.4 4d; this decides
+   rule 1(a) against 4d the way V6 draws it). Nothing was pressed on this device, so there is no tool under a thumb to keep, and
+   the line is what explains why the clips just moved. It shows in `#sm-say` as a quiet message state (no buttons, so rule 5's
+   arming does not apply), times out after 4 s like any line, and is written to `#sm-live` as well. **It never replaces an open
+   tool** (a text field someone is typing in, a slider, crop; V6 moment 6) **or a tray whose tool has focus**: then it goes to
+   `#sm-live` only, and the mover-colour tint shows the rest. In Full it is 4d's plain toast.
    (b) **Lines with buttons** (refusals, a delete that took other items, multi-item or Assistant edits, Do it anyway, a soft
    undo) take `#sm-say`: a message state of the permanent tray row (§8.2), the same 52 px row, full width, so it adds no height
    and never covers `#sm-timeline`; `role=status`, `aria-live=polite`, always in the DOM. They never time out while focus or the
@@ -1831,6 +1840,16 @@ would go on the D2 sheet with its measured width first.
   `styles.css:2590-2592`, quoting him: *"I don't want it to change apart from where I've specified"*), and his row would
   differ between phones; V12 draws it at 440 beside D2-B. Or **D2-D**: no switch on Full's play bar at all, only the cog's Editor
   row and Home's ⋯ (the back-to-Simple button still appears after a hop, as under D2-B). Either way the Simple row is the same.
+- **D2-B's snag on small phones (measured in V12, app v17.12, not yet fixed here).** Full's ⋯ on the phone opens `#opt-bar`
+  (`index.html:513-527`), a vertical strip of icon buttons (speed stepper, loop, magnet, mark in / out / clear), not a list of
+  words, and it is already full. At **380×667** it has **254 px of room for 278 px of buttons today**, so the last one,
+  *clear export marks* (`#vb-markclear`), is half cut off; with D2-B's switch on top it needs **324 px** and the last two are
+  out of sight. At **380×800** it was 285 of 285 before and 332 after, so even there the last button slides away until the
+  strip is scrolled. D2-B is the recommended pick, so **its small fix is part of D2-B, and matters most on small phones**:
+  either a shorter switch item (an icon-sized button in the strip rather than a worded row) or a strip that is meant to
+  scroll (a visible edge fade and scroll affordance, tested at 380×667). Which one is settled with the pictures on the D2
+  sheet (V10) and V12; the numbers are V12's (handoff-v12 note 2). D2-A adds a row to the same strip (◐ as Top/Bottom), so
+  it meets the same limit.
 - **Under D2-B (and D2-D) the way back from Full on the phone is always one visible tap** (⇄ sits beside ✂ in Simple, so a mis-tap into Full
   is likely, and Simple is meant to become the fresh-install default): (1) the first arrival in Full from Simple on a device,
   and every hop, shows a **non-interactive** `FM.toast(msg, 3000)` with no `onTap`, *"Full editor · the ‹ button on the play bar
@@ -1848,7 +1867,7 @@ would go on the D2 sheet with its measured width first.
 - **On PC** it sits in `#t-home` after `‹` (`js/app.js:7594-7596`), using the recorded-origin mechanism so `pcTransportLayout`'s
   teardown puts it back (`js/app.js:7562` [checked]). ⋯ stays where Full puts it on PC, just inside ⛶ (queue 851,
   `js/app.js:7658`), so the PC left group is **‹ ✂ ⇄ |◀**: ✂ always comes before ⇄, on both layouts. This constraint is
-  phone-only. The slot-by-slot table (Full and Simple; phone D2-A, phone D2-B and PC) goes on the V12 chrome check and the D2 sheet,
+  phone-only. The slot-by-slot table (Full and Simple; phone D2-A, phone D2-B and PC) goes on V12 (Buttons on the video) and the D2 sheet,
   so he sees the ⧉ → ✂ change before he picks. **The Simple row's order is D18**: ⋯ · ✂ · ⇄ · |◀ (recommended: ⇄ in slot 3
   in both editors, where D2-B's back button also sits) or ⋯ · ⇄ · ✂ · |◀ (⇄ where Full has ⧉). This section is written for the
   recommended order.
@@ -2566,7 +2585,7 @@ title or a command id (§8.5; a fixture rendering "Overlay" in both rows is the 
 
 | Thing | Word (both editors) | Used in |
 |---|---|---|
-| The main track | **Clip row** (section label, the mute row, refusal lines, tooltips; "main track" stays a code and document term only) | §8.2, §3.11 |
+| The main track | **Clip row** (section label, the mute row, refusal lines, tooltips, and the label on a clip someone is dragging, *"Sam · clip row"* in Full; "main track" stays a code and document term only) | §8.2, §3.11, §10.3 |
 | Main clip → overlay / overlay → clip row | **Make overlay** / **Put in the clip row** as the full names (`title`, `aria-label`, Full's layer menu, drag labels), with no "layer", right even for a picture-in-picture made in Full that was never on the clip row. **The tray faces never show the bare word "Overlay"** (which means only the project tool that adds a picture on top, and the section / tray kind): **⤒ Lift off** and **⤓ Into row**, with *"On top"* drawn as the alternative on V10 for him to pick. Full's layer menu uses the same two words, replacing "Take off / Put on main track". The non-recommended alternative on V10: *Move to top layer / Put back in line* | tray §8.5, Full menu §4.4, drag labels §3.8 |
 | The follow switch | **Stay put** (on/off) in both editors (Full's "Stays put / Follows its clip" goes) | trays, Full menu |
 | The caption-track switch | **Follows the clips / Stays with the sound** | Caption track tray |
@@ -2749,7 +2768,8 @@ The same `othersCanEdit()` powers the drag arm check, so there is one predicate.
   `FM.simpleTimeline.rebuild` fires the same `FM.timeline.onRebuilt` listeners (`js/collab-presence.js:788`,
   `js/collab-comments.js:574`), and `FM.editor.set` calls `paintHeads` and `paintMarks` after the switch.
 - **In Simple**, an item a Full user holds (their lease, `pr.ls`) wears that person's colour ring. **In Full**, a main clip a
-  Simple user is arranging is outlined with "Sam · main track", read from presence `ar.ids` (§3.8), not from `af`: a Simple drag
+  Simple user is arranging is outlined with "Sam · clip row" (the one word for the row everywhere, §8.9; never "main track" on
+  screen), read from presence `ar.ids` (§3.8), not from `af`: a Simple drag
   writes nothing until release, so `af` is null throughout it. `act: 'arrange'` joins `ACTS` (`js/collab-presence.js:81`), and
   `cleanPr` (`:280-297`) keeps `ar` only when `act === 'arrange'`, `k` is one of the two words and `ids` is an `isId`-filtered
   array capped at 8. `ar` rides the 4a bump (Phase 4, §3.8); a guest on an older revision is refused at the door
@@ -3038,15 +3058,22 @@ path, graph editor, points, mask; `LEASED`, `js/collab-presence.js:193-203`) re-
      survives resumes and new mids; when a joiner's name matches the owner's, the row offers the mark but never sets it by itself.
      The host stamps no `by` on an accepted `li` from a `self` member, tells that guest `self: 1` in its welcome / role message,
      and the guest stores it on its linked-copy record. A `self` guest's delete follows D5 like the owner's, and the "your title
-     was kept" line never fires between the owner and a `self` member. Lines name that member *"your phone"* (`whoWord`, §3.11).
+     was kept" line never fires between the owner and a `self` member. Lines name that member *"your phone"* (`whoWord`, §3.11),
+     and on that device the owner is *"your other device"*. **The moved line does fire between his own devices** (*"Your phone
+     moved 1 clip"*, *"Your other device moved 1 clip"*), marked or not: it says what just changed on this screen and where from,
+     which is as true for his own other device as for Sam. Only the "kept" line is about whose item it is, so only it is exempt.
 
 **4d. Seeing it, and lifting the gate (`SCHEMA_REV` 6 → 7).**
 - **Remote ripples glide** over 200 ms (the switch's FLIP code) and tint the moved clips in the mover's colour for a second,
-  with one line: *"Sam moved 4 clips"* (+ *"including locked Clip 7"* when a Do-it-anyway ran); under reduced motion the glide
+  with one line in the tray (§3.12 rule 1(a)'s one exception: never over an open tool, then `#sm-live` only): *"Sam moved 4 clips"* (+ *"including locked Clip 7"* when a Do-it-anyway ran); under reduced motion the glide
   snaps and the tint is a static outline (§8.10). No line for ordinary edits by others, **with one exception**: when a batch
   from another member removes, or sets `sm.stay` on, a layer in this device's `mine` set: *"Ezra deleted a clip — your title
   ‘Hello’ was kept (now Stay put)"*, or, if it was removed anyway (an old build), *"Ezra deleted your title ‘Hello’ — only Ezra
-  can undo it"*.
+  can undo it"*. **In Simple's tray** the kept line is one 348 px row like every other (§3.12 rule 3), so it names no one and
+  quotes nothing: *"Kept your title · its clip was deleted"* + **[Show]** (about 195 px of text at 13 px, measured with the
+  system font outside the app, UNVERIFIED in the app, so it fits beside Show and clear of 🗑's 56 px under any name); the full
+  sentence with the name and the title goes in its `title` / `aria-label` and in Full's toast, which wraps. (With a name and
+  a quoted title it measured 343 px before its button, and 466 px from his other device.)
 - **On a device in Full** these lines have nowhere to go (`#sm-say` is Simple's tray, and the glide is Simple's FLIP helper), and
   the person who most needs *"your title was kept"* is usually Ezra, the owner, adding titles in Full while a guest arranges in
   Simple. So `FM.spine.say` routes to `FM.toast` when the editor is Full (the collab-bridge toast / `toastAction` path,
@@ -3711,7 +3738,7 @@ recommended option, per his rule (the list under the table); he will say if one 
 | # | Question | Why it matters | Options |
 |---|---|---|---|
 | **D1** | What are the two editors called? | It is the word on the switch, the New project cards and every Home card. | **A. Simple / Full (recommended: your own word, and "Full" promises nothing is taken away)** · B. Quick / Full · C. Clips / Layers · D. Cut / Motion. ("Pro" is avoided: you use it for a paid version.) |
-| **D2** | Where is the switch when you are in Full, on the phone? | Full's play bar is already full, so the switch either takes a button you use or sits one tap away. | A. Slot 3 of Full's play bar too; your ◐ Add-row switch moves into ⋯ as a Top/Bottom row and loses its knob · **B. The first item inside Full's ⋯ (one extra tap, your row untouched); after a switch or Open in Full, a back-to-Simple button (the Simple icon with ‹) stands in slot 3 until you go back, and a short note says so (recommended)** · C. On phones about 430 px wide and up (yours is 440), every play-bar button shrinks from 34 to 31 px so five fit; narrower phones use B (your row would change, and differ between phones) · D. Not on the play bar at all: only the ⚙ canvas settings and Home's ⋯ (the back-to-Simple button still appears after Open in Full). §6.1 calls these D2-A to D2-D; on PC the switch is always in the left group |
+| **D2** | Where is the switch when you are in Full, on the phone? | Full's play bar is already full, so the switch either takes a button you use or sits one tap away. | A. Slot 3 of Full's play bar too; your ◐ Add-row switch moves into ⋯ as a Top/Bottom row and loses its knob · **B. The first item inside Full's ⋯ (one extra tap, your row untouched); after a switch or Open in Full, a back-to-Simple button (the Simple icon with ‹) stands in slot 3 until you go back, and a short note says so (recommended); on a small phone ⋯'s strip is already too short, so B comes with a small fix: a shorter item, or a strip meant to scroll (§6.1)** · C. On phones about 430 px wide and up (yours is 440), every play-bar button shrinks from 34 to 31 px so five fit; narrower phones use B (your row would change, and differ between phones) · D. Not on the play bar at all: only the ⚙ canvas settings and Home's ⋯ (the back-to-Simple button still appears after Open in Full). §6.1 calls these D2-A to D2-D; on PC the switch is always in the left group |
 | **D3** | How does a new project choose its editor? | It decides what + New project does on your devices and on a friend's fresh install. | **A. Two cards in New project that remember your last pick; Full stays picked on any device that already has projects, Simple only on a brand-new install; picking Simple folds the rarely used settings into one line (recommended)** · B. Always start in Simple · C. Always start in Full |
 | **D4** | Do text, stickers and overlays follow their clip? | It decides whether titles stay on their picture when you move or cut clips. | **A. Yes; music, voice-overs and long things stay put; anything can be set to Stay put; lyrics timed to the song are spotted and you are offered "Keep on the music" (recommended)** · B. Nothing follows (CapCut on the phone) · C. Ask each time |
 | **D5** | Deleting a clip that has things on it | A deleted clip either takes its titles with it or leaves them floating over the wrong picture. | **A. They go too; a line says how many; Undo brings all back (recommended)** · B. They stay where they were |
@@ -3781,7 +3808,7 @@ checked at 380 px and 1280 px, with sheets split for his phone if tall (memory: 
 | V9 | **The ripple maths** | Before/after strips for each command (delete, tail trim, head trim, speed, reorder, insert, make overlay, close gap), with keyframe dots, followers, caption cues (the time map, a split straddler) and the camera moving exactly; the D6 slide-back; a blend kept through a delete; an end card following the track end; the head trim both ways (same footage, chosen; same time into the clip); a title and a cue on a clip at 2×: the title keeps its length and moves to half its offset, the cue scales; a trim of each clip of a blend, the fade staying over the overlap; Turn into a transition (Phase 6), with the followers it moves | step-through diagram |
 | V10 | **The decision sheet** | D1–D21 exactly as §17 words them, plus the §8.9 word table and the "decided with the recommended option" pictures (§17), each a small picture with the options drawn and one marked recommended, and one button that copies his answers (or "do recommended") as a message | interactive form (local only) |
 | V11 | **The roadmap** | What he can hold after each phase, drawn as the screen he would see, with Phase 1 highlighted and drawn exactly as §15.1 (a lines-only `#sm-say` row, blank and with the Delete line; no tools; Full's Add sheet with clips laid end to end; ✂ dimmed) at 380 and 1280 px | diagram |
-| V12 | **The chrome check** | The stage and play bar at 380 px and 1280 px, in both editors, solo and live: people chip, LIVE pill, comments bubble, person+ door, and the editor button in each D2 placement (D2-A and D2-B; D2-D has no play-bar button and shares D2-B's back-button pictures), at 380×667, 440×956 and 1280, with the slot-by-slot table and D18's two Simple orders; plus Full reached by a mis-tap from Simple and after Open in Full, at 380 and 440, for D2-A and D2-B (the icon-only back button in slot 3 at its real 34 px beside ◐'s normal state, and the non-interactive note), D2-C at 440 beside D2-B; plus the own-devices case with the *"Your phone can edit · clips stay put"* line and its Options menu, at 380 and 1280 | rendered screenshots |
+| V12 | **Buttons on the video** | The stage and play bar at 380 px and 1280 px, in both editors, solo and live: people chip, LIVE pill, comments bubble, person+ door, and the editor button in each D2 placement (D2-A and D2-B; D2-D has no play-bar button and shares D2-B's back-button pictures), at 380×667, 440×956 and 1280, with the slot-by-slot table and D18's two Simple orders; plus Full reached by a mis-tap from Simple and after Open in Full, at 380 and 440, for D2-A and D2-B (the icon-only back button in slot 3 at its real 34 px beside ◐'s normal state, and the non-interactive note), D2-C at 440 beside D2-B; plus the own-devices case with the *"Your phone can edit · clips stay put"* line and its Options menu, at 380 and 1280 | rendered screenshots |
 
 ---
 

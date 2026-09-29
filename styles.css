@@ -707,7 +707,7 @@ body.text-editing .sb-wrap { display: none !important; }
    .dh-t-a / .dh-t-b / .dh-t-c on #drop-hint) and the line colour on every clap ('clapper.lines' → .dh-grey):
      A — open, then a clap every 6 s while the project stays empty (dh-clap / dh-jolt / dh-whack, as shipped in v17.07)
      B — one clap, then it stays shut (…-b, 1000 ms, once)
-     C — non-stop, a clap every 1.6 s (…-c)
+     C — non-stop, a clap every 3.6 s (…-c) — it was 1.6 s until queue 988 (below)
    All three slam at 470 ms into their cycle (the keyframes are the plan's §5d blocks, tools/design/plans/2026-09-26-
    clapper/plan.md). The CHOICE rides on custom properties, never on a more specific `animation` rule: the Home and
    reduced-motion rules below switch `animation` off on the same three elements at their own specificity, and a
@@ -715,7 +715,7 @@ body.text-editing .sb-wrap { display: none !important; }
    for less motion. With no class (the first frame, or FM.variant missing) the defaults are A. */
 #drop-hint { --dh-clap: dh-clap; --dh-jolt: dh-jolt; --dh-whack: dh-whack; --dh-dur: 6s; --dh-n: infinite; }
 #drop-hint.dh-t-b { --dh-clap: dh-clap-b; --dh-jolt: dh-jolt-b; --dh-whack: dh-whack-b; --dh-dur: 1000ms; --dh-n: 1; }
-#drop-hint.dh-t-c { --dh-clap: dh-clap-c; --dh-jolt: dh-jolt-c; --dh-whack: dh-whack-c; --dh-dur: 1600ms; --dh-n: infinite; }
+#drop-hint.dh-t-c { --dh-clap: dh-clap-c; --dh-jolt: dh-jolt-c; --dh-whack: dh-whack-c; --dh-dur: 3600ms; --dh-n: infinite; }
 .dh-stick { transform-box: view-box; transform-origin: 0 0; animation: var(--dh-clap) var(--dh-dur) .4s var(--dh-n) both; }
 .dh-body { animation: var(--dh-jolt) var(--dh-dur) .4s var(--dh-n) both; }
 .dh-whack path { opacity: 0; stroke-dasharray: 1 2; stroke-dashoffset: 1; animation: var(--dh-whack) var(--dh-dur) .4s var(--dh-n) both; }
@@ -764,28 +764,35 @@ body.text-editing .sb-wrap { display: none !important; }
   54% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
   70%, 100% { opacity: 0; stroke-dashoffset: -.95; }
 }
-/* C — non-stop (plan §5d): 1600 ms, the slam at 29.375% = 470 ms, open again by the end so the loop has no seam. */
+/* C — non-stop, SLOWER (queue 988). Ezra, 29 Sep, on his phone: *"The snap animation for when a project is empty goes too
+   fast - like it repeats instantly but should repeat a bit slower"*. At 1600 ms C sat shut for 0.3 s and was already
+   lifting for the next clap — a snap every 1.6 s with no rest between. Now 3600 ms: the clap itself is untouched, in
+   milliseconds (lift 300→380, SLAM at 470 = 13.056%, rebound 530, shut by 600, lines gone by 700), then it rests shut
+   for 2.3 s and lifts open over the last 0.7 s, so 100% = 0% and the loop has no seam — the same shape as A with a shorter
+   rest. 3.6 s, not 3 or 4: a clear pause between snaps, still a little over half of A's 6 s so the three options stay
+   different to compare (he has not picked; they stay random). A (6 s) and B (once) are as they were — "repeats
+   instantly" can only be C. */
 @keyframes dh-clap-c {
   0% { transform: rotate(-20.32deg); }
-  18.75% { transform: rotate(-20.32deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
-  23.75% { transform: rotate(-23.32deg); animation-timing-function: cubic-bezier(.6, 0, 1, .6); }
-  29.375% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
-  33.125% { transform: rotate(4.18deg); animation-timing-function: ease-in; }
-  37.5% { transform: rotate(7.68deg); }
-  56.25% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  8.333% { transform: rotate(-20.32deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  10.556% { transform: rotate(-23.32deg); animation-timing-function: cubic-bezier(.6, 0, 1, .6); }
+  13.056% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  14.722% { transform: rotate(4.18deg); animation-timing-function: ease-in; }
+  16.667% { transform: rotate(7.68deg); }
+  80.556% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
   100% { transform: rotate(-20.32deg); }
 }
 @keyframes dh-jolt-c {
   0% { transform: translateY(0px); }
-  29.375% { transform: translateY(0px); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
-  31.875% { transform: translateY(.5px); animation-timing-function: ease-in; }
-  37.5%, 100% { transform: translateY(0px); }
+  13.056% { transform: translateY(0px); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  14.167% { transform: translateY(.5px); animation-timing-function: ease-in; }
+  16.667%, 100% { transform: translateY(0px); }
 }
 @keyframes dh-whack-c {
-  0%, 29.313% { opacity: 0; stroke-dashoffset: 1; }
-  29.375% { opacity: 1; stroke-dashoffset: .7; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
-  33.75% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
-  43.75%, 100% { opacity: 0; stroke-dashoffset: -.95; }
+  0%, 13.028% { opacity: 0; stroke-dashoffset: 1; }
+  13.056% { opacity: 1; stroke-dashoffset: .7; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  15% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
+  19.444%, 100% { opacity: 0; stroke-dashoffset: -.95; }
 }
 body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path { animation: none; }
 @media (prefers-reduced-motion: reduce) { .dh-stick, .dh-body, .dh-whack path { animation: none; } }
@@ -1334,7 +1341,37 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   .te-panel.te-docked .te-font { max-width: none; }
   .te-panel.te-docked { box-shadow: 0 8px 24px rgba(0,0,0,.35); }
   .te-panel.te-docked #te-input { max-height: 22vh; }
+  /* #984 — THE CAPTIONS EDITOR IN THE ADD MENU'S BOX. js/text-edit.js sizes it to the box exactly (left/top/width/
+     height), so it is part of the band, not a card floating over it: square, no shadow, the band's own line on the
+     timeline side. Short and narrow (307x240 at 1280x800), so: one toolbar row that stays on top while the rest
+     scrolls inside the box — ✓ and the sheet buttons are never scrolled away — with the font button taking what is
+     left and "pt" dropped; then the caption strip, the field, and the caption list. */
+  .te-panel.te-capdock {
+    border: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); border-radius: 0; box-shadow: none;
+    overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+    scroll-padding-top: 54px;   /* a field tabbed to scrolls into view BELOW the pinned toolbar, not under it */
+  }
+  .te-panel.te-capdock .te-bar {
+    position: sticky; top: 0; z-index: 2; flex: 0 0 auto; flex-wrap: nowrap; gap: 5px; padding: 7px 8px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .te-panel.te-capdock .te-btn { min-height: 34px; padding: 4px 8px; font-size: 13px; }
+  .te-panel.te-capdock .te-align { width: 34px; padding: 4px; }
+  .te-panel.te-capdock .te-font { flex: 1 1 0; min-width: 0; max-width: none; }
+  .te-panel.te-capdock .te-size-unit { display: none; }
+  .te-panel.te-capdock .te-done { min-width: 40px; font-size: 16px; }
+  /* z-index: auto — the phone's `.te-dock { z-index: 80 }` makes this FLEX ITEM a stacking context above the sticky
+     toolbar even though it is not positioned (flex items honour z-index), and the field scrolled up over ✓. */
+  .te-panel.te-capdock .te-dock { flex: 0 0 auto; padding: 7px 8px 2px; z-index: auto; }
+  .te-panel.te-capdock #te-input { min-height: 46px; max-height: 96px; padding: 8px 10px; }
+  .te-panel.te-capdock .te-caps { display: block; flex: 0 0 auto; padding: 0 8px 10px; }
+  .te-panel.te-capdock .te-caps .cap-title { margin-top: 8px; }
+  /* Square and edge to edge: js/text-edit.js sizes it to exactly the box under the toolbar, so it is the box's contents
+     for as long as it is open — no corners or inset for the list underneath to show through (#984 review). The right
+     edge keeps the box's own line against the timeline. */
+  .te-pop.te-pop-capdock { z-index: 81; overscroll-behavior: contain; border-radius: 0; border-width: 0 1px 0 0; box-shadow: none; }
 }
+.te-caps { display: none; }   /* #984: only the PC captions box shows the list here (above) */
 #pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 #pe-bar span { font-size: 12px; color: var(--text-faint); max-width: 58vw; }
 .pe-btn { width: 100%; margin: 8px 0 2px; }
@@ -2688,7 +2725,23 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
        right — and that asymmetry put play 13px right of screen centre (queue 373 clause 8). With a 0
        minimum the tracks stay equal by construction even when there is nothing to share, and the wider
        group overflows to the RIGHT into the padding, which is empty space by definition. */
-    display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+    /* …EXCEPT THE LEFT TRACK, which now has its content as its floor (queue 979). A 0 minimum let the left
+       group overflow too — and it is `justify-content: flex-end`, so it overflowed LEFT, out of the row and
+       over the inspector. Measured on v17.12, every 3px from 701 to 899 with 0, 1 and 2 layers selected:
+       201 of 201 states had a transport control that did not take its own click — the copy button and the
+       add-row switch under the A/S/D keys (#key-rail is on the inspector's title line, level with this
+       row), the skip button and the pill's left end under the back button, and from 900 to 996 the copy
+       button still under the back button (its CENTRE from 900 to 964, so a click on copy left the project).
+       The cause is v4.97's centring: play is held on SCREEN centre, and below ~1013px the room between the
+       panel's left edge and screen centre is narrower than back + the three left controls + half the pill.
+       With `minmax(min-content, 1fr)` the left track is its fr share whenever the share is enough — every
+       window from ~1013px up, play on 50vw, and measured pixel-identical to v17.12 at 1016, 1040, 1100,
+       1160, 1280, 1440 and 1920 with 0, 1 and 2 selected — and its own width when it is not, so play
+       slides right exactly as far as the left controls need and no further. That is the conditional the
+       v4.97 test always stated ("hit screen centre when the room exists, and never overlap the panel
+       regardless"); only the right track keeps the 0 minimum, because the heavier right group is the one
+       #373 caught pushing the pill off centre. The back button's width is reserved below. */
+    display: grid; grid-template-columns: minmax(min-content, 1fr) auto minmax(0, 1fr); align-items: center;
     /* CENTRE THE ROW TRACK, not just the items in it (queue 278). Ezra: "the bar with the bin on it and
        stuff, the darkening of the background… is still off centred, the bar gos lower than it gos
        higher, and it looks off." Measured at 1280x800 rather than eyeballed, because "still" means it
@@ -2742,6 +2795,45 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
      flanking tracks had an auto minimum and so were sized by their own contents. The tracks above now
      have a 0 minimum and are equal BY CONSTRUCTION, so the group's width no longer feeds back into the
      centring at all, and the control can sit where he actually asked for it in both layouts. */
+}
+/* ---- NOTHING ON THE ROW SITS UNDER ANYTHING ELSE (queue 979) ------------------------------------------------------
+   The left track above now holds the left group inside the row. Two more things finish the job:
+   1. THE BACK BUTTON'S WIDTH IS RESERVED. #t-home is absolute at the row's left edge (so it never shifts play), which
+      means nothing in the grid knew it was there: the left group's floor did not include it, and the copy button slid
+      under it from 900 to 996px. The left group is padded by the back button plus one row gap — only when #t-home is
+      in the row (it exists once app.js has built the PC row), and only ever felt when the track is at its floor; at
+      its fr share the group is packed against the pill (flex-end) and the padding is empty space.
+   2. THE RIGHT SIDE STOPS PAYING FOR GAPS AND BOXES IT CANNOT AFFORD. Holding the left group in the row moves play
+      right on a narrow window, and the right-hand run follows it — measured, with two selected the ⋯ ran past the
+      window's edge below ~872px (one selected, ~791). app.js (pcTransportRoom) MEASURES the widest the layer group can get (every button it
+      holds shown, as with two selected — so a shift-click never re-flows the row) and steps down only as far as it
+      must: `.t-snug` closes the gaps (6 → 2, inside the group 0, the group's 3px left margin), keeping skip → undo at the
+      12px he asked for (#420/#763); `.t-small` then takes the row's boxes from 34 to 28 — the #405 floor, "the smallest
+      this row can honestly go". The glyphs keep their size; only the hover box and the air between them shrink.
+   3. …AND BELOW ~770px, TWO BUTTONS FOLD INTO ⋯. With both steps above, two selected still put ⋯ at 726–754 in a 701px
+      window (measured). `.t-fold` takes Group and Masking group off the row — the only two whose actions ⋯ also holds
+      (FM.layerMenuItems: "Group selection" / "Masking group" whenever two or more are selected, exactly when these
+      show). Parent and delete stay: parent is in no menu, and delete was taken out of ⋯ on his word (#221).
+      !important because syncTopBar owns the Group button's display inline; the class only ever hides.
+   The far run's band is #970's, held for his pick — except its line, which moved from 1160 to 1226px because one selected
+   put ⋯ under the version chip from 1162 (#801's own case, re-measured; see the note at the band). */
+@media (min-width: 701px) {
+  #transport { --t-gap: 6px; --t-home-w: 34px; }
+  #transport:has(> #t-home) .t-left { padding-left: calc(var(--t-home-w) + var(--t-gap)); }
+  #transport.t-snug { --t-gap: 2px; }
+  #transport.t-snug .t-side { gap: var(--t-gap); }
+  #transport.t-snug #btn-toend { margin-right: 10px; }   /* + the 2px gap = the 12px skip → undo of #420/#763 */
+  #transport.t-snug #t-sel { gap: 0; }
+  #transport.t-snug #t-sel.has-sel { margin-left: 0; }
+  #transport.t-small { --t-home-w: 28px; }
+  #transport.t-small .t-side .tbtn,
+  #transport.t-small #t-sel .icon-btn,
+  #transport.t-small #t-home .icon-btn { width: 28px; min-width: 28px; }
+  #transport.t-fold #btn-group,
+  #transport.t-fold #btn-maskgroup { display: none !important; }
+  /* …and the group's own ground gives back half its side padding, so at 701 its right edge (and his blue corner, #973)
+     ends inside the window rather than 3px past it — measured. */
+  #transport.t-fold #t-sel.has-sel { padding-left: 3px; padding-right: 3px; }
 }
 /* AM-style centred timecode pill, just under the transport row (fills its 26px grid row, centred). */
 /* THE PILL LIVES IN THE TRANSPORT ROW NOW (queue 364, clauses 1 + 5) — #tc-bar is gone, so these are
@@ -6471,8 +6563,12 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      (measured at 360,430, 560x146), so nothing you are typing into goes with it.
      The inspector's COLUMN collapses as well rather than being left as a hole, which is the same thing
      drawing mode does one line above; the timeline keeps its own column and widens into the space. */
-  body.text-editing #inspector-panel { display: none !important; }
-  body.text-editing #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
+  /* …EXCEPT ON A CAPTION TRACK (#984): there the editor sits IN this panel's box — where the Add menu is — so the
+     column stays and the timeline keeps its usual squished width. Only the panel's contents go, which is still queue
+     519's point: no option card is live behind the editor. js/text-edit.js capDockRect sets `te-cap-dock`. */
+  body.text-editing:not(.te-cap-dock) #inspector-panel { display: none !important; }
+  body.text-editing:not(.te-cap-dock) #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
+  body.text-editing.te-cap-dock #inspector-panel > * { display: none !important; }
   /* …AND THE BAND'S ROW HAS TO GO WITH IT (queue 513). Drawing already hides #timeline-panel and
      #inspector-panel outright, but this layout still RESERVED their row — `--tl-h`, 232px by default —
      so the stage was 628px of an 860px window and the canvas sat small with a wide black strip under it
@@ -8015,7 +8111,7 @@ body.fm-pushing #toast { z-index: 213; }
   body { --rail-w: 0px; }
   body #topbar { display: none; }
 
-  /* ---- THE ROW IS TOO NARROW FOR BOTH END CLUSTERS BELOW 1160px (queue 801) -------------------------
+  /* ---- THE ROW IS TOO NARROW FOR BOTH END CLUSTERS BELOW 1160px (queue 801) — 1226px since #979 -----------
    Found 6 Sep by using the PC layout at 900px with a layer selected: #t-far (version chip · help · notes ·
    cog · export · view options, 266px) is absolute so the play button stays centred, and #t-sel (parent ·
    delete · more, 126px) is a normal child of the right column — so once the row is narrower than the two
@@ -8028,8 +8124,18 @@ body.fm-pushing #toast { z-index: 213; }
    40 to 80 so the ruler starts under the band. Nothing can be covered, because nothing shares the row
    with it any more. One control height taller at those widths is the honest cost; a hidden control is
    not. A two-row grid was tried first and collapsed the row's fr tracks — measured, not guessed.
-     Nested inside the 701 block on purpose: this is a refinement of the PC layout, not a layout of its own. */
-  @media (max-width: 1160px) {
+     Nested inside the 701 block on purpose: this is a refinement of the PC layout, not a layout of its own.
+   ⚠️ …AND THE LINE IS 1226px NOW, NOT 1160 (queue 979 review). 1160 was right for the row #801 measured; the far run has
+   since grown (#851 put #btn-opts in it; 304px now, 266 then), and #801's own case — ONE layer selected — had drifted past
+   it. Measured settled, every 2px, the same on v17.12 and on #979's build: from 1162 to 1178 the ⋯'s CENTRE was under the chip
+   (elementFromPoint returned `.ver`, and a real click there hit the chip, which force-updates the app, instead of
+   opening the layer menu), and its right end to 1206; they touch until ~1209. The line is where ⋯ stands one far-run
+   gap (8px, the chip's own spacing to its neighbours) clear of the chip: at 1227 it is 8.8px. Selection-independent,
+   exactly as #801 was, so the row never jumps when a layer is selected. NOT covered by this line, and #970's (held for
+   his pick): TWO selected (the group is 80px wider — to ~1370) and Settings → Work with friends on (#btn-share makes the
+   far run 42px wider — one selected to ~1290), both of which are the band-or-not question he is being asked.
+   The '979 on a PC window…' test sweeps one selected to 1440, so a far run that grows again is red, not shipped. */
+  @media (max-width: 1226px) {
     /* The band's 40px come from the STAGE, not the tracks: the panel grows by the band's height (the base
        --tl-h is the 701px clamp two screens up), so the ruler and every track row sit exactly where they
        did — measured, because the first cut took the height from the tracks and four desktop tests that
@@ -8371,9 +8477,8 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #canvas-dialog.cv-pair.cv-side.cv-flying > .export-card > :not(.cv-mini):not(.dialog-actions) { width: 310px; }
   #canvas-dialog.cv-pair.cv-side.cv-flying > .export-card > .dialog-actions { width: 358px; }
   #canvas-dialog.cv-pair.cv-side.cv-flying > #cv-friends > #cv-fr-body { width: 358px; }
-  /* Opened from the Share button beside Export: the pair hangs from Share (popFrom's .pop-src lifts it), and the cog goes
-     back under the blur — a press on it lands on the backdrop and closes (#944), it does not reopen. */
-  body.cv-anchored.cv-share-src #btn-settings { z-index: auto; }
+  /* (#983: `body.cv-anchored.cv-share-src #btn-settings { z-index: auto }` — the cog back under the blur while the pair hung
+     off the Share button beside Export — went with that button. Every PC door hangs the pair from the cog now.) */
   @keyframes cv-grow {
     from { opacity: 0; transform: scale(.82) translate(6px, -10px); }
     to   { opacity: 1; transform: scale(1) translate(0, 0); }
@@ -8630,9 +8735,19 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 .tl-areafx--press { overflow: hidden; contain: layout paint; mix-blend-mode: screen; }
 .tl-areafx--press > div { position: absolute; left: 0; top: 0; border-radius: 50%; will-change: transform, opacity; }
 .tl-areafx--press > .fx-tint { border-radius: 0; will-change: opacity; }
+/* THE SAME LAP ON THE ADD MENU'S EDGES (queue 981) — drawn by menuRim in js/timeline.js when the empty area opens the
+   menu. A child of #add-sheet so it rides the sheet's swing; over its border box (the JS sets left/top to minus the
+   border); above the menu's own content; never hit-testable. */
+.add-sheet-rim { position: absolute; pointer-events: none; z-index: 30; }
+.add-sheet-rim svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+/* …AND WHILE IT ARRIVES FROM THAT TAP IT TAKES NO TAPS (#981 review) — set by guardArrival in js/timeline.js for the
+   length of its swing (or slide), and never less than a double-tap's 300 ms. The CONTENTS only: the sheet itself still
+   takes the tap, so the tap-away (js/app.js) sees a tap ON the menu and leaves it open, and a double-tap's second tap
+   cannot pick the card that has swung under the finger. */
+#add-sheet.is-arriving * { pointer-events: none; }
 /* The JS picks the calm version itself; this is the second lock, as #571 had — either alone is one point of failure. */
 @media (prefers-reduced-motion: reduce) {
-  .tl-areafx--pulse, .tl-areafx--press { display: none; }
+  .tl-areafx--pulse, .tl-areafx--press, .add-sheet-rim { display: none; }
 }
 /* THE ROW-SIZED #616 PULSE IS OFF ON THE EMPTY SCREEN (clause 6). There the row is a 300px box mid-area, and its
    band lights both sides and the whole top at once — the second, wrong-sized box. The area pulse replaces it; the
@@ -10631,7 +10746,8 @@ body.text-editing .collab-people { display: none; }
    chip stays with layers selected. In Select it was the one way to the people, and to Stop sharing, that vanished.) */
 /* queue 944 — ON PC THE CHIP DOES NOT OFFER AN INVITE. His words: "On PC, get rid of the little plus at the top left to add friends.
    There's already another button for on PC". Alone, the chip is only an invite (+ and a person), and on a desktop the Share button
-   beside Export already is one. With people in the room it shows their faces, and that stays. */
+   beside Export already is one. With people in the room it shows their faces, and that stays.
+   (#983: that Share button is gone too — the PC's invite is the cog, which opens Friends beside Canvas settings, #978.) */
 @media (min-width: 701px) { #collab-people.cp-invite { display: none; } }
 .collab-people .cp-av {
   position: relative; flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
@@ -10834,9 +10950,13 @@ body.text-editing .collab-people { display: none; }
    a pick says so (Home's Join, the Settings order, the off switch). */
 /* The person+ on the video: a 44 px target round its 28 px circle (it was 44 × 40). With the feature off it is the
    phone's one door (§23 as relaxed: one button, no network, no listeners), and a PC never shows it — the PC's Share
-   comes with the feature, beside Export. */
+   comes with the feature, beside Export.
+   #983 — …and a PC never shows it WITH the feature either: "on pc get rid of the button that was originally to invite friends,
+   as we now have it built into the settings cog". The Share beside Export is gone (it is not in the transport row in any
+   state), and the one #btn-share left is this person+, on the video at every width — so above a phone's width it has no box,
+   on or off, sharing or not. The PC's way in is the cog: Friends beside Canvas settings (#978). */
 #btn-share.cs-stagebtn::before { inset: -8px; }
-@media (min-width: 701px) { #btn-share.cs-door { display: none; } }
+@media (min-width: 701px) { #btn-share { display: none; } }
 /* LIVE on the video (his pick A): a red pill right of the chip while he shares — even with nobody in, so shared and not
    shared no longer look the same — and a dark one with a green dot, "Live · <owner>", for a friend. Placed by collab-ui.js
    (placeLive) just past the chip, whose width is whatever the faces make it. A tap opens the people / Leave. */

@@ -582,7 +582,11 @@ window.FM = window.FM || {};
          chooses the intro film and the wordmark's ink, because those three were made for each other —
          his new intro literally ends on white. Three separate toggles would be three ways to end up
          with a mismatched app. */
-      toggleRow('New light look', 'White projects screen with the top bar\u2019s colour bleeding into it, the new intro, and the new logo. Turn this off to go back to the dark look. The editor is unaffected either way.', 'homeLight'),
+      /* queue 990 — Ezra, 29 Sep: *"Make the dark mode light mode toggle just say toggle dark mode and get rid of explanation"*.
+         So the row is named for what ON does — ON is DARK — and has no line under it. The STORED setting keeps its meaning
+         (`homeLight`, true = light): every phone that already chose a look keeps it, and index.html's boot script (which
+         reads homeLight before any of this loads, to pick the intro) is untouched. Only the switch shows the inverse. */
+      switchRow('Toggle dark mode', '', () => !state.homeLight, () => { state.homeLight = !state.homeLight; save(); apply(); }),
     ));
     body.appendChild(group(
       toggleRow('Demo mode', 'Hides your photo and video previews (and their filenames) in the Add menu — so a screen recording never shows your camera roll.', 'demoMode'),

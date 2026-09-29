@@ -24,6 +24,36 @@ window.FM = window.FM || {};
      fresh-boot #936 instance never drew its arrow at all. The timer fires when the entrance should have ended; the second
      pass (`landed`) draws without waiting again. */
   var gen = 0;
+  /* queue 989 — A RE-RENDER CARRIES THE DRAW ON, IT NEVER STARTS IT AGAIN. Ezra, 29 Sep: *"The drawn arrow is currently a
+     bit buggy and broken when you refresh the page it draws from the middle and start at the same time"*. MEASURED with a
+     real reload at 390 (a reload inside the session, so no intro): the arrow starts at ~200 ms, and ~450 ms later Home's
+     thumbnail grab (home.js captureThumbSoon → grab → render) re-renders the grid; render() cleared the half-drawn arrow —
+     it had reached the curl in the MIDDLE — and drew a new one from the start. Every open of Home that is not hidden behind
+     the intro does the same (coming back from a project, deleting the last one), and a grab after the draw had finished
+     replayed it from nothing.
+     So each arrow carries its own clock (`_fm989`: its draw animations), and a redraw over an arrow that is still there
+     starts where that one had got to — mid-draw it carries on, finished it is drawn finished. Two pieces make "still
+     there" true across a re-render: clear({ soft: true }) (render() on a Home that is on screen) leaves the arrow up until
+     the end of the current task, and hold() (arrowSoon(), in the same render, when the tab is still empty) keeps it until
+     the redraw replaces it. A render that does NOT come back to the empty tab never calls hold(), so the arrow still goes
+     the moment a project exists; and an open() renders while Home is still hidden, which clears hard — so the draw-on is
+     still seen every time Home is opened. */
+  var DRAW_END = 1270;                                              // the last flick ends at 1080 + 190 ms (times[] below)
+  var dropping = null;
+  /* ⚠️ THE ARROW'S CLOCK IS ITS LATEST STROKE, NOT ITS FIRST (989 review). Each stroke's animation stops at its OWN end —
+     the main stroke's at 1000 ms — so reading anims[0] said a finished arrow was 1000 ms in, never DRAW_END, and every
+     redraw (a resize frame, a look change, a tap on Projects, a late thumbnail grab) drew both barbs of the head again;
+     measured, a 1 s window drag at 1280 left 59 of 112 frames with part of the head missing. So: every stroke finished
+     is drawn in full, and otherwise the clock is the furthest any stroke has got (the last flick runs to 1270 ms). */
+  function progressOf(svg) {                                        // ms into its draw; Infinity once it is drawn in full
+    var rec = svg && svg._fm989;
+    if (!rec) return null;
+    if (!rec.anims || !rec.anims.length) return Infinity;
+    if (rec.anims.every(function (an) { return an.playState === 'finished'; })) return Infinity;
+    var t = 0;
+    rec.anims.forEach(function (an) { var c = an.currentTime; if (typeof c === 'number' && isFinite(c) && c > t) t = c; });
+    return t;
+  }
   function settling(el) {
     if (!el.getAnimations) return [];
     return el.getAnimations().filter(function (an) {
@@ -33,12 +63,19 @@ window.FM = window.FM || {};
   }
   function draw(opts) {
     var NS = 'http://www.w3.org/2000/svg', ID = 'hm-arrow936';
-    var old = document.getElementById(ID); if (old) old.remove();
+    var old = document.getElementById(ID);
     var home = document.getElementById('home-screen'), plus = document.getElementById('hm-new');
     var title = document.querySelector('#home-screen .hm-grid .hm-empty-title');
-    if (!home || !plus || !title) return null;
+    var drop = function () {
+      if (!old) return;
+      if (old._fm989 && old._fm989.anims) old._fm989.anims.forEach(function (an) { try { an.cancel(); } catch (e) {} });
+      old.remove(); if (dropping === old) dropping = null;
+    };
+    if (!home || !plus || !title) { drop(); return null; }
     var moving = opts && opts.landed ? [] : settling(plus);
     if (moving.length) {
+      // queue 989: an arrow already up stays up (and keeps drawing) until the landed draw replaces it and takes over its clock
+      if (dropping === old) dropping = null;
       var mine = ++gen, left = 0;
       moving.forEach(function (an) { left = Math.max(left, an.effect.getComputedTiming().endTime - (an.currentTime || 0)); });
       var go = function () { if (mine !== gen) return; gen++; draw({ still: !!(opts && opts.still), landed: true }); };
@@ -47,12 +84,12 @@ window.FM = window.FM || {};
       return null;
     }
     var t = title.getBoundingClientRect(), p = plus.getBoundingClientRect();
-    if (!t.width || !p.width || getComputedStyle(plus).visibility === 'hidden') return null;
+    if (!t.width || !p.width || getComputedStyle(plus).visibility === 'hidden') { drop(); return null; }
     var light = document.documentElement.getAttribute('data-home') === 'light';
     var still = (opts && opts.still) || matchMedia('(prefers-reduced-motion: reduce)').matches;
     var vw = document.documentElement.clientWidth, pr = p.width / 2, pcx = p.left + pr, pcy = p.top + pr;
     var S = [t.left + t.width / 2 + Math.min(34, t.width * 0.13), t.bottom + 12];
-    var H = p.top - 12 - S[1]; if (H < 110) return null;              // no room for a swoop: draw nothing
+    var H = p.top - 12 - S[1]; if (H < 110) { drop(); return null; }  // no room for a swoop: draw nothing
     var k = Math.max(0.75, Math.min(1.2, H / 250));
     var a = -52 * Math.PI / 180, u = [Math.cos(a), Math.sin(a)];      // from the +'s centre out to the tip (up-right)
     var E = [pcx + u[0] * (pr + 12), pcy + u[1] * (pr + 12)];
@@ -113,6 +150,12 @@ window.FM = window.FM || {};
       strokes.push([Q, function (x) { return (3.3 - 2.1 * x) * Math.min(1.15, k); }]);
     });
     var times = [[0, 1000], [960, 190], [1080, 190]];
+    /* queue 989: the arrow already up hands on its clock — mid-draw this one carries on from there, drawn in full it is
+       drawn in full (a still arrow). Read BEFORE the old one goes: cancelling its animations resets their time. */
+    var from = old ? progressOf(old) : null;
+    drop();
+    if (from != null && from >= DRAW_END) still = true;
+    var anims = [];
     strokes.forEach(function (st, i) {
       el('path', { d: ribbon(st[0], st[1]) }, ink);
       var len = 0; for (var j = 1; j < st[0].length; j++) len += Math.hypot(st[0][j][0] - st[0][j - 1][0], st[0][j][1] - st[0][j - 1][1]);
@@ -120,20 +163,41 @@ window.FM = window.FM || {};
         'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, mask);
       if (still || !mp.animate) return;
       mp.style.strokeDasharray = (len + 2) + ' ' + (len + 2);
-      mp.animate([{ strokeDashoffset: len + 2 }, { strokeDashoffset: 0 }], { duration: times[i][1], delay: times[i][0],
+      var an = mp.animate([{ strokeDashoffset: len + 2 }, { strokeDashoffset: 0 }], { duration: times[i][1], delay: times[i][0],
         easing: i ? 'ease-out' : 'cubic-bezier(.5,.05,.3,1)', fill: 'both' });
+      if (from) an.currentTime = from;
+      anims.push(an);
     });
+    svg._fm989 = { anims: anims };
     home.insertBefore(svg, plus.parentNode === home ? plus : null);
     if (!window.__hmArrow936On) {                                    // one set of listeners, however often this is called
       window.__hmArrow936On = 1; var raf = 0;
+      // a resize or a look change redraws over the arrow that is up, so it carries on from where that one was (queue 989)
+      // rather than jumping to finished — and one drawn in full is redrawn in full, as it always was
       var again = function () { cancelAnimationFrame(raf); raf = requestAnimationFrame(function () {
-        if (document.getElementById(ID)) draw({ still: true }); }); };
+        if (document.getElementById(ID)) draw(); }); };
       addEventListener('resize', again);
       new MutationObserver(again).observe(document.documentElement, { attributes: true, attributeFilter: ['data-home'] });
     }
     return svg;
   }
 
-  function clear() { gen++; const o = document.getElementById('hm-arrow936'); if (o) o.remove(); }   // queue 957: also voids a draw still waiting for the + to land
-  FM.homeArrow = { draw: draw, clear: clear };
+  /* queue 957: clear() also voids a draw still waiting for the + to land. queue 989: { soft: true } is render() on a Home
+     that is on screen — the arrow stays up to the end of this task, and hold() (arrowSoon, in the same render) keeps it
+     until the redraw takes over its clock; nothing holds it, and it goes, exactly as a hard clear. */
+  function remove(o) {
+    if (!o) return;
+    if (o._fm989 && o._fm989.anims) o._fm989.anims.forEach(function (an) { try { an.cancel(); } catch (e) {} });
+    o.remove();
+  }
+  function clear(opts) {
+    gen++;
+    var o = document.getElementById('hm-arrow936');
+    if (!o) { dropping = null; return; }
+    if (!(opts && opts.soft)) { dropping = null; remove(o); return; }
+    dropping = o;
+    Promise.resolve().then(function () { if (dropping === o) { dropping = null; remove(o); } });
+  }
+  function hold() { dropping = null; }
+  FM.homeArrow = { draw: draw, clear: clear, hold: hold, progress: function () { return progressOf(document.getElementById('hm-arrow936')); } };
 })(window.FM);
