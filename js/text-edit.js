@@ -250,6 +250,7 @@ window.FM = window.FM || {};
   function reflowForPop() { if (active && bar && FM.screen && FM.screen.metrics) onViewport(); }
   function positionPop() {
     if (!pop) return;
+    pop.style.height = '';   // only the PC captions box sets one (#984 review) — a window resized out of it mid-sheet
     if (isDesktop()) {
       // The card is docked at the BOTTOM of the stage, so a popover hung UNDER the toolbar the way the
       // phone hangs it would land on the text field it belongs to. Open upwards instead, width-matched
@@ -265,13 +266,19 @@ window.FM = window.FM || {};
       pop.classList.toggle('te-pop-capdock', capDock);
       pop.style.overflowY = '';
       if (!capDock && popKind !== 'extras' && popKind !== 'font') pop.style.maxHeight = '';   // a window resized out of the box mid-sheet
+      /* …and it COVERS the box under the toolbar, edge to edge (#984 review). It used to stop 6 px short of the box's
+         sides and bottom and 4 px under the toolbar, with round corners, and the box's own list showed through the gaps —
+         at 1920x1080 the top of "+ Add cue at playhead" under the sheet's bottom edge. Square, and exactly the rest of the
+         box, so nothing of the box can peek round it (styles.css .te-pop-capdock). */
       if (capDock) {
-        const pr = panel.getBoundingClientRect(), top = Math.round(bar.getBoundingClientRect().bottom + 4);
+        const pr = panel.getBoundingClientRect(), top = Math.round(bar.getBoundingClientRect().bottom);
+        const h = Math.max(60, Math.round(pr.bottom) - top);
         pop.style.bottom = 'auto';
-        pop.style.left = Math.round(pr.left + 6) + 'px';
-        pop.style.width = Math.round(pr.width - 12) + 'px';
+        pop.style.left = Math.round(pr.left) + 'px';
+        pop.style.width = Math.round(pr.width) + 'px';
         pop.style.top = top + 'px';
-        pop.style.maxHeight = Math.max(60, Math.round(pr.bottom - top - 6)) + 'px';
+        pop.style.height = h + 'px';
+        pop.style.maxHeight = h + 'px';
         pop.style.overflowY = 'auto';
         return;
       }
@@ -565,6 +572,30 @@ window.FM = window.FM || {};
     if (panel && panel.classList.contains('te-capdock')) {
       panel.classList.remove('te-capdock');
       panel.style.height = '';
+    }
+  }
+  /* A PLAIN TEXT SESSION WHOSE LAYER BECAME A CAPTION TRACK UNDER IT (#984, review). Add → Text, type, Aa, Detect speech:
+     detection turns the layer into a caption track, and the editor stayed a plain-text session — measured at 1280x800,
+     the timeline stayed opened up to the full width, the card still floated over the stage, the Aa sheet still offered
+     "+ Use as caption track" with no caption rows, and the next words went into layer.text, which a caption track never
+     shows. So the editor is rebuilt as the captions editor, the way resync() does after an undo — on PC that is the Add
+     menu's box and the timeline goes back to its squished width.
+     It picks up the caption his words were carried onto (captions.detect gives the layer's text to the first cue it
+     finds), so the field still shows what he was typing and the next letter lands on it — rather than a blank caption
+     made in the gap the playhead happens to be in. Only this direction: a caption track whose last caption is deleted
+     keeps the captions menu open, so a new one can be added from it.
+     The Aa sheet he pressed Detect in opens again, fresh, where the list is not already on screen (the phone; the PC
+     card when the box is too small): it vanishing under his finger would read as the button closing everything. */
+  function becameTrack(l) {
+    const typed = input ? input.value : '', cues = cueList(l);
+    let c = typed.trim() ? cues.find(x => (x.text || '') === typed) : null;
+    if (!c && FM.captions.indexAt(l, FM.time) < 0) c = cues[0];
+    if (c && FM.scrubTime) FM.scrubTime((l.start || 0) + c.start + Math.min(0.05, (c.end - c.start) / 2));
+    const aa = popKind === 'extras';
+    FM.textEdit.start(l.id);
+    if (aa && active && active.cap && panel && bar && !panel.classList.contains('te-capdock')) {
+      const b = bar.querySelector('.te-extras');
+      if (b) openPop('extras', buildExtrasPop, b);
     }
   }
 
@@ -1000,7 +1031,12 @@ window.FM = window.FM || {};
       refreshCaps();   // #984: every caption is a new object after a restore — the box's rows must be the restored ones
     },
     // The Aa sheet's caption list changed (✕, a new Start or End, + Add cue, Detect speech): the n / N label follows.
-    cuesChanged() { if (active) { updateCueNav(); refreshCaps(); } },   // …and the PC captions box's list follows (#984)
+    cuesChanged() {
+      if (!active) return;
+      const l = layer();
+      if (l && !active.cap && isCapTrack(l)) { becameTrack(l); return; }   // #984 review: Detect speech from a plain text's Aa sheet
+      updateCueNav(); refreshCaps();   // …and the PC captions box's list follows (#984)
+    },
     /* The caption this session is typing into, or null — read by app.js render() so the paused preview draws it
        settled rather than on the first frame of its entrance (queue 690, seventh hunt). Pure: no rebinding here,
        it is asked on every frame. */

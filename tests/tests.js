@@ -110207,4 +110207,135 @@
     });
   });
 
+  /* ═══ #984 REVIEW — THE WAY IN THROUGH A PLAIN TEXT’S Aa SHEET ═══════════════════════════════════════════════════════
+     Add → Text, type, Aa, Detect speech: detection turns the layer into a caption track, and the editor stayed a plain-text
+     session. MEASURED at 1280x800 on the build and on v17.12 alike: the timeline stayed opened up at 1280x240 with
+     #inspector-panel hidden, the card floated 560x145 over the stage, the Aa sheet still offered + Use as caption track
+     with no caption rows, and the next words went into layer.text — which a caption track never shows. The phone had the
+     same dead typing and the same stale sheet. A real clip is decoded here (tests/_fixtures/vad/clean.wav: speech at
+     0.9–3.4 s and 4.5–7.0 s), because only a real detection converts the layer the way he would see it. */
+  async function detectFromText984(where) {
+    FM.setTime(0); await sleep(60);
+    FM.addTextLayer(); await sleep(450);
+    const id = FM.textEdit.isActive() ? FM.textEdit.layerId() : null;
+    const T = FM.scene.layers.find(function (l) { return l.id === id; });
+    if (!T || T.type !== 'text' || FM.captions.isTrack(T)) throw new Error(where + ' setup: Add → Text did not open the editor on a plain text layer');
+    const inp = document.getElementById('te-input');
+    inp.value = 'Spoken words'; inp.dispatchEvent(new Event('input', { bubbles: true })); await sleep(60);
+    if (T.text !== 'Spoken words') throw new Error(where + ' CONTROL: typing into a plain text layer did not reach it (' + T.text + ')');
+    document.querySelector('.te-bar .te-extras').click(); await sleep(450);
+    const btn = document.querySelector('.te-pop .cap-detect-btn');
+    if (!btn || btn.disabled) throw new Error(where + ' setup: the plain text’s Aa sheet has no live Detect speech button');
+    btn.click();
+    for (let i = 0; i < 300 && !(FM.captions.isTrack(T) && !btn.disabled); i++) await sleep(100);
+    if (!FM.captions.isTrack(T)) throw new Error(where + ' CONTROL: Detect speech on clean.wav did not turn the text layer into a caption track');
+    await sleep(400);
+    if (!FM.textEdit.isActive() || FM.textEdit.layerId() !== T.id) throw new Error(where + ' after Detect speech the editor closed — it should carry on as the captions editor');
+    if (!T.captions.some(function (c) { return c.text === 'Spoken words'; })) throw new Error(where + ' CONTROL: detection did not carry the typed words onto a caption');
+    return T;
+  }
+  async function withClip984(fn) {
+    const scope0 = FM._capScope, src0 = FM._capSrcId;
+    const ab = await fetch('tests/_fixtures/vad/clean.wav', { cache: 'no-store' }).then(function (r) { return r.arrayBuffer(); });
+    const M = FM.makeLayer('video', { name: 'clean.wav' });
+    M.start = 0; M.duration = 5; M.trimStart = 0;
+    FM.scene.layers.push(M);
+    FM.media.set(M.id, { kind: 'video', file: new File([ab], 'clean.wav', { type: 'audio/wav' }), duration: 11.8, width: 2, height: 2 });
+    FM._capScope = 'clip'; FM._capSrcId = M.id;
+    FM.selectLayer(null); if (FM.refreshAll) FM.refreshAll(); await sleep(250);
+    try { return await fn(M); } finally {
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM._capScope = scope0; FM._capSrcId = src0;
+      try { FM.media.remove(M.id); } catch (e) {}
+    }
+  }
+  function typeMore984(T, where) {
+    const inp = document.getElementById('te-input');
+    if (!inp) throw new Error(where + ' there is no text field after Detect speech');
+    inp.value = inp.value + ' EXTRA'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    if (T.text) throw new Error(where + ' after Detect speech the next words went into the layer’s own text (' + JSON.stringify(T.text) + '), which a caption track never shows — the typing does nothing you can see');
+    if (!T.captions.some(function (c) { return c.text === 'Spoken words EXTRA'; })) throw new Error(where + ' after Detect speech, typing did not continue the caption carrying his words (captions: ' + JSON.stringify(T.captions.map(function (c) { return c.text; })) + ')');
+  }
+  test('984 on a PC, Detect speech from a plain text’s Aa sheet moves the editor into the Add menu’s box as the captions menu — the timeline goes back to squished and typing reaches the caption', { item: '984', budgetMs: 90000 }, async function () {
+    if (!FM.addTextLayer || !FM.textEdit || !FM.captions || !FM.detectSpeech) throw new Error('need FM.addTextLayer, FM.textEdit, FM.captions and FM.detectSpeech');
+    await with984(async function () { await withClip984(async function () {
+      await atWideWidth(async function () {
+        await sleep(250);
+        const where = 'at 1280 px:';
+        const tlp = document.getElementById('timeline-panel');
+        const box = addMenuBox984(where), tl0 = rect984(tlp);
+        const T = await detectFromText984(where);
+        const panel = document.querySelector('.te-panel');
+        if (!panel) throw new Error(where + ' the editor has no panel after Detect speech');
+        const pr = rect984(panel), tl1 = rect984(tlp);
+        if (!panel.classList.contains('te-capdock') || !same984(pr, box, 2)) throw new Error(where + ' after Detect speech the editor is ' + say984(pr) + ' — still the plain-text card over the stage, not the captions menu in the Add menu’s box ' + say984(box));
+        if (!same984(tl1, tl0, 1)) throw new Error(where + ' after Detect speech the timeline is ' + say984(tl1) + ', not its squished ' + say984(tl0) + ' beside the Add menu');
+        const stale = [].slice.call(document.querySelectorAll('.te-pop .cap-make')).filter(function (b) { return b.getClientRects().length; });
+        if (stale.length) throw new Error(where + ' a stale Aa sheet still offers + Use as caption track on what is now a caption track');
+        const rows = panel.querySelectorAll('.te-caps .cap-row');
+        if (rows.length !== T.captions.length) throw new Error(where + ' the captions box lists ' + rows.length + ' row(s) for the ' + T.captions.length + ' detected captions');
+        await reach984(rows[0].querySelector('.cap-text'), panel, box, panel.querySelector('.te-bar').getBoundingClientRect().bottom, 'first detected caption');
+        typeMore984(T, where);
+      }, 1280);
+    }); });
+  });
+  test('984 on the phone, Detect speech from a plain text’s Aa sheet turns the editor into the captions editor — the sheet shows the detected captions and typing reaches the caption', { item: '984', budgetMs: 90000 }, async function () {
+    if (!FM.addTextLayer || !FM.textEdit || !FM.captions || !FM.detectSpeech) throw new Error('need FM.addTextLayer, FM.textEdit, FM.captions and FM.detectSpeech');
+    await with984(async function () { await withClip984(async function () {
+      await atPhoneWidth(async function () {
+        await sleep(250);
+        const where = 'at 390 px:';
+        const T = await detectFromText984(where);
+        const nav = document.querySelector('.te-cue-nav');
+        if (!nav || !nav.getClientRects().length) throw new Error(where + ' after Detect speech the editor has no ‹ Cue n / N › strip — it is still the plain-text editor');
+        const pop = document.querySelector('.te-pop');
+        if (!pop) throw new Error(where + ' the Aa sheet he pressed Detect speech in closed and did not come back');
+        if (pop.querySelector('.cap-make')) throw new Error(where + ' the Aa sheet is stale: it still offers + Use as caption track on what is now a caption track');
+        const rows = pop.querySelectorAll('.cap-row');
+        if (rows.length !== T.captions.length) throw new Error(where + ' the Aa sheet lists ' + rows.length + ' caption row(s) for the ' + T.captions.length + ' detected captions');
+        typeMore984(T, where);
+      }, 390);
+    }); });
+  });
+
+  /* ═══ #984 REVIEW — A SHEET IN THE CAPTIONS BOX COVERS THE REST OF THE BOX ════════════════════════════════════════════
+     An Aa, font, size or colour sheet opened in the PC captions box stopped 6 px short of the box's sides and bottom and
+     4 px under the toolbar, with round corners, and the box's own list showed through the gaps — measured at 1920x1080:
+     the sheet 388x296 at (6,778) in a box ending at 1080, with the top of + Add cue at playhead under its bottom edge.
+     Now it is exactly the box under the toolbar. Checked by what is AT the box's corners and just under the toolbar. */
+  test('984 a sheet opened in the PC captions box covers the rest of the box edge to edge — Aa, font, size and colour, at 1280 and 900, with nothing of the box showing round it', { item: '984', budgetMs: 90000 }, async function () {
+    if (!FM.addCaptionLayer || !FM.textEdit) throw new Error('need FM.addCaptionLayer and FM.textEdit');
+    const at = async function (w) {
+      await with984(async function () {
+        await atWideWidth(async function () {
+          await sleep(250);
+          const where = 'at ' + w + ' px:';
+          addMenuBox984(where);
+          FM.addCaptionLayer(); await sleep(450);
+          const panel = document.querySelector('.te-panel');
+          if (!panel || !panel.classList.contains('te-capdock')) throw new Error(where + ' setup: Add → Captions did not open the captions box');
+          const box = rect984(panel), bar = panel.querySelector('.te-bar'), barB = Math.round(bar.getBoundingClientRect().bottom);
+          const kinds = [['Aa', '.te-extras'], ['font', '.te-font'], ['size', '.te-size'], ['colour', '.te-color']];
+          for (let i = 0; i < kinds.length; i++) {
+            const b = bar.querySelector(kinds[i][1]);
+            b.click(); await sleep(450);
+            const pop = document.querySelector('.te-pop');
+            if (!pop) throw new Error(where + ' the ' + kinds[i][0] + ' button opened nothing');
+            const po = rect984(pop);
+            if (Math.abs(po.l - box.l) > 1 || Math.abs(po.r - box.r) > 1 || Math.abs(po.t - barB) > 1 || Math.abs(po.b - box.b) > 1) throw new Error(where + ' the ' + kinds[i][0] + ' sheet is ' + say984(po) + ' — not the box under the toolbar, ' + box.w + 'x' + (box.b - barB) + ' at (' + box.l + ',' + barB + ')');
+            const probes = [['bottom-left corner', box.l + 3, box.b - 2], ['bottom-right corner', box.r - 3, box.b - 2], ['bottom middle', (box.l + box.r) / 2, box.b - 2], ['left edge under the toolbar', box.l + 3, barB + 2], ['right edge under the toolbar', box.r - 3, barB + 2]];
+            for (let k = 0; k < probes.length; k++) {
+              const e = document.elementFromPoint(probes[k][1], probes[k][2]);
+              if (!e || !pop.contains(e)) throw new Error(where + ' with the ' + kinds[i][0] + ' sheet open, the box’s own ' + (e ? e.tagName + '.' + String(e.className).slice(0, 30) : 'nothing') + ' shows at its ' + probes[k][0]);
+            }
+            b.click(); await sleep(300);
+            if (document.querySelector('.te-pop')) throw new Error(where + ' a second press on ' + kinds[i][0] + ' left its sheet open');
+          }
+        }, w);
+      });
+    };
+    await at(1280);
+    await at(900);
+  });
+
 })();

@@ -1359,7 +1359,10 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   .te-panel.te-capdock #te-input { min-height: 46px; max-height: 96px; padding: 8px 10px; }
   .te-panel.te-capdock .te-caps { display: block; flex: 0 0 auto; padding: 0 8px 10px; }
   .te-panel.te-capdock .te-caps .cap-title { margin-top: 8px; }
-  .te-pop.te-pop-capdock { z-index: 81; overscroll-behavior: contain; }
+  /* Square and edge to edge: js/text-edit.js sizes it to exactly the box under the toolbar, so it is the box's contents
+     for as long as it is open — no corners or inset for the list underneath to show through (#984 review). The right
+     edge keeps the box's own line against the timeline. */
+  .te-pop.te-pop-capdock { z-index: 81; overscroll-behavior: contain; border-radius: 0; border-width: 0 1px 0 0; box-shadow: none; }
 }
 .te-caps { display: none; }   /* #984: only the PC captions box shows the list here (above) */
 #pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }

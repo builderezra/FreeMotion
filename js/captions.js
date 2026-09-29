@@ -564,6 +564,9 @@ window.FM = window.FM || {};
           if (rerender) rerender(); else FM.requestRender();
           if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
           if (FM.inspector) FM.inspector.refresh();
+          /* The text editor may be open on this layer — Detect speech is in its Aa sheet — and a plain text layer has
+             just become a caption track under it: it rebuilds itself as the captions editor (#984 review). */
+          if (FM.textEdit && FM.textEdit.cuesChanged) FM.textEdit.cuesChanged();
         } catch (err) {
           btn.textContent = label; btn.disabled = false;
           if (FM.reportError) FM.reportError('detecting speech for captions', err);   // queue 674: the raw message goes to Settings → Last error, not the screen
