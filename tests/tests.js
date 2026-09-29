@@ -6895,14 +6895,23 @@
 
       // ---- and the desktop, where the centring assertion lives
       await sleep(200);
-      const m = check('desktop');
-      const centre = (m.pb.left + m.pb.right) / 2;
-      const off = Math.abs(centre - window.innerWidth / 2);
-      if (off > 4) throw new Error('the play pill sits ' + off.toFixed(2) + 'px off true screen centre — v4.97 pins it there, and the CSS note records that changing this box is exactly how that gets broken');
-      /* CONTROL: on the desktop it DOES shrink-wrap, and that is the state the centring depends on — a
-         pill that filled its track would sit centred by accident rather than by construction. */
-      const row = T().getBoundingClientRect();
-      if (m.pb.width > row.width * 0.5) throw new Error('the desktop pill is ' + m.pb.width.toFixed(1) + 'px in a ' + row.width.toFixed(1) + 'px row — it has stopped shrink-wrapping, which is the width regression the CSS note warns about');
+      check('desktop ' + window.innerWidth);
+      /* …AT 1100, NOT THE RUNNER'S 900 (queue 979). v4.97 pins play on screen centre WHEN THE ROOM EXISTS; at
+         900 in the PC layout it does not — back + copy + switch + skip + half the pill need ~206px left of
+         centre and the panel starts 150px left of it — and holding play there anyway is what put the copy
+         button under the back button. So the centring (and the shrink-wrap that it depends on) is asserted
+         at a width with the room, where the row is byte-identical to before. */
+      await atWideWidth(async function () {
+        await sleep(200);
+        const m = check('desktop ' + window.innerWidth);
+        const centre = (m.pb.left + m.pb.right) / 2;
+        const off = Math.abs(centre - window.innerWidth / 2);
+        if (off > 4) throw new Error('the play pill sits ' + off.toFixed(2) + 'px off true screen centre — v4.97 pins it there, and the CSS note records that changing this box is exactly how that gets broken');
+        /* CONTROL: on the desktop it DOES shrink-wrap, and that is the state the centring depends on — a
+           pill that filled its track would sit centred by accident rather than by construction. */
+        const row = T().getBoundingClientRect();
+        if (m.pb.width > row.width * 0.5) throw new Error('the desktop pill is ' + m.pb.width.toFixed(1) + 'px in a ' + row.width.toFixed(1) + 'px row — it has stopped shrink-wrapping, which is the width regression the CSS note warns about');
+      }, 1100);
     } finally {
       if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
     }
@@ -13504,7 +13513,7 @@
     if (ov.filter.indexOf('drop-shadow') < 0) throw new Error('#add-fab lost its drop-shadow glow: ' + ov.filter);
   });
 
-  test('the playhead sits on true screen centre, and play follows it when there is room', { item: 'playhead-play-centre' }, function () {
+  test('the playhead sits on true screen centre, and play follows it when there is room', { item: 'playhead-play-centre' }, async function () {
     // v4.97. #tl-centerline is absolutely positioned inside #timeline-panel, so a raw viewport unit
     // measures from the PANEL's left edge — 0 on a phone and in classic, but ~406px in Studio at 1440
     // wide. `left: 50vw` therefore landed it at panelLeft + half the viewport (1126px), and v4.96's
@@ -13521,14 +13530,54 @@
     /* The PILL is the play control since queue 364 — #btn-play still exists but is hidden, so it has no
        box and this test measured nothing. The requirement is unchanged ("i meant i want the play head
        and button centred to the screen not the timeline"); what is centred is now the pill. */
+    /* ⚠️ THE ENDS OF THE CLUSTER ARE FOUND, NOT NAMED (queue 979). This test named `first = btn-undo` and
+       `last = btn-layermenu` — the ends of the row when it was written. Both have since swapped sides (copy
+       went left, #373; undo right), so "first" was a control RIGHT of the pill and "last" one LEFT of it:
+       the overlap check measured undo and could never fire, and `clusterHalf` was the larger of two NEGATIVE
+       numbers, so every width counted as roomy. At the runner's 900px it therefore demanded play on screen
+       centre — the very position that put the copy button's centre under the back button (and 2px over the
+       inspector) on v17.12, which this test existed to forbid. Now: the leftmost and rightmost controls
+       actually on the row, and the back button's slot counted in the room the left side needs.
+       The `layout-studio` toggle is kept as it was; the class selects nothing since queue 293, so both
+       passes measure the one PC layout. A pass at 1100px is added because 900 no longer has the room, and
+       a test whose centring branch never runs would pass on a row that never centres. */
     var line = document.getElementById('tl-centerline'), play = document.getElementById('time-readout');
     var panel = document.getElementById('timeline-panel');
-    var first = document.getElementById('btn-undo'), last = document.getElementById('btn-layermenu');
-    if (!line || !play || !panel || !first || !last) throw new Error('transport / playhead elements missing');
+    var vis = function (el) { var r = el && el.getBoundingClientRect(); return r && r.width > 0 && r.height > 0 ? r : null; };
+    var ends = function () {
+      var left = document.querySelector('#transport .t-left'), right = document.querySelector('#transport .t-right');
+      var l = left ? [].slice.call(left.children).filter(vis) : [], r = right ? [].slice.call(right.children).filter(vis) : [];
+      return { first: l[0], last: r[r.length - 1], back: vis(document.getElementById('t-home')) ? document.getElementById('btn-back') : null };
+    };
+    if (!line || !play || !panel || !ends().first || !ends().last) throw new Error('transport / playhead elements missing');
     if (getComputedStyle(line).display === 'none') throw new Error('#tl-centerline is not being drawn');
     if (!window.innerWidth) throw new Error('no viewport width to measure against');
     var body = document.body, was = body.classList.contains('layout-studio');
-    var bad = [];
+    var bad = [], roomySeen = false;
+    var measure = function (where) {
+      var e = ends(), first = e.first, last = e.last;
+      var p = play.getBoundingClientRect();
+      if (!p.width) { bad.push(where + ': the time pill (the play control) has no box to measure'); return; }
+      var centre = window.innerWidth / 2, pc = p.left + p.width / 2;
+      var panelLeft = panel.getBoundingClientRect().left;
+
+      var dLine = Math.abs(line.getBoundingClientRect().left - centre);
+      if (dLine > 2) bad.push(where + ': playhead is ' + Math.round(dLine) + 'px off screen centre');
+
+      // never draw over the inspector band to its left…
+      var fl = first.getBoundingClientRect().left;
+      if (fl < panelLeft - 0.5) bad.push(where + ': the transport overflows ' + Math.round(panelLeft - fl) + 'px past the panel');
+      // …nor under the back button, which is absolute at the row's left end
+      var br = e.back && e.back.getBoundingClientRect();
+      if (br && fl < br.right - 0.5) bad.push(where + ': ' + (first.id || 'the first control') + ' starts ' + Math.round(br.right - fl) + 'px under the back button');
+      // ...and when the cluster DOES fit left of centre, play must actually be centred
+      var leftNeed = (pc - fl) + (br ? br.width + 6 : 0) + 14;   // half the pill + the left group + the back button's slot + the row's padding
+      var roomy = panelLeft + leftNeed <= centre + 0.5;
+      if (roomy) roomySeen = true;
+      var dPlay = Math.abs(pc - centre);
+      if (roomy && dPlay > 2) bad.push(where + ': room for it, but play is ' + Math.round(dPlay) + 'px off screen centre');
+      if (last.getBoundingClientRect().right > window.innerWidth + 0.5) bad.push(where + ': ' + (last.id || 'the last control') + ' runs past the window');
+    };
     [false, true].forEach(function (studio) {
       // toggle the CLASS directly — never FM.settings.set, which writes through to the real
       // localStorage this frame shares with the app and would change Ezra's chosen layout.
@@ -13536,28 +13585,16 @@
       // rebuild() re-measures the panel and republishes --tl-panel-left; without it we would assert
       // against a stale offset and pass for the wrong reason.
       if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
-      var where = studio ? 'studio' : 'classic';
-      var p = play.getBoundingClientRect();
-      if (!p.width) { bad.push(where + ': the time pill (the play control) has no box to measure'); return; }
-      var centre = window.innerWidth / 2;
-      var panelLeft = panel.getBoundingClientRect().left;
-
-      var dLine = Math.abs(line.getBoundingClientRect().left - centre);
-      if (dLine > 2) bad.push(where + ': playhead is ' + Math.round(dLine) + 'px off screen centre');
-
-      // never draw over the inspector band to its left
-      if (first.getBoundingClientRect().left < panelLeft - 0.5) {
-        bad.push(where + ': the transport overflows ' + Math.round(panelLeft - first.getBoundingClientRect().left) + 'px past the panel');
-      }
-      // ...and when the cluster DOES fit left of centre, play must actually be centred
-      var clusterHalf = Math.max(p.left + p.width / 2 - first.getBoundingClientRect().left,
-                                 last.getBoundingClientRect().right - (p.left + p.width / 2));
-      var roomy = (panelLeft + 14 + clusterHalf) <= centre;
-      var dPlay = Math.abs((p.left + p.width / 2) - centre);
-      if (roomy && dPlay > 2) bad.push(where + ': room for it, but play is ' + Math.round(dPlay) + 'px off screen centre');
+      measure((studio ? 'studio' : 'classic') + ' at ' + window.innerWidth);
     });
     body.classList.toggle('layout-studio', was);
     if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    await atWideWidth(async function () {
+      await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+      if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      measure('at ' + window.innerWidth);
+    }, 1100);
+    if (!roomySeen) bad.push('no pass had room for the cluster left of centre, so the centring was never asserted — 1100px should have it');
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
@@ -110002,6 +110039,146 @@
     } finally {
       FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
       if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
+    }
+  });
+
+  /* ---- 979 (hunt LOW): every control on the PC transport row takes its own click, at every width from 701px ----
+     Found by #970's reviewer, measured again before building: on v17.12, every 3px from 701 to 899 with 0, 1 and 2 layers
+     selected, 201 of 201 states had a transport control that did not take its own click — the copy button and the add-row
+     switch under the inspector's A/S/D keys (#key-rail sits on the inspector's title line, level with this row), the skip
+     button and the pill's left end under the back button, and with two selected ⋯ past the window's right edge at 701–728.
+     From 900 to ~995 the copy button was still under the back button (its CENTRE at 900–964: a click on copy left the
+     project). The cause: play is held on SCREEN centre, and the left group, a flex-end group in a 0-minimum track,
+     overflowed LEFT out of the row. This asks elementFromPoint, at the centre and 3px in from each end of every visible
+     control on the row (and the band under it, and the playhead's bookmark disc beside it), what is really on top — at
+     every 3px from 701 to 899, every 4px to 1012, and at 1016, 1040 and 1100, with 0, 1 and 2 selected. Widths from 1160
+     are left out on purpose: two selected there is #970, held for his pick.
+     CONTROL first: a transparent box over the copy button's centre at 1100 must be reported, and be the ONLY report. */
+  test('979 on a PC window from 701px every control on the transport row takes its own click — copy and the add-row switch clear of the A/S/D keys, nothing past the window', { item: '979', budgetMs: 240000 }, async function () {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to reach PC widths');
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const frames = n => new Promise(r => { const go = k => { if (!k) return r(); requestAnimationFrame(() => go(k - 1)); }; go(n); });
+    const w0 = fe.style.width, saved = FM.scene;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const vis = el => { if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' ? r : null; };
+    const ROW = ['btn-back', 'btn-layermenu', 'btn-addside', 'btn-tostart', 'time-readout', 'btn-toend', 'btn-undo', 'btn-redo'];
+    const kids = id => { const w = document.getElementById(id); return w ? [].slice.call(w.children).filter(c => vis(c)) : []; };
+    const controls = () => {
+      const out = ROW.map(id => document.getElementById(id)).filter(el => vis(el));
+      kids('t-sel').concat(kids('t-far')).forEach(c => out.push(c));
+      const disc = document.getElementById('tl-headtap'); if (vis(disc)) out.push(disc);   // the neighbour: the row must not cover it either
+      return out;
+    };
+    const nm = el => el.id ? '#' + el.id : '.' + String(el.className || el.tagName).split(' ')[0];
+    const covered = () => {
+      const bad = [];
+      controls().forEach(el => {
+        const r = el.getBoundingClientRect(), cy = r.top + r.height / 2;
+        [['left end', r.left + 3], ['centre', r.left + r.width / 2], ['right end', r.right - 3]].forEach(p => {
+          const x = p[1];
+          if (x < 0 || x >= innerWidth || cy < 0 || cy >= innerHeight) { bad.push(nm(el) + ' ' + p[0] + ' is outside the window (x ' + Math.round(x) + ' of ' + innerWidth + ')'); return; }
+          const h = document.elementFromPoint(x, cy);
+          if (h && (h === el || el.contains(h))) return;
+          const o = h && h.closest ? h.closest('[id]') : null;
+          bad.push(nm(el) + ' ' + p[0] + ' is under ' + (o ? '#' + o.id : (h ? h.tagName : 'nothing')));
+        });
+      });
+      return bad;
+    };
+    const setW = async w => {
+      fe.style.width = w + 'px';
+      window.dispatchEvent(new Event('resize'));
+      await frames(3);
+      if (Math.abs(innerWidth - w) > 1) throw new Error('setup: the frame is ' + innerWidth + 'px wide, not ' + w);
+      if (matchMedia('(max-width: 700px)').matches) throw new Error('setup: ' + w + 'px measured the phone layout');
+    };
+    const WIDTHS = [];
+    for (let w = 701; w <= 899; w += 3) WIDTHS.push(w);
+    for (let w = 900; w <= 1012; w += 4) WIDTHS.push(w);
+    WIDTHS.push(1016, 1040, 1100);
+    const fails = [];
+    let states = 0, folded = 0;
+    try {
+      if (hadHome) FM.home.close();
+      const mk = (n, c) => FM.makeLayer('shape', { name: n, shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: c, start: 0, duration: 3 });
+      const A = mk('a979', '#c05030'), B = mk('b979', '#3050c0'), C = mk('c979', '#30c050');
+      FM.scene = scene([A, B, C], { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      FM.selectLayer(null); FM.refreshAll(); await frames(2);
+
+      // CONTROL — the checker must be able to see a covered control, and 1100 with nothing selected must otherwise be clean.
+      await setW(1100); await wait(60);
+      const lm = document.getElementById('btn-layermenu'), lr = vis(lm);
+      if (!lr) throw new Error('setup: no copy button on the row at 1100');
+      const lid = document.createElement('div');
+      lid.style.cssText = 'position:fixed;z-index:2147483647;background:transparent;left:' + (lr.left + lr.width / 2 - 4) + 'px;top:' + lr.top + 'px;width:8px;height:' + lr.height + 'px';
+      document.body.appendChild(lid);
+      let seen;
+      try { seen = covered(); } finally { lid.remove(); }
+      if (!(seen.length === 1 && seen[0].indexOf('#btn-layermenu centre is under') === 0)) throw new Error('CONTROL: a box laid over the copy button centre at 1100 should be the one thing reported, got: ' + (seen.join('; ') || 'nothing'));
+
+      for (const n of [0, 1, 2]) {
+        if (n === 0) FM.selectLayer(null);
+        else if (n === 1) FM.selectLayer(A.id);
+        else { FM.selectLayer(A.id); FM.toggleSelect(B.id); }
+        FM.refreshAll(); await frames(2);
+        for (const w of WIDTHS) {
+          await setW(w);
+          states++;
+          const where = w + 'px, ' + n + ' selected: ';
+          if (!document.getElementById('t-sel') || !document.getElementById('t-far')) throw new Error('setup at ' + where + 'the PC transport row is not built');
+          if (n >= 1) { const keys = document.getElementById('key-rail'); if (!vis(keys)) throw new Error('setup at ' + where + 'the A/S/D keys are not showing, so this is not the layout the finding measured'); }
+          // nothing may leave the row to pass: all eight of the row's own controls, the far run, and the layer group
+          const missing = ROW.filter(id => !vis(document.getElementById(id)));
+          if (missing.length) fails.push(where + missing.join(', ') + ' not on screen');
+          if (kids('t-far').length < 6) fails.push(where + 'the far run shows only ' + kids('t-far').length + ' controls');
+          const grp = kids('t-sel').map(c => c.id);
+          const need = n === 0 ? [] : ['btn-parent', 'btn-del-layer', 'btn-more-layer'];
+          need.forEach(id => { if (grp.indexOf(id) < 0) fails.push(where + '#' + id + ' is not on the row'); });
+          if (n === 2) {
+            const fold = ['btn-group', 'btn-maskgroup'].filter(id => grp.indexOf(id) < 0);
+            if (fold.length) {
+              folded++;
+              // taken off the row ONLY where the row cannot hold them, and only because ⋯ holds the same two actions
+              if (w >= 800) fails.push(where + fold.join(' and ') + ' taken off the row at a width that has room for them');
+              const labels = FM.layerMenuItems(FM.selectedLayer(FM.scene)).map(it => it && it.label).filter(Boolean);
+              if (labels.indexOf('Group selection') < 0 || labels.indexOf('Masking group') < 0) fails.push(where + 'Group / Masking group left the row but the ⋯ menu does not offer them');
+            }
+          }
+          // his spacing survives the squeeze: skip → undo stays 12px (#420 / #763)
+          const te = vis(document.getElementById('btn-toend')), un = vis(document.getElementById('btn-undo'));
+          if (te && un && Math.abs((un.left - te.right) - 12) > 1) fails.push(where + 'skip → undo is ' + (un.left - te.right).toFixed(1) + 'px, not 12');
+          // where the room exists the row is exactly what it was: play on screen centre, no step taken
+          if (w >= 1013) {
+            const p = vis(document.getElementById('time-readout')), t = document.getElementById('transport');
+            if (p && Math.abs(p.left + p.width / 2 - innerWidth / 2) > 1) fails.push(where + 'play is ' + Math.round(p.left + p.width / 2 - innerWidth / 2) + 'px off screen centre with room to spare');
+            if (/\bt-(snug|small|fold)\b/.test(t.className)) fails.push(where + 'the row stepped down (' + t.className + ') with room to spare');
+          }
+          const bad = covered();
+          if (bad.length) fails.push(where + bad.slice(0, 4).join('; ') + (bad.length > 4 ? ' (+' + (bad.length - 4) + ' more)' : ''));
+        }
+      }
+      if (states < 290) throw new Error('setup: only ' + states + ' states were measured');
+      /* …and none of it reaches the phone. From the tightest PC state (701, two selected: every step on) to 380, the steps
+         come off with the PC row — the phone row is #405's and this item must leave it exactly as it was. */
+      await setW(701);
+      const tightest = document.getElementById('transport').className;
+      if (!/\bt-fold\b/.test(tightest)) fails.push('701px, 2 selected: the row should be fully stepped down, got (' + tightest + ')');
+      await atPhoneWidth(async function () {
+        FM.refreshAll(); await frames(3);   // the app's next refresh is what gives a narrowed window its phone row back (#405)
+        const t = document.getElementById('transport');
+        if (/\bt-(snug|small|fold)\b/.test(t.className)) fails.push('380px: the PC steps stayed on the phone row (' + t.className + ')');
+        if (document.getElementById('t-sel')) fails.push('380px: the PC layer group is still built on the phone');
+      }, 380);
+      if (fails.length) throw new Error(fails.length + ' of ' + states + ' width × selection states fail — ' + fails.slice(0, 6).join(' | ') + (fails.length > 6 ? ' | …' : '') + ' (queue 979)');
+      if (!folded) throw new Error('with two selected at 701 the whole group cannot fit on the row, yet nothing was folded into ⋯ and nothing was reported — the fold check never ran');
+    } finally {
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      FM.scene = saved;
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await wait(120);
     }
   });
 

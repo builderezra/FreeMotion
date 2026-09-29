@@ -2688,7 +2688,23 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
        right — and that asymmetry put play 13px right of screen centre (queue 373 clause 8). With a 0
        minimum the tracks stay equal by construction even when there is nothing to share, and the wider
        group overflows to the RIGHT into the padding, which is empty space by definition. */
-    display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+    /* …EXCEPT THE LEFT TRACK, which now has its content as its floor (queue 979). A 0 minimum let the left
+       group overflow too — and it is `justify-content: flex-end`, so it overflowed LEFT, out of the row and
+       over the inspector. Measured on v17.12, every 3px from 701 to 899 with 0, 1 and 2 layers selected:
+       201 of 201 states had a transport control that did not take its own click — the copy button and the
+       add-row switch under the A/S/D keys (#key-rail is on the inspector's title line, level with this
+       row), the skip button and the pill's left end under the back button, and from 900 to 996 the copy
+       button still under the back button (its CENTRE from 900 to 964, so a click on copy left the project).
+       The cause is v4.97's centring: play is held on SCREEN centre, and below ~1013px the room between the
+       panel's left edge and screen centre is narrower than back + the three left controls + half the pill.
+       With `minmax(min-content, 1fr)` the left track is its fr share whenever the share is enough — every
+       window from ~1013px up, play on 50vw, and measured pixel-identical to v17.12 at 1016, 1040, 1100,
+       1160, 1280, 1440 and 1920 with 0, 1 and 2 selected — and its own width when it is not, so play
+       slides right exactly as far as the left controls need and no further. That is the conditional the
+       v4.97 test always stated ("hit screen centre when the room exists, and never overlap the panel
+       regardless"); only the right track keeps the 0 minimum, because the heavier right group is the one
+       #373 caught pushing the pill off centre. The back button's width is reserved below. */
+    display: grid; grid-template-columns: minmax(min-content, 1fr) auto minmax(0, 1fr); align-items: center;
     /* CENTRE THE ROW TRACK, not just the items in it (queue 278). Ezra: "the bar with the bin on it and
        stuff, the darkening of the background… is still off centred, the bar gos lower than it gos
        higher, and it looks off." Measured at 1280x800 rather than eyeballed, because "still" means it
@@ -2742,6 +2758,44 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
      flanking tracks had an auto minimum and so were sized by their own contents. The tracks above now
      have a 0 minimum and are equal BY CONSTRUCTION, so the group's width no longer feeds back into the
      centring at all, and the control can sit where he actually asked for it in both layouts. */
+}
+/* ---- NOTHING ON THE ROW SITS UNDER ANYTHING ELSE (queue 979) ------------------------------------------------------
+   The left track above now holds the left group inside the row. Two more things finish the job:
+   1. THE BACK BUTTON'S WIDTH IS RESERVED. #t-home is absolute at the row's left edge (so it never shifts play), which
+      means nothing in the grid knew it was there: the left group's floor did not include it, and the copy button slid
+      under it from 900 to 996px. The left group is padded by the back button plus one row gap — only when #t-home is
+      in the row (it exists once app.js has built the PC row), and only ever felt when the track is at its floor; at
+      its fr share the group is packed against the pill (flex-end) and the padding is empty space.
+   2. THE RIGHT SIDE STOPS PAYING FOR GAPS AND BOXES IT CANNOT AFFORD. Holding the left group in the row moves play
+      right on a narrow window, and the right-hand run follows it — measured, with two selected the ⋯ ran past the
+      window's edge below ~872px (one selected, ~791). app.js (pcTransportRoom) MEASURES the widest the layer group can get (every button it
+      holds shown, as with two selected — so a shift-click never re-flows the row) and steps down only as far as it
+      must: `.t-snug` closes the gaps (6 → 2, inside the group 0, the group's 3px left margin), keeping skip → undo at the
+      12px he asked for (#420/#763); `.t-small` then takes the row's boxes from 34 to 28 — the #405 floor, "the smallest
+      this row can honestly go". The glyphs keep their size; only the hover box and the air between them shrink.
+   3. …AND BELOW ~770px, TWO BUTTONS FOLD INTO ⋯. With both steps above, two selected still put ⋯ at 726–754 in a 701px
+      window (measured). `.t-fold` takes Group and Masking group off the row — the only two whose actions ⋯ also holds
+      (FM.layerMenuItems: "Group selection" / "Masking group" whenever two or more are selected, exactly when these
+      show). Parent and delete stay: parent is in no menu, and delete was taken out of ⋯ on his word (#221).
+      !important because syncTopBar owns the Group button's display inline; the class only ever hides.
+   The far run (the band under the row below 1160px) is not touched: it is #970's, held for his pick. */
+@media (min-width: 701px) {
+  #transport { --t-gap: 6px; --t-home-w: 34px; }
+  #transport:has(> #t-home) .t-left { padding-left: calc(var(--t-home-w) + var(--t-gap)); }
+  #transport.t-snug { --t-gap: 2px; }
+  #transport.t-snug .t-side { gap: var(--t-gap); }
+  #transport.t-snug #btn-toend { margin-right: 10px; }   /* + the 2px gap = the 12px skip → undo of #420/#763 */
+  #transport.t-snug #t-sel { gap: 0; }
+  #transport.t-snug #t-sel.has-sel { margin-left: 0; }
+  #transport.t-small { --t-home-w: 28px; }
+  #transport.t-small .t-side .tbtn,
+  #transport.t-small #t-sel .icon-btn,
+  #transport.t-small #t-home .icon-btn { width: 28px; min-width: 28px; }
+  #transport.t-fold #btn-group,
+  #transport.t-fold #btn-maskgroup { display: none !important; }
+  /* …and the group's own ground gives back half its side padding, so at 701 its right edge (and his blue corner, #973)
+     ends inside the window rather than 3px past it — measured. */
+  #transport.t-fold #t-sel.has-sel { padding-left: 3px; padding-right: 3px; }
 }
 /* AM-style centred timecode pill, just under the transport row (fills its 26px grid row, centred). */
 /* THE PILL LIVES IN THE TRANSPORT ROW NOW (queue 364, clauses 1 + 5) — #tc-bar is gone, so these are

@@ -7709,6 +7709,7 @@ window.FM = window.FM || {};
     t._pcBuilt = true;
     pcTransportSync();
     pcSyncShare();
+    pcTransportWatchRoom(t);   // queue 979
   }
   /* "they only show up when they should, not always there."
    *
@@ -7752,6 +7753,80 @@ window.FM = window.FM || {};
       lm.setAttribute('aria-disabled', 'false');
     }
   }
+  /* ---- THE RIGHT-HAND RUN FITS THE WINDOW (queue 979) ----------------------------------------------------------------
+     styles.css now holds the left group inside the row (its track has its content as a floor, and the back button's
+     width is reserved), so on a narrow window play slides right — and the right-hand run (skip · undo · redo · the
+     layer group) slides with it. Measured with only that in place (every 3px, 701–1012): with two selected ⋯ ran past
+     the window's edge from 701 to ~872px (past the row's 14px inset to ~887), with one selected to ~791 (~806). So the
+     row steps down, as far as it must and no further:
+       1. `.t-snug` closes the gaps (skip → undo keeps its 12px, #420/#763);
+       2. `.t-small` takes the row's boxes to 28px — the #405 floor, the glyphs keep their 21px;
+       3. `.t-fold` takes Group and Masking group off the row. Only these two, because they are the only ones that are
+          ALSO in ⋯: FM.layerMenuItems lists "Group selection" and "Masking group" whenever two or more are selected,
+          which is exactly when these buttons show. Parent is in no menu and delete was taken out of ⋯ on his word
+          (#221), so both stay. Measured: with 1 and 2 in place ⋯ still ended at ~754 in a 701px window with two
+          selected — 53px past the edge — and the two buttons are 56px.
+     Decided against the WIDEST the layer group can get — every button it holds shown, as with two or more selected —
+     so the row never re-flows when a second layer is shift-clicked; the same reason #970 measures its band that way.
+     Each step is measured with the ones after it off, in this one task, so nothing is painted part-way and a decision
+     cannot flip itself back. The limit is the row's own edge padding (14px), the same inset the far run keeps; on the
+     very narrowest windows the last step still ends inside the window rather than inside that inset (at 701, ⋯ is 667–695
+     and its group's edge ~698),
+     which is the most the row can do without a second band (#970's pick). */
+  function pcTransportRoom() {
+    const t = document.getElementById('transport');
+    if (!t) return;
+    /* The PC row outlives a narrowed window until the next refresh tears it down (#405), and every rule these classes
+       drive is inside the 701px block — so below it there is nothing to decide, and nothing is measured. */
+    const pc = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
+    if (!t._pcBuilt || !pc) { t.classList.remove('t-snug', 't-small', 't-fold'); return; }
+    const tr = t.getBoundingClientRect();
+    if (tr.width < 2) return;                                   // not laid out (Home in front) — the observer decides when it is
+    const right = t.querySelector('.t-right'), sel = document.getElementById('t-sel');
+    if (!right) return;
+    const kids = sel ? Array.prototype.slice.call(sel.children) : [];
+    const was = kids.map(k => k.style.display), had = !!(sel && sel.classList.contains('has-sel'));
+    const reach = () => {
+      let r = -Infinity;
+      Array.prototype.forEach.call(right.children, c => { const b = c.getBoundingClientRect(); if (b.width > 0 && b.height > 0) r = Math.max(r, b.right); });
+      return r;
+    };
+    try {
+      kids.forEach(k => { k.style.display = ''; });
+      if (sel) sel.classList.add('has-sel');
+      const limit = tr.right - 14;
+      t.classList.remove('t-snug', 't-small', 't-fold');
+      for (const step of ['t-snug', 't-small', 't-fold']) {
+        if (reach() <= limit) break;
+        t.classList.add(step);
+      }
+    } finally {
+      kids.forEach((k, i) => { k.style.display = was[i]; });
+      if (sel && !had) sel.classList.remove('has-sel');
+    }
+  }
+  /* Re-decided on a window resize, and by a ResizeObserver on the row (the panel changes width without one — the PC text
+     editor folds the inspector away, #519; measured at 760 with two selected: .t-snug .t-small .t-fold → .t-snug while
+     it is open, and back when it closes), on the pill (its width is the font's) and on the layer group (a Viewer's copy hides
+     its buttons with !important, which the measuring cannot un-hide, so the widest it can get changes with the role).
+     On the next animation frame: a resize's own handlers (timeline.js republishes --tl-panel-left, which sets where
+     play sits) run first, and a frame requested from a resize event still runs before that frame is painted; deciding
+     inside an observer callback is what #970 measured raising "ResizeObserver loop completed with undelivered
+     notifications". */
+  let pcRoomQueued = 0, pcRoomResizeHooked = false;
+  function pcTransportRoomSoon() {
+    if (pcRoomQueued) return;
+    pcRoomQueued = requestAnimationFrame(() => { pcRoomQueued = 0; pcTransportRoom(); });
+  }
+  function pcTransportWatchRoom(t) {
+    if (t._roomRO) { try { t._roomRO.disconnect(); } catch (e) {} t._roomRO = null; }
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = (t._roomRO = new ResizeObserver(pcTransportRoomSoon));
+      [t, document.getElementById('time-readout'), document.getElementById('t-sel')].forEach(el => { if (el) ro.observe(el); });
+    }
+    if (!pcRoomResizeHooked) { pcRoomResizeHooked = true; window.addEventListener('resize', pcTransportRoomSoon); }
+    pcTransportRoom();
+  }
   /* THE UNDO for pcTransportLayout (queue 405). Restores every borrowed control to the exact parent and
      position it was taken from, then removes the three wrappers the build created. Without this the row
      could only ever grow: `_pcBuilt` latched and a window narrowing past 701px kept a desktop row on a
@@ -7775,6 +7850,8 @@ window.FM = window.FM || {};
     }
     ['t-home', 't-sel', 't-far'].forEach(id => { const w = document.getElementById(id); if (w && !w.childNodes.length) w.remove(); else if (w) w.remove(); });
     t._pcHomes = null; t._pcBuilt = false;
+    if (t._roomRO) { try { t._roomRO.disconnect(); } catch (e) {} t._roomRO = null; }   // queue 979: the fit is the PC row's, and the row is gone
+    t.classList.remove('t-snug', 't-small', 't-fold');
   }
   FM.pcTransportTeardown = pcTransportTeardown;
   FM.pcTransportLayout = pcTransportLayout;
