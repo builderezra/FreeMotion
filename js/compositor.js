@@ -418,7 +418,7 @@ window.FM = window.FM || {};
     ] },
     { type: 'filmgrain', label: 'Film Grain', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 40, unit: '%' },
-      { key: 'size', label: 'Grain size', min: 1, max: 24, step: 0.5, def: 2, unit: 'px' },        // real grain clumps — it is not one pixel. unit 'px' (queue 986, hunt C5): PROJECT pixels, so pxToPlate scales it to the preview plate as Noise's was (queue 904) — on his phone's 0.28 plate the grain was 3.5x coarser than in the export
+      { key: 'size', label: 'Grain size', min: 1, max: 24, step: 0.5, def: 2, unit: 'px' },        // real grain clumps — it is not one pixel. unit 'px' (queue 986, hunt C5): PROJECT pixels — on his phone's 0.28 plate the grain was 3.5x coarser than in the export. The kernel takes `ps` and scales it itself (pxToPlate then leaves it alone), because round-or-square and the grain's strength are decided on the project size
       /* ROUND GRAIN (queue 109). Ezra: "The film grain effect should have a circle option, instead of
          just squares, and also the preview image should show the circle version."
          He is right about the physics as well as the look — a grain is a silver halide particle, not a
@@ -4183,6 +4183,28 @@ window.FM = window.FM || {};
     return r < 0 ? 0 : (r > 255 ? 255 : r);
   }
 
+  /* HOW STRONG ONE ROUND FILM GRAIN IS, PER PIXEL, AT A CELL SIZE OF `s` PIXELS (queue 986) — the RMS of the weight the
+     filmgrain kernel gives each pixel (q·1.35 inside the inscribed disc, nothing outside), sampled at the kernel's own
+     pixel centres and cells. A grain's per-pixel strength is its hash times this, so the ratio of two of them is what a
+     reduced plate multiplies by to match the export. Small cells are where the pixel grid decides it (0.675 at 2, 0.598
+     at 1.25, 0.70 at 1.5); from 8 up it is the continuous disc's 1.35·sqrt(π/12) = 0.6907 to within 0.05%. Memoised,
+     because a size only changes when he keyframes it or the preview plate moves. */
+  const _grainRms = new Map();
+  function grainDiscRms(s) {
+    if (!(s > 1.2)) return 1;                                     // the kernel draws a square there, at full weight
+    if (s >= 8) return 0.6907455278638798;
+    let v = _grainRms.get(s);
+    if (v !== undefined) return v;
+    const N = Math.ceil(s * 32), inv = 1 / s, rad = s * 0.5, radInv = 1 / (rad * rad), dx = new Float64Array(N);
+    for (let x = 0; x < N; x++) dx[x] = (x + 0.5) - (((x * inv) | 0) * s + rad);
+    let tot = 0;
+    for (let a = 0; a < N; a++) for (let b = 0; b < N; b++) { const q = 1 - (dx[a] * dx[a] + dx[b] * dx[b]) * radInv; if (q > 0) tot += q * q; }
+    v = 1.35 * Math.sqrt(tot / (N * N));
+    if (_grainRms.size > 256) _grainRms.clear();
+    _grainRms.set(s, v);
+    return v;
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -4794,10 +4816,21 @@ window.FM = window.FM || {};
     // highlights are clipped), it CLUMPS instead of sitting on single pixels, and it is nearly
     // monochrome, because dye clouds scatter luminance far more than colour. Flat per-pixel RGB
     // noise reads as a broken sensor; this reads as stock.
-    filmgrain: function (d, W, H, p, t) {
+    filmgrain: function (d, W, H, p, t, ps) {
       const amt = (fparam(p, 'amount', 40, t) / 100) * 90;          // peak swing at mid-grey
       if (amt <= 0) return;
-      const size = Math.max(1, fparam(p, 'size', 2, t));
+      /* THE KERNEL SCALES ITS OWN SIZE (queue 986, review of hunt C5). Size is PROJECT pixels (its `unit: 'px'`), and it
+         takes `ps` so pxToPlate leaves it alone: the plate size is `sizeP * ps`, but whether a grain is ROUND is decided
+         on the project size, and so is its strength. Scaled by pxToPlate instead, the default size 2 reached a plate at
+         or below 0.6 as 1.2 or less, the disc test below failed, and round grain — the default, in 12 of the 56 filters —
+         fell back to square at full weight: measured 10.3 luma std against the export's 6.97, 48% stronger on his
+         phone's 0.28 preview and a 68% step between 0.625 and 0.6 (so it jumped when Play lowered the plate). Now `gn`
+         holds the per-pixel strength to the export's: the RMS weight of the disc at the project size over the RMS of
+         what the plate can draw (a smaller disc, or a square once the cell is too small for one). At ps 1 gn is 1 and
+         never multiplied in, so the export is the old arithmetic byte for byte. */
+      const sizeP = Math.max(1, fparam(p, 'size', 2, t));
+      const S = (ps > 0 && ps < 1) ? ps : 1;
+      const size = S === 1 ? sizeP : Math.max(1, sizeP * S);
       const chroma = fparam(p, 'color', 15, t) / 100;               // 0 = pure luminance grain
       const shadowKeep = fparam(p, 'shadows', 35, t) / 100;         // how much grain survives into the blacks
       // …and the same for the whites. 4*L*(1-L) is zero at BOTH ends, and only the dark end had a
@@ -4813,7 +4846,9 @@ window.FM = window.FM || {};
          The radius is the INSCRIBED circle (size/2), so the corners of every cell fall away to nothing
          — which is what stops the field looking like a grid. Amplitude is lifted by 1.35 to pay for
          the ~21% of each cell that a disc gives up, so switching shape does not read as "quieter". */
-      const round = fparam(p, 'shape', 0, t) >= 0.5 && size > 1.2;
+      const roundP = fparam(p, 'shape', 0, t) >= 0.5 && sizeP > 1.2;
+      const round = roundP && size > 1.2;
+      const gn = S === 1 || !roundP ? 1 : grainDiscRms(sizeP) / (round ? grainDiscRms(size) : 1);
       const rad = size * 0.5, radInv = 1 / (rad * rad);
       for (let y = 0; y < H; y++) {
         const gy = (y * inv) | 0;
@@ -4833,6 +4868,7 @@ window.FM = window.FM || {};
             if (q <= 0) continue;
             n *= q * 1.35;                                          // smooth falloff to the rim
           }
+          if (gn !== 1) n *= gn;                                    // a reduced plate: the export's per-pixel strength (see gn)
           // response curve: 4*L*(1-L) peaks at mid-grey and falls to 0 at both ends, then the
           // shadow floor lifts the dark end back up by the user's amount.
           const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
@@ -7407,11 +7443,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          what the export shrunk to that size shows. At a full plate (the export, ps 1) the table is not built and the old
          `y%3` runs, byte for byte.
          The sensor grain stays one plate pixel: that is the floor every grain in the app has (Noise, Film Grain), because
-         nothing finer than a pixel can be drawn on the plate — and its strength is the same at every plate size. */
-      var nvS=(ps>0&&ps<1)?ps:1, nvRow=null;
-      if(nvS<1){ nvRow=new Float64Array(H); var nvD=function(x){ var k=Math.floor(x/3), r=x-3*k; return k+(r<1?r:1); };
-        for(var ry=0;ry<H;ry++){ var ra=ry/nvS, rb=(ry+1)/nvS; nvRow[ry]=nvS*3<2?0.9:1-0.3*(nvD(rb)-nvD(ra))/(rb-ra); } }
-      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*nvGain+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*nvNoise; if(nvRow)L*=nvRow[y]; else if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*nvT0, gg=L*nvT1, gb=L*nvT2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
+         nothing finer than a pixel can be drawn on the plate — and its strength is the same at every plate size.
+         THE SHARE IS TAKEN OF CLAMPED VALUES (queue 986, review of C6). The export clamps each line to 255 and the eye averages
+         lines that are already clamped; multiplying by the row's average first and clamping after made every highlight the
+         gain pushes past 255 (luma above ~173) brighter on a reduced plate than in the file — measured on #c3c3c3, 174.6
+         against the export's 163.7, White hot 246 against 230. So a reduced plate row is clamp(L) moved toward clamp(0.7·L)
+         by its scanline coverage (nvCov: the share of its project rows that are lines, 1/3 where they are too fine to
+         draw), whose mean is the export's at any brightness. */
+      var nvS=(ps>0&&ps<1)?ps:1, nvCov=null;
+      if(nvS<1){ nvCov=new Float64Array(H); var nvD=function(x){ var k=Math.floor(x/3), r=x-3*k; return k+(r<1?r:1); };
+        for(var ry=0;ry<H;ry++){ var ra=ry/nvS, rb=(ry+1)/nvS; nvCov[ry]=nvS*3<2?1/3:(nvD(rb)-nvD(ra))/(rb-ra); } }
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*nvGain+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*nvNoise;
+        if(nvCov){ var nvLc=L<0?0:(L>255?255:L), nvLd=L*0.7; if(nvLd<0)nvLd=0; if(nvLd>255)nvLd=255; L=nvLc+(nvLd-nvLc)*nvCov[y]; }
+        else { if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; }
+        var gr=L*nvT0, gg=L*nvT1, gb=L*nvT2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
     sketch: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.85, t); if(a<0)a=0; if(a>1)a=1; var s=d.slice();
       // Amount could only fade the whole drawing back toward the photo. DARKNESS was a hardcoded x510
       // gain, so the strokes could not be made bolder or lighter. THRESHOLD clears the grey mud that a

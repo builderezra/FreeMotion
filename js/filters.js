@@ -580,8 +580,9 @@ window.FM = window.FM || {};
     faves: function () { return readFaves().map(id => this.get(id)).filter(Boolean); },
     /* HIS OWN SAVED FILTERS, newest first (queue 986, hunt C9). "Save this effect as preset…" on a filter row stores it,
        and `get()` below has resolved it since queue 581 — but nothing ever LISTED it, so the only way back to a filter he
-       had saved was to have starred it first. The Filters tab draws these as their own row; each resolves through `get()`
-       like every other tile, so picking, previewing, the thumbnail and the star need nothing new. */
+       had saved was to have starred it first. This is the list a "Your filters" row on the Filters tab will draw — that row
+       is held for his pick (#545; see inspector.js). Each resolves through `get()` like every other tile, so picking,
+       previewing, the thumbnail and the star need nothing new. */
     custom: function () {
       let list = [];
       try { list = (FM.effectPresets && FM.effectPresets.custom) ? (FM.effectPresets.custom() || []) : []; } catch (e) { return []; }

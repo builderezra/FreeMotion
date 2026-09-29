@@ -111689,24 +111689,23 @@
 
   /* C5 — FILM GRAIN'S "Grain size" HAD NO unit:'px'. pxToPlate therefore never scaled it, and on his phone's 0.28 preview plate
      the grain was 8 PLATE pixels where the export draws 8 project pixels — 3.5x coarser — the same fault fixed for Noise in
-     queue 904. Measured on 913186b6: size 8 reached the 0.28 plate as 8 (Noise: 2.24). Through the renderer the grain is
-     measured as the run length of equal pixels along a row, in PROJECT pixels, at the export's size and at half size.
-     CONTROL: the same seam scales Noise, and the export plate (ps 1) is handed the size untouched. */
+     queue 904. Measured on 913186b6: size 8 reached the 0.28 plate as 8 (Noise: 2.24). The kernel now takes `ps` and scales the
+     size itself, so that round-or-square and the grain's strength are decided on the project size. Through the renderer the
+     grain is measured as the run length of equal pixels along a row, in PROJECT pixels, at the export's size, half size and
+     his phone's 0.28 — and its strength as the luma std on mid-grey at every preview plate. */
   test('986 C5 Film Grain size is project pixels - the grain on a reduced preview plate is the export grain, not 3.5x coarser', { item: '986' }, function () {
-    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
-    if (!K || !K.filmgrain || !K.noise || !FM._pxToPlate) throw new Error('the kernels or the pxToPlate seam are not reachable');
-    const ctl = FM._pxToPlate(FM.fxRegistry.makeInstance('noise'), { amount: 35, size: 8 }, 0, 0.28, K.noise);
-    if (!(Math.abs(ctl.size - 2.24) < 1e-9)) throw new Error('CONTROL: pxToPlate no longer scales Noise either (' + ctl.size + '), so it cannot judge Film Grain');
-    const fx = FM.fxRegistry.makeInstance('filmgrain');
-    const out = FM._pxToPlate(fx, { amount: 40, size: 8 }, 0, 0.28, K.filmgrain);
-    if (!(Math.abs(out.size - 2.24) < 1e-9)) throw new Error('Film Grain size 8 reaches the phone plate (0.28) as ' + out.size + ' - it is not scaled, so the preview grain is 3.5x coarser than the export');
-    if (FM._pxToPlate(fx, { amount: 40, size: 8 }, 0, 1, K.filmgrain).size !== 8) throw new Error('the export plate (ps 1) changed the grain size');
-    /* the grain through the renderer, in project pixels */
-    const grain = (w) => {
+    /* Through the renderer, which is how the app calls the kernel: a full-frame mid-grey clip in a 320x240 project, drawn into a
+       canvas w wide, so the preview plate scale is w/320 and 320 is the export. */
+    const shot = (w, over) => {
       const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#808080', start: 0, duration: 3 });
-      const e = FM.fxRegistry.makeInstance('filmgrain'); Object.assign(e.params, { amount: 100, size: 8, shape: 0, color: 0, shadows: 100, highlights: 100 }); L.effects = [e];
-      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      const e = FM.fxRegistry.makeInstance('filmgrain'); Object.assign(e.params, over); L.effects = [e];
+      const cv = offscreen(w, Math.round(w * 3 / 4)), x = cv.getContext('2d', { willReadFrequently: true });
       FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } }), 0.5);
+      return x;
+    };
+    /* the grain's size in project pixels: the mean run of equal pixels along rows, divided by the plate scale */
+    const grain = (w) => {
+      const x = shot(w, { amount: 100, size: 8, shape: 0, color: 0, shadows: 100, highlights: 100 });
       const ps = w / 320, runs = [];
       for (let y = Math.round(40 * ps); y < Math.round(200 * ps); y += Math.max(1, Math.round(13 * ps))) {
         const row = x.getImageData(0, y, w, 1).data;
@@ -111716,9 +111715,33 @@
       if (runs.length < 10) throw new Error('setup: the grain drew no structure to measure at ' + w + 'px wide');
       return (runs.reduce((a, b) => a + b, 0) / runs.length) / ps;
     };
-    const exp = grain(320), half = grain(160);
+    const exp = grain(320), half = grain(160), phone = grain(90);
     if (!(exp > 5 && exp < 11)) throw new Error('setup: Grain size 8 measured ' + exp.toFixed(1) + ' project px in the export - the ruler is not reading the grain');
     if (half > exp * 1.3) throw new Error('on a half-size preview the grain is ' + half.toFixed(1) + ' project px against ' + exp.toFixed(1) + ' in the export - it is drawn in plate pixels, so every reduced preview shows it coarser than the file');
+    if (phone > exp * 1.3) throw new Error('on his phone preview (0.28) the grain is ' + phone.toFixed(1) + ' project px against ' + exp.toFixed(1) + ' in the export');
+    /* …AND AS STRONG AS THE EXPORT'S, pixel for pixel (the review of this fix). Scaling the size let the default ROUND grain (size 2)
+       reach a plate at or below 0.6 as 1.2 or less, where the kernel draws a square at full weight: measured on 3499dea5 as a luma
+       std of 6.97 in the export, 6.13 at 0.625, then 10.31 at 0.6, 0.5 and 0.28 - 48% stronger on his phone, and a jump when Play
+       lowers the plate. 913186b6 held about 7.0 everywhere (its grain was coarse, not strong). Size 4 is checked too: a small disc at
+       0.5 (plate 2), a square at 0.28 (plate 1.12). CONTROL: square grain has no disc to lose, so it is the same at every plate, and
+       it is well above round - the ruler can tell the two apart. */
+    const std = (w, over) => {
+      const x = shot(w, over), h = Math.round(w * 3 / 4), m = Math.max(1, Math.round(8 * w / 320));
+      const d = x.getImageData(m, m, w - 2 * m, h - 2 * m).data, v = [];
+      for (let i = 0; i < d.length; i += 4) v.push(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+      const mu = v.reduce((a, b) => a + b, 0) / v.length;
+      return Math.sqrt(v.reduce((a, b) => a + (b - mu) * (b - mu), 0) / v.length);
+    };
+    const sq = std(320, { shape: 0 }), sqPhone = std(90, { shape: 0 }), rnd = std(320, {});
+    if (!(rnd > 5 && rnd < 9)) throw new Error('setup: a default Film Grain on mid-grey measured a luma std of ' + rnd.toFixed(2) + ' in the export (6.97 when written) - the ruler is not reading the grain');
+    if (Math.abs(sqPhone / sq - 1) > 0.05) throw new Error('CONTROL: square grain is ' + sqPhone.toFixed(2) + ' on the phone plate against ' + sq.toFixed(2) + ' in the export - it has no disc to lose, so the measurement itself moved');
+    if (!(sq > rnd * 1.3)) throw new Error('CONTROL: square grain (' + sq.toFixed(2) + ') is not clearly stronger than round (' + rnd.toFixed(2) + ') - the ruler cannot tell a square fallback from a disc');
+    [[{}, rnd, 'the default round grain'], [{ size: 4 }, std(320, { size: 4 }), 'round grain at size 4']].forEach(([over, ref, what]) => {
+      [[200, '0.625'], [192, '0.6'], [160, '0.5'], [90, '0.28 - his phone']].forEach(([w, ps]) => {
+        const s = std(w, over);
+        if (Math.abs(s / ref - 1) > 0.05) throw new Error('on a ' + ps + ' preview plate ' + what + ' measures a luma std of ' + s.toFixed(2) + ' against ' + ref.toFixed(2) + ' in the export (' + (s > ref ? '+' : '') + ((s / ref - 1) * 100).toFixed(0) + '%) - a reduced preview draws it at a different strength than the file');
+      });
+    });
   });
 
   /* C6 — NIGHT VISION'S SCANLINES WERE EVERY THIRD PLATE ROW. The kernel took no `ps`, so on his phone's 0.28 plate the lines
@@ -111766,16 +111789,40 @@
     const pvSpread = Math.max.apply(null, pv) - Math.min.apply(null, pv);
     if (pvSpread > 4) throw new Error('rendered on his phone preview (0.28) Night Vision shows bars ' + pvSpread.toFixed(0) + ' levels deep (rows ' + pv.slice(0, 6).map(v => v.toFixed(0)).join(',') + ') - the export has fine 3px lines there');
     if (Math.abs(mean(pv) - mean(ex)) > 3) throw new Error('rendered on the phone preview Night Vision averages ' + mean(pv).toFixed(1) + ' against ' + mean(ex).toFixed(1) + ' in the export');
+    /* HIGHLIGHTS (the review of this fix). The export clamps each line to 255 and the eye averages lines already clamped, so a clip
+       the gain pushes past white must average the same on a reduced plate as in the file. Multiplying by the row's average BEFORE
+       the clamp made it brighter: measured on 3499dea5 on #c3c3c3, 174.6 on the preview against 163.7 in the export, White hot 246
+       against 230 (913186b6 matched - it drew the bars). Mean luma over the frame, at 0.8, 0.5 and his phone's 0.28, default noise
+       included once. */
+    const lumaMean = (w, fill, over) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: fill, start: 0, duration: 3 });
+      const nv = FM.fxRegistry.makeInstance('nightvision'); Object.assign(nv.params, over); L.effects = [nv];
+      const h = Math.round(w * 3 / 4), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } }), 0.5);
+      const d = x.getImageData(2, 2, w - 4, h - 4).data; let s = 0;
+      for (let i = 0; i < d.length; i += 4) s += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+      return s / (d.length / 4);
+    };
+    [['#c3c3c3', { noise: 0 }, 'a bright clip'], ['#c3c3c3', { noise: 0, color: 2 }, 'a bright clip in White hot'], ['#e0e0e0', {}, 'a brighter clip with the default noise']].forEach(([fill, over, what]) => {
+      const ref = lumaMean(320, fill, over);
+      if (!(ref > 150)) throw new Error('setup: ' + what + ' exports at a mean of ' + ref.toFixed(1) + ' - not bright enough for the gain to clip it');
+      [[256, '0.8'], [160, '0.5'], [90, '0.28 - his phone']].forEach(([w, ps]) => {
+        const m = lumaMean(w, fill, over);
+        if (Math.abs(m - ref) > 1.5) throw new Error('on a ' + ps + ' preview plate Night Vision on ' + what + ' averages ' + m.toFixed(1) + ' against ' + ref.toFixed(1) + ' in the export - the scanlines are averaged before the highlights clip, so the preview is brighter than the file');
+      });
+    });
   });
 
   /* C9 — A FILTER SAVED WITH "Save this effect as preset…" COULD NOT BE FOUND AGAIN. The toast sent him to hold Filter in the
      Effects browser, where the filter container is hidden; the Filters tab drew the library only; and a container rebuilt from
      the preset carried no name or `fid`. Measured on 913186b6: saved, `FM.filters.get(id)` resolved it, and the Filters tab
-     showed 56 tiles, none of them his. Driven through the REAL row ⋯ menu (prompt answered), then the Filters tab, pick, Add.
-     `fid` must also survive the sanitiser every project load runs — it did not (queue 812 stamped it; the whitelist never
-     learned it), so a saved filter of his own lost its Favourite after one reopen. CONTROL: the library is on the tab, and the
-     save really landed in the store. */
-  test('986 C9 a filter saved as a preset is on the Filters tab under Your filters - pick it, Add it, and it lands named, with its effects, and still knows which filter it is after a reload', { item: '986', budgetMs: 60000 }, async function () {
+     showed 56 tiles, none of them his. The ROW that shows his filters on the tab is HELD for his pick (#545, with a way to
+     delete one — nothing in the app can), so this checks the data half it will stand on: driven through the REAL row ⋯ menu
+     (prompt answered), the toast no longer sends him to the Effects browser, `FM.filters.custom()` lists it, and it lands
+     named, with its effects and its `fid`, by both creation paths. `fid` must also survive the sanitiser every project load
+     runs — it did not (queue 812 stamped it; the whitelist never learned it), so a saved filter of his own lost its Favourite
+     after one reopen. CONTROL: the save really landed in the store. */
+  test('986 C9 a filter saved as a preset is kept whole - the toast no longer sends him to the Effects browser, it is listed as his, lands named with its effects, and still knows which filter it is after a reload', { item: '986', budgetMs: 60000 }, async function () {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const savedSel = FM.scene.selectedId, savedLayers = FM.scene.layers.slice();
@@ -111815,27 +111862,18 @@
       if (mine.length !== 1 || mine[0].name !== NAME) throw new Error('CONTROL: the save did not land in the store (' + mine.length + ' new preset(s))');
       savedId = mine[0].id;
       const said = toasts.join(' / ');
-      /* the Filters tab */
-      FM.inspector.openCategory('filters'); await sleep(400);
-      const tiles = [].slice.call(document.querySelectorAll('#inspector .flt-tile[data-fltid]'));
-      if (tiles.filter(t => t.dataset.fltid === lib.id).length < 1) throw new Error('CONTROL: the Filters tab does not show the library (' + tiles.length + ' tiles)');
-      const tile = tiles.filter(t => t.dataset.fltid === savedId)[0];
-      if (!tile) throw new Error('the filter he saved as ' + NAME + ' is nowhere on the Filters tab (' + tiles.length + ' tiles, none of them his) - saved and unreachable');
-      let head = tile.closest('.flt-rail'); head = head && head.previousElementSibling;
-      if (!head || !/your filters/i.test(head.textContent || '')) throw new Error('his filter is on the tab but not under a Your filters heading (the row above says ' + JSON.stringify(head ? head.textContent : null).replace(/"/g, "'") + ')');
-      if (!/beach look 986/i.test(tile.textContent || '')) throw new Error('his filter tile does not carry the name he typed: ' + JSON.stringify(tile.textContent).replace(/"/g, "'"));
+      if (!/saved/i.test(said)) throw new Error('CONTROL: saving showed no Saved toast to read (' + (said || 'no toast') + ')');
       if (/effects browser/i.test(said)) throw new Error('saving a filter still tells him to find it in the Effects browser, where a filter cannot be found: ' + said);
-      if (!/your filters/i.test(said)) throw new Error('saving a filter does not say where it went: ' + (said || '(no toast)'));
-      const n0 = FM.layerById(FM.scene, L.id).effects.length;
-      tile.click(); await sleep(150);
-      const go = document.querySelector('.flt-commit .fxb-commit-go');
-      if (!go) throw new Error('picking his filter brought up no Add button');
-      go.click(); await sleep(250);
-      const fx = FM.layerById(FM.scene, L.id).effects;
-      if (fx.length !== n0 + 1) throw new Error('Add did not put his filter on the layer (' + n0 + ' then ' + fx.length + ')');
-      const got = fx[fx.length - 1];
-      if (got.type !== FM.FX_CONTAINER || got.name !== NAME) throw new Error('his filter landed as ' + got.type + ' named ' + JSON.stringify(got.name).replace(/"/g, "'"));
-      if ((got.effects || []).map(e => e.type).join(',') !== wantTypes) throw new Error('his filter landed with ' + (got.effects || []).map(e => e.type).join(',') + ', not the ' + wantTypes + ' he saved');
+      /* the list the held Your filters row will draw */
+      const listed = (FM.filters.custom ? FM.filters.custom() : null);
+      if (!listed) throw new Error('nothing lists the filters he has saved (FM.filters.custom is missing) - saved and unreachable');
+      const def = listed.filter(f => f && f.id === savedId)[0];
+      if (!def || def.name !== NAME) throw new Error('the filter he saved as ' + NAME + ' is not among his listed filters (' + listed.map(f => f && f.name).join(', ') + ')');
+      if (listed.some(f => f && f.id === lib.id)) throw new Error('his filters list a LIBRARY filter as his own');
+      /* it lands as the tile would land it */
+      const got = FM.filters.makeInstance(savedId);
+      if (!got || got.type !== FM.FX_CONTAINER || got.name !== NAME) throw new Error('his filter lands as ' + (got && got.type) + ' named ' + JSON.stringify(got && got.name).replace(/"/g, "'"));
+      if ((got.effects || []).map(e => e.type).join(',') !== wantTypes) throw new Error('his filter lands with ' + (got.effects || []).map(e => e.type).join(',') + ', not the ' + wantTypes + ' he saved');
       /* through the sanitiser a project load runs, it still knows which filter it is */
       const holder = { effects: [JSON.parse(JSON.stringify(got, FM.jsonReplacer))] };
       FM.storage._sanitizeEffects(holder);
