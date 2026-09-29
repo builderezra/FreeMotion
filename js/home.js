@@ -2886,11 +2886,18 @@ window.FM = window.FM || {};
     f.anims.concat(f.orbAnims).forEach(a => { try { a.cancel(); } catch (e) {} });
     f.nodes.forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
     const dlg = document.getElementById('hm-dialog'), card = dlg && dlg.querySelector('.hm-dlg-card');
-    if (dlg) dlg.style.animation = '';
+    if (dlg) { dlg.style.animation = ''; npDlgPaint(dlg, true); }
     if (card) card.style.animation = '';
   }
-  /* The entrance has landed: the ring goes, the card is its plain self. Only the orb stays as the entrance left it
-     (turned to an ×) until the card goes away. */
+  /* The dialog's own dim and blur: off while the ripple's scrim paints them (see npFxC), back when it lands or goes. */
+  function npDlgPaint(dlg, on) {
+    dlg.style.background = on ? '' : 'transparent';
+    dlg.style.backdropFilter = on ? '' : 'none';
+    dlg.style.webkitBackdropFilter = on ? '' : 'none';
+  }
+  /* The entrance has landed: the ring and the scrim go and the dialog paints its own dim again (in the same task, so no
+     frame shows neither), the card is its plain self. Only the orb stays as the entrance left it (turned to an ×) until
+     the card goes away. */
   function npFxLand() {
     const f = npFx;
     if (!f) return;
@@ -2898,6 +2905,8 @@ window.FM = window.FM || {};
     f.anims = [];
     f.nodes.forEach(n => { if (n.parentNode) n.parentNode.removeChild(n); });
     f.nodes = [];
+    const dlg = document.getElementById('hm-dialog');
+    if (dlg) npDlgPaint(dlg, true);
   }
   function npFxStagger(f, card, from) {
     const kids = Array.prototype.slice.call(card.querySelectorAll('.hm-dlg-title, .hm-dlg-scroll > *, .hm-dlg-actions'));
@@ -2917,7 +2926,26 @@ window.FM = window.FM || {};
     const ox = O.left + O.width / 2, oy = O.top + O.height / 2;
     const far = Math.hypot(Math.max(ox, innerWidth - ox), Math.max(oy, innerHeight - oy));
     const circ = rad => 'circle(' + rad + 'px at ' + ox + 'px ' + oy + 'px)';
-    f.anims.push(npKf(dlg, [{ clipPath: circ(0) }, { clipPath: circ(far), offset: .55 }, { clipPath: circ(far) }], 'reveal', { easing: 'cubic-bezier(.3,0,.2,1)' }));
+    /* ⚠️ THE CIRCLE OPENS ON A LAYER OF ITS OWN, NEVER ON #hm-dialog (#947 review). Chrome does not hit-test an element
+       while a clip-path animation is running on it — even at a circle wider than the screen — so with the reveal on the
+       dialog itself, every press for the whole 640 ms went THROUGH the dim, the card, Cancel and the × to Home: measured
+       with real touch, a tap on the backdrop opened the project under it, and a click on it at 1280 put Home into select
+       mode with the card still up. The dim is painted by this scrim instead (pointer-events:none, behind the card) and the
+       dialog paints nothing of its own until the entrance lands, so the backdrop, the card and the × take presses from
+       frame one. The scrim takes ALL of the dialog's paint, the light Home's blur of what is behind included
+       (theme-glass.css) — the dialog's own blur would otherwise frost the whole screen at once, outside the circle. */
+    const scrim = document.createElement('div');
+    scrim.className = 'np-fx np-fx-scrim';
+    scrim.setAttribute('aria-hidden', 'true');
+    const dcs = getComputedStyle(dlg), blur = dcs.backdropFilter || dcs.webkitBackdropFilter || 'none';
+    scrim.style.cssText = 'position:absolute;inset:0;z-index:-1;pointer-events:none;';
+    scrim.style.backgroundColor = dcs.backgroundColor;
+    scrim.style.backgroundImage = dcs.backgroundImage;
+    scrim.style.backdropFilter = blur; scrim.style.webkitBackdropFilter = blur;
+    dlg.insertBefore(scrim, dlg.firstChild);
+    npDlgPaint(dlg, false);
+    f.nodes.push(scrim);
+    f.anims.push(npKf(scrim, [{ clipPath: circ(0) }, { clipPath: circ(far), offset: .55 }, { clipPath: circ(far) }], 'reveal', { easing: 'cubic-bezier(.3,0,.2,1)' }));
     const ring = document.createElement('div');
     ring.className = 'np-fx np-fx-ring';
     ring.setAttribute('aria-hidden', 'true');

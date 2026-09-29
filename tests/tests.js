@@ -106747,10 +106747,6 @@
           await tap968(document.getElementById('hm-new'), 'a tap on + (new project)');
           await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden'); }, 4000);
           await sleep927(400);
-          /* #947: the card opens by the ripple, which clips the screen to a circle growing from the + for its first ~350 ms of
-             animation time — under load the ripple can start late, and Create was still outside the circle at 400 ms (a press
-             there reaches Home). Wait until it can really be pressed, as a finger would, rather than for a fixed time. */
-          await hcUntil('Create to be reachable once the ripple has opened the card', () => { const c = document.getElementById('hm-create'), r = c.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && (h === c || c.contains(h)); }, 4000);
           await tap968(document.getElementById('hm-create'), 'a tap on Create');
           const b = await hcUntil('the new project to open in the editor', () => { const id = FM.storage.openProjectId(); return !FM.home.isOpen() && id && id !== a ? id : null; }, 8000);
           made.push(b);
@@ -108687,7 +108683,7 @@
      centre, reaching the farthest corner by 55%, a ring spreads from the +, and the + turns 135° into an ×.
      Then the part that matters most on Home afterwards: nothing outlives the card, and the + is whole again. */
   test('947 the New project + opens with the ripple he picked - the screen opens as a circle from the +, a ring spreads out, the + turns to an x - and gives the + back', { item: '947', budgetMs: 40000 }, async function () {
-    const wasOpen = FM.home.isOpen();
+    const wasOpen = FM.home.isOpen(), wasLight = !!FM.settings.get('homeLight');
     const dlg = document.getElementById('hm-dialog'), card = dlg.querySelector('.hm-dlg-card'), orb = document.getElementById('hm-new');
     const np = () => document.getAnimations().filter(a => /^np947-/.test(a.id || ''));
     const seek = (list, t) => list.forEach(a => { a.pause(); a.currentTime = t; });
@@ -108699,6 +108695,8 @@
       if (tabBtn) tabBtn.click();
       await sleep(80);
       for (const width of ['phone', 'pc']) {
+        FM.settings.set('homeLight', width === 'phone');   // the light Home frosts what is behind the card (theme-glass.css), the dark one only dims it
+        await sleep(80);
         await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
           dlg.classList.add('hidden'); await sleep(40);
           const O = orb.getBoundingClientRect();
@@ -108712,10 +108710,22 @@
           const pop = card.getAnimations().concat(dlg.getAnimations()).filter(a => a.animationName);
           if (pop.length) throw new Error(width + ': the card still pops like every other card (' + pop.map(a => a.animationName).join(', ') + ') - #947 asked for an entrance of its own');
           const cx = O.left + O.width / 2, cy = O.top + O.height / 2;
-          const clip = () => { const m = /circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)/.exec(getComputedStyle(dlg).clipPath || ''); return m ? { r: +m[1], x: +m[2], y: +m[3] } : null; };
+          /* The circle opens on the ripple's own scrim, never on the dialog: Chrome does not hit-test an element while a
+             clip-path animation runs on it, so a clipped dialog let every press for the whole entrance through to Home
+             (#947 review, measured with real touch). tests below: '947 review: a real press on the dimmed backdrop…' */
+          const scrim = dlg.querySelector('.np-fx-scrim');
+          if (!scrim) throw new Error(width + ': no scrim of its own for the ripple (.np-fx-scrim in the dialog) - the circle would have to open on the dialog itself');
+          if (getComputedStyle(scrim).pointerEvents !== 'none') throw new Error(width + ': the ripple\'s scrim takes presses (pointer-events ' + getComputedStyle(scrim).pointerEvents + ') - the backdrop under it would never hear them');
+          const dlgClip = dlg.getAnimations().filter(a => a.effect && a.effect.getKeyframes && a.effect.getKeyframes().some(k => 'clipPath' in k));
+          if (dlgClip.length || getComputedStyle(dlg).clipPath !== 'none') throw new Error(width + ': the dialog itself is clipped (' + (dlgClip.map(a => a.id).join(', ') || getComputedStyle(dlg).clipPath) + ') - Chrome does not hit-test it while that runs, so every press in the entrance goes through to Home');
+          const dim = getComputedStyle(scrim).backgroundColor, frost = getComputedStyle(scrim).backdropFilter;
+          if (width === 'phone' && !(frost && frost !== 'none')) throw new Error(width + ': on the light Home the card frosts what is behind it, and the ripple\'s scrim does not (' + frost + ') - the frost is lost while the circle opens');
+          if (getComputedStyle(dlg).backdropFilter !== 'none') throw new Error(width + ': the dialog itself blurs what is behind it (' + getComputedStyle(dlg).backdropFilter + ') - Home is frosted all at once, outside the circle');
+          const clip = () => { const m = /circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)/.exec(getComputedStyle(scrim).clipPath || ''); return m ? { r: +m[1], x: +m[2], y: +m[3] } : null; };
           seek(list, 0);
           const c0 = clip();
-          if (!c0 || c0.r > 1 || Math.hypot(c0.x - cx, c0.y - cy) > 2) throw new Error(width + ': the screen does not open from the +\'s centre (' + getComputedStyle(dlg).clipPath + ')');
+          if (!c0 || c0.r > 1 || Math.hypot(c0.x - cx, c0.y - cy) > 2) throw new Error(width + ': the screen does not open from the +\'s centre (' + getComputedStyle(scrim).clipPath + ')');
+          if (getComputedStyle(dlg).backgroundColor !== 'rgba(0, 0, 0, 0)') throw new Error(width + ': the dialog paints its own dim (' + getComputedStyle(dlg).backgroundColor + ') over the ripple\'s circle - the screen would be dimmed all at once');
           if (+getComputedStyle(card).opacity > 0.05) throw new Error(width + ': the card is visible before the ripple has opened the screen');
           const ring = document.querySelector('.np-fx-ring');
           if (!ring) throw new Error(width + ': no ring spreads from the +');
@@ -108732,15 +108742,17 @@
           // IT LANDS AND CLEANS UP on a timer; only the +'s own pose stays while the card is open
           list.forEach(a => a.play());
           await sleep(640 + 250);
-          if (document.querySelector('.np-fx')) throw new Error(width + ': the ripple\'s ring is still in the page after it landed');
+          if (document.querySelector('.np-fx')) throw new Error(width + ': the ripple\'s ring or scrim is still in the page after it landed');
           const still = np().filter(a => !/-button$/.test(a.id));
           if (still.length) throw new Error(width + ': ' + still.map(a => a.id).join(', ') + ' still running after the card landed');
+          if (getComputedStyle(dlg).backgroundColor !== dim) throw new Error(width + ': after the ripple landed the dialog dims the screen with ' + getComputedStyle(dlg).backgroundColor + ', not the ' + dim + ' the scrim showed - the dim would jump');
+          if (getComputedStyle(dlg).backdropFilter !== frost) throw new Error(width + ': after the ripple landed the dialog blurs with ' + getComputedStyle(dlg).backdropFilter + ', not the ' + frost + ' the scrim showed - the frost would jump');
           // …and the card goes, the + is whole
           dlg.classList.add('hidden'); await sleep(40);
           if (np().length) throw new Error(width + ': ' + np().map(a => a.id).join(', ') + ' outlived the card');
           const back = orb.getBoundingClientRect();
           if (!near(back, O, 1)) throw new Error(width + ': after the card closed the + is ' + box(back) + ', not the ' + box(O) + ' it was - it would be missing or turned on Home');
-          if (card.style.animation || dlg.style.animation) throw new Error(width + ': the card keeps its entrance switch-off after it closed');
+          if (card.style.animation || dlg.style.animation || dlg.style.background || dlg.style.backdropFilter) throw new Error(width + ': the card keeps its entrance switch-off after it closed');
         });
       }
       // REDUCED MOTION: no entrance at all - and the card still opens (the control)
@@ -108758,6 +108770,7 @@
     } finally {
       dlg.classList.add('hidden');
       await sleep(40);
+      FM.settings.set('homeLight', wasLight);
       if (!wasOpen) FM.home.close();
     }
   });
@@ -109898,6 +109911,176 @@
       dlg.classList.add('hidden');
       await sleep(40);
       if (!wasOpen) FM.home.close();
+    }
+  });
+
+  /* ═══ #947 REVIEW — A PRESS IN THE MIDDLE OF THE RIPPLE MUST REACH THE CARD, NOT HOME ═════════════════════════════════
+     The ripple opened the screen by animating a circular clip-path on #hm-dialog ITSELF, and Chrome does not hit-test an
+     element while a clip-path animation is running on it — not even at a circle wider than the screen. So for the whole
+     entrance, about 640 ms of every open once C became the only one, real presses on the dim, on Cancel and on the turned
+     + went THROUGH to Home: measured with real touch at 390, a tap on the dim opened the project under it; at 1280 a click
+     there put Home into Select with the card still up; a tap on the × opened the card again. The 947 tests above cannot
+     see it, because a synthetic pointerdown + dlg.click() skips hit-testing altogether. So this one uses REAL input
+     (tests/_cdp.py's __fmWantInput): a real press on the +, then, in the same batch so the gap is the driver's and not the
+     page's, a real press about 350-450 ms later — on the dim over a Home project, on Cancel, and on the ×.
+     CONTROL: the second press must land while the ripple is still running — a press after it would pass on the broken
+     build — and it must hit what it aimed at (Cancel under the finger, the dim clear of the card).
+     Then, his words for Cancel ("when you press cancel it goes away straight away"): the card is gone by the frame after
+     the press, and Home is exactly as it was — open, on the same project, not in Select, the card not opened again.
+     On the phone the card covers the first projects, so when Home is too short to reach under the dim below it, copies of
+     the open project are added (and deleted after). The frame slides left for the PC presses so both are inside the
+     380-wide window of the phone pass. */
+  test('947 review: a real press in the middle of the ripple - on the dim over a Home project, on Cancel, on the turned + - takes the card away at once and never reaches Home', { item: '947', budgetMs: 90000 }, async function () {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html’s iframe to bring the app on screen for real input');
+    const wasOpen = FM.home.isOpen(), orig = FM.storage.openProjectId();
+    const dlg = document.getElementById('hm-dialog'), orb = document.getElementById('hm-new'), card = dlg.querySelector('.hm-dlg-card');
+    const cancelBtn = document.getElementById('hm-cancel');
+    const R = el => el.getBoundingClientRect();
+    const mid = r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    const inside = (p, r, pad) => p.x >= r.left - pad && p.x <= r.right + pad && p.y >= r.top - pad && p.y <= r.bottom + pad;
+    const nm = e => !e ? 'nothing' : (e.id || (typeof e.className === 'string' && e.className.split(' ')[0]) || e.tagName);
+    const selecting = () => document.body.classList.contains('hm-selecting') || !!document.getElementById('hm-selbar');
+    const ripples = () => document.getAnimations().filter(a => /^np947-/.test(a.id || '') && a.playState === 'running');
+    const made = [];
+    try {
+      for (const where of ['phone', 'pc']) {
+        await (where === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
+          await onScreen924(async function () {
+            if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+            const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+            if (tabBtn) tabBtn.click();
+            if (selecting()) { const sb = document.getElementById('hm-select-btn'); if (sb) sb.click(); }
+            dlg.classList.add('hidden');
+            await sleep(300);
+            const here = FM.storage.openProjectId();
+            // where the presses aim: the card and Cancel as they stand once the ripple is over
+            orb.click(); await sleep(900);
+            if (dlg.classList.contains('hidden')) throw new Error(where + ': setup: the + did not open the New project card');
+            const C = R(card), K = mid(R(cancelBtn)), O = R(orb), X = mid(O);
+            dlg.classList.add('hidden'); await sleep(250);
+            // a point on the dim clear of the card (which rises from below and overshoots 8 px up) and of the +, over a Home project
+            const spot = () => {
+              for (const hc of document.querySelectorAll('#home-screen .hm-card')) {
+                const r = R(hc);
+                for (let y = r.top + 8; y <= r.bottom - 8; y += 6) for (const x of [r.left + 30, r.right - 30, C.left - 40, C.right + 40]) {
+                  const p = { x: x, y: y };
+                  if (!inside(p, r, -6) || inside(p, C, 16) || inside(p, O, 16) || y > innerHeight - 10 || x < 10) continue;
+                  const hit = document.elementFromPoint(x, y);
+                  if (hit && hc.contains(hit)) return { p: p, hc: hc };
+                }
+              }
+              return null;
+            };
+            /* …and the + must be reachable too. On PC (hover + fine pointer, 701 px up) `.hm-grid` has z-index 1 and the +
+               none, so a project scrolled under the + covers it (v15.09's cursor wash) — a real press then lands on that
+               project. Scrolled to the end, the list's 110 px bottom padding keeps every card clear of it. */
+            const sc = document.querySelector('#home-screen .hm-scroll');
+            const orbFree = () => { const h = document.elementFromPoint(X.x, X.y); return !!h && (h === orb || orb.contains(h)); };
+            const settle = async () => { if (!orbFree() && sc) { sc.scrollTop = sc.scrollHeight; await sleep(200); } };
+            await settle();
+            let found = spot();
+            for (let i = 0; !found && i < 8; i++) {
+              let doc = null; try { doc = JSON.parse(localStorage.getItem('fm.proj.' + here)); } catch (e) {}
+              const nid = doc && await FM.projects.duplicateFrom(doc, { name: '947 review filler ' + (made.length + 1), srcIds: [here] });
+              if (!nid) throw new Error(where + ': setup: could not add a project to reach under the dim');
+              made.push(nid);
+              FM.home.refresh(); await sleep(250);
+              await settle();
+              found = spot();
+            }
+            if (!orbFree()) throw new Error(where + ': setup: the + is covered by ' + nm(document.elementFromPoint(X.x, X.y)) + ' even with Home scrolled to its end - a real press cannot reach it');
+            if (!found) throw new Error(where + ': setup: no point on the dim lies over a Home project clear of the card [' + [C.left, C.top, C.right, C.bottom].map(Math.round) + '] - ' + document.querySelectorAll('#home-screen .hm-card').length + ' project cards on Home');
+            const bd = found.p, under = found.hc;
+            const touch = where === 'phone';
+            const press = (p, after) => touch ? [{ t: 'touchStart', x: p.x, y: p.y, ms: 40 }, { t: 'touchEnd', x: p.x, y: p.y, ms: after }]
+                                              : [{ t: 'mouseMove', x: p.x, y: p.y, ms: 10 }, { t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: after }];
+            /* The gaps are the driver's sleep between the two presses; measured, the second lands 60-220 ms later than that
+               after the + opens the card (CDP round trips, the open's own work). Cancel must not be pressed before ~370 ms:
+               the card is still ~30 px low at 300 ms, and its actions row rises 12 px until the very end — so the aim is
+               Cancel's resting centre plus 5 px. A press the machine made LATE (the ripple already over) proves nothing
+               either way, so that one case is tried again, up to three times; nothing else is retried. */
+            const cases = [
+              { what: 'the dim over the Home project ' + (under.dataset.pid || ''), p: bd, want: dlg, gap: 250 },
+              { what: 'Cancel', p: { x: K.x, y: K.y + 5 }, want: cancelBtn, gap: 380 },
+              { what: 'the + turned into an ×', p: X, want: dlg, gap: 250 }
+            ];
+            for (const c of cases) {
+              const lo = Math.min(X.x, c.p.x), hi = Math.max(X.x, c.p.x);
+              const shift = hi > 370 ? 370 - hi : 0;
+              if (lo + shift < 10) throw new Error(where + ', ' + c.what + ': setup: the + and the press are ' + Math.round(hi - lo) + ' px apart - too far to both reach the phone pass’s 380-wide window');
+              const at = where + ', a real ' + (touch ? 'tap' : 'click') + ' on ' + c.what;
+              for (let attempt = 1; ; attempt++) {
+                const rec = { downs: [], clicks: [], openAt: -1, played: false };
+                const mo = new MutationObserver(() => {
+                  if (rec.openAt < 0 && !dlg.classList.contains('hidden')) { rec.openAt = performance.now(); rec.played = document.getAnimations().some(a => a.id === 'np947-C-reveal'); }
+                });
+                mo.observe(dlg, { attributes: true, attributeFilter: ['class'] });
+                const onDown = e => {
+                  if (!e.isTrusted) return;
+                  const rv = document.getAnimations().filter(a => a.id === 'np947-C-reveal')[0];
+                  rec.downs.push({ t: performance.now(), kind: e.pointerType, target: e.target, x: e.clientX, y: e.clientY, reveal: rv ? rv.playState : null, cancel: R(cancelBtn), card: R(card) });
+                };
+                const onClick = e => {
+                  if (!e.isTrusted) return;
+                  const s = { t: performance.now(), target: e.target, next: null };
+                  rec.clicks.push(s);
+                  requestAnimationFrame(() => { s.next = { hidden: dlg.classList.contains('hidden'), w: R(card).width }; });
+                };
+                window.addEventListener('pointerdown', onDown, true);
+                window.addEventListener('click', onClick, true);
+                fe.style.left = shift + 'px';
+                try {
+                  await realInput924(press(X, c.gap).concat(press(c.p, 0)), at + ' (attempt ' + attempt + ')');
+                  await sleep(700);
+                } finally {
+                  fe.style.left = '0px';
+                  window.removeEventListener('pointerdown', onDown, true);
+                  window.removeEventListener('click', onClick, true);
+                  mo.disconnect();
+                }
+                const d2 = rec.downs[1];
+                if (rec.openAt < 0 || !rec.downs.length) throw new Error(at + ': CONTROL: the real press on + did not open the New project card (' + rec.downs.length + ' presses seen, the first on ' + (rec.downs[0] ? nm(rec.downs[0].target) + ' at ' + Math.round(rec.downs[0].x) + ',' + Math.round(rec.downs[0].y) : '-') + '; the + at ' + Math.round(X.x) + ',' + Math.round(X.y) + ')');
+                if (!rec.played) throw new Error(at + ': CONTROL: the card opened without the ripple (no np947-C-reveal) - he picked the ripple, and a press can only go through while it runs');
+                if (!d2) throw new Error(at + ': CONTROL: the second real press never reached the page');
+                if (d2.kind !== (touch ? 'touch' : 'mouse')) throw new Error(at + ': CONTROL: the press arrived as a ' + d2.kind + ' pointer, not ' + (touch ? 'touch' : 'mouse'));
+                const ms = Math.round(d2.t - rec.openAt);
+                if (d2.reveal !== 'running') {
+                  if (attempt < 3) { dlg.classList.add('hidden'); await sleep(400); continue; }
+                  throw new Error(at + ': CONTROL: three times the press landed after the ripple (last at ' + ms + ' ms, ripple ' + (d2.reveal || 'gone') + ') - it has to land WHILE the ripple runs, the only time a press went through; the machine is too loaded to measure this');
+                }
+                if (c.want === cancelBtn && !inside(d2, d2.cancel, 0)) throw new Error(at + ': setup: at ' + ms + ' ms the press (' + Math.round(d2.x) + ',' + Math.round(d2.y) + ') missed Cancel, which was at [' + [d2.cancel.left, d2.cancel.top, d2.cancel.right, d2.cancel.bottom].map(Math.round) + ']');
+                if (c.want === dlg && inside(d2, d2.card, 0)) throw new Error(at + ': setup: at ' + ms + ' ms the press landed on the card, not on the dim');
+                const bad = [];
+                const reached = d2.target;
+                if (!(reached === c.want || (c.want !== dlg && c.want.contains(reached)))) bad.push('the press reached ' + nm(reached) + (dlg.contains(reached) ? '' : ' on Home') + ' instead of ' + (c.want === dlg ? 'the dim' : nm(c.want)));
+                const cl = rec.clicks[rec.clicks.length - 1];
+                if (!cl) bad.push('no click came of it');
+                else if (!cl.next || !cl.next.hidden) bad.push('the frame after the press still shows the card (' + (cl.next ? Math.round(cl.next.w) + ' px wide' : 'no frame') + ')');
+                if (!FM.home.isOpen()) bad.push('Home CLOSED and project ' + FM.storage.openProjectId() + ' opened');
+                else if (FM.storage.openProjectId() !== here) bad.push('project ' + FM.storage.openProjectId() + ' is open instead of ' + here);
+                if (selecting()) bad.push('Home went into Select');
+                if (!dlg.classList.contains('hidden')) bad.push('700 ms later the New project card is still open' + (ripples().length ? ' - it OPENED AGAIN' : ''));
+                if (bad.length) throw new Error(at + ', ' + ms + ' ms into the ripple: ' + bad.join('; ') + ' - the card should just have gone');
+                if (document.querySelector('.np-fx') || ripples().length) throw new Error(at + ': the card went but the ripple (' + (ripples().map(a => a.id).join(', ') || 'its ring or scrim') + ') is still there');
+                break;
+              }
+              dlg.classList.add('hidden');
+              await sleep(250);
+            }
+          });
+        }, where === 'pc' ? 900 : undefined);
+      }
+    } finally {
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (selecting()) { const sb = document.getElementById('hm-select-btn'); if (sb) sb.click(); await sleep(100); }
+      if (orig && FM.storage.openProjectId() !== orig) { try { await FM.projects.open(orig, { confirmed: true }); } catch (e) {} await sleep(300); }
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (made.length && FM.home.refresh) FM.home.refresh();
+      if (wasOpen && !FM.home.isOpen()) FM.home.open();
+      else if (!wasOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(200);
     }
   });
 
