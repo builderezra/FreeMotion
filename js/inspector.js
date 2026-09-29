@@ -1473,7 +1473,9 @@ window.FM = window.FM || {};
         if (!p) { if (FM.toast) FM.toast('Couldn’t save “' + (reg ? reg.label : fx.type) + '” as a preset — it has no settings to store', 2600); return; }
         if (!FM.effectPresets.save(p)) return;
         const note = FM.effectPresets.lastNote ? FM.effectPresets.lastNote() : '';
-        if (!note && FM.toast) FM.toast('Saved — hold ' + (reg ? reg.label : fx.type) + ' in the Effects browser to use it', 2400);
+        // A filter lives on the Filters tab, not in the Effects browser, where the container is hidden (queue 986, hunt C9)
+        const isFilter = !!(FM.isFxContainer && FM.isFxContainer(fx));
+        if (!note && FM.toast) FM.toast(isFilter ? 'Saved — it’s under Your filters on the Filters tab' : 'Saved — hold ' + (reg ? reg.label : fx.type) + ' in the Effects browser to use it', 2400);
       } },
       { sep: true },
       { label: 'Delete', danger: true, action: () => { listFor().splice(idx, 1); done(); } },
@@ -2113,6 +2115,16 @@ window.FM = window.FM || {};
       const fwrap = el('div', 'flt-grid');
       favs.forEach(f => fwrap.appendChild(mkTile(f)));
       s.appendChild(filterRail(fwrap));
+    }
+    /* HIS OWN FILTERS (queue 986, hunt C9). A filter saved from its row's ⋯ → "Save this effect as preset…" was stored and
+       then unreachable: the toast sent him to hold "Filter" in the Effects browser, where the filter container is hidden, and
+       this tab drew the library only. Same tiles, same rail, drawn only when he has saved one — like Favourites above. */
+    const mine = (FM.filters.custom && FM.filters.custom()) || [];
+    if (mine.length) {
+      s.appendChild(el('div', 'insp-sub-label', 'Your filters'));
+      const mwrap = el('div', 'flt-grid');
+      mine.forEach(f => mwrap.appendChild(mkTile(f)));
+      s.appendChild(filterRail(mwrap));
     }
     (FM.filters.sections() || []).forEach(sec => {
       const list = FM.filters.bySection(sec.key);

@@ -111584,4 +111584,363 @@
     }
   });
 
+  /* ═══ #986 (hunt HIGH — found by the #966 inventory, not his words) — KEYING, GRAIN, SCANLINES, PRESETS, SHARPEN ═══════════
+     Six faults the idle backlog found by READING the code (tools/design/plans/2026-09-29-idle-backlog/backlog.md §C: C3, C4,
+     C5, C6, C9, C41). Each was measured on 913186b6 before it was touched; the numbers quoted in each test are those readings.
+     Where a picture is involved it is checked through FM.renderScene at the export's size (a canvas the size of the project,
+     which is what the exporter renders into) AND at a reduced preview size, because a preview fix must not move the export
+     unless the export was the thing that was wrong. */
+
+  /* C3 — CHROMA KEY PRO'S DESPILL ALWAYS PULLED GREEN. Measured on 913186b6, blue key #1e3cff, Despill 1: a leaf (60,140,50)
+     came out (60,60,50) — its green taken away — and a blue-spill pixel (150,150,200) kept all 200 of its blue. The basic
+     Chroma Key has always pulled the key's own strongest channel; this one now does too. CONTROL: a GREEN key gives exactly
+     what the old green despill gave on the same pixels (the leaf pulled to 60, blue and skin untouched), and every pixel
+     survives the key at full alpha, so nothing but despill is being measured. */
+  test('986 C3 Chroma Key Pro despill pulls the key colour - on a blue screen a leaf keeps its green and the blue rim comes down, a green screen is unchanged', { item: '986' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.chromakeypro) throw new Error('the Chroma Key Pro kernel is not reachable');
+    const LEAF = [60, 140, 50], SPILL = [150, 150, 200], SKIN = [220, 170, 140];
+    const P = (color) => ({ color: color, tolerance: 0.1, softness: 0, despill: 1, edgedesat: 0, view: 0 });
+    const say = a => '(' + a.join(',') + ')';
+    const run = (color, pix) => {
+      const d = new Uint8ClampedArray(pix.length * 4);
+      pix.forEach((q, n) => { d[n * 4] = q[0]; d[n * 4 + 1] = q[1]; d[n * 4 + 2] = q[2]; d[n * 4 + 3] = 255; });
+      K.chromakeypro(d, pix.length, 1, P(color), 0);
+      return pix.map((q, n) => Array.from(d.slice(n * 4, n * 4 + 4)));
+    };
+    const blue = run('#1e3cff', [LEAF, SPILL, SKIN]), green = run('#00c23c', [LEAF, SPILL, SKIN]);
+    blue.concat(green).forEach(q => { if (q[3] !== 255) throw new Error('setup: a test pixel was keyed out ' + say(q) + ' - it has to survive the key for despill to be measured'); });
+    if (say(green[0].slice(0, 3)) !== '(60,60,50)') throw new Error('CONTROL: a GREEN key no longer despills a leaf the way it always did - ' + say(LEAF) + ' came out ' + say(green[0].slice(0, 3)) + ', not (60,60,50)');
+    if (say(green[1].slice(0, 3)) !== say(SPILL) || say(green[2].slice(0, 3)) !== say(SKIN)) throw new Error('CONTROL: a GREEN key changed a pixel with no green spill: ' + say(green[1]) + ' ' + say(green[2]));
+    if (blue[0][1] !== 140) throw new Error('a BLUE screen key took the green out of a leaf - ' + say(LEAF) + ' came out ' + say(blue[0].slice(0, 3)) + '; despill has to pull the key colour, not always green');
+    if (blue[1][2] !== 150) throw new Error('a BLUE screen key left its blue spill on the subject - ' + say(SPILL) + ' came out ' + say(blue[1].slice(0, 3)) + ', the blue should come down to 150');
+    if (say(blue[2].slice(0, 3)) !== say(SKIN)) throw new Error('a BLUE screen key changed skin: ' + say(blue[2]));
+    /* …and through the renderer, as the export and a half-size preview draw it */
+    const hex = q => '#' + q.map(v => (v < 16 ? '0' : '') + v.toString(16)).join('');
+    const sc = (fill) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 160, fill: hex(fill), start: 0, duration: 3 });
+      const e = FM.fxRegistry.makeInstance('chromakeypro'); Object.assign(e.params, P('#1e3cff')); L.effects = [e];
+      return scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } });
+    };
+    [[320, 'the export'], [160, 'a half-size preview']].forEach(([w, where]) => {
+      const at = (fill) => { const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true }); FM.renderScene(x, sc(fill), 0.5); return Array.from(x.getImageData(w / 2, w * 3 / 8, 1, 1).data); };
+      const leaf = at(LEAF), spill = at(SPILL);
+      if (leaf[1] < 130) throw new Error('in ' + where + ' a leaf-green clip under a BLUE-screen Chroma Key Pro drew ' + say(leaf.slice(0, 3)) + ' - its green was despilled away');
+      if (spill[2] > 160) throw new Error('in ' + where + ' a blue-spill clip under a BLUE-screen Chroma Key Pro kept its blue: ' + say(spill.slice(0, 3)));
+    });
+  });
+
+  /* C4 — ONLY THE FIRST CHROMA KEY AND THE FIRST LUMA KEY ON A CLIP RAN. The media path picked them with `.find`, so a second
+     Chroma Key — two shades of a badly lit screen — and a second Luma Key did nothing at all while their sliders stayed live.
+     Measured on 913186b6: a clip keyed green then blue still showed its blue (0,0,255) in the render. The clip here is a green,
+     a blue, a black and a white panel with an orange subject across them, over a MAGENTA ground so that "removed" can be told
+     apart from "black". Checked in the export and in a half-size preview. CONTROLS: one key still removes exactly its own
+     colour; a key rendered twice from the cache is the same picture, and changing the SECOND key's colour really re-keys (its
+     cache slot notices); and a luma key listed before a chroma key still runs after it, as it always has. */
+  test('986 C4 every Chroma Key and Luma Key on a clip runs - a second key takes out a second colour, in the export and in a half-size preview', { item: '986' }, function () {
+    const ids = [];
+    const tex = offscreen(320, 240), c = tex.getContext('2d');
+    c.fillStyle = '#00ff00'; c.fillRect(0, 0, 80, 240);
+    c.fillStyle = '#0000ff'; c.fillRect(80, 0, 80, 240);
+    c.fillStyle = '#000000'; c.fillRect(160, 0, 80, 240);
+    c.fillStyle = '#ffffff'; c.fillRect(240, 0, 80, 240);
+    c.fillStyle = '#ff8000'; c.fillRect(0, 100, 320, 40);      // the subject, across all four panels
+    const ck = (col) => { const e = FM.fxRegistry.makeInstance('chromakey'); e.params.color = col; e.params.tolerance = 0.3; e.params.softness = 0; e.params.despill = 0; return e; };
+    const lk = (mode, thr) => { const e = FM.fxRegistry.makeInstance('lumakey'); e.params.mode = mode; e.params.threshold = thr; e.params.softness = 0; return e; };
+    const build = (effs) => {
+      const L = FM.makeLayer('image', { name: '986 C4 keys', x: 160, y: 120, start: 0, duration: 3 });
+      L.start = 0; L.duration = 3; L.effects = effs;
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 320, height: 240 }); ids.push(L.id);
+      return { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#ff00ff' }, layers: [L], selectedId: null, selectedIds: [] };
+    };
+    const PANEL = { green: [40, 40], blue: [120, 40], black: [200, 40], white: [280, 40], subject: [120, 120] };
+    const shot = (sc, w) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, sc, 0.5);
+      const out = {}; Object.keys(PANEL).forEach(k => { out[k] = Array.from(x.getImageData(Math.round(PANEL[k][0] * w / 320), Math.round(PANEL[k][1] * w / 320), 1, 1).data); });
+      out.all = x.getImageData(0, 0, cv.width, cv.height).data;
+      return out;
+    };
+    const gone = (q) => q[0] > 230 && q[1] < 25 && q[2] > 230;       // the magenta ground shows through
+    const say = q => '(' + q.slice(0, 3).join(',') + ')';
+    try {
+      [[320, 'the export'], [160, 'a half-size preview']].forEach(([w, where]) => {
+        const one = shot(build([ck('#00ff00')]), w);
+        if (!gone(one.green) || gone(one.blue) || gone(one.subject)) throw new Error('CONTROL (' + where + '): one green key should remove the green panel and nothing else - green ' + say(one.green) + ', blue ' + say(one.blue) + ', subject ' + say(one.subject));
+        const sc2 = build([ck('#00ff00'), ck('#0000ff')]);
+        const two = shot(sc2, w);
+        if (!gone(two.green)) throw new Error('in ' + where + ' the first of two chroma keys stopped working - green panel ' + say(two.green));
+        if (!gone(two.blue)) throw new Error('in ' + where + ' a SECOND Chroma Key (blue) did nothing - the blue panel still draws ' + say(two.blue) + '; only the first key on a clip was ever run');
+        if (gone(two.subject)) throw new Error('in ' + where + ' two keys took the orange subject out as well: ' + say(two.subject));
+        const again = shot(sc2, w);
+        if (again.all.some((v, i) => v !== two.all[i])) throw new Error('CONTROL (' + where + '): the same two keys rendered twice gave two different pictures - the key cache is handing back the wrong canvas');
+        sc2.layers[0].effects[1].params.color = '#ff8000';
+        const moved = shot(sc2, w);
+        if (!gone(moved.subject) || gone(moved.blue)) throw new Error('in ' + where + ' changing the SECOND key to orange did not re-key - subject ' + say(moved.subject) + ', blue ' + say(moved.blue) + ' (its cache slot did not notice the new colour)');
+        const lum = shot(build([lk(0, 0.25), lk(1, 0.75)]), w);
+        if (!gone(lum.black)) throw new Error('CONTROL (' + where + '): the first Luma Key (dark) no longer removes black: ' + say(lum.black));
+        if (!gone(lum.white)) throw new Error('in ' + where + ' a SECOND Luma Key (bright) did nothing - the white panel still draws ' + say(lum.white));
+        if (gone(lum.subject)) throw new Error('in ' + where + ' two luma keys took the orange subject too: ' + say(lum.subject));
+        const a = shot(build([lk(0, 0.25), ck('#00ff00')]), w), b = shot(build([ck('#00ff00'), lk(0, 0.25)]), w);
+        if (a.all.some((v, i) => v !== b.all[i])) throw new Error('in ' + where + ' a Luma Key listed ABOVE a Chroma Key now renders differently from one listed below it - the order between the two kinds has always been chroma first, and a saved project would change');
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+  });
+
+  /* C5 — FILM GRAIN'S "Grain size" HAD NO unit:'px'. pxToPlate therefore never scaled it, and on his phone's 0.28 preview plate
+     the grain was 8 PLATE pixels where the export draws 8 project pixels — 3.5x coarser — the same fault fixed for Noise in
+     queue 904. Measured on 913186b6: size 8 reached the 0.28 plate as 8 (Noise: 2.24). Through the renderer the grain is
+     measured as the run length of equal pixels along a row, in PROJECT pixels, at the export's size and at half size.
+     CONTROL: the same seam scales Noise, and the export plate (ps 1) is handed the size untouched. */
+  test('986 C5 Film Grain size is project pixels - the grain on a reduced preview plate is the export grain, not 3.5x coarser', { item: '986' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.filmgrain || !K.noise || !FM._pxToPlate) throw new Error('the kernels or the pxToPlate seam are not reachable');
+    const ctl = FM._pxToPlate(FM.fxRegistry.makeInstance('noise'), { amount: 35, size: 8 }, 0, 0.28, K.noise);
+    if (!(Math.abs(ctl.size - 2.24) < 1e-9)) throw new Error('CONTROL: pxToPlate no longer scales Noise either (' + ctl.size + '), so it cannot judge Film Grain');
+    const fx = FM.fxRegistry.makeInstance('filmgrain');
+    const out = FM._pxToPlate(fx, { amount: 40, size: 8 }, 0, 0.28, K.filmgrain);
+    if (!(Math.abs(out.size - 2.24) < 1e-9)) throw new Error('Film Grain size 8 reaches the phone plate (0.28) as ' + out.size + ' - it is not scaled, so the preview grain is 3.5x coarser than the export');
+    if (FM._pxToPlate(fx, { amount: 40, size: 8 }, 0, 1, K.filmgrain).size !== 8) throw new Error('the export plate (ps 1) changed the grain size');
+    /* the grain through the renderer, in project pixels */
+    const grain = (w) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#808080', start: 0, duration: 3 });
+      const e = FM.fxRegistry.makeInstance('filmgrain'); Object.assign(e.params, { amount: 100, size: 8, shape: 0, color: 0, shadows: 100, highlights: 100 }); L.effects = [e];
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } }), 0.5);
+      const ps = w / 320, runs = [];
+      for (let y = Math.round(40 * ps); y < Math.round(200 * ps); y += Math.max(1, Math.round(13 * ps))) {
+        const row = x.getImageData(0, y, w, 1).data;
+        let n = 1;
+        for (let px = 1 + Math.round(8 * ps); px < w - Math.round(8 * ps); px++) { if (row[px * 4] === row[(px - 1) * 4]) n++; else { runs.push(n); n = 1; } }
+      }
+      if (runs.length < 10) throw new Error('setup: the grain drew no structure to measure at ' + w + 'px wide');
+      return (runs.reduce((a, b) => a + b, 0) / runs.length) / ps;
+    };
+    const exp = grain(320), half = grain(160);
+    if (!(exp > 5 && exp < 11)) throw new Error('setup: Grain size 8 measured ' + exp.toFixed(1) + ' project px in the export - the ruler is not reading the grain');
+    if (half > exp * 1.3) throw new Error('on a half-size preview the grain is ' + half.toFixed(1) + ' project px against ' + exp.toFixed(1) + ' in the export - it is drawn in plate pixels, so every reduced preview shows it coarser than the file');
+  });
+
+  /* C6 — NIGHT VISION'S SCANLINES WERE EVERY THIRD PLATE ROW. The kernel took no `ps`, so on his phone's 0.28 plate the lines
+     were drawn every 3 plate rows: a 10.7 project-px pitch in the preview where the export draws 3 — measured on 913186b6 as
+     rows alternating 130 / 186 / 186 on the 0.28 plate, exactly the export's pattern at 3.5x the size. At that size a 3-row
+     pitch is finer than the plate can draw, so the preview now shows what the export shows shrunk to it — the lines' average,
+     flat — and at 0.8 (where the lines ARE drawable) it draws them at their project rows. The export (ps 1) must be the old
+     lines exactly: 130 on every third row, 186 between, measured on 913186b6. The sensor grain stays one plate pixel, the floor
+     every grain in the app has, and is off here so only the lines are measured. */
+  test('986 C6 Night Vision scanlines are every third project row - a reduced preview no longer draws them as 10px bars, and the export keeps its lines exactly', { item: '986' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.nightvision || !FM._pxToPlate) throw new Error('the Night Vision kernel or the pxToPlate seam is not reachable');
+    const P = { amount: 1, color: 0, noise: 0, gain: 1.3 };
+    const rows = (W, ps) => {
+      const d = new Uint8ClampedArray(W * W * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 120; d[i + 3] = 255; }
+      K.nightvision(d, W, W, FM._pxToPlate({ type: 'nightvision' }, P, 0, ps, K.nightvision), 0, ps);   // exactly as the app calls it
+      const out = []; for (let y = 0; y < W; y++) out.push(d[(y * W + 3) * 4 + 1]); return out;
+    };
+    const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+    const e = rows(30, 1);
+    e.forEach((v, y) => { if (v !== (y % 3 === 0 ? 130 : 186)) throw new Error('the EXPORT scanlines moved - row ' + y + ' is ' + v + ', it was ' + (y % 3 === 0 ? 130 : 186) + ' (every third row at 130, 186 between): ' + e.slice(0, 9).join(',')); });
+    const em = mean(e);
+    const phone = rows(17, 0.28);
+    const spread = Math.max.apply(null, phone) - Math.min.apply(null, phone);
+    if (spread > 2) throw new Error('on the phone preview plate (0.28) Night Vision draws bars: rows ' + phone.slice(0, 9).join(',') + ' - every third PLATE row is a scanline, a ' + (3 / 0.28).toFixed(1) + ' project-px pitch where the export draws 3');
+    if (Math.abs(mean(phone) - em) > 1.5) throw new Error('on the phone preview plate Night Vision averages ' + mean(phone).toFixed(1) + ' against ' + em.toFixed(1) + ' in the export');
+    const half = rows(20, 0.5);
+    if (Math.max.apply(null, half) - Math.min.apply(null, half) > 2 || Math.abs(mean(half) - em) > 1.5) throw new Error('on a half-size plate Night Vision draws ' + half.slice(0, 9).join(',') + ' - a 1.5-row pitch the plate cannot draw came out as a coarser stripe');
+    const near = rows(30, 0.8);
+    if (Math.max.apply(null, near) - Math.min.apply(null, near) < 20) throw new Error('CONTROL: at 0.8 the scanlines are drawable and should still show, but the rows are flat: ' + near.slice(0, 9).join(','));
+    if (Math.abs(mean(near) - em) > 2.5) throw new Error('at a 0.8 plate the scanlines average ' + mean(near).toFixed(1) + ' against ' + em.toFixed(1) + ' in the export');
+    /* through the renderer: a full-frame grey clip, the export (320) and his phone's reduced preview (90, scale 0.28) */
+    const shot = (w) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#787878', start: 0, duration: 3 });
+      const nv = FM.fxRegistry.makeInstance('nightvision'); Object.assign(nv.params, P); L.effects = [nv];
+      const h = Math.round(w * 3 / 4), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } }), 0.5);
+      const out = [];
+      for (let y = 2; y < h - 2; y++) { const r = x.getImageData(2, y, w - 4, 1).data; let s = 0; for (let i = 1; i < r.length; i += 4) s += r[i]; out.push(s / (r.length / 4)); }
+      return out;
+    };
+    const ex = shot(320), pv = shot(90);
+    if (Math.max.apply(null, ex) - Math.min.apply(null, ex) < 30) throw new Error('setup: the exported Night Vision shows no scanlines to compare with');
+    const pvSpread = Math.max.apply(null, pv) - Math.min.apply(null, pv);
+    if (pvSpread > 4) throw new Error('rendered on his phone preview (0.28) Night Vision shows bars ' + pvSpread.toFixed(0) + ' levels deep (rows ' + pv.slice(0, 6).map(v => v.toFixed(0)).join(',') + ') - the export has fine 3px lines there');
+    if (Math.abs(mean(pv) - mean(ex)) > 3) throw new Error('rendered on the phone preview Night Vision averages ' + mean(pv).toFixed(1) + ' against ' + mean(ex).toFixed(1) + ' in the export');
+  });
+
+  /* C9 — A FILTER SAVED WITH "Save this effect as preset…" COULD NOT BE FOUND AGAIN. The toast sent him to hold Filter in the
+     Effects browser, where the filter container is hidden; the Filters tab drew the library only; and a container rebuilt from
+     the preset carried no name or `fid`. Measured on 913186b6: saved, `FM.filters.get(id)` resolved it, and the Filters tab
+     showed 56 tiles, none of them his. Driven through the REAL row ⋯ menu (prompt answered), then the Filters tab, pick, Add.
+     `fid` must also survive the sanitiser every project load runs — it did not (queue 812 stamped it; the whitelist never
+     learned it), so a saved filter of his own lost its Favourite after one reopen. CONTROL: the library is on the tab, and the
+     save really landed in the store. */
+  test('986 C9 a filter saved as a preset is on the Filters tab under Your filters - pick it, Add it, and it lands named, with its effects, and still knows which filter it is after a reload', { item: '986', budgetMs: 60000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedSel = FM.scene.selectedId, savedLayers = FM.scene.layers.slice();
+    const realPrompt = window.prompt, realToast = FM.toast, toasts = [];
+    let faves0 = null; try { faves0 = localStorage.getItem('fm.filterFaves'); } catch (e) {}
+    const NAME = 'Beach look 986';
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+    // a library filter of two or more effects that ALL suit a shape layer, so what lands can be compared with what was saved
+    const lib = FM.filters.all().filter(f => {
+      if (!f.effects || f.effects.length < 2) return false;
+      const b = FM.filters.makeInstance(f.id), fit = b && FM.fxRegistry.fitToLayer(FM.filters.makeInstance(f.id), L);
+      return !!(fit && fit.effects && fit.effects.length === b.effects.length);
+    })[0];
+    if (!lib) throw new Error('setup: no library filter with two or more effects that all suit a shape layer');
+    let savedId = null;
+    try {
+      FM.scene.layers.push(L);
+      const box = FM.filters.makeInstance(lib.id);
+      box.effects.pop();                               // his own retune: one ingredient taken out
+      box.params.strength = 0.6;
+      box._expanded = true;                            // the ⋯ only exists on an open row
+      L.effects = [box];
+      const wantTypes = box.effects.map(e => e.type).join(',');
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(150);
+      FM.inspector.openCategory('effects'); await sleep(200);
+      const more = [].slice.call(document.querySelectorAll('#inspector .fx-icon-btn')).filter(b => (b.textContent || '').trim() === '⋯')[0];
+      if (!more) throw new Error('setup: the filter row has no ⋯ button on screen');
+      window.prompt = () => NAME;
+      FM.toast = function (msg) { toasts.push(String(msg)); return realToast && realToast.apply(this, arguments); };
+      const before = FM.effectPresets.custom().map(p => p.id);
+      more.click(); await sleep(180);
+      const items = [].slice.call(document.querySelectorAll('#ctx-menu button, #ctx-menu .ctx-item, #ctx-menu [role="menuitem"]'));
+      const save = items.filter(i => /save this effect as preset/i.test(i.textContent || ''))[0];
+      if (!save) throw new Error('setup: the ⋯ menu has no Save this effect as preset (' + items.map(i => (i.textContent || '').trim()).join(' | ') + ')');
+      save.click(); await sleep(200);
+      const mine = FM.effectPresets.custom().filter(p => before.indexOf(p.id) < 0);
+      if (mine.length !== 1 || mine[0].name !== NAME) throw new Error('CONTROL: the save did not land in the store (' + mine.length + ' new preset(s))');
+      savedId = mine[0].id;
+      const said = toasts.join(' / ');
+      /* the Filters tab */
+      FM.inspector.openCategory('filters'); await sleep(400);
+      const tiles = [].slice.call(document.querySelectorAll('#inspector .flt-tile[data-fltid]'));
+      if (tiles.filter(t => t.dataset.fltid === lib.id).length < 1) throw new Error('CONTROL: the Filters tab does not show the library (' + tiles.length + ' tiles)');
+      const tile = tiles.filter(t => t.dataset.fltid === savedId)[0];
+      if (!tile) throw new Error('the filter he saved as ' + NAME + ' is nowhere on the Filters tab (' + tiles.length + ' tiles, none of them his) - saved and unreachable');
+      let head = tile.closest('.flt-rail'); head = head && head.previousElementSibling;
+      if (!head || !/your filters/i.test(head.textContent || '')) throw new Error('his filter is on the tab but not under a Your filters heading (the row above says ' + JSON.stringify(head ? head.textContent : null).replace(/"/g, "'") + ')');
+      if (!/beach look 986/i.test(tile.textContent || '')) throw new Error('his filter tile does not carry the name he typed: ' + JSON.stringify(tile.textContent).replace(/"/g, "'"));
+      if (/effects browser/i.test(said)) throw new Error('saving a filter still tells him to find it in the Effects browser, where a filter cannot be found: ' + said);
+      if (!/your filters/i.test(said)) throw new Error('saving a filter does not say where it went: ' + (said || '(no toast)'));
+      const n0 = FM.layerById(FM.scene, L.id).effects.length;
+      tile.click(); await sleep(150);
+      const go = document.querySelector('.flt-commit .fxb-commit-go');
+      if (!go) throw new Error('picking his filter brought up no Add button');
+      go.click(); await sleep(250);
+      const fx = FM.layerById(FM.scene, L.id).effects;
+      if (fx.length !== n0 + 1) throw new Error('Add did not put his filter on the layer (' + n0 + ' then ' + fx.length + ')');
+      const got = fx[fx.length - 1];
+      if (got.type !== FM.FX_CONTAINER || got.name !== NAME) throw new Error('his filter landed as ' + got.type + ' named ' + JSON.stringify(got.name).replace(/"/g, "'"));
+      if ((got.effects || []).map(e => e.type).join(',') !== wantTypes) throw new Error('his filter landed with ' + (got.effects || []).map(e => e.type).join(',') + ', not the ' + wantTypes + ' he saved');
+      /* through the sanitiser a project load runs, it still knows which filter it is */
+      const holder = { effects: [JSON.parse(JSON.stringify(got, FM.jsonReplacer))] };
+      FM.storage._sanitizeEffects(holder);
+      const back = holder.effects[0];
+      if (!back || back.fid !== savedId) throw new Error('after a save and reopen his filter no longer says which filter it is (fid ' + JSON.stringify(back && back.fid).replace(/"/g, "'") + ') - the row loses its Favourite');
+      if (FM.filters.idOfInstance(back) !== savedId) throw new Error('after a reload the row cannot find his filter to star it');
+      const lb = FM.filters.makeInstance(lib.id), lbHolder = { effects: [JSON.parse(JSON.stringify(lb))] };
+      FM.storage._sanitizeEffects(lbHolder);
+      if (lbHolder.effects[0].fid !== lib.id) throw new Error('a library filter loses its fid through a reload too (' + JSON.stringify(lbHolder.effects[0].fid).replace(/"/g, "'") + ')');
+      const junk = { effects: [{ type: FM.FX_CONTAINER, enabled: true, params: { strength: 1 }, effects: [], fid: '<img src=x>' }] };
+      FM.storage._sanitizeEffects(junk);
+      if (junk.effects[0] && junk.effects[0].fid !== undefined) throw new Error('the sanitiser kept a filter id that is not a plain word: ' + JSON.stringify(junk.effects[0].fid).replace(/"/g, "'"));
+      /* and the preset path lands it the same way the tile does */
+      const inst = FM.effectPresets.makeInstance(mine[0], 0);
+      if (!inst || inst.name !== NAME || inst.fid !== savedId) throw new Error('FM.effectPresets.makeInstance lands his filter as ' + JSON.stringify({ name: inst && inst.name, fid: inst && inst.fid }).replace(/"/g, "'"));
+    } finally {
+      window.prompt = realPrompt; FM.toast = realToast;
+      try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+      if (savedId) { try { FM.effectPresets.remove(savedId); } catch (e) {} }
+      try { if (faves0 === null) localStorage.removeItem('fm.filterFaves'); else localStorage.setItem('fm.filterFaves', faves0); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* C41 — SHARPEN LEFT AN r-PIXEL FRAME ROUND THE PICTURE UNSHARPENED. Its loops run r..W-r, so on full-frame footage the
+     outer r pixels of every side were never touched — measured on 913186b6: 0 of the border pixels changed at Radius 1, on a
+     frame whose inside changed 194 of 194. A tap that would fall off the frame now reads the nearest pixel inside it
+     (clamp-to-edge). Every pixel is checked against that arithmetic written out here; inside the band it IS the old loop's
+     arithmetic, so the interior is proven unchanged by the same comparison. Colour, a threshold and Brightness-only are all
+     driven, at Radius 1 (its own fast loop), 3 and 8. Then through the renderer: a full-frame textured clip, the export and a
+     half-size preview, and a small clip whose frame edge must stay the plain ground. */
+  test('986 C41 Sharpen sharpens the frame edge too - a Radius 8 border on full-frame footage is no longer left soft, and the inside is unchanged', { item: '986' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.sharpen || !FM._pxToPlate) throw new Error('the Sharpen kernel or the pxToPlate seam is not reachable');
+    const W = 40, H = 34;
+    const val = (x, y, c) => (x * 37 + y * 91 + ((x * y + c * 11) % 7) * 13 + c * 29) % 200 + 28;
+    const plate = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = val(x, y, 0); d[i + 1] = val(x, y, 1); d[i + 2] = val(x, y, 2); d[i + 3] = 255; } return d; };
+    const lu = (s, k) => s[k] * 0.299 + s[k + 1] * 0.587 + s[k + 2] * 0.114;
+    const reference = (s, r, amt, thr, luma) => {
+      const d = new Uint8ClampedArray(s);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const iu = (Math.max(0, y - r) * W + x) * 4, id = (Math.min(H - 1, y + r) * W + x) * 4;
+        const il = (y * W + Math.max(0, x - r)) * 4, ir = (y * W + Math.min(W - 1, x + r)) * 4;
+        if (luma) {
+          const delta = lu(s, i) * 4 - (lu(s, iu) + lu(s, id) + lu(s, il) + lu(s, ir));
+          if (thr > 0 && Math.abs(delta) < thr * 4) continue;
+          const add = delta * amt; d[i] = s[i] + add; d[i + 1] = s[i + 1] + add; d[i + 2] = s[i + 2] + add; continue;
+        }
+        if (thr > 0 && Math.abs(lu(s, i) * 4 - (lu(s, iu) + lu(s, id) + lu(s, il) + lu(s, ir))) < thr * 4) continue;
+        for (let c = 0; c < 3; c++) d[i + c] = s[i + c] * (1 + 4 * amt) - (s[iu + c] + s[id + c] + s[il + c] + s[ir + c]) * amt;
+      }
+      return d;
+    };
+    const CASES = [{ radius: 1 }, { radius: 3 }, { radius: 8 }, { radius: 3, threshold: 10 }, { radius: 2, mode: 1 }, { radius: 8, mode: 1, threshold: 6 }];
+    CASES.forEach(q => {
+      const params = Object.assign({ amount: 1.5, radius: 1, threshold: 0, mode: 0 }, q);
+      const src = plate(), d = plate();
+      K.sharpen(d, W, H, FM._pxToPlate({ type: 'sharpen' }, params, 0, 1, K.sharpen), 0, 1);
+      const want = reference(src, params.radius, params.amount, params.threshold, params.mode === 1);
+      const r = params.radius;
+      let inner = 0, border = 0, borderN = 0, borderMoved = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, isB = x < r || y < r || x >= W - r || y >= H - r;
+        const bad = d[i] !== want[i] || d[i + 1] !== want[i + 1] || d[i + 2] !== want[i + 2] || d[i + 3] !== 255;
+        if (isB) { borderN++; if (bad) border++; if (want[i] !== src[i] || want[i + 1] !== src[i + 1]) borderMoved++; } else if (bad) inner++;
+      }
+      const tag = JSON.stringify(q).replace(/"/g, '');
+      if (inner) throw new Error('Sharpen ' + tag + ' changed ' + inner + ' INSIDE pixels from the old arithmetic - the fix must leave the interior byte for byte');
+      if (!(borderMoved > borderN * 0.3)) throw new Error('setup ' + tag + ': the reference barely sharpens the border (' + borderMoved + ' of ' + borderN + '), so this fixture cannot see the fault');
+      if (border) throw new Error('Sharpen ' + tag + ' left ' + border + ' of the ' + borderN + ' pixels in its ' + r + '-pixel frame edge unsharpened (or wrong) - on full-frame footage that is a soft band down every side');
+    });
+    /* through the renderer: a full-frame textured clip, the export and a half-size preview */
+    const tex = offscreen(320, 240), tc = tex.getContext('2d'), ti = tc.createImageData(320, 240);
+    for (let y = 0; y < 240; y++) for (let x = 0; x < 320; x++) { const i = (y * 320 + x) * 4; ti.data[i] = val(x, y, 0); ti.data[i + 1] = val(x, y, 1); ti.data[i + 2] = val(x, y, 2); ti.data[i + 3] = 255; }
+    tc.putImageData(ti, 0, 0);
+    const ids = [];
+    const render = (w, sharpen, small) => {
+      const L = small
+        ? FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 90, fill: '#c04080', start: 0, duration: 3 })
+        : FM.makeLayer('image', { name: '986 C41 frame', x: 160, y: 120, start: 0, duration: 3 });
+      L.start = 0; L.duration = 3;
+      if (!small) { FM.media.set(L.id, { kind: 'image', el: tex, width: 320, height: 240 }); ids.push(L.id); }
+      if (sharpen) { const e = FM.fxRegistry.makeInstance('sharpen'); Object.assign(e.params, { amount: 1.5, radius: 4, threshold: 0, mode: 0 }); L.effects = [e]; } else L.effects = [];
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#203040' } }), 0.5);
+      return x.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    try {
+      [[320, 'the export', 4], [160, 'a half-size preview', 2]].forEach(([w, where, band]) => {
+        const h = w * 3 / 4, a = render(w, false), b = render(w, true);
+        let n = 0, moved = 0, innerMoved = 0;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4, isB = x < band || y < band || x >= w - band || y >= h - band;
+          const ch = a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2];
+          if (isB) { n++; if (ch) moved++; } else if (ch) innerMoved++;
+        }
+        if (innerMoved < (w - 2 * band) * (h - 2 * band) * 0.5) throw new Error('setup (' + where + '): Sharpen barely changed the inside of a textured clip (' + innerMoved + ' pixels), so the edge cannot be judged against it');
+        if (moved < n * 0.5) throw new Error('in ' + where + ' Sharpen left the ' + band + '-pixel frame edge of a full-frame clip untouched - ' + moved + ' of ' + n + ' edge pixels changed, against ' + innerMoved + ' inside');
+        const s = render(w, true, true);
+        for (let x = 0; x < w; x++) for (const y of [0, h - 1]) { const i = (y * w + x) * 4; if (s[i] !== 0x20 || s[i + 1] !== 0x30 || s[i + 2] !== 0x40) throw new Error('in ' + where + ' a SMALL sharpened clip changed the empty frame edge at ' + x + ',' + y + ' to (' + [s[i], s[i + 1], s[i + 2]].join(',') + ')'); }
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+  });
+
 })();

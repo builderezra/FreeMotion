@@ -306,6 +306,13 @@ window.FM = window.FM || {};
       if (Array.isArray(preset.effects) && preset.effects.length) {
         inst.effects = JSON.parse(JSON.stringify(preset.effects));
         if (FM.reconcileMaskMarkers) FM.reconcileMaskMarkers(inst);   // a preset's mask markers point at masks the target may not have (queue 560)
+        /* A saved FILTER lands named and identified (queue 986, hunt C9), exactly as FM.filters.makeInstance lands it from
+           its tile: the row reads the name he typed, not "Filter", and `fid` is what the row's ⋯ stars. */
+        if (inst.type === FM.FX_CONTAINER) {
+          const nm = String(preset.name || '').trim();
+          if (nm) inst.name = nm.slice(0, 64);
+          if (typeof preset.id === 'string' && preset.id) inst.fid = preset.id;
+        }
       }
       // Value-checked, not just name-checked (queue 218). Returns null rather than an effect the
       // sanitiser threw out — landing a half-rebuilt one would be worse than not landing it.

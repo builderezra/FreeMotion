@@ -578,6 +578,16 @@ window.FM = window.FM || {};
     // The favourite filters as DEFINITIONS, in fave order. The browser draws these as an extra section
     // above the categories, and every one of them still appears in its own category as well.
     faves: function () { return readFaves().map(id => this.get(id)).filter(Boolean); },
+    /* HIS OWN SAVED FILTERS, newest first (queue 986, hunt C9). "Save this effect as preset…" on a filter row stores it,
+       and `get()` below has resolved it since queue 581 — but nothing ever LISTED it, so the only way back to a filter he
+       had saved was to have starred it first. The Filters tab draws these as their own row; each resolves through `get()`
+       like every other tile, so picking, previewing, the thumbnail and the star need nothing new. */
+    custom: function () {
+      let list = [];
+      try { list = (FM.effectPresets && FM.effectPresets.custom) ? (FM.effectPresets.custom() || []) : []; } catch (e) { return []; }
+      return list.filter(p => p && p.fx === FM.FX_CONTAINER && Array.isArray(p.effects) && p.effects.length)
+        .map(p => this.get(p.id)).filter(Boolean);
+    },
     all: function () { return FILTERS.slice(); },
     bySection: function (key) { return FILTERS.filter(f => f.section === key); },
     /* ⚠️ A CUSTOM FILTER RESOLVES HERE TOO — queue 581, and this ONE function is why the rest of the

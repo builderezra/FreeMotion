@@ -418,7 +418,7 @@ window.FM = window.FM || {};
     ] },
     { type: 'filmgrain', label: 'Film Grain', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 40, unit: '%' },
-      { key: 'size', label: 'Grain size', min: 1, max: 24, step: 0.5, def: 2 },        // real grain clumps — it is not one pixel
+      { key: 'size', label: 'Grain size', min: 1, max: 24, step: 0.5, def: 2, unit: 'px' },        // real grain clumps — it is not one pixel. unit 'px' (queue 986, hunt C5): PROJECT pixels, so pxToPlate scales it to the preview plate as Noise's was (queue 904) — on his phone's 0.28 plate the grain was 3.5x coarser than in the export
       /* ROUND GRAIN (queue 109). Ezra: "The film grain effect should have a circle option, instead of
          just squares, and also the preview image should show the circle version."
          He is right about the physics as well as the look — a grain is a silver halide particle, not a
@@ -1402,8 +1402,8 @@ window.FM = window.FM || {};
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
-  FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft, spill) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill); };   // suite seam (queue 734)
-  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode) { return lumaKey(src, w, h, threshold, filterStr, soft, mode); };   // suite seam (queue 735)
+  FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft, spill, slot) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill, slot); };   // suite seam (queue 734; slot: queue 986)
+  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot); };   // suite seam (queue 735; slot: queue 986)
   FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
@@ -1418,17 +1418,21 @@ window.FM = window.FM || {};
     return src;
   }
 
-  // Key out a color → transparency (green/blue screen). Reuses one offscreen canvas + memo.
-  let _ckCanvas = null, _ckLast = null;
+  // Key out a color → transparency (green/blue screen). Reuses one offscreen canvas + memo PER SLOT.
+  /* SLOT (queue 986): the n-th key on a layer. A second key reads the first one's canvas, so it must never be handed
+     that same canvas to draw into — resizing it would clear the very pixels it is about to read. Slot 0 is the one
+     canvas and memo there always were. */
+  const _ckCanvases = [], _ckLasts = [];
   // SOFT is the new one, and it has to be in the cache key below or dragging the slider repaints
   // nothing: this canvas is reused whenever every remembered input matches, and a param the key does
   // not mention is a param the user cannot see the effect of.
-  function chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill) {
+  function chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill, slot) {
     const tok = srcToken(src);
     soft = soft || 0; spill = spill || 0;
-    if (_ckLast && _ckCanvas && _ckLast.tok === tok && _ckLast.w === w && _ckLast.h === h && _ckLast.key === keyHex && _ckLast.tol === tol && _ckLast.filter === filterStr && _ckLast.soft === soft && _ckLast.spill === spill) return _ckCanvas;
-    if (!_ckCanvas) _ckCanvas = document.createElement('canvas');
-    const oc = _ckCanvas; oc.width = w; oc.height = h;
+    const sl = slot > 0 ? slot | 0 : 0, _ckLast = _ckLasts[sl];
+    if (_ckLast && _ckCanvases[sl] && _ckLast.tok === tok && _ckLast.w === w && _ckLast.h === h && _ckLast.key === keyHex && _ckLast.tol === tol && _ckLast.filter === filterStr && _ckLast.soft === soft && _ckLast.spill === spill) return _ckCanvases[sl];
+    if (!_ckCanvases[sl]) _ckCanvases[sl] = document.createElement('canvas');
+    const oc = _ckCanvases[sl]; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
     octx.clearRect(0, 0, w, h);
     octx.filter = filterStr || 'none';                    // filter the SOURCE before keying (AM order: FX → key)
@@ -1460,21 +1464,22 @@ window.FM = window.FM || {};
       }
     }
     octx.putImageData(img, 0, 0);
-    _ckLast = { tok, w, h, key: keyHex, tol, filter: filterStr, soft, spill }; FM._fxStats.ckCompute++;
+    _ckLasts[sl] = { tok, w, h, key: keyHex, tol, filter: filterStr, soft, spill }; FM._fxStats.ckCompute++;
     oc._fmGen = ++_gen;
     return oc;
   }
 
-  // Key out by luminance → transparency (removes dark/black areas below threshold).
-  let _lkCanvas = null, _lkLast = null;
+  // Key out by luminance → transparency (removes dark/black areas below threshold). One canvas + memo per SLOT, as chromaKey.
+  const _lkCanvases = [], _lkLasts = [];
   // SOFT and MODE join the cache key for the same reason chromaKey's softness does.
-  function lumaKey(src, w, h, threshold, filterStr, soft, mode) {
+  function lumaKey(src, w, h, threshold, filterStr, soft, mode, slot) {
     const tok = srcToken(src);
     soft = soft == null ? 28 : soft; mode = mode || 0;
     if (soft <= 0) soft = 0.0001;   // a zero-wide ramp would divide by zero — normalised BEFORE the memo compare (queue 735: the stored 0.0001 never equalled an incoming 0, so Softness 0 recomputed every redraw)
-    if (_lkLast && _lkCanvas && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode) return _lkCanvas;
-    if (!_lkCanvas) _lkCanvas = document.createElement('canvas');
-    const oc = _lkCanvas; oc.width = w; oc.height = h;
+    const sl = slot > 0 ? slot | 0 : 0, _lkLast = _lkLasts[sl];
+    if (_lkLast && _lkCanvases[sl] && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode) return _lkCanvases[sl];
+    if (!_lkCanvases[sl]) _lkCanvases[sl] = document.createElement('canvas');
+    const oc = _lkCanvases[sl]; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
     octx.clearRect(0, 0, w, h);
     octx.filter = filterStr || 'none';                    // filter SOURCE before keying
@@ -1499,7 +1504,7 @@ window.FM = window.FM || {};
       else if (luma < t + soft) d[i + 3] = Math.round(d[i + 3] * (luma - t) / soft);
     }
     octx.putImageData(img, 0, 0);
-    _lkLast = { tok, w, h, thr: threshold, filter: filterStr, soft, mode }; FM._fxStats.lkCompute++;
+    _lkLasts[sl] = { tok, w, h, thr: threshold, filter: filterStr, soft, mode }; FM._fxStats.lkCompute++;
     oc._fmGen = ++_gen;
     return oc;
   }
@@ -4528,6 +4533,12 @@ window.FM = window.FM || {};
       const eDesat = clamp01(p.edgedesat == null ? 0.35 : FM.evalProp(p.edgedesat, t));
       const matte = Math.round(FM.evalProp(p.view, t) || 0) === 1;
       const hi = tol + (soft < 1 ? 1 : soft);            // never a zero-width step — that hard-edges the matte
+      /* DESPILL PULLS THE KEY'S OWN COLOUR (queue 986, hunt C3). It pulled GREEN whatever the key was, so a BLUE screen
+         took the green out of skin and leaves and left its own blue rim on the subject. The spill is the screen's
+         strongest channel, the one the basic Chroma Key already reads (chromaKey's `kc`). For a green key this is the
+         very same arithmetic: channel 1 against the larger of the other two. */
+      const kc = k[1] >= k[0] && k[1] >= k[2] ? 1 : (k[2] >= k[0] ? 2 : 0);
+      const kc1 = (kc + 1) % 3, kc2 = (kc + 2) % 3;
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i + 1], b = d[i + 2];
         const cb = -0.169 * r - 0.331 * g + 0.5 * b;
@@ -4542,9 +4553,9 @@ window.FM = window.FM || {};
         if (a <= 0) { d[i + 3] = 0; continue; }
         d[i + 3] = d[i + 3] * a;
         if (spill > 0) {
-          // Green above both neighbours is spill, not colour. Pull it down to their maximum.
-          const mx = r > b ? r : b;
-          if (g > mx) d[i + 1] = g - (g - mx) * spill;
+          // The key's channel above both neighbours is spill, not colour. Pull it down to their maximum.
+          const v = d[i + kc], o1 = d[i + kc1], o2 = d[i + kc2], mx = o1 > o2 ? o1 : o2;
+          if (v > mx) d[i + kc] = v - (v - mx) * spill;
         }
         if (a < 1 && eDesat > 0) {
           const w = eDesat * (1 - a);
@@ -4904,6 +4915,32 @@ window.FM = window.FM || {};
       let thr = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
       if (thr < 0) thr = 0; if (thr > 64) thr = 64;
       const luma = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+      /* THE BORDER IS SHARPENED TOO (queue 986, hunt C41). The loops below read r pixels either side, so they stop r short of
+         every edge, and on full-frame footage that left an r-pixel frame round the picture unsharpened — at Radius 8 a soft
+         8px band down every side of the export. A tap that would fall off the frame reads the nearest pixel inside it
+         (clamp-to-edge, the usual convention). Only the band the loops never reached is touched: every interior pixel is
+         the loops' own arithmetic, byte for byte. On a clip smaller than the frame that band is transparent, and stays so. */
+      const edge = (x, y) => {
+        const i = (y * W + x) * 4;
+        const iu = ((y - r < 0 ? 0 : y - r) * W + x) * 4, id = ((y + r > H - 1 ? H - 1 : y + r) * W + x) * 4;
+        const il = (y * W + (x - r < 0 ? 0 : x - r)) * 4, ir = (y * W + (x + r > W - 1 ? W - 1 : x + r)) * 4;
+        const lu = (k) => s[k] * 0.299 + s[k + 1] * 0.587 + s[k + 2] * 0.114;
+        if (luma) {
+          const delta = lu(i) * 4 - (lu(iu) + lu(id) + lu(il) + lu(ir));
+          if (thr > 0 && Math.abs(delta) < thr * 4) return;
+          const add = delta * amt;
+          d[i] = s[i] + add; d[i + 1] = s[i + 1] + add; d[i + 2] = s[i + 2] + add;
+          return;
+        }
+        if (thr > 0 && Math.abs(lu(i) * 4 - (lu(iu) + lu(id) + lu(il) + lu(ir))) < thr * 4) return;
+        for (let c = 0; c < 3; c++) d[i + c] = s[i + c] * (1 + 4 * amt) - (s[iu + c] + s[id + c] + s[il + c] + s[ir + c]) * amt;
+      };
+      for (let y = 0; y < H; y++) {
+        if (y >= r && y < H - r) {
+          for (let x = 0; x < r && x < W; x++) edge(x, y);
+          for (let x = W - r > r ? W - r : r; x < W; x++) edge(x, y);
+        } else for (let x = 0; x < W; x++) edge(x, y);
+      }
       if (r === 1 && thr === 0 && !luma) {
         for (let y = 1; y < H - 1; y++) {
           for (let x = 1; x < W - 1; x++) {
@@ -7350,7 +7387,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b);
         var nr=cr+(L-cr)*ds*a+8*a*tk, ng=cg+(L-cg)*ds*a+2*a*tk, nb=cb+(L-cb)*ds*a-6*a*tk;
         d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
-    nightvision: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.85, t); if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0;
+    nightvision: function(d,W,H,p,t,ps){ var a = fparam(p, 'amount', 0.85, t); if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0;
       /* The tint was hardcoded green and the sensor noise a fixed +-30, so every night-vision shot was
          the same green with the same grain — amber, white-hot and thermal-scope looks were all out of
          reach. GAIN is the intensifier's brightness, which is the other half of the look. */
@@ -7360,7 +7397,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       else if(nvC===2){ nvT0=1; nvT1=1; nvT2=1; }                       // white hot
       else if(nvC===3){ nvT0=0.35; nvT1=0.75; nvT2=1; }                 // blue scope
       var nvNoise=p.noise==null?60:FM.evalProp(p.noise,t); if(nvNoise<0)nvNoise=0; if(nvNoise>150)nvNoise=150;
-      var nvGain=p.gain==null?1.3:FM.evalProp(p.gain,t); if(nvGain<0.5)nvGain=0.5; if(nvGain>3)nvGain=3; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*nvGain+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*nvNoise; if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*nvT0, gg=L*nvT1, gb=L*nvT2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
+      var nvGain=p.gain==null?1.3:FM.evalProp(p.gain,t); if(nvGain<0.5)nvGain=0.5; if(nvGain>3)nvGain=3;
+      /* THE SCANLINES ARE EVERY THIRD PROJECT ROW, NOT EVERY THIRD PLATE ROW (queue 986, hunt C6). The kernel took no `ps`, so
+         on his phone's 0.28 preview plate the lines came out every 3 PLATE rows — a 10.7px pitch where the export draws 3px:
+         fat bars in the preview, fine lines in the file. Now each plate row darkens by the share of its project rows that are
+         scanlines, which is what the export looks like at that size. Below 2/3 scale a 3-row pitch is under two plate rows —
+         finer than the plate can draw — and averaging row by row there leaves a beat pattern (measured: a 3-row stripe at
+         half scale, a 5-row ripple at 0.28) that is not in the file either; so there it is the lines' average, 0.9, which is
+         what the export shrunk to that size shows. At a full plate (the export, ps 1) the table is not built and the old
+         `y%3` runs, byte for byte.
+         The sensor grain stays one plate pixel: that is the floor every grain in the app has (Noise, Film Grain), because
+         nothing finer than a pixel can be drawn on the plate — and its strength is the same at every plate size. */
+      var nvS=(ps>0&&ps<1)?ps:1, nvRow=null;
+      if(nvS<1){ nvRow=new Float64Array(H); var nvD=function(x){ var k=Math.floor(x/3), r=x-3*k; return k+(r<1?r:1); };
+        for(var ry=0;ry<H;ry++){ var ra=ry/nvS, rb=(ry+1)/nvS; nvRow[ry]=nvS*3<2?0.9:1-0.3*(nvD(rb)-nvD(ra))/(rb-ra); } }
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*nvGain+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*nvNoise; if(nvRow)L*=nvRow[y]; else if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; var gr=L*nvT0, gg=L*nvT1, gb=L*nvT2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
     sketch: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.85, t); if(a<0)a=0; if(a>1)a=1; var s=d.slice();
       // Amount could only fade the whole drawing back toward the photo. DARKNESS was a hardcoded x510
       // gain, so the strokes could not be made bolder or lighter. THRESHOLD clears the grey mud that a
@@ -15211,28 +15262,35 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // Color FX (ctx.filter) must run on the SOURCE before keying, else a blur halos the
         // keyed alpha edges. So when a key is present, bake the filter into the key offscreen
         // and clear ctx.filter for the final composite.
-        const ck = layer.effects && layer.effects.find(e => e.type === 'chromakey' && e.enabled !== false);
-        const lk = layer.effects && layer.effects.find(e => e.type === 'lumakey' && e.enabled !== false);
+        /* EVERY KEY ON THE LAYER RUNS, NOT ONLY THE FIRST (queue 986, hunt C4). This was `.find`, so a second Chroma Key —
+           the usual way to take out two shades of a badly lit screen — and a second Luma Key were silent no-ops that still
+           showed live sliders. Each key now takes the previous one's output, in stack order, on its own canvas and memo
+           (slot n), because a key drawn into the canvas it is reading from would clear its own source.
+           The ORDER between the two kinds is the one there has always been — every chroma key, then every luma key — so a
+           layer with one of each renders exactly as before: despill changes the colours a luma key then measures. */
+        const cks = layer.effects ? layer.effects.filter(e => e && e.type === 'chromakey' && e.enabled !== false) : [];
+        const lks = layer.effects ? layer.effects.filter(e => e && e.type === 'lumakey' && e.enabled !== false) : [];
         let keyed = false;
         // …in SOURCE pixels, not the target's (queue 690): see filterToSource. The keyed canvas is w×h and is drawn at w×h
         // local units (the crop path samples it 1:1), so a source pixel covers exactly deviceScaleOf(ctx) target pixels. A
         // floor on the scale keeps a clip shrunk to nothing from asking for a blur hundreds of times its own size.
-        const keyFilter = (ck || lk) ? filterToSource(ctx.filter, 1 / Math.max(0.02, deviceScaleOf(ctx))) : 'none';
-        if (ck && src) {
-          const p = resolveFxColors(ck.params || {}, t);   // queue 686: a keyframed key colour is an object; chromaKey then threw and took the whole composite with it
+        const keyFilter = (cks.length || lks.length) ? filterToSource(ctx.filter, 1 / Math.max(0.02, deviceScaleOf(ctx))) : 'none';
+        for (let n = 0; n < cks.length && src; n++) {
+          const p = resolveFxColors(cks[n].params || {}, t);   // queue 686: a keyframed key colour is an object; chromaKey then threw and took the whole composite with it
           // evalProp, not the raw prop: a KEYFRAMED tolerance is an object → tol*441 = NaN → dist<NaN
           // is always false → the key silently does nothing the moment you animate it
           const tol = p.tolerance == null ? 0.3 : FM.evalProp(p.tolerance, t);
-          const cks = p.softness == null ? 0 : Math.max(0, Math.min(1, FM.evalProp(p.softness, t)));
+          const cksoft = p.softness == null ? 0 : Math.max(0, Math.min(1, FM.evalProp(p.softness, t)));
           const ckd = p.despill == null ? 0 : Math.max(0, Math.min(1, FM.evalProp(p.despill, t)));
-          src = chromaKey(src, w, h, p.color || '#00ff00', tol, keyFilter, cks, ckd); keyed = true;
+          // the source filter is baked in ONCE, by the first key — a second pass would blur the keyed result again
+          src = chromaKey(src, w, h, p.color || '#00ff00', tol, keyed ? 'none' : keyFilter, cksoft, ckd, n); keyed = true;
         }
-        if (lk && src) {
-          const p = lk.params || {};
+        for (let n = 0; n < lks.length && src; n++) {
+          const p = lks[n].params || {};
           const thr = p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t);
-          const lks = p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t)));
+          const lksoft = p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t)));
           const lkm = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
-          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lks, lkm); keyed = true;
+          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lksoft, lkm, n); keyed = true;
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         try {

@@ -1503,6 +1503,11 @@ window.FM = window.FM || {};
         // A library filter's own name. String-only and length-capped — it reaches the inspector row as
         // textContent so it cannot carry markup, but an unbounded one would still wreck the row.
         if (typeof f.name === 'string' && f.name && f.name.length <= 64) out.name = f.name;
+        /* …and WHICH filter it is (queue 986, hunt C9). filters.js has stamped `fid` on every filter since queue 812 so the
+           row's ⋯ can star it, and this whitelist never learned the field: one save and reopen and it was gone. A library
+           filter then fell back to matching its name; a saved filter of his own has no library name to match, so its ⋯
+           lost Favourite for good. An id is a short plain word (a library id, or a saved preset's `u…`) — nothing else. */
+        if (typeof f.fid === 'string' && f.fid.length <= 64 && /^[A-Za-z0-9_-]+$/.test(f.fid)) out.fid = f.fid;
       }
       return out;
     };
