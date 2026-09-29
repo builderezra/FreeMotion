@@ -4467,11 +4467,13 @@
         if (has(/^paste style/i)) throw new Error('"Paste Style…" is still AM’s wording, and it now disagrees with the overlay it opens');
         if (has(/^duplicate layer$/i)) throw new Error('"Duplicate Layer" still says "Layer" about a selection that is often several — the same fault as Copy Layer');
         /* THE ORDER, which is the other half of his sentence. Clipboard actions in the order they are
-           used, and the two save-for-later entries together at the end rather than splitting them. */
+           used, and the save-for-later entry at the end rather than splitting them. (Queue 994 took the
+           "Save look as preset" row out — a second door to the Presets card's own save — so the
+           save-for-later family is "Save as element…" alone now, and it is what this orders.) */
         const at = re => rows.findIndex(t => re.test(t));
-        const copy = at(/^copy selected$/i), dup = at(/^duplicate/i), paste = at(/^paste on timeline$/i), preset = at(/^save look as preset$/i);
+        const copy = at(/^copy selected$/i), dup = at(/^duplicate/i), paste = at(/^paste on timeline$/i), save = at(/^save as element/i);
         if (!(copy < dup && dup < paste)) throw new Error('the clipboard rows are ordered copy=' + copy + ' duplicate=' + dup + ' paste=' + paste + ' — they should read in the order they are used');
-        if (!(preset > paste)) throw new Error('"Save look as preset" sits above the paste rows — the save-for-later pair belongs together at the end, which is the re-order he asked for');
+        if (!(save > paste)) throw new Error('"Save as element…" sits above the paste rows (or is missing: ' + save + ') — the save-for-later entry belongs at the end, which is the re-order he asked for');
       } finally { FM.contextMenu.hide(); await sleep(80); }
     } finally {
       FM.scene.layers = layers0;
@@ -27722,23 +27724,12 @@
     }
   });
 
-  /* #182 — Ezra: "Where it says save as preset, make it say save layers effects as preset." */
-  test('the layer menu names what its preset saves', { item: 'preset-label' }, async function () {
-    if (!FM.scene.layers.length) { FM.scene.layers.push(FM.makeLayer('shape', { shape: 'rect', start: 0, duration: 2 })); FM.timeline.rebuild(); }
-    const items = FM.layerMenuItems(FM.scene.layers[0]) || [];
-    const labels = items.map(i => i && i.label).filter(Boolean);
-    /* The wording moved on at queue 406, and this test moved with it rather than being deleted. queue 182
-       asked for "save layers effects as preset" because a bare "Save as preset…" said nothing about what it
-       captured — the right complaint, and the label it produced names the OWNER while getting the CONTENT
-       wrong: this saver takes the fill, outline, shadow, blend, colour grade and the transform's ANIMATION
-       as well as the effects. He came back with "I assumed presets are just effects anyways so I'm
-       confused", which is that label doing the confusing. Both requirements still hold: not the bare
-       wording, and it must SAY what it saves. */
-    if (labels.indexOf('Save as preset…') >= 0) throw new Error('the layer ⋯ still says the bare "Save as preset…"');
-    if (labels.indexOf('Save whole look as preset…') < 0) {
-      throw new Error('no "Save whole look as preset…" in the layer ⋯ — have: ' + labels.join(' | '));
-    }
-  });
+  /* #182's test ('the layer menu names what its preset saves') lived here. Queue 994 took the preset save
+     out of the layer ⋯ altogether — it was a second door to the Presets card's "Save look + animations…" —
+     so the label it guarded no longer exists. Its surviving half (no bare "Save as preset…" in this menu)
+     is inside '994 the layer ⋯ and ⧉ menus carry no preset save…' at the end of this file, which refuses a
+     preset save of ANY wording here; the Presets card's labels are held by 'the two preset save buttons say
+     what each one keeps (queue 329)'. */
 
   /* #166 — Ezra: "For some reason on free hand drawing layers I simply can't swipe up and down on the
      timeline", then a minute later: "Actually it's any layer not just free hand drawing layers."
@@ -112678,6 +112669,124 @@
         for (let x = 0; x < w; x++) for (const y of [0, h - 1]) { const i = (y * w + x) * 4; if (s[i] !== 0x20 || s[i + 1] !== 0x30 || s[i + 2] !== 0x40) throw new Error('in ' + where + ' a SMALL sharpened clip changed the empty frame edge at ' + x + ',' + y + ' to (' + [s[i], s[i + 1], s[i + 2]].join(',') + ')'); }
       });
     } finally { ids.forEach(id => FM.media.remove(id)); }
+  });
+
+  /* ═══ 994 — ONE DOOR PER KIND OF PRESET ═════════════════════════════════════════════════════════
+     His words, 19 Aug (#406): *"Get rid of saving presets from this menu … if you realise we just have two
+     buttons for the same thing just get rid of the one isn't just saving as effects"*; and 1 Sep (#454):
+     *"Actually u are right to keep both options to save effect presets and full layer preseets i change my
+     mind"*. Both kinds stay. The whole-look save had THREE doors — the layer ⋯ ("Save whole look as
+     preset…"), the ⧉ Layer actions menu ("Save look as preset") and the Presets card ("Save look +
+     animations…") — and all three called the same FM.savePresetPrompt. The two menu rows go; the card
+     keeps it beside the effects-only save.
+     ⚠️ THE CONTROLS ARE WHAT MAKE THE ABSENCE MEAN SOMETHING. "No preset row" is also what an empty or
+     unopened menu says, so each menu must first show the row that sits beside the removed one (Save …
+     as element), and the card must still SAVE a whole look through its own button, end to end — a test
+     that only proved the rows gone would pass just as well if the capability had been deleted with them. */
+  test('994 the layer ⋯ and ⧉ menus carry no preset save, and the Presets card still saves the whole look', { item: '994' }, async function () {
+    const NAME = '__994 whole look ' + Date.now();
+    const realPrompt = window.prompt;
+    const layers0 = FM.scene.layers.slice();
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const onScreen = el => !!(el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0);
+    try {
+      if (homeWasOpen) FM.home.close();
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'Look994', shape: 'rect', x: 300, y: 400, shapeW: 200, shapeH: 160, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3;
+      L.effects = [FM.fxRegistry.makeInstance('blur')].filter(Boolean);
+      FM.scene.layers.push(L); FM.refreshAll(); FM.selectLayer(L.id);
+      await sleep(120);
+
+      /* 1. the layer ⋯ — the menu the phone's ⋯ and PC's ⋯ both open (one FM.layerMenuItems) */
+      const labels = (FM.layerMenuItems(L) || []).map(i => i && i.label).filter(Boolean);
+      if (!labels.some(t => /^save selection as element/i.test(t))) throw new Error('setup: the layer ⋯ has no "Save selection as element…" row, so this is not the real menu — have: ' + labels.join(' | '));
+      const inDots = labels.filter(t => /preset/i.test(t));
+      if (inDots.length) throw new Error('the layer ⋯ still offers a preset save (' + inDots.join(' | ') + ') — it is a second door to the Presets card’s own “Save look + animations…”, and he asked for one of two same buttons to go (#406, #994)');
+
+      /* 2. the ⧉ Layer actions menu */
+      const btn = document.getElementById('btn-layermenu');
+      if (!btn) throw new Error('setup: #btn-layermenu is gone');
+      if (onScreen(document.getElementById('ctx-menu'))) { FM.contextMenu.hide(); await sleep(100); }
+      btn.click(); await sleep(150);
+      const menu = document.getElementById('ctx-menu');
+      if (!onScreen(menu)) throw new Error('setup: the ⧉ menu did not open');
+      let rows;
+      try {
+        rows = Array.prototype.map.call(menu.querySelectorAll('.ctx-item, [role="menuitem"], button, div'), n => (n.textContent || '').trim()).filter(t => t && t.length < 40);
+      } finally { FM.contextMenu.hide(); await sleep(80); }
+      if (!rows.some(t => /^save as element/i.test(t))) throw new Error('setup: the ⧉ menu has no "Save as element…" row, so the rows were not read — have: ' + rows.slice(0, 12).join(' | '));
+      const inCopy = rows.filter(t => /preset/i.test(t));
+      if (inCopy.length) throw new Error('the ⧉ Layer actions menu still offers a preset save (' + inCopy.join(' | ') + ') — the same FM.savePresetPrompt as the Presets card’s button, so a duplicate door (#994)');
+
+      /* 3. CONTROL — the one door that stays, driven end to end: the Presets card's button saves a WHOLE LOOK
+         (the fill and the transform go with it, not only the effects), and the effects-only save is still
+         there beside it. */
+      FM.inspector.openCategory('presets');
+      await sleep(220);
+      const acts = [].slice.call(document.querySelectorAll('#inspector .fx-act'));
+      const whole = acts.filter(b => /look \+ animations/i.test(b.textContent || '') && /^save/i.test((b.textContent || '').trim()))[0];
+      const fxOnly = acts.filter(b => /^save effects only/i.test((b.textContent || '').trim()))[0];
+      if (!whole) throw new Error('the Presets card has no “Save look + animations…” button — the one door the whole look was meant to keep (have: ' + acts.map(b => (b.textContent || '').trim()).join(' | ') + ')');
+      if (!fxOnly) throw new Error('the Presets card lost its effects-only save — both kinds were to stay (1 Sep)');
+      window.prompt = () => NAME;
+      whole.click();
+      await sleep(120);
+      const saved = FM.layerPresets.list().filter(p => p.name === NAME)[0];
+      if (!saved) throw new Error('pressing “Save look + animations…” saved no layer preset — the whole look has no door left');
+      if (!saved.data || saved.data.fill !== '#3a7bd5' || !saved.data.transform) throw new Error('the Presets card saved something other than a whole look: ' + JSON.stringify(saved.data).slice(0, 160));
+    } finally {
+      window.prompt = realPrompt;
+      try { FM.layerPresets.remove(NAME); } catch (e) {}
+      try { FM.contextMenu.hide(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); try { FM.inspector.openCategory('home'); } catch (e) {} FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+      await sleep(120);
+    }
+  });
+
+  /* ═══ 834 clause 20 — THE SKETCHING BAR SAYS CLOSE, BECAUSE NOTHING IS CANCELLED ═══════════════════
+     From the hunt (u19): in Sketching every stroke is committed to its Sketch layer the moment the finger
+     lifts, so the bar's "Cancel" closed the bar and kept the drawing — a word promising the opposite of what
+     the button does. Option B (recommended, built under LOOP.md rule 16 while he has not picked): rename it
+     Close and change nothing it does. Asserted both ways round, because both halves are the point:
+       · Sketching reads Close, and pressing it leaves the stroke's layer exactly where it was;
+       · Custom shape still reads Cancel, because there it IS true — its points are not a layer until Done,
+         and pressing it leaves no layer behind. One word per behaviour, not one word per button. */
+  test('834 the sketching bar says Close because its strokes are already kept, and Custom shape still says Cancel', { item: '834' }, async function () {
+    await editorWithShape(async function () {
+      const before = FM.scene.layers.length;
+      try {
+        FM.startDraw('freehand');
+        const bar = document.getElementById('draw-bar');
+        if (!bar || bar.classList.contains('hidden')) throw new Error('setup: startDraw showed no #draw-bar');
+        const cx = bar.querySelector('.db-cancel');
+        if (!cx) throw new Error('setup: the sketching bar has no .db-cancel button');
+        const word = (cx.textContent || '').trim();
+        if (word !== 'Close') throw new Error('the sketching bar’s last button reads “' + word + '” — every stroke is already a committed Sketch layer, so it cancels nothing; it should say Close (#834 clause 20, option B)');
+        if (!/close/i.test(cx.getAttribute('aria-label') || '') || /cancel/i.test(cx.title || '')) throw new Error('the button reads Close but its label/tooltip still say otherwise (aria-label “' + cx.getAttribute('aria-label') + '”, title “' + cx.title + '”)');
+        /* …and what it DOES is unchanged: a stroke drawn, then Close, and the stroke's layer stays */
+        FM.drawTool.points = [[120, 200], [180, 230], [240, 260], [300, 290]]; FM.drawTool._commit();
+        await sleep(60);
+        const drawn = FM.scene.layers.length;
+        if (drawn !== before + 1) throw new Error('setup: one committed stroke made ' + (drawn - before) + ' layers, so the Close check below would mean nothing');
+        cx.click(); await sleep(80);
+        if (FM.drawTool.active || !bar.classList.contains('hidden')) throw new Error('Close did not close the sketching bar');
+        if (FM.scene.layers.length !== drawn) throw new Error('Close changed the drawing (' + drawn + ' layers → ' + FM.scene.layers.length + ') — the rename was meant to change the word and nothing it does');
+
+        /* CONTROL — Custom shape: its points are uncommitted, so there the button really cancels, and says so */
+        FM.startDraw('vector');
+        const cv = bar.querySelector('.db-cancel');
+        if ((cv.textContent || '').trim() !== 'Cancel') throw new Error('in Custom shape the button reads “' + (cv.textContent || '').trim() + '” — its points are not a layer until Done and this button throws them away, so Cancel is the true word there');
+        FM.drawTool.points = [[100, 100], [300, 100], [200, 300]];
+        cv.click(); await sleep(80);
+        if (FM.scene.layers.length !== drawn) throw new Error('Cancel in Custom shape left a layer behind (' + drawn + ' → ' + FM.scene.layers.length + ')');
+        /* …and back to Sketching, the word follows the mode rather than sticking at the last one */
+        FM.startDraw('freehand');
+        if ((bar.querySelector('.db-cancel').textContent || '').trim() !== 'Close') throw new Error('after a Custom shape the sketching bar went back to “' + bar.querySelector('.db-cancel').textContent + '” — the word must follow the mode');
+      } finally { try { if (FM.drawTool && FM.drawTool.active) FM.drawTool._stop(); } catch (e) {} }
+    });
   });
 
 })();

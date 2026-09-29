@@ -5287,17 +5287,22 @@ window.FM = window.FM || {};
       items.push({ label: 'Group selection', action: () => FM.groupSelection() });
       items.push({ label: 'Masking group', action: () => FM.groupSelection({ mask: true }) });
     }
-    /* "Save WHOLE LOOK as preset" (queue 406, correcting queue 182's wording with his own later words).
-       queue 182 asked for "save layers effects as preset" because a bare "Save as preset" did not say what
-       it captured — right problem, and the label it produced names the OWNER while getting the CONTENT
-       wrong. The old comment even admitted it in a parenthesis: this stores the fill, stroke, shadow, blend
-       mode, colour grade, corner radius AND the transform's animation as well as the effects.
-       That parenthesis is what cost him an afternoon: "I assumed presets are just effects anyways so I'm
-       confused". The label said effects. It is not effects. There are THREE savers in this app and each
-       one now says what it takes:
-         · this one              — the whole look, including movement
-         · Effects card → button — the effects list and nothing else
-         · an effect row's ⋯     — that ONE effect's settings */
+    /* NO PRESET SAVE IN THIS MENU (queue 994, closing #406 clause 1). This menu used to carry "Save whole
+       look as preset…" — the fill, outline, shadow, blend, colour grade, corner radius AND the transform's
+       animation, as well as the effects (the label was queue 182's, corrected at 406). His words, 19 Aug:
+       *"Get rid of saving presets from this menu … if you realise we just have two buttons for the same
+       thing just get rid of the one isn't just saving as effects"*, and on 1 Sep, via #454: *"Actually u are
+       right to keep both options to save effect presets and full layer preseets i change my mind"*.
+       So BOTH KINDS stay, and each keeps ONE door, on the card that lists what it makes:
+         · the whole look + animations — the layer's Presets card → "Save look + animations…"
+         · the effects only            — the layer's Presets card → "Save effects only as preset"
+                                         (the same button also sits under the Effects stack, beside Copy
+                                         and Paste — he circled that one at queue 583, so it stays)
+         · ONE effect's settings       — an effect row's ⋯ (a third, smaller kind)
+       This row and the ⧉ menu's "Save look as preset" were both extra doors to FM.savePresetPrompt — the
+       exact function the Presets card button calls — so both went. Nothing is lost: the card is one tap
+       from any layer that can use a look preset (camera and audio-only layers have no Presets card, and a
+       look saved from one could not be applied to one either). */
     /* ✎ DRAW MORE, REACHABLE WITHOUT ENTERING POINT EDITING (queue 552). His words: *"being able to
      * continue the drawing INSTEAD OF the current edit points system"* — and the button that does it
      * was put INSIDE that system. It lives in the Edit Points panel (js/inspector.js), and opening that
@@ -5308,7 +5313,6 @@ window.FM = window.FM || {};
     if (layer.type === 'shape' && layer.shape === 'path' && !layer.closed && FM.startDraw) {
       items.push({ label: '✎  Draw more', action: () => FM.startDraw('freehand', { layerId: layer.id }) });
     }
-    items.push({ label: 'Save whole look as preset…', action: () => FM.savePresetPrompt && FM.savePresetPrompt(layer) });
     items.push({ label: 'Save selection as element…', action: () => FM.saveElementPrompt && FM.saveElementPrompt() });
     // the layer extras (Flip/Fit/Clipping Mask/Outline/Extract Audio/Media Info/colour tag) used to
     // live ONLY in the desktop top-bar ⋯ — merged here so every surface shows one identical menu
@@ -7190,12 +7194,17 @@ window.FM = window.FM || {};
        * distinguishes it from Paste look, the other paste in the same menu.
        *
        * THE ORDER IS BY JOB, not AM's interleave. Selection first, then the clipboard trio in the
-       * order you actually use it (copy → duplicate → paste), then the two SAVE-for-later entries,
-       * which are a different kind of act and now sit together instead of splitting the pastes.
+       * order you actually use it (copy → duplicate → paste), then the SAVE-for-later entry, which is
+       * a different kind of act and sits after the pastes instead of splitting them.
        * Separators carry that grouping so it reads as three families rather than seven rows.
        *
-       * "Paste look…" rather than "Paste Style…" pairs it with "Save look as preset" — one word for
-       * one idea, where AM had two. */
+       * "Paste look…" rather than "Paste Style…" — "look" is the word the Presets card uses for the
+       * same idea ("Save look + animations…"), where AM had two words.
+       * ⚠️ NO "Save look as preset" HERE ANY MORE (queue 994). It called FM.savePresetPrompt, exactly
+       * what the Presets card's "Save look + animations…" calls, so it was a second door to one save —
+       * and his rule for that (#406, 19 Aug) was *"if you realise we just have two buttons for the same
+       * thing just get rid of the one"*. The card keeps it, beside the effects-only save, under headings
+       * that say what each one keeps. See the note in FM.layerMenuItems. */
       // queue 918.10: the menu's right edge goes under the button's (it is ~152px wide, not the 200 guessed here)
       FM.contextMenu.show(Math.max(8, r.right - 200), r.bottom + 4, [
         { label: 'Select all layers', action: () => { if (FM.selectAll) FM.selectAll(); } },
@@ -7212,7 +7221,6 @@ window.FM = window.FM || {};
         { label: 'Paste on timeline', disabled: !hasClip, action: () => { if (FM.pasteClipboard) FM.pasteClipboard(); }, arrow: hasClip, arrowTitle: 'Choose where to paste', arrowAction: openPastePos },
         { label: 'Paste look…', disabled: !(hasSel && hasStyle), action: () => { if (FM.openPasteStyle) FM.openPasteStyle(); } },
         { sep: true },
-        { label: 'Save look as preset', disabled: !hasSel, action: () => FM.savePresetPrompt() },
         { label: 'Save as element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
       ], { right: r.right, above: r.top });
     });
