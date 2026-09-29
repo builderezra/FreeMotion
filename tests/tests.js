@@ -110279,4 +110279,178 @@
     }
   });
 
+  /* ═══ #989 (review) — A FINISHED ARROW IS REDRAWN FINISHED ═════════════════════════════════════════════════════════
+     The first 989 fix gave every arrow its own clock so a redraw carries the draw on — and read that clock off the MAIN
+     stroke's animation, which stops at its own end (1000 ms). A finished arrow therefore said "1000 ms in", never the
+     1270 ms the last flick ends at, so every redraw drew the head's two flicks again: a tap on Projects, a window drag
+     (every resize frame restarted them — measured at 1280, 59 of 112 frames of a 1 s drag were missing part of the head),
+     a look change. Here the arrow is let finish, then each of those happens with a real finger or mouse and a real
+     resize, and every painted frame reads how much of each of its three strokes is drawn (the mask's dash, what is on
+     screen). Pass: the arrow stays up and whole through all of it — no stroke's drawn part ever drops. CONTROL: each of
+     the three really redrew the arrow (a new arrow replaced the old one during it), and the frames were painted. */
+  function arrowFrac989r(mp) {
+    const cs = getComputedStyle(mp), dash = parseFloat(cs.strokeDasharray), off = parseFloat(cs.strokeDashoffset);
+    return dash > 0 ? Math.max(0, Math.min(1, 1 - (off || 0) / dash)) : 1;   // a still arrow has no dash: whole
+  }
+  function arrowWatch989r() {
+    const ids = new WeakMap(), rec = [];
+    let n = 0, on = true, step = '';
+    const tick = () => {
+      if (!on) return;
+      const all = document.querySelectorAll('svg[id^="hm-arrow936"]'), a = all[0];
+      if (a && !ids.has(a)) ids.set(a, ++n);
+      rec.push({ t: Math.round(performance.now()), step: step, n: all.length, id: a ? ids.get(a) : 0,
+        f: a ? [].map.call(a.querySelectorAll('mask path'), arrowFrac989r) : null });
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    return { rec: rec, step: s => { step = s; }, stop: () => { on = false; } };
+  }
+  test('989 a Home arrow that has finished drawing stays whole through a tap on Projects, a window drag and a look change - its head is never drawn again', { item: '989', budgetMs: 90000 }, async function () {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // drawn still there: nothing is ever redrawn part-way
+    if (!FM.homeArrow || !FM.home || !FM.projects || !FM.settings) throw new Error('need FM.homeArrow, FM.home, FM.projects and FM.settings');
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const html = document.documentElement, home = document.getElementById('home-screen'), fe = window.frameElement;
+    const hadHome = FM.home.isOpen(), list0 = FM.projects.list, look0 = html.getAttribute('data-home'), light0 = FM.settings.get('homeLight');
+    const NAMES = ['the main stroke', 'the upper flick of the head', 'the lower flick of the head'];
+    const whole = () => {
+      const a = document.getElementById('hm-arrow936');
+      if (!a) return false;
+      const f = [].map.call(a.querySelectorAll('mask path'), arrowFrac989r);
+      return f.length === 3 && f.every(x => x >= 0.995);
+    };
+    const rows = [];
+    const oneWidth = async (w, label, press) => {
+      FM.home.refresh(); await wait(300);
+      if (!document.querySelector('#home-screen .hm-grid .hm-empty-title')) throw new Error(label + ': setup: the Projects tab is not showing its empty state');
+      const tab = home.querySelector('.hm-tab[data-tab="projects"]');
+      if (!tab) throw new Error(label + ': setup: no Projects tab');
+      for (let i = 0; i < 60 && !whole(); i++) await wait(100);
+      if (!whole()) throw new Error(label + ': setup: the arrow to the + never finished drawing on the empty Projects tab (' + (document.getElementById('hm-arrow936') ? 'it is up but not whole' : 'there is no arrow - no room for the swoop?') + ')');
+      await wait(500);                                  // well past its 1.27 s draw
+      const TAP = 'a ' + (press === 'tap' ? 'real tap' : 'real click') + ' on the Projects tab';
+      const W = arrowWatch989r();
+      try {
+        W.step(TAP);
+        if (press === 'tap') await h3aTap(tab, label + ': a tap on the Projects tab'); else await hcMouse(tab, label + ': a click on the Projects tab');
+        await wait(800);
+        W.step('a window drag');                        // a real resize of the frame, a step every 90 ms, then back
+        const w0 = fe.style.width;
+        for (let i = 1; i <= 8; i++) { fe.style.width = (w - 4 * i) + 'px'; await wait(90); }
+        for (let i = 7; i >= 0; i--) { fe.style.width = (w - 4 * i) + 'px'; await wait(90); }
+        fe.style.width = w0; await wait(800);
+        W.step('a look change');                        // what the Toggle dark mode switch does, both ways
+        const lt = html.getAttribute('data-home') === 'light';
+        FM.settings.set('homeLight', !lt); await wait(700);
+        FM.settings.set('homeLight', lt); await wait(800);
+      } finally { W.stop(); }
+      const S = W.rec.filter(r => r.step);
+      for (const st of [TAP, 'a window drag', 'a look change']) {
+        const F = S.filter(r => r.step === st), t0 = F.length ? F[0].t : 0;
+        const before = W.rec.filter(r => r.t < t0).map(r => r.id);
+        if (F.length < 10) throw new Error(label + ': CONTROL: only ' + F.length + ' painted frames during ' + st + ' - the frame is not being painted, so a redrawn head could not be seen');
+        if (!F.some(r => r.id && before.indexOf(r.id) < 0)) throw new Error(label + ': CONTROL: ' + st + ' never redrew the arrow (the same arrow stayed up throughout), so this case is not the one that broke');
+      }
+      const gone = S.filter(r => r.n !== 1)[0];
+      if (gone) throw new Error(label + ': during ' + gone.step + ' there were ' + gone.n + ' arrows on screen (a frame ' + (gone.t - S[0].t) + ' ms in)');
+      for (const r of S) {
+        const k = r.f.findIndex(x => x < 0.98);
+        if (k < 0) continue;
+        const same = S.filter(q => q.step === r.step);
+        const low = Math.min.apply(null, same.map(q => q.f[k]));
+        const bad = same.filter(q => q.f.some(x => x < 0.98)).length;
+        throw new Error(label + ': the arrow had finished drawing, and during ' + r.step + ' ' + NAMES[k] + ' was drawn again - down to ' + Math.round(low * 100) + '% drawn, ' + bad + ' of ' + same.length + ' frames missing part of it (a redraw that restarted a finished arrow)');
+      }
+      rows.push(label + ' ' + S.length + ' frames, ' + (new Set(S.map(r => r.id))).size + ' arrows, all whole');
+    };
+    try {
+      FM.projects.list = () => [];                     // an EMPTY Projects tab without touching the suite's own project
+      FM.settings.set('homeLight', true);
+      await onScreen924(async function () {
+        if (!hadHome) FM.home.open();
+        await wait(2200);                              // past the first-open entrance, if this open ran it
+        const pt = home.querySelector('.hm-tab[data-tab="projects"]');
+        if (pt && !pt.classList.contains('active')) { pt.click(); await wait(700); }
+        await atPhoneWidth(() => oneWidth(390, '390', 'tap'), 390);
+        await atWideWidth(() => oneWidth(1280, '1280', 'click'), 1280);
+      });
+    } finally {
+      FM.projects.list = list0;
+      FM.settings.set('homeLight', light0);
+      if (look0 == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', look0);
+      FM.homeArrow.clear();
+      FM.home.refresh();
+      if (!hadHome) FM.home.close();
+      await wait(150);
+    }
+    window.__fm989r = rows;
+  });
+
+  /* ═══ #991 (review) — ON THE PC, A CLICK INTO THE SUGGESTED NAME CLEARS IT TOO ═════════════════════════════════════
+     With a mouse the dialog focuses the name itself and selects it, so typing straight away replaced it — but a CLICK into
+     that already-focused field fired no focus event, so nothing emptied it: the click only collapsed the selection to a
+     caret after "Project N", and "Beach" became "Project NBeach" (measured with a real mouse at 1280). Driven with a REAL
+     mouse and REAL keys at 1280: the + opens the dialog, a click into the name, Beach, Enter — the project is Beach. And
+     the untouched name still makes Project N. CONTROL: the dialog really focused and selected the name itself (the PC
+     case), the click really reached the field (a trusted mouse pointerdown), and the keys really typed. */
+  test('991 on the PC a click into the suggested name clears it as well - a real mouse click and Beach makes Beach, an untouched name still makes Project N', { item: '991', budgetMs: 120000 }, async function () {
+    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) throw new Error('setup: this browser reports no mouse ((hover: hover) and (pointer: fine) is false), so the dialog will not select the name itself - this is the PC case');
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    let remembered = null; try { remembered = localStorage.getItem('fm.newproj'); } catch (e) {}
+    const dlg = document.getElementById('hm-dialog');
+    const say = v => JSON.stringify(v).replace(/"/g, "'");
+    const keys = text => text.split('').map(ch => ({ t: 'key', key: ch, code: 'Key' + ch.toUpperCase(), vk: ch.toUpperCase().charCodeAt(0), text: ch, ms: 40 }));
+    const ENTER = { t: 'key', key: 'Enter', code: 'Enter', vk: 13, text: '\r', ms: 40 };
+    const openDialog = async function () {
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+      const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+      if (tab && !tab.classList.contains('active')) { tab.click(); await sleep(300); }
+      await hcMouse(document.getElementById('hm-new'), 'a click on + (new project)');
+      await hcUntil('the New project dialog', () => !dlg.classList.contains('hidden'), 4000);
+      await sleep(800);                                // #947/#974: the card lands first
+      return document.getElementById('hm-new-name');
+    };
+    const enter = async function (what) {
+      const before = FM.projects.currentId();
+      await realInput924([ENTER], 'Enter (' + what + ')');
+      await hcUntil('the new project to open (' + what + ')', () => FM.projects.currentId() !== before && !FM.home.isOpen(), 8000);
+      await sleep(400);
+      made.push(FM.projects.currentId());
+      return FM.scene.project && FM.scene.project.name;
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          /* 1 — the dialog selects the name, he clicks into it, types Beach */
+          let inp = await openDialog();
+          const def1 = inp.value;
+          if (!/^Project \d+$/.test(def1)) throw new Error('setup: the dialog suggests ' + say(def1) + ', not a Project N');
+          if (document.activeElement !== inp || inp.selectionStart !== 0 || inp.selectionEnd !== def1.length) throw new Error('setup: with a mouse the dialog should focus the name and select it (focused ' + (document.activeElement === inp) + ', selection ' + inp.selectionStart + '-' + inp.selectionEnd + ') - this is not the PC case');
+          const downs = [], rec = e => downs.push({ trusted: e.isTrusted, kind: e.pointerType });
+          inp.addEventListener('pointerdown', rec);
+          try { await hcMouse(inp, 'a click into the name field'); } finally { inp.removeEventListener('pointerdown', rec); }
+          if (!downs.some(d => d.trusted && d.kind === 'mouse')) throw new Error('CONTROL: the click never reached the name field as a real mouse press (' + say(downs) + ')');
+          if (document.activeElement !== inp) throw new Error('CONTROL: after the click the name field is not focused');
+          await realInput924(keys('Beach'), 'typing Beach'); await sleep(120);
+          if (!/Beach$/.test(inp.value)) throw new Error('CONTROL: real keys did not type into the field (it reads ' + say(inp.value) + ')');
+          if (inp.value !== 'Beach') throw new Error('he clicked into the name and typed Beach, and the name is ' + say(inp.value) + ' - he still has to delete ' + def1 + ' first');
+          const n1 = await enter('Beach');
+          if (n1 !== 'Beach') throw new Error('he named it Beach and the project opened as ' + say(n1));
+          /* 2 — untouched: Enter straight away makes Project N */
+          inp = await openDialog();
+          const def2 = inp.value;
+          if (!/^Project \d+$/.test(def2)) throw new Error('setup: the second dialog suggests ' + say(def2));
+          const n2 = await enter('untouched');
+          if (n2 !== def2) throw new Error('with the name left alone the project is ' + say(n2) + ', not ' + def2);
+        }, 1280);
+      });
+    } finally {
+      try { dlg.classList.add('hidden'); } catch (e) {}
+      try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();

@@ -40,12 +40,19 @@ window.FM = window.FM || {};
      still seen every time Home is opened. */
   var DRAW_END = 1270;                                              // the last flick ends at 1080 + 190 ms (times[] below)
   var dropping = null;
+  /* ⚠️ THE ARROW'S CLOCK IS ITS LATEST STROKE, NOT ITS FIRST (989 review). Each stroke's animation stops at its OWN end —
+     the main stroke's at 1000 ms — so reading anims[0] said a finished arrow was 1000 ms in, never DRAW_END, and every
+     redraw (a resize frame, a look change, a tap on Projects, a late thumbnail grab) drew both barbs of the head again;
+     measured, a 1 s window drag at 1280 left 59 of 112 frames with part of the head missing. So: every stroke finished
+     is drawn in full, and otherwise the clock is the furthest any stroke has got (the last flick runs to 1270 ms). */
   function progressOf(svg) {                                        // ms into its draw; Infinity once it is drawn in full
     var rec = svg && svg._fm989;
     if (!rec) return null;
     if (!rec.anims || !rec.anims.length) return Infinity;
-    var t = rec.anims[0].currentTime;
-    return typeof t === 'number' && isFinite(t) ? t : 0;
+    if (rec.anims.every(function (an) { return an.playState === 'finished'; })) return Infinity;
+    var t = 0;
+    rec.anims.forEach(function (an) { var c = an.currentTime; if (typeof c === 'number' && isFinite(c) && c > t) t = c; });
+    return t;
   }
   function settling(el) {
     if (!el.getAnimations) return [];

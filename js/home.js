@@ -3080,7 +3080,8 @@ window.FM = window.FM || {};
      it still holds the untouched suggestion, it empties, and the suggestion stays on show as the placeholder; typing
      starts a fresh name, leaving it empty (blur) puts "Project N" back, and Create uses "Project N" whenever it is left
      empty — so an untouched name still makes "Project N". The PC's own auto-focus keeps its select-all (the first key
-     replaces it there already); a later click back into the field empties it just the same. */
+     replaces it there already); a click or tap into the field while it still holds the suggestion empties it as well — a
+     pointerdown listener, because a click into the field the PC has ALREADY focused fires no focus event (991 review). */
   let npDefaultName = '', npAutoFocus = false;
   function newProjectDialog() {
     const dlg = document.getElementById('hm-dialog');
@@ -3249,6 +3250,11 @@ window.FM = window.FM || {};
       // queue 991: the untouched suggestion empties when he goes to name the project, and comes back if he leaves it empty
       npEl('hm-new-name').addEventListener('focus', () => { const f = npEl('hm-new-name'); if (!npAutoFocus && npDefaultName && f.value === npDefaultName) f.value = ''; });
       npEl('hm-new-name').addEventListener('blur', () => { const f = npEl('hm-new-name'); if (npDefaultName && !f.value.trim()) f.value = npDefaultName; });
+      /* …and a press INTO the field empties it too (991 review). On the PC the dialog focuses the field itself, so a click
+         into it fires no focus event — the click only collapsed the select-all to a caret after "Project 1", and "Beach"
+         became "Project 1Beach" (measured with a real mouse at 1280). The press lands before the caret is placed, so the
+         caret goes into an empty field; on the phone it runs just ahead of the focus handler, which then finds it empty. */
+      npEl('hm-new-name').addEventListener('pointerdown', () => { const f = npEl('hm-new-name'); if (npDefaultName && f.value === npDefaultName) f.value = ''; });
       dlg.querySelector('#hm-create').addEventListener('click', createFromDialog);
       dlg.querySelector('#hm-cancel').addEventListener('click', npDismiss);   // queue 947: A shrinks back into the orb
     },
