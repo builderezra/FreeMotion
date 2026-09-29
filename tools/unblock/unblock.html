@@ -196,7 +196,7 @@
   <div id="groups"></div>
   <script type="application/json" id="unblock-data">
 {
- "asOf": "25 Sep 2026, v16.97",
+ "asOf": "25 Sep 2026, v16.97 — 30 Sep: #406 card removed (#994 settled it), #482 speed and #834 Close moved to Already decided, #482 Gradient Overlay card names 0.8 / 0.5",
  "groups": [
   {
    "id": "picks",
@@ -414,36 +414,18 @@
      "num": "482",
      "kind": "pick",
      "title": "Gradient Overlay’s default strength",
-     "text": "At its default the pink-to-blue gradient covers most of your picture.",
+     "text": "It starts at 0.8 today, so the pink-to-blue gradient covers most of your photo. The picture shows both on the same photo. The slider still goes anywhere after you add it — this only picks where it starts.",
      "options": [
       [
        "Keep",
-       "Keep the default as it is"
+       "Keep 0.8, today’s default"
       ],
       [
        "Gentler",
-       "Make the default gentler so the photo shows through"
+       "Start at 0.5, so half the photo shows through"
       ]
      ],
-     "rec": ""
-    },
-    {
-     "n": 13,
-     "num": "482",
-     "kind": "pick",
-     "title": "Should effect speed sliders go faster?",
-     "text": "Glitch speed, scanline roll, cloud drift and similar. I can’t measure whether faster is better — your call.",
-     "options": [
-      [
-       "Yes",
-       "Yes, open up the speed controls"
-      ],
-      [
-       "No",
-       "No, leave them"
-      ]
-     ],
-     "rec": ""
+     "rec": "Gentler"
     },
     {
      "n": 14,
@@ -629,46 +611,6 @@
       [
        "B",
        "Leave Copy on the left"
-      ]
-     ],
-     "rec": "B"
-    },
-    {
-     "n": 24,
-     "num": "406",
-     "kind": "pick",
-     "title": "Which duplicate preset-save button goes? (and: got it?)",
-     "text": "You asked to be reminded until you confirm: “Effect” presets save only the effects; “Save look + animations” also saves fill, outline, shadow, blend and movement. Pick a letter, which also counts as “got it”.",
-     "options": [
-      [
-       "A",
-       "“Save whole look as preset” in the layer ⋯ menu (the same save stays on the Presets card)"
-      ],
-      [
-       "B",
-       "The effect row’s ⋯ save"
-      ],
-      [
-       "C",
-       "The Effects card button"
-      ]
-     ],
-     "rec": "A"
-    },
-    {
-     "n": 25,
-     "num": "834",
-     "kind": "pick",
-     "title": "The sketch bar’s Cancel button",
-     "text": "Today it only closes the bar — every stroke is already saved as a layer.",
-     "options": [
-      [
-       "A",
-       "Cancel throws away the whole drawing from this session"
-      ],
-      [
-       "B",
-       "Rename it Close (Undo already takes back a stroke)"
       ]
      ],
      "rec": "B"
@@ -1116,8 +1058,36 @@
   {
    "id": "vetoes",
    "title": "Already decided — say one word to reverse",
-   "desc": "Nothing waits on these. Each shipped the option marked recommended while you were away.",
+   "desc": "Nothing waits on these — each was decided while you were away. Tap the button, or say the word, only if you want it the other way.",
    "items": [
+    {
+     "n": 13,
+     "num": "482",
+     "kind": "pick",
+     "title": "Effect speed sliders: left as they are — raise them?",
+     "text": "Glitch speed, scanline roll, cloud drift and similar. Faster is taste, not something I can measure, so I left them alone. Tap Yes to have them opened up.",
+     "options": [
+      [
+       "Yes",
+       "Yes, raise them — open up the speed controls"
+      ]
+     ],
+     "rec": ""
+    },
+    {
+     "n": 25,
+     "num": "834",
+     "kind": "pick",
+     "title": "The sketch bar’s Cancel now says Close",
+     "text": "Every stroke is already saved as a layer the moment you lift your finger, so the button only ever closed the bar. It says Close now; what it does has not changed, and Undo still takes back one stroke. Custom shape keeps Cancel, because there it really throws the points away.",
+     "options": [
+      [
+       "A",
+       "Make it Cancel, and have it throw away the whole drawing from this session"
+      ]
+     ],
+     "rec": ""
+    },
     {
      "n": 61,
      "num": "395 · 484 · 539 · 583 · 624 · 642 · 760 · 763 · 813 · 851",
@@ -1294,7 +1264,9 @@
     var status = document.getElementById('status'), send = document.getElementById('send');
 
     function render() {
-      var n = Object.keys(state).length;
+      // Count answers to cards that are ON the page. A card taken off (30 Sep: #406's, once #994 settled it) can
+      // leave its old answer in storage, and counting that would read "3 of 2 answered".
+      var n = cards.filter(function (c) { return !!state[c.dataset.id]; }).length;
       send.disabled = n === 0;
       status.innerHTML = n === 0
         ? 'Nothing picked yet.'

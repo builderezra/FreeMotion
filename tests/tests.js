@@ -112789,4 +112789,62 @@
     });
   });
 
+  /* ═══ THE UNBLOCK PAGE MUST NOT ASK WHAT THIS RELEASE SETTLED (#994 · #834 · #482, review of 30 Sep) ═══════
+     tools/unblock/unblock.html is the one page he opens to answer everything, and its cards are data. The build
+     settled three of its questions and left the cards asking them: #406's "which duplicate preset save goes"
+     (the row it names is gone), #834's "Cancel or Close" (Close is built) and #482's "should speed sliders go
+     faster" (decided: no). And #482's Gradient Overlay card offered Keep / Gentler with no numbers, while the
+     note beside it said Keep = 1 — but the default has been 0.8 since v2.02, so a reply of "Gentler" read as 0.8
+     would have changed nothing. Each check below is conditional on the card still being there, so answering
+     and removing a card later cannot turn these red; the parse itself is the positive control. */
+  async function readUnblockPage() {
+    const res = await fetch('../tools/unblock/unblock.html?t=' + Date.now(), { cache: 'no-store' });
+    const src = res.ok ? await res.text() : '';
+    const m = /<script type="application\/json" id="unblock-data">([\s\S]*?)<\/script>/.exec(src);
+    if (!m) throw new Error('setup: could not read the card data from tools/unblock/unblock.html (HTTP ' + res.status + ')');
+    const data = JSON.parse(m[1]);
+    const cards = [];
+    (data.groups || []).forEach(g => (g.items || []).forEach(it => cards.push(Object.assign({ group: g.id }, it))));
+    if (cards.length < 20) throw new Error('setup: the unblock page parsed to only ' + cards.length + ' cards — the reader is broken, not the page');
+    if (!(data.groups || []).some(g => g.id === 'vetoes')) throw new Error('setup: the unblock page has no “Already decided” (vetoes) group to hold settled questions');
+    const words = c => [c.title, c.text].concat((c.options || []).map(o => o.join(' '))).join(' ');
+    return { cards, words };
+  }
+
+  test('994 the unblock page no longer asks which preset save goes — the layer ⋯ row it named is gone', { item: '994' }, async function () {
+    const { cards, words } = await readUnblockPage();
+    const asks = cards.filter(c => /save whole look as preset/i.test(words(c)));
+    if (asks.length) throw new Error('the unblock page still offers “Save whole look as preset” (card ' + asks.map(c => c.n + ' · #' + c.num).join(', ') + ') — #994 took that row off the layer ⋯ menu, so the question is settled and the card should go (#994 clause 3)');
+  });
+
+  test('834 the unblock page tells him the sketch bar says Close, rather than asking A or B', { item: '834' }, async function () {
+    const { cards } = await readUnblockPage();
+    const bar = cards.filter(c => /834/.test(String(c.num)) && /sketch bar/i.test(c.title || ''));
+    bar.forEach(function (c) {
+      if (c.group !== 'vetoes') throw new Error('card ' + c.n + ' (#834, “' + c.title + '”) still sits in “' + c.group + '” — B is built (the bar says Close), so it belongs under Already decided, where a tap only reverses it');
+      const keys = (c.options || []).map(o => o[0]);
+      if (keys.indexOf('B') >= 0 || (c.options || []).some(o => /rename it close/i.test(o[1]))) throw new Error('card ' + c.n + ' still offers renaming it Close — that is already built, so the only thing left to offer is A');
+      if (!/close/i.test(c.title + ' ' + c.text)) throw new Error('card ' + c.n + ' does not tell him the button now says Close');
+    });
+  });
+
+  test('482 the unblock page names Gradient Overlay’s real default as Keep, a gentler number as Gentler, and no longer asks about speed sliders', { item: '482' }, async function () {
+    const { cards } = await readUnblockPage();
+    const def = FM.fxRegistry.makeInstance('gradientoverlay').params.amount;
+    if (!(def > 0 && def <= 1)) throw new Error('setup: Gradient Overlay has no sane default amount (' + def + ')');
+    cards.filter(c => /gradient overlay/i.test(c.title || '') && c.kind === 'pick').forEach(function (c) {
+      const opt = k => ((c.options || []).filter(o => o[0] === k)[0] || [])[1] || '';
+      const num = s => { const m = /(\d*\.\d+|\d+)/.exec(s); return m ? parseFloat(m[1]) : NaN; };
+      const keep = opt('Keep'), gentler = opt('Gentler');
+      if (num(keep) !== def) throw new Error('card ' + c.n + '’s Keep reads “' + keep + '” — it must name the default the app really starts at, ' + def + ', or a reply cannot be applied (the note beside it said Keep = 1)');
+      if (!(num(gentler) < def)) throw new Error('card ' + c.n + '’s Gentler reads “' + gentler + '” — it must name a number below today’s ' + def + ', or picking it changes nothing');
+      if (c.rec && !(c.options || []).some(o => o[0] === c.rec)) throw new Error('card ' + c.n + ' recommends “' + c.rec + '”, which is not one of its options');
+    });
+    const speed = cards.filter(c => /speed slider/i.test(c.title || ''));
+    speed.forEach(function (c) {
+      if (c.group !== 'vetoes') throw new Error('card ' + c.n + ' (“' + c.title + '”) still asks in “' + c.group + '” — the speed sliders were decided (left as they are), so it belongs under Already decided');
+      if ((c.options || []).some(o => /^no\b/i.test(o[0]))) throw new Error('card ' + c.n + ' still offers “No, leave them” — that is what was decided; only the reverse is left to offer');
+    });
+  });
+
 })();
