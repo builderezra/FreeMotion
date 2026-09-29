@@ -110217,4 +110217,167 @@
     });
   });
 
+  /* ═══ 981 REVIEW — A DOUBLE-TAP MUST NOT PICK A CARD, AND AN OPEN MENU IS NOT RELIT ════════════════════════════════
+     With the menu opening in the tap's own click it covers the area about 90 ms into its 360 ms swing, so the SECOND tap
+     of a quick double-tap landed on whichever card had swung under the finger: a Captions layer was added, or Custom
+     shape's drawing bar opened (measured with real touches at 390x844). The #964 hold used to absorb it, because a
+     second press re-armed the hold, and nothing replaced that. Driven with a REAL finger (tests/_cdp.py). */
+  test('981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up picks nothing from it, even one that lifts after the menu has arrived', { item: '981', budgetMs: 60000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    const SAFE = ['Text', 'Captions', 'Adjustment', 'New group'];   // cards that only add a layer: no file picker, no camera
+    await onEmpty981(async function () {
+      const tl = document.getElementById('timeline'), r = tl.getBoundingClientRect();
+      // THE POINT: the middle of a card of the LANDED menu that sits over the empty area - measured, not assumed
+      FM.mobile.openAdd();
+      sheet.getAnimations().forEach(function (an) { an.finish(); });
+      await sleep(80);
+      const cards = [].slice.call(sheet.querySelectorAll('button.addmenu-card')).filter(function (b) { return SAFE.indexOf(b.title) >= 0; });
+      const spots = cards.map(function (b) { const q = b.getBoundingClientRect(); return { b: b, x: Math.round(q.left + q.width / 2), y: Math.round(q.top + q.height / 2) }; })
+        .filter(function (p) { const h = document.elementFromPoint(p.x, p.y); return h && p.b.contains(h) && p.y > r.top + 20 && p.y < r.bottom - 20 && p.x > r.left && p.x < r.right; });
+      FM.mobile.closeAdd();
+      await sleep(500);
+      if (!spots.length) throw new Error('setup: none of ' + SAFE.join(', ') + ' sits over the empty area once the menu has landed - nothing for the second tap to hit');
+      spots.sort(function (p, q) { return q.y - p.y; });   // the lowest: the swing covers it first
+      const x = spots[0].x, y = spots[0].y, label = spots[0].b.title;
+      /* 150 ms between the lift and the second press: the driver adds ~80, so the second press lands ~230 ms into the
+         360 ms swing - the menu is nearly up (a card is under the finger) and still arriving. Measured on the build that
+         shipped without a guard, the quick one picked the Adjustment card and added its layer.
+         THE HELD ONE lifts ~570 ms in, after the menu has arrived. A touch's click is hit-tested again at the lift, so a
+         guard that only covered the press let that click through to the card (measured: Captions, then a text layer). */
+      const cases = [['a quick second tap', 60], ['a second tap held until after the menu has arrived', 300]];
+      window.__fmLast981dbl = {};
+      for (const cs of cases) {
+        const what = cs[0];
+        [].slice.call(document.querySelectorAll('#timeline-panel .tl-areafx')).forEach(function (n) { n.remove(); });
+        if (!FM._isEmptyStart()) throw new Error('setup (' + what + '): not on the empty project screen');
+        hitIs927(x, y, tl, 'the empty area under the ' + label + ' card');
+        const layers0 = FM.scene.layers.length;
+        const rec = [];
+        let openAt = 0;
+        const on = function (e) {
+          if (!e.isTrusted) return;
+          const s = { type: e.type, t: performance.now(), target: e.target, under: null };
+          if (e.type === 'pointerdown') {
+            // what is under the finger right now, from the cards' own (mid-swing) boxes - whatever takes the hit
+            s.under = [].slice.call(sheet.querySelectorAll('button.addmenu-card')).filter(function (b) {
+              const q = b.getBoundingClientRect(); return e.clientX >= q.left && e.clientX <= q.right && e.clientY >= q.top && e.clientY <= q.bottom;
+            })[0] || null;
+          }
+          rec.push(s);
+        };
+        ['pointerdown', 'click'].forEach(function (k) { window.addEventListener(k, on, true); });
+        const mo = new MutationObserver(function () { if (!openAt && sheet.classList.contains('open')) openAt = performance.now(); });
+        mo.observe(sheet, { attributes: true, attributeFilter: ['class'] });
+        try {
+          await realInput924([{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 150 }, { t: 'touchStart', x: x, y: y, ms: cs[1] }, { t: 'touchEnd', x: x, y: y, ms: 0 }], 'a double-tap on the empty area (' + what + ')');
+          await sleep(700);
+        } finally { mo.disconnect(); ['pointerdown', 'click'].forEach(function (k) { window.removeEventListener(k, on, true); }); }
+        const downs = rec.filter(function (s) { return s.type === 'pointerdown'; }), clicks = rec.filter(function (s) { return s.type === 'click'; });
+        if (downs.length !== 2 || clicks.length !== 2) throw new Error('CONTROL (' + what + '): the double-tap did not arrive as two trusted presses and two clicks (' + downs.length + ' / ' + clicks.length + ') - this is not a real double-tap');
+        // 60 ms: the bound the first 981 test set from measurement (it opens 4-8 ms after the click; the #964 hold made it ~240)
+        if (!openAt || openAt > downs[1].t || openAt - clicks[0].t > 60) throw new Error(what + ': the first tap did not open the add menu straight away (' + (openAt ? Math.round(openAt - clicks[0].t) + ' ms after its click, ' + Math.round(downs[1].t - openAt) + ' ms before the second press' : 'never') + ') - #981 clause 1');
+        if (!downs[1].under) throw new Error('CONTROL (' + what + '): no card of the arriving menu was under the second tap (the ' + label + ' card at ' + x + ',' + y + '), so this proves nothing about a double-tap picking one');
+        const hitCard = downs[1].target instanceof Node && downs[1].under.contains(downs[1].target);
+        const clickCard = clicks[1].target instanceof Node && downs[1].under.contains(clicks[1].target);
+        window.__fmLast981dbl[what] = { open: Math.round(openAt - clicks[0].t), press2: Math.round(downs[1].t - clicks[0].t), click2: Math.round(clicks[1].t - clicks[0].t), click2OnCard: clickCard };
+        if (FM.scene.layers.length !== layers0) throw new Error(what + ' picked the ' + downs[1].under.title + ' card from the menu while it was still swinging up: ' + (FM.scene.layers.length - layers0) + ' layer(s) added (' + FM.scene.layers.map(function (l) { return l.type; }).join(', ') + ')');
+        if (hitCard) throw new Error(what + ': its press reached the ' + downs[1].under.title + ' card while the menu was still arriving');
+        if (FM.toolOwnsCanvas && FM.toolOwnsCanvas()) throw new Error(what + ': a tool took over the canvas after the double-tap on the empty area');
+        if (!sheet.classList.contains('open') || sheet.classList.contains('closing')) throw new Error(what + ': after the double-tap the add menu is not left open (open ' + sheet.classList.contains('open') + ', closing ' + sheet.classList.contains('closing') + ')');
+        // ONCE IT HAS ARRIVED THE CARDS TAKE TAPS AGAIN: the same point now hits the card - the guard lifts, and the point was real
+        sheet.getAnimations().forEach(function (an) { an.finish(); });
+        await sleep(80);
+        const h = document.elementFromPoint(x, y);
+        if (!h || !downs[1].under.contains(h)) throw new Error(what + ': the menu has landed and the ' + downs[1].under.title + ' card still cannot be tapped at ' + x + ',' + y + ' (the point hits ' + (h ? h.tagName + '.' + h.className : 'nothing') + ') - the double-tap guard did not lift');
+        FM.mobile.closeAdd();
+        await sleep(500);
+      }
+    });
+  });
+
+  test('981 review: with less motion the add menu arrives on its plain 220 ms slide, and its cards still take no tap for a double-tap window (300 ms) after the empty area opens it', { item: '981', budgetMs: 10000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    return onEmptyArea964(async function (c) {
+      /* The reduced-motion rule from styles.css, applied directly: this runner cannot switch the media query itself, and
+         the JS half of reduced motion (no lights) is 981's own test. What this measures is the guard's length. */
+      const st = document.createElement('style');
+      st.textContent = '#add-sheet.open { animation: none !important; transition: transform .22s ease !important; }';
+      document.head.appendChild(st);
+      try {
+        // a card of the landed menu, to hit-test (never tapped)
+        FM.mobile.openAdd();
+        sheet.getAnimations().forEach(function (an) { an.finish(); });
+        await c.sleep(60);
+        const card = [].slice.call(sheet.querySelectorAll('button.addmenu-card')).filter(function (b) {
+          const q = b.getBoundingClientRect(), h = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2);
+          return q.width > 0 && h && b.contains(h);
+        })[0];
+        if (!card) throw new Error('setup: no card of the landed add menu could be hit-tested');
+        const q = card.getBoundingClientRect(), x = q.left + q.width / 2, y = q.top + q.height / 2;   // while it is up
+        FM.mobile.closeAdd(); await c.sleep(450);
+        c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height / 2);
+        c.row.click();
+        const t0 = performance.now();
+        if (!sheet.classList.contains('open')) throw new Error('the press and click on the empty area did not open the add menu at once (#981 clause 1)');
+        // CONTROL: it is arriving on the slide, not the swing - this is the reduced-motion arrival
+        const an = sheet.getAnimations();
+        const slide = an.filter(function (a) { return a.transitionProperty === 'transform'; })[0];
+        if (!slide || Math.abs(slide.effect.getComputedTiming().duration - 220) > 1 || an.some(function (a) { return a.animationName === 'fm-hinge-up'; })) throw new Error('CONTROL: the menu is not arriving on the 220 ms reduced-motion slide (' + an.map(function (a) { return a.animationName || a.transitionProperty; }).join(', ') + ')');
+        // land it now, so what is timed below is the guard alone and not how many frames this runner gets
+        an.forEach(function (a) { a.finish(); });
+        let freeAt = 0, last = null;
+        while (performance.now() - t0 < 1500) {
+          // by its title: every opening redraws the menu, so the card measured above is not the same element
+          const h = document.elementFromPoint(x, y), hc = h && h.closest && h.closest('button.addmenu-card');
+          last = h;
+          if (hc && sheet.contains(hc) && hc.title === card.title) { freeAt = performance.now(); break; }
+          await c.sleep(8);
+        }
+        if (!freeAt) throw new Error('the ' + card.title + ' card never became tappable after the menu arrived - the guard never lifted (' + Math.round(x) + ',' + Math.round(y) + ' hits ' + (last ? last.tagName + '#' + last.id + '.' + String(last.className && last.className.baseVal !== undefined ? last.className.baseVal : last.className) : 'nothing') + ', sheet ' + sheet.className + ', transform ' + getComputedStyle(sheet).transform + ', viewport ' + innerWidth + 'x' + innerHeight + ', sheet box ' + JSON.stringify(sheet.getBoundingClientRect()) + ')');
+        const held = freeAt - t0;
+        window.__fmLast981rm = Math.round(held);
+        /* A timer never fires early, so with the 300 ms floor this reads 300 or more; with the guard set to the 220 ms slide
+           it read ~225. 290 sits between. */
+        if (held < 290) throw new Error('with less motion the ' + card.title + ' card took a tap ' + Math.round(held) + ' ms after the empty area opened the menu - a double-tap\'s second tap (up to 300 ms after the first) picks it');
+      } finally {
+        st.remove();
+        FM.mobile.closeAdd();
+        await c.sleep(450);
+      }
+    });
+  });
+
+  test('981 review: Enter on the empty add row while the add menu is already open does not run the lights round it again - they are for the menu as it arrives', { item: '981', budgetMs: 10000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    const enter = function (row) { row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); };
+    const rims = function () { return sheet.querySelectorAll('.add-sheet-rim').length; };
+    const clear = function () { [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); }); };
+    return onEmptyArea964(async function (c) {
+      try {
+        FM.variant.force('emptytap.start', 'bottom');
+        // CONTROL: Enter on the shut menu opens it at once with its lights
+        enter(c.row);
+        if (!sheet.classList.contains('open') || rims() !== 1) throw new Error('CONTROL: Enter on the empty add row did not open the add menu at once with its lights (open ' + sheet.classList.contains('open') + ', lights ' + rims() + ')');
+        // it lands, and its lights finish and go (their teardown, done here rather than waited for)
+        sheet.getAnimations().forEach(function (an) { an.finish(); });
+        clear();
+        await c.sleep(60);
+        // focus stays on the row, so a second Enter reaches it with the menu settled and open
+        enter(c.row);
+        if (!sheet.classList.contains('open')) throw new Error('a second Enter closed or lost the add menu');
+        if (rims()) throw new Error('a second Enter on the empty add row ran the lights round the already-open, settled menu again - they belong to the menu as it loads up');
+        // CONTROL: shut it, and the next Enter lights it again - a fresh arrival still gets its lights
+        FM.mobile.closeAdd(); await c.sleep(450);
+        clear();
+        enter(c.row);
+        if (!sheet.classList.contains('open') || rims() !== 1) throw new Error('CONTROL: after shutting it, Enter did not open the menu with its lights again (open ' + sheet.classList.contains('open') + ', lights ' + rims() + ')');
+      } finally {
+        try { sheet.getAnimations().forEach(function (an) { an.finish(); }); } catch (e) {}
+        FM.mobile.closeAdd();
+        clear();
+        await c.sleep(450);
+      }
+    });
+  });
+
 })();

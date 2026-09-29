@@ -3308,7 +3308,17 @@ window.FM = window.FM || {};
      it rides the swing with it, and it keeps the start this press drew (bottom-middle, or the edge nearest the finger).
      Reduced motion: no lights at all — the menu still opens at once (on its plain slide).
      Nothing can open behind Home any more: there is no timer left to fire after he has gone. The check below stays for
-     the one path that is not a tap — Enter on a row that kept focus after he left. */
+     the one path that is not a tap — Enter on a row that kept focus after he left.
+     ⚠️ THE ARRIVING MENU TAKES NO TAPS (#981 review). Opened in the tap's own click, the sheet covers the area ~90 ms
+     into its 360 ms swing, so the SECOND tap of a quick double-tap landed on whichever card had swung under the finger —
+     measured with real touches at 390x844: a Captions layer added, or Custom shape's drawing bar opened. The #964 hold
+     had absorbed that (a second press re-armed it). So while the sheet is still arriving its CONTENTS are not
+     hit-testable (`.is-arriving`, styles.css); the sheet itself still is, so the tap-away in js/app.js sees a tap ON the
+     menu and leaves it open. The guard lasts as long as the sheet's own arrival — the swing, or the plain slide under
+     reduced motion, read from its running animations rather than a copied number — and never less than a double-tap's
+     window; a press that began inside it has its click stopped too (see guardArrival).
+     And an already-open menu is not re-lit: Enter again on the row (it keeps focus) would have run a fresh lap round a
+     settled menu. The lights are for the menu AS IT LOADS UP. */
   let fxLastPress = null;   // {x, y, t, start} of the last press on the empty area
   const RIM_IN = 1.5;       // the rim runs this far inside the sheet's border box: ON the edge, not beside it
   function openFromArea() {
@@ -3316,9 +3326,12 @@ window.FM = window.FM || {};
     if (!(FM.mobile && FM.mobile.openAdd)) return;
     const press = fxLastPress && performance.now() - fxLastPress.t < 2000 ? fxLastPress : null;
     fxLastPress = null;
-    FM.mobile.openAdd();
     const sheet = document.getElementById('add-sheet');
+    const wasOpen = !!(sheet && sheet.classList.contains('open'));
+    FM.mobile.openAdd();
     if (!sheet || !sheet.classList.contains('open')) return;   // a Viewer adds nothing (openAdd refused), so no lights
+    if (wasOpen) return;                                          // nothing is arriving: no guard, no second lap
+    guardArrival(sheet);
     if (!menuRim(sheet, press)) return;
     // the area's lap hands over to the menu's
     const panel = document.getElementById('timeline-panel');
@@ -3328,6 +3341,33 @@ window.FM = window.FM || {};
       lap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-out', fill: 'forwards' });
       fxTeardown(lap, 200);
     }
+  }
+  /* A double-tap's second tap comes within this of the first one's lift (the usual platform window). The guard never
+     lifts sooner, so the plain 220 ms slide under reduced motion protects a double-tap as well as the 360 ms swing —
+     measured with real touches at 390x844: with 220 ms a second press 229 ms after the first lift picked Custom shape. */
+  const DOUBLE_TAP_MS = 300;
+  function guardArrival(sheet) {
+    let ms = DOUBLE_TAP_MS;   // …or what is left of the sheet's own arrival (fm-hinge-up, or the slide), if longer
+    sheet.getAnimations().forEach(function (an) {
+      const t = an.effect && an.effect.getComputedTiming ? an.effect.getComputedTiming() : null;
+      if (t && isFinite(t.endTime)) ms = Math.max(ms, t.endTime - (+an.currentTime || 0));
+    });
+    /* A PRESS THAT BEGAN WHILE IT ARRIVED KEEPS NOTHING, EVEN IF IT LIFTS AFTER. A touch's click is hit-tested again at the
+       lift, not where the press landed — measured: a second press on the arriving sheet, its lift a few ms after the guard
+       came off, and the click went to the Captions card under it. So the click of a press begun during the arrival is
+       stopped here, before it reaches any card. Once, on the sheet itself, capture phase. */
+    if (!sheet._arriveHooked) {
+      sheet._arriveHooked = true;
+      sheet.addEventListener('pointerdown', function () { sheet._arrivePressAt = sheet.classList.contains('is-arriving') ? performance.now() : 0; }, true);
+      sheet.addEventListener('click', function (e) {
+        const at = sheet._arrivePressAt;
+        sheet._arrivePressAt = 0;
+        if (at && performance.now() - at < 1500) { e.stopPropagation(); e.preventDefault(); }
+      }, true);
+    }
+    clearTimeout(sheet._arriveTimer);
+    sheet.classList.add('is-arriving');
+    sheet._arriveTimer = setTimeout(function () { sheet._arriveTimer = 0; sheet.classList.remove('is-arriving'); }, Math.ceil(ms));
   }
   function menuRim(sheet, press) {
     [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
