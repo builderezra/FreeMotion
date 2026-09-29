@@ -4953,14 +4953,23 @@
         const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
         FM.renderScene(c.getContext('2d'), FM.scene, 1);
         const d = c.getContext('2d').getImageData(0, 0, P.width, P.height).data;
-        let n = 0, sp = 0, lu = 0;
+        /* TONE IS READ IN THE CENTRE BOX (#986 C8), the way #675's measurement already reads it: Noir carries a
+           vignette, and over the whole frame its corner fall-off was being counted as its tone. That only ever passed
+           because a SHAPE's vignette used to be a different, lighter curve from a photo's — on a photo, which is what
+           this flat frame stands for, Noir and Ink already read 52 and 54 over the whole frame. In the centre they are
+           72 and 54, which is the difference you see. Colour spread still covers the whole frame. */
+        const x0 = P.width * 0.3, x1 = P.width * 0.7, y0 = P.height * 0.3, y1 = P.height * 0.7;
+        let n = 0, sp = 0, lu = 0, nc = 0;
         for (let i = 0; i < d.length; i += 4) {
           if (d[i + 3] < 8) continue;
           sp += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
-          lu += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
           n++;
+          const px = (i >> 2) % P.width, py = ((i >> 2) / P.width) | 0;
+          if (px < x0 || px > x1 || py < y0 || py > y1) continue;
+          lu += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          nc++;
         }
-        return n ? { spread: sp / n, mean: lu / n } : null;
+        return n && nc ? { spread: sp / n, mean: lu / nc } : null;
       };
       const base = stats(null);
       if (!base || base.spread < 40) throw new Error('the test subject is not colourful enough to tell desaturation from a no-op (spread ' + (base && base.spread) + ')');
@@ -111582,6 +111591,260 @@
       try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
       await hcCleanup(made, orig, wasOpen);
     }
+  });
+
+  /* ═══ #986 — the render bugs the #966 inventory found by READING the code (hunt HIGH), each reproduced with a
+   * measurement before it was fixed. Every one of these fails on 913186b6. ═══════════════════════════════════════ */
+  const _986shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return { d: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height };
+  };
+  const _986fx = (type, params) => { const e = FM.fxRegistry.makeInstance(type); if (!e) throw new Error('no registry entry for ' + type); Object.assign(e.params, params || {}); return e; };
+
+  test('986 C1 a filter on an adjustment layer grades what is below it, and its Strength fades it', { item: '986' }, function () {
+    /* He sees "Added 1 filter" on an adjustment layer and the picture does not change. MEASURED on 913186b6: a
+       Grayscale inside a filter left the red frame (232,68,63) exactly red, while the same Grayscale placed directly
+       greyed it to (103,103,103). */
+    const W = 120, H = 90;
+    const sceneOf = (effects, op) => {
+      const bg = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 120, shapeH: 90, fill: '#e8443f' }); bg.start = 0; bg.duration = 4;
+      const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = effects;
+      if (op != null) A.transform.opacity = op;
+      return [A, bg];
+    };
+    const at = (effects, op, rs) => { const r = _986shot(sceneOf(effects, op), 0.5, W, H, rs); const i = ((r.h >> 1) * r.w + (r.w >> 1)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]]; };
+    const box = (kids, s) => { const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = kids; if (s != null) b.params.strength = s; return b; };
+    const near = (a, b, tol) => Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol;
+    const bad = [];
+    for (const rs of [1, 0.4]) {
+      const none = at([], null, rs), direct = at([_986fx('grayscale')], null, rs);
+      if (!(Math.abs(direct[0] - direct[1]) < 6 && none[0] - direct[0] > 60)) throw new Error('CONTROL at scale ' + rs + ': a Grayscale placed directly on the adjustment layer gave ' + direct + ' over ' + none + ' — the fixture is not grading at all');
+      const full = at([box([_986fx('grayscale')])], null, rs);
+      if (!near(full, direct, 2)) bad.push('scale ' + rs + ': a filter holding Grayscale gave ' + full + ' where the Grayscale on its own gives ' + direct + ' (nothing graded: ' + none + ')');
+      const half = at([box([_986fx('grayscale')], 0.5)], null, rs), mid = [0, 1, 2].map(k => (none[k] + direct[k]) / 2);
+      if (!near(half, mid, 3)) bad.push('scale ' + rs + ': Strength 0.5 gave ' + half + ', not halfway (' + mid.map(Math.round) + ') between ungraded and graded');
+      const zero = at([box([_986fx('grayscale')], 0)], null, rs);
+      if (!near(zero, none, 1)) bad.push('scale ' + rs + ': Strength 0 gave ' + zero + ', not the ungraded ' + none);
+      const tintD = at([_986fx('tint')], null, rs), tintF = at([box([_986fx('tint')])], null, rs);
+      if (near(tintD, none, 10)) throw new Error('CONTROL: Tint on its own does nothing to this frame');
+      if (!near(tintF, tintD, 2)) bad.push('scale ' + rs + ': a filter holding Tint (a per-pixel grade) gave ' + tintF + ' where Tint on its own gives ' + tintD);
+      const op = at([box([_986fx('grayscale')], 0.5)], 0.5, rs), opMid = [0, 1, 2].map(k => none[k] + (direct[k] - none[k]) * 0.25);
+      if (!near(op, opMid, 3)) bad.push('scale ' + rs + ': Strength 0.5 at layer opacity 50% gave ' + op + ', not a quarter of the way (' + opMid.map(Math.round) + ')');
+    }
+    /* …and through the path he uses: a filter from the library, fitted to an adjustment layer the way Add fits it. */
+    const adjProbe = FM.makeLayer('adjustment', { name: 'probe' });
+    const lib = (FM.filters && FM.filters.all ? FM.filters.all() : []).map(f => FM.fxRegistry.fitToLayer(FM.filters.makeInstance(f.id), adjProbe)).filter(Boolean);
+    if (!lib.length) throw new Error('CONTROL: no library filter fits an adjustment layer, so the Filters tab is not offering anything here');
+    const none = at([], null, 1);
+    const moved = lib.filter(b => !near(at([b], null, 1), none, 3)).length;
+    if (moved < Math.min(3, lib.length)) bad.push('only ' + moved + ' of the ' + lib.length + ' library filters that fit an adjustment layer change the picture under it');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C24 on a device without ctx.filter, Halation, Compound Blur, Backfill, Liquid Glass and Motion Blur (Footage) keep their blur', { item: '986', budgetMs: 90000 }, function () {
+    /* Only the nine CSS effects asked ctxFilterOK(); these five set ctx.filter = 'blur(…)' regardless, and on his
+       class of phone that string is silently IGNORED. FM._forceNoCtxFilter alone cannot show it — the effects never
+       asked — so ctx.filter is made genuinely dead for the duration (the descriptor swap queue 836's test uses).
+       MEASURED on 913186b6, mean error against the real filter as a share of the effect's own size: Compound Blur 1.00
+       (it stayed sharp), Halation 0.70, Liquid Glass 0.66, Backfill 0.50, Motion Blur (Footage) 0.28. */
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter in this browser, so there is no reference picture to compare against');
+    if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available, so his phone’s path cannot be exercised: ' + (FM.glColor ? FM.glColor.stats().reason : 'no FM.glColor'));
+    const W = 200, H = 150;
+    const render = (layers, t) => _986shot(layers, t, W, H).d;
+    const mean = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3]); return s / (a.length / 4); };
+    const art = document.createElement('canvas'); art.width = 80; art.height = 60;
+    const ax = art.getContext('2d'); for (let y = 0; y < 60; y += 10) for (let x = 0; x < 80; x += 10) { ax.fillStyle = ((x / 10 + y / 10) % 2) ? '#ff2d55' : '#0a84ff'; ax.fillRect(x, y, 10, 10); }
+    const had = FM.media.get('_986c24');
+    FM.media.set('_986c24', { kind: 'image', el: art, width: 80, height: 60, duration: 0 });
+    const photo = (fx, sc) => { const l = FM.makeLayer('image', { x: 100, y: 75, start: 0, duration: 4 }); l.id = '_986c24'; l.transform.scale = sc || 1; l.effects = fx; return l; };
+    const cases = {
+      'Halation': (on) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 75, shapeW: 60, shapeH: 44, fill: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = on ? [_986fx('halation')] : []; return () => render([L]); },
+      'Compound Blur': (on) => { const map = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 75, shapeW: 100, shapeH: 150, fill: '#ffffff' }); map.start = 0; map.duration = 4; const L = photo(on ? [_986fx('compoundblur', { source: map.id })] : [], 2); return () => render([L, map]); },
+      'Backfill': (on) => { const L = photo(on ? [_986fx('fillbehind', { blur: 16, dim: 0 })] : []); return () => render([L]); },
+      'Liquid Glass': (on) => { const L = photo(on ? [_986fx('liquidglass')] : [], 2); return () => render([L]); },
+      // the frame-to-frame history has to be warmed on ONE layer object, or there is no motion to read
+      'Motion Blur (Footage)': (on) => { const l = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 75, shapeW: 40, shapeH: 40, fill: '#ffffff' }); l.start = 0; l.duration = 10;
+        l.effects = [{ type: 'orbit', enabled: true, params: { radius: 40, speed: 2 } }].concat(on ? [{ type: 'motionflow', enabled: true, params: { style: 1, amount: 2, samples: 10, threshold: 0.05, softness: 0.5 } }] : []);
+        return () => { [0.8, 0.833, 0.867, 0.9, 0.933].forEach(t => render([l], t)); return render([l], 0.9667); }; },
+    };
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    const was = { force: FM._forceNoCtxFilter, noGL: FM._noGL };
+    const bad = [];
+    try {
+      for (const name in cases) {
+        FM._forceNoCtxFilter = false; FM._noGL = false; FM.glColor._reset();
+        const ref = cases[name](1)(), bare = cases[name](0)();
+        const size = mean(ref, bare);
+        if (!(size > 1)) throw new Error('CONTROL: ' + name + ' changes the picture by only ' + size.toFixed(2) + ' with ctx.filter working — the fixture is not showing the effect');
+        for (const noGL of [false, true]) {
+          if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, get: function () { return 'none'; }, set: function () {} });
+          FM._forceNoCtxFilter = true; FM._noGL = noGL; FM.glColor._reset();
+          let dead;
+          try { dead = cases[name](1)(); } finally { if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc); FM._forceNoCtxFilter = false; FM._noGL = false; }
+          const err = mean(dead, ref), lim = noGL ? 0.15 : 0.1;
+          if (!(err <= size * lim)) bad.push(name + (noGL ? ' (no WebGL either)' : '') + ' misses the real filter by ' + err.toFixed(2) + ' — ' + (err / size).toFixed(2) + ' of the effect itself (' + size.toFixed(2) + ')');
+        }
+      }
+    } finally {
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      FM._forceNoCtxFilter = was.force; FM._noGL = was.noGL; FM.glColor._reset();
+      if (had) FM.media.set('_986c24', had); else if (FM.media.remove) FM.media.remove('_986c24');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C8 Vignette is one renderer: every vignette runs, first in the stack on every layer, and never darkens a transparent corner', { item: '986' }, function () {
+    /* MEASURED on 913186b6: a second vignette on a photo changed the corner from 351 to 351 (only the first ran); a round
+       PNG over blue had the transparent corner of its box painted to 14 where the blue behind reads 336 (sum of RGB);
+       the same Vignette on a flat full-frame photo and on a flat full-frame shape of the same colour differed by up to 24
+       (two curves); and on a shape it ran in row order while a photo's always ran first. */
+    const W = 240, H = 320;
+    const flat = document.createElement('canvas'); flat.width = W; flat.height = H; const fx0 = flat.getContext('2d'); fx0.fillStyle = '#e0e0e0'; fx0.fillRect(0, 0, W, H);
+    const disc = document.createElement('canvas'); disc.width = 120; disc.height = 120; const dx0 = disc.getContext('2d'); dx0.fillStyle = '#d0a040'; dx0.beginPath(); dx0.arc(60, 60, 58, 0, Math.PI * 2); dx0.fill();
+    const saved = ['_986flat', '_986disc'].map(k => [k, FM.media.get(k)]);
+    FM.media.set('_986flat', { kind: 'image', el: flat, width: W, height: H, duration: 0 });
+    FM.media.set('_986disc', { kind: 'image', el: disc, width: 120, height: 120, duration: 0 });
+    const img = (id, fx) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = id; l.transform.scale = 1; l.effects = fx; return l; };
+    const V = (a, s) => _986fx('vignette', { amount: a, size: s });
+    const sum = (r, x, y) => { const i = (y * r.w + x) * 4; return r.d[i] + r.d[i + 1] + r.d[i + 2]; };
+    const bad = [];
+    try {
+      // every vignette counts
+      const one = _986shot([img('_986flat', [V(0.5, 30)])], 0.5, W, H), two = _986shot([img('_986flat', [V(0.5, 30), V(0.5, 30)])], 0.5, W, H);
+      if (!(sum(one, 4, 4) < 600)) throw new Error('CONTROL: one vignette left the corner at ' + sum(one, 4, 4));
+      if (!(sum(two, 4, 4) < sum(one, 4, 4) - 60)) bad.push('a second Vignette on a photo changed the corner from ' + sum(one, 4, 4) + ' to ' + sum(two, 4, 4) + ' — only the first one runs');
+      // the same place in the stack on every layer: innermost, where a clip has always drawn it (every film filter was
+      // tuned on photographs with it there). A photo already did this; a shape took it in row order.
+      const thr = () => _986fx('threshold', { level: 0.5 });
+      const flatShape = (fx) => { const s = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#e0e0e0' }); s.start = 0; s.duration = 4; s.effects = fx; return s; };
+      const cmp = (a, b) => { let n = 0; for (let i = 0; i < a.d.length; i += 4) if (Math.abs(a.d[i] - b.d[i]) > 30) n++; return n; };
+      const pTV = _986shot([img('_986flat', [thr(), V(0.9, 10)])], 0.5, W, H), pVT = _986shot([img('_986flat', [V(0.9, 10), thr()])], 0.5, W, H);
+      const sTV = _986shot([flatShape([thr(), V(0.9, 10)])], 0.5, W, H), sVT = _986shot([flatShape([V(0.9, 10), thr()])], 0.5, W, H);
+      if (cmp(pVT, _986shot([img('_986flat', [thr()])], 0.5, W, H)) < 200) throw new Error('CONTROL: the vignette under a Threshold did not change which pixels cross it');
+      if (cmp(pTV, pVT) > 0) bad.push('a photo’s vignette no longer runs first: Threshold then Vignette and Vignette then Threshold differ in ' + cmp(pTV, pVT) + ' px — every filter’s look on a clip moves');
+      if (cmp(sTV, sVT) > 0) bad.push('on a shape, Threshold then Vignette and Vignette then Threshold differ in ' + cmp(sTV, sVT) + ' px — the vignette sits in a different place than on a photo');
+      if (cmp(sTV, pTV) > 0) bad.push('the same stack on a flat photo and a flat shape differs in ' + cmp(sTV, pTV) + ' px');
+      // transparent corners stay transparent
+      const blue = () => { const b = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#3060c0' }); b.start = 0; b.duration = 4; return b; };
+      const png = _986shot([img('_986disc', [V(1, 0)]), blue()], 0.5, W, H), bare = _986shot([blue()], 0.5, W, H);
+      const cx = W / 2 - 58, cy = H / 2 - 58;   // the disc's box corner: transparent in the PNG
+      if (Math.abs(sum(png, cx, cy) - sum(bare, cx, cy)) > 6) bad.push('the transparent corner of a round PNG reads ' + sum(png, cx, cy) + ' over a background of ' + sum(bare, cx, cy) + ' — the vignette painted where the picture has nothing');
+      if (!(sum(png, W / 2, H / 2 - 50) < sum(_986shot([img('_986disc', []), blue()], 0.5, W, H), W / 2, H / 2 - 50) - 30)) bad.push('the vignette no longer darkens the PNG’s own edge');
+      // one look, whatever the layer is
+      const shape = () => { const s = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#e0e0e0' }); s.start = 0; s.duration = 4; s.effects = [V(0.6, 35)]; return s; };
+      const a = _986shot([img('_986flat', [V(0.6, 35)])], 0.5, W, H), b = _986shot([shape()], 0.5, W, H);
+      let worst = 0; for (let i = 0; i < a.d.length; i += 4) worst = Math.max(worst, Math.abs(a.d[i] - b.d[i]));
+      if (worst > 3) bad.push('the same Vignette on a full-frame photo and on a full-frame shape of the same colour differs by up to ' + worst + ' — two renderers');
+      // …and the photo keeps the gradient it always had: colour × (1 − amount·q), q from Size out to the half-diagonal
+      const R = Math.hypot(W, H) / 2; let off = 0;
+      for (const [x, y] of [[4, 4], [120, 160], [30, 300], [230, 20], [120, 10], [10, 160]]) {
+        const q = Math.min(1, Math.max(0, (Math.hypot(x + 0.5 - W / 2, y + 0.5 - H / 2) / R - 0.35) / 0.65));
+        off = Math.max(off, Math.abs(a.d[(y * W + x) * 4] - 0xe0 * (1 - 0.6 * q)));
+      }
+      if (off > 2.5) bad.push('a photo’s vignette is ' + off.toFixed(1) + ' levels off the gradient every video has always had');
+    } finally { saved.forEach(([k, v]) => { if (v) FM.media.set(k, v); else if (FM.media.remove) FM.media.remove(k); }); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C22 Drop Shadow draws under the soft edge of a letter and under a see-through layer', { item: '986' }, function () {
+    /* `if (dsa>0) continue` skipped every pixel with any alpha. MEASURED on 913186b6: of the 50 anti-aliased edge pixels
+       of an O that sit over its own shadow, all 50 were exactly as light as with no shadow at all (mean 197.8) — a light
+       seam between the letter and its shadow. */
+    const W = 160, H = 100;
+    const ds = () => _986fx('dropshadow', { distance: 10, angle: 45, softness: 0, color: '#000000', opacity: 100 });
+    const txt = (fx) => { const L = FM.makeLayer('text', { text: 'O', x: 80, y: 50, fontSize: 70, color: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const a = _986shot([txt([ds()])], 0.5, W, H, null, '#808080').d, b = _986shot([txt([])], 0.5, W, H, null, '#808080').d;
+    const o = Math.round(Math.cos(Math.PI / 4) * 10);
+    let n = 0, seam = 0, sA = 0, sB = 0, shadowPx = 0;
+    for (let y = o + 1; y < H - 1; y++) for (let x = o + 1; x < W - 1; x++) {
+      const i = (y * W + x) * 4, j = ((y - o) * W + (x - o)) * 4;
+      if (b[i] <= 130 && b[j] >= 250 && a[i] < 20) shadowPx++;
+      if (b[i] > 140 && b[i] < 240 && b[j] >= 250) { n++; sA += a[i]; sB += b[i]; if (a[i] > b[i] - 2) seam++; }
+    }
+    if (!(shadowPx > 100)) throw new Error('CONTROL: the shadow itself did not draw (' + shadowPx + ' dark px where it should lie)');
+    if (!(n > 20)) throw new Error('CONTROL: found only ' + n + ' soft edge pixels over the shadow — the fixture is not anti-aliased');
+    const bad = [];
+    if (seam > n * 0.1) bad.push(seam + ' of ' + n + ' soft edge pixels over the shadow are no darker than with no shadow (mean ' + (sA / n).toFixed(1) + ' vs ' + (sB / n).toFixed(1) + ') — a light seam round the letter');
+    // a half-transparent square casts its shadow behind itself too
+    const half = document.createElement('canvas'); half.width = 60; half.height = 40; const hx = half.getContext('2d'); hx.fillStyle = 'rgba(255,255,255,0.5)'; hx.fillRect(0, 0, 60, 40);
+    const had = FM.media.get('_986half');
+    FM.media.set('_986half', { kind: 'image', el: half, width: 60, height: 40, duration: 0 });
+    try {
+      const sq = (fx) => { const l = FM.makeLayer('image', { x: 70, y: 45, start: 0, duration: 4 }); l.id = '_986half'; l.transform.scale = 1; l.effects = fx; return l; };
+      const s = _986shot([sq([ds()])], 0.5, W, H, null, '#808080').d, s0 = _986shot([sq([])], 0.5, W, H, null, '#808080').d;
+      const over = ((45 + 15) * W + (70 + 20)) * 4;   // inside the square AND over its own shadow
+      if (!(s[over] < s0[over] - 30)) bad.push('a 50% see-through square reads ' + s[over] + ' over its own shadow and ' + s0[over] + ' with no shadow — it casts no shadow behind itself');
+      const clear = ((45 - 15) * W + (70 - 25)) * 4;  // inside the square, outside the shadow
+      if (Math.abs(s[clear] - s0[clear]) > 2) bad.push('the part of the square with no shadow behind it changed (' + s0[clear] + ' → ' + s[clear] + ')');
+    } finally { if (had) FM.media.set('_986half', had); else if (FM.media.remove) FM.media.remove('_986half'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C27 Shake, Swing, Spin, Pulse, Trail and Scatter Array draw what is past the frame edge instead of empty space', { item: '986', budgetMs: 60000 }, function () {
+    /* A clip scaled up so a shake cannot show its edges showed them anyway. MEASURED on 913186b6 on a frame-filling
+       rectangle at 130%: up to 4056 transparent pixels a frame with Shake, 2384 with Swing, 10560 with Pulse; and the
+       copies Trail and Scatter make of a clip half off the frame were copies of the half. */
+    const W = 200, H = 150, bad = [];
+    const big = (fx) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 75, shapeW: 200, shapeH: 150, fill: '#40c080' }); L.start = 0; L.duration = 4; L.transform.scale = 1.3; L.effects = fx; return L; };
+    const holes = (r) => { let n = 0; for (let i = 3; i < r.d.length; i += 4) if (r.d[i] < 250) n++; return n; };
+    const cases = {
+      'Shake': () => [_986fx('shake', { amount: 20, twist: 0, speed: 3 })],
+      'Shake with twist and smear': () => [_986fx('shake', { amount: 10, twist: 6, speed: 3, smear: 1 })],
+      'Swing': () => [_986fx('swing', { angle: 10, pivotx: 50, pivoty: 50 })],
+      'Pulse': () => [_986fx('pulse', { amount: 0.2, speed: 1 })],
+    };
+    if (holes(_986shot([big([])], 0.5, W, H, null, null)) !== 0) throw new Error('CONTROL: the 130% rectangle does not cover the frame on its own');
+    for (const name in cases) for (const rs of [1, 0.4]) {
+      let worst = 0; for (const t of [0.3, 0.7, 1.1, 1.6, 2.2]) worst = Math.max(worst, holes(_986shot([big(cases[name]())], t, W, H, rs, null)));
+      if (worst) bad.push(name + ' leaves ' + worst + ' transparent pixels at scale ' + rs + ' on a layer that covers the frame with room to spare');
+    }
+    // Spin, against the truth: the same rectangle simply rotated by the same angle about the same point
+    for (const rs of [1, 0.4]) {
+      const spun = _986shot([big([_986fx('spin', { speed: 20 })])], 0.4, W, H, rs, null);
+      const truthL = big([]); truthL.transform.rotation = 8;
+      const truth = _986shot([truthL], 0.4, W, H, rs, null);
+      let off = 0; for (let i = 3; i < spun.d.length; i += 4) if (Math.abs(spun.d[i] - truth.d[i]) > 64) off++;
+      if (off > spun.d.length / 4 * 0.005) bad.push('Spin at 8° differs from the rectangle rotated 8° in ' + off + ' pixels at scale ' + rs);
+    }
+    // Trail and Scatter: a 40px square half off the left edge, against a 30px one that is exactly its visible half —
+    // the same on-frame box, so the same copies in the same places; only what lies past the edge differs.
+    const sq = (x, w, fx) => { const L = FM.makeLayer('shape', { shape: 'rect', x: x, y: 75, shapeW: w, shapeH: 40, fill: '#ff0000' }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const ink = (r) => { let n = 0; for (let i = 3; i < r.d.length; i += 4) if (r.d[i] > 128) n++; return n; };
+    const reps = { 'Trail': () => [_986fx('linearrepeat', { count: 3, spacing: 150 })], 'Scatter Array': () => [_986fx('scatterarray', { count: 6, spread: 150, rotate: 0, sizevary: 0, fade: 0 })] };
+    for (const name in reps) {
+      const whole = ink(_986shot([sq(10, 40, reps[name]())], 0.5, W, H, null, null)), cut = ink(_986shot([sq(15, 30, reps[name]())], 0.5, W, H, null, null));
+      if (!(cut > 1500)) throw new Error('CONTROL: ' + name + ' drew only ' + cut + ' px from the visible half — it is not repeating');
+      if (!(whole > cut + 300)) bad.push(name + ' of a square half off the frame drew ' + whole + ' px against ' + cut + ' for its visible half alone — its copies are copies of the half');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C39 Mirror renders its layer on the preview plate, not at full project size', { item: '986' }, function () {
+    /* Mirror sized its plate from the PROJECT: on the phone's reduced plate it rendered the layer at full resolution
+       every frame just to shrink it again, and everything nested inside it ran at that size too. MEASURED on 913186b6
+       with a spy kernel under the Mirror, on a 0.25 plate of a 400x300 project: it was handed 400x300 at scale 1. */
+    const T = FM._FX_TABLES;
+    if (!T || !T.POSTFX || !T.PIXEL_FX) throw new Error('FM._FX_TABLES is not reachable, so the plate cannot be observed');
+    const seen = [];
+    T.POSTFX.__spy986 = 1; T.PIXEL_FX.__spy986 = function (d, W, H, p, t, ps) { seen.push([W, H, ps]); };
+    const W = 400, H = 300;
+    const L = () => { const l = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 150, shapeW: 120, shapeH: 100, fill: '#ff8800' }); l.start = 0; l.duration = 4; l.effects = [{ type: '__spy986', enabled: true, params: {} }, _986fx('mirror')]; return l; };
+    const ink = (r) => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] > 128) n++; return n; };
+    try {
+      const full = _986shot([L()], 0.5, W, H);
+      if (!seen.length) throw new Error('CONTROL: the spy under the Mirror never ran');
+      if (seen[0][0] !== W || seen[0][1] !== H || seen[0][2] !== 1) throw new Error('CONTROL: at full size the Mirror’s plate is ' + seen[0] + ', not ' + [W, H, 1]);
+      seen.length = 0;
+      const small = _986shot([L()], 0.5, W, H, 0.25);
+      if (!seen.length) throw new Error('the spy under the Mirror never ran on the reduced plate');
+      const [pw, ph, ps] = seen[0];
+      if (pw > W * 0.25 + 1 || ph > H * 0.25 + 1 || ps !== 0.25) throw new Error('on a 0.25 preview the Mirror rendered its layer into a ' + pw + 'x' + ph + ' plate at scale ' + ps + ' — full project size, ' + Math.round(pw * ph / (W * H * 0.0625)) + 'x the pixels the preview shows');
+      const a = ink(full), b = ink(small) * 16;
+      if (Math.abs(a - b) > a * 0.03) throw new Error('the reduced Mirror draws ' + b + ' px (scaled) against ' + a + ' at full size — the picture changed');
+    } finally { delete T.POSTFX.__spy986; delete T.PIXEL_FX.__spy986; }
   });
 
 })();

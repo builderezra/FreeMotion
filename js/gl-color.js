@@ -79,6 +79,9 @@
     'uniform float sigma;',
     'uniform int taps;',
     'uniform float flip;',
+    /* #986 C24: 1 on the SECOND pass of a premultiplied blur (see `blur`'s opts) — divides the colour back out of
+       the alpha. 0 everywhere else, which leaves the output exactly the expression it always was. */
+    'uniform float unpremul;',
     'void main(){',
     '  vec2 base = vec2(uv.x, flip > 0.5 ? 1.0 - uv.y : uv.y);',
     '  vec2 st = vec2(step.x, flip > 0.5 ? -step.y : step.y);',
@@ -91,7 +94,9 @@
     '    acc += texture2D(src, base + st * fi) * w;',
     '    wsum += w;',
     '  }',
-    '  gl_FragColor = acc / max(wsum, 1e-5);',
+    '  vec4 o = acc / max(wsum, 1e-5);',
+    '  if (unpremul > 0.5) o.rgb = o.a > 0.0 ? min(o.rgb / o.a, vec3(1.0)) : vec3(0.0);',
+    '  gl_FragColor = o;',
     '}'
   ].join('\n');
 
@@ -119,7 +124,7 @@
     _blurProg = p;
     _ub = { src: g.getUniformLocation(p, 'src'), step: g.getUniformLocation(p, 'step'),
             sigma: g.getUniformLocation(p, 'sigma'), taps: g.getUniformLocation(p, 'taps'),
-            flip: g.getUniformLocation(p, 'flip') };
+            flip: g.getUniformLocation(p, 'flip'), unpremul: g.getUniformLocation(p, 'unpremul') };
     _stats.compiled++;
     return p;
   }
@@ -275,7 +280,13 @@
      * whether `blur(Npx)` means a standard deviation of N or of N/2, and the only answer that matters is
      * the one that matches what `ctx.filter` actually draws on this machine. The suite compares the two
      * and would fail on a wrong constant, so the number below is the one that agreed. */
-    blur: function (srcCanvas, W, H, radiusPx) {
+    /* `opts.premul` (#986 C24): blur the PREMULTIPLIED picture, which is what ctx.filter's blur does. The default
+       (off) blurs the straight colour, so a transparent neighbour pulls the colour toward black — invisible on the
+       opaque layers the CSS-effect fallback was measured on, but a soft mask or a glow on transparency (Halation's
+       highlight wash, Liquid Glass's frost edge, a feathered matte) comes out as a dark fringe that the real filter
+       never draws. Off, every byte is what it was. */
+    blur: function (srcCanvas, W, H, radiusPx, opts) {
+      const premul = !!(opts && opts.premul);
       if (FM._noGL) { _stats.cpu++; return null; }
       if (!srcCanvas || !(W > 0) || !(H > 0) || !(radiusPx > 0.05)) { _stats.cpu++; return null; }
       const g = gl();
@@ -316,9 +327,12 @@
         g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, _fbTex, 0);
         g.activeTexture(g.TEXTURE0);
         g.bindTexture(g.TEXTURE_2D, _tex);
-        g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, srcCanvas);
+        if (premul) g.pixelStorei(g.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        try { g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, srcCanvas); }
+        finally { if (premul) g.pixelStorei(g.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); }   // the colour path relies on it staying off
         g.uniform2f(_ub.step, 1 / W, 0);
         g.uniform1f(_ub.flip, 1);      // the canvas upload is top-down; the framebuffer is not
+        g.uniform1f(_ub.unpremul, 0);  // pass 1 stays premultiplied in the framebuffer
         g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT);
         g.drawArrays(g.TRIANGLES, 0, 3);
 
@@ -327,6 +341,7 @@
         g.bindTexture(g.TEXTURE_2D, _fbTex);
         g.uniform2f(_ub.step, 0, 1 / H);
         g.uniform1f(_ub.flip, 0);      // …and pass 2 reads a framebuffer, which is already bottom-up
+        g.uniform1f(_ub.unpremul, premul ? 1 : 0);
         g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT);
         g.drawArrays(g.TRIANGLES, 0, 3);
 

@@ -1639,6 +1639,108 @@ window.FM = window.FM || {};
     return _ctxFilterOK;
   }
   FM.ctxFilterOK = ctxFilterOK;
+  /* ═══ A BLUR THAT STILL BLURS WHERE ctx.filter DOES NOTHING (#986 C24, hunt) ═══════════════════════════════════════
+   * ctxFilterOK() above was consulted by the nine CSS effects and by nothing else, so five effects that build their
+   * look out of `ctx.filter = 'blur(…)'` lost it silently on a device without ctx.filter — his phone's class of device,
+   * the one queue 661 exists for: Halation drew an un-bloomed red copy of the highlights, Compound Blur stayed sharp,
+   * Fill Behind drew a sharp zoomed copy behind the clip, Liquid Glass lost its frost, and Motion Blur (Footage)'s
+   * smear mask lost its feather. The string is silently IGNORED there — no throw, nothing to see.
+   * Each of those sites now asks ctxFilterOK() first and keeps its own ctx.filter line untouched when the answer is
+   * yes (so a healthy device draws byte-for-byte what it drew), and otherwise calls this: it draws `src` into dc's
+   * rect (dx, dy, dw, dh) blurred by `r` DEVICE pixels — what 'blur(r px)' means on that context — through the GPU
+   * blur, premultiplied like the real filter, and failing that a CPU box blur. `ops` are colour functions the same
+   * filter string carried after the blur (Liquid Glass's saturate + brightness): the colour shader, else the CPU.
+   * The draw itself goes through dc as it stands, so its globalAlpha and composite mode apply exactly as they did
+   * to the filtered draw.
+   *   · PADDED: 'blur()' treats everything outside the source as transparent and spreads the picture past its own
+   *     edge. The GPU blur clamps at its texture edge, which would smear the border instead, so the working copy
+   *     carries a transparent border 3σ wide and the result is drawn back that much bigger.
+   *   · SCALED DOWN FOR A BIG RADIUS: the shader's kernel stops at 64 taps (σ ≈ 21), and Halation's wide wash is σ 54
+   *     on a 1080 frame. Past σ 16 the working copy is 1/k the size and blurred by r/k — the blur hides the
+   *     resample, and it is cheaper on the phone it exists for. */
+  let _nbA = null;
+  function boxesForGauss(sigma) {                  // three box widths whose convolution has this σ (Kovesi)
+    const n = 3, wIdeal = Math.sqrt(12 * sigma * sigma / n + 1);
+    let wl = Math.floor(wIdeal); if (wl % 2 === 0) wl--;
+    const m = Math.round((12 * sigma * sigma - n * wl * wl - 4 * n * wl - 3 * n) / (-4 * wl - 4));
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(Math.max(0, ((i < m ? wl : wl + 2) - 1) / 2));
+    return out;
+  }
+  function cpuBlurCanvas(cv, W, H, sigma) {        // premultiplied, transparent past the edge — what 'blur()' draws
+    const g = cv.getContext('2d');
+    let img; try { img = g.getImageData(0, 0, W, H); } catch (e) { return false; }
+    const d = img.data, N = W * H;
+    let a = new Float32Array(N * 4), b = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) { const j = i * 4, al = d[j + 3] / 255; a[j] = d[j] * al; a[j + 1] = d[j + 1] * al; a[j + 2] = d[j + 2] * al; a[j + 3] = d[j + 3]; }
+    const pass = (src, dst, r, horiz) => {
+      const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, inv = 1 / (2 * r + 1);
+      for (let l = 0; l < lines; l++) {
+        const base = horiz ? l * W * 4 : l * 4;
+        for (let c = 0; c < 4; c++) {
+          let acc = 0;
+          for (let k = 0; k <= r && k < len; k++) acc += src[base + k * step + c];
+          for (let x = 0; x < len; x++) {
+            dst[base + x * step + c] = acc * inv;
+            const add = x + r + 1, sub = x - r;
+            if (add < len) acc += src[base + add * step + c];
+            if (sub >= 0) acc -= src[base + sub * step + c];
+          }
+        }
+      }
+    };
+    boxesForGauss(sigma).forEach(r => { r = Math.round(r); if (r < 1) return; pass(a, b, r, true); pass(b, a, r, false); });
+    for (let i = 0; i < N; i++) {
+      const j = i * 4, al = a[j + 3];
+      if (al <= 0.001) { d[j] = d[j + 1] = d[j + 2] = d[j + 3] = 0; continue; }
+      const f = 255 / al; d[j] = a[j] * f; d[j + 1] = a[j + 1] * f; d[j + 2] = a[j + 2] * f; d[j + 3] = al;
+    }
+    g.putImageData(img, 0, 0);
+    return true;
+  }
+  function cpuColourOps(cv, W, H, ops) {           // the two colour functions a blur string here carries, by the filter spec
+    const g = cv.getContext('2d');
+    let img; try { img = g.getImageData(0, 0, W, H); } catch (e) { return; }
+    const d = img.data;
+    for (const op of ops) {
+      const v = op.value;
+      if (op.type === 'brightness') { for (let i = 0; i < d.length; i += 4) { d[i] *= v; d[i + 1] *= v; d[i + 2] *= v; } }
+      else if (op.type === 'saturate') {
+        const a = 0.213 + 0.787 * v, b = 0.715 - 0.715 * v, c = 0.072 - 0.072 * v, e = 0.213 - 0.213 * v,
+              f = 0.715 + 0.285 * v, h = 0.072 + 0.928 * v;
+        for (let i = 0; i < d.length; i += 4) {
+          const R = d[i], G = d[i + 1], B = d[i + 2];
+          d[i] = a * R + b * G + c * B; d[i + 1] = e * R + f * G + c * B; d[i + 2] = e * R + b * G + h * B;
+        }
+      }
+    }
+    g.putImageData(img, 0, 0);
+  }
+  function drawBlurredNoFilter(dc, src, r, dx, dy, dw, dh, ops) {
+    if (!src || !(dw > 0) || !(dh > 0)) return;
+    const blur = r > 0.05, colour = !!(ops && ops.length);
+    if (!blur && !colour) { dc.drawImage(src, dx, dy, dw, dh); return; }
+    const k = r > 16 ? r / 16 : 1, rw = r / k;
+    const pad = blur ? Math.ceil(rw * 3) + 2 : 0;
+    const ww = Math.max(1, Math.ceil(dw / k) + 2 * pad), wh = Math.max(1, Math.ceil(dh / k) + 2 * pad);
+    if (!_nbA) _nbA = document.createElement('canvas');
+    if (_nbA.width !== ww || _nbA.height !== wh) { _nbA.width = ww; _nbA.height = wh; }
+    const g = _nbA.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, ww, wh); g.imageSmoothingEnabled = true;
+    try { g.drawImage(src, pad, pad, dw / k, dh / k); } catch (e) { return; }
+    const back = (o) => { g.clearRect(0, 0, ww, wh); g.drawImage(o, 0, 0); };   // the GPU canvas is shared — copy out at once
+    if (blur) {
+      const o = FM.glColor && FM.glColor.blur ? FM.glColor.blur(_nbA, ww, wh, rw, { premul: true }) : null;
+      if (o) back(o); else cpuBlurCanvas(_nbA, ww, wh, rw);
+    }
+    if (colour) {
+      const o = FM.glColor && FM.glColor.apply ? FM.glColor.apply(_nbA, ww, wh, ops) : null;
+      if (o) back(o); else cpuColourOps(_nbA, ww, wh, ops);
+    }
+    dc.drawImage(_nbA, 0, 0, ww, wh, dx - pad * k, dy - pad * k, ww * k, wh * k);
+  }
+  FM._drawBlurredNoFilter = drawBlurredNoFilter;   // suite seam (#986)
   /* CAN THIS DEVICE SPACE TEXT AT ALL — MEASURED, NOT ASKED (#686). Six sites guarded letter- and
    * word-spacing with `'letterSpacing' in ctx`, which asks whether the PROPERTY EXISTS. That is not
    * the same question as whether setting it does anything, and #645 is the entry that exists because
@@ -3288,23 +3390,30 @@ window.FM = window.FM || {};
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
   Object.setPrototypeOf(POSTFX, null);
-  // vignette is deliberately NOT in POSTFX: media layers draw it inline over the clip's own (cropped)
-  // bounds, and that behaviour must not change. Non-media layers route it through the pixel path via
-  // the explicit check in drawLayer (it renders comp-space there — see PIXEL_FX.vignette).
+  // vignette is deliberately NOT in POSTFX — postFxOrder names it explicitly. It used to be media-inline and a
+  // pixel kernel for everything else; since #986 C8 every layer takes one path (see CANVAS_FX.vignette).
   /* ═══ THE EFFECT STACK IN THE ORDER IT IS ACTUALLY APPLIED ═══════════════════════════════════════
    * Array order IS application order; the LAST entry is the OUTERMOST, and the dispatcher peels from
    * that end. Two rules are baked in and both are load-bearing, with the reasoning kept at the call
-   * site below: Squish composites outermost (queue 323), and vignette only joins the stack on layers
-   * that do not draw it inline.
+   * site below: Squish composites outermost (queue 323), and Vignette composites innermost, on every layer
+   * (#986 C8 — where a clip has always drawn it; text and shapes used to take it in row order).
    * ⚠️ IT IS A FUNCTION BECAUSE THE GPU CHAIN IN drawWarpEffect HAS TO ASK THE SAME QUESTION. Two
    * copies of this ordering would agree today and diverge the first time either changed — and the
    * symptom would be a chain collapsing effects that had something else BETWEEN them, i.e. a silently
    * wrong picture rather than an error. One function, both callers.
    */
   function postFxOrder(layer) {
-    const vigOk = layer.type !== 'video' && layer.type !== 'image';
-    const pp0 = (layer.effects || []).filter(e => (POSTFX[e.type] || (vigOk && e.type === 'vignette')) && e.enabled !== false
+    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette') && e.enabled !== false   // vignette: every layer since #986 C8
       && !(e.type === 'motionflow' && layer.type === '_flat'));
+    /* VIGNETTE COMPOSITES INNERMOST, on every layer (#986 C8) — straight after the nine CSS effects, which already
+       render before everything else whatever their row. That is where a video or photo has ALWAYS drawn it (inside the
+       media draw), and every film filter's look was tuned on photographs with it there: MEASURED, taking stack order
+       literally instead moved 22 filters on a photo by up to 56 levels a region (Ember 56, Infrared 48, Bloodline 46),
+       i.e. his approved looks, on every clip he has put one on. So a text, shape or group vignette moves to where a
+       clip's has always been, rather than every clip's moving. Several vignettes keep their own order among
+       themselves, and now every one of them runs. */
+    const vg = pp1.filter(e => e.type === 'vignette');
+    const pp0 = vg.length ? vg.concat(pp1.filter(e => e.type !== 'vignette')) : pp1;
     /* SQUISH COMPOSITES INNERMOST, wherever it sits in the stack.
      * Every other effect renders its clean copy of the layer into a COMP-SIZED plate, so anything
      * that runs before Squish has already thrown away the one thing Squish exists to use: the part
@@ -6130,7 +6239,13 @@ window.FM = window.FM || {};
       var dsGX0=dsBB?Math.max(0,dsSX0-dsSoft-1):0,          dsGX1=dsBB?Math.min(W-1,dsSX1+dsSoft+1):W-1;
       var dsGY0=dsBB?Math.max(0,dsSY0-dsSoft-1):0,          dsGY1=dsBB?Math.min(H-1,dsSY1+dsSoft+1):H-1;
       for(dsy=dsSY0;dsy<=dsSY1;dsy++){ for(dsx=dsSX0;dsx<=dsSX1;dsx++){ dssx=dsx-dsOx; dssy=dsy-dsOy; if(dssx<0||dssx>=W||dssy<0||dssy>=H){ dsShift[dsy*W+dsx]=0; } else { dsShift[dsy*W+dsx]=s[(dssy*W+dssx)*4+3]; } } } if(dsSoft>0){ var dsR=dsSoft; var dsWin=dsR*2+1; var dsTmp=new Float32Array(dsN); var dsAcc,dskx,dski,dsrow; for(dsy=dsSY0;dsy<=dsSY1;dsy++){ dsrow=dsy*W; dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dskx=dski<0?0:(dski>=W?W-1:dski); dsAcc+=dsShift[dsrow+dskx]; } for(dsx=0;dsx<W;dsx++){ dsTmp[dsrow+dsx]=dsAcc/dsWin; var dsAdd=dsx+dsR+1; dsAdd=dsAdd>=W?W-1:dsAdd; var dsSub=dsx-dsR; dsSub=dsSub<0?0:dsSub; dsAcc+=dsShift[dsrow+dsAdd]-dsShift[dsrow+dsSub]; } } var dscol2; for(dsx=dsGX0;dsx<=dsGX1;dsx++){ dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dscol2=dski<0?0:(dski>=H?H-1:dski); dsAcc+=dsTmp[dscol2*W+dsx]; } for(dsy=0;dsy<H;dsy++){ dsShift[dsy*W+dsx]=dsAcc/dsWin; var dsAddY=dsy+dsR+1; dsAddY=dsAddY>=H?H-1:dsAddY; var dsSubY=dsy-dsR; dsSubY=dsSubY<0?0:dsSubY; dsAcc+=dsTmp[dsAddY*W+dsx]-dsTmp[dsSubY*W+dsx]; } } } var dsi,dsidx,dsa,dssh,dsoa, dsCy, dsCx;
-      for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>0) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } } },
+      /* UNDER A SOFT EDGE TOO (#986 C22, hunt). This skipped every pixel with ANY alpha (`dsa>0`), so the shadow stopped
+         dead at an anti-aliased edge — the half-covered pixels round every glyph sat over the background with no shadow
+         behind them, a light seam between the letter and its shadow — and a semi-transparent layer cast no shadow behind
+         itself at all. A partly covered pixel now has the shadow composited BEHIND it (the layer over the shadow, which
+         is what 'drop shadow' means and what CSS drop-shadow draws). Empty pixels and solid ones are exactly as before. */
+      var dsFa, dsSa, dsOa2;
+      for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>=255) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; if(dsa===0){ d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } else { dsFa=dsa/255; dsSa=dsoa/255*(1-dsFa); dsOa2=dsFa+dsSa; d[dsidx]=(s[dsidx]*dsFa+dsCr*dsSa)/dsOa2; d[dsidx+1]=(s[dsidx+1]*dsFa+dsCg*dsSa)/dsOa2; d[dsidx+2]=(s[dsidx+2]*dsFa+dsCb*dsSa)/dsOa2; d[dsidx+3]=dsOa2*255; } } } },
     chromaticaberration: function(d,W,H,p,t){ var caAmt = fparam(p, 'amount', 8, t); caAmt=Math.max(0,Math.min(30,caAmt)); var caAng = fparam(p, 'angle', 0, t); var caRad=caAng*Math.PI/180; var caCos=Math.cos(caRad), caSin=Math.sin(caRad); var caDx=caCos*caAmt, caDy=caSin*caAmt; if(caAmt===0)return; var caQ=Math.max(0,Math.min(1,fparam(p, 'radial', 0, t)/100)); /* 0 = the uniform shift every saved instance had (legacy); 1 = radial, nothing at the centre */ var caCx=W/2, caCy=H/2, caNorm=1/Math.max(1,Math.hypot(caCx,caCy)); var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; if(caQ>0){ var caPx=caX-caCx, caPy=caY-caCy, caR=Math.hypot(caPx,caPy), caRn=caR*caNorm; var caUx=caR>0?caPx/caR:0, caUy=caR>0?caPy/caR:0; /* radial unit vector rotated by the angle, blended with the uniform direction; magnitude blended the same way */ var caVx=(1-caQ)*caCos+caQ*(caUx*caCos-caUy*caSin), caVy=(1-caQ)*caSin+caQ*(caUx*caSin+caUy*caCos); var caMag=caAmt*((1-caQ)+caQ*caRn); caDx=caVx*caMag; caDy=caVy*caMag; } var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
     innerglow: function(d,W,H,p,t){ var igRad = fparam(p, 'radius', 10, t); igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt = fparam(p, 'intensity', 1, t); igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI; for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2]; d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
     unsharpmask: function(d,W,H,p,t){ var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} /* THRESHOLD (queue 904) — Sharpen's 'Skip flat areas': a pixel whose brightness differs from its blur by less than this is left alone, so grain in sky and skin is not hardened as hard as an edge. 0 is the old behaviour. */ var umThr=p.threshold==null?0:FM.evalProp(p.threshold,t); if(umThr<0)umThr=0; if(umThr>64)umThr=64; var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlur=new Float32Array(umN*3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){ var umAcc0v=0,umAcc1v=0,umAcc2v=0; for(c=0;c<=umR;c++){ umP=(Math.min(H-1,c)*W+x)*3; umAcc0v+=umTmp[umP]; umAcc1v+=umTmp[umP+1]; umAcc2v+=umTmp[umP+2]; } umP=x*3; umAcc0v+=umTmp[umP]*umR; umAcc1v+=umTmp[umP+1]*umR; umAcc2v+=umTmp[umP+2]*umR; for(y=0;y<H;y++){ umP=(y*W+x)*3; umBlur[umP]=umAcc0v/umDiv; umBlur[umP+1]=umAcc1v/umDiv; umBlur[umP+2]=umAcc2v/umDiv; var umAddY=Math.min(H-1,y+umR+1); var umSubY=Math.max(0,y-umR); var umAddP=(umAddY*W+x)*3; var umSubP=(umSubY*W+x)*3; umAcc0v+=umTmp[umAddP]-umTmp[umSubP]; umAcc1v+=umTmp[umAddP+1]-umTmp[umSubP+1]; umAcc2v+=umTmp[umAddP+2]-umTmp[umSubP+2]; } } for(y=0;y<H;y++){ for(x=0;x<W;x++){ umI=(y*W+x)*4; if(umS[umI+3]<=0)continue; umP=(y*W+x)*3; if(umThr>0&&Math.abs((umS[umI]-umBlur[umP])*0.299+(umS[umI+1]-umBlur[umP+1])*0.587+(umS[umI+2]-umBlur[umP+2])*0.114)<umThr)continue; for(c=0;c<3;c++){ var umOrig=umS[umI+c]; var umVal=umOrig+(umOrig-umBlur[umP+c])*umAmt; if(umVal<0)umVal=0; else if(umVal>255)umVal=255; d[umI+c]=umVal; } } } },
@@ -7185,10 +7300,6 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           } }
       }
     },
-    // Vignette (non-media layers): comp-space radial darkening of the layer's own pixels. Media layers
-    // never reach this — they keep their inline clip-bounds vignette in the media draw branch; this fn
-    // exists so text/shape/path/group layers stop silently ignoring the effect. (#backlog: vignette no-op)
-    vignette: function(d,W,H,p,t){ var vgA = fparam(p, 'amount', 0.6, t); vgA=vgA<0?0:(vgA>1?1:vgA); if(vgA<=0)return; var vgCx=W/2, vgCy=H/2, vgMr=Math.hypot(vgCx,vgCy); var vgSz=p.size==null?35:FM.evalProp(p.size,t); var vgIn=vgSz===35?0.35:Math.max(0,Math.min(0.98,vgSz/100)), vgSpan=vgIn===0.35?0.65:(1-vgIn); for(var vgy=0;vgy<H;vgy++){ var vgRow=vgy*W, vgDy=vgy-vgCy; for(var vgx=0;vgx<W;vgx++){ var vgi=(vgRow+vgx)*4; if(d[vgi+3]===0)continue; var vgR=Math.hypot(vgx-vgCx,vgDy)/vgMr, vgQ=(vgR-vgIn)/vgSpan; if(vgQ<=0)continue; var vgF=1-vgA*Math.pow(vgQ,1.6); if(vgF<0)vgF=0; d[vgi]*=vgF; d[vgi+1]*=vgF; d[vgi+2]*=vgF; } } },
     // ---- batch 28 (AM parity fill-ins) ----
     // Palette Map: quantize every pixel to the nearest of a small evenly-spaced palette (posterize in
     // 3D RGB space → banded, screen-print look). Count = palette steps per axis; Amount blends toward it.
@@ -8574,9 +8685,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         qc.putImageData(qi, 0, 0);
         cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.globalAlpha = 1; cctx.globalCompositeOperation = 'source-over';
         cctx.clearRect(0, 0, W, H);
-        cctx.filter = 'blur(' + (r * ps).toFixed(2) + 'px)';   // DEVICE px on the plate — × 1 on every export
-        cctx.drawImage(slot.A, 0, 0);
-        cctx.filter = 'none';
+        if (ctxFilterOK()) {
+          cctx.filter = 'blur(' + (r * ps).toFixed(2) + 'px)';   // DEVICE px on the plate — × 1 on every export
+          cctx.drawImage(slot.A, 0, 0);
+          cctx.filter = 'none';
+        } else drawBlurredNoFilter(cctx, slot.A, +(r * ps).toFixed(2), 0, 0, W, H);   // #986 C24: it stayed sharp
         cctx.globalCompositeOperation = 'destination-in';
         cctx.imageSmoothingEnabled = true;              // the upscale IS the mask's feathering
         cctx.drawImage(q, 0, 0, W, H);
@@ -9903,7 +10016,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      expanded-plate cost off frames where the layer is nowhere near an edge — and the full-frame placeholder this list
      hands them made `near` always true, so all three rendered a second full plate every frame. They get the fast
      alpha scan like everything else; pixels unchanged, one drawLayer per frame again. */
-  const CFX_NO_BBOX = { rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   Object.setPrototypeOf(CFX_NO_BBOX, null);   // own keys only — see POSTFX
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
@@ -9933,7 +10046,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * born, and `_fx2d` exists so a future call site cannot quietly get the un-hinted kind. */
   function _fx2d(cv) { return cv.getContext('2d', { willReadFrequently: true }); }
 
-  function renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM) {
+  function renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM) {
     const tr = layer.transform || {};
     const sz = (FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH });
     const sc = Math.abs(FM.evalProp(tr.scale, t) || 1);
@@ -9949,7 +10062,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let my = Math.max(_min, Math.max(0, Math.max(reach - cy, cy + reach - PH)));
     if (mx < 2 && my < 2) return null;                          // nothing outside the frame — caller uses the normal plate
     FM._fxStats.plates++;   // queue 730: an expanded plate is being rendered — the suite counts these
+    /* `maxM` (#986 C27): the most margin the CALLER can use — a shake that moves 20px has no use for the 650px a
+       full-frame clip's rotation-safe reach asks for. Given, the margin is also snapped to whole plate pixels, so a
+       mover drawing from this plate lands on A's own pixel grid. Absent (every older caller), nothing changes. */
+    if (maxM > 0) { mx = Math.min(mx, maxM); my = Math.min(my, maxM); }
     mx = Math.min(mx, PW * 0.6); my = Math.min(my, PH * 0.6);   // cost ceiling: at most ~4.8x the comp's pixels
+    if (maxM > 0) { mx = Math.ceil(mx * ps) / ps; my = Math.ceil(my * ps) / ps; }
     const EW = Math.max(1, Math.round((PW + 2 * mx) * ps)), EH = Math.max(1, Math.round((PH + 2 * my) * ps));
     /* Pooled by depth for the same reason A/B below are: the drawLayer at the end of this function
      * re-enters drawCanvasEffect, which can call expand() again, and a second expanded plate would
@@ -10032,7 +10150,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Tiles' whole-clip repeat needs the layer's content from OUTSIDE the frame, which the normal
     // comp-sized plate has already thrown away. Handed over as a callback so the plate machinery
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
-    const expand = (minM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM);
+    const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
@@ -10558,7 +10676,93 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { x: x, y: y };
   }
 
+  /* ═══ A MOVED COPY OF THE LAYER SHOWS WHAT WAS REALLY PAST THE EDGE (#986 C27, hunt — queue 228's fix, finished) ════
+   * The plate a canvas effect is handed is the FRAME, so whatever the layer had outside it is gone before the effect
+   * runs. Queue 228 gave Wiggle, Drift and Orbit the expanded plate; Shake, Swing, Spin, Pulse, Trail and Scatter Array
+   * never got it. The case he builds: a clip scaled to 110% so the shake cannot show its edges — and the edges showed
+   * anyway, because the extra 10% had been cut off before the shake moved it. Trail and Scatter lost the same way:
+   * their copies of a clip half off the frame were copies of the half.
+   * `mats` are the transforms each copy is drawn with (plate pixels). From them this works out how far outside the
+   * plate any copy reaches — every plate corner mapped back through each inverse — and only when the layer really does
+   * extend past the frame (its own box under its full transform) asks `expand` for a plate with that much margin and
+   * no more. Returns what to draw instead of `A` at (0, 0): { cv, x, y }. A layer inside the frame, a motion that
+   * reaches nowhere, or no plate to be had all return A itself, i.e. exactly what was drawn before. */
+  function moverSource(A, W, H, ps, expand, layer, t, scene, mats) {
+    const same = { cv: A, x: 0, y: 0 };
+    if (!expand || !layer || !scene || !scene.project || !mats || !mats.length) return same;
+    let need = 0;
+    for (const m of mats) {
+      let I; try { I = m.inverse(); } catch (e) { continue; }
+      if (!Number.isFinite(I.a) || !Number.isFinite(I.e)) continue;
+      for (const q of [[0, 0], [W, 0], [0, H], [W, H]]) {
+        const x = I.a * q[0] + I.c * q[1] + I.e, y = I.b * q[0] + I.d * q[1] + I.f;
+        need = Math.max(need, -x, x - W, -y, y - H);
+      }
+    }
+    if (!(need > 0.5)) return same;
+    const P = scene.project, box = layerAABB(layer, t, scene);
+    if (box && box.x0 >= -0.5 && box.y0 >= -0.5 && box.x1 <= P.width + 0.5 && box.y1 <= P.height + 0.5) return same;   // nothing is out there
+    const s = ps > 0 ? ps : 1;
+    const ex = expand(0, need / s + 2);
+    if (!ex || !ex.cv) return same;
+    return { cv: ex.cv, x: (-ex.mx - (A.__fmOX || 0)) * ex.ps, y: (-ex.my - (A.__fmOY || 0)) * ex.ps };
+  }
+  FM._moverSource = moverSource;   // suite seam (#986)
   const CANVAS_FX = {
+    /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
+     * There were two. A video or photo drew an inline black radial gradient over its clip rect inside the media draw:
+     * only the FIRST vignette counted (a second was a live-looking row that did nothing), and it painted black over a
+     * PNG's transparent corners — a dark box round a sticker. Every other layer ran a per-pixel kernel with a different
+     * curve (1 − a·q^1.6 against the gradient's 1 − a·q) at a different place in the stack (its row, where a clip's
+     * always ran first), so the same two sliders drew two different vignettes depending on what they were on.
+     * Now every layer comes here, once per vignette, innermost (see postFxOrder), and darkens only the pixels the layer
+     * has ('source-atop': colour × (1 − g), alpha untouched).
+     *   · THE CURVE IS THE MEDIA ONE — the same linear gradient, same stops. It is the vignette every video and photo
+     *     has always had and the one every film filter was tuned against (their sheets are real photographs), so his
+     *     clips keep their look; the text / shape / group vignette, added later as a fill-in, is the one that moves.
+     *   · THE SHAPE FOLLOWS THE LAYER KIND, as before: a video or photo is vignetted over its own (cropped, moved,
+     *     rotated) frame, through the layer's own transform; anything else over the project frame. A full-frame clip is
+     *     the same circle either way.
+     *   · A GRADIENT, NOT A PIXEL LOOP: measured, routing it through the per-pixel path cost 110 ms a frame on a
+     *     1080×1920 photo (11 ms on the 0.28 preview plate) where the gradient costs about one. */
+    vignette: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+      B.drawImage(A, 0, 0);
+      var vgA = fparam(p, 'amount', 0.6, t); vgA = vgA < 0 ? 0 : (vgA > 1 ? 1 : vgA); if (vgA <= 0) return;
+      var vgSz = p.size == null ? 35 : FM.evalProp(p.size, t);
+      var vgIn = Math.max(0, Math.min(0.98, vgSz / 100));
+      const s = ps > 0 ? ps : 1, oX = A.__fmOX || 0, oY = A.__fmOY || 0;
+      const proj = (scene && scene.project) || FM.scene.project;
+      const media = !!layer && (layer.type === 'video' || layer.type === 'image');
+      const M = media && scene ? layerCTM(layer, t, scene) : null;
+      const sz = M && FM.layerSize ? FM.layerSize(layer) : null;
+      B.save();
+      B.globalCompositeOperation = 'source-atop'; B.globalAlpha = 1; B.filter = 'none';
+      B.setTransform(s, 0, 0, s, -oX * s, -oY * s);            // project units → this plate's pixels
+      let cx = proj.width / 2, cy = proj.height / 2, R = Math.hypot(proj.width, proj.height) / 2;
+      let cover = [oX, oY, W / s, H / s];                      // the whole plate, in the space the gradient is drawn in
+      if (M && sz && sz.w > 0 && sz.h > 0) {
+        let I = null; try { I = M.inverse(); } catch (e) { I = null; }
+        if (I && [I.a, I.b, I.c, I.d, I.e, I.f].every(Number.isFinite)) {
+          B.transform(M.a, M.b, M.c, M.d, M.e, M.f);           // …and the clip's own space on top of that
+          const tr = layer.transform || {};
+          cx = sz.w * (0.5 - anchorX(tr)); cy = sz.h * (0.5 - anchorY(tr)); R = Math.hypot(sz.w, sz.h) / 2;
+          let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+          [[oX, oY], [oX + W / s, oY], [oX, oY + H / s], [oX + W / s, oY + H / s]].forEach(q => {
+            const lx = I.a * q[0] + I.c * q[1] + I.e, ly = I.b * q[0] + I.d * q[1] + I.f;
+            if (lx < x0) x0 = lx; if (lx > x1) x1 = lx; if (ly < y0) y0 = ly; if (ly > y1) y1 = ly;
+          });
+          cover = [x0, y0, x1 - x0, y1 - y0];
+        }
+      }
+      if (R > 0) {
+        const grad = B.createRadialGradient(cx, cy, R * vgIn, cx, cy, R);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,' + vgA + ')');
+        B.fillStyle = grad;
+        B.fillRect(cover[0], cover[1], cover[2], cover[3]);
+      }
+      B.restore();
+    },
     /* ---- Halation ----------------------------------------------------------------------------
      * Film's highlights bleed warm-red because light punches through the emulsion, scatters off the
      * back of the base and re-exposes it from behind. The look is TWO radii at once: a tight core
@@ -10612,11 +10816,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.save();
       B.globalCompositeOperation = 'lighter';   // halation ADDS light; it never darkens
       B.globalAlpha = Math.min(1, amount * 0.65);
-      B.filter = 'blur(' + rCore.toFixed(2) + 'px)';
-      B.drawImage(_halC, 0, 0, W, H);
-      B.globalAlpha = Math.min(1, amount * 0.35);
-      B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
-      B.drawImage(_halC, 0, 0, W, H);
+      if (ctxFilterOK()) {
+        B.filter = 'blur(' + rCore.toFixed(2) + 'px)';
+        B.drawImage(_halC, 0, 0, W, H);
+        B.globalAlpha = Math.min(1, amount * 0.35);
+        B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
+        B.drawImage(_halC, 0, 0, W, H);
+      } else {                                  // #986 C24: no ctx.filter — the bloom was a sharp red copy
+        drawBlurredNoFilter(B, _halC, +rCore.toFixed(2), 0, 0, W, H);
+        B.globalAlpha = Math.min(1, amount * 0.35);
+        drawBlurredNoFilter(B, _halC, +rWide.toFixed(2), 0, 0, W, H);
+      }
       B.restore();
     },
     /* ---- Temporal Denoise ------------------------------------------------------------------------
@@ -11148,8 +11358,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const vc = _mfMov.getContext('2d');
         vc.clearRect(0, 0, W, H); vc.drawImage(A, 0, 0);
         vc.save(); vc.globalCompositeOperation = 'destination-in';
-        vc.imageSmoothingEnabled = true; vc.filter = 'blur(' + Math.round(4 + soft * 10) + 'px)';
-        vc.drawImage(_mfMask, 0, 0, W, H); vc.restore();
+        if (ctxFilterOK()) {
+          vc.imageSmoothingEnabled = true; vc.filter = 'blur(' + Math.round(4 + soft * 10) + 'px)';
+          vc.drawImage(_mfMask, 0, 0, W, H);
+        } else { vc.imageSmoothingEnabled = true; drawBlurredNoFilter(vc, _mfMask, Math.round(4 + soft * 10), 0, 0, W, H); }   // #986 C24: the mask lost its feather
+        vc.restore();
         /* ⚠️ REVERTED v13.42 — v13.40 replaced these three lines with a destination-out punch-out of the
          * moving region, on the theory that a motion blur must REPLACE the object rather than veil it.
          * The theory may well be right. The EVIDENCE for it was not: the 110 -> 117 px improvement was
@@ -11402,9 +11615,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // ---- the glass body, built on scratch so `amount` can cross-fade it against the original
         g1.setTransform(1, 0, 0, 1, 0, 0); g1.clearRect(0, 0, W, H);
         g1.globalCompositeOperation = 'source-over'; g1.globalAlpha = 1;
-        g1.filter = 'blur(' + frost.toFixed(2) + 'px) saturate(1.25) brightness(1.06)';
-        g1.drawImage(A, 0, 0);
-        g1.filter = 'none';
+        if (ctxFilterOK()) {
+          g1.filter = 'blur(' + frost.toFixed(2) + 'px) saturate(1.25) brightness(1.06)';
+          g1.drawImage(A, 0, 0);
+          g1.filter = 'none';
+        } else drawBlurredNoFilter(g1, A, +frost.toFixed(2), 0, 0, W, H, [{ type: 'saturate', value: 1.25 }, { type: 'brightness', value: 1.06 }]);   // #986 C24: the frost was gone
         if (clarity > 0) { g1.globalAlpha = clarity; g1.drawImage(A, 0, 0); g1.globalAlpha = 1; }
         // the blur bled past the silhouette — clip it back to the layer's own crisp alpha
         g1.globalCompositeOperation = 'destination-in';
@@ -11612,7 +11827,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * would overlap a small layer and leave gaps around a big one.
      * Steps are rounded to whole pixels for the reason Tiles documents at length: a fractional
      * destination makes canvas resample the edge column, and that soft column reads as a seam. */
-    linearrepeat: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+    linearrepeat: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const n = Math.max(1, Math.min(12, Math.round(fparam(p, 'count', 4, t))));
       const ang = (fparam(p, 'angle', 0, t) || 0) * Math.PI / 180;    // 0° = to the right
       const spread = Math.max(0.05, Math.min(3, (fparam(p, 'spacing', 100, t) || 100) / 100));
@@ -11622,17 +11837,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // How far the content reaches along the repeat axis — the honest basis for "one copy over".
       const along = Math.abs(Math.cos(ang)) * bb.w + Math.abs(Math.sin(ang)) * bb.h;
       const step = Math.max(1, along * spread);
+      /* #986 C27: the copies are offsets of the whole layer, so a clip half off the frame repeats as a whole clip —
+         the plate the copies are drawn from reaches as far past the edge as the furthest copy looks. The original
+         (drawn above, from A) is untouched. */
+      const offs = [];
       for (let i = 1; i < n; i++) {
         const dx = Math.round(Math.cos(ang) * step * i);
         const dy = Math.round(Math.sin(ang) * step * i);
         // Nothing to see once a copy has walked entirely off the frame; stop rather than pay for it.
         if (dx <= -W || dx >= W || dy <= -H || dy >= H) break;
+        const a = fade ? 1 - fade * (i / (n - 1)) : 1;
+        if (fade && a <= 0.004) break;
+        offs.push([dx, dy, a]);
+      }
+      const src = moverSource(A, W, H, ps, expand, layer, t, scene, offs.map(q => new DOMMatrix().translateSelf(q[0], q[1])));
+      for (const q of offs) {
         if (fade) {
-          const a = 1 - fade * (i / (n - 1));
-          if (a <= 0.004) break;
-          B.save(); B.globalAlpha = a; B.drawImage(A, dx, dy); B.restore();
+          B.save(); B.globalAlpha = q[2]; B.drawImage(src.cv, q[0] + src.x, q[1] + src.y); B.restore();
         } else {
-          B.drawImage(A, dx, dy);
+          B.drawImage(src.cv, q[0] + src.x, q[1] + src.y);
         }
       }
     },
@@ -11645,7 +11868,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        preview, which is a class of bug this file already carries scars from. The same integer
        avalanche `particles` uses gives the same copy the same offset forever, so the effect is STILL
        between frames unless you animate it, and a Seed slider is what re-rolls the arrangement. */
-    scatterarray: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+    scatterarray: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const n = Math.max(1, Math.min(24, Math.round(fparam(p, 'count', 8, t))));
       const spread = Math.max(0, Math.min(200, fparam(p, 'spread', 60, t))) / 100;
       const rot = (fparam(p, 'rotate', 25, t) || 0) * Math.PI / 180;
@@ -11664,6 +11887,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          thing on a small shape and a full-frame clip — the mistake Trail's note warns about. */
       const cx0 = bb.x + bb.w / 2, cy0 = bb.y + bb.h / 2;
       const reach = Math.max(bb.w, bb.h) * spread;
+      const copies = [];   // #986 C27: gathered first so one expanded plate serves every copy
       for (let i = 1; i < n; i++) {
         const dx = (hash(i * 5) - 0.5) * 2 * reach;
         const dy = (hash(i * 5 + 1) - 0.5) * 2 * reach;
@@ -11672,13 +11896,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sc = 1 + (hash(i * 5 + 3) - 0.5) * 2 * scaleV;
         const an = (hash(i * 5 + 4) - 0.5) * 2 * rot;
         if (cx0 + dx < -bb.w || cx0 + dx > W + bb.w || cy0 + dy < -bb.h || cy0 + dy > H + bb.h) continue;
+        copies.push([dx, dy, a, sc <= 0.02 ? 0.02 : sc, an]);
+      }
+      const src = moverSource(A, W, H, ps, expand, layer, t, scene, copies.map(q =>
+        new DOMMatrix().translateSelf(cx0 + q[0], cy0 + q[1]).rotateSelf(q[4] * 180 / Math.PI).scaleSelf(q[3], q[3]).translateSelf(-cx0, -cy0)));
+      for (const q of copies) {
         B.save();
-        B.globalAlpha = a;
-        B.translate(cx0 + dx, cy0 + dy);
-        B.rotate(an);
-        B.scale(sc <= 0.02 ? 0.02 : sc, sc <= 0.02 ? 0.02 : sc);
+        B.globalAlpha = q[2];
+        B.translate(cx0 + q[0], cy0 + q[1]);
+        B.rotate(q[4]);
+        B.scale(q[3], q[3]);
         B.translate(-cx0, -cy0);
-        B.drawImage(A, 0, 0);
+        B.drawImage(src.cv, src.x, src.y);
         B.restore();
       }
     },
@@ -11794,7 +12023,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
     },
-    shake: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+    shake: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const amt = fparam(p, 'amount', 20, t) * (ps || 1), spd = fparam(p, 'speed', 12, t), tw = fparam(p, 'twist', 4, t);
       // Fallbacks are the NO-OP values, not the schema defaults — an old instance (amount/speed/twist
       // only) must keep rendering byte-identical to the original smooth-noise shake.
@@ -11819,15 +12048,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
       const rot = tw * noise(u0, 200) * Math.PI / 180;
       const s = zoom > 0 ? 1 + (zoom / 100) * Math.abs(noise(u0, 313)) : 1;   // |n| → always punches IN (impact), never breathes out
-      const stamp = function (dx, dy, alpha) {
-        B.save();
-        B.globalAlpha = alpha;
-        B.translate(px + dx, py + dy);
-        if (rot) B.rotate(rot);
-        if (s !== 1) B.scale(s, s);
-        B.translate(-px, -py);
-        B.drawImage(A, 0, 0);
-        B.restore();
+      /* #986 C27: every stamp is queued first, so the expanded plate is asked for once, with the margin the furthest
+         stamp needs; then they are drawn exactly as before, from that plate when the layer reaches past the frame. */
+      const stamps = [];
+      const stamp = function (dx, dy, alpha) { stamps.push([dx, dy, alpha]); };
+      const flush = function () {
+        const src = moverSource(A, W, H, ps, expand, layer, t, scene, stamps.map(q => {
+          const m = new DOMMatrix().translateSelf(px + q[0], py + q[1]);
+          if (rot) m.rotateSelf(rot * 180 / Math.PI);
+          if (s !== 1) m.scaleSelf(s, s);
+          return m.translateSelf(-px, -py);
+        }));
+        for (const q of stamps) {
+          B.save();
+          B.globalAlpha = q[2];
+          B.translate(px + q[0], py + q[1]);
+          if (rot) B.rotate(rot);
+          if (s !== 1) B.scale(s, s);
+          B.translate(-px, -py);
+          B.drawImage(src.cv, src.x, src.y);
+          B.restore();
+        }
       };
       // Smear: ghost copies trailing along the SHAKE VELOCITY (displacement now vs one frame ago), so a
       // violent frame reads as a smeared hit instead of a clean teleport. Deterministic — the previous
@@ -11845,8 +12086,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       }
       stamp(d0[0], d0[1], 1);
+      flush();
     },
-    swing: function (A, B, W, H, bb, p, t, tl) {
+    swing: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const amp = fparam(p, 'angle', 15, t), spd = fparam(p, 'speed', 1, t);
       /* THE PIVOT (queue 904): it was welded to the top-centre of the layer, so a sign could not hang from a corner, a sword
          could not swing from its handle, a card could not rock on its bottom edge. Spin's Pivot X/Y, same units; the
@@ -11854,14 +12096,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t), fy = p.pivoty == null ? 0 : FM.evalProp(p.pivoty, t);
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 0 ? bb.y : bb.y + bb.h * (fy / 100);
+      const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old swing exactly
+      const ang = amp * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180;
+      const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
-      const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old swing exactly
-      B.rotate(amp * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180);
+      B.rotate(ang);
       B.translate(-px, -py);
-      B.drawImage(A, 0, 0); B.restore();
+      B.drawImage(src.cv, src.x, src.y); B.restore();
     },
-    spin: function (A, B, W, H, bb, p, t, tl) {
+    spin: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const spd = fparam(p, 'speed', 90, t);
       /* Speed was the only handle. Every spin started at exactly 0 degrees at the clip's start, so two
          spinning layers could never be offset from each other, and it always turned about the bounds
@@ -11871,20 +12115,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
+      const ang = (off === 0 ? spd * tl : spd * tl + off) * Math.PI / 180;
+      const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
-      B.rotate((off === 0 ? spd * tl : spd * tl + off) * Math.PI / 180);
+      B.rotate(ang);
       B.translate(-px, -py);
-      B.drawImage(A, 0, 0); B.restore();
+      B.drawImage(src.cv, src.x, src.y); B.restore();
     },
-    pulse: function (A, B, W, H, bb, p, t, tl) {
+    pulse: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const amt = fparam(p, 'amount', 0.2, t), spd = fparam(p, 'speed', 1.5, t);
       const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old pulse exactly
       const s = 1 + amt * Math.sin(2 * Math.PI * spd * tl + ph);
       const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      const src = s > 0 ? moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).scaleSelf(s, s).translateSelf(-px, -py)]) : { cv: A, x: 0, y: 0 };   // #986 C27 (a shrink pulls in what was past the edge)
       B.save();
       B.translate(px, py); B.scale(s, s); B.translate(-px, -py);
-      B.drawImage(A, 0, 0); B.restore();
+      B.drawImage(src.cv, src.x, src.y); B.restore();
     },
     /* DRIFT AND ORBIT GET WIGGLE'S EXPANDED PLATE (queue 228) — they are the same three lines wiggle
      * was before v7.32, and they carry the same defect he reported for wiggle in #93(b).
@@ -12455,14 +12702,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const W = P.width, H = P.height; mode = Math.round(mode) || 0;
+    /* THE PLATE IS THE TARGET'S, NOT THE PROJECT'S (#986 C39, hunt). It was allocated at P.width × P.height and left
+       unstamped, so every frame of a 0.28 phone preview rendered the layer at full project resolution just to shrink it
+       again on the way out — 12x the pixels on the one device where they cost the most — and anything nested inside
+       it (a pixel effect, a blur) ran at that full size too. And its origin was always project (0, 0), so inside a plate
+       that reaches past the frame (Squish's padding) the layer was cut at the frame edge first. nestedPlate is the
+       answer every other pass here uses: the target's extent, origin and scale. The strips below stay in PROJECT units
+       and read the plate through `sx`/`sy`/`sl`, so at scale 1 over the frame — every export — each drawImage is the
+       very call it was. */
+    const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const _d = _miDepth++;
     try {
     if (!_miPool[_d]) _miPool[_d] = document.createElement('canvas');
     const _miA = _miPool[_d];
-    if (_miA.width !== W || _miA.height !== H) { _miA.width = W; _miA.height = H; }   // cleared below
+    if (_miA.width !== _np.W || _miA.height !== _np.H) { _miA.width = _np.W; _miA.height = _np.H; }   // cleared below
+    _miA.__fmRS = ps; _miA.__fmOX = OX; _miA.__fmOY = OY;
     const actx = _miA.getContext('2d');
-    baseT(actx); actx.clearRect(0, 0, W, H);
+    baseT(actx); actx.clearRect(OX, OY, _np.PWp, _np.PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+    const sx = v => (v - OX) * ps, sy = v => (v - OY) * ps, sl = v => v * ps;   // project → plate pixels
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'mirror'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     ctx.save();
@@ -12477,29 +12735,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const pos = clamp01((position == null ? 50 : position) / 100);
     const ax = W * pos, ay = H * pos, LIM = 64;
     let k;
+    const pass = () => ctx.drawImage(_miA, OX, OY, _np.PWp, _np.PHp);   // the plate, back where it came from
     if (mode === 0) {           // Left → Right
-      const aw = ax; if (aw < 0.5) { ctx.drawImage(_miA, 0, 0); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
+      const aw = ax; if (aw < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
       for (k = 0; k * aw < W && k < LIM; k++) {
-        if (k % 2 === 0) ctx.drawImage(_miA, 0, 0, aw, H, k * aw, 0, aw, H);
-        else { ctx.save(); ctx.translate((k + 1) * aw, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, 0, 0, aw, H, 0, 0, aw, H); ctx.restore(); }
+        if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(0), sl(aw), sl(H), k * aw, 0, aw, H);
+        else { ctx.save(); ctx.translate((k + 1) * aw, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, sx(0), sy(0), sl(aw), sl(H), 0, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 1) {    // Right → Left
-      const aw = W - ax; if (aw < 0.5) { ctx.drawImage(_miA, 0, 0); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
+      const aw = W - ax; if (aw < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
       for (k = 0; ax - k * aw + aw > 0 && k < LIM; k++) {
-        if (k % 2 === 0) ctx.drawImage(_miA, ax, 0, aw, H, ax - k * aw, 0, aw, H);
-        else { ctx.save(); ctx.translate(ax - k * aw + W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, ax, 0, aw, H, ax, 0, aw, H); ctx.restore(); }
+        if (k % 2 === 0) ctx.drawImage(_miA, sx(ax), sy(0), sl(aw), sl(H), ax - k * aw, 0, aw, H);
+        else { ctx.save(); ctx.translate(ax - k * aw + W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, sx(ax), sy(0), sl(aw), sl(H), ax, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 2) {    // Top → Bottom
-      const ah = ay; if (ah < 0.5) { ctx.drawImage(_miA, 0, 0); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
+      const ah = ay; if (ah < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
       for (k = 0; k * ah < H && k < LIM; k++) {
-        if (k % 2 === 0) ctx.drawImage(_miA, 0, 0, W, ah, 0, k * ah, W, ah);
-        else { ctx.save(); ctx.translate(0, (k + 1) * ah); ctx.scale(1, -1); ctx.drawImage(_miA, 0, 0, W, ah, 0, 0, W, ah); ctx.restore(); }
+        if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(0), sl(W), sl(ah), 0, k * ah, W, ah);
+        else { ctx.save(); ctx.translate(0, (k + 1) * ah); ctx.scale(1, -1); ctx.drawImage(_miA, sx(0), sy(0), sl(W), sl(ah), 0, 0, W, ah); ctx.restore(); }
       }
     } else {                    // Bottom → Top
-      const ah = H - ay; if (ah < 0.5) { ctx.drawImage(_miA, 0, 0); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
+      const ah = H - ay; if (ah < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
       for (k = 0; ay - k * ah + ah > 0 && k < LIM; k++) {
-        if (k % 2 === 0) ctx.drawImage(_miA, 0, ay, W, ah, 0, ay - k * ah, W, ah);
-        else { ctx.save(); ctx.translate(0, ay - k * ah + H); ctx.scale(1, -1); ctx.drawImage(_miA, 0, ay, W, ah, 0, ay, W, ah); ctx.restore(); }
+        if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(ay), sl(W), sl(ah), 0, ay - k * ah, W, ah);
+        else { ctx.save(); ctx.translate(0, ay - k * ah + H); ctx.scale(1, -1); ctx.drawImage(_miA, sx(0), sy(ay), sl(W), sl(ah), 0, ay, W, ah); ctx.restore(); }
       }
     }
     ctx.restore();
@@ -14387,8 +14646,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         // …and blur the extended plate down onto the frame-sized one. The offset is a whole number of
         // working pixels, so this is a straight 1:1 translate — no second resample.
-        bctx.filter = 'blur(' + (blurDev / k).toFixed(3) + 'px)';
-        try { bctx.drawImage(pC, -MK, -MK); } catch (e) {}
+        if (ctxFilterOK()) {
+          bctx.filter = 'blur(' + (blurDev / k).toFixed(3) + 'px)';
+          try { bctx.drawImage(pC, -MK, -MK); } catch (e) {}
+        } else drawBlurredNoFilter(bctx, pC, +(blurDev / k).toFixed(3), -MK, -MK, pC.width, pC.height);   // #986 C24: a sharp copy behind the clip
       } else {
         bctx.filter = doBlur ? 'blur(' + (blurDev / k).toFixed(3) + 'px)' : 'none';
         try { bctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
@@ -14751,9 +15012,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // outermost pass, rendered over a clean copy of the layer with that effect removed (recursing
     // inward through the rest). So effect[0] is applied first (innermost), effect[n] last (outermost).
     if (scene && layer.effects) {
-      // vignette routes through the pixel path ONLY for non-media layers — media draws it inline over
-      // the clip's own bounds (media branch), and that behaviour must not change. Text/shape/path/group
-      // layers used to silently ignore the effect entirely.
+      // vignette joins this stack on EVERY layer, innermost (#986 C8 — see postFxOrder and CANVAS_FX.vignette); media
+      // layers used to draw it inline in the media branch, first vignette only.
       const pp = postFxOrder(layer);
       const outer = pp[pp.length - 1];
       /* MOTION BLUR (OBJECT) DISPATCHES OUTERMOST NOW (queue 382), not at the base of the recursion.
@@ -15248,26 +15508,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             ctx.drawImage(src, cr.x * kx, cr.y * ky, cr.w * kx, cr.h * ky, -cw * anchorX(tr), -ch * anchorY(tr), cw, ch);
           }
         } catch (e) { /* frame not ready */ }
-        // vignette: radial darkening over the clip's (cropped) bounds (not a CSS filter)
-        const vig = layer.effects && layer.effects.find(e => e.type === 'vignette' && e.enabled !== false);
-        if (vig) {
-          const amt = clamp01(vig.params && vig.params.amount != null ? FM.evalProp(vig.params.amount, t) : 0.6);
-          // Flat source-over overlay regardless of blend mode — but it FOLLOWS the layer's opacity
-          // (a fading clip used to leave its vignette ring floating at full strength).
-          ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
-          ctx.globalAlpha = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
-          const gx = -cw * anchorX(tr) + cw / 2, gy = -ch * anchorY(tr) + ch / 2, rad = Math.hypot(cw, ch) / 2;
-          // NOTE the fallback is 45 here and 35 in the pixel path — the two have always disagreed.
-          // Keeping each one's own legacy number means no existing project moves; a NEW vignette now
-          // carries size 35 from the schema, so from here on both paths agree on one number.
-          const vgs = vig.params && vig.params.size != null ? FM.evalProp(vig.params.size, t) : 45;
-          const inner = Math.max(0, Math.min(0.98, vgs / 100));
-          const grad = ctx.createRadialGradient(gx, gy, rad * inner, gx, gy, rad);
-          grad.addColorStop(0, 'rgba(0,0,0,0)');
-          grad.addColorStop(1, 'rgba(0,0,0,' + amt + ')');
-          ctx.fillStyle = grad;
-          ctx.fillRect(-cw * anchorX(tr), -ch * anchorY(tr), cw, ch);
-        }
+        // (The vignette that used to be drawn here, over the clip rect, is CANVAS_FX.vignette now — #986 C8.)
       }
     }
     ctx.restore();
@@ -15424,13 +15665,88 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     a.drawImage(_adjTmp, 0, 0, nx, ny, (x0 * bw - OX) * rs, (y0 * bh - OY) * rs, nx * bw * rs, ny * bh * rs);   // upscale → blocky, at their project positions
     a.imageSmoothingEnabled = true;
   }
-  function applyAdjustment(ctx, layer, t, scene) {
-    const filter = effectFilter(layer, t, renderScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
-    const ppfx = (layer.effects || []).filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
-    const pixFx = (layer.effects || []).find(e => e.type === 'pixelate' && e.enabled !== false);
-    if (!hasCss && !ppfx.length && !pixFx) return;
+  /* ═══ A FILTER ON AN ADJUSTMENT LAYER GRADES WHAT IS BELOW IT (#986 C1, hunt HIGH) ═══════════════════════════════════
+   * The Filters tab is offered on an adjustment layer and fitToLayer keeps the container with its adjustment-safe
+   * children, so he saw "Added 1 filter" — and the picture did not change. This function read the layer's TOP-LEVEL
+   * effects only (effectFilter has no 'filter' case, PIXEL_ADJ has no container), and the container's own renderer is
+   * dispatched per layer, which an adjustment layer never reaches. Measured: a Grayscale inside a filter left a red
+   * frame (232,68,63) exactly red, while the same Grayscale placed directly greyed it to (103,103,103).
+   * Now a live container is opened here, with drawFilterContainer's two rules:
+   *   · Strength 1 (and a container nested past the depth cap) — its children stand exactly where it stood, so the
+   *     grade is byte-for-byte the one those children give placed directly. Strength 0 / no live child — it is absent.
+   *   · Between — a CROSS-FADE of the whole grade with and without the children, never a scaling of their params
+   *     (see drawFilterContainer for why), built as two graded plates mixed with 'lighter' and blitted once at the
+   *     layer's opacity. The CSS part of each grade is baked into its plate so both sides are complete pictures.
+   * `effs` / `into` are that machinery's: grade with this list instead of the layer's own, and bake the result (CSS
+   * filter included, opacity not) into the canvas `into` rather than onto ctx. A plain call is unchanged. */
+  const _adjFcPool = [];
+  const adjLiveBox = (e) => !!(e && FM.isFxContainer && FM.isFxContainer(e) && e.enabled !== false);
+  const adjKids = (e) => (e.effects || []).filter(k => k && k.enabled !== false && k.type !== FM.FX_CONTAINER);
+  const adjStrength = (e, t) => clamp01(e.params && e.params.strength != null ? FM.evalProp(e.params.strength, t) : 1);
+  function adjFlatten(effs, t) {                   // every container opened at full strength or dropped
+    const out = [];
+    for (const e of effs) {
+      if (!(FM.isFxContainer && FM.isFxContainer(e))) { out.push(e); continue; }
+      if (e.enabled === false) continue;
+      const k = adjKids(e);
+      if (k.length && adjStrength(e, t) > 0) for (const c of k) out.push(c);
+    }
+    return out;
+  }
+  function adjFilterPlate(ctx, layer, t, scene, effs, depth) {
+    const cw = ctx.canvas.width, ch = ctx.canvas.height;
+    if (!_adjFcPool[depth]) _adjFcPool[depth] = { A: document.createElement('canvas'), M: document.createElement('canvas') };
+    const P = _adjFcPool[depth];
+    ['A', 'M'].forEach(k => { if (P[k].width !== cw || P[k].height !== ch) { P[k].width = cw; P[k].height = ch; } });
+    let fi = -1, fs = 1;
+    if (depth < FC_MAX_DEPTH) for (let i = 0; i < effs.length; i++) {
+      const e = effs[i];
+      if (!adjLiveBox(e) || !adjKids(e).length) continue;
+      const s = adjStrength(e, t);
+      if (s > 0 && s < 1) { fi = i; fs = s; break; }
+    }
+    if (fi < 0) { applyAdjustment(ctx, layer, t, scene, adjFlatten(effs, t), P.M); return P.M; }
+    const box = effs[fi];
+    const rest = effs.slice(0, fi).concat(effs.slice(fi + 1));
+    const spliced = effs.slice(0, fi).concat(adjKids(box), effs.slice(fi + 1));
+    const a = P.A.getContext('2d');
+    a.setTransform(1, 0, 0, 1, 0, 0); a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
+    a.clearRect(0, 0, cw, ch); a.drawImage(adjFilterPlate(ctx, layer, t, scene, rest, depth + 1), 0, 0);   // the grade as if the filter were not there
+    const B = adjFilterPlate(ctx, layer, t, scene, spliced, depth + 1);                                     // …and as if its children stood in its place
+    const m = P.M.getContext('2d');
+    m.setTransform(1, 0, 0, 1, 0, 0); m.filter = 'none'; m.clearRect(0, 0, cw, ch);
+    m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - fs; m.drawImage(P.A, 0, 0);
+    m.globalCompositeOperation = 'lighter';     m.globalAlpha = fs;     m.drawImage(B, 0, 0);
+    m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
+    return P.M;
+  }
+  function applyAdjustmentFilters(ctx, layer, t, scene, own) {
+    const frac = own.some(e => adjLiveBox(e) && adjKids(e).length && (s => s > 0 && s < 1)(adjStrength(e, t)));
+    if (!frac) { applyAdjustment(ctx, layer, t, scene, adjFlatten(own, t)); return; }
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
+    const M = adjFilterPlate(ctx, layer, t, scene, own, 0);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = 'none';
+    ctx.drawImage(M, 0, 0);
+    ctx.restore();
+  }
+  function applyAdjustment(ctx, layer, t, scene, effs, into) {
+    if (!effs) {
+      const own = layer.effects || [];
+      if (own.some(adjLiveBox)) return applyAdjustmentFilters(ctx, layer, t, scene, own);
+      effs = own;
+    }
+    const lay = effs === layer.effects ? layer : Object.assign({}, layer, { effects: effs });
+    const filter = effectFilter(lay, t, renderScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
+    const ppfx = effs.filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
+    const pixFx = effs.find(e => e.type === 'pixelate' && e.enabled !== false);
+    if (!into && !hasCss && !ppfx.length && !pixFx) return;   // (baking: an empty grade is still the snapshot, masked)
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (!into && opacity <= 0) return;
     const P = scene.project, W = P.width, H = P.height;
     // The grade plate lives on the TARGET's pixel grid, not the project's — the same rule
     // drawManualBlendLayer and the Copy Background snapshot already follow. It used to be allocated at
@@ -15507,6 +15823,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         a.restore();
         a.globalCompositeOperation = 'source-over';
       }
+    }
+    if (into) {                                     // #986 C1: one side of a filter's cross-fade — baked, not blitted
+      const m = into.getContext('2d');
+      m.setTransform(1, 0, 0, 1, 0, 0); m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
+      m.clearRect(0, 0, into.width, into.height);
+      m.filter = hasCss ? filter : 'none';
+      m.drawImage(_adjCv, 0, 0);
+      m.filter = 'none';
+      return;
     }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);             // the plate is already on the target's pixel grid
