@@ -113385,4 +113385,221 @@
     }
   });
 
+  /* ═══ 986 batch 2 (hunt LOW, found by the #966 inventory — NOT his words): five sound faults, each measured before it was
+   * fixed (idle backlog §C: C11, C13, C16, C17, C18). Every one was reproduced with a number at 768c83d0 and each test below
+   * fails there for the reason it names. The audio-effect ones render through FM.buildAudioFxChain on an OfflineAudioContext
+   * (afx986, above) in BOTH the export's path (schedule) and the preview's (applyAt), so they measure numbers, not ears. */
+
+  /* C11 — EVERY NOISE BUFFER OF THE SAME LENGTH AND COLOUR WAS THE SAME NOISE. The seed was (length, colour, rate) and nothing
+   * else, so a sound that asked for several of one kind got one buffer many times. MEASURED at 768c83d0 by catching every
+   * buffer a recipe makes: Fire crackle's 10 crackles were 1 distinct buffer, Ticking build's 29 ticks 1, Camera shutter's two
+   * clicks 1. Fixed (js/sfx.js noiseSeed): a repeat of a seed in the same render gets a stream of its own; the FIRST request
+   * gets exactly the old one. Measured across all 30 sounds, only those three changed; the other 27 render as at 768c83d0.
+   * CONTROLS: the first buffer of a kind is still the old formula's stream, sample for sample, and a sound renders the same
+   * twice (the ▶ and Add each render it afresh, so that promise is what makes them the same sound). */
+  test('986 C11 no two noise buffers in one sound are the same noise - every Fire crackle, every Ticking build tick and both shutter clicks are their own, and a sound still renders the same twice', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.sfx || !FM.sfx.byId || !FM.sfx.renderBuffer || !FM.sfx._noiseBuffer) throw new Error('FM.sfx seams (byId, renderBuffer, _noiseBuffer) are missing');
+    const SR = 44100;
+    async function buffersOf(id) {
+      const def = FM.sfx.byId(id);
+      if (!def) throw new Error('setup: there is no sound ' + id);
+      const ctx = new OfflineAudioContext(1, Math.ceil((def.dur + 0.05) * SR), SR);
+      const made = [], orig = ctx.createBuffer.bind(ctx);
+      ctx.createBuffer = function () { const b = orig.apply(null, arguments); made.push(b); return b; };
+      const trim = ctx.createGain(); trim.connect(ctx.destination);
+      def.render(ctx, 0, def.dur, trim);
+      await ctx.startRendering();
+      return made;
+    }
+    const sig = b => Array.prototype.slice.call(b.getChannelData(0), 0, 48).join(',');
+    const bad = [];
+    for (const [id, len, name] of [['fire', 2205, 'crackles'], ['build-tick', 1323, 'ticks'], ['shutter', 2205, 'clicks']]) {
+      const bufs = (await buffersOf(id)).filter(b => b.length === len);
+      if (bufs.length < 2) throw new Error('setup: ' + id + ' made ' + bufs.length + ' noise buffers of ' + len + ' samples - the recipe changed and this probe no longer reaches its repeats');
+      const distinct = new Set(bufs.map(sig)).size;
+      if (distinct !== bufs.length) bad.push(FM.sfx.byId(id).name + ' plays ' + bufs.length + ' ' + name + ' from ' + distinct + ' distinct noise buffer' + (distinct === 1 ? '' : 's'));
+    }
+    // CONTROL 1: the first white 0.05 s buffer in a fresh context is the stream the old seed made (mulberry32, seed n*31+3+rate/100).
+    const ref = (function (seed) { let a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })(2205 * 31 + 3 + Math.floor(SR / 100));
+    const oc = new OfflineAudioContext(1, 128, SR);
+    const first = FM.sfx._noiseBuffer(oc, 0.05, 'white').getChannelData(0);
+    let worst = 0; for (let i = 0; i < first.length; i++) worst = Math.max(worst, Math.abs(first[i] - Math.fround(ref() * 2 - 1)));
+    if (worst !== 0) throw new Error('CONTROL: the first noise buffer of a kind is no longer the stream it always was (up to ' + worst.toExponential(2) + ' away) - every sound would change, not just the repeats');
+    const second = FM.sfx._noiseBuffer(oc, 0.05, 'white').getChannelData(0);
+    if (sig({ getChannelData: () => second }) === sig({ getChannelData: () => first })) bad.push('asking the same context twice for 0.05 s of white noise hands back the same noise');
+    // CONTROL 2: the same sound renders the same twice - Fire, whose crackles are now each their own.
+    const a = (await FM.sfx.renderBuffer(FM.sfx.byId('fire'))).getChannelData(0), b = (await FM.sfx.renderBuffer(FM.sfx.byId('fire'))).getChannelData(0);
+    let d = 0; for (let i = 0; i < a.length; i++) d = Math.max(d, Math.abs(a[i] - b[i]));
+    if (d > 1e-6) throw new Error('CONTROL: Fire crackle renders up to ' + d.toFixed(4) + ' apart from itself - the ▶ and the clip Add makes would be different sounds');
+    if (bad.length) throw new Error('the same noise is replayed inside one sound: ' + bad.join('; '));
+  });
+
+  /* C13 — AUDIO-EFFECT SEARCH MISSED THE WORDS PEOPLE USE. It matched the label, the type id and the category, and nothing else.
+   * MEASURED at 768c83d0 in the real browser: karaoke, robot, chipmunk, deep voice, muffled, underwater, radio, bass boost and
+   * 8-bit each showed No audio effects match. Fixed: a tag list per effect (js/audio-fx.js TAGS) read by the search, matched
+   * while it is typed and as one of several words. Driven through the real search box on a song, then the found tile is
+   * tapped: it is on screen at this width and it adds the effect. CONTROL: reverb finds Reverb (the label match that always
+   * worked), and a word that means nothing still says so. */
+  test('986 C13 audio-effect search finds what people call the sound - karaoke, robot voice, chipmunk, muffled, radio, bass boost, 8-bit - and the found effect adds with one tap', { item: '986', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.audioFxBrowser || !FM.audioFxBrowser.open) throw new Error('FM.audioFxBrowser is not reachable');
+    const saved = FM.scene;
+    let recents = null; try { recents = localStorage.getItem('fm.afx.recents'); } catch (e) {}
+    const root = document.getElementById('afx-browser');
+    try {
+      const song = await hbAudScene([], 4);
+      FM.audioFxBrowser.open(FM.layerById(FM.scene, song.id)); await sleep(350);
+      if (!root || root.classList.contains('hidden')) throw new Error('setup: the audio effects browser did not open on a song');
+      const btn = root.querySelector('.fxb-search-btn'), input = root.querySelector('.fxb-search-input');
+      if (!btn || !input) throw new Error('setup: the audio browser has no search button / field');
+      btn.click(); await sleep(60);
+      if (input.classList.contains('hidden')) throw new Error('setup: the search button did not show the search field');
+      const search = async q => { input.value = q; input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(320); return [].slice.call(root.querySelectorAll('.fxb-search-grid .fxb-tile')); };
+      const names = tiles => tiles.map(t => (t.querySelector('.fxb-tile-name') || {}).textContent || '').map(s => s.trim());
+      const ctl = names(await search('reverb'));
+      if (ctl.indexOf('Reverb') < 0) throw new Error('CONTROL: searching reverb shows ' + (ctl.join(', ') || 'nothing') + ' - the search itself is broken, nothing below means anything');
+      await search('zzqx');
+      const empty = root.querySelector('.fxb-search-grid .fxb-empty');
+      if (!empty || root.querySelectorAll('.fxb-search-grid .fxb-tile').length) throw new Error('CONTROL: a word that means nothing (zzqx) does not say No audio effects match');
+      const want = [['karaoke', 'Vocal Remove'], ['karao', 'Vocal Remove'], ['robot', 'Ring Mod'], ['robot voice', 'Ring Mod'], ['chipmunk', 'Pitch Shift'], ['deep voice', 'Pitch Shift'],
+        ['muffled', 'Low-Pass'], ['underwater', 'Low-Pass'], ['radio', 'Telephone'], ['megaphone', 'Telephone'], ['bass boost', 'Bass & Treble'], ['8-bit', 'Bit Crush'], ['8 bit', 'Bit Crush']];
+      const bad = [];
+      for (const [q, label] of want) { const got = names(await search(q)); if (got.indexOf(label) < 0) bad.push(q + ' finds ' + (got.length ? got.join(', ') : 'nothing') + ', not ' + label); }
+      const robot = names(await search('robot voice'));
+      if (robot.length !== 1) bad.push('robot voice lists ' + robot.join(', ') + ' - one word of a phrase pulled in effects that have nothing to do with it');
+      if (bad.length) throw new Error('audio-effect search misses the words people use: ' + bad.join('; '));
+      const tile =(await search('karaoke')).filter(t => (t.querySelector('.fxb-tile-name') || {}).textContent === 'Vocal Remove')[0];
+      const r = tile.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0 && r.left >= -1 && r.right <= window.innerWidth + 1 && r.top >= -1 && r.bottom <= window.innerHeight + 1)) throw new Error('the Vocal Remove tile that karaoke finds is at ' + Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' in a ' + window.innerWidth + 'x' + window.innerHeight + ' window - not on screen');
+      tile.click(); await sleep(250);
+      const L = FM.layerById(FM.scene, song.id);
+      if (!(L.audioFx || []).some(f => f.type === 'vocalremove')) throw new Error('tapping the Vocal Remove that karaoke found did not add it to the song (' + JSON.stringify((L.audioFx || []).map(f => f.type)) + ')');
+    } finally {
+      try { FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (recents == null) localStorage.removeItem('fm.afx.recents'); else localStorage.setItem('fm.afx.recents', recents); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* C16 — THE FLANGER'S FEEDBACK CAME BACK ONE RENDER QUANTUM LATE. Its feedback was a loop through the swept delay, and a
+   * cycle in Web Audio costs a render quantum (128 frames, 2.67 ms at 48 kHz) per trip. MEASURED at 768c83d0, an impulse at
+   * the bottom of a Depth 1 sweep (tau = 1 ms, Feedback 0.5, Mix 1) came back at 1.00, 4.67, 8.35, 12.06 ms - not 1, 2, 3, 4 -
+   * and at the top (tau = 7 ms) at 7.0, 16.6, 26.3 - not 7, 14, 21. (The backlog expected the sweep itself to stop at 2.7 ms;
+   * measured, the first pass reached 1.000 ms in both paths - it is the echoes after it that were late.) Fixed: the loop is
+   * unrolled into a chain of swept delays with no cycle. Each echo k is summed within 4 samples of k x tau and must carry
+   * Feedback^(k-1); nothing may sit at tau + 2.67 ms. CONTROL: the first pass lands at tau (1 ms / 7 ms) and at Feedback 0
+   * there is no second echo. A Feedback keyframed from 0 up to 0.5 is checked too (the taps are scheduled gains). */
+  test('986 C16 Flanger feedback echoes land every tau, not tau plus a render quantum - at the bottom and top of the sweep, in the export and the preview', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const SR = 48000, CLICK = 2400;   // the impulse is 50 ms into the window
+    const click = t => (Math.round(t * SR) === CLICK ? 1 : 0);
+    const fl = (fb, over) => [{ type: 'flanger', enabled: true, params: Object.assign({ rate: 0.3, depth: 1, feedback: fb, mix: 1 }, over || {}) }];
+    const near = (y, ms) => { const c = CLICK + ms * SR / 1000; let s = 0; for (let i = Math.floor(c - 4); i <= Math.ceil(c + 4); i++) s += Math.abs(y[i] || 0); return s; };
+    const QMS = 128 / SR * 1000;
+    // rate 0.3 Hz: the sweep's bottom (tau 1 ms) is scene 2.5 s, its top (tau 7 ms) scene 0.8333 s; the click lands on each.
+    const spots = [['bottom', 2.45, 1], ['top', 0.78333, 7]];
+    const bad = [];
+    for (const [where, anchor, tau] of spots) {
+      for (const live of [false, true]) {
+        const path = live ? 'preview' : 'export';
+        const y0 = await afx986(fl(0), click, 0.2, { anchor: anchor, live: live });
+        if (Math.abs(near(y0, tau) - 1) > 0.05) throw new Error('CONTROL: at the ' + where + ' of the sweep the first pass (' + path + ') carries ' + near(y0, tau).toFixed(3) + ' at ' + tau + ' ms, not 1 - the probe is not where the sweep is');
+        if (near(y0, 2 * tau) > 0.02) throw new Error('CONTROL: at Feedback 0 there is still an echo at ' + 2 * tau + ' ms (' + near(y0, 2 * tau).toFixed(3) + ')');
+        for (const fb of [0.5, 0.9]) {
+          const y = await afx986(fl(fb), click, 0.2, { anchor: anchor, live: live });
+          for (let k = 2; k <= 4; k++) {
+            const got = near(y, k * tau), want = Math.pow(fb, k - 1);
+            if (Math.abs(got - want) > 0.2 * want) bad.push(path + ', ' + where + ' (tau ' + tau + ' ms), Feedback ' + fb + ': echo ' + k + ' at ' + (k * tau) + ' ms carries ' + got.toFixed(3) + ', not ' + want.toFixed(3));
+          }
+          const late = near(y, tau + QMS);
+          if (late > 0.1 * fb) bad.push(path + ', ' + where + ', Feedback ' + fb + ': ' + late.toFixed(3) + ' comes back at ' + (tau + QMS).toFixed(2) + ' ms - tau plus a render quantum');
+        }
+      }
+    }
+    // Feedback keyframed 0 -> 0.5 before the click (scene time), held: the second echo carries 0.5.
+    const kf = await afx986(fl({ kf: [{ t: 2.45, v: 0 }, { t: 2.48, v: 0.5 }, { t: 2.7, v: 0.5 }] }), click, 0.2, { anchor: 2.45 });
+    if (Math.abs(near(kf, 2) - 0.5) > 0.1) bad.push('a Feedback keyframed up to 0.5 gives a second echo of ' + near(kf, 2).toFixed(3) + ' at 2 ms, not 0.5');
+    if (bad.length) throw new Error('the Flanger feedback is not a flanger feedback: ' + bad.slice(0, 8).join('; '));
+  });
+
+  /* C17 — THE PHASER'S FEEDBACK WAS A FIXED COMB. The loop went through a 1 ms DelayNode (a cycle needs one) and the engine adds
+   * a render quantum per trip, so the loop was 3.67 ms: a comb every 272 Hz that stands still while the notches sweep.
+   * MEASURED at 768c83d0 against a phaser with no delay in its loop (the model: 0.5 + 0.5 A / (1 - fb A), A the four allpasses
+   * read back from the engine's own BiquadFilterNode.getFrequencyResponse), 60 Hz - 6 kHz: Depth 0, Feedback 0.4 missed it by
+   * 3.62 dB rms and 0.9 by 7.68, with the strongest resonance at 1360 Hz where the phaser puts it at 240; at the top of a
+   * Depth 0.7 sweep 3.82 dB rms and 1920 Hz for 1980. Fixed: the loop unrolled into six passes of the chain, no cycle - 0.03 /
+   * 3.26 dB rms, 240 Hz, and 0.03 dB / 1980 Hz while sweeping (Feedback 0.9 keeps fb^6 of its tail, hence 3.3 dB). CONTROL:
+   * Feedback 0 matches the model to 0.05 dB (it did at 768c83d0 too - the measurement and the model are right). */
+  test('986 C17 Phaser feedback resonates where the phaser notches are, not on a fixed comb - held still and mid-sweep, in the export and the preview', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const SR = 48000;
+    const freqs = []; for (let f = 60; f <= 6000; f += 20) freqs.push(f);
+    function allpass(scale) {
+      const oc = new OfflineAudioContext(1, 128, SR), F = new Float32Array(freqs);
+      const re = freqs.map(() => 1), im = freqs.map(() => 0);
+      [200, 400, 800, 1600].forEach(b => {
+        const bq = oc.createBiquadFilter(); bq.type = 'allpass'; bq.frequency.value = b * scale; bq.Q.value = 1;
+        const mag = new Float32Array(F.length), ph = new Float32Array(F.length); bq.getFrequencyResponse(F, mag, ph);
+        for (let i = 0; i < F.length; i++) { const r = mag[i] * Math.cos(ph[i]), q = mag[i] * Math.sin(ph[i]); const nr = re[i] * r - im[i] * q, ni = re[i] * q + im[i] * r; re[i] = nr; im[i] = ni; }
+      });
+      return { re: re, im: im };
+    }
+    const model = (A, fb) => freqs.map((f, i) => { const dr = 1 - fb * A.re[i], di = -fb * A.im[i], dd = dr * dr + di * di; const qr = (A.re[i] * dr + A.im[i] * di) / dd, qi = (A.im[i] * dr - A.re[i] * di) / dd; return Math.hypot(0.5 + 0.5 * qr, 0.5 * qi); });
+    const response = (h, i0) => freqs.map(f => { let re = 0, im = 0; for (let n = i0; n < h.length; n++) { const w = 2 * Math.PI * f * (n - i0) / SR; re += h[n] * Math.cos(w); im -= h[n] * Math.sin(w); } return Math.hypot(re, im); });
+    const dB = x => 20 * Math.log10(Math.max(1e-9, x));
+    const rms = (m, id) => { let s = 0; for (let i = 0; i < m.length; i++) { const e = dB(m[i]) - dB(id[i]); s += e * e; } return Math.sqrt(s / m.length); };
+    const peak = m => { let bi = 0; for (let i = 1; i < m.length; i++) if (m[i] > m[bi]) bi = i; return freqs[bi]; };
+    const imp = i0 => t => (Math.round(t * SR) === i0 ? 1 : 0);
+    const ph = (fb, over) => [{ type: 'phaser', enabled: true, params: Object.assign({ rate: 0.5, depth: 0, feedback: fb }, over || {}) }];
+    const A0 = allpass(1), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const c = rms(response(await afx986(ph(0), imp(0), 0.5, { live: live }), 0), model(A0, 0));
+      if (c > 0.05) throw new Error('CONTROL: at Feedback 0 the ' + path + ' misses the allpass model by ' + c.toFixed(2) + ' dB rms - the model or the measurement is broken');
+      for (const [fb, lim] of [[0.4, 0.5], [0.9, 4.5]]) {
+        const m = response(await afx986(ph(fb), imp(0), 0.5, { live: live }), 0), id = model(A0, fb), e = rms(m, id);
+        if (e > lim) bad.push(path + ', held still, Feedback ' + fb + ': ' + e.toFixed(2) + ' dB rms from a phaser with no delay in its loop (limit ' + lim + ')');
+        if (Math.abs(peak(m) - peak(id)) > 20) bad.push(path + ', held still, Feedback ' + fb + ': the strongest resonance is at ' + peak(m) + ' Hz, the phaser puts it at ' + peak(id));
+      }
+    }
+    // Mid-sweep: Rate 0.05, Depth 0.7 - the top of the sweep is scene 5 s, where every stage sits at 1.49 x its centre.
+    const A1 = allpass(1.49);
+    for (const [fb, lim] of [[0.4, 0.5], [0.9, 4.5]]) {
+      const m = response(await afx986(ph(fb, { rate: 0.05, depth: 0.7 }), imp(2400), 0.45, { anchor: 4.95 }), 2400), id = model(A1, fb), e = rms(m, id);
+      if (e > lim) bad.push('at the top of a Depth 0.7 sweep, Feedback ' + fb + ': ' + e.toFixed(2) + ' dB rms from a phaser with no delay in its loop (limit ' + lim + ')');
+      if (Math.abs(peak(m) - peak(id)) > 20) bad.push('at the top of a Depth 0.7 sweep, Feedback ' + fb + ': the strongest resonance is at ' + peak(m) + ' Hz, the phaser puts it at ' + peak(id));
+    }
+    if (bad.length) throw new Error('the Phaser feedback does not follow its notches: ' + bad.slice(0, 8).join('; '));
+  });
+
+  /* C18 — BIT CRUSH BITS 13-16 WERE THE DRY SOUND. Its staircase lived on an 8192-point WaveShaper curve, and a WaveShaper
+   * interpolates linearly, so once a step is about one point wide the staircase interpolates back into a straight line.
+   * MEASURED at 768c83d0 on a -40 dBFS 1 kHz sine, error (output - input) against a true quantiser (JS, same rounding):
+   *   bits 12: -81.4 vs -76.5 dB   13: -78.5 vs -81.4   14 / 15 / 16: -121.3 (float noise) vs -92.5 / -95.4 / -101.1
+   * and 14, 15 and 16 rendered byte-identical. Fixed (crushCurve): 8 curve points per step from 11 bits up - 11-16 now land
+   * within 1.1 dB of the quantiser; up to 10 bits the curve is untouched. Checked through the static shaper (export and
+   * preview) and the keyframed bank, whose top four shapers were all the dry line. CONTROL: 6 bits (the default) is the
+   * quantiser to 0.3 dB and 14 bits differs from 16. */
+  test('986 C18 Bit Crush 11 to 16 bits quantise like the bits they say - 14, 15 and 16 are no longer the dry sound, in the export, the preview and a keyframed Bits', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const SR = 48000, sine = sine986(0.01);
+    const crush = bits => [{ type: 'bitcrush', enabled: true, params: { bits: bits, mix: 1 } }];
+    const errDb = y => { let e = 0; for (let i = 0; i < y.length; i++) { const d = y[i] - Math.fround(sine(i / SR)); e += d * d; } return 10 * Math.log10(e / y.length); };
+    const idealDb = (bits, n) => { const step = 2 / Math.pow(2, bits); let e = 0; for (let i = 0; i < n; i++) { const x = Math.fround(sine(i / SR)); const d = Math.round(x / step) * step - x; e += d * d; } return 10 * Math.log10(e / n); };
+    const ctl = await afx986(crush(6), sine, 0.5);
+    if (Math.abs(errDb(ctl) - idealDb(6, ctl.length)) > 0.3) throw new Error('CONTROL: 6 bits (the default) sits ' + (errDb(ctl) - idealDb(6, ctl.length)).toFixed(2) + ' dB from a true 6-bit quantiser - the measurement is broken');
+    const bad = [], outs = {};
+    for (let b = 11; b <= 16; b++) {
+      const want = idealDb(b, SR / 2);
+      for (const [path, fx, opts] of [['export', crush(b), {}], ['preview', crush(b), { live: true }], ['keyframed', crush({ kf: [{ t: 0, v: b }, { t: 0.5, v: b }] }), {}]]) {
+        const y = await afx986(fx, sine, 0.5, opts), got = errDb(y);
+        if (path === 'export') outs[b] = y;
+        if (Math.abs(got - want) > 2) bad.push(path + ' ' + b + ' bits leaves ' + got.toFixed(1) + ' dB of quantisation error where ' + b + ' bits leaves ' + want.toFixed(1));
+      }
+    }
+    let d = 0; for (let i = 0; i < outs[14].length; i++) d = Math.max(d, Math.abs(outs[14][i] - outs[16][i]));
+    if (!(d > 1e-5)) bad.push('14 bits and 16 bits render ' + (d === 0 ? 'byte-identical' : 'within ' + d.toExponential(1)));
+    if (bad.length) throw new Error('the top of the Bits slider does not crush: ' + bad.join('; '));
+  });
+
 })();
