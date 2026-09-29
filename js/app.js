@@ -8418,10 +8418,19 @@ window.FM = window.FM || {};
          centred on a phone — and keeps whichever block was big. `setTimeout`, not rAF: rAF fires no frames in a tab that is
          not fronted (popfrom.js's RETRY note, LOOP.md rule 11), and the placement must wait for the new width's layout to
          have moved the cog. */
+      /* #983 review: AND BUILD THE PC ROW FIRST. A resize never builds it (only refreshAll and syncTopBar do), so a window
+         widened from a phone's — where any edit tears the row down — still had the cog in the hidden top bar, with no box:
+         the pair a person+ opened there stayed in the middle, and stayed there after the row came back. Measured with a real
+         mouse and real resizes (anchored:false, pair's right edge 820 against the cog's 1140). Only on the way to a PC: a
+         narrowing leaves the row to the next refresh, as it did before. */
       const cvOnWidth = () => {
         if (cvDialog.classList.contains('hidden')) return;
         cvPairSettle();
-        setTimeout(() => { if (!cvDialog.classList.contains('hidden')) cvPlace(cvSrc); }, 0);
+        setTimeout(() => {
+          if (cvDialog.classList.contains('hidden')) return;
+          if (FM.pcTransportLayout && window.matchMedia('(min-width: 701px)').matches) FM.pcTransportLayout();
+          cvPlace(cvSrc);
+        }, 0);
       };
       let cvWidthOn = false;
       const cvWatchWidth = (on) => {

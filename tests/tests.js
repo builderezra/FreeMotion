@@ -110062,13 +110062,19 @@
             press978(cog); await opened();
             hung('the cog reopening on Friends, the block open last');
             await shut();
-            /* The person+ passes itself to the pair; on a PC it has no box, so the pair hangs from the cog. */
+            /* A JAVASCRIPT-ONLY GUARD, NOT A USER DOOR (#983 review): on a PC the person+ has no box, so nobody can press it here.
+               It pins cvPlace's own rule — a door with no box on a PC hangs the pair from the cog — which the widen below needs. */
             ui.openPeople(pb); await opened();
-            hung('the person+ door on a PC');
+            hung('cvPlace given the box-less person+ on a PC (a JavaScript call, not a press)');
             await shut();
           }, 1280);
           /* A pair the phone's person+ opened, and then the window widened to a PC's. */
           await atPhoneWidth(async function () {
+            /* #983 review: TEAR THE ROW DOWN AS THE APP DOES. Any edit at phone width runs refreshAll, which gives the PC row's
+               controls back to the hidden top bar; a resize alone never does, so without this the harness kept the cog's box
+               through the narrowing and the widen below passed for a reason the app never meets. */
+            FM.refreshAll(); await sleep(60);
+            if (document.getElementById('t-far') || document.getElementById('btn-settings').getBoundingClientRect().width > 0) throw new Error('setup: at 380 after a refresh the PC row is still built (#t-far ' + !!document.getElementById('t-far') + ') — the widen below would not start from a phone’s state');
             const pb = document.getElementById('btn-share');
             pb.click(); await opened();
             if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: at 380 the person+ did not open Friends big');
