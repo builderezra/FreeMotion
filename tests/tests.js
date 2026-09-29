@@ -111845,5 +111845,56 @@
     } finally { try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {} await sleep(150); }
   });
 
+  /* C12 (review) — THE PLAYING STATE BELONGED TO A ROW, NOT TO THE SOUND. MEASURED at e5976048 with Riser (2.2 s): ▶, then its ★ -
+   * the ★ rebuilds the list, and the sound kept playing with NO lit row and both of its copies (Favourites and its category)
+   * labelled Hear Riser; a tap on either copy then RESTARTED it instead of stopping it (previewing() still riser, the row lit
+   * again). 913186b6 lost the highlight on a ★ tap too. Fixed: the playing state is keyed by the sound's id - every row of
+   * that sound is lit and says Stop, a row rebuilt while it plays comes back lit, and one tap on any copy stops it.
+   * CONTROL: the first tap lights its row, and the ★ does not itself stop the sound. */
+  test('986 C12 a sound keeps its lit Stop row after its star is tapped, and one tap on either copy stops it', { item: '986', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.sfx || !FM.sfx.open || !FM.sfx.favs) throw new Error('FM.sfx.open / favs is missing');
+    const favKey = 'fm.sfx.fav', saved = localStorage.getItem(favKey);
+    FM.sfx.open(); await sleep(400);
+    try {
+      const secs = r => parseFloat((r.querySelector('.sfx-dur') || {}).textContent);
+      const idOf = r => ((r.querySelector('.sfx-star') || {}).dataset || {}).sfxid;
+      const favs = FM.sfx.favs();
+      const pick = [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => secs(r) >= 1.5 && idOf(r) && favs.indexOf(idOf(r)) < 0)[0];
+      if (!pick) throw new Error('setup: no unstarred sound of 1.5 s or more in the sheet');
+      const id = idOf(pick), name = pick.querySelector('.sfx-name').textContent;
+      const rowsOf = () => [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => idOf(r) === id);
+      const lit = () => [].slice.call(document.querySelectorAll('.sfx-row.playing')).map(idOf);
+      const say = r => r.querySelector('.sfx-play').getAttribute('aria-label') || '';
+      const tap = (r, what) => attached(r.querySelector(what), 'the ' + what + ' of ' + name).click();
+      const playing = () => (typeof FM.sfx.previewing === 'function' ? FM.sfx.previewing() : '(no previewing seam)');
+      tap(pick, '.sfx-play'); await sleep(120);
+      if (!pick.classList.contains('playing')) throw new Error('CONTROL: tapping ▶ on ' + name + ' did not light its row - nothing below is measured');
+      tap(pick, '.sfx-star'); await sleep(150);
+      let copies = rowsOf();
+      if (copies.length !== 2) throw new Error('setup: after starring, ' + name + ' should appear twice (Favourites and its category) - found ' + copies.length);
+      if (typeof FM.sfx.previewing === 'function' && playing() !== id) throw new Error('CONTROL: the ★ tap is not meant to stop the sound, yet the sheet reports ' + JSON.stringify(playing()) + ' playing');
+      const unlit = copies.filter(r => !r.classList.contains('playing') || !/^Stop /.test(say(r)));
+      if (unlit.length) throw new Error(name + ' is still playing after its ★ was tapped, but ' + unlit.length + ' of its 2 rows are not lit with a Stop ▶ (lit rows ' + JSON.stringify(lit()) + ', labels ' + JSON.stringify(copies.map(say)) + ') - the ★ rebuilt the list and the new rows forgot it');
+      if (lit().some(x => x !== id)) throw new Error('rows of other sounds are lit: ' + JSON.stringify(lit()));
+      tap(copies[1], '.sfx-play'); await sleep(120);
+      if (playing() !== null) throw new Error('one tap on the lit ' + name + ' row after starring did not stop it - the sheet reports ' + JSON.stringify(playing()) + ' (it restarted)');
+      if (lit().length) throw new Error('after the stop tap rows are still lit: ' + JSON.stringify(lit()));
+      if (!rowsOf().every(r => /^Hear /.test(say(r)))) throw new Error('after the stop tap the ▶ labels are ' + JSON.stringify(rowsOf().map(say)));
+      // The other copy: start it from the category row, stop it from the Favourites row.
+      copies = rowsOf();
+      tap(copies[1], '.sfx-play'); await sleep(120);
+      if (!rowsOf().every(r => r.classList.contains('playing'))) throw new Error('playing ' + name + ' from its category row did not light its Favourites copy too');
+      tap(copies[0], '.sfx-play'); await sleep(120);
+      if (playing() !== null) throw new Error('tapping the Favourites copy of the playing ' + name + ' did not stop it - the sheet reports ' + JSON.stringify(playing()) + ' (it restarted)');
+      if (lit().length) throw new Error('after stopping from the Favourites copy rows are still lit: ' + JSON.stringify(lit()));
+    } finally {
+      try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
+      try { if (saved === null) localStorage.removeItem(favKey); else localStorage.setItem(favKey, saved); } catch (e) {}
+      await sleep(150);
+    }
+  });
+
 
 })();

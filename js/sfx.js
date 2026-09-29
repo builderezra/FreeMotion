@@ -670,18 +670,28 @@ window.FM = window.FM || {};
      by its own timer and nothing else, so hearing a second sound left the first row lit for the rest of its
      length, and nothing could stop a sound once started — tapping it again only restarted it. Now starting
      a sound stops the one before AND unlights its row at once, the highlight goes out when the sound really
-     ends, and tapping the row that is playing stops it. */
-  let _cur = null;   // { def, row, src } — the preview in flight, if any
-  function markRow(row, on, def) {
-    if (!row) return;
+     ends, and tapping the row that is playing stops it.
+     KEYED BY THE SOUND, NOT BY ONE ROW (986 review). The ★ rebuilds the list, and a starred sound sits in
+     two rows (Favourites and its category). Tied to the row that was tapped, the playing state was lost on
+     a ★ tap — the sound played on with no lit row and a "Hear" ▶, so a tap restarted it instead of stopping
+     it — and the other copy of a starred sound restarted it too. So every row of the playing sound is lit,
+     a row built while it plays comes back lit (rowFor), and a tap on any of them stops it. */
+  let _cur = null;   // { def, src } — the preview in flight, if any
+  function paintRow(row, on, def) {
     row.classList.toggle('playing', !!on);
     const play = row.querySelector('.sfx-play');
-    if (play && def) {
+    if (play) {
       const say = (on ? 'Stop ' : 'Hear ') + def.name;
       play.title = say; play.setAttribute('aria-label', say);
     }
   }
-  function preview(def, row) {
+  function markRow(def, on) {   // every row of this sound in the open sheet
+    document.querySelectorAll('.sfx-row .sfx-star[data-sfxid]').forEach(star => {
+      const row = star.dataset.sfxid === def.id && star.closest('.sfx-row');
+      if (row) paintRow(row, on, def);
+    });
+  }
+  function preview(def) {
     stopPreview();
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { if (FM.toast) FM.toast('This browser cannot play sound effects'); return Promise.resolve(false); }
@@ -694,12 +704,12 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('Could not start audio \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
       return Promise.resolve(false);
     }
-    const me = { def: def, row: row || null, src: null };
+    const me = { def: def, src: null };
     _cur = me;
-    markRow(me.row, true, def);
+    markRow(def, true);
     const ctx = liveCtx;
     const fail = (e) => {
-      if (_cur === me) { _cur = null; markRow(me.row, false, def); }
+      if (_cur === me) { _cur = null; markRow(def, false); }
       /* SAID, NOT SWALLOWED. A preview that fails silently is indistinguishable from one that works
          on a muted phone, which is exactly how this lasted. */
       if (FM.reportError) FM.reportError('playing the sound effect ' + def.name, e);   // queue 674
@@ -712,7 +722,7 @@ window.FM = window.FM || {};
         const src = ctx.createBufferSource();
         src.buffer = buf;                         // the very samples Add puts on the timeline, at unity
         src.connect(ctx.destination);
-        src.onended = () => { if (_cur === me) { _cur = null; markRow(me.row, false, def); } try { src.disconnect(); } catch (e) {} };
+        src.onended = () => { if (_cur === me) { _cur = null; markRow(def, false); } try { src.disconnect(); } catch (e) {} };
         src.start(ctx.currentTime + 0.01);
         me.src = src;
         return true;
@@ -729,7 +739,7 @@ window.FM = window.FM || {};
     if (!me) return;
     _cur = null;
     if (me.src) { try { me.src.stop(); } catch (e) {} try { me.src.disconnect(); } catch (e) {} }
-    markRow(me.row, false, me.def);
+    markRow(me.def, false);
   }
   function previewing() { return _cur ? _cur.def.id : null; }   // suite seam: which sound is playing, if any
 
@@ -815,8 +825,8 @@ window.FM = window.FM || {};
       const name = el('button', 'sfx-name', def.name);
       name.type = 'button';
       const secs = el('span', 'sfx-dur', def.dur.toFixed(2).replace(/0$/, '') + 's');
-      // Tap = hear it; tap the row that is playing = stop it (queue 986). preview() owns the highlight now.
-      const hear = () => { if (_cur && _cur.row === row) { stopPreview(); return; } preview(def, row); };
+      // Tap = hear it; tap a row of the sound that is playing = stop it (queue 986). preview() owns the highlight now.
+      const hear = () => { if (_cur && _cur.def.id === def.id) { stopPreview(); return; } preview(def); };
       play.addEventListener('click', hear);
       name.addEventListener('click', hear);
       const star = el('button', 'sfx-star' + (isFav(def.id) ? ' on' : ''), '★');
@@ -844,6 +854,7 @@ window.FM = window.FM || {};
         catch (e) { addBtn.disabled = false; addBtn.textContent = 'Add'; if (FM.toast) FM.toast('Could not add that sound'); }
       });
       row.append(play, name, secs, star, addBtn);
+      if (_cur && _cur.def.id === def.id) paintRow(row, true, def);   // rebuilt (the ★) while it plays: still lit, still Stop
       return row;
     }
     function fillList() {
