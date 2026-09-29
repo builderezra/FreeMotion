@@ -51,6 +51,24 @@ window.FM = window.FM || {};
   function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
   function dbToLin(db) { return Math.pow(10, db / 20); }
 
+  /* ═══ A HARD-KNEE DynamicsCompressor TURNS EVERYTHING UP, AND NOTHING SAYS SO (queue 986, hunt C2) ═══════
+   * The Web Audio spec gives every DynamicsCompressorNode an automatic makeup gain it cannot switch off:
+   * (1 / the curve's gain at 0 dBFS) ^ 0.6. With a hard knee and ratio R that is −0.6·(1 − 1/R)·T dB
+   * — +0.57 dB for each dB the threshold T sits below 0 at 20:1. So a "Ceiling" of −6 was really a
+   * 20:1 compressor followed by +3.4 dB: MEASURED in the suite's Chrome, a full-scale sine came out at
+   * −2.1 dBFS, not near −6, and at a −24 ceiling a quiet −40 dBFS line came out 13.7 dB LOUDER
+   * (−26.3) while a full-scale one sat at −8.6. The boost limiter on a clip above 100 % (−1.5 dBFS,
+   * js/audio-fx-live.js) carried the same +0.86 dB and let a 1000 % sine out at 1.11 — over full scale.
+   * This is the gain that cancels it, applied after the node: below the threshold the level is then
+   * untouched, and above it the 20:1 slope is all that is left (a full-scale sine lands within ~1.7 dB of
+   * a −24 ceiling, within 0.5 dB of −6 — the node's ratio stops at 20, which is as hard as it gets).
+   * Spec maths, not a tuned number: the same line holds in every engine that follows the spec. */
+  function hardKneeMakeupCancel(thresholdDb, ratio) {
+    const r = ratio > 1 ? ratio : 1;
+    return dbToLin(0.6 * (1 - 1 / r) * Math.min(0, thresholdDb));
+  }
+  FM._hardKneeMakeupCancel = hardKneeMakeupCancel;   // one definition: the boost limiter (audio-fx-live.js) uses it too
+
   /* ---- curves ---- */
   // A WaveShaper curve sampled over its input domain [-1, 1]. Shared between instances (never mutated).
   function curveFrom(fn, n) {
@@ -637,11 +655,17 @@ window.FM = window.FM || {};
       P('ratio', 'Ratio', 1, 20, 0.1, 4, ':1', true),
       P('attack', 'Attack', 0, 0.5, 0.001, 0.01, 's', true),
       P('release', 'Release', 0.01, 1, 0.01, 0.25, 's', true),
+      /* THE KNEE WAS NEVER SET (queue 986, hunt C14), so every Compressor ran on the node's own 30 dB
+         soft knee with no way to see or change it — at the default −24 threshold that knee spans −24 to
+         +6 dBFS, so "4:1" never fully applied to anything a clip can hold. Now it is a control. Its def
+         IS the node's default, so every saved Compressor (which the sanitiser fills with def) sounds
+         exactly as it always has. */
+      P('knee', 'Knee', 0, 40, 0.5, 30, 'dB', true),
     ],
     build: function (ctx) {
       const s = shop(ctx);
       const c = s.comp();
-      return unit({ input: c, output: c, nodes: s.nodes, oscs: s.oscs, params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release } });
+      return unit({ input: c, output: c, nodes: s.nodes, oscs: s.oscs, params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee } });
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
@@ -651,7 +675,13 @@ window.FM = window.FM || {};
       const c = s.comp();
       c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05;
       c.threshold.value = -1;
-      return unit({ input: c, output: c, nodes: s.nodes, oscs: s.oscs, params: { ceiling: c.threshold } });
+      // The node's hidden makeup, cancelled (queue 986, hunt C2 — see hardKneeMakeupCancel). The ceiling
+      // drives the threshold AND this gain from one key, so a keyframed ceiling stays compensated at
+      // every step: both are real AudioParams scheduled together.
+      const trim = s.gain(hardKneeMakeupCancel(-1, 20));
+      c.connect(trim);
+      return unit({ input: c, output: trim, nodes: s.nodes, oscs: s.oscs,
+        custom: { ceiling: multi([[c.threshold, null], [trim.gain, v => hardKneeMakeupCancel(v, 20)]]) } });
     },
   }, {
     type: 'tremolo', label: 'Tremolo', category: 'dyn',
@@ -876,12 +906,18 @@ window.FM = window.FM || {};
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const ring = s.gain(0);   // gain 0 + an LFO on .gain = a multiplier; nothing else may write it
-      const lfo = s.lfo(220, { key: 'freq' });
+      /* A 0.1 s CYCLE, NOT THE LFO's USUAL 1 s (queue 986, hunt C15). On a 1 s buffer the playbackRate
+         IS the frequency, and an AudioBufferSourceNode's rate stops at 1024 in Chromium and WebKit —
+         MEASURED in the suite's Chrome: 1100, 1500 and 2000 Hz all came out at exactly 1024 Hz, so the
+         top half of the Frequency slider did nothing. At 0.1 s the rate is Hz / 10 (≤ 200 at 2000 Hz),
+         and 0.1 s is a whole number of samples at 44.1, 48 and 96 kHz, so the cycle is exact. */
+      const RING_SECS = 0.1;
+      const lfo = s.lfo(220, { key: 'freq', secs: RING_SECS });
       lfo.connect(ring.gain);
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
       input.connect(ring); ring.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { freq: lfo.playbackRate }, custom: { mix: wd.set } });
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, custom: { freq: multi([[lfo.playbackRate, RING_SECS]]), mix: wd.set } });
     },
   }, {
     type: 'vocalremove', label: 'Vocal Remove', category: 'char',

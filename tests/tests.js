@@ -7947,7 +7947,11 @@
     const prev = src.slice(src.indexOf('function preview('), src.indexOf('function stopPreview('));
     if (!prev) throw new Error('preview() is no longer findable in js/sfx.js');
     if (/Object\.create\(\s*liveCtx\s*\)/.test(prev)) throw new Error('preview() builds a prototype-proxy over the AudioContext again — every recipe will throw Illegal invocation and be silent');
-    if (!/def\.render\([^)]*,[^)]*,[^)]*,[^)]*\)/.test(prev)) throw new Error('preview() calls def.render without a fourth argument — the recipes connect to `out`, so the sound goes nowhere');
+    /* Since queue 986 the ▶ plays the very buffer Add makes (renderBuffer, normalised, cached), so the recipe call with its
+       fourth argument lives in renderBuffer, and preview() must play that buffer rather than render anything of its own. */
+    const rb = src.slice(src.indexOf('function renderBuffer('), src.indexOf('function encodeWav('));
+    if (!/def\.render\([^)]*,[^)]*,[^)]*,[^)]*\)/.test(rb)) throw new Error('renderBuffer() calls def.render without a fourth argument — the recipes connect to `out`, so the sound goes nowhere');
+    if (!/rendered\(def\)/.test(prev) || !/createBufferSource/.test(prev)) throw new Error('preview() no longer plays the rendered buffer Add uses — the ▶ and the added clip can differ again (queue 986)');
     /* The property that matters is that a FAILURE IS REPORTED, not that no empty catch exists anywhere:
        `try { trim.disconnect(); } catch (e) {}` is a perfectly good one, and an earlier version of this
        assertion failed on it. What killed queue 562 was the whole render being swallowed. */
@@ -85910,10 +85914,14 @@
       if (!plain.some(function (e) { return e.from instanceof GainNode && e.to instanceof AudioDestinationNode; })) throw new Error('CONTROL: at 100% the voice’s gain does not reach the speakers, so the fixture is not the path this test is about');
       // THE CASE: 400%.
       const loud = wiring(4);
-      const lim = loud.filter(function (e) { return e.from instanceof DynamicsCompressorNode && e.to instanceof AudioDestinationNode; }).map(function (e) { return e.from; })[0];
+      /* Since queue 986 the limiter is the compressor THEN the gain that cancels its hidden makeup
+         (FM.audioFxLive.makeLimiter returns { input, output }), so it reaches the speakers through that one gain. */
+      const toDest = function (n) { return loud.some(function (e) { return e.from === n && e.to instanceof AudioDestinationNode; }); };
+      const limEdge = loud.filter(function (e) { return e.from instanceof DynamicsCompressorNode && (e.to instanceof AudioDestinationNode || (e.to instanceof GainNode && toDest(e.to))); })[0];
+      const lim = limEdge && limEdge.from, limOut = limEdge && limEdge.to instanceof GainNode ? limEdge.to : null;
       if (!lim) throw new Error('a reversed clip at 400% reaches the speakers with no limiter (' + loud.map(function (e) { return kind(e.from) + '→' + kind(e.to); }).join(', ') + ') — the preview hard-clips into a crackle the exported file does not have');
       if (Math.abs(lim.threshold.value + 1.5) > 1e-6 || lim.ratio.value !== 20 || lim.knee.value !== 0) throw new Error('the reversed preview’s limiter is not the one the export uses (threshold ' + lim.threshold.value + ', knee ' + lim.knee.value + ', ratio ' + lim.ratio.value + ')');
-      if (loud.some(function (e) { return e.from instanceof GainNode && e.to instanceof AudioDestinationNode; })) throw new Error('the boosted voice’s gain still has a direct line to the speakers, around the limiter');
+      if (loud.some(function (e) { return e.from instanceof GainNode && e.from !== limOut && e.to instanceof AudioDestinationNode; })) throw new Error('the boosted voice’s gain still has a direct line to the speakers, around the limiter');
       if (!loud.some(function (e) { return e.from instanceof GainNode && e.to === lim; })) throw new Error('the boosted voice’s gain does not feed the limiter');
     } finally {
       AudioNode.prototype.connect = connect0;
@@ -111583,5 +111591,259 @@
       await hcCleanup(made, orig, wasOpen);
     }
   });
+
+  /* ═══ 986 (hunt HIGH, found by the #966 inventory — NOT his words): five audio faults, each measured before it was fixed ═══
+   * All five were found by READING the code (idle backlog §C: C2, C10, C12, C14, C15); every one below was first reproduced
+   * with a number, and each test fails on the release before (913186b6) for the reason it names. The audio ones render
+   * through FM.buildAudioFxChain on an OfflineAudioContext — the builder BOTH the export (schedule) and the live preview
+   * (applyAt) use — so each measures numbers, not ears. */
+  function afx986(fx, sig, secs, opts) {
+    opts = opts || {};
+    const SR = 48000, n = Math.round(SR * secs), at = opts.anchor || 0;
+    const oac = new OfflineAudioContext(1, n, SR);
+    const b = oac.createBuffer(1, n, SR), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = sig(i / SR);
+    const src = oac.createBufferSource(); src.buffer = b;
+    const chain = FM.buildAudioFxChain(oac, { audioFx: fx }, at);
+    if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(fx));
+    if (opts.live) chain.applyAt(at); else chain.schedule(at, at + secs);   // live = the preview's per-frame path
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    return oac.startRendering().then(r => { try { chain.dispose(); } catch (e) {} return r.getChannelData(0); });
+  }
+  function pk986(d, a, b) { const SR = 48000; let p = 0; for (let i = Math.floor(a * SR); i < Math.min(d.length, Math.floor(b * SR)); i++) { const v = Math.abs(d[i]); if (v > p) p = v; } return p; }
+  function db986(x) { return 20 * Math.log10(Math.max(1e-12, x)); }
+  const sine986 = (amp, f) => t => amp * Math.sin(2 * Math.PI * (f || 1000) * t);
+
+  /* C2 — THE LIMITER'S CEILING WAS NOT A CEILING. A DynamicsCompressorNode adds its own makeup gain, −0.6·(1 − 1/ratio)·T dB,
+   * and the Limiter never cancelled it. MEASURED at 913186b6 (full-scale 1 kHz sine / −40 dBFS sine, peak after 0.5 s):
+   *   Ceiling −1:  −0.32 dBFS / −39.43      Ceiling −6:  −2.12 dBFS / −36.58      Ceiling −24:  −8.64 dBFS / −26.32
+   * so a −24 ceiling let a full-scale sine out 15 dB above it and lifted quiet sound by 13.7 dB. Fixed (js/audio-fx.js
+   * hardKneeMakeupCancel): −0.89 / −40.00, −5.54 / −40.00, −22.32 / −40.00. The node stops at 20:1, so a full-scale peak
+   * still lands a little over the ceiling (1/20 of the overshoot, plus the detector) — the limits below sit between the
+   * fixed and the broken numbers with room on both sides. */
+  test('986 C2 the Limiter Ceiling is a ceiling - a full-scale sine lands near it and quieter sound keeps its own level, keyframed too', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const quiet = sine986(Math.pow(10, -40 / 20)), loud = sine986(1);
+    // CONTROL: the instrument. A 0 dB Gain passes the −40 dBFS sine at −40 dBFS.
+    const ctl = db986(pk986(await afx986([{ type: 'gain', enabled: true, params: { gain: 0 } }], quiet, 1), 0.5, 1));
+    if (Math.abs(ctl + 40) > 0.05) throw new Error('CONTROL: a 0 dB Gain turned a -40 dBFS sine into ' + ctl.toFixed(2) + ' dBFS - the measurement is broken, nothing below means anything');
+    const lim = c => [{ type: 'limiter', enabled: true, params: { ceiling: c } }];
+    const bad = [];
+    for (const c of [-1, -6, -24]) {
+      const q = db986(pk986(await afx986(lim(c), quiet, 1), 0.5, 1));
+      if (Math.abs(q + 40) > 0.1) bad.push('at a ' + c + ' dB ceiling a -40 dBFS sine (nowhere near it) came out at ' + q.toFixed(2) + ' dBFS - the limiter turned it UP by ' + (q + 40).toFixed(2) + ' dB');
+    }
+    const l6 = db986(pk986(await afx986(lim(-6), loud, 1), 0.5, 1)), l24 = db986(pk986(await afx986(lim(-24), loud, 1), 0.5, 1));
+    // measured fixed −5.54 and −22.32; broken −2.12 and −8.64
+    if (!(l6 <= -5.2)) bad.push('a full-scale sine through a -6 dB ceiling peaks at ' + l6.toFixed(2) + ' dBFS - ' + (l6 + 6).toFixed(1) + ' dB over the ceiling');
+    if (!(l24 <= -21.8)) bad.push('a full-scale sine through a -24 dB ceiling peaks at ' + l24.toFixed(2) + ' dBFS - ' + (l24 + 24).toFixed(1) + ' dB over the ceiling');
+    // …and it still LIMITS (a fix that muted everything, or took the limiter out, would pass the lines above)
+    if (!(l6 > -7) || !(l24 > -25)) bad.push('CONTROL: the limiter now crushes a full-scale sine to ' + l6.toFixed(2) + ' / ' + l24.toFixed(2) + ' dBFS at -6 / -24 - below the ceiling');
+    // A KEYFRAMED ceiling (−1 → −24 over 2 s) keeps the quiet sine where it is all the way: the threshold and the gain that
+    // cancels its makeup are scheduled from the one key. Broken, it rose with the ceiling to about −27 dBFS by the end.
+    const kf = await afx986([{ type: 'limiter', enabled: true, params: { ceiling: { kf: [{ t: 0, v: -1 }, { t: 2, v: -24 }] } } }], quiet, 2);
+    [[0.2, 0.4], [0.9, 1.1], [1.7, 1.95]].forEach(w => {
+      const v = db986(pk986(kf, w[0], w[1]));
+      if (Math.abs(v + 40) > 0.3) bad.push('with the ceiling keyframed from -1 to -24, the -40 dBFS sine reads ' + v.toFixed(2) + ' dBFS at ' + w[0] + '-' + w[1] + ' s');
+    });
+    if (bad.length) throw new Error('the Limiter is not a ceiling - its DynamicsCompressor adds a makeup gain nothing cancels: ' + bad.join('; '));
+  });
+
+  /* C2 (the boost half) — THE LIMITER ON A CLIP ABOVE 100 PERCENT CARRIED THE SAME HIDDEN MAKEUP: +0.86 dB at its −1.5 dBFS
+   * threshold. MEASURED at 913186b6 through FM.audioFxLive.makeLimiter (the forward preview and the reversed preview build it)
+   * and the export's own copy of it: a 1000 percent sine peaked at 1.111 (over full scale), and a clip at 200 percent came
+   * out 2.21x, not 2x. Fixed: 1.007 and 2.000. The export now builds the same limiter (FM.audioFxLive.makeLimiter), and the
+   * exported mix is measured below as well as the limiter itself. CONTROL: the same clip at 100 percent, no limiter. */
+  test('986 C2 the boost limiter on a clip above 100 percent adds no level of its own - in the limiter and in the exported mix', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.audioFxLive || typeof FM.audioFxLive.makeLimiter !== 'function') throw new Error('FM.audioFxLive.makeLimiter is not reachable');
+    const SR = 48000;
+    async function through(amp) {
+      const oac = new OfflineAudioContext(1, SR, SR);
+      const b = oac.createBuffer(1, SR, SR), d = b.getChannelData(0);
+      for (let i = 0; i < SR; i++) d[i] = amp * Math.sin(2 * Math.PI * 1000 * i / SR);
+      const src = oac.createBufferSource(); src.buffer = b;
+      const L = FM.audioFxLive.makeLimiter(oac);
+      src.connect(L.input || L); (L.output || L).connect(oac.destination); src.start(0);   // { input, output } now; one node at 913186b6
+      return pk986((await oac.startRendering()).getChannelData(0), 0.5, 1);
+    }
+    const q = await through(0.2), l = await through(10);
+    if (Math.abs(q / 0.2 - 1) > 0.002) throw new Error('a 0.2 sine - far under the -1.5 dBFS threshold - leaves the boost limiter at ' + q.toFixed(4) + ', ' + db986(q / 0.2).toFixed(2) + ' dB louder than it went in: every boosted clip is turned up by the node\'s hidden makeup');
+    // measured fixed 1.0072 (the 20:1 slope and the detector); broken 1.1114
+    if (!(l < 1.02)) throw new Error('a 1000 percent full-scale sine leaves the boost limiter peaking at ' + l.toFixed(4) + ' - ' + db986(l).toFixed(2) + ' dBFS, over full scale, so it clips on the speakers');
+    // THE EXPORT: buildAudioMix, a 0.1 sine at 100 percent and at 200 percent (boosted, so it ends in the limiter).
+    const saved = FM.scene, made = [];
+    try {
+      window.__fmStep = '986 C2 boost export';
+      const mixRms = async function (vol, tag) {
+        const rec = await FM.loadVideoFile(huntEWav(2, t => 0.1 * Math.sin(2 * Math.PI * 440 * t), 'c2boost-' + tag));
+        const L = FM.makeLayer('video', { name: 'boost ' + tag, x: 32, y: 32, start: 0, duration: 2 });
+        L.volume = vol; FM.media.set(L.id, rec); made.push(L.id);
+        FM.scene = huntEScene([L], 2);
+        const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 2);
+        if (!mix) throw new Error('setup: the exporter built no soundtrack at ' + tag);
+        return { rms: huntBRms(mix.audioBuffer, 0.5, 1.5), boosted: FM.audioFxLive.needsBoost(L) };
+      };
+      const one = await mixRms(1, '100'), two = await mixRms(2, '200');
+      if (one.boosted || !two.boosted) throw new Error('setup: the 100 / 200 percent clips routed as boosted ' + one.boosted + ' / ' + two.boosted);
+      if (!(Math.abs(one.rms - 0.1 / Math.SQRT2) < 0.001)) throw new Error('CONTROL: the 100 percent clip exports at rms ' + one.rms.toFixed(4) + ', not the 0.0707 it holds - the measurement is broken');
+      const ratio = two.rms / one.rms;
+      if (Math.abs(ratio - 2) > 0.01) throw new Error('a clip at 200 percent exports at ' + ratio.toFixed(3) + 'x the same clip at 100 percent, not 2x - the boost limiter adds ' + db986(ratio / 2).toFixed(2) + ' dB of its own to every boosted clip in the file');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* C14 — THE COMPRESSOR'S KNEE WAS NEVER SET, so every Compressor ran on the node's own 30 dB soft knee with no control:
+   * at the default −24 threshold that knee spans −24 to +6 dBFS, and "4:1" never fully applied to anything a clip can hold.
+   * MEASURED at 913186b6: a `knee` of 0 rendered byte-for-byte what 30 did (the key was ignored). Fixed: Knee, 0–40 dB,
+   * keyframable, default 30 — the node's own default, so a saved Compressor (the sanitiser fills a missing key with it)
+   * renders exactly as before; that is the control. Knee 0 then compresses a full-scale sine to −6.63 dBFS where 30 gives
+   * −1.50. And it is on screen: a Knee row in the open Compressor, inside the panel, at whatever width the suite runs. */
+  test('986 C14 the Compressor has a Knee control, and its default is the 30 dB the node always used', { item: '986', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const reg = FM.audioFxRegistry;
+    const inst = reg.makeInstance('compressor');
+    if (!inst || inst.params.knee !== 30) throw new Error('a new Compressor has no Knee (params ' + JSON.stringify(inst && inst.params) + ') - the knee is never set, it is always the node default');
+    const oldSave = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { threshold: -24, ratio: 4, attack: 0.01, release: 0.25 } }] }];
+    FM.storage._sanitizeLayers(oldSave);
+    if (oldSave[0].audioFx[0].params.knee !== 30) throw new Error('a Compressor saved before Knee existed opens with knee ' + oldSave[0].audioFx[0].params.knee + ', not 30 - it would change how a saved project sounds');
+    const kept = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { threshold: -24, ratio: 4, attack: 0.01, release: 0.25, knee: 6 } }] }];
+    FM.storage._sanitizeLayers(kept);
+    if (kept[0].audioFx[0].params.knee !== 6) throw new Error('a saved Knee of 6 dB is read back as ' + kept[0].audioFx[0].params.knee);
+    const base = { threshold: -24, ratio: 4, attack: 0.01, release: 0.25 };
+    const cmp = k => [{ type: 'compressor', enabled: true, params: k == null ? base : Object.assign({ knee: k }, base) }];
+    const loud = sine986(1);
+    // CONTROL: the default is today's sound, sample for sample.
+    const a = await afx986(cmp(null), loud, 1), b30 = await afx986(cmp(30), loud, 1);
+    let worst = 0; for (let i = 0; i < a.length; i++) worst = Math.max(worst, Math.abs(a[i] - b30[i]));
+    if (worst > 1e-6) throw new Error('CONTROL: a Compressor at Knee 30 renders up to ' + worst.toExponential(2) + ' away from one with no knee key - the default must be the sound saved projects already have');
+    const p30 = db986(pk986(b30, 0.5, 1)), p0 = db986(pk986(await afx986(cmp(0), loud, 1), 0.5, 1));
+    // measured −1.50 (30) and −6.63 (0)
+    if (!(p30 - p0 > 3)) throw new Error('Knee 0 and Knee 30 compress a full-scale sine to ' + p0.toFixed(2) + ' and ' + p30.toFixed(2) + ' dBFS - the Knee does nothing; the node keeps its own 30 dB');
+    const kf = await afx986([{ type: 'compressor', enabled: true, params: Object.assign({}, base, { knee: { kf: [{ t: 0, v: 30 }, { t: 1, v: 0 }, { t: 2, v: 0 }] } }) }], loud, 2);
+    const kfEnd = db986(pk986(kf, 1.5, 2));
+    if (Math.abs(kfEnd - p0) > 0.5) throw new Error('a Knee keyframed from 30 to 0 ends at ' + kfEnd.toFixed(2) + ' dBFS where a static 0 gives ' + p0.toFixed(2) + ' - it does not animate');
+    // ON SCREEN: the open Compressor row shows a Knee row inside the panel, reading 30.0dB.
+    const saved = FM.scene;
+    try {
+      const song = await hbAudScene([], 4);
+      const c = reg.makeInstance('compressor'); c._expanded = true;
+      FM.layerById(FM.scene, song.id).audioFx = [c];
+      FM.refreshAll(); FM.selectLayer(song.id); await sleep(200);
+      FM.inspector.openCategory('audiofx'); await sleep(500);
+      const labels = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label'));
+      const knee = labels.filter(l => l.textContent.trim() === 'Knee')[0];
+      if (!labels.length) throw new Error('setup: the open Compressor row has no slider labels at all');
+      if (!knee) throw new Error('the open Compressor shows ' + labels.map(l => l.textContent.trim()).join(', ') + ' - no Knee');
+      const row = knee.closest('.fx-scrub-row'), r = row.getBoundingClientRect(), pr = document.getElementById('inspector-panel').getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0) || r.left < pr.left - 1 || r.right > pr.right + 1) throw new Error('the Knee row is at ' + Math.round(r.left) + '-' + Math.round(r.right) + ' px in a panel at ' + Math.round(pr.left) + '-' + Math.round(pr.right) + ' px (window ' + window.innerWidth + ')');
+      const val = row.querySelector('.fx-scrub-val');
+      if (!val || val.value !== '30.0dB') throw new Error('the Knee reads ' + (val && val.value) + ', not 30.0dB');
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* C15 — RING MOD STOPPED AT 1024 Hz. Its carrier was a 1 s sine buffer played at playbackRate = Hz, and an
+   * AudioBufferSourceNode's rate is capped at 1024 (Chromium and WebKit). MEASURED at 913186b6 on a DC input, whose output
+   * IS the carrier (zero crossings over one second): 220 → 219, 1000 → 999, and 1100, 1500 and 2000 all → 1024. The top
+   * half of the Frequency slider did nothing. Fixed: a 0.1 s cycle (rate = Hz / 10). Checked in the export's path
+   * (schedule), the preview's (applyAt), and that an export starting mid-scene lands on the same carrier phase as one from
+   * 0 (the LFO's scene-time phase rule — at 913186b6 the phase was computed at 2000 Hz and played at 1024, so they split). */
+  test('986 C15 Ring Mod above 1024 Hz modulates at the frequency on the slider, in the export and the preview', { item: '986', budgetMs: 60000 }, async function () {
+    const SR = 48000;
+    const freqOf = (d, a, b) => { let z = 0; for (let i = Math.floor(a * SR) + 1; i < Math.floor(b * SR); i++) if (d[i - 1] < 0 && d[i] >= 0) z++; return z / (b - a); };
+    const ring = f => [{ type: 'ringmod', enabled: true, params: { freq: f, mix: 1 } }];
+    const dc = () => 1;
+    const c220 = freqOf(await afx986(ring(220), dc, 1.2), 0.1, 1.1);
+    if (Math.abs(c220 - 220) > 2) throw new Error('CONTROL: a 220 Hz Ring Mod on a DC input measures ' + c220.toFixed(1) + ' Hz - the zero-crossing counter is broken');
+    const bad = [];
+    for (const f of [1500, 2000]) {
+      const ex = freqOf(await afx986(ring(f), dc, 1.2), 0.1, 1.1);
+      const pv = freqOf(await afx986(ring(f), dc, 1.2, { live: true }), 0.1, 1.1);
+      if (Math.abs(ex - f) > 2) bad.push('the export path modulates at ' + ex.toFixed(1) + ' Hz for a ' + f + ' Hz setting');
+      if (Math.abs(pv - f) > 2) bad.push('the preview path modulates at ' + pv.toFixed(1) + ' Hz for a ' + f + ' Hz setting');
+    }
+    // An export that starts at 0.25375 s (12180 samples) plays the carrier the whole-project render plays at the same moment.
+    const whole = await afx986(ring(2000), dc, 1), part = await afx986(ring(2000), dc, 0.75, { anchor: 0.25375 });
+    let worst = 0; for (let i = 0; i < 0.4 * SR; i++) worst = Math.max(worst, Math.abs(whole[i + 12180 + 12000] - part[i + 12000]));
+    if (worst > 0.01) bad.push('an export from 0.254 s plays a carrier up to ' + worst.toFixed(3) + ' away from the whole-project render at the same scene time');
+    if (bad.length) throw new Error('Ring Mod does not reach the frequencies its slider offers (the buffer rate stops at 1024): ' + bad.join('; '));
+  });
+
+  /* C10 — THE SOUND-EFFECT PLAY BUTTON WAS NOT WHAT Add PRODUCES. ▶ rendered the recipe live, raw, through a 0.82 trim; Add
+   * renders it offline and normalises it (0.89 x level / peak). MEASURED at 913186b6 with the preview's own context stood in
+   * by an OfflineAudioContext (FM.audioCtx is what preview() asks for), peak of the ▶ against peak of the added clip:
+   * Reverse whoosh 0.090 vs 0.890 (9.9x), Whoosh 7.8x, Swoosh-by 5.9x, Wind 4.7x, Click 0.894 vs 0.489 (the ▶ LOUDER), and
+   * Punch, Glass break and Reverse cymbal 1.00-1.04 on the ▶ - over full scale. Fixed: the ▶ plays renderBuffer's own
+   * buffer, cached, at unity - every one of the 30 now matches the added clip sample for sample (from its 10 ms start).
+   * CONTROL: preview() still reaches FM.audioCtx() synchronously - the iPhone unlocks audio only inside the tap. */
+  test('986 C10 the sound-effect play button plays the very buffer Add puts on the timeline', { item: '986', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.sfx || !FM.sfx.preview || !FM.sfx.renderBuffer) throw new Error('FM.sfx.preview / renderBuffer missing');
+    const defs = FM.sfx.list();
+    if (defs.length < 20) throw new Error('setup: only ' + defs.length + ' sound effects');
+    const real = FM.audioCtx, bad = [];
+    try {
+      for (const def of defs) {
+        window.__fmStep = '986 C10 ' + def.id;
+        const oc = new OfflineAudioContext(1, Math.ceil((def.dur + 0.3) * 44100), 44100);
+        let asked = false;
+        FM.audioCtx = () => { asked = true; return oc; };
+        const pr = FM.sfx.preview(def);
+        if (!asked) throw new Error('CONTROL: preview(' + def.id + ') did not reach FM.audioCtx() inside the tap - on an iPhone the sound would never unlock');
+        if (pr && pr.then) await pr;
+        await sleep(30);
+        const pv = (await oc.startRendering()).getChannelData(0);
+        FM.sfx.stopPreview();
+        const add = (await FM.sfx.renderBuffer(def)).getChannelData(0);
+        let pa = 0, pp = 0, diff = 0;
+        for (let i = 0; i < add.length; i++) { pa = Math.max(pa, Math.abs(add[i])); if (i + 441 < pv.length) diff = Math.max(diff, Math.abs(pv[i + 441] - add[i])); }
+        for (let i = 0; i < pv.length; i++) pp = Math.max(pp, Math.abs(pv[i]));
+        if (!(pa > 0.05)) throw new Error('setup: ' + def.name + ' renders silent for Add (peak ' + pa.toFixed(3) + ')');
+        if (Math.abs(pp / pa - 1) > 0.01 || diff > 1e-4) bad.push(def.name + ' plays at peak ' + pp.toFixed(3) + ' on the ▶ and ' + pa.toFixed(3) + ' once added (' + (pa / Math.max(1e-6, pp)).toFixed(2) + 'x)');
+      }
+    } finally { FM.audioCtx = real; try { FM.sfx.stopPreview(); } catch (e) {} }
+    if (bad.length) throw new Error(bad.length + ' of ' + defs.length + ' sound effects sound different on the ▶ from the clip Add puts on the timeline: ' + bad.slice(0, 8).join('; '));
+  });
+
+  /* C12 — THE SOUND ROW'S HIGHLIGHT CLEARED ONLY ON ITS OWN TIMER, AND NOTHING COULD STOP A SOUND. MEASURED at 913186b6 in the
+   * real sheet: ▶ on one row, then ▶ on another - the first row stayed lit (its timer had not run out), and a second tap on
+   * the playing row left it lit and started the sound again. Fixed: one preview at a time, which knows its row - the old row
+   * goes dark the moment another starts, a tap on the playing row stops it (and its ▶ says Stop meanwhile).
+   * CONTROL: the first tap lights its row, and a sound left alone goes dark when it ends. */
+  test('986 C12 hearing a second sound unlights the first row at once, and tapping the playing row stops it', { item: '986', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.sfx || !FM.sfx.open) throw new Error('FM.sfx.open is missing');
+    FM.sfx.open(); await sleep(400);
+    try {
+      const rows = [].slice.call(document.querySelectorAll('.sfx-row'));
+      const secs = r => parseFloat((r.querySelector('.sfx-dur') || {}).textContent);
+      const long = rows.filter(r => secs(r) >= 1.5).slice(0, 2);
+      const short = rows.filter(r => secs(r) <= 0.3)[0];
+      if (long.length < 2 || !short) throw new Error('setup: need two sounds of 1.5 s or more and one of 0.3 s or less in the sheet');
+      const A = long[0], B = long[1], tap = r => attached(r.querySelector('.sfx-play'), 'the ▶ of a sound row').click();
+      tap(A); await sleep(120);
+      if (!A.classList.contains('playing')) throw new Error('CONTROL: tapping ▶ did not light its row - nothing below is measured');
+      tap(B); await sleep(120);
+      if (A.classList.contains('playing')) throw new Error('hearing a second sound left the first row lit - its highlight only clears on its own timer, so two rows look like they are playing');
+      if (!B.classList.contains('playing')) throw new Error('the second row is not lit while it plays');
+      const stopSay = (B.querySelector('.sfx-play').getAttribute('aria-label') || '');
+      if (!/^Stop /.test(stopSay)) throw new Error('the playing row\'s ▶ is labelled ' + JSON.stringify(stopSay) + ' - it should say it stops');
+      tap(B); await sleep(120);
+      if (B.classList.contains('playing')) throw new Error('tapping the playing row did not stop it - it is still lit, and nothing on screen can stop a sound once started');
+      if (typeof FM.sfx.previewing !== 'function') throw new Error('FM.sfx.previewing is missing - whether a sound is still playing cannot be read');
+      if (FM.sfx.previewing() !== null) throw new Error('after the stop tap the sheet still reports ' + FM.sfx.previewing() + ' playing');
+      // CONTROL: a sound left alone goes dark on its own when it ends.
+      tap(short); await sleep(80);
+      if (!short.classList.contains('playing')) throw new Error('CONTROL: the short sound did not light its row');
+      await sleep(Math.round(secs(short) * 1000) + 900);
+      if (short.classList.contains('playing')) throw new Error('a ' + secs(short) + ' s sound left alone is still lit 0.9 s after it ended');
+    } finally { try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {} await sleep(150); }
+  });
+
 
 })();
