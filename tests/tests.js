@@ -112919,8 +112919,10 @@
       if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
       Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
     });
-    /* 2. THE PICTURES, against v17.14. */
-    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/1e519c24', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/72a7bbef', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    /* 2. THE PICTURES, against v17.14. Comic Ink and Blueprint carry Find Edges, whose REDUCED-plate picture #986 C60 changed
+       on purpose (the line is the export's, shrunk, not 2 plate pixels at full strength): their second hash (the 120-wide,
+       0.5 render) is re-captured after that fix; the first (240 wide, the export) is v17.14's to the byte. */
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/9cf3fa6b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/18d2d092', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
     const HEAD_FX = { 'filmgrain/image': '2e19d26a/0f06368b', 'filmgrain/shape': '4c6e1d70/1923071e', 'lightleak/image': '8d3548c2/dd26433f', 'lightleak/shape': '85f6b0dc/a682c6df', 'glow/image': '4982cf31/73d5725a', 'glow/shape': '079f0f43/40fb8939', 'letterbox/image': '13ff85ed/ac039da2', 'letterbox/shape': '3842b4f7/62416c45', 'faded/image': '5fdf89a1/0bf1c4cb', 'faded/shape': 'dc16c171/9d8844ae', 'temperature/image': '971867df/50ef3714', 'temperature/shape': '6f093827/cf9c7296', 'colorbalance/image': '971867df/50ef3714', 'colorbalance/shape': '6f093827/cf9c7296' };
     const all = FM.filters.all();
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
@@ -113383,6 +113385,271 @@
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
       try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
     }
+  });
+
+  /* ═══ #986 batch 2 — the second half of the render bugs the #966 inventory found by READING the code (hunt), each
+   * reproduced with a measurement first. Every test here fails on 768c83d0. ═══════════════════════════════════════ */
+  /* The export shrunk to a reduced preview's plate the honest way: each plate pixel is the area-weighted mean of the
+     project pixels it covers (the plate is the frame at `ps`, so a plate pixel is 1/ps project px on a side). */
+  const _986boxDown = (d, SW, SH, w, h, ps) => {
+    const out = new Float32Array(w * h * 3), inv = 1 / ps;
+    for (let y = 0; y < h; y++) {
+      const Y0 = y * inv, Y1 = Math.min(SH, (y + 1) * inv);
+      for (let x = 0; x < w; x++) {
+        const X0 = x * inv, X1 = Math.min(SW, (x + 1) * inv);
+        let r = 0, g = 0, b = 0, A = 0;
+        for (let yy = Math.floor(Y0); yy < Math.ceil(Y1); yy++) {
+          const oy = Math.min(Y1, yy + 1) - Math.max(Y0, yy); if (!(oy > 0)) continue;
+          for (let xx = Math.floor(X0); xx < Math.ceil(X1); xx++) {
+            const ox = Math.min(X1, xx + 1) - Math.max(X0, xx); if (!(ox > 0)) continue;
+            const i = (yy * SW + xx) * 4, q = ox * oy; r += d[i] * q; g += d[i + 1] * q; b += d[i + 2] * q; A += q;
+          }
+        }
+        const o = (y * w + x) * 3; out[o] = A ? r / A : 0; out[o + 1] = A ? g / A : 0; out[o + 2] = A ? b / A : 0;
+      }
+    }
+    return out;
+  };
+  /* mean |difference| and correlation between a preview plate and the export shrunk to it, interior only (a 2px border
+     is where the frame edge splits a plate pixel) */
+  const _986vsShrunk = (pv, ref, w, h) => {
+    let s = 0, n = 0, sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0;
+    for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
+      const i = (y * w + x) * 4, o = (y * w + x) * 3;
+      for (let c = 0; c < 3; c++) { const a = pv[i + c], b = ref[o + c]; s += Math.abs(a - b); sa += a; sb += b; saa += a * a; sbb += b * b; sab += a * b; n++; }
+    }
+    const ma = sa / n, mb = sb / n, cov = sab / n - ma * mb, va = saa / n - ma * ma, vb = sbb / n - mb * mb;
+    return { mad: s / n, corr: cov / Math.sqrt(Math.max(1e-9, va * vb)), meanPv: ma, meanRef: mb };
+  };
+
+  test('986 C7 Clouds and Starfield on a reduced preview are the export shrunk - the same clouds and the same stars, not bigger ones somewhere else', { item: '986', budgetMs: 60000 }, function () {
+    /* Both kernels worked in PLATE pixels: Clouds' octave cells were 64/32/16 plate px and Drift moved them in plate
+       px, and Starfield hashed each plate pixel for a star — so on his phone's 0.28 preview the clouds were 3.5x the
+       size and the stars were other stars in other places. MEASURED on 768c83d0 against the export shrunk to the
+       preview's size: Clouds a mean error of 27 levels at 0.28 and 18 at 0.5 (means 54 against 67); Starfield 7.3
+       levels on a field whose whole mean is 3.9 — nothing lined up. A full-frame black clip in a 320x240 project; the
+       export is rendered at 320 and shrunk here by area, the preview is rendered at 160 and at 90 (ps 0.28). */
+    const PW = 320, PH = 240;
+    const clip = (fxs) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#000000' }); L.start = 0; L.duration = 4; L.effects = fxs; return L; };
+    const cases = [
+      ['Clouds', () => [_986fx('clouds')], 2.5, 0.97],
+      ['Clouds drifting at 60 px/s, scale 50', () => [_986fx('clouds', { drift: 60, scale: 50 })], 2.5, 0.97],
+      ['Starfield', () => [_986fx('starfield')], 0.5, 0.97],
+      ['Starfield, star size 3', () => [_986fx('starfield', { size: 3 })], 0.5, 0.97],
+      ['Starfield with brightness spread and twinkle', () => [_986fx('starfield', { variation: 0.6, twinkle: 0.5, amount: 1 })], 0.5, 0.97],
+    ];
+    const bad = [];
+    cases.forEach(([name, fxs, madLim, corrLim]) => {
+      const ex = _986shot([clip(fxs())], 1.3, PW, PH);
+      const exMean = (() => { let s = 0; for (let i = 0; i < ex.d.length; i += 4) s += ex.d[i] + ex.d[i + 1] + ex.d[i + 2]; return s / (ex.d.length / 4) / 3; })();
+      if (!(exMean > 1)) throw new Error('setup: the exported ' + name + ' draws nothing to compare (mean ' + exMean.toFixed(2) + ')');
+      [160, 90].forEach(w => {
+        const ps = w / PW, pv = _986shot([clip(fxs())], 1.3, PW, PH, ps);
+        const ref = _986boxDown(ex.d, PW, PH, pv.w, pv.h, ps);
+        const m = _986vsShrunk(pv.d, ref, pv.w, pv.h);
+        if (!(m.mad <= madLim && m.corr >= corrLim)) bad.push(name + ' on a ' + ps.toFixed(2) + ' preview is off the export shrunk to it by ' + m.mad.toFixed(2) + ' levels (limit ' + madLim + '), correlation ' + m.corr.toFixed(3) + ' (means ' + m.meanPv.toFixed(1) + ' against ' + m.meanRef.toFixed(1) + ')');
+      });
+    });
+    /* CONTROL: the ruler can tell two different fields apart — the export of a DIFFERENT field (Clouds at scale 50 vs
+       100, star size 1 vs 3) shrunk the same way must NOT pass the test above. */
+    const a = _986shot([clip([_986fx('starfield')])], 1.3, PW, PH), b = _986shot([clip([_986fx('starfield', { size: 3 })])], 1.3, PW, PH, 90 / PW);
+    const c = _986vsShrunk(b.d, _986boxDown(a.d, PW, PH, b.w, b.h, 90 / PW), b.w, b.h);
+    if (c.corr > 0.5) throw new Error('CONTROL: a size-3 field correlates ' + c.corr.toFixed(3) + ' with a size-1 field shrunk - the ruler cannot tell different stars apart');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C40 Chroma Key Pro View Matte keeps the clip edge - no grey band round a clip smaller than the frame, in the export and on a reduced preview', { item: '986' }, function () {
+    /* The matte view wrote alpha 255 into EVERY pixel it was handed — including the transparent ones round a clip
+       smaller than the frame, and the kernel is handed the clip's box plus a crop margin. MEASURED on 768c83d0: 8 project
+       px outside a 100x80 green clip over red, the export showed (220,220,220) opaque grey where the red belongs, and
+       so did a 0.28 preview; far outside the margin the red was untouched — a grey frame exactly as wide as the crop. */
+    const W = 320, H = 240, bad = [];
+    const scene = (fill) => {
+      const bg = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#ff0000' }); bg.start = 0; bg.duration = 4;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 100, shapeH: 80, fill: fill }); L.start = 0; L.duration = 4;
+      L.effects = [_986fx('chromakeypro', { view: 1 })];
+      return [L, bg];
+    };
+    [[1, 'the export'], [90 / W, 'a 0.28 preview'], [0.5, 'a half-size preview']].forEach(([rs, what]) => {
+      const at = (r, x, y) => { const i = (Math.round(y * rs) * r.w + Math.round(x * rs)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2], r.d[i + 3]]; };
+      const g = _986shot(scene('#00c23c'), 0.5, W, H, rs === 1 ? undefined : rs), m = _986shot(scene('#ff00ff'), 0.5, W, H, rs === 1 ? undefined : rs);
+      const inG = at(g, 160, 120), inM = at(m, 160, 120);
+      if (!(inG[0] < 20 && inM[0] > 235 && inM[1] > 235)) throw new Error('CONTROL on ' + what + ': the matte view is not showing a matte - a keyed green clip reads ' + inG + ' (black expected), a magenta one ' + inM + ' (white expected)');
+      [[160 + 58, 120], [160, 120 + 48], [160 - 58, 120 - 20]].forEach(([x, y]) => {
+        const p = at(m, x, y);
+        if (!(p[0] > 245 && p[1] < 10 && p[2] < 10)) bad.push(what + ': 8 project px outside the clip at (' + x + ',' + y + ') reads ' + p + ' - the red layer below should show there, the matte painted an opaque band over it');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C52 a picked filter previews exactly what Add adds - on an adjustment layer it grades the canvas, with only the ingredients that suit it', { item: '986', budgetMs: 60000 }, async function () {
+    /* The preview was built from the RAW recipe (every child, params copied), while Add lands the container fitted to
+       the layer — and on an ADJUSTMENT layer the preview was never read at all. MEASURED on 768c83d0: picking Teal &
+       Orange on an adjustment layer over red changed 0 pixels (preview (232,68,63) = no grade), Add then graded it, and
+       the previewed list held all 4 ingredients where Add keeps 2. Driven through the real Filters tab. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.filters || !FM.filters.get || !FM.filters.get('tealorange')) throw new Error('setup: the Teal & Orange filter is not in the library');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMountFilter = FM.fxThumbs && FM.fxThumbs.mountFilter;   // see queue 554's test: the tile thumbnails leak into later tests
+    if (realMountFilter) FM.fxThumbs.mountFilter = function () {};
+    const render = () => { const P = FM.scene.project, c = offscreen(160, Math.round(160 * P.height / P.width)), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, FM.scene, 0.5); return g.getImageData(0, 0, c.width, c.height).data; };
+    const diffPx = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 3 || Math.abs(a[i + 1] - b[i + 1]) > 3 || Math.abs(a[i + 2] - b[i + 2]) > 3) n++; return n; };
+    const cv = document.getElementById('preview');
+    const grab = () => { const c = offscreen(cv.width, cv.height); c.getContext('2d').drawImage(cv, 0, 0); return c.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; };
+    const bad = [];
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      for (const kind of ['adjustment', 'shape']) {
+        const P = FM.scene.project;
+        FM.scene.layers.length = 0;
+        const bg = FM.makeLayer('shape', { name: 'bg', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: '#e8443f' });
+        bg.start = 0; bg.duration = 4; bg.effects = [];
+        const L = kind === 'adjustment'
+          ? Object.assign(FM.makeLayer('adjustment', { name: 'grade' }), { start: 0, duration: 4, effects: [] })
+          : Object.assign(FM.makeLayer('shape', { name: 'A', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width * 0.7, shapeH: P.height * 0.7, fill: '#3060c0' }), { start: 0, duration: 4, effects: [] });
+        FM.scene.layers.push(L, bg);
+        FM.selectLayer(L.id); FM.refreshAll();
+        await sleep(400);
+        if (FM.inspector.openCategory) FM.inspector.openCategory('Effects');
+        await sleep(350);
+        if (FM.inspector.openFxTab) FM.inspector.openFxTab('filters');
+        await sleep(500);
+        const panel = document.getElementById('inspector-panel');
+        const tile = panel.querySelector('.flt-tile[data-fltid="tealorange"]');
+        if (!tile) throw new Error('setup: no Teal & Orange tile on the Filters tab of the ' + kind + ' layer');
+        await sleep(250);
+        const base = render(), baseCv = grab();
+        tile.click();
+        await sleep(700);
+        const shown = render(), shownCv = grab();
+        const list = (FM._fxPreview && FM._fxPreview.list) || [];
+        if (L.effects.length) throw new Error('picking wrote ' + L.effects.length + ' effect(s) onto the ' + kind + ' layer - a preview must not touch the project');
+        const go = panel.querySelector('.flt-commit .fxb-commit-go');
+        if (!go) throw new Error('setup: no Add button on the Filters tab');
+        go.click();
+        await sleep(600);
+        if (L.effects.length !== 1) throw new Error('CONTROL: Add put ' + L.effects.length + ' entries on the ' + kind + ' layer, not the one filter');
+        const added = render();
+        const want = (L.effects[0].effects || []).map(e => e.type).join(',');
+        const got = list.map(e => (e.effects ? '[' + e.effects.map(k => k.type).join(',') + ']' : e.type)).join(',');
+        if (diffPx(base, added) < 500) throw new Error('CONTROL: on the ' + kind + ' layer, Add changed only ' + diffPx(base, added) + ' pixels - the fixture is not grading');
+        if (diffPx(baseCv, shownCv) < 500) bad.push('on the ' + kind + ' layer, picking Teal & Orange changed ' + diffPx(baseCv, shownCv) + ' pixels on his canvas - the preview shows nothing');
+        const off = diffPx(shown, added);
+        if (off > 20) bad.push('on the ' + kind + ' layer, the previewed frame differs from the frame after Add in ' + off + ' pixels');
+        if (got !== '[' + want + ']') bad.push('on the ' + kind + ' layer the preview holds ' + (got || 'nothing') + ' where Add lands [' + want + ']');
+      }
+    } finally {
+      FM._fxPreview = null;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (realMountFilter) FM.fxThumbs.mountFilter = realMountFilter;
+      await sleep(250);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C60 Find Edges and Emboss lines on a reduced preview weigh what the export lines weigh - not 3.5x fatter', { item: '986' }, function () {
+    /* Both read the neighbour ONE PLATE PIXEL away, so on a reduced plate the 2-pixel line a hard edge makes was 2 plate
+       pixels wide at full strength. MEASURED on 768c83d0, the line's weight across a hard edge (brightness above the flat
+       level, summed over project px): Find Edges 510 in the export, 1020 at 0.5, 1813 at 0.28; Emboss 254 / 508 / 903.
+       The export must keep its lines exactly: 2 pixels at 255 (Find Edges) and 2 at 255 over 128 (Emboss). */
+    const PW = 320, PH = 240;
+    const art = document.createElement('canvas'); art.width = PW; art.height = PH;
+    const ax = art.getContext('2d'); ax.fillStyle = '#202020'; ax.fillRect(0, 0, PW, PH); ax.fillStyle = '#e0e0e0'; ax.fillRect(90, 50, 140, 140);
+    const had = FM.media.get('_986c60');
+    FM.media.set('_986c60', { kind: 'image', el: art, width: PW, height: PH, duration: 0 });
+    const bad = [];
+    try {
+      const weigh = (fx, rs) => {
+        const I = FM.makeLayer('image', { x: 160, y: 120, start: 0, duration: 4 }); I.id = '_986c60'; I.effects = [fx];
+        const r = _986shot([I], 0.5, PW, PH, rs === 1 ? undefined : rs), s = rs;
+        const y = Math.round(120 * s), flat = r.d[(y * r.w + Math.round(40 * s)) * 4];
+        let en = 0; const prof = [];
+        for (let x = Math.round(60 * s); x < Math.round(120 * s); x++) { const v = r.d[(y * r.w + x) * 4]; prof.push(v); en += Math.abs(v - flat) / s; }
+        return { en: en, flat: flat, prof: prof };
+      };
+      [['Find Edges', () => _986fx('edge'), 510, 0], ['Find Edges, Black on white', () => _986fx('edge', { polarity: 1 }), 510, 255],
+       ['Find Edges, Ignore below 30', () => _986fx('edge', { threshold: 30 }), 510, 0], ['Emboss', () => _986fx('emboss'), 254, 128],
+       ['Emboss, grey at 45 degrees', () => _986fx('emboss', { mono: 1, angle: 45 }), null, 128]].forEach(([name, fx, want, flat]) => {
+        const ex = weigh(fx(), 1);
+        if (ex.flat !== flat) throw new Error('setup: ' + name + ' reads ' + ex.flat + ' on the flat area of the export, not ' + flat);
+        if (want != null && ex.en !== want) bad.push('the EXPORT line of ' + name + ' moved: it weighs ' + ex.en + ', it was ' + want + ' (' + ex.prof.filter(v => v !== flat).join(',') + ')');
+        if (!(ex.en > 100)) throw new Error('setup: the exported ' + name + ' draws no line across the edge');
+        [[0.5, '0.5'], [90 / PW, '0.28 - his phone']].forEach(([rs, label]) => {
+          const pv = weigh(fx(), rs);
+          if (Math.abs(pv.en / ex.en - 1) > 0.12) bad.push(name + ' on a ' + label + ' preview: the line weighs ' + pv.en.toFixed(0) + ' against ' + ex.en.toFixed(0) + ' in the export (x' + (pv.en / ex.en).toFixed(2) + ')');
+        });
+      });
+    } finally { if (had) FM.media.set('_986c60', had); else if (FM.media.remove) FM.media.remove('_986c60'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C24 batch 2 on a device without ctx.filter, the mask feather, Luma Matte feather, 3D shading, Temporal Denoise smoothing, Light Wrap, camera focus blur and an adjustment grade keep their look', { item: '986', budgetMs: 120000 }, function () {
+    /* The v17.14 C24 fix covered five effects; these seven sites set ctx.filter too, and where it is silently ignored
+       (his class of phone) each lost its look. MEASURED on 768c83d0 with ctx.filter made genuinely dead (the descriptor
+       swap C24's test uses), the error against the real filter as a share of the look itself: the shape mask's
+       feather 1.00 (a hard edge), Luma Matte's feather 1.00, a Cube's shading 1.00 (flat), Temporal Denoise's Extra
+       smoothing 1.00, Light Wrap 1.00 (it drew nothing — the subject was subtracted from itself), the camera's focus
+       blur 0.41 (the layer sharp), an adjustment layer's Saturation/Brightness/Blur 1.00 and a filter on one 1.00. */
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter in this browser, so there is no reference picture to compare against');
+    if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available, so his phone’s path cannot be exercised: ' + (FM.glColor ? FM.glColor.stats().reason : 'no FM.glColor'));
+    const W = 200, H = 150;
+    let RS = 1;   // the export (1), then a half-size preview: a radius written in project px must follow the plate either way
+    const render = (layers, t) => _986shot(layers, t, W, H, RS === 1 ? undefined : RS).d;
+    const mean = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3]); return s / (a.length / 4); };
+    const art = document.createElement('canvas'); art.width = 80; art.height = 60;
+    const ax = art.getContext('2d'); for (let y = 0; y < 60; y += 10) for (let x = 0; x < 80; x += 10) { ax.fillStyle = ((x / 10 + y / 10) % 2) ? '#ff2d55' : '#0a84ff'; ax.fillRect(x, y, 10, 10); }
+    const had = FM.media.get('_986c24b');
+    FM.media.set('_986c24b', { kind: 'image', el: art, width: 80, height: 60, duration: 0 });
+    const photo = (fx, sc) => { const l = FM.makeLayer('image', { x: 100, y: 75, start: 0, duration: 4 }); l.id = '_986c24b'; l.transform.scale = sc || 1; l.effects = fx || []; return l; };
+    const rect = (o) => { const L = FM.makeLayer('shape', Object.assign({ shape: 'rect', x: 100, y: 75, shapeW: 120, shapeH: 90, fill: '#ffffff' }, o)); L.start = 0; L.duration = 4; return L; };
+    const adj = (fx) => { const A = FM.makeLayer('adjustment', { name: 'a' }); A.start = 0; A.duration = 4; A.effects = fx; return A; };
+    // [build(on) → () => pixels, GL limit, no-GL limit or null when the look needs the shader (the nine CSS effects do, everywhere)]
+    const cases = {
+      'the shape mask feather': [(on) => { const L = rect({ fill: '#ffcc00' }); L.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 100, h: 70, feather: on ? 14 : 0 }; return () => render([L]); }, 0.1, 0.15],
+      'Luma Matte feather': [(on) => { const m = rect({ x: 150, shapeW: 100, shapeH: 150 }); const L = photo([_986fx('lumamatte', { source: m.id, feather: on ? 12 : 0 })], 2); return () => render([L, m]); }, 0.1, 0.15],
+      'a Cube shading': [(on) => { const L = photo([_986fx('cube3d', { shading: on ? 0.8 : 0 })], 1.5); return () => render([L]); }, 0.1, 0.1],
+      'Temporal Denoise Extra smoothing': [(on) => { const L = photo([_986fx('filmgrain', { amount: 100 }), _986fx('temporaldenoise', { spatial: on ? 5 : 0, strength: 1 })], 2); return () => { [0.4, 0.433, 0.467, 0.5].forEach(t => render([L], t)); return render([L], 0.533); }; }, 0.15, 0.15],
+      'Light Wrap': [(on) => { const bg = rect({ shapeW: 200, shapeH: 150, fill: '#fff4a0' }); const L = photo(on ? [_986fx('lightwrap', { reach: 18, radius: 20 })] : [], 1.4); return () => render([L, bg]); }, 0.1, 0.15],
+      'the camera focus blur': [(on) => { const cam = FM.makeLayer('camera', { name: 'C', x: W / 2, y: H / 2, start: 0, duration: 4 }); cam.focus = { enabled: true, distance: 0, dof: 40, blur: 1 }; const L = photo([], 1.5); L.transform.z = on ? 260 : 0; return () => render([L, cam]); }, 0.1, 0.15],
+      'an adjustment layer grade (Saturation, Brightness, Blur)': [(on) => { const p = photo([], 2.5); const A = adj(on ? [_986fx('saturate', { amount: 0.2 }), _986fx('brightness', { amount: 1.3 }), _986fx('blur', { radius: 4 })] : []); return () => render([A, p]); }, 0.1, null],
+      'a filter at Strength 0.6 on an adjustment layer': [(on) => { const p = photo([], 2.5); const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = [_986fx('grayscale'), _986fx('contrast', { amount: 1.5 })]; b.params.strength = 0.6; return () => render([adj(on ? [b] : []), p]); }, 0.1, null],
+    };
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    const was = { force: FM._forceNoCtxFilter, noGL: FM._noGL };
+    const bad = [];
+    try {
+      for (const rs of [1, 0.5]) {
+        RS = rs;
+        const where = rs === 1 ? '' : ' on a half-size preview';
+        for (const name in cases) {
+          const [build, limGL, limNoGL] = cases[name];
+          FM._forceNoCtxFilter = false; FM._noGL = false; FM.glColor._reset();
+          const ref = build(1)(), bare = build(0)();
+          const size = mean(ref, bare);
+          if (!(size > 1)) throw new Error('CONTROL: ' + name + where + ' changes the picture by only ' + size.toFixed(2) + ' with ctx.filter working - the fixture is not showing it');
+          for (const noGL of (limNoGL == null ? [false] : [false, true])) {
+            if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, get: function () { return 'none'; }, set: function () {} });
+            FM._forceNoCtxFilter = true; FM._noGL = noGL; FM.glColor._reset();
+            let dead;
+            try { dead = build(1)(); } finally { if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc); FM._forceNoCtxFilter = false; FM._noGL = false; }
+            const err = mean(dead, ref), lim = noGL ? limNoGL : limGL;
+            if (!(err <= size * lim)) bad.push(name + where + (noGL ? ' (no WebGL either)' : '') + ' misses the real filter by ' + err.toFixed(2) + ' - ' + (err / size).toFixed(2) + ' of the look itself (' + size.toFixed(2) + ')');
+          }
+        }
+      }
+    } finally {
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      FM._forceNoCtxFilter = was.force; FM._noGL = was.noGL; FM.glColor._reset();
+      if (had) FM.media.set('_986c24b', had); else if (FM.media.remove) FM.media.remove('_986c24b');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
   });
 
 })();

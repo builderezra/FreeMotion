@@ -1786,6 +1786,28 @@ window.FM = window.FM || {};
     dc.drawImage(_nbA, 0, 0, ww, wh, dx - pad * k, dy - pad * k, ww * k, wh * k);
   }
   FM._drawBlurredNoFilter = drawBlurredNoFilter;   // suite seam (#986)
+  /* …AND THE SAME FOR A DRAW THAT IS NOT ONE IMAGE (#986 batch 2). `ctx.filter = 'blur(r)'` followed by a path fill or
+   * a placed image blurs whatever that draw puts down, in the target's DEVICE pixels, before it is composited. So the
+   * draw goes down sharp on a scratch the size of dc's canvas, under dc's own transform, and that scratch is laid back
+   * through drawBlurredNoFilter at the identity — the same pixels, the same radius, and dc's alpha, composite mode and
+   * clip applied once at the end, as the filter would have applied them. `draw(g)` must only draw (no re-entry). */
+  let _nbS = null;
+  function drawBlurredDrawNoFilter(dc, r, draw) {
+    const cv = dc.canvas, W = cv.width, H = cv.height;
+    if (!(W > 0) || !(H > 0)) return;
+    if (!_nbS) _nbS = document.createElement('canvas');
+    if (_nbS.width !== W || _nbS.height !== H) { _nbS.width = W; _nbS.height = H; }
+    const g = _nbS.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+    g.clearRect(0, 0, W, H);
+    g.setTransform(dc.getTransform());
+    draw(g);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    dc.save();
+    dc.setTransform(1, 0, 0, 1, 0, 0);
+    drawBlurredNoFilter(dc, _nbS, r, 0, 0, W, H);
+    dc.restore();
+  }
   /* CAN THIS DEVICE SPACE TEXT AT ALL — MEASURED, NOT ASKED (#686). Six sites guarded letter- and
    * word-spacing with `'letterSpacing' in ctx`, which asks whether the PROPERTY EXISTS. That is not
    * the same question as whether setting it does anything, and #645 is the entry that exists because
@@ -3019,9 +3041,13 @@ window.FM = window.FM || {};
     applyLayerTransform(octx, layer, t, scene);
     // ctx.filter is in DEVICE pixels on the plate and the current transform does not touch it, so a
     // feather written in project px follows the plate's scale. × 1 on every export.
-    octx.filter = 'blur(' + (Math.max(0, layer.mask.feather || 0) * ps) + 'px)';
-    octx.fillStyle = '#fff';
-    const path = new Path2D(); addMaskShape(path, layer.mask); octx.fill(path);
+    const path = new Path2D(); addMaskShape(path, layer.mask);
+    const _mfr = Math.max(0, layer.mask.feather || 0) * ps;
+    if (ctxFilterOK() || !(_mfr > 0.05)) {
+      octx.filter = 'blur(' + _mfr + 'px)';
+      octx.fillStyle = '#fff';
+      octx.fill(path);
+    } else drawBlurredDrawNoFilter(octx, _mfr, g => { g.fillStyle = '#fff'; g.fill(path); });   // #986 batch 2: the mask's feather was a hard edge
     octx.restore();
     octx.filter = 'none'; octx.globalCompositeOperation = 'source-over';
     // 3) blit onto the main canvas with the layer's real opacity + blend
@@ -4535,6 +4561,79 @@ window.FM = window.FM || {};
     out[0] = r; out[1] = g; out[2] = b;
   }
 
+  /* ═══ STARFIELD ON A REDUCED PLATE: THE EXPORT'S STARS, SHRUNK (#986 C7b) ══════════════════════════════════════════
+   * The kernel hashed PLATE pixels, so a reduced preview scattered a different field from the file's: other stars in
+   * other places, each a whole plate pixel (3.5 project px on his phone's 0.28 plate) — MEASURED against the export
+   * shrunk to the same size, a mean error of 7.3 levels on a field whose whole mean is 3.9, i.e. nothing lined up.
+   * Here the stars are the export's own cells in PROJECT pixels (same hash, same size, same brightness and twinkle),
+   * each laid onto the plate by how much of every plate pixel it covers — the export's picture averaged down, which is
+   * what a reduced preview of anything else shows. Density's candidates (a cell whose hash is under 0.03, the most the
+   * slider reaches) are found once per star size and frame size and cached, so a frame costs the stars, not the
+   * 2 million cells of a 1080x1920 field. Only reached below ps 1: the export keeps its own loop, byte for byte.
+   * The brightness arithmetic mirrors the kernel's, line for line; the suite compares the two pictures. */
+  const _sfCand = [];
+  function sfCandidates(sz, cols, rows) {
+    for (let i = 0; i < _sfCand.length; i++) { const c = _sfCand[i]; if (c.sz === sz && c.cols === cols && c.rows === rows) return c; }
+    let cap = Math.ceil(cols * rows * 0.035) + 64, n = 0;
+    let X = new Int32Array(cap), Y = new Int32Array(cap), R = new Float64Array(cap);
+    for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
+      let h = (cx * 374761393 + cy * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; h = h ^ (h >>> 16);
+      const r = (h >>> 0) / 4294967295;
+      if (!(r < 0.03)) continue;
+      if (n >= cap) { cap *= 2; const x2 = new Int32Array(cap), y2 = new Int32Array(cap), r2 = new Float64Array(cap); x2.set(X); y2.set(Y); r2.set(R); X = x2; Y = y2; R = r2; }
+      X[n] = cx; Y[n] = cy; R[n] = r; n++;
+    }
+    const c = { sz: sz, cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
+    _sfCand.unshift(c); if (_sfCand.length > 3) _sfCand.length = 3;
+    return c;
+  }
+  let _sfCov = null, _sfAcc = null;
+  function starfieldReduced(d, W, H, ps, t, thr, sz, col, plain, vari, tw, twPh, tws) {
+    const cols = Math.ceil(W / ps / sz), rows = Math.ceil(H / ps / sz);
+    const C = sfCandidates(sz, cols, rows), N = W * H;
+    if (!_sfCov || _sfCov.length < N) { _sfCov = new Float32Array(N); _sfAcc = new Float32Array(N); }
+    const cov = _sfCov, acc = _sfAcc;
+    cov.fill(0, 0, N); acc.fill(0, 0, N);
+    const cell = sz * ps;                                   // one star's side, in plate pixels
+    for (let k = 0; k < C.n; k++) {
+      if (!(C.R[k] < thr)) continue;                       // the kernel's own test, on the very same float
+      const cx = C.X[k], cy = C.Y[k];
+      let b = 1;
+      if (!plain) {
+        if (vari > 0) { let hv = ((cx * 83492791) ^ (cy * 2654435761)) >>> 0; hv = (hv ^ (hv >>> 15)) >>> 0; b *= 1 - vari * ((hv >>> 8) / 16777216) * 0.9; }
+        if (tw > 0) { let ht = ((cx * 40503) ^ (cy * 12289)) | 0; ht = (ht ^ (ht >>> 13)) * 1274126177 | 0; ht = (ht ^ (ht >>> 16)) >>> 0;
+          const pz = (ht / 4294967295) * 6.283;
+          b *= 1 - tw * 0.5 * (1 - Math.sin((twPh === null ? t * 3 * tws : twPh) + pz)); }
+        if (b < 0) b = 0;
+      }
+      const X0 = cx * cell, X1 = X0 + cell, Y0 = cy * cell, Y1 = Y0 + cell;
+      const px0 = Math.floor(X0), px1 = Math.min(W - 1, Math.ceil(X1) - 1), py0 = Math.floor(Y0), py1 = Math.min(H - 1, Math.ceil(Y1) - 1);
+      for (let py = py0; py <= py1; py++) {
+        const oy = Math.min(Y1, py + 1) - Math.max(Y0, py);
+        if (!(oy > 0)) continue;
+        for (let px = px0; px <= px1; px++) {
+          const ox = Math.min(X1, px + 1) - Math.max(X0, px);
+          if (!(ox > 0)) continue;
+          const w = ox * oy, j = py * W + px;
+          cov[j] += w; acc[j] += w * b;
+        }
+      }
+    }
+    for (let j = 0; j < N; j++) {
+      let f = cov[j];
+      if (!(f > 0)) continue;
+      const i = j * 4, a0 = d[i + 3] / 255;
+      if (a0 <= 0) continue;                                // the export draws a star only where the layer is
+      let s = acc[j];
+      if (f > 1) { s /= f; f = 1; }
+      const keep = (1 - f) * a0, A = f + keep;              // premultiplied: the star covers f of the pixel at alpha 1
+      d[i] = (col[0] * s + d[i] * keep) / A;
+      d[i + 1] = (col[1] * s + d[i + 1] * keep) / A;
+      d[i + 2] = (col[2] * s + d[i + 2] * keep) / A;
+      d[i + 3] = A * 255;
+    }
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -4901,7 +5000,11 @@ window.FM = window.FM || {};
         if (dist <= tol) a = 0;
         else if (dist >= hi) a = 1;
         else { const u = (dist - tol) / (hi - tol); a = u * u * (3 - 2 * u); }
-        if (matte) { const v = a * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; continue; }
+        /* VIEW: MATTE KEEPS THE LAYER'S OWN ALPHA (#986 C40). It wrote 255 into every pixel it was handed, including
+           the transparent ones round a clip smaller than the frame — and the kernel is handed the clip's box PLUS a crop
+           margin, so a light-grey opaque band (measured 220,220,220) framed the clip exactly as far as that margin
+           reached and no further. Where the layer is solid (every keyed shot) this is the same byte as before. */
+        if (matte) { const v = a * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; continue; }
         if (a <= 0) { d[i + 3] = 0; continue; }
         d[i + 3] = d[i + 3] * a;
         if (spill > 0) {
@@ -5514,8 +5617,20 @@ window.FM = window.FM || {};
       }
     },
     // ---- batch 4 ----
-    edge: function (d, W, H, p, t) {
+    /* ═══ A REDUCED PREVIEW DRAWS THE EXPORT'S LINES, SHRUNK — NOT 3.5x FATTER ONES (#986 C60) ═══════════════════════
+     * Find Edges and Emboss read their neighbour ONE PLATE PIXEL away. On a reduced plate that pixel is 1/ps project
+     * pixels away, so the 2-pixel line a hard edge makes was 2 PLATE pixels — 7 project px on his phone's 0.28 preview
+     * against 2 in the file. MEASURED across a hard edge, the line's weight (brightness × width, project px): Find Edges
+     * 510 in the export, 1020 at 0.5, 1813 at 0.28; Emboss 254 / 508 / 903.
+     * The plate cannot draw a line thinner than a pixel, so it draws what the export's line looks like shrunk to it:
+     * the same 2 plate pixels at ps of the export's strength (a line covering ps of each), which puts the weight back.
+     * The strength is taken as the export would read it — clamped (and thresholded) per pixel first, then shrunk —
+     * because the export clamps its own pixels before anything averages them; every other control reads the shrunk
+     * value unchanged, so Polarity, Mix and Ink sit on it exactly as they sit on the export's. ps 1 (every export,
+     * every full-size preview) never enters the new line. */
+    edge: function (d, W, H, p, t, ps) {
       const k = FM.evalProp(p.amount, t) || 1, s = fxSrc(d), w4 = W * 4;
+      const shrink = ps > 0 && ps < 1 ? ps : 1;
       const thrP = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
       const thr = Math.max(0, Math.min(100, thrP)) / 100 * 255;
       const inv = (p.polarity == null ? 0 : (Math.round(FM.evalProp(p.polarity, t)) | 0)) === 1;
@@ -5538,6 +5653,7 @@ window.FM = window.FM || {};
           // THRESHOLD kills the grey mush: a Sobel over a smooth area still returns a small reading,
           // so every gentle gradient came back faintly lit with no way to say "that is not an edge".
           if (thr > 0 && mag < thr) mag = 0;
+          if (shrink !== 1) mag *= shrink;   // #986 C60: the export's line, shrunk to this plate
           // POLARITY: the effect could only ever draw glowing white lines on black. Ink on paper — the
           // way line art is actually drawn — was simply unreachable.
           if (inv) mag = 255 - mag;
@@ -5552,8 +5668,10 @@ window.FM = window.FM || {};
         }
       }
     },
-    emboss: function (d, W, H, p, t) {
+    emboss: function (d, W, H, p, t, ps) {   // ps: #986 C60, see Find Edges above
       const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = fxSrc(d), w4 = W * 4;
+      const shrink = ps > 0 && ps < 1 ? ps : 1;
+      const sh = (v) => 128 + ((v < 0 ? 0 : (v > 255 ? 255 : v)) - 128) * shrink;   // the export's relief, clamped as it clamps, shrunk
       // THE KERNEL GENERALISES EXACTLY, which is worth stating because it is why this is a real angle
       // control and not a second effect wearing the same name. The legacy weights are
       //     -2 -1  0        and the weight of the neighbour at offset (dx,dy) is precisely dx*1 + dy*1:
@@ -5572,7 +5690,7 @@ window.FM = window.FM || {};
       for (let y = 1; y < H - 1; y++) {
         for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
-          if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; d[j] = 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; } continue; }
+          if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; const v = 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; d[j] = shrink === 1 ? v : sh(v); } continue; }
           // MONO runs the kernel over LUMINANCE once instead of per channel. Per channel is what puts
           // colour fringing on the relief; a clean grey metal stamp was unreachable.
           if (mono) {
@@ -5582,7 +5700,7 @@ window.FM = window.FM || {};
               const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
               if (w !== 0) acc += lum(i + dy * w4 + dx * 4) * w;
             }
-            const v = 128 + acc * k;
+            const v = shrink === 1 ? 128 + acc * k : sh(128 + acc * k);
             if (allIn) { d[i] = v; d[i + 1] = v; d[i + 2] = v; }
             else { d[i] = s[i] + (v - s[i]) * bl; d[i + 1] = s[i + 1] + (v - s[i + 1]) * bl; d[i + 2] = s[i + 2] + (v - s[i + 2]) * bl; }
             continue;
@@ -5593,7 +5711,7 @@ window.FM = window.FM || {};
               const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
               if (w !== 0) acc += s[j + dy * w4 + dx * 4] * w;
             }
-            const v = 128 + acc * k;
+            const v = shrink === 1 ? 128 + acc * k : sh(128 + acc * k);
             d[j] = allIn ? v : s[j] + (v - s[j]) * bl;
           }
         }
@@ -6027,7 +6145,12 @@ window.FM = window.FM || {};
           if(htlSoft>0){ var htlE=(htlM-htlThresh)/htlSoft; htlV=htlE<=0?0:(htlE>=1?255:Math.round(htlE*255)); }
           else htlV=(htlM<htlThresh)?0:255;
           d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } } },
-    clouds: function(d,W,H,p,t){ var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=cl_x+cl_ox; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_y/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_y-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
+    /* CLOUDS ARE MEASURED IN PROJECT PIXELS (#986 C7a). The octave cells were 64/32/16 PLATE pixels and Drift moved
+       them in plate pixels, so a reduced preview drew clouds 1/ps times the export's size (3.5x on his phone's 0.28
+       plate) and drifting 1/ps times as fast — MEASURED against the export shrunk to the same size: a mean error of
+       27 levels at 0.28 and 18 at 0.5. Each plate pixel now samples the SAME noise at its own centre in project
+       space; at ps 1 that centre is the pixel itself, so every export is the very same arithmetic. */
+    clouds: function(d,W,H,p,t,ps){ var cl_ps=(ps>0&&ps<1)?ps:1; var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=(cl_ps===1?cl_x:(cl_x+0.5)/cl_ps-0.5)+cl_ox, cl_ys=cl_ps===1?cl_y:(cl_y+0.5)/cl_ps-0.5; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_ys/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_ys-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
     rays: function(d,W,H,p,t){ var raysCount = fparam(p, 'count', 16, t); raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
     stripes: function(d,W,H,p,t,ps){ var stp_size = fparam(p, 'size', 16, t); stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2];
       // Locked to a 45-degree diagonal at a 50% duty cycle mixed at a fixed 0.6 — the only thing you
@@ -6106,7 +6229,7 @@ window.FM = window.FM || {};
         if(seK!==0){ v=(v-127.5)*(1+Math.abs(seK)*3)+127.5+seK*127.5; if(v<0)v=0; else if(v>255)v=255; }
         d[sei*4+3]=v; } },
     blocknoise: function(d,W,H,p,t,ps){ var bnAmt = fparam(p, 'amount', 0.5, t); bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
-    starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4;
+    starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t,sf_ps){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4;
       // Every star was a single pixel of one flat colour. At 1080p that is not a star, it is sensor
       // dirt, and a one-pixel highlight is exactly what an encoder throws away — so it also shimmered
       // to nothing on export. SIZE hashes on the CELL rather than the pixel so a star becomes a block
@@ -6120,6 +6243,7 @@ window.FM = window.FM || {};
          clip on every frame, so a ramp played as a burst of frantic flicker. Unkeyframed: the old phase, to the bit. */
       var sf_twPh=FM.isAnimated(sf_p.twinklespeed)?3*FM.integrateProp(sf_p.twinklespeed,0,sf_t,function(u){ var k=FM.evalProp(sf_p.twinklespeed,u); return !(k>0.1)?0.1:(k>5?5:k); }):null;
       var sf_plain=sf_szP===1&&sf_tw===0&&sf_var===0;
+      if(sf_ps>0&&sf_ps<1){ starfieldReduced(sf_d,sf_W,sf_H,sf_ps,sf_t,sf_thr,sf_szP,sf_col,sf_plain,sf_var,sf_tw,sf_twPh,sf_tws); return; }   // #986 C7b: a reduced plate shows the export's stars, shrunk (Star size is project px here — pxToPlate leaves a 6-argument kernel alone)
       for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue;
         var sf_cx=sf_szP===1?sf_x:Math.floor(sf_x/sf_szP), sf_cy=sf_szP===1?sf_y:Math.floor(sf_y/sf_szP);
         var sf_h=(sf_cx*374761393+sf_cy*668265263)|0; sf_h=(sf_h^(sf_h>>>13))*1274126177; sf_h=sf_h^(sf_h>>>16);
@@ -8174,6 +8298,74 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return (matrix.length || blurs.length || glows.length) ? { matrix: matrix, blurs: blurs, glows: glows } : null;
   }
 
+  /* The CSS colour/blur/glow chain on a canvas that already holds the picture, through the shader — drawCssFxOnGPU's
+     own passes, lifted out so an adjustment layer's grade runs the SAME code where ctx.filter does nothing (#986
+     batch 2). `pool` supplies the B (and lazily C) scratches at W×H; `ps` converts the project-px radii to this
+     canvas's pixels. Returns the canvas holding the result, or null for any "cannot" (the caller then draws as before). */
+  function runCssOpsOnGPU(src, W, H, ops, ps, pool) {
+    let cur = src;
+    /* A THIRD scratch, because a glow pass needs the halo, the source and a place to combine them at
+       once — two canvases cannot hold three things. Allocated lazily so a stack with no glow in it
+       never pays for it. */
+    const needC = () => {
+      if (!pool.C) pool.C = document.createElement('canvas');
+      const wC = pool.C;
+      if (wC.width !== W || wC.height !== H) { wC.width = W; wC.height = H; }
+      const cx2 = wC.getContext('2d');
+      cx2.setTransform(1, 0, 0, 1, 0, 0);
+      cx2.globalCompositeOperation = 'source-over';
+      cx2.clearRect(0, 0, W, H);
+      return { cv: wC, cx: cx2 };
+    };
+    const needB = () => {
+      const wB = pool.B;
+      if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
+      const bx = wB.getContext('2d');
+      bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, W, H);
+      return { cv: wB, cx: bx };
+    };
+    if (ops.matrix.length) {
+      const o = FM.glColor.apply(cur, W, H, ops.matrix);
+      if (!o) return null;
+      if (ops.blurs.length) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
+    }
+    for (let bi = 0; bi < ops.blurs.length; bi++) {
+      // the radius is in PROJECT px and the plate is at `ps` — the same conversion effectFilter does
+      const o = FM.glColor.blur(cur, W, H, ops.blurs[bi] * ps);
+      if (!o) return null;
+      const last = bi === ops.blurs.length - 1 && !ops.glows.length;
+      if (!last) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
+    }
+    /* ⚠️ EACH PASS SHADOWS THE PREVIOUS RESULT, not the original — that is what `drop-shadow(...)
+     * drop-shadow(...)` means in a filter chain, and it is why stacking reads as light rather than as
+     * a thicker halo. Reproducing it any other way would be a different picture. */
+    for (let gi = 0; gi < ops.glows.length; gi++) {
+      const g = ops.glows[gi];
+      for (let pass = 0; pass < g.passes; pass++) {
+        const halo = FM.glColor.blur(cur, W, H, Math.max(0.05, g.radius * ps * GLOW_SIGMA));
+        /* ⚠️ A GLOW THAT CANNOT DRAW A HALO IS NOT A REASON TO ABANDON THE WHOLE STACK (queue 836).
+         * `FM.glColor.blur` refuses a radius that is not > 0.05 and hands back null, and `return
+         * false` here throws away the ENTIRE pass — every Grayscale, Saturation and Brightness on the
+         * same layer with it. On a device without ctx.filter there is no second path to catch them,
+         * so the layer draws bare: queue 661's complaint, caused by one glow. It is reachable with a
+         * radius the user typed (0) as well as one that was never saved, which is why the fix above
+         * is not enough on its own. A glow with no halo contributes nothing; skip that glow. */
+        if (!halo) continue;
+        const c = needC();
+        // the blurred ALPHA, filled with the glow colour…
+        c.cx.drawImage(halo, 0, 0);
+        c.cx.globalCompositeOperation = 'source-in';
+        c.cx.fillStyle = g.color;
+        c.cx.fillRect(0, 0, W, H);
+        c.cx.globalCompositeOperation = 'source-over';
+        // …and the layer itself back on top of its own halo
+        c.cx.drawImage(cur, 0, 0);
+        const b2 = needB(); b2.cx.drawImage(c.cv, 0, 0); cur = b2.cv;
+      }
+    }
+    return cur;
+  }
+
   function drawCssFxOnGPU(ctx, layer, t, scene, ops) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return true;
@@ -8208,68 +8400,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       /* ⚠️ EACH GPU PASS WRITES THE SAME CANVAS, so a chain has to be copied out between passes or the
        * second would read what it is writing. `wB` is the plate pool's other half, already the right
        * size, already allocated — the same canvas drawWarpEffect uses for its output. */
-      let cur = wA;
-      /* A THIRD scratch, because a glow pass needs the halo, the source and a place to combine them at
-         once — two canvases cannot hold three things. Allocated lazily so a stack with no glow in it
-         never pays for it. */
-      const needC = () => {
-        const pool = _wpPool[d];
-        if (!pool.C) pool.C = document.createElement('canvas');
-        const wC = pool.C;
-        if (wC.width !== W || wC.height !== H) { wC.width = W; wC.height = H; }
-        const cx2 = wC.getContext('2d');
-        cx2.setTransform(1, 0, 0, 1, 0, 0);
-        cx2.globalCompositeOperation = 'source-over';
-        cx2.clearRect(0, 0, W, H);
-        return { cv: wC, cx: cx2 };
-      };
-      const needB = () => {
-        const wB = _wpPool[d].B;
-        if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
-        const bx = wB.getContext('2d');
-        bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, W, H);
-        return { cv: wB, cx: bx };
-      };
-      if (ops.matrix.length) {
-        const o = FM.glColor.apply(cur, W, H, ops.matrix);
-        if (!o) return false;
-        if (ops.blurs.length) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
-      }
-      for (let bi = 0; bi < ops.blurs.length; bi++) {
-        // the radius is in PROJECT px and the plate is at `ps` — the same conversion effectFilter does
-        const o = FM.glColor.blur(cur, W, H, ops.blurs[bi] * ps);
-        if (!o) return false;
-        const last = bi === ops.blurs.length - 1 && !ops.glows.length;
-        if (!last) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
-      }
-      /* ⚠️ EACH PASS SHADOWS THE PREVIOUS RESULT, not the original — that is what `drop-shadow(...)
-       * drop-shadow(...)` means in a filter chain, and it is why stacking reads as light rather than as
-       * a thicker halo. Reproducing it any other way would be a different picture. */
-      for (let gi = 0; gi < ops.glows.length; gi++) {
-        const g = ops.glows[gi];
-        for (let pass = 0; pass < g.passes; pass++) {
-          const halo = FM.glColor.blur(cur, W, H, Math.max(0.05, g.radius * ps * GLOW_SIGMA));
-          /* ⚠️ A GLOW THAT CANNOT DRAW A HALO IS NOT A REASON TO ABANDON THE WHOLE STACK (queue 836).
-           * `FM.glColor.blur` refuses a radius that is not > 0.05 and hands back null, and `return
-           * false` here throws away the ENTIRE pass — every Grayscale, Saturation and Brightness on the
-           * same layer with it. On a device without ctx.filter there is no second path to catch them,
-           * so the layer draws bare: queue 661's complaint, caused by one glow. It is reachable with a
-           * radius the user typed (0) as well as one that was never saved, which is why the fix above
-           * is not enough on its own. A glow with no halo contributes nothing; skip that glow. */
-          if (!halo) continue;
-          const c = needC();
-          // the blurred ALPHA, filled with the glow colour…
-          c.cx.drawImage(halo, 0, 0);
-          c.cx.globalCompositeOperation = 'source-in';
-          c.cx.fillStyle = g.color;
-          c.cx.fillRect(0, 0, W, H);
-          c.cx.globalCompositeOperation = 'source-over';
-          // …and the layer itself back on top of its own halo
-          c.cx.drawImage(cur, 0, 0);
-          const b2 = needB(); b2.cx.drawImage(c.cv, 0, 0); cur = b2.cv;
-        }
-      }
-      const outCv = cur;
+      const outCv = runCssOpsOnGPU(wA, W, H, ops, ps, _wpPool[d]);
       if (!outCv || outCv === wA) return false;                // nothing was applied — let the old path run
       ctx.save();
       baseT(ctx);
@@ -9052,8 +9183,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       actx.globalCompositeOperation = 'destination-in';
       // ctx.filter lengths are DEVICE pixels on the plate and the transform does not touch them, so a
       // feather written in PROJECT px must be multiplied by the plate's scale. × 1 on every export.
-      actx.filter = feather > 0.05 ? 'blur(' + (feather * ps).toFixed(2) + 'px)' : 'none';
-      actx.drawImage(slot.M, 0, 0);
+      if (feather > 0.05 && !ctxFilterOK()) drawBlurredNoFilter(actx, slot.M, +(feather * ps).toFixed(2), 0, 0, slot.M.width, slot.M.height);   // #986 batch 2: the matte's feather was a hard cut
+      else {
+        actx.filter = feather > 0.05 ? 'blur(' + (feather * ps).toFixed(2) + 'px)' : 'none';
+        actx.drawImage(slot.M, 0, 0);
+      }
       actx.filter = 'none'; actx.globalCompositeOperation = 'source-over';
       ctx.save();
       baseT(ctx);
@@ -10710,6 +10844,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return _cfTex;
   }
 
+  // The texture's own alpha in black — the (1 - shade) of coverage renderMesh adds back where ctx.filter cannot dim a face (#986 batch 2)
+  let _meshBlk = null;
+  function meshBlackTex(tex, tw, th) {
+    if (!_meshBlk) _meshBlk = document.createElement('canvas');
+    const w = Math.max(1, tex.width || tw), h = Math.max(1, tex.height || th);
+    if (_meshBlk.width !== w || _meshBlk.height !== h) { _meshBlk.width = w; _meshBlk.height = h; }
+    const g = _meshBlk.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.filter = 'none';
+    g.globalCompositeOperation = 'copy'; g.drawImage(tex, 0, 0);
+    g.globalCompositeOperation = 'source-in'; g.fillStyle = '#000000'; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'source-over';
+    return _meshBlk;
+  }
   // ---- tiny fixed-function mesh pipeline ----
   // verts: [x,y,z,u,v] in unit space (|xyz| ≲ 1, uv 0..1), tris: index triples.
   // Euler-rotates, projects with weak perspective, painter-sorts, then draws each triangle as an
@@ -10743,6 +10890,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const lm = Math.hypot(0.42, 0.55), la = o.light * Math.PI / 180;
       Lx = lm * Math.cos(la); Ly = -lm * Math.sin(la);
     }
+    // #986 batch 2: the face shading below is a ctx.filter; where that does nothing it is composited instead (source-over only)
+    const shadeOK = ctxFilterOK() || dctx.globalCompositeOperation !== 'source-over';
+    let blk = null;
     for (let k = 0; k < order.length; k++) {
       const tr = tris[order[k]];
       const a = P[tr[0]], b = P[tr[1]], c = P[tr[2]];
@@ -10778,6 +10928,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       dctx.transform(ma, mb, mc, md, me, mf);
       // shade baked into this face's own pixels (a source-atop fill would also darken farther
       // faces showing through transparent texels); brightness(s) ≡ compositing black at 1-s
+      if (shade < 0.999 && !shadeOK) {
+        /* #986 batch 2: WITHOUT ctx.filter THE SHADING WAS GONE — every face drew at full brightness, so a Cube read as
+           a flat cut-out. brightness(s) over the face is premultiplied colour × s at the face's own alpha, which three
+           plain composites give exactly, farther faces behind a see-through texel included: take the face's coverage
+           out of what is there (destination-out), ADD the face at s, and ADD back the (1 - s) of alpha the dimmer face
+           still covers with black texels ('lighter' sums premultiplied colour and alpha). */
+        if (!blk) blk = meshBlackTex(tex, tw, th);
+        const ga = dctx.globalAlpha;
+        dctx.globalCompositeOperation = 'destination-out'; dctx.drawImage(tex, 0, 0);
+        dctx.globalCompositeOperation = 'lighter'; dctx.globalAlpha = ga * shade; dctx.drawImage(tex, 0, 0);
+        dctx.globalAlpha = ga * (1 - shade); dctx.drawImage(blk, 0, 0);
+        dctx.restore();
+        continue;
+      }
       if (shade < 0.999) dctx.filter = 'brightness(' + shade.toFixed(3) + ')';
       dctx.drawImage(tex, 0, 0);
       dctx.restore();
@@ -11350,8 +11514,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cc = _dnC.getContext('2d');
       cc.setTransform(1, 0, 0, 1, 0, 0); cc.globalAlpha = 1; cc.globalCompositeOperation = 'source-over';
       cc.clearRect(0, 0, W, H);
-      cc.filter = spatial > 0.05 ? 'blur(' + spatial.toFixed(2) + 'px)' : 'none';
-      cc.drawImage(rec.cv, 0, 0);
+      if (spatial > 0.05 && !ctxFilterOK()) drawBlurredNoFilter(cc, rec.cv, +spatial.toFixed(2), 0, 0, rec.cv.width, rec.cv.height);   // #986 batch 2: Extra smoothing did nothing
+      else {
+        cc.filter = spatial > 0.05 ? 'blur(' + spatial.toFixed(2) + 'px)' : 'none';
+        cc.drawImage(rec.cv, 0, 0);
+      }
       cc.filter = 'none';
       cc.globalCompositeOperation = 'destination-in';
       cc.imageSmoothingEnabled = true;                  // the bilinear upscale IS the mask's feathering
@@ -11396,19 +11563,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       bandCtx.clearRect(0, 0, W, H);
       bandCtx.drawImage(A, 0, 0);
       bandCtx.globalCompositeOperation = 'destination-out';
-      bandCtx.filter = 'blur(' + reach.toFixed(2) + 'px)';
-      bandCtx.drawImage(A, 0, 0);
+      /* #986 batch 2: where ctx.filter does nothing, the subject was subtracted from ITSELF, sharp — an empty band, so
+         Light Wrap drew nothing at all. Both blurs here take the no-filter path there. */
+      const lwOK = ctxFilterOK();
+      if (lwOK) {
+        bandCtx.filter = 'blur(' + reach.toFixed(2) + 'px)';
+        bandCtx.drawImage(A, 0, 0);
+      } else drawBlurredNoFilter(bandCtx, A, +reach.toFixed(2), 0, 0, A.width, A.height);
       bandCtx.filter = 'none'; bandCtx.globalCompositeOperation = 'source-over';
       // 2) the backdrop, blurred, cut to that band
       const wrapCtx = _lwB.getContext('2d');
       wrapCtx.setTransform(1, 0, 0, 1, 0, 0);
       wrapCtx.globalAlpha = 1; wrapCtx.globalCompositeOperation = 'source-over';
       wrapCtx.clearRect(0, 0, W, H);
-      wrapCtx.filter = soft > 0.05 ? 'blur(' + soft.toFixed(2) + 'px)' : 'none';
-      try {
-        if (snapRegionDiffers(snap, A)) drawSnapInRegion(wrapCtx, snap, A);   // a camera plate's backdrop, placed by where it came from (queue 690)
-        else wrapCtx.drawImage(snap, 0, 0, W, H);
-      } catch (e) { return; }
+      const placeSnap = (g) => {
+        if (snapRegionDiffers(snap, A)) drawSnapInRegion(g, snap, A);   // a camera plate's backdrop, placed by where it came from (queue 690)
+        else g.drawImage(snap, 0, 0, W, H);
+      };
+      if (lwOK || !(soft > 0.05)) {
+        wrapCtx.filter = soft > 0.05 ? 'blur(' + soft.toFixed(2) + 'px)' : 'none';
+        try { placeSnap(wrapCtx); } catch (e) { return; }
+      } else {
+        try { drawBlurredDrawNoFilter(wrapCtx, +soft.toFixed(2), placeSnap); } catch (e) { return; }
+      }
       wrapCtx.filter = 'none';
       wrapCtx.globalCompositeOperation = 'destination-in';
       wrapCtx.drawImage(_lwA, 0, 0);
@@ -12930,6 +13107,40 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (ctx.canvas === _fogA) ctx.clearRect(0, 0, W, H);   // nested plates: ctx IS our scratch → clear so this replaces rather than double-composites
     ctx.drawImage(_fogA, 0, 0);
     ctx.restore();
+  }
+  /* The camera's focus blur where ctx.filter does nothing (#986 batch 2) — see the call in drawLayer. The plate is the
+     TARGET's own grid and stamps, so `r` is exactly the device-pixel radius the filter string would have carried, and
+     the layer draws into it at the same place it would have drawn into ctx. Depth-indexed like the other plate pools:
+     a group unit's members can be out of focus inside an out-of-focus unit. */
+  const _dfPool = [];
+  let _dfDepth = 0;
+  function drawDefocusNoFilter(ctx, layer, t, scene, r) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return true;
+    const cv = ctx.canvas, W = cv.width, H = cv.height;
+    if (!(W > 0) || !(H > 0) || _dfDepth > 6) return false;
+    const d = _dfDepth++;
+    try {
+      const P = _dfPool[d] || (_dfPool[d] = document.createElement('canvas'));
+      if (P.width !== W || P.height !== H) { P.width = W; P.height = H; }
+      P.__fmRS = cv.__fmRS; P.__fmOX = cv.__fmOX; P.__fmOY = cv.__fmOY; P.__fmCamExt = cv.__fmCamExt;
+      const a = P.getContext('2d');
+      a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H);
+      a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
+      baseT(a);
+      drawLayer(a, Object.assign({}, layer, {
+        __fmNoDfc: 1, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer),
+        transform: Object.assign({}, layer.transform, { opacity: 1 }),
+      }), t, scene);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      drawBlurredNoFilter(ctx, P, r, 0, 0, W, H);
+      ctx.restore();
+      return true;
+    } finally { _dfDepth--; }
   }
 
   function drawTint(ctx, layer, t, scene, amount, colorHex, fx) {
@@ -15567,6 +15778,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // the finished layer whichever of the eight ways it draws.
     if (!_fogBusy && scene) { const _fa = camFogAmt(layer, t); if (_fa > 0.002) { drawFogLayer(ctx, layer, t, scene, _fa); return; } }
 
+    /* THE CAMERA'S FOCUS BLUR, WHERE ctx.filter DOES NOTHING (#986 batch 2). Depth of field is appended to this
+     * layer's ctx.filter string below, so on such a device every out-of-focus layer drew SHARP — measured: a layer
+     * 260 deep off the focus plane lost its whole blur. Here the layer is drawn once, sharp, on a plate on the target's
+     * own grid (so the radius is the very device-pixel radius the filter would have used), and laid back blurred at
+     * its opacity and blend. First, so the CSS colour pass below runs INSIDE the plate and the blur lands last —
+     * the order the filter string has. The plate's own draw is marked so it cannot come back here, and so the
+     * ordinary path cannot append the blur a second time on a browser where the filter does run. A healthy device
+     * never enters this. */
+    if (scene && _camLens && _camLens.focus && !layer.__fmNoDfc && !ctxFilterOK()) {
+      const _d0 = camDefocus(layer, t);
+      if (_d0 > 0) {
+        const _px0 = _d0 * _camLens.focus.s * 22 * renderScale(ctx);
+        if (_px0 > 0.3 && drawDefocusNoFilter(ctx, layer, t, scene, +_px0.toFixed(2))) return;
+      }
+    }
     /* ⚠️ ON A DEVICE THAT CANNOT RUN ctx.filter, THE LINE BELOW DRAWS NOTHING AND SAYS NOTHING
      * (queue 661) — that is the whole of "the effects don't work on mobile". Route the colour ones
      * through the shader instead. Returns false for every "cannot", and then the old path runs exactly
@@ -15595,7 +15821,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // was never really blurred at all.
       const px = _dfc * _camLens.focus.s * 22;
       const pxs = px * renderScale(ctx);   // device-space like every other filter length — see effectFilter
-      if (pxs > 0.3) ctx.filter = (ctx.filter && ctx.filter !== 'none' ? ctx.filter + ' ' : '') + 'blur(' + pxs.toFixed(2) + 'px)';
+      if (pxs > 0.3 && !layer.__fmNoDfc) ctx.filter = (ctx.filter && ctx.filter !== 'none' ? ctx.filter + ' ' : '') + 'blur(' + pxs.toFixed(2) + 'px)';   // __fmNoDfc: drawDefocusNoFilter's plate, which blurs it itself
     }
     applyShadow(ctx, layer, t, renderScale(ctx));   // device-space offsets/blur — see renderScale
     applyLayerTransform(ctx, layer, t, scene);   // parent chain + position/Z + rotation + non-uniform scale + skew
@@ -16228,9 +16454,37 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ctx.drawImage(M, 0, 0);
     ctx.restore();
   }
+  /* The adjustment grade's CSS half through the shader (#986 batch 2) — see the call in applyAdjustment. The same op
+     list drawCssFxOnGPU builds (cssColorOps) plus the colour-grade hue/saturation effectFilter appends, run by the same
+     passes (runCssOpsOnGPU) over the graded snapshot, and copied out at once: the GPU's canvas is shared. */
+  let _adjCssPool = null, _adjCssOut = null;
+  function adjCssNoFilter(lay, t, W, H, S) {
+    if (!FM.glColor || !FM.glColor.available || !FM.glColor.available() || !_adjCv) return null;
+    const ops = cssColorOps(lay, t) || { matrix: [], blurs: [], glows: [] };
+    const cg = lay.colorGrade;
+    if (cg && !fillOwnsColor(lay)) {
+      if (cg.hue) ops.matrix.push({ type: 'hue', value: cg.hue });
+      if (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) ops.matrix.push({ type: 'saturate', value: Math.max(0, cg.sat) });
+    }
+    if (!ops.matrix.length && !ops.blurs.length && !ops.glows.length) return null;
+    if (!_adjCssPool) _adjCssPool = { B: document.createElement('canvas') };
+    let r = null;
+    try { r = runCssOpsOnGPU(_adjCv, W, H, ops, S, _adjCssPool); } catch (e) { r = null; }
+    if (!r || r === _adjCv) return null;
+    if (!_adjCssOut) _adjCssOut = document.createElement('canvas');
+    if (_adjCssOut.width !== W || _adjCssOut.height !== H) { _adjCssOut.width = W; _adjCssOut.height = H; }
+    const g = _adjCssOut.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.filter = 'none';
+    g.globalCompositeOperation = 'copy'; g.drawImage(r, 0, 0); g.globalCompositeOperation = 'source-over';
+    return _adjCssOut;
+  }
   function applyAdjustment(ctx, layer, t, scene, effs, into) {
     if (!effs) {
-      const own = layer.effects || [];
+      /* …plus a PREVIEWED stack (#986 C52): picking a filter tile on an adjustment layer set FM._fxPreview and changed
+         nothing on the canvas, because the preview is merged in drawLayer's effectiveFx and an adjustment layer never
+         reaches it — then Add graded the frame. Same view-only override, same export guard (fxPreviewListFor). */
+      const pv = FM.fxPreviewListFor(layer);
+      const own = pv ? (layer.effects || []).concat(pv) : (layer.effects || []);
       if (own.some(adjLiveBox)) return applyAdjustmentFilters(ctx, layer, t, scene, own);
       effs = own;
     }
@@ -16318,12 +16572,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         a.globalCompositeOperation = 'source-over';
       }
     }
+    /* WHERE ctx.filter DOES NOTHING, THE CSS HALF OF THE GRADE RUNS THROUGH THE SHADER (#986 batch 2). The nine CSS
+       effects on an ordinary layer have had drawCssFxOnGPU since queue 661; on an ADJUSTMENT layer the grade was the
+       filter string on the blit below and nothing else, so Brightness, Saturation, Blur… on an adjustment layer drew
+       the frame back ungraded on his class of phone — measured: the whole grade gone. The same passes run here on the
+       graded snapshot, radii at the target's own scale (what effectFilter was handed), and the result is drawn with no
+       filter. Anything the shader cannot do leaves the old line exactly as it was. */
+    let src = _adjCv, css = hasCss ? filter : 'none';
+    if (hasCss && !ctxFilterOK()) { const o = adjCssNoFilter(lay, t, cw, ch, renderScale(ctx)); if (o) { src = o; css = 'none'; } }
     if (into) {                                     // #986 C1: one side of a filter's cross-fade — baked, not blitted
       const m = into.getContext('2d');
       m.setTransform(1, 0, 0, 1, 0, 0); m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
       m.clearRect(0, 0, into.width, into.height);
-      m.filter = hasCss ? filter : 'none';
-      m.drawImage(_adjCv, 0, 0);
+      m.filter = css;
+      m.drawImage(src, 0, 0);
       m.filter = 'none';
       return;
     }
@@ -16331,8 +16593,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ctx.setTransform(1, 0, 0, 1, 0, 0);             // the plate is already on the target's pixel grid
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.filter = hasCss ? filter : 'none';
-    ctx.drawImage(_adjCv, 0, 0);                    // (optionally CSS-filtered) graded snapshot, blended by opacity
+    ctx.filter = css;
+    ctx.drawImage(src, 0, 0);                       // (optionally CSS-filtered) graded snapshot, blended by opacity
     ctx.restore();
   }
   // When a camera layer is active, the whole scene is drawn to this offscreen first, then composited
