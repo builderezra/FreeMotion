@@ -113052,4 +113052,170 @@
     }
   });
 
+  /* ═══ REVIEW OF #482 POLISH BATCH 1 — four findings, each reproduced on the build (fd460fe0) before it was touched ═══════
+     A softened grain fainter on the phone than in the file, a Leak edge row that kept showing the old colour, an AI digest
+     that advertised a colour as undefined..undefined, and a still Light Leak that did not sit where Source X/Y put it. */
+
+  /* SOFTNESS BROKE C5 AGAIN. 986 C5 holds a grain on a reduced preview plate at the export's strength; the Softness blur takes a
+     DIFFERENT share of it away on a small plate cell than on the export's (a 1 px square under [¼ ½ ¼] against a 2 px disc
+     under a 3-tap box), and gn only corrected the unblurred field. C5's own ruler — a 320x240 project, mid-grey, luma std with
+     the image drawn 320 (the export), 160 and 90 (his phone's 0.28) px wide — measured on the build: Round Softness 50
+     4.35 / 3.49 / 3.50 (0.80), Round 100 3.87 / 2.63 / 2.63 (0.68), Square 100 5.73 / 3.89 / 3.88 (0.68), Size 4 at 100
+     3.68 / 3.92 / 2.92 (0.79 on the phone). Fixed, every one is within 2% of the export (the colour grain within 4%), so 10%
+     sits between the jitter and the fault. CONTROLS: at Softness 0 every plate still measures the export (C5 still holds and
+     the ruler reads the grain), and Softness 100 really is softer in the export than 0 — without that there is nothing here
+     to compare. The colour grain is read as R minus B, which the luma grain cancels out of, on square grain. */
+  test('482 polish 1 review a softened Film Grain is as strong on the phone and half-size previews as in the export', { item: '482' }, function () {
+    const read = (w, over) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#808080', start: 0, duration: 3 });
+      const e = FM.fxRegistry.makeInstance('filmgrain'); Object.assign(e.params, over); L.effects = [e];
+      const h = Math.round(w * 3 / 4), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } }), 0.5);
+      const m = Math.max(1, Math.round(8 * w / 320)), d = x.getImageData(m, m, w - 2 * m, h - 2 * m).data;
+      let s = 0, s2 = 0, c = 0, c2 = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) { const v = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114, q = d[i] - d[i + 2]; s += v; s2 += v * v; c += q; c2 += q * q; n++; }
+      return { luma: Math.sqrt(s2 / n - (s / n) * (s / n)), chroma: Math.sqrt(c2 / n - (c / n) * (c / n)) };
+    };
+    const e0 = read(320, {}).luma, e100 = read(320, { soft: 100 }).luma;
+    if (!(e0 > 5 && e0 < 9)) throw new Error('setup: a default Film Grain on mid-grey measured a luma std of ' + e0.toFixed(2) + ' in the export (6.97 when written) - the ruler is not reading the grain');
+    if (!(e100 < e0 * 0.75)) throw new Error('setup: Softness 100 left the export grain at ' + e100.toFixed(2) + ' against ' + e0.toFixed(2) + ' at 0 - nothing is being softened, so there is nothing to compare');
+    const PLATES = [[160, 'the half-size preview'], [90, 'his phone preview (0.28)']];
+    const same = (over, what, tol, chan) => {
+      const ref = read(320, over)[chan || 'luma'];
+      PLATES.forEach(([w, where]) => {
+        const s = read(w, over)[chan || 'luma'];
+        if (Math.abs(s / ref - 1) > tol) throw new Error('on ' + where + ' ' + what + ' measures ' + s.toFixed(2) + ' against ' + ref.toFixed(2) + ' in the export (' + (s > ref ? '+' : '') + ((s / ref - 1) * 100).toFixed(0) + '%) - a softened grain is drawn at a different strength on the preview than in the file');
+      });
+    };
+    same({}, 'CONTROL: the default grain at Softness 0', 0.05);
+    same({ soft: 50 }, 'round grain at Softness 50', 0.10);
+    same({ soft: 100 }, 'round grain at Softness 100', 0.10);
+    same({ shape: 0, soft: 100 }, 'square grain at Softness 100', 0.10);
+    same({ size: 4, soft: 100 }, 'round size 4 grain at Softness 100', 0.10);
+    same({ shape: 0, color: 100, soft: 100 }, 'the COLOUR grain (R minus B) of square grain at Softness 100', 0.10, 'chroma');
+  });
+
+  /* The two tests below open an effect in the real inspector, the way 482 polish 1 does. */
+  async function open482r(type, set) {
+    FM.scene.layers.length = 0;
+    const L = FM.makeLayer('shape', { name: 'R482', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+    L.start = 0; L.duration = 5;
+    const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+    L.effects = [inst]; FM.scene.layers.push(L);
+    FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+    await sleep(200);
+    return inst;
+  }
+  function row482r(label) {
+    const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label, #inspector-panel .fx-row.fx-open .kf-color-row > label'));
+    const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+    return lab ? lab.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row') : null;
+  }
+
+  /* LEAK EDGE KEPT SHOWING THE OLD COLOUR. It shows the Leak colour while it follows it (no colour of its own) — and it was
+     read once, when the panel was built: typing #00ff00 into Leak drew a green leak while Leak edge went on saying #ff7a3c
+     until something rebuilt the panel (measured on the build with real touch at 390 and a real mouse at 1280). Only the
+     eyedropper and the recent-colour chips rebuild. Now the row re-reads its leader on the leader's input and change, from
+     the hex box and from the swatch. CONTROL: a Leak edge with a colour of its own keeps it, and typing never gives a
+     following edge a colour of its own (that would freeze it). */
+  test('482 polish 1 review Leak edge shows the new Leak colour the moment it is typed, and an edge with its own colour keeps it', { item: '482' }, async function () {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId, recents: (FM.recentColors || []).slice() };
+    let savedLs = null; try { savedLs = localStorage.getItem('fm.recentColors'); } catch (e) {}
+    const colourOf = row => { const h = row && row.querySelector('.hex-input'), s = row && row.querySelector('input[type=color]'); return (h ? h.value : '?') + ' / ' + (s ? s.value : '?'); };
+    try {
+      let inst = await open482r('lightleak');
+      let lead = row482r('Leak'), edge = row482r('Leak edge');
+      if (!lead || !edge) throw new Error('setup: the open Light Leak shows no ' + (!lead ? 'Leak' : 'Leak edge') + ' colour row');
+      if (colourOf(edge).toLowerCase() !== '#ff7a3c / #ff7a3c') throw new Error('setup: a new Light Leak edge row shows ' + colourOf(edge) + ', not the Leak orange it follows');
+      const hx = lead.querySelector('.hex-input');
+      hx.focus(); hx.value = '#00ff00'; hx.dispatchEvent(new Event('input', { bubbles: true }));
+      if (inst.params.color !== '#00ff00') throw new Error('setup: typing #00ff00 into Leak did not set the Leak colour (' + inst.params.color + ')');
+      if (colourOf(edge).toLowerCase() !== '#00ff00 / #00ff00') throw new Error('after typing #00ff00 into Leak, Leak edge still shows ' + colourOf(edge) + ' - the leak draws green at its rim and the row says it is orange');
+      hx.dispatchEvent(new Event('change', { bubbles: true })); hx.blur(); await sleep(60);
+      edge = row482r('Leak edge');
+      if (colourOf(edge).toLowerCase() !== '#00ff00 / #00ff00') throw new Error('after the typed Leak colour was committed, Leak edge shows ' + colourOf(edge));
+      lead = row482r('Leak');
+      const sw = lead.querySelector('input[type=color]');
+      sw.value = '#123456'; sw.dispatchEvent(new Event('input', { bubbles: true }));
+      if (colourOf(row482r('Leak edge')).toLowerCase() !== '#123456 / #123456') throw new Error('after picking #123456 on the Leak swatch, Leak edge shows ' + colourOf(row482r('Leak edge')));
+      if ('color2' in inst.params) throw new Error('changing the Leak colour gave the following edge a colour of its own (' + inst.params.color2 + ') - it would stop following');
+      /* CONTROL: an edge he has set is his, whatever Leak does. */
+      inst = await open482r('lightleak', p => { p.color2 = '#2040ff'; });
+      lead = row482r('Leak');
+      const hx2 = lead.querySelector('.hex-input');
+      hx2.focus(); hx2.value = '#00ff00'; hx2.dispatchEvent(new Event('input', { bubbles: true }));
+      hx2.dispatchEvent(new Event('change', { bubbles: true })); hx2.blur(); await sleep(60);
+      if (colourOf(row482r('Leak edge')).toLowerCase() !== '#2040ff / #2040ff' || inst.params.color2 !== '#2040ff') throw new Error('CONTROL: a Leak edge set to #2040ff shows ' + colourOf(row482r('Leak edge')) + ' (' + inst.params.color2 + ') after the Leak colour changed - an edge of its own must not follow');
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      FM.recentColors = saved.recents;   // a committed colour joins the recent chips — put them back
+      try { if (savedLs === null) localStorage.removeItem('fm.recentColors'); else localStorage.setItem('fm.recentColors', savedLs); } catch (e) {}
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* THE AI DIGEST SAID fadecol(undefined..undefined). Faded Film's Fade colour is a colour row inside `params` (the new `swatch`
+     flag), and effectVocab printed every param that is not a toggle or a list of modes as a min..max range — the exact thing
+     #755 stopped for toggles and segments, because it reads as broken and invites the model to send a number into a colour.
+     1924ade0's digest carries no 'undefined' at all. CONTROL: Faded Film's other new controls are still advertised with their
+     ranges, so the check reads the right part of the digest. */
+  test('482 polish 1 review the AI digest advertises Fade colour as a colour hex and no control as undefined', { item: '482' }, function () {
+    const d = String(FM.aiManifest && FM.aiManifest.digest || '');
+    if (d.length < 1000) throw new Error('setup: the AI capability digest is ' + d.length + ' characters - it was not built');
+    const at = d.indexOf('undefined');
+    if (at >= 0) throw new Error('the AI capability digest says ' + JSON.stringify(d.slice(Math.max(0, at - 70), at + 30)) + ' - a control with no numeric range is advertised as one');
+    const faded = (/(^|; )faded \[([^\]]*)\]/.exec(d) || [])[2] || '';
+    if (!/crush\(0\.\.200, def 100\)/.test(faded) || !/rolloff\(0\.\.100, def 0\)/.test(faded)) throw new Error('CONTROL: the digest does not advertise Faded Film Contrast loss and Fade whites with their ranges: ' + faded);
+    if (!/fadecol\(colour hex, def #808080\)/.test(faded)) throw new Error('the digest does not advertise Faded Film Fade colour as a colour hex: ' + faded);
+  });
+
+  /* A STILL LIGHT LEAK WAS NOT AT ITS SOURCE, AND WANDER MOVED IT. At Drift speed 0 the phase is 0 and cos(0) = 1, so the leak
+     sat 10% x Wander below Source Y — measured on the build (the brightest pixel of a leak on black, 200x300): Source 85/12 at
+     Wander 0 / 100 / 300 put its heart at y 12 / 22 / 42%, and a centred one at Wander 300 at y 80%, at 0 s and at 2 s. Now a
+     still leak has no wander: it sits on Source X/Y, and the panel greys Wander out while Drift speed is 0. CONTROLS: a MOVING
+     leak at Wander 300 is off its source at 0 s (the probe can tell), a keyframed speed that eases to 0 still parks where it
+     has got to rather than jumping to the source (the build's rule, kept), and Wander is live at the default speed and under a
+     keyframed speed that is not all zero. */
+  test('482 polish 1 review a Light Leak held still sits on Source X and Y whatever Wander says, and Wander greys out while it is still', { item: '482' }, async function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.lightleak) throw new Error('the Light Leak kernel is not reachable');
+    const W = 200, H = 300;
+    const heart = (over, t) => {
+      const d = new Uint8ClampedArray(W * H * 4); for (let i = 3; i < d.length; i += 4) d[i] = 255;
+      K.lightleak(d, W, H, Object.assign({}, FM.fxRegistry.makeInstance('lightleak').params, over), t);
+      let best = -1, bx = 0, by = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = d[i] + d[i + 1] + d[i + 2]; if (v > best) { best = v; bx = x; by = y; } }
+      return [bx / W * 100, by / H * 100];
+    };
+    const say = q => Math.round(q[0]) + '%, ' + Math.round(q[1]) + '%';
+    const near = (q, x, y) => Math.abs(q[0] - x) <= 1 && Math.abs(q[1] - y) <= 1;
+    const moving = heart({ x: 50, y: 50, wander: 300 }, 0);
+    if (near(moving, 50, 50)) throw new Error('CONTROL: a MOVING leak at Wander 300 sits on its source at 0 s (' + say(moving) + ') - the probe cannot tell a parked leak from a roaming one');
+    [[{}, 85, 12], [{ wander: 0 }, 85, 12], [{ wander: 300 }, 85, 12], [{ x: 50, y: 50, wander: 300 }, 50, 50], [{ x: 20, y: 70, wander: 200 }, 20, 70]].forEach(([over, x, y]) => {
+      [0, 2].forEach(t => {
+        const q = heart(Object.assign({ speed: 0 }, over), t);
+        if (!near(q, x, y)) throw new Error('a Light Leak at Drift speed 0 with Source ' + x + '/' + y + ' and Wander ' + (over.wander == null ? 100 : over.wander) + ' has its heart at ' + say(q) + ' at ' + t + ' s - held still, it should sit on its source');
+      });
+    });
+    const zeroKf = { kf: [{ t: 0, v: 0 }, { t: 2, v: 0 }] };
+    if (!near(heart({ speed: zeroKf, x: 50, y: 50, wander: 300 }, 1), 50, 50)) throw new Error('a Drift speed keyframed at 0 throughout does not park the leak on its source (' + say(heart({ speed: zeroKf, x: 50, y: 50, wander: 300 }, 1)) + ')');
+    const ease = { kf: [{ t: 0, v: 100 }, { t: 1, v: 0 }] };
+    const eased = heart({ speed: ease, x: 50, y: 50, wander: 300 }, 3);
+    if (near(eased, 50, 50)) throw new Error('CONTROL: a Drift speed that EASES to 0 jumped the leak to its source (' + say(eased) + ') - it should park where it had got to');
+    /* THE PANEL */
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const dead = () => { const r = row482r('Wander'); if (!r) throw new Error('setup: the open Light Leak shows no Wander row'); return r.classList.contains('fx-overridden'); };
+    try {
+      await open482r('lightleak');
+      if (dead()) throw new Error('CONTROL: Wander is greyed out at the default Drift speed, where the leak roams');
+      await open482r('lightleak', p => { p.speed = 0; });
+      if (!dead()) throw new Error('at Drift speed 0 Wander still looks live - a still leak does not roam, so the slider does nothing');
+      await open482r('lightleak', p => { p.speed = { kf: [{ t: 0, v: 100 }, { t: 1, v: 0 }] }; });
+      if (dead()) throw new Error('under a Drift speed keyframed from 100 to 0 Wander is greyed out - it roams until the speed reaches 0');
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 })();

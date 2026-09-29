@@ -269,6 +269,10 @@ window.FM = window.FM || {};
     hex.addEventListener('blur', () => { hex.value = normHex(getVal()); });
     hex.addEventListener('change', commitColor);
     wrap.append(sw, hex);
+    /* Re-read the value without a rebuild — for a colour that FOLLOWS another (review of #482 polish 1.2): Light Leak's Leak
+       edge shows the Leak colour while it has none of its own, and kept showing the old one after he typed a new Leak colour,
+       because only the eyedropper and the recent chips rebuild the panel. A box he is typing in is left alone. */
+    cont._resync = () => { const n = normHex(getVal()); sw.value = n; if (document.activeElement !== hex) hex.value = n; };
     // Eyedropper — sample a colour straight off the rendered frame (works on iOS, unlike EyeDropper()).
     if (FM.eyedropper) {
       const drop = el('button', 'eyedrop-btn');
@@ -1367,7 +1371,9 @@ window.FM = window.FM || {};
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dv()); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('label', null, label));
-    row.appendChild(colorField(() => FM.evalProp(container[key], FM.time) || dv(), v => { FM.setProp(container, key, v, FM.time); }));
+    const field = colorField(() => FM.evalProp(container[key], FM.time) || dv(), v => { FM.setProp(container, key, v, FM.time); });
+    row.appendChild(field);
+    row._resync = field._resync;
     return row;
   }
   function segRow(label, options, get, set) {
@@ -1771,6 +1777,7 @@ window.FM = window.FM || {};
          The PANEL stops rendering it; the text is NOT deleted. `reg.desc` is still the browser tile's
          tooltip and still the written record of what each effect does — which is the "somewhere else"
          he asked for. Deleting 190-odd strings would have thrown away the thing he asked to keep. */
+      const colourRows = {};   // colour rows by key, so a colour that follows another can listen to it (#482 polish 1.2)
       reg.params.forEach(p => {
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);
@@ -1795,7 +1802,15 @@ window.FM = window.FM || {};
            entry asked.
            The row is asked for the value through evalProp and writes through setProp, so a static colour
            stays a plain string and only becomes a keyframe object when he presses the ◆. */
-        else if (p.type === 'color') { body.appendChild(kfColorRow(fx.params, p.key, p.label, p.follows ? () => (FM.evalProp(fx.params[p.follows], FM.time) || p.default) : p.default)); }   // follows: #482 polish 1.2
+        else if (p.type === 'color') {
+          const crow = kfColorRow(fx.params, p.key, p.label, p.follows ? () => (FM.evalProp(fx.params[p.follows], FM.time) || p.default) : p.default);   // follows: #482 polish 1.2
+          colourRows[p.key] = crow;
+          /* …and a following row re-reads as he changes the colour it follows: the leader's swatch and hex box fire input/change,
+             which bubble to its row AFTER the row has written the new value (review of polish 1.2 — the edge stayed orange). */
+          const lead = p.follows && colourRows[p.follows];
+          if (lead && crow._resync) { lead.addEventListener('input', crow._resync); lead.addEventListener('change', crow._resync); }
+          body.appendChild(crow);
+        }
         else if (p.type === 'layer') {   // Displacement Map: pick which OTHER layer drives the warp
           const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label || 'Source'));
           const sel = document.createElement('select');

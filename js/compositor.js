@@ -851,7 +851,7 @@ window.FM = window.FM || {};
       { key: 'y', label: 'Source Y', min: 0, max: 100, step: 1, def: 12, unit: '%' },
       { key: 'size', label: 'Spread', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'speed', label: 'Drift speed', min: 0, max: 400, step: 5, def: 100, unit: '%' },
-      { key: 'wander', label: 'Wander', min: 0, max: 300, step: 5, def: 100, unit: '%' },
+      { key: 'wander', label: 'Wander', min: 0, max: 300, step: 5, def: 100, unit: '%', overriddenBy: 'speed', liveAbove: 0 },   // a still leak does not roam (review of polish 1.2)
       { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
     ] },
@@ -4394,6 +4394,56 @@ window.FM = window.FM || {};
     return v;
   }
 
+  /* …AND HOW MUCH OF IT A SOFTNESS BLUR LEAVES (review of #482 polish 1.1). Softness box-blurs the grain field by up to half a
+     grain, and a blur takes a DIFFERENT share of the grain away on a small plate cell than on the export's — measured on the
+     first build at Softness 100: a default grain 3.87 luma std in the export against 2.63 on the half and the phone preview
+     (0.68), square grain 5.73 against 3.89 — the preview a third fainter than the file, which is the C5 fault back again. It
+     is the pixel grid: the export blurs a 2 px grain with a 3-tap box, the phone's plate a 1 px one with [¼ ½ ¼], and that
+     averages more of it away. This is the RMS per pixel of the blurred field of a unit grain, with the kernel's own cells
+     ((x*inv)|0), weights (q·1.35 in the inscribed disc, or 1 for a square) and fractional box (gsBlurLine's taps), so the
+     project's over the plate's is what a reduced plate multiplies by. At r 0 it is grainDiscRms. The cells are independent,
+     so each one's blurred energy is summed on its own, over enough cells to sample a fractional size's phases — a square
+     cell is separable, so one axis does. Memoised; about a million multiply-adds for the largest grain. */
+  const _grainBlurRms = new Map();
+  function grainBlurRms(s, r, round) {
+    if (!(r > 0)) return round ? grainDiscRms(s) : 1;
+    const key = (round ? 'r' : 's') + s + '|' + r;
+    let v = _grainBlurRms.get(key);
+    if (v !== undefined) return v;
+    const R = Math.floor(r), fr = r - R, T = 2 * R + 3, k = new Float64Array(T), nrm = 1 / (2 * R + 1 + 2 * fr);
+    for (let i = 0; i < T; i++) k[i] = (i === 0 || i === T - 1 ? fr : 1) * nrm;
+    const inv = 1 / s, rad = s * 0.5, radInv = 1 / (rad * rad), cw = Math.ceil(s) + 1, span = cw + T - 1;
+    const M = round ? Math.max(2, Math.min(32, Math.floor(Math.sqrt(1e6 / (span * span * Math.min(cw, T) + cw * span * T))))) : 64;
+    const st = new Int32Array(M + 1);                              // cell c is pixels st[c] … st[c+1]-1, by the kernel's rule
+    for (let c = 0, x = 0; c <= M; c++) { while (((x * inv) | 0) < c) x++; st[c] = x; }
+    let tot = 0;
+    if (!round) {
+      for (let c = 0; c < M; c++) {
+        const w = st[c + 1] - st[c];
+        for (let j = 0; j < w + T - 1; j++) { let o = 0; for (let q = Math.max(0, j - T + 1); q <= Math.min(w - 1, j); q++) o += k[j - q]; tot += o * o; }
+      }
+      v = tot / st[M];                                              // separable: the 2-D mean square is this squared
+    } else {
+      const wg = new Float64Array(cw * cw), rw = new Float64Array(cw * span);
+      for (let cy = 0; cy < M; cy++) for (let cx = 0; cx < M; cx++) {
+        const x0 = st[cx], wx = st[cx + 1] - x0, y0 = st[cy], wy = st[cy + 1] - y0, ox = wx + T - 1, oy = wy + T - 1;
+        for (let yy = 0; yy < wy; yy++) {
+          const dy = (y0 + yy + 0.5) - (cy * s + rad);
+          for (let xx = 0; xx < wx; xx++) { const dx = (x0 + xx + 0.5) - (cx * s + rad), q = 1 - (dx * dx + dy * dy) * radInv; wg[yy * cw + xx] = q > 0 ? q * 1.35 : 0; }
+          for (let j = 0; j < ox; j++) { let o = 0; for (let xx = Math.max(0, j - T + 1); xx <= Math.min(wx - 1, j); xx++) o += wg[yy * cw + xx] * k[j - xx]; rw[yy * span + j] = o; }
+        }
+        for (let i = 0; i < oy; i++) {
+          const a = Math.max(0, i - T + 1), b = Math.min(wy - 1, i);
+          for (let j = 0; j < ox; j++) { let o = 0; for (let yy = a; yy <= b; yy++) o += rw[yy * span + j] * k[i - yy]; tot += o * o; }
+        }
+      }
+      v = Math.sqrt(tot / (st[M] * st[M]));
+    }
+    if (_grainBlurRms.size > 256) _grainBlurRms.clear();
+    _grainBlurRms.set(key, v);
+    return v;
+  }
+
   /* ═══ SOFT FILM GRAIN (#482 polish 1.1, Softness) ════════════════════════════════════════════════════════════════
    * The grain field — the same hashed cells, the same round-disc weighting, the same per-plate strength `gn` as the
    * kernel's own loop — is written into a buffer and BOX-BLURRED by up to half a grain before it touches a pixel, so
@@ -4423,7 +4473,7 @@ window.FM = window.FM || {};
     for (let y = 0; y < H; y++) gsBlurLine(f, y * W, 1, W, R, fr, pad, pre);
     for (let x = 0; x < W; x++) gsBlurLine(f, x, W, H, R, fr, pad, pre);
   }
-  function grainSoft(d, W, H, size, inv, gw, frame, seedK, round, rad, radInv, gn, soft, amt, chroma, shadowKeep, highKeep, flat) {
+  function grainSoft(d, W, H, size, inv, gw, frame, seedK, round, rad, radInv, gn, gc, soft, amt, chroma, shadowKeep, highKeep, flat) {
     const N = W * H, fN = gsScratch(0, N), col = chroma > 0, fR = col ? gsScratch(1, N) : null, fB = col ? gsScratch(2, N) : null;
     for (let y = 0; y < H; y++) {
       const cyi = (y * inv) | 0;
@@ -4443,7 +4493,7 @@ window.FM = window.FM || {};
           if (!inDisc) { fR[j] = 0; fB[j] = 0; continue; }
           let h2 = (h ^ 0x5bf03635) * 2246822519; h2 = (h2 ^ (h2 >> 15));
           let h3 = (h ^ 0x27d4eb2f) * 3266489917; h3 = (h3 ^ (h3 >> 15));
-          fR[j] = (h2 & 255) / 255 - 0.5; fB[j] = (h3 & 255) / 255 - 0.5;
+          fR[j] = ((h2 & 255) / 255 - 0.5) * gc; fB[j] = ((h3 & 255) / 255 - 0.5) * gc;
         }
       }
     }
@@ -5166,7 +5216,16 @@ window.FM = window.FM || {};
       const round = roundP && size > 1.2;
       const gn = S === 1 || !roundP ? 1 : grainDiscRms(sizeP) / (round ? grainDiscRms(size) : 1);
       const rad = size * 0.5, radInv = 1 / (rad * rad);
-      if (soft > 0) { grainSoft(d, W, H, size, inv, gw, frame, seedK, round, rad, radInv, gn, soft, amt, chroma, shadowKeep, highKeep, flat); return; }
+      if (soft > 0) {
+        /* A SOFTENED grain at the export's strength (review of polish 1.1): what the blur leaves of the grain at the project
+           size over what it leaves on this plate (grainBlurRms) — gn itself at Softness 0, so the slider has no step at 1.
+           The colour grain carries the blur's share only (gs/gn): unsoftened it is not scaled, and must not jump at 1 either.
+           At ps 1 both are exactly 1, so the export is untouched. */
+        const sf = (soft > 100 ? 100 : soft) / 100;
+        const gs = S === 1 ? 1 : grainBlurRms(sizeP, sf * 0.5 * sizeP, roundP) / grainBlurRms(size, sf * 0.5 * size, round);
+        grainSoft(d, W, H, size, inv, gw, frame, seedK, round, rad, radInv, gs, gs / gn, soft, amt, chroma, shadowKeep, highKeep, flat);
+        return;
+      }
       for (let y = 0; y < H; y++) {
         const gy = (y * inv) | 0;
         for (let x = 0; x < W; x++) {
@@ -7327,6 +7386,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var llSp=p.speed==null?100:FM.evalProp(p.speed,t); if(!(llSp>0))llSp=0; if(llSp>400)llSp=400;
       var ph=FM.isAnimated(p.speed)?0.15*FM.integrateProp(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return !(k>0)?0:(k>400?4:k/100); }):t*0.15*(llSp/100);
       var llW=p.wander==null?100:FM.evalProp(p.wander,t); if(!(llW>0))llW=0; if(llW>300)llW=300; llW/=100;
+      /* PARKED AT THE SOURCE (review of polish 1.2). Held still, the leak sat at the wander's phase-0 point — cos(0) = 1, so
+         10% × Wander BELOW Source Y (22% for the default 12%, 80% for a centred one at Wander 300) — and Wander, which is how
+         far it roams, moved a leak that does not roam. At Drift speed 0 there is no wander: it sits on Source X/Y and the
+         panel greys Wander out. A keyframed speed parks only when every key is 0, the rule the panel greys it by; one that
+         EASES to 0 still parks where it has got to. Speed 0 is new, so the default leak is untouched. */
+      if(FM.isAnimated(p.speed)?p.speed.kf.every(function(k){ return !(k.v>0); }):!(llSp>0))llW=0;
       var llFk=p.flicker==null?0:FM.evalProp(p.flicker,t); if(!(llFk>0))llFk=0; if(llFk>1)llFk=1;
       if(llFk>0){ var llF=t*12, llI=Math.floor(llF), llU=llF-llI; llU=llU*llU*(3-2*llU); a*=1-llFk*(llHash(llI)+(llHash(llI+1)-llHash(llI))*llU); }
       var llBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0);
