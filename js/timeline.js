@@ -2893,7 +2893,7 @@ window.FM = window.FM || {};
       /* The add row has its OWN click handler — letting this one fire too would open the sheet twice.
          Everything else here is a control that means something on its own. */
       if (e.target.closest && e.target.closest('.tl-addrow, button, input, select, textarea, a, [role="button"], #tl-ruler, .tl-ruler')) return;
-      afterPress(function () { if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd(); });   // queue 964: after the press animation's beat
+      openFromArea();   // queue 981: at once (no hold), with the lights on the menu's edges
     });
     /* ⚠️ THE AREA'S PRESS (OUTLINE + COLOUR) IS ON pointerdown, NOT click — queue 964 (replacing #571 clause 3).
        #571's brief still holds. Ezra: *"do a nice little
@@ -2907,7 +2907,6 @@ window.FM = window.FM || {};
        he is most likely to press would be the opposite of what he described. */
     tl.addEventListener('pointerdown', (e) => {
       if (!tlPanel.classList.contains('tl-empty-start')) return;
-      fxPressAt = performance.now();         // the menu hold counts from the PRESS (queue 964, ASK 2)
       areaFx(tl, e.clientX, e.clientY);
     });
   }
@@ -2934,9 +2933,10 @@ window.FM = window.FM || {};
    * backgrounded tab, and a node waiting for them would live for as long as the app does.
    * ⚠️ ONLY transform AND opacity ARE ANIMATED on the colour layer (plus stroke-dashoffset on a few SVG paths), so
    * the press keeps running on the compositor while openAdd() builds the menu on the main thread. */
-  /* bottom-centre → up both sides → meet at the top. 360, not the 620 first drawn: the plan's ASK 2 (a, recommended)
-     pairs it with the 300 ms menu hold below — the held sheet reaches the area's top line ~400 ms after the press, so a
-     620 ms lap would meet UNDER the menu and he would never see the lights join at the top (his clause 1 again). */
+  /* bottom-centre → up both sides → meet at the top. 360, not the 620 first drawn: the plan's ASK 2 (a) paired it with a
+     300 ms menu hold. The hold is gone (queue 981 — the menu opens at once, see openFromArea), and 360 stays: it is the
+     length of the add sheet's own swing (fm-hinge-up, 360 ms), and the same lap now runs round the MENU's edges as it
+     comes up, so the lights meet at its top just as it lands. */
   const FX_PULSE_TRAVEL = 360;
   const FX_PULSE_MS = 1100;      // …then the trail fades out
   const FX_PRESS_MS = 950;
@@ -3000,9 +3000,11 @@ window.FM = window.FM || {};
      the corners (the #616 note makes the same argument for the slim row). A dash moves at constant speed along the
      real perimeter at any aspect ratio. Lengths come from getTotalLength() in px — not `pathLength`, which older
      WebKit ignored for dashes. */
-  function fxRim(W, H, sb) {
-    const IN = 4;
-    return { x0: IN, x1: W - IN, T: IN, B: H - Math.max(IN, Math.round(sb * 0.6)), rt: 14, rb: sb > 0 ? 34 : 14, cx: W / 2 };   // big bottom corners clear the phone's rounded screen
+  /* IN is how far inside the box the line runs, rt its top corners' radius. The area uses 4 and 14; the add menu's rim
+     (queue 981) runs right ON its edge, round its own 16px corners. */
+  function fxRim(W, H, sb, IN, rt) {
+    IN = IN === undefined ? 4 : IN;
+    return { x0: IN, x1: W - IN, T: IN, B: H - Math.max(IN, Math.round(sb * 0.6)), rt: rt === undefined ? 14 : rt, rb: sb > 0 ? 34 : 14, cx: W / 2 };   // big bottom corners clear the phone's rounded screen
   }
   /* The whole rim as points, from the bottom-centre going left (bottom → left side → top → right side → bottom). */
   function fxRimPoints(g) {
@@ -3061,6 +3063,14 @@ window.FM = window.FM || {};
     const start = (FM.variant && FM.variant('emptytap.start', ['bottom', 'nearest'])) || 'bottom';   // queue 974
     const halves = fxHalves(g, start, (x === undefined ? g.cx : x - a.left), (y === undefined ? g.B : y - a.top));
     host.dataset.start = start;
+    fxLap(host, W, H, halves);
+    fxTeardown(host, FX_PULSE_MS + 150);
+    return host;
+  }
+  /* THE LAP ITSELF — two lit heads with drawn-on trails, one per half, and a soft flash where they meet. Shared by the
+     area's outline and the add menu's rim (queue 981), so the two are the same light by construction: same colours,
+     same glow, same speed. W x H is the box the halves were drawn in; the svg fills `host`. */
+  function fxLap(host, W, H, halves) {
     const mx = halves.meet[0], my = halves.meet[1];
     const id = 'fxp' + (++fxSeq);
     const svg = document.createElementNS(SVGNS, 'svg');
@@ -3107,8 +3117,7 @@ window.FM = window.FM || {};
     meet.animate([{ opacity: 0, transform: 'scale(.2)' }, { opacity: 0, transform: 'scale(.2)', offset: (FX_PULSE_TRAVEL - 60) / FX_PULSE_MS },
       { opacity: 1, transform: 'scale(1)', offset: (FX_PULSE_TRAVEL + 60) / FX_PULSE_MS }, { opacity: 0, transform: 'scale(1.6)' }],
       { duration: FX_PULSE_MS, fill: 'forwards' });
-    fxTeardown(host, FX_PULSE_MS + 150);
-    return host;
+    return svg;
   }
 
   /* ---- THE COLOUR — ALL THREE OPTIONS, ONE AT RANDOM PER PRESS (queue 974) ----
@@ -3278,42 +3287,70 @@ window.FM = window.FM || {};
     // one lap at a time: a second tap mid-lap does not restart it (a restart reads as a jump)
     if (!panel.querySelector('.tl-areafx--pulse')) areaPulse(a, clientX, clientY);
     if (panel.querySelectorAll('.tl-areafx--press').length < FX_MAX) areaPress(a, clientX, clientY);
+    // queue 981: the menu that this press opens runs the same lap round ITS edges, from the same kind of start
+    const lap = panel.querySelector('.tl-areafx--pulse');
+    fxLastPress = { x: clientX, y: clientY, t: performance.now(), start: (lap && lap.dataset.start) || 'bottom' };
   }
 
-  /* ---- HOLD THE MENU A BEAT (the plan's ASK 2, recommended a: 300 ms with the 360 ms lap; 0 restores the old timing) ----
-     MEASURED at 380px (seeking the sheet's own fm-hinge-up): it covers 59% of this area 50 ms after it starts and
-     98% at 100 ms, and it starts on click — the finger's LIFT, ~100 ms after the press on a quick tap. So without a
-     hold he sees ~150 ms of any press animation, however good it is. The hold counts from the PRESS, not the click, so a slow press waits for
-     nothing extra, a keyboard Enter (no press) is never delayed, and it applies to the EMPTY state only.
-     queue 974: the same hold and the same 360 ms lap for EVERY colour option and both starts — without the hold none of
-     them is seen, and a comparison between them is only fair if each gets the same time on screen. */
-  const SHEET_HOLD_MS = 300;
-  let fxPressAt = 0;
-  /* ⚠️ A HELD OPEN IS CANCELLED BY LEAVING (#974 review). The hold is a timer, and nothing used to cancel it: a tap on
-     the empty area and then straight away on the back arrow opened Home AND the add sheet behind it (z 63 under Home's
-     200 — invisible, until the next tap anywhere closed it). So at most one open waits; a press anywhere OUTSIDE the
-     timeline drops it (he has moved on to something else), and when it fires it checks the screen is still the empty
-     project with Home shut. */
-  let sheetHoldTimer = 0;
-  function dropHeldOpen() { if (sheetHoldTimer) { clearTimeout(sheetHoldTimer); sheetHoldTimer = 0; } }
-  document.addEventListener('pointerdown', (e) => {
-    if (!sheetHoldTimer) return;
-    const tl = document.getElementById('timeline');
-    if (!tl || !(e.target instanceof Node) || !tl.contains(e.target)) dropHeldOpen();
-  }, true);
-  function afterPress(fn) {
-    const wait = fxPressAt ? Math.max(0, fxPressAt + SHEET_HOLD_MS - performance.now()) : 0;
-    fxPressAt = 0;   // one press buys one hold
-    dropHeldOpen();
-    if (wait > 16) {
-      sheetHoldTimer = setTimeout(function () {
-        sheetHoldTimer = 0;
-        if (!isEmptyStart() || (FM.home && FM.home.isOpen && FM.home.isOpen())) return;
-        fn();
-      }, wait);
-    } else fn();
+  /* ---- THE MENU OPENS AT ONCE — AND THE LIGHTS GO ROUND IT (queue 981) --------------------------------------------
+     Ezra, 29 Sep: *"I actually have a problem with every animation when you press on the tap here to start creating
+     area, that being the menu takes too long to pop up - since the menu is clear anyways, it doesnt matter if it pops up
+     straight away as you can see the animations underneath. Maybe when u fix this make sure the white lines on the
+     borders that glow, appear on the edges of the add menu as it loads up"*.
+     That answers #964's ASK 2 ("how long does the menu wait?") with NO WAIT. The 300 ms hold counted from the press is
+     gone, with its timer, its cancel-on-leave listener and HOLD_MS: the tap opens the menu in the same task as its click,
+     exactly like the + on a project with layers. The colour keeps playing — it lives in #timeline-panel, which opening
+     the menu never touches, and the glass sheet (82% tint + blur) lets it through.
+     THE LIGHTS: the area's outline would now run UNDER the menu, blurred, and meet under it. So the lap moves onto the
+     menu: the same two lights (fxLap — same colours, glow and speed) run round #add-sheet's own rim while it swings up
+     (fm-hinge-up is 360 ms, the lap's length), meet at its top as it lands, and fade; the area's lap hands over by
+     fading out, so there is one set of lights, not a sharp one over a blurred echo. The rim is a CHILD of the sheet so
+     it rides the swing with it, and it keeps the start this press drew (bottom-middle, or the edge nearest the finger).
+     Reduced motion: no lights at all — the menu still opens at once (on its plain slide).
+     Nothing can open behind Home any more: there is no timer left to fire after he has gone. The check below stays for
+     the one path that is not a tap — Enter on a row that kept focus after he left. */
+  let fxLastPress = null;   // {x, y, t, start} of the last press on the empty area
+  const RIM_IN = 1.5;       // the rim runs this far inside the sheet's border box: ON the edge, not beside it
+  function openFromArea() {
+    if (!isEmptyStart() || (FM.home && FM.home.isOpen && FM.home.isOpen())) return;
+    if (!(FM.mobile && FM.mobile.openAdd)) return;
+    const press = fxLastPress && performance.now() - fxLastPress.t < 2000 ? fxLastPress : null;
+    fxLastPress = null;
+    FM.mobile.openAdd();
+    const sheet = document.getElementById('add-sheet');
+    if (!sheet || !sheet.classList.contains('open')) return;   // a Viewer adds nothing (openAdd refused), so no lights
+    if (!menuRim(sheet, press)) return;
+    // the area's lap hands over to the menu's
+    const panel = document.getElementById('timeline-panel');
+    const lap = panel && panel.querySelector('.tl-areafx--pulse:not(.is-handed-over)');
+    if (lap) {
+      lap.classList.add('is-handed-over');
+      lap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-out', fill: 'forwards' });
+      fxTeardown(lap, 200);
+    }
   }
-  FM._areaFx = { area: emptyArea, fire: areaFx, PULSE_MS: FX_PULSE_MS, PULSE_TRAVEL: FX_PULSE_TRAVEL, PRESS_MS: FX_PRESS_MS, CALM_MS: FX_CALM_MS, MAX: FX_MAX, HOLD_MS: SHEET_HOLD_MS };
+  function menuRim(sheet, press) {
+    [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+    if (fxReduced()) return null;
+    // the LAYOUT box — offset* ignore the swing's transform, which is mid-flight right now
+    const W = sheet.offsetWidth, H = sheet.offsetHeight;
+    if (!(W > 0) || !(H > 0)) return null;
+    const host = document.createElement('div');
+    host.className = 'add-sheet-rim';
+    host.setAttribute('aria-hidden', 'true');
+    host.style.left = -sheet.clientLeft + 'px'; host.style.top = -sheet.clientTop + 'px';   // over the border, not inside it
+    host.style.width = W + 'px'; host.style.height = H + 'px';
+    sheet.appendChild(host);
+    const r = parseFloat(getComputedStyle(sheet).borderTopLeftRadius) || 16;
+    const g = fxRim(W, H, fxSafeBottomPx(), RIM_IN, Math.max(0, r - RIM_IN));
+    const start = press ? press.start : 'bottom';
+    const halves = fxHalves(g, start, press ? press.x - sheet.offsetLeft : g.cx, press ? press.y - sheet.offsetTop : g.B);
+    host.dataset.start = start;
+    fxLap(host, W, H, halves);
+    fxTeardown(host, FX_PULSE_MS + 150);
+    return host;
+  }
+  FM._areaFx = { area: emptyArea, fire: areaFx, PULSE_MS: FX_PULSE_MS, PULSE_TRAVEL: FX_PULSE_TRAVEL, PRESS_MS: FX_PRESS_MS, CALM_MS: FX_CALM_MS, MAX: FX_MAX, RIM_IN: RIM_IN };
   FM._isEmptyStart = isEmptyStart;   // seam: the suite asks the real condition, not a copy of it
 
   function buildAddRow() {
@@ -3406,8 +3443,8 @@ window.FM = window.FM || {};
          add menu IS the inspector band whenever nothing is selected — so "open the add menu" is a
          deselect. Clause 9: "you would just click on them line". */
       if (phone) {
-        const go = function () { if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd(); };
-        if (empty) afterPress(go); else go();   // queue 964: only the empty screen waits for its press animation
+        if (empty) openFromArea();   // queue 981: at once, with the lights on the menu's edges (the empty screen only)
+        else if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd();
       }
       else if (FM.selectLayer) FM.selectLayer(null);
     };

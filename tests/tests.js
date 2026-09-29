@@ -108269,31 +108269,6 @@
     });
   });
 
-  /* ONLY IF HE PICKS A HOLD (ASK 2). With SHEET_HOLD_MS = 0 this test is deleted, not skipped. */
-  test('964: the add menu waits a beat after a press on the empty area, counted from the press - never after a bare click', { item: '964', budgetMs: 6000 }, async function () {
-    return onEmptyArea964(async function (c) {
-      if (!FM._areaFx || !(FM._areaFx.HOLD_MS >= 0)) throw new Error('FM._areaFx.HOLD_MS is missing - there is no hold, so the menu covers the press animation within ~100ms of the finger lifting (measured: 59% at 50ms, 98% at 100ms)');
-      const real = FM.mobile.openAdd;
-      const calls = [];
-      FM.mobile.openAdd = function () { calls.push(performance.now()); };
-      try {
-        const HOLD = FM._areaFx.HOLD_MS;
-        if (!(HOLD > 0)) throw new Error('HOLD_MS is ' + HOLD + ' - with no hold this test should have been removed');
-        const t0 = performance.now();
-        c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height * 0.36, c.row);
-        c.row.click();
-        if (calls.length) throw new Error('the add menu opened ' + Math.round(calls[0] - t0) + 'ms after the press - the colour is covered before it is seen (measured: the sheet covers 59% of the area 50ms into its swing, 98% at 100ms)');
-        await c.sleep(HOLD + 120);
-        if (calls.length !== 1) throw new Error('after the hold the add menu opened ' + calls.length + ' times, not once');
-        if (calls[0] - t0 < HOLD - 25) throw new Error('the menu opened ' + Math.round(calls[0] - t0) + 'ms after the press, short of the ' + HOLD + 'ms hold');
-        // CONTROL: a click with no press before it (the keyboard's Enter path, and every older test) is NOT delayed.
-        calls.length = 0;
-        c.row.click();
-        if (calls.length !== 1) throw new Error('CONTROL FAILED - a bare click (no press) was delayed too; the hold must count from a press');
-      } finally { FM.mobile.openAdd = real; }
-    });
-  });
-
   /* ═══ 974 — EVERY ANIMATION WITH OPTIONS: ALL OF THEM IN THE APP, ONE AT RANDOM EACH TIME ═══════════════════════════
      Ezra, 28 Sep: "Honestly for all of the different button animations - make them all happen in the app but it's just
      random which one so I can decide which is best over use time".
@@ -108989,7 +108964,10 @@
     });
   });
 
-  test('974 review: the add menu held for the empty area\'s press is dropped when he leaves - a real tap there, then straight away the back arrow, and the sheet does not open behind Home', { item: '974', budgetMs: 40000 }, async function () {
+  /* Retuned for #981 (29 Sep): there is no hold any more, so a tap on the empty area opens the menu at once and the
+     tap on the back arrow that follows closes it on its way to Home (the tap-away rule, js/app.js). What this guards is
+     unchanged: he leaves for Home and nothing is left open behind it. */
+  test('974 review: a real tap on the empty area, then straight away the back arrow - the add menu is never left open behind Home', { item: '974', budgetMs: 40000 }, async function () {
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
     const made = [];
     const sheet = document.getElementById('add-sheet');
@@ -109007,19 +108985,18 @@
           const tl = document.getElementById('timeline'), r = tl.getBoundingClientRect();
           const x = r.left + 40, y = r.bottom - 40;
           hitIs927(x, y, tl, 'the empty area');
-          // CONTROL: the same real tap on its own opens the sheet - after the hold, not before
+          // CONTROL: the same real tap on its own opens the sheet - at once since #981 (it used to wait out a 300 ms hold)
           await tap974(x, y, 'a real tap on the empty area');
-          if (sheetOpen()) throw new Error('CONTROL: the add menu opened with the tap - there is no hold for the press animation (#964), so this test has nothing to drop');
-          await hcUntil('the add menu to open after the hold', sheetOpen, 2000);
+          if (!sheetOpen()) throw new Error('CONTROL: the real tap on the empty area did not open the add menu at once (#981), so the check below - that it is not left open behind Home - proves nothing');
           FM.mobile.closeAdd(); await sleep(500);
           if (sheetOpen()) throw new Error('setup: the add menu did not close');
-          // the tap, and the back arrow inside the hold
+          // the tap, and straight away the back arrow
           const back = document.getElementById('m-back'), b = back.getBoundingClientRect(), bx = b.left + b.width / 2, by = b.top + b.height / 2;
           hitIs927(bx, by, back, 'the back arrow');
           await realInput924([{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 40 }, { t: 'touchStart', x: bx, y: by, ms: 60 }, { t: 'touchEnd', x: bx, y: by, ms: 0 }], 'a tap on the empty area, then the back arrow');
           await sleep(1200);
           if (!FM.home.isOpen()) throw new Error('CONTROL: the back arrow did not open Home');
-          if (sheetOpen()) throw new Error('1.2 s after he left for Home the add menu opened behind it (#add-sheet.open, body.add-open) - the held open fired anyway; the next tap anywhere closes it');
+          if (sheetOpen()) throw new Error('1.2 s after he left for Home the add menu is open behind it (#add-sheet.open, body.add-open) - invisible under Home until the next tap anywhere closes it');
         });
       });
     } finally {
@@ -110003,6 +109980,241 @@
       FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
       if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
     }
+  });
+
+  /* ═══ 981 — THE ADD MENU POPS UP STRAIGHT AWAY, AND THE LIGHTS GO ROUND ITS EDGES ═══════════════════════════════════
+     Ezra, 29 Sep: "I actually have a problem with every animation when you press on the tap here to start creating area,
+     that being the menu takes too long to pop up - since the menu is clear anyways, it doesnt matter if it pops up
+     straight away as you can see the animations underneath. Maybe when u fix this make sure the white lines on the
+     borders that glow, appear on the edges of the add menu as it loads up".
+     His clauses: (1) for EVERY tap animation the menu opens straight away; (2) the menu is see-through, so the animation
+     keeps playing under it; (3) the glowing lines appear on the menu's edges as it opens.
+     (1) is driven with a REAL finger (tests/_cdp.py's trusted touches), once per colour and outline start, forced through
+     FM.variant.force; the opening is timed against the tap's own trusted events by a MutationObserver on the sheet.
+     (3) is seeked, like #964's outline tests, because this runner may fire no frames while it is not fronted. */
+  async function onEmpty981(fn) {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    try {
+      if (wasOpen) { FM.home.close(); await sleep(300); }
+      const id = await FM.projects.create({ name: '981 empty', width: 1080, height: 1920 });
+      if (!id) throw new Error('setup: an empty project could not be made');
+      made.push(id);
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          if (FM.home.isOpen()) { FM.home.close(); await sleep(300); }
+          FM.selectLayer(null); FM.timeline.rebuild(); await sleep(400);
+          if (!FM._isEmptyStart || !FM._isEmptyStart()) throw new Error('setup: not on the empty project screen');
+          await fn();
+        });
+      });
+    } finally {
+      try { FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null); } catch (e) {}
+      try { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } catch (e) {}
+      const p = document.getElementById('timeline-panel');
+      if (p) [].slice.call(p.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+      await hcCleanup(made, orig, wasOpen);
+    }
+  }
+
+  test('981 a real tap on the empty area opens the add menu at once - every colour, both outline starts - and the colour keeps playing under it', { item: '981', budgetMs: 60000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    const panel = document.getElementById('timeline-panel');
+    const seen = [];
+    await onEmpty981(async function () {
+      const tl = document.getElementById('timeline'), r = tl.getBoundingClientRect();
+      const x = Math.round(r.left + r.width * 0.3), y = Math.round(r.bottom - 60);
+      hitIs927(x, y, tl, 'the empty area');
+      // CLAUSE 2's premise, his own reason: the menu is see-through. An opaque menu opened at once would hide the tap.
+      const bg = getComputedStyle(sheet).backgroundColor, am = /rgba\([^)]*,\s*([\d.]+)\)/.exec(bg);
+      if (!am || !(+am[1] < 1)) throw new Error('the add menu is opaque (' + bg + ') - opening it at once would hide the tap animation under it (clause 2)');
+      const combos = [['A', 'bottom'], ['B', 'nearest'], ['C', 'bottom'], ['A', 'nearest'], ['B', 'bottom'], ['C', 'nearest']];
+      for (const combo of combos) {
+        const v = combo[0], st = combo[1], what = v + ' with the ' + st + ' start';
+        FM.variant.force('emptytap.colour', v); FM.variant.force('emptytap.start', st);
+        const t = { down: 0, up: 0, click: 0, open: 0, nextTask: 0 };
+        const on = function (e) {
+          if (!e.isTrusted) return;
+          const k = e.type === 'pointerdown' ? 'down' : e.type === 'pointerup' ? 'up' : 'click';
+          if (t[k]) return;
+          t[k] = performance.now();
+          // the first moment AFTER the click's own task: the menu must already be open by then
+          if (k === 'click') setTimeout(function () { t.nextTask = performance.now(); }, 0);
+        };
+        ['pointerdown', 'pointerup', 'click'].forEach(function (k) { window.addEventListener(k, on, true); });
+        const mo = new MutationObserver(function () { if (!t.open && sheet.classList.contains('open')) t.open = performance.now(); });
+        mo.observe(sheet, { attributes: true, attributeFilter: ['class'] });
+        try { await tap974(x, y, 'a real tap on the empty area (' + what + ')'); }
+        finally { mo.disconnect(); ['pointerdown', 'pointerup', 'click'].forEach(function (k) { window.removeEventListener(k, on, true); }); }
+        const now = performance.now();
+        if (!t.down || !t.up || !t.click) throw new Error('CONTROL: the tap did not arrive as a trusted pointerdown, pointerup and click (' + JSON.stringify(t) + ') - this is not a real tap');
+        if (!t.open) throw new Error(what + ': ' + Math.round(now - t.up) + ' ms after the finger lifted the add menu is still shut - it is waiting (the #964 hold), not popping up straight away (clause 1)');
+        const fromClick = t.open - t.click, fromLift = t.open - t.up;
+        seen.push({ v: v, start: st, fromClick: +fromClick.toFixed(1), fromLift: +fromLift.toFixed(1), downToUp: +(t.up - t.down).toFixed(1) });
+        /* WITHIN ONE FRAME = IN THE CLICK'S OWN TASK. The menu's class must be set before anything after the click runs, so
+           no frame can be painted between the tap and the menu starting to open. That is exact on any machine; a wall-clock
+           bound is kept too, set from measurement (29 Sep, this build): the menu opens 4-8 ms after the click reaches the
+           window (openAdd builds the menu first) and 10-15 ms after the lift in the 900px frame, 21 ms at 380. With the
+           #964 hold it opened ~165 ms after the lift (300 ms from a press held ~135 ms). 60 ms sits between the two. */
+        if (!t.nextTask || t.open > t.nextTask) throw new Error(what + ': the add menu opened after the tap\'s click had finished (' + Math.round(fromClick) + ' ms after it) - it is waiting on a timer, not opening with the tap (clause 1)');
+        if (fromLift > 60) throw new Error(what + ': the add menu opened ' + Math.round(fromLift) + ' ms after the finger lifted (' + Math.round(fromClick) + ' ms after the click) - not straight away (clause 1)');
+        // CLAUSE 2: the colour this tap chose is still on screen and still moving, under the open menu
+        const host = panel.querySelector('.tl-areafx--press');
+        if (!host) throw new Error(what + ': with the menu open, the tap animation is gone - opening the menu must not cancel it (clause 2)');
+        if (host.dataset.variant !== v) throw new Error('forced ' + v + ' but ' + host.dataset.variant + ' played');
+        const hs = getComputedStyle(host);
+        if (hs.display === 'none' || hs.visibility === 'hidden' || +hs.opacity < 0.99) throw new Error(what + ': the tap animation is hidden while the menu is open (' + hs.display + ' / ' + hs.visibility + ' / ' + hs.opacity + ')');
+        if (!sheet.classList.contains('open')) throw new Error(what + ': the menu closed again by itself');
+        if (v === 'C') {
+          // a canvas redrawn every frame: moving means its pixels change
+          const cv = host.querySelector('canvas.fx-keys');
+          const sum = function () { const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let s = 0; for (let i = 3; i < d.length; i += 4 * 29) s += d[i]; return s; };
+          const s0 = sum(); let s1 = s0;
+          for (let k = 0; k < 8 && s1 === s0; k++) { await sleep(40); s1 = sum(); }
+          if (s1 === s0) throw new Error('C: the key ripple stopped redrawing once the menu opened (clause 2)');
+        } else {
+          const live = host.getAnimations({ subtree: true }).filter(function (an) { return an.playState === 'running'; });
+          if (!live.length) throw new Error(what + ': the tap animation is not running under the open menu (clause 2)');
+        }
+        FM.mobile.closeAdd();
+        await sleep(450);
+        [].slice.call(panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+        if (sheet.classList.contains('open')) throw new Error('setup: the add menu did not close between taps');
+      }
+    });
+    window.__fmLast981 = seen;
+  });
+
+  test('981 the glowing lines run round the add menu\'s own edges as it opens, meet at its top as it lands, then go - the + opens it without them', { item: '981', budgetMs: 15000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    const land = function () { sheet.getAnimations().forEach(function (an) { an.pause(); an.currentTime = an.effect.getComputedTiming().endTime; }); };
+    return onEmptyArea964(async function (c) {
+      try {
+        FM.variant.force('emptytap.start', 'bottom');
+        c.press(c.area.left + c.area.width * 0.3, c.area.top + c.area.height * 0.6);
+        c.row.click();
+        if (!sheet.classList.contains('open')) throw new Error('the press and click on the empty area did not open the add menu at once (clause 1)');
+        const rim = sheet.querySelector('.add-sheet-rim');
+        if (!rim) throw new Error('the add menu opened from the empty area with no glowing lines on its edges (clause 3)');
+        if (rim.parentNode !== sheet) throw new Error('the lights are not part of the menu, so they cannot rise with it as it opens');
+        if (rim.dataset.start !== 'bottom') throw new Error('the lights started ' + rim.dataset.start + ', not from the start this press drew (bottom)');
+        if (getComputedStyle(rim).pointerEvents !== 'none') throw new Error('the lights can be hit - they would eat taps meant for the menu');
+        // THE BOX HUGS THE MENU: seek the menu's swing to where it rests, then compare the two boxes
+        land();
+        const sr = sheet.getBoundingClientRect(), rr = rim.getBoundingClientRect();
+        if (['left', 'top', 'right', 'bottom'].some(function (k) { return Math.abs(sr[k] - rr[k]) > 1; })) throw new Error('the lights\' box ' + JSON.stringify([rr.left, rr.top, rr.right, rr.bottom].map(Math.round)) + ' is not the menu\'s ' + JSON.stringify([sr.left, sr.top, sr.right, sr.bottom].map(Math.round)));
+        const cores = [].slice.call(rim.querySelectorAll('path.fx-core'));
+        if (cores.length !== 2) throw new Error('expected two travelling lights on the menu, found ' + cores.length);
+        const T = FM._areaFx.PULSE_TRAVEL;
+        const at = function (p, t) {
+          p.getAnimations().forEach(function (an) { an.pause(); an.currentTime = t; });
+          const len = parseFloat(p.style.strokeDasharray), off = parseFloat(getComputedStyle(p).strokeDashoffset), L = p.getTotalLength();
+          const pt = p.getPointAtLength(Math.max(0, Math.min(L, len - off)));
+          return { x: rr.left + pt.x, y: rr.top + pt.y };
+        };
+        // ON THE EDGES, ALL THE WAY ROUND: every sampled head is within 8px of the menu's border (its corners are round)
+        const seen = { left: 0, right: 0, top: 0, bottom: 0 };
+        let inside = 0, worst = null;
+        for (let k = 0; k <= 24; k++) cores.forEach(function (p) {
+          const q = at(p, T * k / 24);
+          const d = Math.min(q.x - sr.left, sr.right - q.x, q.y - sr.top, sr.bottom - q.y);
+          if (d > inside) { inside = d; worst = q; }
+          if (q.x <= sr.left + 8) seen.left++;
+          if (q.x >= sr.right - 8) seen.right++;
+          if (q.y <= sr.top + 8) seen.top++;
+          if (q.y >= sr.bottom - 8) seen.bottom++;
+        });
+        if (inside > 8) throw new Error('a light ran ' + Math.round(inside) + 'px inside the menu at ' + JSON.stringify(worst) + ' - the lines belong ON its edges (clause 3)');
+        const miss = Object.keys(seen).filter(function (k) { return !seen[k]; });
+        if (miss.length) throw new Error('the lights never reached the menu\'s ' + miss.join(', ') + ' edge: ' + JSON.stringify(seen));
+        // POSITIVE CONTROL for "on the edges": the same read finds both lights meeting at the TOP-CENTRE as the lap ends
+        const qe = cores.map(function (p) { return at(p, T); });
+        if (qe.some(function (q) { return Math.abs(q.x - (sr.left + sr.width / 2)) > 6 || q.y > sr.top + 8; })) throw new Error('the two lights do not meet at the menu\'s top-centre: ' + JSON.stringify(qe));
+        // AS IT LOADS UP: the lap is as long as the menu's own swing, so they meet as it lands
+        const swing = sheet.getAnimations().filter(function (an) { return an.animationName === 'fm-hinge-up'; })[0];
+        if (swing && Math.abs(swing.effect.getComputedTiming().duration - T) > 1) throw new Error('the lap (' + T + ' ms) and the menu\'s swing (' + swing.effect.getComputedTiming().duration + ' ms) are not the same length');
+        // ONE SET OF LIGHTS: the area's own lap, now under the menu, hands over
+        const lap = c.panel.querySelector('.tl-areafx--pulse');
+        if (lap && !lap.classList.contains('is-handed-over')) throw new Error('the area\'s outline keeps running under the menu as well - two sets of lights, one blurred under the other');
+        cores.concat([].slice.call(rim.querySelectorAll('path'))).forEach(function (p) { p.getAnimations().forEach(function (an) { an.play(); }); });
+
+        // THE OTHER START (#974): from the edge nearest the finger, both ways round, meeting on the far side
+        FM.mobile.closeAdd(); await c.sleep(450);
+        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+        FM.variant.force('emptytap.start', 'nearest');
+        const fy = c.area.top + c.area.height * 0.5;
+        c.press(c.area.left + 12, fy);
+        c.row.click();
+        const rim2 = sheet.querySelector('.add-sheet-rim');
+        if (!rim2 || rim2.dataset.start !== 'nearest') throw new Error('with the nearest-edge start the menu\'s lights were ' + (rim2 ? 'started ' + rim2.dataset.start : 'missing'));
+        land();
+        const sr2 = sheet.getBoundingClientRect(), rr2 = rim2.getBoundingClientRect();
+        const at2 = function (p, t) { const q = at(p, t); return { x: q.x - rr.left + rr2.left, y: q.y - rr.top + rr2.top }; };
+        const c2 = [].slice.call(rim2.querySelectorAll('path.fx-core'));
+        const q0 = c2.map(function (p) { return at2(p, 0); }), q1 = c2.map(function (p) { return at2(p, T); });
+        if (q0.some(function (q) { return q.x > sr2.left + 8 || Math.abs(q.y - fy) > 12; })) throw new Error('pressed near the left edge, the menu\'s lights did not start on its left edge by the finger: ' + JSON.stringify(q0));
+        if (Math.hypot(q1[0].x - q1[1].x, q1[0].y - q1[1].y) > 6 || Math.hypot(q1[0].x - q0[0].x, q1[0].y - q0[0].y) < 200) throw new Error('the nearest-edge lights do not meet on the far side: start ' + JSON.stringify(q0[0]) + ', ends ' + JSON.stringify(q1));
+        rim2.querySelectorAll('path').forEach(function (p) { p.getAnimations().forEach(function (an) { an.play(); }); });
+        sheet.getAnimations().forEach(function (an) { an.finish(); });
+
+        // THEN THEY GO (a timer, by design - it must not wait on frames)
+        await c.sleep(FM._areaFx.PULSE_MS + 400);
+        if (sheet.querySelector('.add-sheet-rim')) throw new Error('the lights are still on the menu ' + (FM._areaFx.PULSE_MS + 400) + ' ms after it opened - they must settle and go');
+
+        // THE KEYBOARD PATH still opens it at once, with the lights from the bottom-middle (no finger to start from)
+        FM.mobile.closeAdd(); await c.sleep(450);
+        c.row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        const rk = sheet.querySelector('.add-sheet-rim');
+        if (!sheet.classList.contains('open') || !rk || rk.dataset.start !== 'bottom') throw new Error('Enter on the empty add row: open ' + sheet.classList.contains('open') + ', lights ' + (rk ? rk.dataset.start : 'none') + ' - it must open at once with the lights from the bottom-middle');
+
+        // CONTROL: the menu opened any other way (the + / FM.mobile.openAdd) carries no lights - they belong to this tap
+        FM.mobile.closeAdd(); await c.sleep(450);
+        [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+        FM.mobile.openAdd();
+        if (!sheet.classList.contains('open')) throw new Error('CONTROL: FM.mobile.openAdd did not open the menu');
+        if (sheet.querySelector('.add-sheet-rim')) throw new Error('CONTROL FAILED - the menu opened by the + also draws the lights; they are for the empty area\'s tap');
+      } finally {
+        try { sheet.getAnimations().forEach(function (an) { an.finish(); }); } catch (e) {}
+        FM.mobile.closeAdd();
+        [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+        await c.sleep(450);
+      }
+    });
+  });
+
+  test('981 asked for less motion: the empty area still opens the add menu at once, with no lights round it', { item: '981', budgetMs: 8000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    return onEmptyArea964(async function (c) {
+      const realMM = window.matchMedia;
+      const px = c.area.left + c.area.width / 2, py = c.area.top + c.area.height / 2;
+      try {
+        // CONTROL: with motion, the same press and click DO draw the lights - so their absence below means something
+        c.press(px, py); c.row.click();
+        if (!sheet.classList.contains('open') || !sheet.querySelector('.add-sheet-rim')) throw new Error('CONTROL: with motion on, the press and click did not open the menu at once with its lights (open ' + sheet.classList.contains('open') + ')');
+        FM.mobile.closeAdd(); await c.sleep(450);
+        [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+        window.matchMedia = function (q) {
+          if (/prefers-reduced-motion:\s*reduce/.test(q)) return { matches: true, media: q, onchange: null, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+          return realMM.call(window, q);
+        };
+        c.press(px, py); c.row.click();
+        if (!sheet.classList.contains('open')) throw new Error('with reduced motion asked for, the empty area did not open the add menu at once');
+        if (sheet.querySelector('.add-sheet-rim')) throw new Error('with reduced motion asked for, lights still travel round the menu');
+        if (!c.panel.querySelector('.tl-areafx--calm')) throw new Error('with reduced motion asked for, the press itself was not acknowledged');
+        const rule = [].some.call(document.styleSheets, function (sh) {
+          let rs; try { rs = sh.cssRules; } catch (e) { return false; }
+          const walk = function (list) { return [].some.call(list, function (ru) { return ru.cssRules ? (/reduce/.test(ru.conditionText || (ru.media && ru.media.mediaText) || '') && [].some.call(ru.cssRules, function (x) { return /\.add-sheet-rim/.test(x.selectorText || '') && x.style.display === 'none'; })) || walk(ru.cssRules) : false; }); };
+          return rs ? walk(rs) : false;
+        });
+        if (!rule) throw new Error('no reduced-motion CSS lock hides .add-sheet-rim - the JS check is then the only thing keeping the lights off');
+      } finally {
+        window.matchMedia = realMM;
+        FM.mobile.closeAdd();
+        [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+        await c.sleep(450);
+      }
+    });
   });
 
 })();
