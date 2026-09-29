@@ -5387,6 +5387,7 @@ window.FM = window.FM || {};
             if (FM.captions) FM.captions.normalize(cd.layer);
             FM.timeline.rebuild();
             if (FM.inspector) FM.inspector.refresh();
+            if (FM.textEdit && FM.textEdit.cuesChanged) FM.textEdit.cuesChanged();   // #984: the PC captions box sits beside this — its list and n / N follow the drag
             if (FM.history) FM.history.commit();
           } else {
             // a plain tap on a cue puts the playhead on it (so you can see what you're about to edit)

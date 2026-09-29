@@ -1334,7 +1334,34 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   .te-panel.te-docked .te-font { max-width: none; }
   .te-panel.te-docked { box-shadow: 0 8px 24px rgba(0,0,0,.35); }
   .te-panel.te-docked #te-input { max-height: 22vh; }
+  /* #984 — THE CAPTIONS EDITOR IN THE ADD MENU'S BOX. js/text-edit.js sizes it to the box exactly (left/top/width/
+     height), so it is part of the band, not a card floating over it: square, no shadow, the band's own line on the
+     timeline side. Short and narrow (307x240 at 1280x800), so: one toolbar row that stays on top while the rest
+     scrolls inside the box — ✓ and the sheet buttons are never scrolled away — with the font button taking what is
+     left and "pt" dropped; then the caption strip, the field, and the caption list. */
+  .te-panel.te-capdock {
+    border: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); border-radius: 0; box-shadow: none;
+    overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+    scroll-padding-top: 54px;   /* a field tabbed to scrolls into view BELOW the pinned toolbar, not under it */
+  }
+  .te-panel.te-capdock .te-bar {
+    position: sticky; top: 0; z-index: 2; flex: 0 0 auto; flex-wrap: nowrap; gap: 5px; padding: 7px 8px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .te-panel.te-capdock .te-btn { min-height: 34px; padding: 4px 8px; font-size: 13px; }
+  .te-panel.te-capdock .te-align { width: 34px; padding: 4px; }
+  .te-panel.te-capdock .te-font { flex: 1 1 0; min-width: 0; max-width: none; }
+  .te-panel.te-capdock .te-size-unit { display: none; }
+  .te-panel.te-capdock .te-done { min-width: 40px; font-size: 16px; }
+  /* z-index: auto — the phone's `.te-dock { z-index: 80 }` makes this FLEX ITEM a stacking context above the sticky
+     toolbar even though it is not positioned (flex items honour z-index), and the field scrolled up over ✓. */
+  .te-panel.te-capdock .te-dock { flex: 0 0 auto; padding: 7px 8px 2px; z-index: auto; }
+  .te-panel.te-capdock #te-input { min-height: 46px; max-height: 96px; padding: 8px 10px; }
+  .te-panel.te-capdock .te-caps { display: block; flex: 0 0 auto; padding: 0 8px 10px; }
+  .te-panel.te-capdock .te-caps .cap-title { margin-top: 8px; }
+  .te-pop.te-pop-capdock { z-index: 81; overscroll-behavior: contain; }
 }
+.te-caps { display: none; }   /* #984: only the PC captions box shows the list here (above) */
 #pe-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 #pe-bar span { font-size: 12px; color: var(--text-faint); max-width: 58vw; }
 .pe-btn { width: 100%; margin: 8px 0 2px; }
@@ -6471,8 +6498,12 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
      (measured at 360,430, 560x146), so nothing you are typing into goes with it.
      The inspector's COLUMN collapses as well rather than being left as a hole, which is the same thing
      drawing mode does one line above; the timeline keeps its own column and widens into the space. */
-  body.text-editing #inspector-panel { display: none !important; }
-  body.text-editing #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
+  /* …EXCEPT ON A CAPTION TRACK (#984): there the editor sits IN this panel's box — where the Add menu is — so the
+     column stays and the timeline keeps its usual squished width. Only the panel's contents go, which is still queue
+     519's point: no option card is live behind the editor. js/text-edit.js capDockRect sets `te-cap-dock`. */
+  body.text-editing:not(.te-cap-dock) #inspector-panel { display: none !important; }
+  body.text-editing:not(.te-cap-dock) #app { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr) !important; }
+  body.text-editing.te-cap-dock #inspector-panel > * { display: none !important; }
   /* …AND THE BAND'S ROW HAS TO GO WITH IT (queue 513). Drawing already hides #timeline-panel and
      #inspector-panel outright, but this layout still RESERVED their row — `--tl-h`, 232px by default —
      so the stage was 628px of an 860px window and the canvas sat small with a wide black strip under it

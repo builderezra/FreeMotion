@@ -336,6 +336,11 @@ window.FM = window.FM || {};
   FM.captionsEditor = {
     mount(container, layer) {
       container.innerHTML = '';
+      /* WHAT THIS LIST WAS DRAWN FROM (#984). Every row holds its caption and its layer by reference, so a list whose
+         captions were since replaced (an undo, Detect speech from another copy of this list) looks right and edits
+         objects that are no longer in the project. The PC captions box sits beside the timeline and redraws itself
+         when this no longer matches — js/text-edit.js capsStale. */
+      container._capDrawn = (layer && Array.isArray(layer.captions)) ? { layer: layer, cues: layer.captions.slice() } : null;
       if (!layer || !Array.isArray(layer.captions)) return;
 
       // Detection FIRST. It is the reason to use captions at all, and the Aa sheet is a 46vh

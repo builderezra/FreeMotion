@@ -110005,4 +110005,206 @@
     }
   });
 
+  /* ═══ #984 — THE CAPTIONS MENU GOES WHERE THE ADD MENU IS, AND THE TIMELINE STAYS SQUISHED ═══════════════════════════
+     Ezra, 29 Sep: "when u open the captions menu it takes up space really badly and opens up the timline fully when it
+     could just go where the add menu is and leave the timeline squished like it usually is".
+     MEASURED on v17.12 (Studio, nothing selected so the Add menu shows): Add → Captions opens the text editor on the
+     track, and editing text hid #inspector-panel and collapsed its column (queue 519), so the timeline went 973 → 1280
+     px wide at 1280x800 and 600 → 900 at 900x800 (its height never moved — "opens up fully" is the width), while the
+     editor floated 560x185 over the bottom of the stage and its Aa sheet — the caption list — dropped over the timeline.
+     The phone was measured too (390x844): there the editor has always been a full-screen takeover for every text layer
+     and the timeline is hidden, not opened, so nothing there matches his words and nothing there changed.
+     These run at 1280 AND 900 in both suite passes (atWideWidth), so the 380 pass cannot skip them. */
+  function rect984(el) { const r = el.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), r: Math.round(r.right), b: Math.round(r.bottom) }; }
+  function same984(a, b, tol) { return Math.abs(a.l - b.l) <= tol && Math.abs(a.t - b.t) <= tol && Math.abs(a.w - b.w) <= tol && Math.abs(a.h - b.h) <= tol; }
+  function say984(r) { return r.w + 'x' + r.h + ' at (' + r.l + ',' + r.t + ')'; }
+  async function with984(fn) {
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) { FM.home.close(); await sleep(450); }
+    const saved = FM.scene.layers.slice(), sel = FM.scene.selectedId, t00 = FM.time;
+    try {
+      FM.scene.layers.length = 0;
+      const S = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0' });
+      S.start = 0; S.duration = 5; FM.scene.layers.push(S);
+      FM.selectLayer(null);
+      if (FM.refreshAll) FM.refreshAll();
+      await sleep(250);
+      return await fn();
+    } finally {
+      if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(sel || null);
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.setTime) FM.setTime(Math.min(t00 || 0, FM.scene.project.duration || 0));
+      if (wasHome && FM.home.open) FM.home.open();
+      await sleep(200);
+    }
+  }
+  /* The Add menu's own box, measured first — the control every other assertion is held against. */
+  function addMenuBox984(where) {
+    const col = document.getElementById('inspector-panel'), am = col && col.querySelector('.addmenu');
+    if (!col || !am || !am.getClientRects().length) throw new Error(where + ' CONTROL: with nothing selected the Add menu is not showing in #inspector-panel');
+    const box = rect984(col), ar = rect984(am);
+    if (box.w < 200 || box.h < 120) throw new Error(where + ' CONTROL: the Add menu’s box is only ' + say984(box));
+    if (ar.l < box.l - 1 || ar.r > box.r + 1 || ar.t < box.t - 1 || ar.b > box.b + 1) throw new Error(where + ' CONTROL: the Add menu (' + say984(ar) + ') is not inside #inspector-panel (' + say984(box) + ')');
+    return box;
+  }
+  /* Scroll it into the box the way his wheel would (so the box has to BE a scroller), then its middle must be it. */
+  async function reach984(el, scroller, box, top, what) {
+    if (!el) throw new Error('there is no ' + what + ' in the captions box');
+    let r = el.getBoundingClientRect();
+    if (r.top < top) scroller.scrollTop -= Math.ceil(top - r.top + 2);
+    else if (r.bottom > box.b) scroller.scrollTop += Math.ceil(r.bottom - box.b + 2);
+    await sleep(30);
+    r = el.getBoundingClientRect();
+    if (!r.width || !r.height) throw new Error('the ' + what + ' has no size in the captions box');
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x < box.l || x > box.r || y < box.t || y > box.b) throw new Error('the ' + what + ' sits at (' + Math.round(x) + ',' + Math.round(y) + '), outside the Add menu’s box ' + say984(box));
+    const at = document.elementFromPoint(x, y);
+    if (!at || (at !== el && !el.contains(at))) throw new Error('the ' + what + ' cannot be pressed: at its middle is ' + (at ? at.tagName + '.' + String(at.className).slice(0, 40) : 'nothing'));
+  }
+  async function captionsBoxAt984(w) {
+    await atWideWidth(async function () {
+      await sleep(250);
+      const where = 'at ' + w + ' px:';
+      const tlp = document.getElementById('timeline-panel');
+      const box = addMenuBox984(where);
+      const tl0 = rect984(tlp), tlh0 = document.documentElement.style.getPropertyValue('--tl-h');
+      if (tl0.l < box.r - 2) throw new Error(where + ' CONTROL: the timeline (' + say984(tl0) + ') does not sit beside the Add menu (' + say984(box) + ') before anything opens');
+      FM.addCaptionLayer();   // Add → Captions: the track, and the captions editor opened on its first caption
+      await sleep(450);
+      const L = FM.scene.layers.find(function (l) { return Array.isArray(l.captions) && l.captions.length; });
+      if (!L || !FM.textEdit.isActive() || FM.textEdit.layerId() !== L.id) throw new Error(where + ' setup: Add → Captions did not open the captions editor on its track');
+      const panel = document.querySelector('.te-panel');
+      if (!panel) throw new Error(where + ' setup: the captions editor has no panel');
+      const pr = rect984(panel), tl1 = rect984(tlp);
+      /* Clause 2 and 4 — the timeline, measured the way it was before: same place, same width, same height. */
+      if (!same984(tl1, tl0, 1)) throw new Error(where + ' opening the captions menu changed the timeline from ' + say984(tl0) + ' to ' + say984(tl1) + ' — it opened up instead of staying squished beside the Add menu');
+      if (document.documentElement.style.getPropertyValue('--tl-h') !== tlh0) throw new Error(where + ' opening the captions menu rewrote the band height (--tl-h ' + (tlh0 || 'unset') + ' → ' + document.documentElement.style.getPropertyValue('--tl-h') + ')');
+      /* Clause 3 — it is where the Add menu is, at the Add menu's size, and nothing else of that column is live under it. */
+      if (!same984(pr, box, 2)) throw new Error(where + ' the captions menu is ' + say984(pr) + ', not in the Add menu’s box ' + say984(box) + ' — it floats over the canvas instead');
+      const live = [].slice.call(document.querySelectorAll('#inspector-panel .cat-card, #inspector-panel .addmenu button')).filter(function (b) { return b.getClientRects().length; });
+      if (live.length) throw new Error(where + ' ' + live.length + ' Add menu / option button(s) are still live under the captions menu (queue 519: pressing one while typing bugs it out)');
+      const stage = rect984(document.getElementById('stage'));
+      if (pr.t < stage.b - 1 && pr.r > stage.l + 1 && pr.l < stage.r - 1) throw new Error(where + ' the captions menu (' + say984(pr) + ') overlaps the stage (' + say984(stage) + ')');
+      /* Clause 1 — it no longer takes space off the canvas either. */
+      const pad = parseFloat(getComputedStyle(document.getElementById('stage')).paddingBottom) || 0;
+      if (pad > 1) throw new Error(where + ' the stage is still giving up ' + Math.round(pad) + ' px of the canvas to the captions menu');
+      /* Every captions control is in the box and can be pressed — scrolling inside the box, which must be a scroller. */
+      const oy = getComputedStyle(panel).overflowY;
+      if (panel.scrollHeight > panel.clientHeight + 1 && oy !== 'auto' && oy !== 'scroll') throw new Error(where + ' the captions menu is taller than the box (' + panel.scrollHeight + ' > ' + panel.clientHeight + ') and does not scroll (overflow-y ' + oy + ') — the rest cannot be reached');
+      const bar = panel.querySelector('.te-bar');
+      const top = () => (bar ? bar.getBoundingClientRect().bottom : box.t);
+      const q = function (s) { return panel.querySelector(s); };
+      const ctl = [['colour button', '.te-bar .te-color'], ['align button', '.te-bar .te-align'], ['font button', '.te-bar .te-font'], ['size button', '.te-bar .te-size'], ['Aa button', '.te-bar .te-extras'], ['✓', '.te-bar .te-done']];
+      for (let i = 0; i < ctl.length; i++) await reach984(q(ctl[i][1]), panel, box, box.t, ctl[i][0]);
+      if (bar && bar.scrollWidth - bar.clientWidth > 1) throw new Error(where + ' the toolbar overflows the box by ' + (bar.scrollWidth - bar.clientWidth) + ' px — a button is cut off');
+      const cueBtns = panel.querySelectorAll('.te-cue-nav .te-cue-btn');
+      if (cueBtns.length !== 3) throw new Error(where + ' the caption strip has ' + cueBtns.length + ' buttons, not ‹ › +');
+      for (let i = 0; i < cueBtns.length; i++) await reach984(cueBtns[i], panel, box, top(), 'caption strip button ' + cueBtns[i].textContent);
+      await reach984(q('#te-input'), panel, box, top(), 'caption text field');
+      const rows = panel.querySelectorAll('.cap-row');
+      if (rows.length !== L.captions.length) throw new Error(where + ' the captions box lists ' + rows.length + ' caption row(s) for ' + L.captions.length + ' captions — the list, its timing and its crosses are not in the box');
+      for (let i = 0; i < rows.length; i++) {
+        const parts = [['text', '.cap-text'], ['start', '.cap-time'], ['grip', '.cap-grip'], ['cross', '.cap-del']];
+        for (let k = 0; k < parts.length; k++) await reach984(rows[i].querySelector(parts[k][1]), panel, box, top(), 'caption ' + (i + 1) + ' ' + parts[k][0]);
+        await reach984(rows[i].querySelectorAll('.cap-time')[1], panel, box, top(), 'caption ' + (i + 1) + ' end');
+      }
+      await reach984(q('.cap-scope'), panel, box, top(), 'Detect speech scope');
+      await reach984(q('.cap-detect-btn'), panel, box, top(), 'Detect speech button');
+      await reach984(q('.cap-add'), panel, box, top(), '+ Add cue at playhead');
+      /* The Aa sheet (styles, and its own copy of the list) opens INSIDE the box too, under the toolbar. */
+      panel.scrollTop = 0; await sleep(40);
+      q('.te-bar .te-extras').click(); await sleep(450);
+      const pop = document.querySelector('.te-pop');
+      if (!pop) throw new Error(where + ' the Aa button opened nothing');
+      const po = rect984(pop);
+      if (po.l < box.l - 1 || po.r > box.r + 1 || po.t < box.t - 1 || po.b > box.b + 1) throw new Error(where + ' the Aa sheet is ' + say984(po) + ', outside the Add menu’s box ' + say984(box));
+      if (!same984(rect984(tlp), tl0, 1)) throw new Error(where + ' opening the Aa sheet moved the timeline to ' + say984(rect984(tlp)));
+      const popBox = { l: po.l, t: po.t, r: po.r, b: po.b };
+      const inPop = [].slice.call(pop.querySelectorAll('.cap-row .cap-del, .cap-add, .cap-scope, select')).filter(function (e) { return e.getClientRects().length; });
+      if (!inPop.length) throw new Error(where + ' the Aa sheet holds no caption controls');
+      for (let i = 0; i < inPop.length; i++) await reach984(inPop[i], pop, popBox, po.t, 'Aa sheet control ' + (i + 1) + ' (' + String(inPop[i].className || inPop[i].tagName) + ')');
+      q('.te-bar .te-extras').click(); await sleep(300);
+      if (document.querySelector('.te-pop')) throw new Error(where + ' a second press on Aa left the sheet open');
+      /* ✓ gives the column its own contents back, with the timeline still where it was. */
+      q('.te-bar .te-done').click(); await sleep(350);
+      if (FM.textEdit.isActive() || document.body.classList.contains('te-cap-dock')) throw new Error(where + ' ✓ did not close the captions menu');
+      const col = document.getElementById('inspector-panel');
+      if (!col.querySelector('#inspector') || !col.querySelector('#inspector').getClientRects().length) throw new Error(where + ' after ✓ the inspector did not come back in its box');
+      if (!same984(rect984(tlp), tl0, 1)) throw new Error(where + ' after ✓ the timeline is ' + say984(rect984(tlp)) + ', not ' + say984(tl0));
+      /* CONTROL — the request is the captions menu: a plain text layer keeps the editor it had (queue 519's hide). */
+      const T = FM.makeLayer('text', { text: 'Probe', x: 60, y: 45, size: 40, fill: '#fff' }); T.start = 0; T.duration = 4;
+      FM.scene.layers.push(T); FM.selectLayer(T.id); if (FM.refreshAll) FM.refreshAll(); await sleep(150);
+      FM.textEdit.start(T.id); await sleep(300);
+      const tp = document.querySelector('.te-panel');
+      if (!tp || tp.classList.contains('te-capdock') || document.body.classList.contains('te-cap-dock')) throw new Error(where + ' CONTROL: a plain text layer’s editor went into the captions box too — only the captions menu was asked for');
+      if (col.getClientRects().length) throw new Error(where + ' CONTROL: a plain text layer’s editor left the option cards showing (queue 519 is unchanged for plain text)');
+      FM.textEdit.stop(); await sleep(250);
+    }, w);
+  }
+  test('984 on a PC the captions menu opens in the Add menu’s box and leaves the timeline squished — at 1280 and 900, every captions control is reachable in it, the Aa sheet opens inside it, and plain text is unchanged', { item: '984', budgetMs: 120000 }, async function () {
+    if (!FM.addCaptionLayer || !FM.textEdit || !FM.captions) throw new Error('need FM.addCaptionLayer, FM.textEdit and FM.captions');
+    await with984(async function () { await captionsBoxAt984(1280); });
+    await with984(async function () { await captionsBoxAt984(900); });
+  });
+
+  /* The box is the captions menu, not a picture of one: typing shows in its row, its list edits the real captions, the
+     caption strip and the list agree, it follows the band when the timeline is dragged taller, and after ↶ its rows are
+     the restored captions — a row still holding a replaced caption would edit something no longer in the project. */
+  test('984 the PC captions box works — typing shows in its row, its times and + Add cue edit the captions, it follows a dragged timeline, and after undo its rows edit the restored captions', { item: '984', budgetMs: 90000 }, async function () {
+    if (!FM.addCaptionLayer || !FM.textEdit || !FM.history) throw new Error('need FM.addCaptionLayer, FM.textEdit and FM.history');
+    await with984(async function () {
+      await atWideWidth(async function () {
+        await sleep(250);
+        const root = document.documentElement, tlh0 = root.style.getPropertyValue('--tl-h');
+        try {
+          addMenuBox984('at 1280 px:');
+          FM.addCaptionLayer(); await sleep(450);
+          const id = FM.textEdit.layerId(), Lof = function () { return FM.scene.layers.find(function (l) { return l.id === id; }); };
+          const panel = document.querySelector('.te-panel');
+          const rowsOf = function () { return [].slice.call(panel.querySelectorAll('.cap-row')); };
+          if (!rowsOf().length) throw new Error('the captions box has no caption list — the rows, their times and Detect speech are not there');
+          /* typing */
+          const inp = document.getElementById('te-input');
+          inp.value = 'Hello from Perth'; inp.dispatchEvent(new Event('input', { bubbles: true })); await sleep(60);
+          const t0 = rowsOf()[0].querySelector('.cap-text').textContent;
+          if (Lof().captions[0].text !== 'Hello from Perth') throw new Error('CONTROL: typing did not reach the first caption (' + Lof().captions[0].text + ')');
+          if (t0 !== 'Hello from Perth') throw new Error('typed Hello from Perth into the first caption, and its row in the box still reads ' + t0);
+          /* a time typed in the list */
+          const end = rowsOf()[0].querySelectorAll('.cap-time')[1];
+          end.value = '1.2'; end.dispatchEvent(new Event('input', { bubbles: true })); end.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
+          if (Math.abs(Lof().captions[0].end - 1.2) > 1e-6) throw new Error('an End of 1.2 typed in the box left the first caption ending at ' + Lof().captions[0].end);
+          /* + Add cue, and the strip counts it */
+          const n0 = Lof().captions.length;
+          FM.setTime(4.2); await sleep(60);
+          panel.querySelector('.cap-add').click(); await sleep(120);
+          const n1 = Lof().captions.length, lbl = (panel.querySelector('.te-cue-lbl') || {}).textContent || '';
+          if (n1 !== n0 + 1) throw new Error('+ Add cue at playhead in the box left ' + n1 + ' captions, not ' + (n0 + 1));
+          if (rowsOf().length !== n1) throw new Error('after + Add cue the box lists ' + rowsOf().length + ' rows for ' + n1 + ' captions');
+          if (!new RegExp('/ ' + n1 + '$').test(lbl)) throw new Error('after + Add cue the caption strip reads ' + lbl + ', not out of ' + n1);
+          /* the band dragged taller: the box follows the Add menu's column */
+          const box0 = rect984(document.getElementById('inspector-panel'));
+          root.style.setProperty('--tl-h', (box0.h + 60) + 'px'); window.dispatchEvent(new Event('resize')); await sleep(350);
+          const col1 = rect984(document.getElementById('inspector-panel')), p1 = rect984(panel);
+          if (col1.h < box0.h + 40) throw new Error('setup: a taller band did not make the Add menu’s column taller (' + box0.h + ' → ' + col1.h + ')');
+          if (!same984(p1, col1, 2)) throw new Error('with the timeline dragged taller the captions box is ' + say984(p1) + ', not the Add menu’s new box ' + say984(col1));
+          /* ↶ — the list is redrawn from the restored captions */
+          FM.history.undo(); await sleep(300);
+          if (!FM.textEdit.isActive()) throw new Error('setup: undo closed the captions editor');
+          const L2 = Lof(), rows2 = rowsOf();
+          if (rows2.length !== L2.captions.length) throw new Error('after undo the box lists ' + rows2.length + ' rows for ' + L2.captions.length + ' captions');
+          const e2 = rows2[rows2.length - 1].querySelectorAll('.cap-time')[1], last = L2.captions[L2.captions.length - 1];
+          const want = +(Math.max(last.start + 0.3, last.end - 0.4)).toFixed(2);
+          e2.value = String(want); e2.dispatchEvent(new Event('input', { bubbles: true })); e2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
+          const got = Lof().captions[Lof().captions.length - 1].end;
+          if (Math.abs(got - want) > 1e-6) throw new Error('after undo, an End of ' + want + ' typed into the last row of the box left the project’s last caption ending at ' + got + ' — the row still edits a caption the undo replaced');
+        } finally {
+          if (tlh0) root.style.setProperty('--tl-h', tlh0); else root.style.removeProperty('--tl-h');
+          window.dispatchEvent(new Event('resize')); await sleep(120);
+        }
+      }, 1280);
+    });
+  });
+
 })();
