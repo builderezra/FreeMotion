@@ -6365,7 +6365,7 @@ window.FM = window.FM || {};
        unless it has been registered, so getPropertyValue hands back the token stream the stylesheet wrote
        — measured on a fresh profile at 1280x800: "clamp(232px, 30vh, 300px)" — and parseInt of that is
        NaN. All four readers below then fell to their fallback of 232 while the real band was 240 (300 on
-       a 1080p window; 40 more below 1160px, where the transport hangs under the row). Measured
+       a 1080p window; 40 more below 1226px, where the transport hangs under the row). Measured
        consequences, all three from this one line-pattern: a 10px drag DOWN on the add menu's handle
        detached the panel at 232px inside a 240px row and opened an 8px strip of bare background above it;
        a CLICK on the timeline divider persisted 232, so the next load opened with a shorter band than the

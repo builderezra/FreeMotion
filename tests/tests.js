@@ -110051,8 +110051,15 @@
      project). The cause: play is held on SCREEN centre, and the left group, a flex-end group in a 0-minimum track,
      overflowed LEFT out of the row. This asks elementFromPoint, at the centre and 3px in from each end of every visible
      control on the row (and the band under it, and the playhead's bookmark disc beside it), what is really on top — at
-     every 3px from 701 to 899, every 4px to 1012, and at 1016, 1040 and 1100, with 0, 1 and 2 selected. Widths from 1160
-     are left out on purpose: two selected there is #970, held for his pick.
+     every 3px from 701 to 899, every 4px to 1156, every 2px across the band's line (1158–1240) and every 10px to 1440,
+     with 0, 1 and 2 selected.
+     ⚠️ …AND PAST 1160, WHICH THIS TEST FIRST LEFT OUT (queue 979 review). It stopped at 1100 on the reading that everything
+     from 1160 was #970's — but #970's clause is TWO selected, and with ONE selected (#801's own case) the ⋯ sat under the
+     version chip from 1162 to 1178 (its centre; its right end to 1206), where a click force-updates the app instead of
+     opening the layer menu. So one selected and none are swept to 1440, and the band's line moved to 1226 (styles.css).
+     Two selected stops at that line: above it, and with Settings → Work with friends on, is #970's, held for his pick.
+     Every width is measured SETTLED — after timeline.js has republished --tl-panel-left (150ms after a resize), because
+     from ~1170 the inspector widens with the window, and until then play sits up to ~24px off centre for a moment.
      CONTROL first: a transparent box over the copy button's centre at 1100 must be reported, and be the ONLY report. */
   test('979 on a PC window from 701px every control on the transport row takes its own click — copy and the add-row switch clear of the A/S/D keys, nothing past the window', { item: '979', budgetMs: 240000 }, async function () {
     const fe = window.frameElement;
@@ -110086,17 +110093,30 @@
       });
       return bad;
     };
+    const panelSettled = () => {
+      const pan = document.getElementById('timeline-panel'), L = parseFloat(document.documentElement.style.getPropertyValue('--tl-panel-left'));
+      return !pan || !isFinite(L) || Math.abs(L - pan.getBoundingClientRect().left) < 0.6;
+    };
     const setW = async w => {
       fe.style.width = w + 'px';
       window.dispatchEvent(new Event('resize'));
       await frames(3);
       if (Math.abs(innerWidth - w) > 1) throw new Error('setup: the frame is ' + innerWidth + 'px wide, not ' + w);
       if (matchMedia('(max-width: 700px)').matches) throw new Error('setup: ' + w + 'px measured the phone layout');
+      // the width he sits at, not the frame after a resize: wait for --tl-panel-left to catch the panel up (see above)
+      const t0 = performance.now();
+      while (!panelSettled()) {
+        if (performance.now() - t0 > 1500) throw new Error('setup at ' + w + 'px: --tl-panel-left never caught up with the panel, so play is not where he would see it');
+        await frames(1);
+      }
+      await frames(1);
     };
     const WIDTHS = [];
     for (let w = 701; w <= 899; w += 3) WIDTHS.push(w);
-    for (let w = 900; w <= 1012; w += 4) WIDTHS.push(w);
-    WIDTHS.push(1016, 1040, 1100);
+    for (let w = 900; w <= 1156; w += 4) WIDTHS.push(w);
+    for (let w = 1158; w <= 1240; w += 2) WIDTHS.push(w);
+    for (let w = 1250; w <= 1440; w += 10) WIDTHS.push(w);
+    const BAND_LINE = 1226;   // styles.css — two selected above it is #970's (held for his pick), so it is not asserted here
     const fails = [];
     let states = 0, folded = 0;
     try {
@@ -110123,6 +110143,7 @@
         else { FM.selectLayer(A.id); FM.toggleSelect(B.id); }
         FM.refreshAll(); await frames(2);
         for (const w of WIDTHS) {
+          if (n === 2 && w > BAND_LINE) continue;
           await setW(w);
           states++;
           const where = w + 'px, ' + n + ' selected: ';
@@ -110158,7 +110179,7 @@
           if (bad.length) fails.push(where + bad.slice(0, 4).join('; ') + (bad.length > 4 ? ' (+' + (bad.length - 4) + ' more)' : ''));
         }
       }
-      if (states < 290) throw new Error('setup: only ' + states + ' states were measured');
+      if (states < 450) throw new Error('setup: only ' + states + ' states were measured');
       /* …and none of it reaches the phone. From the tightest PC state (701, two selected: every step on) to 380, the steps
          come off with the PC row — the phone row is #405's and this item must leave it exactly as it was. */
       await setW(701);

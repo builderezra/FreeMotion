@@ -2778,7 +2778,8 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
       (FM.layerMenuItems: "Group selection" / "Masking group" whenever two or more are selected, exactly when these
       show). Parent and delete stay: parent is in no menu, and delete was taken out of ⋯ on his word (#221).
       !important because syncTopBar owns the Group button's display inline; the class only ever hides.
-   The far run (the band under the row below 1160px) is not touched: it is #970's, held for his pick. */
+   The far run's band is #970's, held for his pick — except its line, which moved from 1160 to 1226px because one selected
+   put ⋯ under the version chip from 1162 (#801's own case, re-measured; see the note at the band). */
 @media (min-width: 701px) {
   #transport { --t-gap: 6px; --t-home-w: 34px; }
   #transport:has(> #t-home) .t-left { padding-left: calc(var(--t-home-w) + var(--t-gap)); }
@@ -8069,7 +8070,7 @@ body.fm-pushing #toast { z-index: 213; }
   body { --rail-w: 0px; }
   body #topbar { display: none; }
 
-  /* ---- THE ROW IS TOO NARROW FOR BOTH END CLUSTERS BELOW 1160px (queue 801) -------------------------
+  /* ---- THE ROW IS TOO NARROW FOR BOTH END CLUSTERS BELOW 1160px (queue 801) — 1226px since #979 -----------
    Found 6 Sep by using the PC layout at 900px with a layer selected: #t-far (version chip · help · notes ·
    cog · export · view options, 266px) is absolute so the play button stays centred, and #t-sel (parent ·
    delete · more, 126px) is a normal child of the right column — so once the row is narrower than the two
@@ -8082,8 +8083,18 @@ body.fm-pushing #toast { z-index: 213; }
    40 to 80 so the ruler starts under the band. Nothing can be covered, because nothing shares the row
    with it any more. One control height taller at those widths is the honest cost; a hidden control is
    not. A two-row grid was tried first and collapsed the row's fr tracks — measured, not guessed.
-     Nested inside the 701 block on purpose: this is a refinement of the PC layout, not a layout of its own. */
-  @media (max-width: 1160px) {
+     Nested inside the 701 block on purpose: this is a refinement of the PC layout, not a layout of its own.
+   ⚠️ …AND THE LINE IS 1226px NOW, NOT 1160 (queue 979 review). 1160 was right for the row #801 measured; the far run has
+   since grown (#851 put #btn-opts in it; 304px now, 266 then), and #801's own case — ONE layer selected — had drifted past
+   it. Measured settled, every 2px, the same on v17.12 and on #979's build: from 1162 to 1178 the ⋯'s CENTRE was under the chip
+   (elementFromPoint returned `.ver`, and a real click there hit the chip, which force-updates the app, instead of
+   opening the layer menu), and its right end to 1206; they touch until ~1209. The line is where ⋯ stands one far-run
+   gap (8px, the chip's own spacing to its neighbours) clear of the chip: at 1227 it is 8.8px. Selection-independent,
+   exactly as #801 was, so the row never jumps when a layer is selected. NOT covered by this line, and #970's (held for
+   his pick): TWO selected (the group is 80px wider — to ~1370) and Settings → Work with friends on (#btn-share makes the
+   far run 42px wider — one selected to ~1290), both of which are the band-or-not question he is being asked.
+   The '979 on a PC window…' test sweeps one selected to 1440, so a far run that grows again is red, not shipped. */
+  @media (max-width: 1226px) {
     /* The band's 40px come from the STAGE, not the tracks: the panel grows by the band's height (the base
        --tl-h is the 701px clamp two screens up), so the ruler and every track row sit exactly where they
        did — measured, because the first cut took the height from the tracks and four desktop tests that
