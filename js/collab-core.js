@@ -25,8 +25,11 @@ window.FM = window.FM || {};
   /* Bumped to 2 in S2, which is what S1's note below said the bump was for: the fingerprint now
      includes the derived writers (§11.1), so a build whose autoFitDuration or loop-mode inheritance
      differs is refused at the door instead of disagreeing forever about a document nobody can see a
-     difference in. */
-  C.SCHEMA_REV = 2;
+     difference in.
+     Bumped to 3 by #482 polish batch 1: Film Grain, Light Leak, Glow, Letterbox, Faded Film, Colour Temperature and Colour
+     Balance gained controls, so an older build's sanitiser would drop keys this one keeps — the two would normalise the
+     same project differently, which is exactly what the gate below refuses. */
+  C.SCHEMA_REV = 3;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -217,7 +220,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 7274450401628346;
+  C.SCHEMA_FP = 2363691439221026;   // #482 polish batch 1 (SCHEMA_REV 3): seven effects gained controls
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *

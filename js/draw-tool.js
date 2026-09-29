@@ -737,6 +737,20 @@ window.FM = window.FM || {};
       er.setAttribute('aria-pressed', FM.drawTool.erasing ? 'true' : 'false');
     }
     bar.classList.toggle('db-vector', vec);
+    /* "CLOSE", NOT "CANCEL", WHILE SKETCHING (queue 834 clause 20 — option B, decided under LOOP.md rule 16;
+       say A to change it). In Sketching every stroke is committed to its Sketch layer the moment you lift
+       your finger, so this button has never cancelled anything: it closes the bar and the drawing stays.
+       A label that promises to throw the drawing away, on a button that keeps it, is the lie — so the word
+       changes and what it does does not (A, making it really discard the session, is the more dangerous of
+       the two: it deletes work you can see, and ↶ already takes back one stroke at a time).
+       ⚠️ CUSTOM SHAPE KEEPS "Cancel", because there it IS true: its points are not a layer until Done, and
+       this button throws them away. One word per behaviour, not one word per button. */
+    var cx = bar.querySelector('.db-cancel');
+    if (cx) {
+      cx.textContent = vec ? 'Cancel' : 'Close';
+      cx.setAttribute('aria-label', vec ? 'Cancel this shape' : 'Close sketching');
+      cx.title = vec ? 'Cancel — throw away the points of this shape' : 'Close — your strokes are already on the canvas (↶ takes one back)';
+    }
     var n = FM.drawTool.points.length;
     var hint = bar.querySelector('.db-hint');
     // sessionSubs, not `strokes` — since queue 167 the whole session is ONE layer, so `strokes` holds
@@ -772,7 +786,7 @@ window.FM = window.FM || {};
       '<button class="db-undo" type="button" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l-4-4 4-4"/><path d="M5 10h9a5 5 0 0 1 0 10h-3"/></svg></button>' +
       '<button class="db-redo" type="button" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l4-4-4-4"/><path d="M19 10h-9a5 5 0 0 0 0 10h3"/></svg></button>' +
       '<button class="db-done" type="button">Done</button>' +
-      '<button class="db-cancel" type="button">Cancel</button>';
+      '<button class="db-cancel" type="button" aria-label="Close sketching">Close</button>';   // updateBar() words it per mode (queue 834)
     document.body.appendChild(bar);
     bar.querySelector('.db-color input').addEventListener('input', function (e) {
       FM.drawTool.color = e.target.value;
@@ -1049,7 +1063,7 @@ window.FM = window.FM || {};
       // re-allocates it the moment a drag starts, which is exactly when you are drawing. The overlay
       // is positioned and scaled off that canvas, so it has to follow or the stroke drifts mid-line.
       FM.drawTool.sync = function () { if (FM.drawTool.active) { syncOverlay(); redraw(); } };
-      // Enter finishes the drawing (same as Done); Escape cancels. Capture phase + stopPropagation
+      // Enter finishes the drawing (same as Done); Escape is the bar's Close / Cancel. Capture phase + stopPropagation
       // so the app's own Enter/Escape shortcuts don't also fire while you're mid-draw.
       window.addEventListener('keydown', function (e) {
         if (!FM.drawTool.active) return;

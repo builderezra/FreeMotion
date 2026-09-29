@@ -59,6 +59,10 @@ window.FM = window.FM || {};
     { type: 'glow', label: 'Glow', color: true, params: [
       { key: 'radius', label: 'Radius', min: 0, max: 60, step: 1, def: 16, legacy: 12, unit: 'px' },   // queue 756: the kernel draws an absent radius at 12 — the inspector must show what renders
       { key: 'passes', label: 'Bloom', min: 1, max: 4, step: 1, def: 1 },
+      /* STRENGTH (#482 polish 1.3, his #966 "more customisation"): the halo was always at the colour's full alpha, so a
+         faint glow meant a smaller one. It is the drop-shadow colour's alpha — at 100 the colour string is emitted exactly
+         as it always was, so every saved Glow and the 14 filters that carry one draw the same pixels. */
+      { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'vignette', label: 'Vignette', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
@@ -126,6 +130,11 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Temperature', min: -100, max: 100, step: 1, def: 40 },
       { key: 'tint', label: 'Tint', min: -100, max: 100, step: 1, def: 0 },
       { key: 'preserve', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      /* #482 polish 1.6 (hunt C46). Shift ADDS to red and blue, so black became rgb(20,0,0) at the default — a warm-up
+         tinted the blacks. White balance MULTIPLIES, the way a camera's does, so black stays black. Shift stays the
+         default because it is what every saved project and 14 filters draw. Affects uses Colour Balance's tonal weights. */
+      { key: 'method', label: 'Method', def: 0, options: [[0, 'Shift'], [1, 'White balance']] },
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] },
     ] },
     { type: 'noise', label: 'Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
@@ -432,6 +441,12 @@ window.FM = window.FM || {};
       // NOTHING on white text (Ezra: "film grain no work on text"). The FALLBACK is still 0, so every
       // project saved before this keeps its exact pixels; only a newly added Film Grain gets the lift.
       { key: 'highlights', label: 'In highlights', min: 0, max: 100, step: 1, def: 35, legacy: 0, unit: '%' },   // queue 756: absent = the old curve (0), as the kernel reads it
+      /* #482 polish 1.1 (#966 "more customisation"). The grain re-rolled at a welded 24 a second, could not be held still for
+         a paper texture, had one hard edge and one pattern for every layer. All three defaults are the old grain exactly:
+         speed 24 is the old Math.floor(t*24), softness 0 runs the old loop, and pattern 0 adds nothing to the hash. */
+      { key: 'speed', label: 'Grain speed', min: 0, max: 60, step: 1, def: 24, unit: 'fps' },
+      { key: 'soft', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
     { type: 'blocknoise', label: 'Chunk Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -526,7 +541,12 @@ window.FM = window.FM || {};
     // 'motionblur' so saved projects, presets and the AI vocabulary all still resolve.
     { type: 'motionblur', label: 'Directional Blur', desc: 'A fixed smear along an angle you choose. It does not read movement — a still clip blurs exactly as much as a moving one.',
       params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' }] },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
-    { type: 'colorbalance', label: 'Colour Balance', /* queue 904: Affects — it was one flat offset, no tonal range */ params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }, { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] }] },
+    { type: 'colorbalance', label: 'Colour Balance', /* queue 904: Affects — it was one flat offset, no tonal range */ params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }, { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] },
+      /* #482 polish 1.7: a push of red also BRIGHTENED (about +17 levels on a grey ramp at Red 100), and the tonal ranges
+         had one fixed width. Keep brightness puts every pixel back at its own luma; Range width is an exponent on the
+         range weight (100 = the old weights). Both defaults run the old loops. */
+      { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] }] },
     { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
     // ---- batch 12 ----
@@ -822,11 +842,18 @@ window.FM = window.FM || {};
       { key: 'lift', label: 'Colour cast', min: 0, max: 300, step: 5, def: 100, unit: '%' },
       { key: 'gain', label: 'Curve', min: 0, max: 300, step: 5, def: 100, unit: '%' },
     ] },
-    { type: 'lightleak', label: 'Light Leak', color: true, defColor: '#ff7a3c', colorLabel: 'Leak', params: [
+    /* #482 polish 1.2. The drift was welded (t*0.15, a fixed ±12/±10% wander), so a leak could never hold still; it was
+       one colour, always screened, and never flickered. Leak edge is the colour at the rim: ABSENT it follows Leak, so a
+       saved leak and a new one (makeInstance skips a `color2Follows` colour) are the one-colour leak they always were. */
+    { type: 'lightleak', label: 'Light Leak', color: true, defColor: '#ff7a3c', colorLabel: 'Leak', color2: true, defColor2: '#ff7a3c', color2Label: 'Leak edge', color2Follows: 'color', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'x', label: 'Source X', min: 0, max: 100, step: 1, def: 85, unit: '%' },
       { key: 'y', label: 'Source Y', min: 0, max: 100, step: 1, def: 12, unit: '%' },
       { key: 'size', label: 'Spread', min: 10, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'speed', label: 'Drift speed', min: 0, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'wander', label: 'Wander', min: 0, max: 300, step: 5, def: 100, unit: '%', overriddenBy: 'speed', liveAbove: 0 },   // a still leak does not roam (review of polish 1.2)
+      { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
     ] },
     /* Letterbox. BARS ARE MEASURED AGAINST — the one param that had to change meaning when these two
      * effects were confined to the layer they are attached to (see PIXEL_FX.letterbox / fxBounds).
@@ -840,9 +867,16 @@ window.FM = window.FM || {};
      * On a full-frame layer the two are the same number, so every existing instance on the common
      * case is byte-identical either way — verified across size 0/14/30/45 at render scale 1/0.35/2. */
     { type: 'letterbox', label: 'Letterbox', color: true, defColor: '#000000', colorLabel: 'Bars', params: [   // queue 904: bars were hardcoded black and horizontal-only
-      { key: 'size', label: 'Size', min: 0, max: 45, step: 1, def: 14, unit: '%' },
+      /* SHAPE (#482 polish 1.4) is listed first because it decides whether Size and Bars at do anything: a cinema shape
+         works the bars out from the picture's own shape and puts them top and bottom or at the sides itself. Custom = the
+         old Size slider. Strength, Feather and Picture position default to the old solid, hard, centred bars. */
+      { key: 'ratio', label: 'Shape', def: 0, options: [[0, 'Custom'], [1, '2.39:1'], [2, '2.35:1'], [3, '2:1'], [4, '1.85:1'], [5, '16:9'], [6, '4:3'], [7, '1:1'], [8, '4:5']] },
+      { key: 'size', label: 'Size', min: 0, max: 45, step: 1, def: 14, unit: '%', overriddenBy: 'ratio' },
       { key: 'metric', label: 'Bars sized to', options: [[0, 'Layer'], [1, 'Frame']], def: 0, legacy: 1 },
-      { key: 'orient', label: 'Bars at', options: [[0, 'Top & bottom'], [1, 'Left & right']], def: 0 },   // Left & right = pillarbox
+      { key: 'orient', label: 'Bars at', options: [[0, 'Top & bottom'], [1, 'Left & right']], def: 0, overriddenBy: 'ratio' },   // Left & right = pillarbox
+      { key: 'offset', label: 'Picture position', min: -50, max: 50, step: 1, def: 0, unit: '%' },
+      { key: 'feather', label: 'Feather', min: 0, max: 60, step: 1, def: 0, unit: 'px' },   // project px: the kernel takes ps and scales it itself
+      { key: 'opacity', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'border', label: 'Border Frame', color: true, defColor: '#ffffff', colorLabel: 'Border', params: [
       { key: 'width', label: 'Width', min: 1, max: 180, step: 1, def: 10, unit: 'px' },
@@ -856,6 +890,12 @@ window.FM = window.FM || {};
       { key: 'lift', label: 'Milky blacks', min: 0, max: 100, step: 1, def: 26 },
       { key: 'desat', label: 'Colour loss', min: 0, max: 100, step: 1, def: 15, unit: '%' },
       { key: 'tone', label: 'Warm / cool', min: -200, max: 200, step: 5, def: 100, unit: '%' },
+      /* #482 polish 1.5: the crush was welded at a quarter of Amount, the whites never faded and the lifted blacks were
+         always grey. Fade colour tints the lifted blacks (any grey = the old neutral lift, so the grey default draws the
+         old look); Warm / cool still adds its cast on top. Contrast loss 100 and Fade whites 0 are the old curve. */
+      { key: 'crush', label: 'Contrast loss', min: 0, max: 200, step: 5, def: 100, unit: '%' },
+      { key: 'rolloff', label: 'Fade whites', min: 0, max: 100, step: 1, def: 0 },
+      { key: 'fadecol', label: 'Fade colour', swatch: true, def: '#808080' },   // a colour row inside `params` (fx-registry paramsOf `swatch`), last like every effect colour
     ] },
     { type: 'nightvision', label: 'Night Vision', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
@@ -1886,7 +1926,9 @@ window.FM = window.FM || {};
       // behaviour (Edge Glow keys its original code path on `source == null`); filling it flips a saved project onto
       // the new path — the suite's "a project saved before the Glow-on control still renders exactly as it did" caught
       // exactly that on 5 Sep. The panel already shows `legacy` for such a key, so absent stays absent there.
-      controls.forEach(c => { if (!c || !c.key || c.type === 'layer' || c.legacy !== undefined) return; if (fx.params[c.key] === undefined) { let v = fxFillValue(fx.type, c.key); if (v === undefined) v = c.default; if (v !== undefined) fx.params[c.key] = v; } });
+      // …nor a colour that FOLLOWS another (#482 polish 1.2, Light Leak's Leak edge): absent IS its value — the colour it
+      // names — and filling it with its default would freeze the edge orange the first time he changed the Leak colour.
+      controls.forEach(c => { if (!c || !c.key || c.type === 'layer' || c.legacy !== undefined || c.follows) return; if (fx.params[c.key] === undefined) { let v = fxFillValue(fx.type, c.key); if (v === undefined) v = c.default; if (v !== undefined) fx.params[c.key] = v; } });
     }
     if (Array.isArray(fx.effects)) fx.effects.forEach(fillFxParams);   // a filter's children
     _fxFilled.add(fx);
@@ -1939,6 +1981,44 @@ window.FM = window.FM || {};
   }
   FM._effectiveFx = effectiveFx;
 
+  /* GLOW STRENGTH (#482 polish 1.3). A drop-shadow's colour alpha IS its strength, and both glow paths draw with that colour
+     (effectFilter's `drop-shadow(… colour)` and the GPU fallback's `fillStyle` + source-in), so one helper feeds both and they
+     cannot disagree. At 100 — every saved Glow, and every new one at its default — the colour string is returned UNTOUCHED,
+     so the filter string is character-for-character what it was. Below 100 it is `rgba(r,g,b,a)` with a = the colour's own
+     alpha × Strength; hex is parsed here, and anything else a colour may be (a name, rgb(), hsl()) is normalised by the
+     canvas itself, which is the parser that will read the string anyway. */
+  let _gcCtx = null;
+  function cssColorAlpha(c, k) {
+    if (!(k < 1)) return c;
+    if (!(k > 0)) k = 0;
+    const s = String(c).trim();
+    let r = 0, g = 0, b = 0, a = 1, m = /^#([0-9a-f]{3,8})$/i.exec(s);
+    if (m && m[1].length !== 5 && m[1].length !== 7) {
+      let h = m[1];
+      if (h.length <= 4) h = h.split('').map(ch => ch + ch).join('');
+      r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16);
+      if (h.length === 8) a = parseInt(h.slice(6, 8), 16) / 255;
+    } else {
+      try {
+        if (!_gcCtx) { const cv = document.createElement('canvas'); cv.width = cv.height = 1; _gcCtx = cv.getContext('2d'); }
+        _gcCtx.fillStyle = '#ffffff'; _gcCtx.fillStyle = s;
+        const n = String(_gcCtx.fillStyle);
+        const mm = /^#([0-9a-f]{6})$/i.exec(n), mr = /^rgba?\(([^)]+)\)$/i.exec(n);
+        if (mm) { r = parseInt(mm[1].slice(0, 2), 16); g = parseInt(mm[1].slice(2, 4), 16); b = parseInt(mm[1].slice(4, 6), 16); }
+        else if (mr) { const q = mr[1].split(',').map(parseFloat); r = q[0] | 0; g = q[1] | 0; b = q[2] | 0; if (q.length > 3 && isFinite(q[3])) a = q[3]; }
+        else return c;
+      } catch (e) { return c; }
+    }
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + (Math.round(a * k * 1e4) / 1e4) + ')';
+  }
+  FM._cssColorAlpha = cssColorAlpha;   // suite seam
+  function glowColor(p, t) {
+    const gc = (FM.evalProp(p.color, t) || '#ffffff');
+    if (p.strength == null) return gc;
+    const st = FM.evalProp(p.strength, t);
+    return Number.isFinite(st) && st < 100 ? cssColorAlpha(gc, Math.max(0, st) / 100) : gc;
+  }
+
   function effectFilter(layer, t, ps) {
     const S = ps == null ? 1 : ps;
     const parts = [];
@@ -1980,7 +2060,7 @@ window.FM = window.FM || {};
            * at once. Every other param on this line already goes through evalProp; this one was
            * missed. It is also a candidate cause of "grayscale does nothing on my phone" (queue 661),
            * because one keyframed glow anywhere in the stack silently kills the lot. */
-          const gr = nn('radius', 12), gc = (FM.evalProp(p.color, t) || '#ffffff');
+          const gr = nn('radius', 12), gc = glowColor(p, t);   // Strength (#482 polish 1.3) is the colour's alpha — at 100 the colour string as it always was
           const gp = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
           for (let gi = 0; gi < gp; gi++) parts.push('drop-shadow(0 0 ' + (gr * S) + 'px ' + gc + ')');
           break;
@@ -4314,6 +4394,147 @@ window.FM = window.FM || {};
     return v;
   }
 
+  /* …AND HOW MUCH OF IT A SOFTNESS BLUR LEAVES (review of #482 polish 1.1). Softness box-blurs the grain field by up to half a
+     grain, and a blur takes a DIFFERENT share of the grain away on a small plate cell than on the export's — measured on the
+     first build at Softness 100: a default grain 3.87 luma std in the export against 2.63 on the half and the phone preview
+     (0.68), square grain 5.73 against 3.89 — the preview a third fainter than the file, which is the C5 fault back again. It
+     is the pixel grid: the export blurs a 2 px grain with a 3-tap box, the phone's plate a 1 px one with [¼ ½ ¼], and that
+     averages more of it away. This is the RMS per pixel of the blurred field of a unit grain, with the kernel's own cells
+     ((x*inv)|0), weights (q·1.35 in the inscribed disc, or 1 for a square) and fractional box (gsBlurLine's taps), so the
+     project's over the plate's is what a reduced plate multiplies by. At r 0 it is grainDiscRms. The cells are independent,
+     so each one's blurred energy is summed on its own, over enough cells to sample a fractional size's phases — a square
+     cell is separable, so one axis does. Memoised; about a million multiply-adds for the largest grain. */
+  const _grainBlurRms = new Map();
+  function grainBlurRms(s, r, round) {
+    if (!(r > 0)) return round ? grainDiscRms(s) : 1;
+    const key = (round ? 'r' : 's') + s + '|' + r;
+    let v = _grainBlurRms.get(key);
+    if (v !== undefined) return v;
+    const R = Math.floor(r), fr = r - R, T = 2 * R + 3, k = new Float64Array(T), nrm = 1 / (2 * R + 1 + 2 * fr);
+    for (let i = 0; i < T; i++) k[i] = (i === 0 || i === T - 1 ? fr : 1) * nrm;
+    const inv = 1 / s, rad = s * 0.5, radInv = 1 / (rad * rad), cw = Math.ceil(s) + 1, span = cw + T - 1;
+    const M = round ? Math.max(2, Math.min(32, Math.floor(Math.sqrt(1e6 / (span * span * Math.min(cw, T) + cw * span * T))))) : 64;
+    const st = new Int32Array(M + 1);                              // cell c is pixels st[c] … st[c+1]-1, by the kernel's rule
+    for (let c = 0, x = 0; c <= M; c++) { while (((x * inv) | 0) < c) x++; st[c] = x; }
+    let tot = 0;
+    if (!round) {
+      for (let c = 0; c < M; c++) {
+        const w = st[c + 1] - st[c];
+        for (let j = 0; j < w + T - 1; j++) { let o = 0; for (let q = Math.max(0, j - T + 1); q <= Math.min(w - 1, j); q++) o += k[j - q]; tot += o * o; }
+      }
+      v = tot / st[M];                                              // separable: the 2-D mean square is this squared
+    } else {
+      const wg = new Float64Array(cw * cw), rw = new Float64Array(cw * span);
+      for (let cy = 0; cy < M; cy++) for (let cx = 0; cx < M; cx++) {
+        const x0 = st[cx], wx = st[cx + 1] - x0, y0 = st[cy], wy = st[cy + 1] - y0, ox = wx + T - 1, oy = wy + T - 1;
+        for (let yy = 0; yy < wy; yy++) {
+          const dy = (y0 + yy + 0.5) - (cy * s + rad);
+          for (let xx = 0; xx < wx; xx++) { const dx = (x0 + xx + 0.5) - (cx * s + rad), q = 1 - (dx * dx + dy * dy) * radInv; wg[yy * cw + xx] = q > 0 ? q * 1.35 : 0; }
+          for (let j = 0; j < ox; j++) { let o = 0; for (let xx = Math.max(0, j - T + 1); xx <= Math.min(wx - 1, j); xx++) o += wg[yy * cw + xx] * k[j - xx]; rw[yy * span + j] = o; }
+        }
+        for (let i = 0; i < oy; i++) {
+          const a = Math.max(0, i - T + 1), b = Math.min(wy - 1, i);
+          for (let j = 0; j < ox; j++) { let o = 0; for (let yy = a; yy <= b; yy++) o += rw[yy * span + j] * k[i - yy]; tot += o * o; }
+        }
+      }
+      v = Math.sqrt(tot / (st[M] * st[M]));
+    }
+    if (_grainBlurRms.size > 256) _grainBlurRms.clear();
+    _grainBlurRms.set(key, v);
+    return v;
+  }
+
+  /* ═══ SOFT FILM GRAIN (#482 polish 1.1, Softness) ════════════════════════════════════════════════════════════════
+   * The grain field — the same hashed cells, the same round-disc weighting, the same per-plate strength `gn` as the
+   * kernel's own loop — is written into a buffer and BOX-BLURRED by up to half a grain before it touches a pixel, so
+   * the grains lose their hard cell edges and read as soft dye clouds rather than crisp specks. Only reached at
+   * Softness > 0: at 0 the kernel runs its original single loop, byte for byte. The blur is a separable running sum
+   * with a FRACTIONAL radius (the two outermost taps weighted by the fraction), so the slider moves smoothly instead
+   * of stepping a whole pixel at a time, and its cost does not grow with the radius. Edges are clamped. Buffers are
+   * reused between frames; a frame allocates nothing once the plate size is steady. */
+  const _gsBuf = [];
+  function gsScratch(slot, n) { let b = _gsBuf[slot]; if (!b || b.length < n) b = _gsBuf[slot] = new Float32Array(n); return b; }
+  function gsBlurLine(a, off, st, n, R, fr, pad, pre) {
+    const P = R + 1, m = n + 2 * P;
+    for (let k = 0; k < m; k++) { let s = k - P; s = s < 0 ? 0 : (s >= n ? n - 1 : s); pad[k] = a[off + s * st]; }
+    pre[0] = 0; for (let k = 0; k < m; k++) pre[k + 1] = pre[k] + pad[k];
+    const norm = 1 / (2 * R + 1 + 2 * fr);
+    for (let x = 0; x < n; x++) {
+      const c = x + P;
+      let s = pre[c + R + 1] - pre[c - R];
+      if (fr > 0) s += fr * (pad[c - R - 1] + pad[c + R + 1]);
+      a[off + x * st] = s * norm;
+    }
+  }
+  function gsBlur(f, W, H, r) {
+    if (!(r > 0)) return;
+    const R = Math.floor(r), fr = r - R, L = Math.max(W, H) + 2 * (R + 1);
+    const pad = new Float64Array(L), pre = new Float64Array(L + 1);
+    for (let y = 0; y < H; y++) gsBlurLine(f, y * W, 1, W, R, fr, pad, pre);
+    for (let x = 0; x < W; x++) gsBlurLine(f, x, W, H, R, fr, pad, pre);
+  }
+  function grainSoft(d, W, H, size, inv, gw, frame, seedK, round, rad, radInv, gn, gc, soft, amt, chroma, shadowKeep, highKeep, flat) {
+    const N = W * H, fN = gsScratch(0, N), col = chroma > 0, fR = col ? gsScratch(1, N) : null, fB = col ? gsScratch(2, N) : null;
+    for (let y = 0; y < H; y++) {
+      const cyi = (y * inv) | 0;
+      for (let x = 0; x < W; x++) {
+        const j = y * W + x, cxi = (x * inv) | 0, cell = cyi * gw + cxi;
+        let h = (cell * 374761393 + frame * 668265263 + seedK) | 0;
+        h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
+        let n = ((h & 1023) / 1023 - 0.5), inDisc = true;
+        if (round) {
+          const dx = (x + 0.5) - (cxi * size + rad), dy = (y + 0.5) - (cyi * size + rad);
+          const q = 1 - (dx * dx + dy * dy) * radInv;
+          if (q <= 0) { n = 0; inDisc = false; } else n *= q * 1.35;
+        }
+        if (gn !== 1) n *= gn;
+        fN[j] = n;
+        if (col) {
+          if (!inDisc) { fR[j] = 0; fB[j] = 0; continue; }
+          let h2 = (h ^ 0x5bf03635) * 2246822519; h2 = (h2 ^ (h2 >> 15));
+          let h3 = (h ^ 0x27d4eb2f) * 3266489917; h3 = (h3 ^ (h3 >> 15));
+          fR[j] = ((h2 & 255) / 255 - 0.5) * gc; fB[j] = ((h3 & 255) / 255 - 0.5) * gc;
+        }
+      }
+    }
+    const r = (soft > 100 ? 100 : soft) / 100 * 0.5 * size;      // plate px: `size` is already the plate's grain size
+    gsBlur(fN, W, H, r); if (col) { gsBlur(fR, W, H, r); gsBlur(fB, W, H, r); }
+    for (let j = 0; j < N; j++) {
+      const i = j << 2;
+      if (d[i + 3] === 0) continue;
+      const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+      const mid = 4 * L * (1 - L);
+      const resp = flat ? mid + (1 - mid) * shadowKeep * (1 - L) : mid + (1 - mid) * (shadowKeep * (1 - L) + highKeep * L);
+      const g = fN[j] * amt * resp;
+      if (!col) { d[i] += g; d[i + 1] += g; d[i + 2] += g; continue; }
+      const cr = fR[j] * chroma * amt * resp, cb = fB[j] * chroma * amt * resp;
+      d[i] += g + cr; d[i + 1] += g - (cr + cb) * 0.5; d[i + 2] += g + cb;
+    }
+  }
+
+  /* Light Leak helpers (#482 polish 1.2). llHash: an integer tick → 0..1, stateless, so a flicker is the same pulse in the
+     preview, the export and a scrub. llSoft: the W3C soft-light of one channel (0..255) under a light of `s` (0..255). */
+  function llHash(i) { let h = (i * 374761393 + 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967295; }
+  function llSoft(b, s) {
+    const cb = b / 255, cs = s / 255;
+    if (cs <= 0.5) return (cb - (1 - 2 * cs) * cb * (1 - cb)) * 255;
+    const dd = cb <= 0.25 ? ((16 * cb - 12) * cb + 4) * cb : Math.sqrt(cb);
+    return (cb + (2 * cs - 1) * (dd - cb)) * 255;
+  }
+  /* Letterbox's cinema shapes (#482 polish 1.4): width over height of the picture window, by the Shape option's value. */
+  const LB_RATIOS = [0, 2.39, 2.35, 2, 1.85, 16 / 9, 4 / 3, 1, 0.8];
+  /* ClipColor + SetLum (W3C compositing, the non-separable blend modes), on 0..255 channels with the app's luma weights:
+     puts (r,g,b) at luma `l` and, where that pushes a channel past 0 or 255, desaturates toward the grey of that luma
+     instead of clipping — so the luma is really kept. Colour Balance's Keep brightness (#482 polish 1.7). */
+  function setLum255(r, g, b, l, out) {
+    const d = l - (0.299 * r + 0.587 * g + 0.114 * b);
+    r += d; g += d; b += d;
+    const L = 0.299 * r + 0.587 * g + 0.114 * b, n = Math.min(r, g, b), x = Math.max(r, g, b);
+    if (n < 0 && L - n > 1e-9) { const k = L / (L - n); r = L + (r - L) * k; g = L + (g - L) * k; b = L + (b - L) * k; }
+    if (x > 255 && x - L > 1e-9) { const k = (255 - L) / (x - L); r = L + (r - L) * k; g = L + (g - L) * k; b = L + (b - L) * k; }
+    out[0] = r; out[1] = g; out[2] = b;
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -4866,6 +5087,33 @@ window.FM = window.FM || {};
       // PRESERVE re-scales each pixel back to its original luminance, so a warm-up stops also being
       // a brighten — the shift becomes purely a colour move.
       const pres = (p.preserve == null ? 0 : FM.evalProp(p.preserve, t)) / 100;
+      /* METHOD and AFFECTS (#482 polish 1.6, hunt C46). Shift ADDS ±50 to red and blue, so at the default a black pixel became
+         rgb(20,0,0) — every warm-up tinted the blacks, which no camera does. White balance MULTIPLIES instead (red ×(1+k),
+         blue ×(1−k), Tint on green), so black stays black and white takes the cast. Affects confines either to the darks,
+         mids or lights with Colour Balance's weights ((1−L)², 1−(2L−1)², L²). Shift + All run the two loops that follow,
+         untouched, which is what every saved Temperature and the 14 filters that use one draw. */
+      const meth = p.method == null ? 0 : (Math.round(FM.evalProp(p.method, t)) | 0);
+      const rng = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
+      if (meth === 1 || rng > 0) {
+        const th2 = tn * 0.5, kT = a * 0.5, kN = tn / 100, wR = (1 + kT) * (1 + kN * 0.5), wG = 1 - kN, wB = (1 - kT) * (1 + kN * 0.5);
+        for (let i = 0; i < d.length; i += 4) {
+          const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+          let nr, ng, nb;
+          if (meth === 1) { nr = r0 * wR; ng = g0 * wG; nb = b0 * wB; }
+          else { nr = r0 + r + th2; ng = g0 - tn; nb = b0 + b + th2; }
+          if (pres > 0) {
+            const l0 = 0.299 * r0 + 0.587 * g0 + 0.114 * b0;
+            const l1 = 0.299 * nr + 0.587 * ng + 0.114 * nb;
+            if (l1 > 0.0001) { const k = 1 + (l0 / l1 - 1) * pres; nr *= k; ng *= k; nb *= k; }
+          }
+          if (rng > 0) {
+            const L = (0.299 * r0 + 0.587 * g0 + 0.114 * b0) / 255, w = rng === 1 ? (1 - L) * (1 - L) : rng === 3 ? L * L : 1 - (2 * L - 1) * (2 * L - 1);
+            nr = r0 + (nr - r0) * w; ng = g0 + (ng - g0) * w; nb = b0 + (nb - b0) * w;
+          }
+          d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+        }
+        return;
+      }
       if (tn === 0 && pres === 0) {
         for (let i = 0; i < d.length; i += 4) { d[i] = d[i] + r; d[i + 2] = d[i + 2] + b; }
         return;
@@ -4947,7 +5195,16 @@ window.FM = window.FM || {};
       // was mathematically incapable of doing anything, which is exactly what it looked like.
       const highKeep = fparam(p, 'highlights', 0, t) / 100;         // fallback 0 = the old curve, byte for byte
       const flat = highKeep === 0;
-      const frame = Math.floor(t * 24);                             // re-roll per frame: static grain reads as dirt on the lens
+      /* GRAIN SPEED (#482 polish 1.1): how many times a second the grain re-rolls. It was welded at 24 — right for a moving
+         shot, wrong for a still paper texture, which 0 now holds. 24 is the old Math.floor(t*24) exactly. A KEYFRAMED speed
+         is integrated (FM.integrateProp), so easing it down slows the boil instead of jumping the pattern back in time. */
+      const spd = p.speed == null ? 24 : FM.evalProp(p.speed, t);
+      const frame = FM.isAnimated(p.speed)
+        ? Math.floor(FM.integrateProp(p.speed, 0, t, (u) => { const k = FM.evalProp(p.speed, u); return k > 0 ? (k < 60 ? k : 60) : 0; }))
+        : Math.floor(t * (spd > 0 ? (spd < 60 ? spd : 60) : 0));    // re-roll per frame: static grain reads as dirt on the lens
+      /* PATTERN (#482 polish 1.1): two grained layers drew the same grain. 0 adds nothing to the hash, so the old field. */
+      const seedK = (Math.round(fparam(p, 'seed', 0, t)) || 0) * 2654435761;
+      const soft = fparam(p, 'soft', 0, t);
       const inv = 1 / size;
       const gw = Math.ceil(W * inv) + 1;
       /* Round grain weights each pixel by how far it sits from its cell's centre, so a grain reads as
@@ -4959,6 +5216,16 @@ window.FM = window.FM || {};
       const round = roundP && size > 1.2;
       const gn = S === 1 || !roundP ? 1 : grainDiscRms(sizeP) / (round ? grainDiscRms(size) : 1);
       const rad = size * 0.5, radInv = 1 / (rad * rad);
+      if (soft > 0) {
+        /* A SOFTENED grain at the export's strength (review of polish 1.1): what the blur leaves of the grain at the project
+           size over what it leaves on this plate (grainBlurRms) — gn itself at Softness 0, so the slider has no step at 1.
+           The colour grain carries the blur's share only (gs/gn): unsoftened it is not scaled, and must not jump at 1 either.
+           At ps 1 both are exactly 1, so the export is untouched. */
+        const sf = (soft > 100 ? 100 : soft) / 100;
+        const gs = S === 1 ? 1 : grainBlurRms(sizeP, sf * 0.5 * sizeP, roundP) / grainBlurRms(size, sf * 0.5 * size, round);
+        grainSoft(d, W, H, size, inv, gw, frame, seedK, round, rad, radInv, gs, gs / gn, soft, amt, chroma, shadowKeep, highKeep, flat);
+        return;
+      }
       for (let y = 0; y < H; y++) {
         const gy = (y * inv) | 0;
         for (let x = 0; x < W; x++) {
@@ -4967,7 +5234,7 @@ window.FM = window.FM || {};
           // one hash per GRAIN cell, not per pixel — this is what gives it structure at size > 1
           const cxi = (x * inv) | 0, cyi = (y * inv) | 0;
           const cell = cyi * gw + cxi;
-          let h = (cell * 374761393 + frame * 668265263) | 0;
+          let h = (cell * 374761393 + frame * 668265263 + seedK) | 0;
           h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
           let n = ((h & 1023) / 1023 - 0.5);                        // -0.5..0.5
           if (round) {
@@ -6201,6 +6468,20 @@ window.FM = window.FM || {};
       /* AFFECTS (queue 904): colour balance is meant to push shadows, mids and highlights apart — cool shadows under warm highlights is the
          whole grade. A weight by brightness picks the range: shadows (1-L)², highlights L², mids 1-(2L-1)². All runs the old loop exactly. */
       var cbRg=p.range==null?0:(Math.round(FM.evalProp(p.range,t))|0);
+      /* KEEP BRIGHTNESS and RANGE WIDTH (#482 polish 1.7). Pushing Red to 100 also brightened a grey ramp by about 17 levels,
+         so a colour move was never only a colour move; and each range had one fixed width. Keep brightness puts every pixel
+         back at its OWN luma (setLum255: where that would push a channel past white it desaturates instead of clipping, so
+         the luma is really kept). Range width is an exponent on the range weight — 100 = the old weights. Off + 100 run the
+         old loops below. */
+      var cbPr=p.preserve==null?0:(Math.round(FM.evalProp(p.preserve,t))|0), cbSo=p.soft==null?100:FM.evalProp(p.soft,t); if(!(cbSo>=10))cbSo=10; if(cbSo>200)cbSo=200;
+      var cbEx=cbRg>0&&cbSo!==100?100/cbSo:1;
+      if(cbPr===1||cbEx!==1){ var cbO=[0,0,0];
+        for(var cbK=0;cbK<cbN;cbK+=4){ if(d[cbK+3]<=0)continue; var q0=d[cbK],q1=d[cbK+1],q2=d[cbK+2], ql=0.299*q0+0.587*q1+0.114*q2, qw=1;
+          if(cbRg>0){ var qL=ql/255; qw=cbRg===1?(1-qL)*(1-qL):cbRg===3?qL*qL:1-(2*qL-1)*(2*qL-1); if(cbEx!==1)qw=qw>0?Math.pow(qw,cbEx):0; }
+          var n0=q0+cbAddR*qw, n1=q1+cbAddG*qw, n2=q2+cbAddB*qw;
+          if(cbPr===1){ setLum255(n0,n1,n2,ql,cbO); n0=cbO[0]; n1=cbO[1]; n2=cbO[2]; }
+          d[cbK]=n0<0?0:(n0>255?255:n0); d[cbK+1]=n1<0?0:(n1>255?255:n1); d[cbK+2]=n2<0?0:(n2>255?255:n2); }
+        return; }
       if(cbRg>0){ for(var cbJ=0;cbJ<cbN;cbJ+=4){ if(d[cbJ+3]<=0)continue; var cbL=(0.299*d[cbJ]+0.587*d[cbJ+1]+0.114*d[cbJ+2])/255, cbW=cbRg===1?(1-cbL)*(1-cbL):cbRg===3?cbL*cbL:1-(2*cbL-1)*(2*cbL-1);
           var cbQ=d[cbJ]+cbAddR*cbW; d[cbJ]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+1]+cbAddG*cbW; d[cbJ+1]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+2]+cbAddB*cbW; d[cbJ+2]=cbQ<0?0:(cbQ>255?255:cbQ); } return; } for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
     highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4; for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
@@ -7095,7 +7376,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var LR=new Float64Array(256), LG=new Float64Array(256), LB=new Float64Array(256);
       for(var v=0;v<256;v++){ LR[v]=cv(v,l1,g1); LG[v]=cv(v,l2,g2); LB[v]=cv(v,l3,g3); }
       for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var nr=LR[r], ng=LG[g], nb=LB[b]; d[i]=r+(nr-r)*a; d[i+1]=g+(ng-g)*a; d[i+2]=b+(nb-b)*a; } }; })(),
-    lightleak: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(p.color); var cr=col[0],cg=col[1],cb=col[2]; var ph=t*0.15;
+    lightleak: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1; var col=hexToRGB(FM.evalProp(p.color,t)); var cr=col[0],cg=col[1],cb=col[2];   // evalProp: the Leak colour keyframes (queue 555) — a keyframed one was parsed as '[object Object]', i.e. black
+      /* DRIFT SPEED, WANDER, FLICKER, BLEND and a LEAK EDGE colour (#482 polish 1.2). The drift was welded — ph = t·0.15 and a
+         fixed ±12/±10% wander — so a leak could never hold still or roam further; it could not flicker like a real one, only
+         ever screened, and was one flat colour. Every default is the old leak: speed 100 multiplies the phase by exactly 1,
+         wander 100 the swing by exactly 1, flicker 0 leaves Amount alone, and the old loop below runs untouched unless an
+         edge colour or another blend is chosen. A keyframed Drift speed is INTEGRATED (FM.integrateProp) so easing it to 0 parks the leak where it
+         is instead of flinging it back to where it started. The flicker is a hash of (t, 12 Hz), so preview = export = scrub. */
+      var llSp=p.speed==null?100:FM.evalProp(p.speed,t); if(!(llSp>0))llSp=0; if(llSp>400)llSp=400;
+      var ph=FM.isAnimated(p.speed)?0.15*FM.integrateProp(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return !(k>0)?0:(k>400?4:k/100); }):t*0.15*(llSp/100);
+      var llW=p.wander==null?100:FM.evalProp(p.wander,t); if(!(llW>0))llW=0; if(llW>300)llW=300; llW/=100;
+      /* PARKED AT THE SOURCE (review of polish 1.2). Held still, the leak sat at the wander's phase-0 point — cos(0) = 1, so
+         10% × Wander BELOW Source Y (22% for the default 12%, 80% for a centred one at Wander 300) — and Wander, which is how
+         far it roams, moved a leak that does not roam. At Drift speed 0 there is no wander: it sits on Source X/Y and the
+         panel greys Wander out. A keyframed speed parks only when every key is 0, the rule the panel greys it by; one that
+         EASES to 0 still parks where it has got to. Speed 0 is new, so the default leak is untouched. */
+      if(FM.isAnimated(p.speed)?p.speed.kf.every(function(k){ return !(k.v>0); }):!(llSp>0))llW=0;
+      var llFk=p.flicker==null?0:FM.evalProp(p.flicker,t); if(!(llFk>0))llFk=0; if(llFk>1)llFk=1;
+      if(llFk>0){ var llF=t*12, llI=Math.floor(llF), llU=llF-llI; llU=llU*llU*(3-2*llU); a*=1-llFk*(llHash(llI)+(llHash(llI+1)-llHash(llI))*llU); }
+      var llBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0);
+      var llE=p.color2==null?null:hexToRGB(FM.evalProp(p.color2,t)), llEdge=!!llE&&(llE[0]!==cr||llE[1]!==cg||llE[2]!==cb);
       // The leak always entered from the top-right at a fixed size, so it could not be placed to match
       // where the sun actually is in the shot — which is the only thing that makes a light leak read as
       // light rather than as a sticker. The drift stays; only its ANCHOR moves.
@@ -7104,7 +7404,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var llSz=p.size==null?100:FM.evalProp(p.size,t); if(llSz<10)llSz=10; if(llSz>400)llSz=400;
       var llBx=llX===85?0.85:llX/100, llBy=llY===12?0.12:llY/100;
       var llFall=llSz===100?1.8:1.8*(100/llSz);
-      var lx=W*(llBx+0.12*Math.sin(ph)), ly=H*(llBy+0.10*Math.cos(ph*1.3)); var maxR=Math.sqrt(W*W+H*H); for(var y=0;y<H;y++){ var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; if(d[i+3]===0)continue; var dx=x-lx, dy=y-ly; var dist=Math.sqrt(dx*dx+dy*dy)/maxR; var g=1-dist*llFall; if(g<=0)continue; g=g*g*a; if(g<=0.002)continue; d[i]=255-(255-d[i])*(255-cr*g)/255; d[i+1]=255-(255-d[i+1])*(255-cg*g)/255; d[i+2]=255-(255-d[i+2])*(255-cb*g)/255; } } },
+      var lx=W*(llBx+0.12*llW*Math.sin(ph)), ly=H*(llBy+0.10*llW*Math.cos(ph*1.3)); var maxR=Math.sqrt(W*W+H*H);
+      if(llEdge||llBl!==0){
+        /* The general loop. g0 runs 1 at the leak's heart to 0 at its rim, so the colour is Leak at the heart and Leak edge
+           at the rim. Add sums the light in; Soft light is the W3C soft-light of the leak colour, faded in by the leak's
+           weight, so it tints and deepens instead of washing out. Screen is the old formula. */
+        for(var y2=0;y2<H;y2++){ var row2=y2*W*4; for(var x2=0;x2<W;x2++){ var j=row2+x2*4; if(d[j+3]===0)continue; var ex=x2-lx, ey=y2-ly; var g0=1-Math.sqrt(ex*ex+ey*ey)/maxR*llFall; if(g0<=0)continue; var gg=g0*g0*a; if(gg<=0.002)continue;
+          var kr=cr, kg=cg, kb=cb; if(llEdge){ kr=llE[0]+(cr-llE[0])*g0; kg=llE[1]+(cg-llE[1])*g0; kb=llE[2]+(cb-llE[2])*g0; }
+          if(llBl===1){ d[j]=d[j]+kr*gg; d[j+1]=d[j+1]+kg*gg; d[j+2]=d[j+2]+kb*gg; }
+          else if(llBl===2){ d[j]=d[j]+(llSoft(d[j],kr)-d[j])*gg; d[j+1]=d[j+1]+(llSoft(d[j+1],kg)-d[j+1])*gg; d[j+2]=d[j+2]+(llSoft(d[j+2],kb)-d[j+2])*gg; }
+          else { d[j]=255-(255-d[j])*(255-kr*gg)/255; d[j+1]=255-(255-d[j+1])*(255-kg*gg)/255; d[j+2]=255-(255-d[j+2])*(255-kb*gg)/255; } } }
+        return;
+      }
+      for(var y=0;y<H;y++){ var row=y*W*4; for(var x=0;x<W;x++){ var i=row+x*4; if(d[i+3]===0)continue; var dx=x-lx, dy=y-ly; var dist=Math.sqrt(dx*dx+dy*dy)/maxR; var g=1-dist*llFall; if(g<=0)continue; g=g*g*a; if(g<=0.002)continue; d[i]=255-(255-d[i])*(255-cr*g)/255; d[i+1]=255-(255-d[i+1])*(255-cg*g)/255; d[i+2]=255-(255-d[i+2])*(255-cb*g)/255; } } },
     /* Letterbox / Border Frame — the two effects that DRAW a frame instead of grading one. Both take
      * `bb`, the layer's own box in plate pixels, from BOUNDED_FX in drawPixelEffect; the full story
      * of why (and of the erasure it stops) is in the block above fxBounds. Read them together.
@@ -7124,10 +7436,37 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var met=(p.metric==null)?1:Math.round(FM.evalProp(p.metric,t)||0);
       /* COLOUR AND SIDE (queue 904): the bars were hardcoded black and could only sit top and bottom. A missing colour is
          black by name — not by hexToRGB(undefined) happening to return black — and Top & bottom is the old loop, untouched. */
-      var lbC=p.color?hexToRGB(p.color):[0,0,0], lbR=lbC[0], lbG=lbC[1], lbB=lbC[2];
+      var lbC=p.color?hexToRGB(FM.evalProp(p.color,t)):[0,0,0], lbR=lbC[0], lbG=lbC[1], lbB=lbC[2];   // evalProp: a keyframed Bars colour (queue 555) was parsed as '[object Object]'
       var lbSide=(p.orient==null?0:Math.round(FM.evalProp(p.orient,t)||0))===1, bw=x1-x0;
-      var bar=Math.round((met===1?(lbSide?W:H):(lbSide?bw:bh))*s/100); if(bar<=0)return;
+      /* SHAPE (#482 polish 1.4): a cinema shape sizes the bars from the picture's own shape — the layer's box, or the frame
+         under "Bars sized to: Frame" — and chooses top & bottom or the sides itself: a 2.39:1 window on a 9:16 phone frame
+         is two tall bars top and bottom, a 4:5 one on a 16:9 frame is two at the sides. Custom (0) is the Size slider. */
+      var lbRat=p.ratio==null?0:(Math.round(FM.evalProp(p.ratio,t))|0), bar;
+      if(lbRat>0&&lbRat<LB_RATIOS.length){ var lbMw=met===1?W:bw, lbMh=met===1?H:bh, lbK=LB_RATIOS[lbRat]; if(!(lbMw>0&&lbMh>0))return;
+        lbSide=lbMw/lbMh>lbK; bar=Math.round(lbSide?(lbMw-lbMh*lbK)/2:(lbMh-lbMw/lbK)/2); }
+      else bar=Math.round((met===1?(lbSide?W:H):(lbSide?bw:bh))*s/100);
+      if(bar<=0)return;
       var half=Math.floor((lbSide?bw:bh)/2); if(bar>half)bar=half;   // frame-metric bars on a short layer would otherwise exceed it; never engages full-frame (s caps at 48% vs half at 50%)
+      /* STRENGTH, FEATHER, PICTURE POSITION (#482 polish 1.4). The bars were solid, hard-edged and centred. At the defaults
+         the old loops below run untouched. Otherwise each row (or column) gets a coverage: 1 inside a bar, a ramp centred
+         on the bar's edge `feather` project px wide, times Strength — and the bar BLENDS toward its colour, alpha too,
+         instead of being set, because the old loops' forced alpha 255 would make a 50% bar a solid one on a see-through
+         layer. Picture position slides the window: +50 puts it against the bottom (or right), the two bars sharing 2×bar. */
+      var lbOp=p.opacity==null?100:FM.evalProp(p.opacity,t); if(!(lbOp>0))return; if(lbOp>100)lbOp=100;
+      var lbFe=p.feather==null?0:FM.evalProp(p.feather,t); if(!(lbFe>0))lbFe=0; if(lbFe>60)lbFe=60; lbFe*=(ps||1);   // project px → plate px (this kernel takes ps, so pxToPlate leaves it alone)
+      var lbOff=p.offset==null?0:FM.evalProp(p.offset,t); if(!(lbOff>-50))lbOff=lbOff<=-50?-50:0; if(lbOff>50)lbOff=50;
+      if(lbOp!==100||lbFe>0||lbOff!==0){
+        var lbN=lbSide?bw:bh, lbU0=lbSide?x0:y0, lbA=bar*(1+lbOff/50), lbB2=2*bar-lbA, lbE1=lbU0+lbA, lbE2=lbU0+lbN-lbB2, lbK2=lbOp/100, lbCv=new Float64Array(lbN>0?lbN:0);
+        for(var q=0;q<lbN;q++){ var uc=lbU0+q+0.5, c=0;
+          if(lbFe>0){ if(lbA>0){ var ca=0.5+(lbE1-uc)/lbFe; if(ca>c)c=ca; } if(lbB2>0){ var cz=0.5+(uc-lbE2)/lbFe; if(cz>c)c=cz; } if(c>1)c=1; }
+          else c=((lbA>0&&uc<lbE1)||(lbB2>0&&uc>lbE2))?1:0;
+          lbCv[q]=c*lbK2; }
+        for(var gy=y0;gy<y1;gy++){ var gr=gy*W*4; for(var gx=x0;gx<x1;gx++){ var kk=lbCv[lbSide?gx-x0:gy-y0]; if(!(kk>0))continue; var gi=gr+gx*4;
+          // the bar laid OVER the pixel (source-over, un-premultiplied): a see-through pixel takes the bar's own colour, not a darkened one
+          var ga=d[gi+3]/255, oa=kk+ga*(1-kk), w0=ga*(1-kk)/oa, w1=kk/oa;
+          d[gi]=lbR*w1+d[gi]*w0; d[gi+1]=lbG*w1+d[gi+1]*w0; d[gi+2]=lbB*w1+d[gi+2]*w0; d[gi+3]=oa*255; } }
+        return;
+      }
       if(lbSide){ for(var yy=y0;yy<y1;yy++){ var rr=yy*W*4; for(var xx=x0;xx<x1;xx++){ if(xx>=x0+bar && xx<x1-bar) continue; var ii=rr+xx*4; d[ii]=lbR; d[ii+1]=lbG; d[ii+2]=lbB; if(d[ii+3]<255)d[ii+3]=255; } } return; }
       for(var y=y0;y<y1;y++){ if(y>=y0+bar && y<y1-bar) continue; var row=y*W*4; for(var x=x0;x<x1;x++){ var i=row+x*4; d[i]=lbR; d[i+1]=lbG; d[i+2]=lbB; if(d[i+3]<255)d[i+3]=255; } } },
     border: function(d,W,H,p,t,ps,bb){ var w = fparam(p, 'width', 10, t); w=Math.round(w*(ps||1)); if(w<1)w=1;
@@ -7528,10 +7867,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var fdL=p.lift==null?26:FM.evalProp(p.lift,t); if(fdL<0)fdL=0; if(fdL>100)fdL=100;
       var fdD=p.desat==null?15:FM.evalProp(p.desat,t); if(fdD<0)fdD=0; if(fdD>100)fdD=100;
       var fdT=p.tone==null?100:FM.evalProp(p.tone,t); if(fdT<-200)fdT=-200; if(fdT>200)fdT=200;
-      var lift=fdL*a, con=1-0.25*a;
+      /* CONTRAST LOSS, FADE WHITES, FADE COLOUR (#482 polish 1.5). The crush was welded at a quarter of Amount, the white
+         point never moved and the lifted blacks were always grey. crush 100 multiplies the old 0.25·a by exactly 1, Fade
+         whites 0 subtracts exactly 0, and any GREY fade colour (the default is one) takes the old single-lift path — so the
+         default and every saved Faded Film are the old curve byte for byte. A coloured one lifts each channel by the
+         colour's share of its own luma, so the blacks sit at the same brightness in that colour; Warm / cool still adds its
+         cast on top. */
+      var fdCr=p.crush==null?100:FM.evalProp(p.crush,t); if(!(fdCr>0))fdCr=0; if(fdCr>200)fdCr=200;
+      var fdW=p.rolloff==null?0:FM.evalProp(p.rolloff,t); if(!(fdW>0))fdW=0; if(fdW>100)fdW=100;
+      var lift=fdL*a, con=1-0.25*a*(fdCr/100), wd=fdW*a;
       var ds=fdD===15?0.15:fdD/100, tk=fdT===100?1:fdT/100;
-      function ch(v){ v=lift+v*(255-lift)/255; return 128+(v-128)*con; }
-      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=ch(r), cg=ch(g), cb=ch(b);
+      var fdC=p.fadecol==null?null:hexToRGB(FM.evalProp(p.fadecol,t)), fdTint=!!fdC&&!(fdC[0]===fdC[1]&&fdC[1]===fdC[2]);
+      var lR=lift, lG=lift, lB=lift;
+      if(fdTint){ var fdY=0.299*fdC[0]+0.587*fdC[1]+0.114*fdC[2]; if(fdY<1)fdY=1; lR=Math.min(255-wd,lift*fdC[0]/fdY); lG=Math.min(255-wd,lift*fdC[1]/fdY); lB=Math.min(255-wd,lift*fdC[2]/fdY); }
+      function ch(v){ v=lift+v*(255-lift-wd)/255; return 128+(v-128)*con; }
+      function chl(v,l){ v=l+v*(255-l-wd)/255; return 128+(v-128)*con; }
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var L=r*0.299+g*0.587+b*0.114; var cr=fdTint?chl(r,lR):ch(r), cg=fdTint?chl(g,lG):ch(g), cb=fdTint?chl(b,lB):ch(b);
         var nr=cr+(L-cr)*ds*a+8*a*tk, ng=cg+(L-cg)*ds*a+2*a*tk, nb=cb+(L-cb)*ds*a-6*a*tk;
         d[i]=nr<0?0:(nr>255?255:nr); d[i+1]=ng<0?0:(ng>255?255:ng); d[i+2]=nb<0?0:(nb>255?255:nb); } },
     nightvision: function(d,W,H,p,t,ps){ var a = fparam(p, 'amount', 0.85, t); if(a<0)a=0; if(a>1)a=1; var fr=(t*30)|0;
@@ -7813,7 +8164,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const gr = p.radius == null ? 12 : FM.evalProp(p.radius, t);
         const gp = Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
         glows.push({ radius: Number.isFinite(gr) ? Math.max(0, gr) : 12,
-                     color: (FM.evalProp(p.color, t) || '#ffffff'), passes: gp });
+                     color: glowColor(p, t), passes: gp });   // Strength (#482 polish 1.3): the same alpha-scaled colour effectFilter emits
         continue;
       }
       if (!FM.glColor.supports(e.type)) return null;          // anything still unknown → leave it all alone

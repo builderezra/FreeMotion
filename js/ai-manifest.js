@@ -56,6 +56,7 @@ window.FM = window.FM || {};
         p = e.params.map(function (pp) {
           if (pp.toggle) return pp.key + '(0|1, def ' + pp.def + ')';
           if (pp.options) return pp.key + '(modes: ' + pp.options.map(function (o) { return (Array.isArray(o) ? o[0] + '=' + o[1] : o); }).join(', ') + ', def ' + pp.def + ')';
+          if (pp.swatch) return pp.key + '(colour hex, def ' + pp.def + ')';   // a colour row inside params (#482 polish 1.5, Faded Film's Fade colour) has no range either
           return pp.key + '(' + pp.min + '..' + pp.max + ', def ' + pp.def + ')';
         }).join(', ');
       } else if (e.options) {
