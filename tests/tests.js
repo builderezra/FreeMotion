@@ -4953,14 +4953,23 @@
         const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
         FM.renderScene(c.getContext('2d'), FM.scene, 1);
         const d = c.getContext('2d').getImageData(0, 0, P.width, P.height).data;
-        let n = 0, sp = 0, lu = 0;
+        /* TONE IS READ IN THE CENTRE BOX (#986 C8), the way #675's measurement already reads it: Noir carries a
+           vignette, and over the whole frame its corner fall-off was being counted as its tone. That only ever passed
+           because a SHAPE's vignette used to be a different, lighter curve from a photo's — on a photo, which is what
+           this flat frame stands for, Noir and Ink already read 52 and 54 over the whole frame. In the centre they are
+           72 and 54, which is the difference you see. Colour spread still covers the whole frame. */
+        const x0 = P.width * 0.3, x1 = P.width * 0.7, y0 = P.height * 0.3, y1 = P.height * 0.7;
+        let n = 0, sp = 0, lu = 0, nc = 0;
         for (let i = 0; i < d.length; i += 4) {
           if (d[i + 3] < 8) continue;
           sp += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
-          lu += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
           n++;
+          const px = (i >> 2) % P.width, py = ((i >> 2) / P.width) | 0;
+          if (px < x0 || px > x1 || py < y0 || py > y1) continue;
+          lu += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          nc++;
         }
-        return n ? { spread: sp / n, mean: lu / n } : null;
+        return n && nc ? { spread: sp / n, mean: lu / nc } : null;
       };
       const base = stats(null);
       if (!base || base.spread < 40) throw new Error('the test subject is not colourful enough to tell desaturation from a no-op (spread ' + (base && base.spread) + ')');
@@ -7947,7 +7956,11 @@
     const prev = src.slice(src.indexOf('function preview('), src.indexOf('function stopPreview('));
     if (!prev) throw new Error('preview() is no longer findable in js/sfx.js');
     if (/Object\.create\(\s*liveCtx\s*\)/.test(prev)) throw new Error('preview() builds a prototype-proxy over the AudioContext again — every recipe will throw Illegal invocation and be silent');
-    if (!/def\.render\([^)]*,[^)]*,[^)]*,[^)]*\)/.test(prev)) throw new Error('preview() calls def.render without a fourth argument — the recipes connect to `out`, so the sound goes nowhere');
+    /* Since queue 986 the ▶ plays the very buffer Add makes (renderBuffer, normalised, cached), so the recipe call with its
+       fourth argument lives in renderBuffer, and preview() must play that buffer rather than render anything of its own. */
+    const rb = src.slice(src.indexOf('function renderBuffer('), src.indexOf('function encodeWav('));
+    if (!/def\.render\([^)]*,[^)]*,[^)]*,[^)]*\)/.test(rb)) throw new Error('renderBuffer() calls def.render without a fourth argument — the recipes connect to `out`, so the sound goes nowhere');
+    if (!/rendered\(def\)/.test(prev) || !/createBufferSource/.test(prev)) throw new Error('preview() no longer plays the rendered buffer Add uses — the ▶ and the added clip can differ again (queue 986)');
     /* The property that matters is that a FAILURE IS REPORTED, not that no empty catch exists anywhere:
        `try { trim.disconnect(); } catch (e) {}` is a perfectly good one, and an earlier version of this
        assertion failed on it. What killed queue 562 was the whole render being swallowed. */
@@ -81037,7 +81050,7 @@
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     for (const [name, needle] of [
       ['applyPostFx (Tint, Duotone, Threshold…)', /function applyPostFx[\s\S]{0,300}?resolveFxColors\(/],
-      ['the chroma-key path', /ck\.params[\s\S]{0,40}/],
+      ['the chroma-key path', /resolveFxColors\(cks?(?:\[\w+\])?\.params/],   // #986 C4: every key on a layer runs now, so the loop reads cks[n].params — still resolved
     ]) {
       if (!needle.test(code)) throw new Error(name + ' no longer resolves keyframed colours before use');
     }
@@ -85910,10 +85923,14 @@
       if (!plain.some(function (e) { return e.from instanceof GainNode && e.to instanceof AudioDestinationNode; })) throw new Error('CONTROL: at 100% the voice’s gain does not reach the speakers, so the fixture is not the path this test is about');
       // THE CASE: 400%.
       const loud = wiring(4);
-      const lim = loud.filter(function (e) { return e.from instanceof DynamicsCompressorNode && e.to instanceof AudioDestinationNode; }).map(function (e) { return e.from; })[0];
+      /* Since queue 986 the limiter is the compressor THEN the gain that cancels its hidden makeup
+         (FM.audioFxLive.makeLimiter returns { input, output }), so it reaches the speakers through that one gain. */
+      const toDest = function (n) { return loud.some(function (e) { return e.from === n && e.to instanceof AudioDestinationNode; }); };
+      const limEdge = loud.filter(function (e) { return e.from instanceof DynamicsCompressorNode && (e.to instanceof AudioDestinationNode || (e.to instanceof GainNode && toDest(e.to))); })[0];
+      const lim = limEdge && limEdge.from, limOut = limEdge && limEdge.to instanceof GainNode ? limEdge.to : null;
       if (!lim) throw new Error('a reversed clip at 400% reaches the speakers with no limiter (' + loud.map(function (e) { return kind(e.from) + '→' + kind(e.to); }).join(', ') + ') — the preview hard-clips into a crackle the exported file does not have');
       if (Math.abs(lim.threshold.value + 1.5) > 1e-6 || lim.ratio.value !== 20 || lim.knee.value !== 0) throw new Error('the reversed preview’s limiter is not the one the export uses (threshold ' + lim.threshold.value + ', knee ' + lim.knee.value + ', ratio ' + lim.ratio.value + ')');
-      if (loud.some(function (e) { return e.from instanceof GainNode && e.to instanceof AudioDestinationNode; })) throw new Error('the boosted voice’s gain still has a direct line to the speakers, around the limiter');
+      if (loud.some(function (e) { return e.from instanceof GainNode && e.from !== limOut && e.to instanceof AudioDestinationNode; })) throw new Error('the boosted voice’s gain still has a direct line to the speakers, around the limiter');
       if (!loud.some(function (e) { return e.from instanceof GainNode && e.to === lim; })) throw new Error('the boosted voice’s gain does not feed the limiter');
     } finally {
       AudioNode.prototype.connect = connect0;
@@ -111582,6 +111599,1085 @@
       try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
       await hcCleanup(made, orig, wasOpen);
     }
+  });
+
+  /* ═══ #986 — the render bugs the #966 inventory found by READING the code (hunt HIGH), each reproduced with a
+   * measurement before it was fixed. Every one of these fails on 913186b6. ═══════════════════════════════════════ */
+  const _986shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return { d: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height };
+  };
+  const _986fx = (type, params) => { const e = FM.fxRegistry.makeInstance(type); if (!e) throw new Error('no registry entry for ' + type); Object.assign(e.params, params || {}); return e; };
+
+  test('986 C1 a filter on an adjustment layer grades what is below it, and its Strength fades it', { item: '986' }, function () {
+    /* He sees "Added 1 filter" on an adjustment layer and the picture does not change. MEASURED on 913186b6: a
+       Grayscale inside a filter left the red frame (232,68,63) exactly red, while the same Grayscale placed directly
+       greyed it to (103,103,103). */
+    const W = 120, H = 90;
+    const sceneOf = (effects, op) => {
+      const bg = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 120, shapeH: 90, fill: '#e8443f' }); bg.start = 0; bg.duration = 4;
+      const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = effects;
+      if (op != null) A.transform.opacity = op;
+      return [A, bg];
+    };
+    const at = (effects, op, rs) => { const r = _986shot(sceneOf(effects, op), 0.5, W, H, rs); const i = ((r.h >> 1) * r.w + (r.w >> 1)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]]; };
+    const box = (kids, s) => { const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = kids; if (s != null) b.params.strength = s; return b; };
+    const near = (a, b, tol) => Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol;
+    const bad = [];
+    for (const rs of [1, 0.4]) {
+      const none = at([], null, rs), direct = at([_986fx('grayscale')], null, rs);
+      if (!(Math.abs(direct[0] - direct[1]) < 6 && none[0] - direct[0] > 60)) throw new Error('CONTROL at scale ' + rs + ': a Grayscale placed directly on the adjustment layer gave ' + direct + ' over ' + none + ' — the fixture is not grading at all');
+      const full = at([box([_986fx('grayscale')])], null, rs);
+      if (!near(full, direct, 2)) bad.push('scale ' + rs + ': a filter holding Grayscale gave ' + full + ' where the Grayscale on its own gives ' + direct + ' (nothing graded: ' + none + ')');
+      const half = at([box([_986fx('grayscale')], 0.5)], null, rs), mid = [0, 1, 2].map(k => (none[k] + direct[k]) / 2);
+      if (!near(half, mid, 3)) bad.push('scale ' + rs + ': Strength 0.5 gave ' + half + ', not halfway (' + mid.map(Math.round) + ') between ungraded and graded');
+      const zero = at([box([_986fx('grayscale')], 0)], null, rs);
+      if (!near(zero, none, 1)) bad.push('scale ' + rs + ': Strength 0 gave ' + zero + ', not the ungraded ' + none);
+      const tintD = at([_986fx('tint')], null, rs), tintF = at([box([_986fx('tint')])], null, rs);
+      if (near(tintD, none, 10)) throw new Error('CONTROL: Tint on its own does nothing to this frame');
+      if (!near(tintF, tintD, 2)) bad.push('scale ' + rs + ': a filter holding Tint (a per-pixel grade) gave ' + tintF + ' where Tint on its own gives ' + tintD);
+      const op = at([box([_986fx('grayscale')], 0.5)], 0.5, rs), opMid = [0, 1, 2].map(k => none[k] + (direct[k] - none[k]) * 0.25);
+      if (!near(op, opMid, 3)) bad.push('scale ' + rs + ': Strength 0.5 at layer opacity 50% gave ' + op + ', not a quarter of the way (' + opMid.map(Math.round) + ')');
+    }
+    /* …and through the path he uses: a filter from the library, fitted to an adjustment layer the way Add fits it. */
+    const adjProbe = FM.makeLayer('adjustment', { name: 'probe' });
+    const lib = (FM.filters && FM.filters.all ? FM.filters.all() : []).map(f => FM.fxRegistry.fitToLayer(FM.filters.makeInstance(f.id), adjProbe)).filter(Boolean);
+    if (!lib.length) throw new Error('CONTROL: no library filter fits an adjustment layer, so the Filters tab is not offering anything here');
+    const none = at([], null, 1);
+    const moved = lib.filter(b => !near(at([b], null, 1), none, 3)).length;
+    if (moved < Math.min(3, lib.length)) bad.push('only ' + moved + ' of the ' + lib.length + ' library filters that fit an adjustment layer change the picture under it');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C24 on a device without ctx.filter, Halation, Compound Blur, Backfill, Liquid Glass and Motion Blur (Footage) keep their blur', { item: '986', budgetMs: 90000 }, function () {
+    /* Only the nine CSS effects asked ctxFilterOK(); these five set ctx.filter = 'blur(…)' regardless, and on his
+       class of phone that string is silently IGNORED. FM._forceNoCtxFilter alone cannot show it — the effects never
+       asked — so ctx.filter is made genuinely dead for the duration (the descriptor swap queue 836's test uses).
+       MEASURED on 913186b6, mean error against the real filter as a share of the effect's own size: Compound Blur 1.00
+       (it stayed sharp), Halation 0.70, Liquid Glass 0.66, Backfill 0.50, Motion Blur (Footage) 0.28. */
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter in this browser, so there is no reference picture to compare against');
+    if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available, so his phone’s path cannot be exercised: ' + (FM.glColor ? FM.glColor.stats().reason : 'no FM.glColor'));
+    const W = 200, H = 150;
+    const render = (layers, t) => _986shot(layers, t, W, H).d;
+    const mean = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3]); return s / (a.length / 4); };
+    const art = document.createElement('canvas'); art.width = 80; art.height = 60;
+    const ax = art.getContext('2d'); for (let y = 0; y < 60; y += 10) for (let x = 0; x < 80; x += 10) { ax.fillStyle = ((x / 10 + y / 10) % 2) ? '#ff2d55' : '#0a84ff'; ax.fillRect(x, y, 10, 10); }
+    const had = FM.media.get('_986c24');
+    FM.media.set('_986c24', { kind: 'image', el: art, width: 80, height: 60, duration: 0 });
+    const photo = (fx, sc) => { const l = FM.makeLayer('image', { x: 100, y: 75, start: 0, duration: 4 }); l.id = '_986c24'; l.transform.scale = sc || 1; l.effects = fx; return l; };
+    const cases = {
+      'Halation': (on) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 75, shapeW: 60, shapeH: 44, fill: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = on ? [_986fx('halation')] : []; return () => render([L]); },
+      'Compound Blur': (on) => { const map = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 75, shapeW: 100, shapeH: 150, fill: '#ffffff' }); map.start = 0; map.duration = 4; const L = photo(on ? [_986fx('compoundblur', { source: map.id })] : [], 2); return () => render([L, map]); },
+      'Backfill': (on) => { const L = photo(on ? [_986fx('fillbehind', { blur: 16, dim: 0 })] : []); return () => render([L]); },
+      'Liquid Glass': (on) => { const L = photo(on ? [_986fx('liquidglass')] : [], 2); return () => render([L]); },
+      // the frame-to-frame history has to be warmed on ONE layer object, or there is no motion to read
+      'Motion Blur (Footage)': (on) => { const l = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 75, shapeW: 40, shapeH: 40, fill: '#ffffff' }); l.start = 0; l.duration = 10;
+        l.effects = [{ type: 'orbit', enabled: true, params: { radius: 40, speed: 2 } }].concat(on ? [{ type: 'motionflow', enabled: true, params: { style: 1, amount: 2, samples: 10, threshold: 0.05, softness: 0.5 } }] : []);
+        return () => { [0.8, 0.833, 0.867, 0.9, 0.933].forEach(t => render([l], t)); return render([l], 0.9667); }; },
+    };
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    const was = { force: FM._forceNoCtxFilter, noGL: FM._noGL };
+    const bad = [];
+    try {
+      for (const name in cases) {
+        FM._forceNoCtxFilter = false; FM._noGL = false; FM.glColor._reset();
+        const ref = cases[name](1)(), bare = cases[name](0)();
+        const size = mean(ref, bare);
+        if (!(size > 1)) throw new Error('CONTROL: ' + name + ' changes the picture by only ' + size.toFixed(2) + ' with ctx.filter working — the fixture is not showing the effect');
+        for (const noGL of [false, true]) {
+          if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, get: function () { return 'none'; }, set: function () {} });
+          FM._forceNoCtxFilter = true; FM._noGL = noGL; FM.glColor._reset();
+          let dead;
+          try { dead = cases[name](1)(); } finally { if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc); FM._forceNoCtxFilter = false; FM._noGL = false; }
+          const err = mean(dead, ref), lim = noGL ? 0.15 : 0.1;
+          if (!(err <= size * lim)) bad.push(name + (noGL ? ' (no WebGL either)' : '') + ' misses the real filter by ' + err.toFixed(2) + ' — ' + (err / size).toFixed(2) + ' of the effect itself (' + size.toFixed(2) + ')');
+        }
+      }
+    } finally {
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      FM._forceNoCtxFilter = was.force; FM._noGL = was.noGL; FM.glColor._reset();
+      if (had) FM.media.set('_986c24', had); else if (FM.media.remove) FM.media.remove('_986c24');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C8 Vignette is one renderer: every vignette runs, first in the stack on every layer, and never darkens a transparent corner', { item: '986' }, function () {
+    /* MEASURED on 913186b6: a second vignette on a photo changed the corner from 351 to 351 (only the first ran); a round
+       PNG over blue had the transparent corner of its box painted to 14 where the blue behind reads 336 (sum of RGB);
+       the same Vignette on a flat full-frame photo and on a flat full-frame shape of the same colour differed by up to 24
+       (two curves); and on a shape it ran in row order while a photo's always ran first. */
+    const W = 240, H = 320;
+    const flat = document.createElement('canvas'); flat.width = W; flat.height = H; const fx0 = flat.getContext('2d'); fx0.fillStyle = '#e0e0e0'; fx0.fillRect(0, 0, W, H);
+    const disc = document.createElement('canvas'); disc.width = 120; disc.height = 120; const dx0 = disc.getContext('2d'); dx0.fillStyle = '#d0a040'; dx0.beginPath(); dx0.arc(60, 60, 58, 0, Math.PI * 2); dx0.fill();
+    const saved = ['_986flat', '_986disc'].map(k => [k, FM.media.get(k)]);
+    FM.media.set('_986flat', { kind: 'image', el: flat, width: W, height: H, duration: 0 });
+    FM.media.set('_986disc', { kind: 'image', el: disc, width: 120, height: 120, duration: 0 });
+    const img = (id, fx) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = id; l.transform.scale = 1; l.effects = fx; return l; };
+    const V = (a, s) => _986fx('vignette', { amount: a, size: s });
+    const sum = (r, x, y) => { const i = (y * r.w + x) * 4; return r.d[i] + r.d[i + 1] + r.d[i + 2]; };
+    const bad = [];
+    try {
+      // every vignette counts
+      const one = _986shot([img('_986flat', [V(0.5, 30)])], 0.5, W, H), two = _986shot([img('_986flat', [V(0.5, 30), V(0.5, 30)])], 0.5, W, H);
+      if (!(sum(one, 4, 4) < 600)) throw new Error('CONTROL: one vignette left the corner at ' + sum(one, 4, 4));
+      if (!(sum(two, 4, 4) < sum(one, 4, 4) - 60)) bad.push('a second Vignette on a photo changed the corner from ' + sum(one, 4, 4) + ' to ' + sum(two, 4, 4) + ' — only the first one runs');
+      // the same place in the stack on every layer: innermost, where a clip has always drawn it (every film filter was
+      // tuned on photographs with it there). A photo already did this; a shape took it in row order.
+      const thr = () => _986fx('threshold', { level: 0.5 });
+      const flatShape = (fx) => { const s = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#e0e0e0' }); s.start = 0; s.duration = 4; s.effects = fx; return s; };
+      const cmp = (a, b) => { let n = 0; for (let i = 0; i < a.d.length; i += 4) if (Math.abs(a.d[i] - b.d[i]) > 30) n++; return n; };
+      const pTV = _986shot([img('_986flat', [thr(), V(0.9, 10)])], 0.5, W, H), pVT = _986shot([img('_986flat', [V(0.9, 10), thr()])], 0.5, W, H);
+      const sTV = _986shot([flatShape([thr(), V(0.9, 10)])], 0.5, W, H), sVT = _986shot([flatShape([V(0.9, 10), thr()])], 0.5, W, H);
+      if (cmp(pVT, _986shot([img('_986flat', [thr()])], 0.5, W, H)) < 200) throw new Error('CONTROL: the vignette under a Threshold did not change which pixels cross it');
+      if (cmp(pTV, pVT) > 0) bad.push('a photo’s vignette no longer runs first: Threshold then Vignette and Vignette then Threshold differ in ' + cmp(pTV, pVT) + ' px — every filter’s look on a clip moves');
+      if (cmp(sTV, sVT) > 0) bad.push('on a shape, Threshold then Vignette and Vignette then Threshold differ in ' + cmp(sTV, sVT) + ' px — the vignette sits in a different place than on a photo');
+      if (cmp(sTV, pTV) > 0) bad.push('the same stack on a flat photo and a flat shape differs in ' + cmp(sTV, pTV) + ' px');
+      // transparent corners stay transparent
+      const blue = () => { const b = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#3060c0' }); b.start = 0; b.duration = 4; return b; };
+      const png = _986shot([img('_986disc', [V(1, 0)]), blue()], 0.5, W, H), bare = _986shot([blue()], 0.5, W, H);
+      const cx = W / 2 - 58, cy = H / 2 - 58;   // the disc's box corner: transparent in the PNG
+      if (Math.abs(sum(png, cx, cy) - sum(bare, cx, cy)) > 6) bad.push('the transparent corner of a round PNG reads ' + sum(png, cx, cy) + ' over a background of ' + sum(bare, cx, cy) + ' — the vignette painted where the picture has nothing');
+      if (!(sum(png, W / 2, H / 2 - 50) < sum(_986shot([img('_986disc', []), blue()], 0.5, W, H), W / 2, H / 2 - 50) - 30)) bad.push('the vignette no longer darkens the PNG’s own edge');
+      // one look, whatever the layer is
+      const shape = () => { const s = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#e0e0e0' }); s.start = 0; s.duration = 4; s.effects = [V(0.6, 35)]; return s; };
+      const a = _986shot([img('_986flat', [V(0.6, 35)])], 0.5, W, H), b = _986shot([shape()], 0.5, W, H);
+      let worst = 0; for (let i = 0; i < a.d.length; i += 4) worst = Math.max(worst, Math.abs(a.d[i] - b.d[i]));
+      if (worst > 3) bad.push('the same Vignette on a full-frame photo and on a full-frame shape of the same colour differs by up to ' + worst + ' — two renderers');
+      // …and the photo keeps the gradient it always had: colour × (1 − amount·q), q from Size out to the half-diagonal
+      const R = Math.hypot(W, H) / 2; let off = 0;
+      for (const [x, y] of [[4, 4], [120, 160], [30, 300], [230, 20], [120, 10], [10, 160]]) {
+        const q = Math.min(1, Math.max(0, (Math.hypot(x + 0.5 - W / 2, y + 0.5 - H / 2) / R - 0.35) / 0.65));
+        off = Math.max(off, Math.abs(a.d[(y * W + x) * 4] - 0xe0 * (1 - 0.6 * q)));
+      }
+      if (off > 2.5) bad.push('a photo’s vignette is ' + off.toFixed(1) + ' levels off the gradient every video has always had');
+    } finally { saved.forEach(([k, v]) => { if (v) FM.media.set(k, v); else if (FM.media.remove) FM.media.remove(k); }); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C22 Drop Shadow draws under the soft edge of a letter and under a see-through layer', { item: '986' }, function () {
+    /* `if (dsa>0) continue` skipped every pixel with any alpha. MEASURED on 913186b6: of the 50 anti-aliased edge pixels
+       of an O that sit over its own shadow, all 50 were exactly as light as with no shadow at all (mean 197.8) — a light
+       seam between the letter and its shadow. */
+    const W = 160, H = 100;
+    const ds = () => _986fx('dropshadow', { distance: 10, angle: 45, softness: 0, color: '#000000', opacity: 100 });
+    const txt = (fx) => { const L = FM.makeLayer('text', { text: 'O', x: 80, y: 50, fontSize: 70, color: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const a = _986shot([txt([ds()])], 0.5, W, H, null, '#808080').d, b = _986shot([txt([])], 0.5, W, H, null, '#808080').d;
+    const o = Math.round(Math.cos(Math.PI / 4) * 10);
+    let n = 0, seam = 0, sA = 0, sB = 0, shadowPx = 0;
+    for (let y = o + 1; y < H - 1; y++) for (let x = o + 1; x < W - 1; x++) {
+      const i = (y * W + x) * 4, j = ((y - o) * W + (x - o)) * 4;
+      if (b[i] <= 130 && b[j] >= 250 && a[i] < 20) shadowPx++;
+      if (b[i] > 140 && b[i] < 240 && b[j] >= 250) { n++; sA += a[i]; sB += b[i]; if (a[i] > b[i] - 2) seam++; }
+    }
+    if (!(shadowPx > 100)) throw new Error('CONTROL: the shadow itself did not draw (' + shadowPx + ' dark px where it should lie)');
+    if (!(n > 20)) throw new Error('CONTROL: found only ' + n + ' soft edge pixels over the shadow — the fixture is not anti-aliased');
+    const bad = [];
+    if (seam > n * 0.1) bad.push(seam + ' of ' + n + ' soft edge pixels over the shadow are no darker than with no shadow (mean ' + (sA / n).toFixed(1) + ' vs ' + (sB / n).toFixed(1) + ') — a light seam round the letter');
+    // a half-transparent square casts its shadow behind itself too
+    const half = document.createElement('canvas'); half.width = 60; half.height = 40; const hx = half.getContext('2d'); hx.fillStyle = 'rgba(255,255,255,0.5)'; hx.fillRect(0, 0, 60, 40);
+    const had = FM.media.get('_986half');
+    FM.media.set('_986half', { kind: 'image', el: half, width: 60, height: 40, duration: 0 });
+    try {
+      const sq = (fx) => { const l = FM.makeLayer('image', { x: 70, y: 45, start: 0, duration: 4 }); l.id = '_986half'; l.transform.scale = 1; l.effects = fx; return l; };
+      const s = _986shot([sq([ds()])], 0.5, W, H, null, '#808080').d, s0 = _986shot([sq([])], 0.5, W, H, null, '#808080').d;
+      const over = ((45 + 15) * W + (70 + 20)) * 4;   // inside the square AND over its own shadow
+      if (!(s[over] < s0[over] - 30)) bad.push('a 50% see-through square reads ' + s[over] + ' over its own shadow and ' + s0[over] + ' with no shadow — it casts no shadow behind itself');
+      const clear = ((45 - 15) * W + (70 - 25)) * 4;  // inside the square, outside the shadow
+      if (Math.abs(s[clear] - s0[clear]) > 2) bad.push('the part of the square with no shadow behind it changed (' + s0[clear] + ' → ' + s[clear] + ')');
+    } finally { if (had) FM.media.set('_986half', had); else if (FM.media.remove) FM.media.remove('_986half'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C27 Shake, Swing, Spin, Pulse, Trail and Scatter Array draw what is past the frame edge instead of empty space', { item: '986', budgetMs: 60000 }, function () {
+    /* A clip scaled up so a shake cannot show its edges showed them anyway. MEASURED on 913186b6 on a frame-filling
+       rectangle at 130%: up to 4056 transparent pixels a frame with Shake, 2384 with Swing, 10560 with Pulse; and the
+       copies Trail and Scatter make of a clip half off the frame were copies of the half. */
+    const W = 200, H = 150, bad = [];
+    const big = (fx) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 75, shapeW: 200, shapeH: 150, fill: '#40c080' }); L.start = 0; L.duration = 4; L.transform.scale = 1.3; L.effects = fx; return L; };
+    const holes = (r) => { let n = 0; for (let i = 3; i < r.d.length; i += 4) if (r.d[i] < 250) n++; return n; };
+    const cases = {
+      'Shake': () => [_986fx('shake', { amount: 20, twist: 0, speed: 3 })],
+      'Shake with twist and smear': () => [_986fx('shake', { amount: 10, twist: 6, speed: 3, smear: 1 })],
+      'Swing': () => [_986fx('swing', { angle: 10, pivotx: 50, pivoty: 50 })],
+      'Pulse': () => [_986fx('pulse', { amount: 0.2, speed: 1 })],
+    };
+    if (holes(_986shot([big([])], 0.5, W, H, null, null)) !== 0) throw new Error('CONTROL: the 130% rectangle does not cover the frame on its own');
+    for (const name in cases) for (const rs of [1, 0.4]) {
+      let worst = 0; for (const t of [0.3, 0.7, 1.1, 1.6, 2.2]) worst = Math.max(worst, holes(_986shot([big(cases[name]())], t, W, H, rs, null)));
+      if (worst) bad.push(name + ' leaves ' + worst + ' transparent pixels at scale ' + rs + ' on a layer that covers the frame with room to spare');
+    }
+    // Spin, against the truth: the same rectangle simply rotated by the same angle about the same point
+    for (const rs of [1, 0.4]) {
+      const spun = _986shot([big([_986fx('spin', { speed: 20 })])], 0.4, W, H, rs, null);
+      const truthL = big([]); truthL.transform.rotation = 8;
+      const truth = _986shot([truthL], 0.4, W, H, rs, null);
+      let off = 0; for (let i = 3; i < spun.d.length; i += 4) if (Math.abs(spun.d[i] - truth.d[i]) > 64) off++;
+      if (off > spun.d.length / 4 * 0.005) bad.push('Spin at 8° differs from the rectangle rotated 8° in ' + off + ' pixels at scale ' + rs);
+    }
+    // Trail and Scatter: a 40px square half off the left edge, against a 30px one that is exactly its visible half —
+    // the same on-frame box, so the same copies in the same places; only what lies past the edge differs.
+    const sq = (x, w, fx) => { const L = FM.makeLayer('shape', { shape: 'rect', x: x, y: 75, shapeW: w, shapeH: 40, fill: '#ff0000' }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const ink = (r) => { let n = 0; for (let i = 3; i < r.d.length; i += 4) if (r.d[i] > 128) n++; return n; };
+    const reps = { 'Trail': () => [_986fx('linearrepeat', { count: 3, spacing: 150 })], 'Scatter Array': () => [_986fx('scatterarray', { count: 6, spread: 150, rotate: 0, sizevary: 0, fade: 0 })] };
+    for (const name in reps) {
+      const whole = ink(_986shot([sq(10, 40, reps[name]())], 0.5, W, H, null, null)), cut = ink(_986shot([sq(15, 30, reps[name]())], 0.5, W, H, null, null));
+      if (!(cut > 1500)) throw new Error('CONTROL: ' + name + ' drew only ' + cut + ' px from the visible half — it is not repeating');
+      if (!(whole > cut + 300)) bad.push(name + ' of a square half off the frame drew ' + whole + ' px against ' + cut + ' for its visible half alone — its copies are copies of the half');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C39 Mirror renders its layer on the preview plate, not at full project size', { item: '986' }, function () {
+    /* Mirror sized its plate from the PROJECT: on the phone's reduced plate it rendered the layer at full resolution
+       every frame just to shrink it again, and everything nested inside it ran at that size too. MEASURED on 913186b6
+       with a spy kernel under the Mirror, on a 0.25 plate of a 400x300 project: it was handed 400x300 at scale 1. */
+    const T = FM._FX_TABLES;
+    if (!T || !T.POSTFX || !T.PIXEL_FX) throw new Error('FM._FX_TABLES is not reachable, so the plate cannot be observed');
+    const seen = [];
+    T.POSTFX.__spy986 = 1; T.PIXEL_FX.__spy986 = function (d, W, H, p, t, ps) { seen.push([W, H, ps]); };
+    const W = 400, H = 300;
+    const L = () => { const l = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 150, shapeW: 120, shapeH: 100, fill: '#ff8800' }); l.start = 0; l.duration = 4; l.effects = [{ type: '__spy986', enabled: true, params: {} }, _986fx('mirror')]; return l; };
+    const ink = (r) => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] > 128) n++; return n; };
+    try {
+      const full = _986shot([L()], 0.5, W, H);
+      if (!seen.length) throw new Error('CONTROL: the spy under the Mirror never ran');
+      if (seen[0][0] !== W || seen[0][1] !== H || seen[0][2] !== 1) throw new Error('CONTROL: at full size the Mirror’s plate is ' + seen[0] + ', not ' + [W, H, 1]);
+      seen.length = 0;
+      const small = _986shot([L()], 0.5, W, H, 0.25);
+      if (!seen.length) throw new Error('the spy under the Mirror never ran on the reduced plate');
+      const [pw, ph, ps] = seen[0];
+      if (pw > W * 0.25 + 1 || ph > H * 0.25 + 1 || ps !== 0.25) throw new Error('on a 0.25 preview the Mirror rendered its layer into a ' + pw + 'x' + ph + ' plate at scale ' + ps + ' — full project size, ' + Math.round(pw * ph / (W * H * 0.0625)) + 'x the pixels the preview shows');
+      const a = ink(full), b = ink(small) * 16;
+      if (Math.abs(a - b) > a * 0.03) throw new Error('the reduced Mirror draws ' + b + ' px (scaled) against ' + a + ' at full size — the picture changed');
+    } finally { delete T.POSTFX.__spy986; delete T.PIXEL_FX.__spy986; }
+  });
+
+  /* ═══ #986 review fixes — three things the first build got wrong, each measured on a15fac8d before it was fixed. ═══ */
+  test('986 C8 an exported frame of a clip with a keyframed crop gets that frame’s vignette and layer box, not the playhead’s', { item: '986', budgetMs: 60000 }, function () {
+    /* The exporter renders frame t WITHOUT moving FM.time, and FM.layerSize reads the crop at FM.time. MEASURED on
+       a15fac8d: a Vignette on a photo whose crop shrinks 240x320 → 80x120 over 4 s, exported at t=2 with the playhead
+       parked at 0, differed from the same frame rendered with the playhead at 2 in 98442 channel values (up to 72 levels);
+       on 913186b6 the two were byte-identical (the inline vignette read the crop at t). The layer box, which decides
+       whether Shake and the other movers get the plate past the frame edge, read the playhead's crop on both. */
+    const W = 240, H = 320;
+    const art = document.createElement('canvas'); art.width = W; art.height = H;
+    const ax = art.getContext('2d'); const gr = ax.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#f0e0c0'); gr.addColorStop(1, '#80c0f0'); ax.fillStyle = gr; ax.fillRect(0, 0, W, H);
+    const had = FM.media.get('_986kfc');
+    FM.media.set('_986kfc', { kind: 'image', el: art, width: W, height: H, duration: 0 });
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 4, v: b, e: 'linear' }] });
+    const clip = (fx, sc) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_986kfc'; l.transform.scale = sc || 1; l.crop = { x: 0, y: 0, w: kf(240, 80), h: kf(320, 120) }; l.effects = fx; return l; };
+    const scene = (layers) => ({ project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] });
+    const diff = (a, b) => { let n = 0, mx = 0; for (let i = 0; i < a.d.length; i++) { const d = Math.abs(a.d[i] - b.d[i]); if (d > 1) n++; if (d > mx) mx = d; } return [n, mx]; };
+    const was = { time: FM.time, exp: FM._exporting };
+    const bad = [];
+    try {
+      FM._exporting = true;   // the exporter's own flag — the crop tool's preview-only whole frame stays out of it
+      FM.time = 0; const sz0 = FM.layerSize(clip([])); FM.time = 2; const sz2 = FM.layerSize(clip([]));
+      if (!(Math.abs(sz0.w - sz2.w) > 50)) throw new Error('CONTROL: the crop is not keyframed — layerSize reads ' + sz0.w + ' at 0 s and ' + sz2.w + ' at 2 s');
+      for (const rs of [1, 0.5]) {
+        FM.time = 2;
+        const bare = _986shot([clip([])], 2, W, H, rs), atT = _986shot([clip([_986fx('vignette', { amount: 0.8, size: 20 })])], 2, W, H, rs);
+        if (!(diff(bare, atT)[0] > 1000)) throw new Error('CONTROL at scale ' + rs + ': the vignette does not change the frame');
+        FM.time = 0;
+        const parked = _986shot([clip([_986fx('vignette', { amount: 0.8, size: 20 })])], 2, W, H, rs);
+        const [n, mx] = diff(parked, atT);
+        if (n) bad.push('at scale ' + rs + ' the vignette exported at 2 s with the playhead at 0 differs from the same frame with the playhead at 2 in ' + n + ' values (up to ' + mx + ' levels)');
+        // Shake on a clip at 130% that runs past the frame at 0.5 s and sits inside it by 4 s: the frame at 0.5 s must not
+        // depend on where the playhead is (the layer box decides whether the shake draws from the plate past the edge)
+        const shaken = () => [clip([_986fx('shake', { amount: 20, twist: 0, speed: 3 })], 1.3)];
+        FM.time = 0.5; const here = _986shot(shaken(), 0.5, W, H, rs, null);
+        FM.time = 4; const away = _986shot(shaken(), 0.5, W, H, rs, null);
+        const [n2, mx2] = diff(away, here);
+        if (n2) bad.push('at scale ' + rs + ' a Shake exported at 0.5 s with the playhead at 4 s differs from the same frame with the playhead at 0.5 s in ' + n2 + ' values (up to ' + mx2 + ' levels)');
+      }
+      // …and the layer box itself, which layer-vs-layer collision reads as well
+      const L = clip([]), sc = scene([L]);
+      FM.time = 0; const b0 = FM._layerAABB(L, 2, sc); FM.time = 2; const b2 = FM._layerAABB(L, 2, sc);
+      if (!b0 || !b2) throw new Error('CONTROL: FM._layerAABB gave no box');
+      if (['x0', 'y0', 'x1', 'y1'].some(k => Math.abs(b0[k] - b2[k]) > 0.01)) bad.push('the layer box at 2 s is ' + [b0.x0, b0.y0, b0.x1, b0.y1].map(v => v.toFixed(1)) + ' with the playhead at 0 and ' + [b2.x0, b2.y0, b2.x1, b2.y1].map(v => v.toFixed(1)) + ' with it at 2 — it reads the playhead’s crop');
+    } finally {
+      FM.time = was.time; FM._exporting = was.exp;
+      if (had) FM.media.set('_986kfc', had); else if (FM.media.remove) FM.media.remove('_986kfc');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C8 a clip’s vignette darkens only the clip, not its Glow or its own shadow outside the frame', { item: '986' }, function () {
+    /* The one-renderer vignette filled the whole plate (source-atop), so everything the clip drew OUTSIDE its frame got
+       darkened too. MEASURED on a15fac8d: Glow round a photo at 60% had its halo's mean go from 50.5 to 16.5 with a
+       Vignette added (28176 values changed outside the clip); on 913186b6 the halo was untouched. The layer's own shadow
+       was darkened the same way — and on 913186b6 the inline vignette CAST that shadow, painting it again outside. */
+    const W = 240, H = 320;
+    const art = document.createElement('canvas'); art.width = W; art.height = H;
+    const ax = art.getContext('2d'); ax.fillStyle = '#f0e0c0'; ax.fillRect(0, 0, W, H);
+    const had = FM.media.get('_986halo');
+    FM.media.set('_986halo', { kind: 'image', el: art, width: W, height: H, duration: 0 });
+    const clip = (fx, sc, rot, shadow) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_986halo'; l.transform.scale = sc; if (rot) l.transform.rotation = rot; if (shadow) l.shadow = { enabled: true, blur: 12, dx: 14, dy: 14, color: '#40ff40', alpha: 100 }; l.effects = fx; return l; };
+    const V = () => _986fx('vignette', { amount: 0.8, size: 20 });
+    const bad = [];
+    try {
+      for (const [sc, rot] of [[0.6, 0], [0.7, 15]]) for (const rs of [1, 0.5]) {
+        // pixels more than 3 px outside the clip's rotated frame
+        const outside = (fn) => { const th = -rot * Math.PI / 180, hw = W * sc / 2 + 3, hh = H * sc / 2 + 3; const w = Math.round(W * rs), h = Math.round(H * rs);
+          for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const px = (x + 0.5) / rs - W / 2, py = (y + 0.5) / rs - H / 2;
+            if (Math.abs(px * Math.cos(th) - py * Math.sin(th)) < hw && Math.abs(px * Math.sin(th) + py * Math.cos(th)) < hh) continue; fn((y * w + x) * 4); } };
+        const cmp = (a, b) => { let n = 0, mx = 0, sa = 0, sb = 0, c = 0; outside(i => { for (let k = 0; k < 4; k++) { const d = Math.abs(a.d[i + k] - b.d[i + k]); if (d > 1) n++; if (d > mx) mx = d; } sa += a.d[i] + a.d[i + 1] + a.d[i + 2]; sb += b.d[i] + b.d[i + 1] + b.d[i + 2]; c++; }); return { n: n, mx: mx, ma: sa / c, mb: sb / c }; };
+        const where = 'on a clip at ' + Math.round(sc * 100) + '%' + (rot ? ' turned ' + rot + '°' : '') + ', scale ' + rs;
+        const g = _986shot([clip([_986fx('glow')], sc, rot)], 0.5, W, H, rs), gv = _986shot([clip([_986fx('glow'), V()], sc, rot)], 0.5, W, H, rs);
+        const r1 = cmp(gv, g);
+        if (!(r1.mb > 15)) throw new Error('CONTROL ' + where + ': Glow drew no halo outside the clip (mean ' + r1.mb.toFixed(1) + ')');
+        if (r1.n) bad.push('Glow with a Vignette ' + where + ': ' + r1.n + ' values of the halo outside the clip changed (mean ' + r1.mb.toFixed(1) + ' → ' + r1.ma.toFixed(1) + ')');
+        const s = _986shot([clip([], sc, rot, 1)], 0.5, W, H, rs), sv = _986shot([clip([V()], sc, rot, 1)], 0.5, W, H, rs);
+        const r2 = cmp(sv, s);
+        if (!(r2.mb > 15)) throw new Error('CONTROL ' + where + ': the shadow drew nothing outside the clip (mean ' + r2.mb.toFixed(1) + ')');
+        if (r2.n) bad.push('the layer’s shadow with a Vignette ' + where + ': ' + r2.n + ' values outside the clip changed, up to ' + r2.mx + ' levels (mean ' + r2.mb.toFixed(1) + ' → ' + r2.ma.toFixed(1) + ')');
+        // …while the vignette still darkens the clip's own corner
+        const c0 = _986shot([clip([], sc, rot)], 0.5, W, H, rs), c1 = _986shot([clip([V()], sc, rot)], 0.5, W, H, rs);
+        const th = rot * Math.PI / 180, lx = -W * sc / 2 + 8, ly = -H * sc / 2 + 8;
+        const cx = Math.round((W / 2 + lx * Math.cos(th) - ly * Math.sin(th)) * rs), cy = Math.round((H / 2 + lx * Math.sin(th) + ly * Math.cos(th)) * rs), ci = (cy * Math.round(W * rs) + cx) * 4;
+        if (!(c1.d[ci] < c0.d[ci] - 60)) bad.push('the vignette no longer darkens the clip’s own corner ' + where + ' (' + c0.d[ci] + ' → ' + c1.d[ci] + ')');
+      }
+    } finally { if (had) FM.media.set('_986halo', had); else if (FM.media.remove) FM.media.remove('_986halo'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C27 Trail of a clip half off the frame lays whole copies one after another, none over the original', { item: '986' }, function () {
+    /* Spacing 100 means one copy over, edge to edge. The copies became whole clips (from the plate past the edge) while
+       the step was still measured from the ON-FRAME part. MEASURED on a15fac8d: a 120-wide photo with half of it past the
+       left edge, Trail 4 at spacing 100 — the first copy covered 4480 of the original's 11200 visible pixels; on 913186b6
+       none were covered, but each copy was only the visible 80 px. */
+    const W = 400, H = 320;   // wide enough that the first copy is never cut by the right edge
+    const art = document.createElement('canvas'); art.width = 240; art.height = 320;
+    const ax = art.getContext('2d'); const gr = ax.createLinearGradient(0, 0, 240, 0); gr.addColorStop(0, '#ff0000'); gr.addColorStop(1, '#0000ff'); ax.fillStyle = gr; ax.fillRect(0, 0, 240, 320);
+    const had = FM.media.get('_986trail');
+    FM.media.set('_986trail', { kind: 'image', el: art, width: 240, height: 320, duration: 0 });
+    const clip = (x, fx) => { const l = FM.makeLayer('image', { x: x, y: H / 2, start: 0, duration: 4 }); l.id = '_986trail'; l.transform.scale = 0.5; l.effects = fx; return l; };
+    const trail = () => [_986fx('linearrepeat', { count: 4, spacing: 100 })];
+    const bad = [];
+    try {
+      for (const rs of [1, 0.5]) {
+        const w = Math.round(W * rs), row = Math.round(160 * rs);
+        const runs = (r) => { const out = []; let start = -1; for (let x = 0; x <= w; x++) { const i = (row * w + x) * 4; const on = x < w && r.d[i + 3] > 128; if (on && start < 0) start = x; if (!on && start >= 0) { out.push([start, x]); start = -1; } } return out; };
+        // CONTROL: the same clip fully inside the frame repeats edge to edge in whole copies
+        const inRuns = runs(_986shot([clip(60, trail())], 0.5, W, H, rs, null));   // no background: the runs are the clip's own ink
+        if (!(inRuns.length >= 2 && Math.abs(inRuns[1][1] - inRuns[1][0] - 120 * rs) <= 2)) throw new Error('CONTROL at scale ' + rs + ': the in-frame clip’s Trail runs are ' + JSON.stringify(inRuns) + ', not whole 120 px copies');
+        const bare = _986shot([clip(20, [])], 0.5, W, H, rs, null), tr = _986shot([clip(20, trail())], 0.5, W, H, rs, null);
+        let covered = 0, tot = 0;
+        for (let y = Math.round(90 * rs); y < Math.round(230 * rs); y++) for (let x = 0; x < Math.round(80 * rs); x++) {
+          const i = (y * w + x) * 4; tot++;
+          if (Math.abs(bare.d[i] - tr.d[i]) > 4 || Math.abs(bare.d[i + 2] - tr.d[i + 2]) > 4) covered++;
+        }
+        if (covered) bad.push('at scale ' + rs + ' the copies cover ' + covered + ' of the ' + tot + ' pixels of the original’s visible part');
+        const r = runs(tr);
+        if (!(r.length >= 2 && Math.abs(r[1][1] - r[1][0] - 120 * rs) <= 2)) bad.push('at scale ' + rs + ' the first copy is not one whole clip (' + Math.round(120 * rs) + ' px) standing clear of the original: runs of ink ' + JSON.stringify(r));
+      }
+    } finally { if (had) FM.media.set('_986trail', had); else if (FM.media.remove) FM.media.remove('_986trail'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 986 (hunt HIGH, found by the #966 inventory — NOT his words): five audio faults, each measured before it was fixed ═══
+   * All five were found by READING the code (idle backlog §C: C2, C10, C12, C14, C15); every one below was first reproduced
+   * with a number, and each test fails on the release before (913186b6) for the reason it names. The audio ones render
+   * through FM.buildAudioFxChain on an OfflineAudioContext — the builder BOTH the export (schedule) and the live preview
+   * (applyAt) use — so each measures numbers, not ears. */
+  function afx986(fx, sig, secs, opts) {
+    opts = opts || {};
+    const SR = 48000, n = Math.round(SR * secs), at = opts.anchor || 0;
+    const oac = new OfflineAudioContext(1, n, SR);
+    const b = oac.createBuffer(1, n, SR), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = sig(i / SR);
+    const src = oac.createBufferSource(); src.buffer = b;
+    const chain = FM.buildAudioFxChain(oac, { audioFx: fx }, at);
+    if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(fx));
+    if (opts.live) chain.applyAt(at); else chain.schedule(at, at + secs);   // live = the preview's per-frame path
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    return oac.startRendering().then(r => { try { chain.dispose(); } catch (e) {} return r.getChannelData(0); });
+  }
+  function pk986(d, a, b) { const SR = 48000; let p = 0; for (let i = Math.floor(a * SR); i < Math.min(d.length, Math.floor(b * SR)); i++) { const v = Math.abs(d[i]); if (v > p) p = v; } return p; }
+  function db986(x) { return 20 * Math.log10(Math.max(1e-12, x)); }
+  const sine986 = (amp, f) => t => amp * Math.sin(2 * Math.PI * (f || 1000) * t);
+
+  /* C2 — THE LIMITER'S CEILING WAS NOT A CEILING. A DynamicsCompressorNode adds its own makeup gain, −0.6·(1 − 1/ratio)·T dB,
+   * and the Limiter never cancelled it. MEASURED at 913186b6 (full-scale 1 kHz sine / −40 dBFS sine, peak after 0.5 s):
+   *   Ceiling −1:  −0.32 dBFS / −39.43      Ceiling −6:  −2.12 dBFS / −36.58      Ceiling −24:  −8.64 dBFS / −26.32
+   * so a −24 ceiling let a full-scale sine out 15 dB above it and lifted quiet sound by 13.7 dB. Fixed (js/audio-fx.js
+   * hardKneeMakeupCancel): −0.89 / −40.00, −5.54 / −40.00, −22.32 / −40.00. The node stops at 20:1, so a full-scale peak
+   * still lands a little over the ceiling (1/20 of the overshoot, plus the detector) — the limits below sit between the
+   * fixed and the broken numbers with room on both sides. */
+  test('986 C2 the Limiter Ceiling is a ceiling - a full-scale sine lands near it and quieter sound keeps its own level, keyframed too', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const quiet = sine986(Math.pow(10, -40 / 20)), loud = sine986(1);
+    // CONTROL: the instrument. A 0 dB Gain passes the −40 dBFS sine at −40 dBFS.
+    const ctl = db986(pk986(await afx986([{ type: 'gain', enabled: true, params: { gain: 0 } }], quiet, 1), 0.5, 1));
+    if (Math.abs(ctl + 40) > 0.05) throw new Error('CONTROL: a 0 dB Gain turned a -40 dBFS sine into ' + ctl.toFixed(2) + ' dBFS - the measurement is broken, nothing below means anything');
+    const lim = c => [{ type: 'limiter', enabled: true, params: { ceiling: c } }];
+    const bad = [];
+    for (const c of [-1, -6, -24]) {
+      const q = db986(pk986(await afx986(lim(c), quiet, 1), 0.5, 1));
+      if (Math.abs(q + 40) > 0.1) bad.push('at a ' + c + ' dB ceiling a -40 dBFS sine (nowhere near it) came out at ' + q.toFixed(2) + ' dBFS - the limiter turned it UP by ' + (q + 40).toFixed(2) + ' dB');
+    }
+    const l6 = db986(pk986(await afx986(lim(-6), loud, 1), 0.5, 1)), l24 = db986(pk986(await afx986(lim(-24), loud, 1), 0.5, 1));
+    // measured fixed −5.54 and −22.32; broken −2.12 and −8.64
+    if (!(l6 <= -5.2)) bad.push('a full-scale sine through a -6 dB ceiling peaks at ' + l6.toFixed(2) + ' dBFS - ' + (l6 + 6).toFixed(1) + ' dB over the ceiling');
+    if (!(l24 <= -21.8)) bad.push('a full-scale sine through a -24 dB ceiling peaks at ' + l24.toFixed(2) + ' dBFS - ' + (l24 + 24).toFixed(1) + ' dB over the ceiling');
+    // …and it still LIMITS (a fix that muted everything, or took the limiter out, would pass the lines above)
+    if (!(l6 > -7) || !(l24 > -25)) bad.push('CONTROL: the limiter now crushes a full-scale sine to ' + l6.toFixed(2) + ' / ' + l24.toFixed(2) + ' dBFS at -6 / -24 - below the ceiling');
+    // A KEYFRAMED ceiling (−1 → −24 over 2 s) keeps the quiet sine where it is all the way: the threshold and the gain that
+    // cancels its makeup are scheduled from the one key. Broken, it rose with the ceiling to about −27 dBFS by the end.
+    const kf = await afx986([{ type: 'limiter', enabled: true, params: { ceiling: { kf: [{ t: 0, v: -1 }, { t: 2, v: -24 }] } } }], quiet, 2);
+    [[0.2, 0.4], [0.9, 1.1], [1.7, 1.95]].forEach(w => {
+      const v = db986(pk986(kf, w[0], w[1]));
+      if (Math.abs(v + 40) > 0.3) bad.push('with the ceiling keyframed from -1 to -24, the -40 dBFS sine reads ' + v.toFixed(2) + ' dBFS at ' + w[0] + '-' + w[1] + ' s');
+    });
+    if (bad.length) throw new Error('the Limiter is not a ceiling - its DynamicsCompressor adds a makeup gain nothing cancels: ' + bad.join('; '));
+  });
+
+  /* C2 (the boost half) — THE LIMITER ON A CLIP ABOVE 100 PERCENT CARRIED THE SAME HIDDEN MAKEUP: +0.86 dB at its −1.5 dBFS
+   * threshold. MEASURED at 913186b6 through FM.audioFxLive.makeLimiter (the forward preview and the reversed preview build it)
+   * and the export's own copy of it: a 1000 percent sine peaked at 1.111 (over full scale), and a clip at 200 percent came
+   * out 2.21x, not 2x. Fixed: 1.007 and 2.000. The export now builds the same limiter (FM.audioFxLive.makeLimiter), and the
+   * exported mix is measured below as well as the limiter itself. CONTROL: the same clip at 100 percent, no limiter. */
+  test('986 C2 the boost limiter on a clip above 100 percent adds no level of its own - in the limiter and in the exported mix', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.audioFxLive || typeof FM.audioFxLive.makeLimiter !== 'function') throw new Error('FM.audioFxLive.makeLimiter is not reachable');
+    const SR = 48000;
+    async function through(amp) {
+      const oac = new OfflineAudioContext(1, SR, SR);
+      const b = oac.createBuffer(1, SR, SR), d = b.getChannelData(0);
+      for (let i = 0; i < SR; i++) d[i] = amp * Math.sin(2 * Math.PI * 1000 * i / SR);
+      const src = oac.createBufferSource(); src.buffer = b;
+      const L = FM.audioFxLive.makeLimiter(oac);
+      src.connect(L.input || L); (L.output || L).connect(oac.destination); src.start(0);   // { input, output } now; one node at 913186b6
+      return pk986((await oac.startRendering()).getChannelData(0), 0.5, 1);
+    }
+    const q = await through(0.2), l = await through(10);
+    if (Math.abs(q / 0.2 - 1) > 0.002) throw new Error('a 0.2 sine - far under the -1.5 dBFS threshold - leaves the boost limiter at ' + q.toFixed(4) + ', ' + db986(q / 0.2).toFixed(2) + ' dB louder than it went in: every boosted clip is turned up by the node\'s hidden makeup');
+    // measured fixed 1.0072 (the 20:1 slope and the detector); broken 1.1114
+    if (!(l < 1.02)) throw new Error('a 1000 percent full-scale sine leaves the boost limiter peaking at ' + l.toFixed(4) + ' - ' + db986(l).toFixed(2) + ' dBFS, over full scale, so it clips on the speakers');
+    // THE EXPORT: buildAudioMix, a 0.1 sine at 100 percent and at 200 percent (boosted, so it ends in the limiter).
+    const saved = FM.scene, made = [];
+    try {
+      window.__fmStep = '986 C2 boost export';
+      const mixRms = async function (vol, tag) {
+        const rec = await FM.loadVideoFile(huntEWav(2, t => 0.1 * Math.sin(2 * Math.PI * 440 * t), 'c2boost-' + tag));
+        const L = FM.makeLayer('video', { name: 'boost ' + tag, x: 32, y: 32, start: 0, duration: 2 });
+        L.volume = vol; FM.media.set(L.id, rec); made.push(L.id);
+        FM.scene = huntEScene([L], 2);
+        const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 2);
+        if (!mix) throw new Error('setup: the exporter built no soundtrack at ' + tag);
+        return { rms: huntBRms(mix.audioBuffer, 0.5, 1.5), boosted: FM.audioFxLive.needsBoost(L) };
+      };
+      const one = await mixRms(1, '100'), two = await mixRms(2, '200');
+      if (one.boosted || !two.boosted) throw new Error('setup: the 100 / 200 percent clips routed as boosted ' + one.boosted + ' / ' + two.boosted);
+      if (!(Math.abs(one.rms - 0.1 / Math.SQRT2) < 0.001)) throw new Error('CONTROL: the 100 percent clip exports at rms ' + one.rms.toFixed(4) + ', not the 0.0707 it holds - the measurement is broken');
+      const ratio = two.rms / one.rms;
+      if (Math.abs(ratio - 2) > 0.01) throw new Error('a clip at 200 percent exports at ' + ratio.toFixed(3) + 'x the same clip at 100 percent, not 2x - the boost limiter adds ' + db986(ratio / 2).toFixed(2) + ' dB of its own to every boosted clip in the file');
+    } finally {
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* C14 — THE COMPRESSOR'S KNEE WAS NEVER SET, so every Compressor ran on the node's own 30 dB soft knee with no control:
+   * at the default −24 threshold that knee spans −24 to +6 dBFS, and "4:1" never fully applied to anything a clip can hold.
+   * MEASURED at 913186b6: a `knee` of 0 rendered byte-for-byte what 30 did (the key was ignored). Fixed: Knee, 0–40 dB,
+   * keyframable, default 30 — the node's own default, so a saved Compressor (the sanitiser fills a missing key with it)
+   * renders exactly as before; that is the control. Knee 0 then compresses a full-scale sine to −6.63 dBFS where 30 gives
+   * −1.50. And it is on screen: a Knee row in the open Compressor, inside the panel, at whatever width the suite runs. */
+  test('986 C14 the Compressor has a Knee control, and its default is the 30 dB the node always used', { item: '986', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const reg = FM.audioFxRegistry;
+    const inst = reg.makeInstance('compressor');
+    if (!inst || inst.params.knee !== 30) throw new Error('a new Compressor has no Knee (params ' + JSON.stringify(inst && inst.params) + ') - the knee is never set, it is always the node default');
+    const oldSave = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { threshold: -24, ratio: 4, attack: 0.01, release: 0.25 } }] }];
+    FM.storage._sanitizeLayers(oldSave);
+    if (oldSave[0].audioFx[0].params.knee !== 30) throw new Error('a Compressor saved before Knee existed opens with knee ' + oldSave[0].audioFx[0].params.knee + ', not 30 - it would change how a saved project sounds');
+    const kept = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { threshold: -24, ratio: 4, attack: 0.01, release: 0.25, knee: 6 } }] }];
+    FM.storage._sanitizeLayers(kept);
+    if (kept[0].audioFx[0].params.knee !== 6) throw new Error('a saved Knee of 6 dB is read back as ' + kept[0].audioFx[0].params.knee);
+    const base = { threshold: -24, ratio: 4, attack: 0.01, release: 0.25 };
+    const cmp = k => [{ type: 'compressor', enabled: true, params: k == null ? base : Object.assign({ knee: k }, base) }];
+    const loud = sine986(1);
+    // CONTROL: the default is today's sound, sample for sample.
+    const a = await afx986(cmp(null), loud, 1), b30 = await afx986(cmp(30), loud, 1);
+    let worst = 0; for (let i = 0; i < a.length; i++) worst = Math.max(worst, Math.abs(a[i] - b30[i]));
+    if (worst > 1e-6) throw new Error('CONTROL: a Compressor at Knee 30 renders up to ' + worst.toExponential(2) + ' away from one with no knee key - the default must be the sound saved projects already have');
+    const p30 = db986(pk986(b30, 0.5, 1)), p0 = db986(pk986(await afx986(cmp(0), loud, 1), 0.5, 1));
+    // measured −1.50 (30) and −6.63 (0)
+    if (!(p30 - p0 > 3)) throw new Error('Knee 0 and Knee 30 compress a full-scale sine to ' + p0.toFixed(2) + ' and ' + p30.toFixed(2) + ' dBFS - the Knee does nothing; the node keeps its own 30 dB');
+    const kf = await afx986([{ type: 'compressor', enabled: true, params: Object.assign({}, base, { knee: { kf: [{ t: 0, v: 30 }, { t: 1, v: 0 }, { t: 2, v: 0 }] } }) }], loud, 2);
+    const kfEnd = db986(pk986(kf, 1.5, 2));
+    if (Math.abs(kfEnd - p0) > 0.5) throw new Error('a Knee keyframed from 30 to 0 ends at ' + kfEnd.toFixed(2) + ' dBFS where a static 0 gives ' + p0.toFixed(2) + ' - it does not animate');
+    // ON SCREEN: the open Compressor row shows a Knee row inside the panel, reading 30.0dB.
+    const saved = FM.scene;
+    try {
+      const song = await hbAudScene([], 4);
+      const c = reg.makeInstance('compressor'); c._expanded = true;
+      FM.layerById(FM.scene, song.id).audioFx = [c];
+      FM.refreshAll(); FM.selectLayer(song.id); await sleep(200);
+      FM.inspector.openCategory('audiofx'); await sleep(500);
+      const labels = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label'));
+      const knee = labels.filter(l => l.textContent.trim() === 'Knee')[0];
+      if (!labels.length) throw new Error('setup: the open Compressor row has no slider labels at all');
+      if (!knee) throw new Error('the open Compressor shows ' + labels.map(l => l.textContent.trim()).join(', ') + ' - no Knee');
+      const row = knee.closest('.fx-scrub-row'), r = row.getBoundingClientRect(), pr = document.getElementById('inspector-panel').getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0) || r.left < pr.left - 1 || r.right > pr.right + 1) throw new Error('the Knee row is at ' + Math.round(r.left) + '-' + Math.round(r.right) + ' px in a panel at ' + Math.round(pr.left) + '-' + Math.round(pr.right) + ' px (window ' + window.innerWidth + ')');
+      const val = row.querySelector('.fx-scrub-val');
+      if (!val || val.value !== '30.0dB') throw new Error('the Knee reads ' + (val && val.value) + ', not 30.0dB');
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* C15 — RING MOD STOPPED AT 1024 Hz. Its carrier was a 1 s sine buffer played at playbackRate = Hz, and an
+   * AudioBufferSourceNode's rate is capped at 1024 (Chromium and WebKit). MEASURED at 913186b6 on a DC input, whose output
+   * IS the carrier (zero crossings over one second): 220 → 219, 1000 → 999, and 1100, 1500 and 2000 all → 1024. The top
+   * half of the Frequency slider did nothing. Fixed: a 0.1 s cycle (rate = Hz / 10). Checked in the export's path
+   * (schedule), the preview's (applyAt), and that an export starting mid-scene lands on the same carrier phase as one from
+   * 0 (the LFO's scene-time phase rule — at 913186b6 the phase was computed at 2000 Hz and played at 1024, so they split). */
+  test('986 C15 Ring Mod above 1024 Hz modulates at the frequency on the slider, in the export and the preview', { item: '986', budgetMs: 60000 }, async function () {
+    const SR = 48000;
+    const freqOf = (d, a, b) => { let z = 0; for (let i = Math.floor(a * SR) + 1; i < Math.floor(b * SR); i++) if (d[i - 1] < 0 && d[i] >= 0) z++; return z / (b - a); };
+    const ring = f => [{ type: 'ringmod', enabled: true, params: { freq: f, mix: 1 } }];
+    const dc = () => 1;
+    const c220 = freqOf(await afx986(ring(220), dc, 1.2), 0.1, 1.1);
+    if (Math.abs(c220 - 220) > 2) throw new Error('CONTROL: a 220 Hz Ring Mod on a DC input measures ' + c220.toFixed(1) + ' Hz - the zero-crossing counter is broken');
+    const bad = [];
+    for (const f of [1500, 2000]) {
+      const ex = freqOf(await afx986(ring(f), dc, 1.2), 0.1, 1.1);
+      const pv = freqOf(await afx986(ring(f), dc, 1.2, { live: true }), 0.1, 1.1);
+      if (Math.abs(ex - f) > 2) bad.push('the export path modulates at ' + ex.toFixed(1) + ' Hz for a ' + f + ' Hz setting');
+      if (Math.abs(pv - f) > 2) bad.push('the preview path modulates at ' + pv.toFixed(1) + ' Hz for a ' + f + ' Hz setting');
+    }
+    // An export that starts at 0.25375 s (12180 samples) plays the carrier the whole-project render plays at the same moment.
+    const whole = await afx986(ring(2000), dc, 1), part = await afx986(ring(2000), dc, 0.75, { anchor: 0.25375 });
+    let worst = 0; for (let i = 0; i < 0.4 * SR; i++) worst = Math.max(worst, Math.abs(whole[i + 12180 + 12000] - part[i + 12000]));
+    if (worst > 0.01) bad.push('an export from 0.254 s plays a carrier up to ' + worst.toFixed(3) + ' away from the whole-project render at the same scene time');
+    if (bad.length) throw new Error('Ring Mod does not reach the frequencies its slider offers (the buffer rate stops at 1024): ' + bad.join('; '));
+  });
+
+  /* C10 — THE SOUND-EFFECT PLAY BUTTON WAS NOT WHAT Add PRODUCES. ▶ rendered the recipe live, raw, through a 0.82 trim; Add
+   * renders it offline and normalises it (0.89 x level / peak). MEASURED at 913186b6 with the preview's own context stood in
+   * by an OfflineAudioContext (FM.audioCtx is what preview() asks for), peak of the ▶ against peak of the added clip:
+   * Reverse whoosh 0.090 vs 0.890 (9.9x), Whoosh 7.8x, Swoosh-by 5.9x, Wind 4.7x, Click 0.894 vs 0.489 (the ▶ LOUDER), and
+   * Punch, Glass break and Reverse cymbal 1.00-1.04 on the ▶ - over full scale. Fixed: the ▶ plays renderBuffer's own
+   * buffer, cached, at unity - every one of the 30 now matches the added clip sample for sample (from its 10 ms start).
+   * CONTROL: preview() still reaches FM.audioCtx() synchronously - the iPhone unlocks audio only inside the tap. */
+  test('986 C10 the sound-effect play button plays the very buffer Add puts on the timeline', { item: '986', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.sfx || !FM.sfx.preview || !FM.sfx.renderBuffer) throw new Error('FM.sfx.preview / renderBuffer missing');
+    const defs = FM.sfx.list();
+    if (defs.length < 20) throw new Error('setup: only ' + defs.length + ' sound effects');
+    const real = FM.audioCtx, bad = [];
+    try {
+      for (const def of defs) {
+        window.__fmStep = '986 C10 ' + def.id;
+        const oc = new OfflineAudioContext(1, Math.ceil((def.dur + 0.3) * 44100), 44100);
+        let asked = false;
+        FM.audioCtx = () => { asked = true; return oc; };
+        const pr = FM.sfx.preview(def);
+        if (!asked) throw new Error('CONTROL: preview(' + def.id + ') did not reach FM.audioCtx() inside the tap - on an iPhone the sound would never unlock');
+        if (pr && pr.then) await pr;
+        await sleep(30);
+        const pv = (await oc.startRendering()).getChannelData(0);
+        FM.sfx.stopPreview();
+        const add = (await FM.sfx.renderBuffer(def)).getChannelData(0);
+        let pa = 0, pp = 0, diff = 0;
+        for (let i = 0; i < add.length; i++) { pa = Math.max(pa, Math.abs(add[i])); if (i + 441 < pv.length) diff = Math.max(diff, Math.abs(pv[i + 441] - add[i])); }
+        for (let i = 0; i < pv.length; i++) pp = Math.max(pp, Math.abs(pv[i]));
+        if (!(pa > 0.05)) throw new Error('setup: ' + def.name + ' renders silent for Add (peak ' + pa.toFixed(3) + ')');
+        if (Math.abs(pp / pa - 1) > 0.01 || diff > 1e-4) bad.push(def.name + ' plays at peak ' + pp.toFixed(3) + ' on the ▶ and ' + pa.toFixed(3) + ' once added (' + (pa / Math.max(1e-6, pp)).toFixed(2) + 'x)');
+      }
+    } finally { FM.audioCtx = real; try { FM.sfx.stopPreview(); } catch (e) {} }
+    if (bad.length) throw new Error(bad.length + ' of ' + defs.length + ' sound effects sound different on the ▶ from the clip Add puts on the timeline: ' + bad.slice(0, 8).join('; '));
+  });
+
+  /* C12 — THE SOUND ROW'S HIGHLIGHT CLEARED ONLY ON ITS OWN TIMER, AND NOTHING COULD STOP A SOUND. MEASURED at 913186b6 in the
+   * real sheet: ▶ on one row, then ▶ on another - the first row stayed lit (its timer had not run out), and a second tap on
+   * the playing row left it lit and started the sound again. Fixed: one preview at a time, which knows its row - the old row
+   * goes dark the moment another starts, a tap on the playing row stops it (and its ▶ says Stop meanwhile).
+   * CONTROL: the first tap lights its row, and a sound left alone goes dark when it ends. */
+  test('986 C12 hearing a second sound unlights the first row at once, and tapping the playing row stops it', { item: '986', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.sfx || !FM.sfx.open) throw new Error('FM.sfx.open is missing');
+    FM.sfx.open(); await sleep(400);
+    try {
+      const rows = [].slice.call(document.querySelectorAll('.sfx-row'));
+      const secs = r => parseFloat((r.querySelector('.sfx-dur') || {}).textContent);
+      const long = rows.filter(r => secs(r) >= 1.5).slice(0, 2);
+      const short = rows.filter(r => secs(r) <= 0.3)[0];
+      if (long.length < 2 || !short) throw new Error('setup: need two sounds of 1.5 s or more and one of 0.3 s or less in the sheet');
+      const A = long[0], B = long[1], tap = r => attached(r.querySelector('.sfx-play'), 'the ▶ of a sound row').click();
+      tap(A); await sleep(120);
+      if (!A.classList.contains('playing')) throw new Error('CONTROL: tapping ▶ did not light its row - nothing below is measured');
+      tap(B); await sleep(120);
+      if (A.classList.contains('playing')) throw new Error('hearing a second sound left the first row lit - its highlight only clears on its own timer, so two rows look like they are playing');
+      if (!B.classList.contains('playing')) throw new Error('the second row is not lit while it plays');
+      const stopSay = (B.querySelector('.sfx-play').getAttribute('aria-label') || '');
+      if (!/^Stop /.test(stopSay)) throw new Error('the playing row\'s ▶ is labelled ' + JSON.stringify(stopSay) + ' - it should say it stops');
+      tap(B); await sleep(120);
+      if (B.classList.contains('playing')) throw new Error('tapping the playing row did not stop it - it is still lit, and nothing on screen can stop a sound once started');
+      if (typeof FM.sfx.previewing !== 'function') throw new Error('FM.sfx.previewing is missing - whether a sound is still playing cannot be read');
+      if (FM.sfx.previewing() !== null) throw new Error('after the stop tap the sheet still reports ' + FM.sfx.previewing() + ' playing');
+      // CONTROL: a sound left alone goes dark on its own when it ends.
+      tap(short); await sleep(80);
+      if (!short.classList.contains('playing')) throw new Error('CONTROL: the short sound did not light its row');
+      await sleep(Math.round(secs(short) * 1000) + 900);
+      if (short.classList.contains('playing')) throw new Error('a ' + secs(short) + ' s sound left alone is still lit 0.9 s after it ended');
+    } finally { try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {} await sleep(150); }
+  });
+
+  /* C12 (review) — THE PLAYING STATE BELONGED TO A ROW, NOT TO THE SOUND. MEASURED at e5976048 with Riser (2.2 s): ▶, then its ★ -
+   * the ★ rebuilds the list, and the sound kept playing with NO lit row and both of its copies (Favourites and its category)
+   * labelled Hear Riser; a tap on either copy then RESTARTED it instead of stopping it (previewing() still riser, the row lit
+   * again). 913186b6 lost the highlight on a ★ tap too. Fixed: the playing state is keyed by the sound's id - every row of
+   * that sound is lit and says Stop, a row rebuilt while it plays comes back lit, and one tap on any copy stops it.
+   * CONTROL: the first tap lights its row, and the ★ does not itself stop the sound. */
+  test('986 C12 a sound keeps its lit Stop row after its star is tapped, and one tap on either copy stops it', { item: '986', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!FM.sfx || !FM.sfx.open || !FM.sfx.favs) throw new Error('FM.sfx.open / favs is missing');
+    const favKey = 'fm.sfx.fav', saved = localStorage.getItem(favKey);
+    FM.sfx.open(); await sleep(400);
+    try {
+      const secs = r => parseFloat((r.querySelector('.sfx-dur') || {}).textContent);
+      const idOf = r => ((r.querySelector('.sfx-star') || {}).dataset || {}).sfxid;
+      const favs = FM.sfx.favs();
+      const pick = [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => secs(r) >= 1.5 && idOf(r) && favs.indexOf(idOf(r)) < 0)[0];
+      if (!pick) throw new Error('setup: no unstarred sound of 1.5 s or more in the sheet');
+      const id = idOf(pick), name = pick.querySelector('.sfx-name').textContent;
+      const rowsOf = () => [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => idOf(r) === id);
+      const lit = () => [].slice.call(document.querySelectorAll('.sfx-row.playing')).map(idOf);
+      const say = r => r.querySelector('.sfx-play').getAttribute('aria-label') || '';
+      const tap = (r, what) => attached(r.querySelector(what), 'the ' + what + ' of ' + name).click();
+      const playing = () => (typeof FM.sfx.previewing === 'function' ? FM.sfx.previewing() : '(no previewing seam)');
+      tap(pick, '.sfx-play'); await sleep(120);
+      if (!pick.classList.contains('playing')) throw new Error('CONTROL: tapping ▶ on ' + name + ' did not light its row - nothing below is measured');
+      tap(pick, '.sfx-star'); await sleep(150);
+      let copies = rowsOf();
+      if (copies.length !== 2) throw new Error('setup: after starring, ' + name + ' should appear twice (Favourites and its category) - found ' + copies.length);
+      if (typeof FM.sfx.previewing === 'function' && playing() !== id) throw new Error('CONTROL: the ★ tap is not meant to stop the sound, yet the sheet reports ' + JSON.stringify(playing()) + ' playing');
+      const unlit = copies.filter(r => !r.classList.contains('playing') || !/^Stop /.test(say(r)));
+      if (unlit.length) throw new Error(name + ' is still playing after its ★ was tapped, but ' + unlit.length + ' of its 2 rows are not lit with a Stop ▶ (lit rows ' + JSON.stringify(lit()) + ', labels ' + JSON.stringify(copies.map(say)) + ') - the ★ rebuilt the list and the new rows forgot it');
+      if (lit().some(x => x !== id)) throw new Error('rows of other sounds are lit: ' + JSON.stringify(lit()));
+      tap(copies[1], '.sfx-play'); await sleep(120);
+      if (playing() !== null) throw new Error('one tap on the lit ' + name + ' row after starring did not stop it - the sheet reports ' + JSON.stringify(playing()) + ' (it restarted)');
+      if (lit().length) throw new Error('after the stop tap rows are still lit: ' + JSON.stringify(lit()));
+      if (!rowsOf().every(r => /^Hear /.test(say(r)))) throw new Error('after the stop tap the ▶ labels are ' + JSON.stringify(rowsOf().map(say)));
+      // The other copy: start it from the category row, stop it from the Favourites row.
+      copies = rowsOf();
+      tap(copies[1], '.sfx-play'); await sleep(120);
+      if (!rowsOf().every(r => r.classList.contains('playing'))) throw new Error('playing ' + name + ' from its category row did not light its Favourites copy too');
+      tap(copies[0], '.sfx-play'); await sleep(120);
+      if (playing() !== null) throw new Error('tapping the Favourites copy of the playing ' + name + ' did not stop it - the sheet reports ' + JSON.stringify(playing()) + ' (it restarted)');
+      if (lit().length) throw new Error('after stopping from the Favourites copy rows are still lit: ' + JSON.stringify(lit()));
+    } finally {
+      try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
+      try { if (saved === null) localStorage.removeItem(favKey); else localStorage.setItem(favKey, saved); } catch (e) {}
+      await sleep(150);
+    }
+  });
+
+
+  /* ═══ #986 (hunt HIGH — found by the #966 inventory, not his words) — KEYING, GRAIN, SCANLINES, PRESETS, SHARPEN ═══════════
+     Six faults the idle backlog found by READING the code (tools/design/plans/2026-09-29-idle-backlog/backlog.md §C: C3, C4,
+     C5, C6, C9, C41). Each was measured on 913186b6 before it was touched; the numbers quoted in each test are those readings.
+     Where a picture is involved it is checked through FM.renderScene at the export's size (a canvas the size of the project,
+     which is what the exporter renders into) AND at a reduced preview size, because a preview fix must not move the export
+     unless the export was the thing that was wrong. */
+
+  /* C3 — CHROMA KEY PRO'S DESPILL ALWAYS PULLED GREEN. Measured on 913186b6, blue key #1e3cff, Despill 1: a leaf (60,140,50)
+     came out (60,60,50) — its green taken away — and a blue-spill pixel (150,150,200) kept all 200 of its blue. The basic
+     Chroma Key has always pulled the key's own strongest channel; this one now does too. CONTROL: a GREEN key gives exactly
+     what the old green despill gave on the same pixels (the leaf pulled to 60, blue and skin untouched), and every pixel
+     survives the key at full alpha, so nothing but despill is being measured. */
+  test('986 C3 Chroma Key Pro despill pulls the key colour - on a blue screen a leaf keeps its green and the blue rim comes down, a green screen is unchanged', { item: '986' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.chromakeypro) throw new Error('the Chroma Key Pro kernel is not reachable');
+    const LEAF = [60, 140, 50], SPILL = [150, 150, 200], SKIN = [220, 170, 140];
+    const P = (color) => ({ color: color, tolerance: 0.1, softness: 0, despill: 1, edgedesat: 0, view: 0 });
+    const say = a => '(' + a.join(',') + ')';
+    const run = (color, pix) => {
+      const d = new Uint8ClampedArray(pix.length * 4);
+      pix.forEach((q, n) => { d[n * 4] = q[0]; d[n * 4 + 1] = q[1]; d[n * 4 + 2] = q[2]; d[n * 4 + 3] = 255; });
+      K.chromakeypro(d, pix.length, 1, P(color), 0);
+      return pix.map((q, n) => Array.from(d.slice(n * 4, n * 4 + 4)));
+    };
+    const blue = run('#1e3cff', [LEAF, SPILL, SKIN]), green = run('#00c23c', [LEAF, SPILL, SKIN]);
+    blue.concat(green).forEach(q => { if (q[3] !== 255) throw new Error('setup: a test pixel was keyed out ' + say(q) + ' - it has to survive the key for despill to be measured'); });
+    if (say(green[0].slice(0, 3)) !== '(60,60,50)') throw new Error('CONTROL: a GREEN key no longer despills a leaf the way it always did - ' + say(LEAF) + ' came out ' + say(green[0].slice(0, 3)) + ', not (60,60,50)');
+    if (say(green[1].slice(0, 3)) !== say(SPILL) || say(green[2].slice(0, 3)) !== say(SKIN)) throw new Error('CONTROL: a GREEN key changed a pixel with no green spill: ' + say(green[1]) + ' ' + say(green[2]));
+    if (blue[0][1] !== 140) throw new Error('a BLUE screen key took the green out of a leaf - ' + say(LEAF) + ' came out ' + say(blue[0].slice(0, 3)) + '; despill has to pull the key colour, not always green');
+    if (blue[1][2] !== 150) throw new Error('a BLUE screen key left its blue spill on the subject - ' + say(SPILL) + ' came out ' + say(blue[1].slice(0, 3)) + ', the blue should come down to 150');
+    if (say(blue[2].slice(0, 3)) !== say(SKIN)) throw new Error('a BLUE screen key changed skin: ' + say(blue[2]));
+    /* …and through the renderer, as the export and a half-size preview draw it */
+    const hex = q => '#' + q.map(v => (v < 16 ? '0' : '') + v.toString(16)).join('');
+    const sc = (fill) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 160, fill: hex(fill), start: 0, duration: 3 });
+      const e = FM.fxRegistry.makeInstance('chromakeypro'); Object.assign(e.params, P('#1e3cff')); L.effects = [e];
+      return scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } });
+    };
+    [[320, 'the export'], [160, 'a half-size preview']].forEach(([w, where]) => {
+      const at = (fill) => { const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true }); FM.renderScene(x, sc(fill), 0.5); return Array.from(x.getImageData(w / 2, w * 3 / 8, 1, 1).data); };
+      const leaf = at(LEAF), spill = at(SPILL);
+      if (leaf[1] < 130) throw new Error('in ' + where + ' a leaf-green clip under a BLUE-screen Chroma Key Pro drew ' + say(leaf.slice(0, 3)) + ' - its green was despilled away');
+      if (spill[2] > 160) throw new Error('in ' + where + ' a blue-spill clip under a BLUE-screen Chroma Key Pro kept its blue: ' + say(spill.slice(0, 3)));
+    });
+  });
+
+  /* C4 — ONLY THE FIRST CHROMA KEY AND THE FIRST LUMA KEY ON A CLIP RAN. The media path picked them with `.find`, so a second
+     Chroma Key — two shades of a badly lit screen — and a second Luma Key did nothing at all while their sliders stayed live.
+     Measured on 913186b6: a clip keyed green then blue still showed its blue (0,0,255) in the render. The clip here is a green,
+     a blue, a black and a white panel with an orange subject across them, over a MAGENTA ground so that "removed" can be told
+     apart from "black". Checked in the export and in a half-size preview. CONTROLS: one key still removes exactly its own
+     colour; a key rendered twice from the cache is the same picture, and changing the SECOND key's colour really re-keys (its
+     cache slot notices); and a luma key listed before a chroma key still runs after it, as it always has. */
+  test('986 C4 every Chroma Key and Luma Key on a clip runs - a second key takes out a second colour, in the export and in a half-size preview', { item: '986' }, function () {
+    const ids = [];
+    const tex = offscreen(320, 240), c = tex.getContext('2d');
+    c.fillStyle = '#00ff00'; c.fillRect(0, 0, 80, 240);
+    c.fillStyle = '#0000ff'; c.fillRect(80, 0, 80, 240);
+    c.fillStyle = '#000000'; c.fillRect(160, 0, 80, 240);
+    c.fillStyle = '#ffffff'; c.fillRect(240, 0, 80, 240);
+    c.fillStyle = '#ff8000'; c.fillRect(0, 100, 320, 40);      // the subject, across all four panels
+    const ck = (col) => { const e = FM.fxRegistry.makeInstance('chromakey'); e.params.color = col; e.params.tolerance = 0.3; e.params.softness = 0; e.params.despill = 0; return e; };
+    const lk = (mode, thr) => { const e = FM.fxRegistry.makeInstance('lumakey'); e.params.mode = mode; e.params.threshold = thr; e.params.softness = 0; return e; };
+    const build = (effs) => {
+      const L = FM.makeLayer('image', { name: '986 C4 keys', x: 160, y: 120, start: 0, duration: 3 });
+      L.start = 0; L.duration = 3; L.effects = effs;
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 320, height: 240 }); ids.push(L.id);
+      return { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#ff00ff' }, layers: [L], selectedId: null, selectedIds: [] };
+    };
+    const PANEL = { green: [40, 40], blue: [120, 40], black: [200, 40], white: [280, 40], subject: [120, 120] };
+    const shot = (sc, w) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, sc, 0.5);
+      const out = {}; Object.keys(PANEL).forEach(k => { out[k] = Array.from(x.getImageData(Math.round(PANEL[k][0] * w / 320), Math.round(PANEL[k][1] * w / 320), 1, 1).data); });
+      out.all = x.getImageData(0, 0, cv.width, cv.height).data;
+      return out;
+    };
+    const gone = (q) => q[0] > 230 && q[1] < 25 && q[2] > 230;       // the magenta ground shows through
+    const say = q => '(' + q.slice(0, 3).join(',') + ')';
+    try {
+      [[320, 'the export'], [160, 'a half-size preview']].forEach(([w, where]) => {
+        const one = shot(build([ck('#00ff00')]), w);
+        if (!gone(one.green) || gone(one.blue) || gone(one.subject)) throw new Error('CONTROL (' + where + '): one green key should remove the green panel and nothing else - green ' + say(one.green) + ', blue ' + say(one.blue) + ', subject ' + say(one.subject));
+        const sc2 = build([ck('#00ff00'), ck('#0000ff')]);
+        const two = shot(sc2, w);
+        if (!gone(two.green)) throw new Error('in ' + where + ' the first of two chroma keys stopped working - green panel ' + say(two.green));
+        if (!gone(two.blue)) throw new Error('in ' + where + ' a SECOND Chroma Key (blue) did nothing - the blue panel still draws ' + say(two.blue) + '; only the first key on a clip was ever run');
+        if (gone(two.subject)) throw new Error('in ' + where + ' two keys took the orange subject out as well: ' + say(two.subject));
+        const again = shot(sc2, w);
+        if (again.all.some((v, i) => v !== two.all[i])) throw new Error('CONTROL (' + where + '): the same two keys rendered twice gave two different pictures - the key cache is handing back the wrong canvas');
+        sc2.layers[0].effects[1].params.color = '#ff8000';
+        const moved = shot(sc2, w);
+        if (!gone(moved.subject) || gone(moved.blue)) throw new Error('in ' + where + ' changing the SECOND key to orange did not re-key - subject ' + say(moved.subject) + ', blue ' + say(moved.blue) + ' (its cache slot did not notice the new colour)');
+        const lum = shot(build([lk(0, 0.25), lk(1, 0.75)]), w);
+        if (!gone(lum.black)) throw new Error('CONTROL (' + where + '): the first Luma Key (dark) no longer removes black: ' + say(lum.black));
+        if (!gone(lum.white)) throw new Error('in ' + where + ' a SECOND Luma Key (bright) did nothing - the white panel still draws ' + say(lum.white));
+        if (gone(lum.subject)) throw new Error('in ' + where + ' two luma keys took the orange subject too: ' + say(lum.subject));
+        const a = shot(build([lk(0, 0.25), ck('#00ff00')]), w), b = shot(build([ck('#00ff00'), lk(0, 0.25)]), w);
+        if (a.all.some((v, i) => v !== b.all[i])) throw new Error('in ' + where + ' a Luma Key listed ABOVE a Chroma Key now renders differently from one listed below it - the order between the two kinds has always been chroma first, and a saved project would change');
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+  });
+
+  /* C5 — FILM GRAIN'S "Grain size" HAD NO unit:'px'. pxToPlate therefore never scaled it, and on his phone's 0.28 preview plate
+     the grain was 8 PLATE pixels where the export draws 8 project pixels — 3.5x coarser — the same fault fixed for Noise in
+     queue 904. Measured on 913186b6: size 8 reached the 0.28 plate as 8 (Noise: 2.24). The kernel now takes `ps` and scales the
+     size itself, so that round-or-square and the grain's strength are decided on the project size. Through the renderer the
+     grain is measured as the run length of equal pixels along a row, in PROJECT pixels, at the export's size, half size and
+     his phone's 0.28 — and its strength as the luma std on mid-grey at every preview plate. */
+  test('986 C5 Film Grain size is project pixels - the grain on a reduced preview plate is the export grain, not 3.5x coarser', { item: '986' }, function () {
+    /* Through the renderer, which is how the app calls the kernel: a full-frame mid-grey clip in a 320x240 project, drawn into a
+       canvas w wide, so the preview plate scale is w/320 and 320 is the export. */
+    const shot = (w, over) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#808080', start: 0, duration: 3 });
+      const e = FM.fxRegistry.makeInstance('filmgrain'); Object.assign(e.params, over); L.effects = [e];
+      const cv = offscreen(w, Math.round(w * 3 / 4)), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } }), 0.5);
+      return x;
+    };
+    /* the grain's size in project pixels: the mean run of equal pixels along rows, divided by the plate scale */
+    const grain = (w) => {
+      const x = shot(w, { amount: 100, size: 8, shape: 0, color: 0, shadows: 100, highlights: 100 });
+      const ps = w / 320, runs = [];
+      for (let y = Math.round(40 * ps); y < Math.round(200 * ps); y += Math.max(1, Math.round(13 * ps))) {
+        const row = x.getImageData(0, y, w, 1).data;
+        let n = 1;
+        for (let px = 1 + Math.round(8 * ps); px < w - Math.round(8 * ps); px++) { if (row[px * 4] === row[(px - 1) * 4]) n++; else { runs.push(n); n = 1; } }
+      }
+      if (runs.length < 10) throw new Error('setup: the grain drew no structure to measure at ' + w + 'px wide');
+      return (runs.reduce((a, b) => a + b, 0) / runs.length) / ps;
+    };
+    const exp = grain(320), half = grain(160), phone = grain(90);
+    if (!(exp > 5 && exp < 11)) throw new Error('setup: Grain size 8 measured ' + exp.toFixed(1) + ' project px in the export - the ruler is not reading the grain');
+    if (half > exp * 1.3) throw new Error('on a half-size preview the grain is ' + half.toFixed(1) + ' project px against ' + exp.toFixed(1) + ' in the export - it is drawn in plate pixels, so every reduced preview shows it coarser than the file');
+    if (phone > exp * 1.3) throw new Error('on his phone preview (0.28) the grain is ' + phone.toFixed(1) + ' project px against ' + exp.toFixed(1) + ' in the export');
+    /* …AND AS STRONG AS THE EXPORT'S, pixel for pixel (the review of this fix). Scaling the size let the default ROUND grain (size 2)
+       reach a plate at or below 0.6 as 1.2 or less, where the kernel draws a square at full weight: measured on 3499dea5 as a luma
+       std of 6.97 in the export, 6.13 at 0.625, then 10.31 at 0.6, 0.5 and 0.28 - 48% stronger on his phone, and a jump when Play
+       lowers the plate. 913186b6 held about 7.0 everywhere (its grain was coarse, not strong). Size 4 is checked too: a small disc at
+       0.5 (plate 2), a square at 0.28 (plate 1.12). CONTROL: square grain has no disc to lose, so it is the same at every plate, and
+       it is well above round - the ruler can tell the two apart. */
+    const std = (w, over) => {
+      const x = shot(w, over), h = Math.round(w * 3 / 4), m = Math.max(1, Math.round(8 * w / 320));
+      const d = x.getImageData(m, m, w - 2 * m, h - 2 * m).data, v = [];
+      for (let i = 0; i < d.length; i += 4) v.push(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+      const mu = v.reduce((a, b) => a + b, 0) / v.length;
+      return Math.sqrt(v.reduce((a, b) => a + (b - mu) * (b - mu), 0) / v.length);
+    };
+    const sq = std(320, { shape: 0 }), sqPhone = std(90, { shape: 0 }), rnd = std(320, {});
+    if (!(rnd > 5 && rnd < 9)) throw new Error('setup: a default Film Grain on mid-grey measured a luma std of ' + rnd.toFixed(2) + ' in the export (6.97 when written) - the ruler is not reading the grain');
+    if (Math.abs(sqPhone / sq - 1) > 0.05) throw new Error('CONTROL: square grain is ' + sqPhone.toFixed(2) + ' on the phone plate against ' + sq.toFixed(2) + ' in the export - it has no disc to lose, so the measurement itself moved');
+    if (!(sq > rnd * 1.3)) throw new Error('CONTROL: square grain (' + sq.toFixed(2) + ') is not clearly stronger than round (' + rnd.toFixed(2) + ') - the ruler cannot tell a square fallback from a disc');
+    [[{}, rnd, 'the default round grain'], [{ size: 4 }, std(320, { size: 4 }), 'round grain at size 4']].forEach(([over, ref, what]) => {
+      [[200, '0.625'], [192, '0.6'], [160, '0.5'], [90, '0.28 - his phone']].forEach(([w, ps]) => {
+        const s = std(w, over);
+        if (Math.abs(s / ref - 1) > 0.05) throw new Error('on a ' + ps + ' preview plate ' + what + ' measures a luma std of ' + s.toFixed(2) + ' against ' + ref.toFixed(2) + ' in the export (' + (s > ref ? '+' : '') + ((s / ref - 1) * 100).toFixed(0) + '%) - a reduced preview draws it at a different strength than the file');
+      });
+    });
+  });
+
+  /* C6 — NIGHT VISION'S SCANLINES WERE EVERY THIRD PLATE ROW. The kernel took no `ps`, so on his phone's 0.28 plate the lines
+     were drawn every 3 plate rows: a 10.7 project-px pitch in the preview where the export draws 3 — measured on 913186b6 as
+     rows alternating 130 / 186 / 186 on the 0.28 plate, exactly the export's pattern at 3.5x the size. At that size a 3-row
+     pitch is finer than the plate can draw, so the preview now shows what the export shows shrunk to it — the lines' average,
+     flat — and at 0.8 (where the lines ARE drawable) it draws them at their project rows. The export (ps 1) must be the old
+     lines exactly: 130 on every third row, 186 between, measured on 913186b6. The sensor grain stays one plate pixel, the floor
+     every grain in the app has, and is off here so only the lines are measured. */
+  test('986 C6 Night Vision scanlines are every third project row - a reduced preview no longer draws them as 10px bars, and the export keeps its lines exactly', { item: '986' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.nightvision || !FM._pxToPlate) throw new Error('the Night Vision kernel or the pxToPlate seam is not reachable');
+    const P = { amount: 1, color: 0, noise: 0, gain: 1.3 };
+    const rows = (W, ps) => {
+      const d = new Uint8ClampedArray(W * W * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 120; d[i + 3] = 255; }
+      K.nightvision(d, W, W, FM._pxToPlate({ type: 'nightvision' }, P, 0, ps, K.nightvision), 0, ps);   // exactly as the app calls it
+      const out = []; for (let y = 0; y < W; y++) out.push(d[(y * W + 3) * 4 + 1]); return out;
+    };
+    const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+    const e = rows(30, 1);
+    e.forEach((v, y) => { if (v !== (y % 3 === 0 ? 130 : 186)) throw new Error('the EXPORT scanlines moved - row ' + y + ' is ' + v + ', it was ' + (y % 3 === 0 ? 130 : 186) + ' (every third row at 130, 186 between): ' + e.slice(0, 9).join(',')); });
+    const em = mean(e);
+    const phone = rows(17, 0.28);
+    const spread = Math.max.apply(null, phone) - Math.min.apply(null, phone);
+    if (spread > 2) throw new Error('on the phone preview plate (0.28) Night Vision draws bars: rows ' + phone.slice(0, 9).join(',') + ' - every third PLATE row is a scanline, a ' + (3 / 0.28).toFixed(1) + ' project-px pitch where the export draws 3');
+    if (Math.abs(mean(phone) - em) > 1.5) throw new Error('on the phone preview plate Night Vision averages ' + mean(phone).toFixed(1) + ' against ' + em.toFixed(1) + ' in the export');
+    const half = rows(20, 0.5);
+    if (Math.max.apply(null, half) - Math.min.apply(null, half) > 2 || Math.abs(mean(half) - em) > 1.5) throw new Error('on a half-size plate Night Vision draws ' + half.slice(0, 9).join(',') + ' - a 1.5-row pitch the plate cannot draw came out as a coarser stripe');
+    const near = rows(30, 0.8);
+    if (Math.max.apply(null, near) - Math.min.apply(null, near) < 20) throw new Error('CONTROL: at 0.8 the scanlines are drawable and should still show, but the rows are flat: ' + near.slice(0, 9).join(','));
+    if (Math.abs(mean(near) - em) > 2.5) throw new Error('at a 0.8 plate the scanlines average ' + mean(near).toFixed(1) + ' against ' + em.toFixed(1) + ' in the export');
+    /* through the renderer: a full-frame grey clip, the export (320) and his phone's reduced preview (90, scale 0.28) */
+    const shot = (w) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#787878', start: 0, duration: 3 });
+      const nv = FM.fxRegistry.makeInstance('nightvision'); Object.assign(nv.params, P); L.effects = [nv];
+      const h = Math.round(w * 3 / 4), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } }), 0.5);
+      const out = [];
+      for (let y = 2; y < h - 2; y++) { const r = x.getImageData(2, y, w - 4, 1).data; let s = 0; for (let i = 1; i < r.length; i += 4) s += r[i]; out.push(s / (r.length / 4)); }
+      return out;
+    };
+    const ex = shot(320), pv = shot(90);
+    if (Math.max.apply(null, ex) - Math.min.apply(null, ex) < 30) throw new Error('setup: the exported Night Vision shows no scanlines to compare with');
+    const pvSpread = Math.max.apply(null, pv) - Math.min.apply(null, pv);
+    if (pvSpread > 4) throw new Error('rendered on his phone preview (0.28) Night Vision shows bars ' + pvSpread.toFixed(0) + ' levels deep (rows ' + pv.slice(0, 6).map(v => v.toFixed(0)).join(',') + ') - the export has fine 3px lines there');
+    if (Math.abs(mean(pv) - mean(ex)) > 3) throw new Error('rendered on the phone preview Night Vision averages ' + mean(pv).toFixed(1) + ' against ' + mean(ex).toFixed(1) + ' in the export');
+    /* HIGHLIGHTS (the review of this fix). The export clamps each line to 255 and the eye averages lines already clamped, so a clip
+       the gain pushes past white must average the same on a reduced plate as in the file. Multiplying by the row's average BEFORE
+       the clamp made it brighter: measured on 3499dea5 on #c3c3c3, 174.6 on the preview against 163.7 in the export, White hot 246
+       against 230 (913186b6 matched - it drew the bars). Mean luma over the frame, at 0.8, 0.5 and his phone's 0.28, default noise
+       included once. */
+    const lumaMean = (w, fill, over) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: fill, start: 0, duration: 3 });
+      const nv = FM.fxRegistry.makeInstance('nightvision'); Object.assign(nv.params, over); L.effects = [nv];
+      const h = Math.round(w * 3 / 4), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' } }), 0.5);
+      const d = x.getImageData(2, 2, w - 4, h - 4).data; let s = 0;
+      for (let i = 0; i < d.length; i += 4) s += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+      return s / (d.length / 4);
+    };
+    [['#c3c3c3', { noise: 0 }, 'a bright clip'], ['#c3c3c3', { noise: 0, color: 2 }, 'a bright clip in White hot'], ['#e0e0e0', {}, 'a brighter clip with the default noise']].forEach(([fill, over, what]) => {
+      const ref = lumaMean(320, fill, over);
+      if (!(ref > 150)) throw new Error('setup: ' + what + ' exports at a mean of ' + ref.toFixed(1) + ' - not bright enough for the gain to clip it');
+      [[256, '0.8'], [160, '0.5'], [90, '0.28 - his phone']].forEach(([w, ps]) => {
+        const m = lumaMean(w, fill, over);
+        if (Math.abs(m - ref) > 1.5) throw new Error('on a ' + ps + ' preview plate Night Vision on ' + what + ' averages ' + m.toFixed(1) + ' against ' + ref.toFixed(1) + ' in the export - the scanlines are averaged before the highlights clip, so the preview is brighter than the file');
+      });
+    });
+  });
+
+  /* C9 — A FILTER SAVED WITH "Save this effect as preset…" COULD NOT BE FOUND AGAIN. The toast sent him to hold Filter in the
+     Effects browser, where the filter container is hidden; the Filters tab drew the library only; and a container rebuilt from
+     the preset carried no name or `fid`. Measured on 913186b6: saved, `FM.filters.get(id)` resolved it, and the Filters tab
+     showed 56 tiles, none of them his. The ROW that shows his filters on the tab is HELD for his pick (#545, with a way to
+     delete one — nothing in the app can), so this checks the data half it will stand on: driven through the REAL row ⋯ menu
+     (prompt answered), the toast no longer sends him to the Effects browser, `FM.filters.custom()` lists it, and it lands
+     named, with its effects and its `fid`, by both creation paths. `fid` must also survive the sanitiser every project load
+     runs — it did not (queue 812 stamped it; the whitelist never learned it), so a saved filter of his own lost its Favourite
+     after one reopen. CONTROL: the save really landed in the store. */
+  test('986 C9 a filter saved as a preset is kept whole - the toast no longer sends him to the Effects browser, it is listed as his, lands named with its effects, and still knows which filter it is after a reload', { item: '986', budgetMs: 60000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedSel = FM.scene.selectedId, savedLayers = FM.scene.layers.slice();
+    const realPrompt = window.prompt, realToast = FM.toast, toasts = [];
+    let faves0 = null; try { faves0 = localStorage.getItem('fm.filterFaves'); } catch (e) {}
+    const NAME = 'Beach look 986';
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#4080c0', start: 0, duration: 4 });
+    // a library filter of two or more effects that ALL suit a shape layer, so what lands can be compared with what was saved
+    const lib = FM.filters.all().filter(f => {
+      if (!f.effects || f.effects.length < 2) return false;
+      const b = FM.filters.makeInstance(f.id), fit = b && FM.fxRegistry.fitToLayer(FM.filters.makeInstance(f.id), L);
+      return !!(fit && fit.effects && fit.effects.length === b.effects.length);
+    })[0];
+    if (!lib) throw new Error('setup: no library filter with two or more effects that all suit a shape layer');
+    let savedId = null;
+    try {
+      FM.scene.layers.push(L);
+      const box = FM.filters.makeInstance(lib.id);
+      box.effects.pop();                               // his own retune: one ingredient taken out
+      box.params.strength = 0.6;
+      box._expanded = true;                            // the ⋯ only exists on an open row
+      L.effects = [box];
+      const wantTypes = box.effects.map(e => e.type).join(',');
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll(); await sleep(150);
+      FM.inspector.openCategory('effects'); await sleep(200);
+      const more = [].slice.call(document.querySelectorAll('#inspector .fx-icon-btn')).filter(b => (b.textContent || '').trim() === '⋯')[0];
+      if (!more) throw new Error('setup: the filter row has no ⋯ button on screen');
+      window.prompt = () => NAME;
+      FM.toast = function (msg) { toasts.push(String(msg)); return realToast && realToast.apply(this, arguments); };
+      const before = FM.effectPresets.custom().map(p => p.id);
+      more.click(); await sleep(180);
+      const items = [].slice.call(document.querySelectorAll('#ctx-menu button, #ctx-menu .ctx-item, #ctx-menu [role="menuitem"]'));
+      const save = items.filter(i => /save this effect as preset/i.test(i.textContent || ''))[0];
+      if (!save) throw new Error('setup: the ⋯ menu has no Save this effect as preset (' + items.map(i => (i.textContent || '').trim()).join(' | ') + ')');
+      save.click(); await sleep(200);
+      const mine = FM.effectPresets.custom().filter(p => before.indexOf(p.id) < 0);
+      if (mine.length !== 1 || mine[0].name !== NAME) throw new Error('CONTROL: the save did not land in the store (' + mine.length + ' new preset(s))');
+      savedId = mine[0].id;
+      const said = toasts.join(' / ');
+      if (!/saved/i.test(said)) throw new Error('CONTROL: saving showed no Saved toast to read (' + (said || 'no toast') + ')');
+      if (/effects browser/i.test(said)) throw new Error('saving a filter still tells him to find it in the Effects browser, where a filter cannot be found: ' + said);
+      /* the list the held Your filters row will draw */
+      const listed = (FM.filters.custom ? FM.filters.custom() : null);
+      if (!listed) throw new Error('nothing lists the filters he has saved (FM.filters.custom is missing) - saved and unreachable');
+      const def = listed.filter(f => f && f.id === savedId)[0];
+      if (!def || def.name !== NAME) throw new Error('the filter he saved as ' + NAME + ' is not among his listed filters (' + listed.map(f => f && f.name).join(', ') + ')');
+      if (listed.some(f => f && f.id === lib.id)) throw new Error('his filters list a LIBRARY filter as his own');
+      /* it lands as the tile would land it */
+      const got = FM.filters.makeInstance(savedId);
+      if (!got || got.type !== FM.FX_CONTAINER || got.name !== NAME) throw new Error('his filter lands as ' + (got && got.type) + ' named ' + JSON.stringify(got && got.name).replace(/"/g, "'"));
+      if ((got.effects || []).map(e => e.type).join(',') !== wantTypes) throw new Error('his filter lands with ' + (got.effects || []).map(e => e.type).join(',') + ', not the ' + wantTypes + ' he saved');
+      /* through the sanitiser a project load runs, it still knows which filter it is */
+      const holder = { effects: [JSON.parse(JSON.stringify(got, FM.jsonReplacer))] };
+      FM.storage._sanitizeEffects(holder);
+      const back = holder.effects[0];
+      if (!back || back.fid !== savedId) throw new Error('after a save and reopen his filter no longer says which filter it is (fid ' + JSON.stringify(back && back.fid).replace(/"/g, "'") + ') - the row loses its Favourite');
+      if (FM.filters.idOfInstance(back) !== savedId) throw new Error('after a reload the row cannot find his filter to star it');
+      const lb = FM.filters.makeInstance(lib.id), lbHolder = { effects: [JSON.parse(JSON.stringify(lb))] };
+      FM.storage._sanitizeEffects(lbHolder);
+      if (lbHolder.effects[0].fid !== lib.id) throw new Error('a library filter loses its fid through a reload too (' + JSON.stringify(lbHolder.effects[0].fid).replace(/"/g, "'") + ')');
+      const junk = { effects: [{ type: FM.FX_CONTAINER, enabled: true, params: { strength: 1 }, effects: [], fid: '<img src=x>' }] };
+      FM.storage._sanitizeEffects(junk);
+      if (junk.effects[0] && junk.effects[0].fid !== undefined) throw new Error('the sanitiser kept a filter id that is not a plain word: ' + JSON.stringify(junk.effects[0].fid).replace(/"/g, "'"));
+      /* and the preset path lands it the same way the tile does */
+      const inst = FM.effectPresets.makeInstance(mine[0], 0);
+      if (!inst || inst.name !== NAME || inst.fid !== savedId) throw new Error('FM.effectPresets.makeInstance lands his filter as ' + JSON.stringify({ name: inst && inst.name, fid: inst && inst.fid }).replace(/"/g, "'"));
+    } finally {
+      window.prompt = realPrompt; FM.toast = realToast;
+      try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+      if (savedId) { try { FM.effectPresets.remove(savedId); } catch (e) {} }
+      try { if (faves0 === null) localStorage.removeItem('fm.filterFaves'); else localStorage.setItem('fm.filterFaves', faves0); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.timeline.rebuild(); FM.selectLayer(savedSel || null); FM.refreshAll(); await sleep(40);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* C41 — SHARPEN LEFT AN r-PIXEL FRAME ROUND THE PICTURE UNSHARPENED. Its loops run r..W-r, so on full-frame footage the
+     outer r pixels of every side were never touched — measured on 913186b6: 0 of the border pixels changed at Radius 1, on a
+     frame whose inside changed 194 of 194. A tap that would fall off the frame now reads the nearest pixel inside it
+     (clamp-to-edge). Every pixel is checked against that arithmetic written out here; inside the band it IS the old loop's
+     arithmetic, so the interior is proven unchanged by the same comparison. Colour, a threshold and Brightness-only are all
+     driven, at Radius 1 (its own fast loop), 3 and 8. Then through the renderer: a full-frame textured clip, the export and a
+     half-size preview, and a small clip whose frame edge must stay the plain ground. */
+  test('986 C41 Sharpen sharpens the frame edge too - a Radius 8 border on full-frame footage is no longer left soft, and the inside is unchanged', { item: '986' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.sharpen || !FM._pxToPlate) throw new Error('the Sharpen kernel or the pxToPlate seam is not reachable');
+    const W = 40, H = 34;
+    const val = (x, y, c) => (x * 37 + y * 91 + ((x * y + c * 11) % 7) * 13 + c * 29) % 200 + 28;
+    const plate = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = val(x, y, 0); d[i + 1] = val(x, y, 1); d[i + 2] = val(x, y, 2); d[i + 3] = 255; } return d; };
+    const lu = (s, k) => s[k] * 0.299 + s[k + 1] * 0.587 + s[k + 2] * 0.114;
+    const reference = (s, r, amt, thr, luma) => {
+      const d = new Uint8ClampedArray(s);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const iu = (Math.max(0, y - r) * W + x) * 4, id = (Math.min(H - 1, y + r) * W + x) * 4;
+        const il = (y * W + Math.max(0, x - r)) * 4, ir = (y * W + Math.min(W - 1, x + r)) * 4;
+        if (luma) {
+          const delta = lu(s, i) * 4 - (lu(s, iu) + lu(s, id) + lu(s, il) + lu(s, ir));
+          if (thr > 0 && Math.abs(delta) < thr * 4) continue;
+          const add = delta * amt; d[i] = s[i] + add; d[i + 1] = s[i + 1] + add; d[i + 2] = s[i + 2] + add; continue;
+        }
+        if (thr > 0 && Math.abs(lu(s, i) * 4 - (lu(s, iu) + lu(s, id) + lu(s, il) + lu(s, ir))) < thr * 4) continue;
+        for (let c = 0; c < 3; c++) d[i + c] = s[i + c] * (1 + 4 * amt) - (s[iu + c] + s[id + c] + s[il + c] + s[ir + c]) * amt;
+      }
+      return d;
+    };
+    const CASES = [{ radius: 1 }, { radius: 3 }, { radius: 8 }, { radius: 3, threshold: 10 }, { radius: 2, mode: 1 }, { radius: 8, mode: 1, threshold: 6 }];
+    CASES.forEach(q => {
+      const params = Object.assign({ amount: 1.5, radius: 1, threshold: 0, mode: 0 }, q);
+      const src = plate(), d = plate();
+      K.sharpen(d, W, H, FM._pxToPlate({ type: 'sharpen' }, params, 0, 1, K.sharpen), 0, 1);
+      const want = reference(src, params.radius, params.amount, params.threshold, params.mode === 1);
+      const r = params.radius;
+      let inner = 0, border = 0, borderN = 0, borderMoved = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, isB = x < r || y < r || x >= W - r || y >= H - r;
+        const bad = d[i] !== want[i] || d[i + 1] !== want[i + 1] || d[i + 2] !== want[i + 2] || d[i + 3] !== 255;
+        if (isB) { borderN++; if (bad) border++; if (want[i] !== src[i] || want[i + 1] !== src[i + 1]) borderMoved++; } else if (bad) inner++;
+      }
+      const tag = JSON.stringify(q).replace(/"/g, '');
+      if (inner) throw new Error('Sharpen ' + tag + ' changed ' + inner + ' INSIDE pixels from the old arithmetic - the fix must leave the interior byte for byte');
+      if (!(borderMoved > borderN * 0.3)) throw new Error('setup ' + tag + ': the reference barely sharpens the border (' + borderMoved + ' of ' + borderN + '), so this fixture cannot see the fault');
+      if (border) throw new Error('Sharpen ' + tag + ' left ' + border + ' of the ' + borderN + ' pixels in its ' + r + '-pixel frame edge unsharpened (or wrong) - on full-frame footage that is a soft band down every side');
+    });
+    /* through the renderer: a full-frame textured clip, the export and a half-size preview */
+    const tex = offscreen(320, 240), tc = tex.getContext('2d'), ti = tc.createImageData(320, 240);
+    for (let y = 0; y < 240; y++) for (let x = 0; x < 320; x++) { const i = (y * 320 + x) * 4; ti.data[i] = val(x, y, 0); ti.data[i + 1] = val(x, y, 1); ti.data[i + 2] = val(x, y, 2); ti.data[i + 3] = 255; }
+    tc.putImageData(ti, 0, 0);
+    const ids = [];
+    const render = (w, sharpen, small) => {
+      const L = small
+        ? FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 90, fill: '#c04080', start: 0, duration: 3 })
+        : FM.makeLayer('image', { name: '986 C41 frame', x: 160, y: 120, start: 0, duration: 3 });
+      L.start = 0; L.duration = 3;
+      if (!small) { FM.media.set(L.id, { kind: 'image', el: tex, width: 320, height: 240 }); ids.push(L.id); }
+      if (sharpen) { const e = FM.fxRegistry.makeInstance('sharpen'); Object.assign(e.params, { amount: 1.5, radius: 4, threshold: 0, mode: 0 }); L.effects = [e]; } else L.effects = [];
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, scene([L], { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#203040' } }), 0.5);
+      return x.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    try {
+      [[320, 'the export', 4], [160, 'a half-size preview', 2]].forEach(([w, where, band]) => {
+        const h = w * 3 / 4, a = render(w, false), b = render(w, true);
+        let n = 0, moved = 0, innerMoved = 0;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4, isB = x < band || y < band || x >= w - band || y >= h - band;
+          const ch = a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2];
+          if (isB) { n++; if (ch) moved++; } else if (ch) innerMoved++;
+        }
+        if (innerMoved < (w - 2 * band) * (h - 2 * band) * 0.5) throw new Error('setup (' + where + '): Sharpen barely changed the inside of a textured clip (' + innerMoved + ' pixels), so the edge cannot be judged against it');
+        if (moved < n * 0.5) throw new Error('in ' + where + ' Sharpen left the ' + band + '-pixel frame edge of a full-frame clip untouched - ' + moved + ' of ' + n + ' edge pixels changed, against ' + innerMoved + ' inside');
+        const s = render(w, true, true);
+        for (let x = 0; x < w; x++) for (const y of [0, h - 1]) { const i = (y * w + x) * 4; if (s[i] !== 0x20 || s[i + 1] !== 0x30 || s[i + 2] !== 0x40) throw new Error('in ' + where + ' a SMALL sharpened clip changed the empty frame edge at ' + x + ',' + y + ' to (' + [s[i], s[i + 1], s[i + 2]].join(',') + ')'); }
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
   });
 
 })();

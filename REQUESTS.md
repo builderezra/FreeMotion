@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 29 Sep at v17.13
+> ## 📌 WHAT I NEED FROM YOU — updated 30 Sep at v17.14
 >
-> **State:** v17.13 — **your New project + animation is the ripple** (#947, your pick — Cancel closes it at once); **“Tap here to start creating” opens the menu straight away**, with the glowing lines round the menu's edges (#981); **the old PC Share button is gone** — the cog is the way in (#983); **on PC the captions menu opens where the Add menu is**, and the timeline stays squished (#984); the clapper rests between snaps (#988); the Home arrow draws once after a refresh (#989); **Toggle dark mode** (#990); “Project 1” clears itself when you name a project (#991); narrow PC windows: every button takes its own click (#979). **Your picks waiting: #982 Join icon (A–D), #985 export (A–C), #987 note colours (A–C), #970 (A/B).** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.14 — **17 effect/filter/sound bugs fixed** (#986 batch 1): a filter on an adjustment layer now works, blurs survive on your iPhone class of device, vignettes stack and match the export, shadows under soft edges, shaking/spinning clips no longer show empty corners, Chroma Key Pro on a blue screen removes blue spill, Film Grain on the phone matches the export, the Limiter really limits (saved Limiters get a little quieter), the sound-effect ▶ plays exactly what Add adds. **Your list of everything waiting on you was sent by the logging chat (#993)** and REQUESTS.md now matches it. v17.13 — **your New project + animation is the ripple** (#947, your pick — Cancel closes it at once); **“Tap here to start creating” opens the menu straight away**, with the glowing lines round the menu's edges (#981); **the old PC Share button is gone** — the cog is the way in (#983); **on PC the captions menu opens where the Add menu is**, and the timeline stays squished (#984); the clapper rests between snaps (#988); the Home arrow draws once after a refresh (#989); **Toggle dark mode** (#990); “Project 1” clears itself when you name a project (#991); narrow PC windows: every button takes its own click (#979). **Your picks waiting: #982 Join icon (A–D), #985 export (A–C), #987 note colours (A–C), #970 (A/B).** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -331,9 +331,9 @@ better still, keep working inside the turn rather than parking work for a later 
       phone runs a Safari-based PWA while this probe is Chrome-based. **Safari decodes HEVC and handles
       .mov; Chrome is the reverse.** So neither result transfers to his device — **what it establishes is
       that the entry's confident diagnosis was never verified anywhere.**
-      ❓ **SO THE QUESTION TO HIM GETS SHARPER, and it is easier than the old one:** not *"do you see a
+      ~~❓ **SO THE QUESTION TO HIM GETS SHARPER, and it is easier than the old one:** not *"do you see a
       toast"* but **"what does the FILE say — .mov or .mp4?"** His camera roll shows it. **A .mov points
-      at the container, an .mp4 at the codec, and the two need different fixes.**
+      at the container, an .mp4 at the codec, and the two need different fixes.**~~ — retired: answered 27 Aug ("I have no idea", just below), and since v14.14 the app reports the file itself.
 
       ✅ **THE DIAGNOSTIC HALF SHIPPED v13.44** — a blank clip now reports its real name, MIME type and
       what `canPlayType` says, instead of asserting H.265 on a path where nothing had confirmed it.
@@ -455,6 +455,8 @@ better still, keep working inside the turn rather than parking work for a later 
       2. [x] A file refused AT LOAD wrote no report at all — `loadVideoFile`'s error listener only rejected, `handleFiles` showed a toast, and Settings stayed "Nothing yet" on exactly the kind of file this entry is about. It writes the report now ("refused at load").
       3. [x] "The app cannot make an H.265 recording here" was false: `tools/mkhevc.swift` (AVFoundation, 30 lines) writes a real 2s hvc1 .mov in about a second on this Mac; `tests/_fixtures/hevc-2s.mov` is checked in and test 129 loads it end to end (refused → the report; decoded → a 2s clip).
       4. [ ] Not done: a run in macOS Safari (safaridriver needs his password to enable) — the one measurement that would speak for his phone's engine. Still ⏸ **BUILT OUT UNTIL HE pastes "A clip with no picture"** — and now the paste will say something true. ✔ reply checked 5 Sep — his 27 Aug answer was to the older question
+      ❓ASK: has a screen recording (or any clip) landed on the timeline with no picture since v15.69? If so: Settings → A clip with no picture → Copy, and paste it — it names the file and what your phone can play, so you do not need to know anything about the file. ✔ reply checked 30 Sep — his 27 Aug "I have no idea" answered the older .mov/.mp4 question, struck above.
+      🔎 Side clue from the logging chat (29 Sep), a hint and not proof: his 27 Aug upload was an .mp4 screen recording, which leans toward the codec theory over the container one.
 
 - [x] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop. THE TIER HALF IS DONE (v7.57, verified 15 Aug). The lag itself lives on in #125.** His
       words: *"I have got no other projects, just one; and I managed to add one screen recording that's
@@ -1936,10 +1938,9 @@ better still, keep working inside the turn rather than parking work for a later 
       saved project does not go through the constructor, so nothing you already have is resized.
       Mutation-checked by restoring the flat 96 — caught at the first shape.
       **The taste call in (c) is still yours and still unanswered** — see the question block.
-- [ ] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **96 — Adding a SONG is really buggy and sometimes will not play at all, as the only clip.** His
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** No song is named, so the "which file" half is still unanswered — but he says the files are fine until effects are added, which points the same way as #845.
-      ❓ASK (still open, and narrowed 10 Sep: he says the files are fine until EFFECTS are added — #844 — so the question is now whether a song still fails with NO effects on it): has a song failed to play since v13.88? If so, WHICH file — the format and rough length is enough. A fourth cause was found and fixed today; this is only open because I cannot prove it was yours. ✔ reply checked 24 Sep — the 10 Sep answer is the paste this narrowed; whether a song fails with NO effects on it is still unanswered.
+      ~~❓ASK (still open, and narrowed 10 Sep: he says the files are fine until EFFECTS are added — #844 — so the question is now whether a song still fails with NO effects on it): has a song failed to play since v13.88? If so, WHICH file — the format and rough length is enough. A fourth cause was found and fixed today; this is only open because I cannot prove it was yours. ✔ reply checked 24 Sep — the 10 Sep answer is the paste this narrowed; whether a song fails with NO effects on it is still unanswered.~~ — stale: his 9 Sep words (below) put the glitch on EFFECTS being added, not on the song; closed into #845 on 30 Sep.
 
       ✅ **v12.36 — A THIRD CAUSE, AND IT PRODUCES YOUR SYMPTOM EXACTLY: the clip could be born with NO
       LENGTH.** Found by taking this entry's own lead seriously — that the suspect is an mp3 whose length
@@ -2087,8 +2088,10 @@ better still, keep working inside the turn rather than parking work for a later 
       #95**, which is the oldest of the three complaints and where the work is logged.
       ➡️ **15 seconds from you closes this:** play it on your phone until the sound misbehaves, press
       stop, then Settings → Your last playback → Copy, and paste it to me.
-      ~~⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** — same paste as #95, same instrument, and the one suspected second bug was closed by measurement on 22 Aug. Re-checked today for strict oldest-first: this line is what is left.~~ ✅ the paste came on 10 Sep (#844).
-      ⏸ **24 Sep — BUILT OUT UNTIL HE says whether a song has failed to play with NO effects on it since v13.88** — the 10 Sep paste pointed at effects (#844/#845); a song that fails bare would be a second cause. ✔ reply checked 24 Sep.
+      ~~⏸ **2 Sep — built out until he pastes "Your last playback"** — same paste as #95, same instrument, and the one suspected second bug was closed by measurement on 22 Aug. Re-checked today for strict oldest-first: this line is what is left.~~ ✅ the paste came on 10 Sep (#844).
+      ~~⏸ **24 Sep — built out until he says whether a song has failed to play with NO effects on it since v13.88** — the 10 Sep paste pointed at effects (#844/#845); a song that fails bare would be a second cause. ✔ reply checked 24 Sep.~~ — stale: answered by his 9 Sep words below (a song sounds fine until effects are added); closed into #845.
+      ✅ **HE ANSWERED 9 Sep (found by the logging chat, 29 Sep):** *"Pretty much all of the files audio files are added sounded fine deciding effects to them. They start to glitch out on my phone."* (2026-09-09T23:29Z, sent with the two reports in #844.) Read as: a song plays fine on its own and glitches once EFFECTS are added to it — which is #845.
+      ✅ **CLOSED 30 Sep into #845** (#993 housekeeping, from the logging chat's note): his own words put the fault on the effects path, and #845 carries that ask. **Reopen this as a second cause if a song with NO effects on it ever fails to play again.** (Unblock card 37 goes with it.)
 
 - [x] **95 — Phone: timeline still laggy AND audio does not play smoothly (tested with a voice memo).**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** The audio half now has numbers: one cut-out of 1205ms in 1.2s, 32 of 133 frames dropped, the clock 158ms out, and 94 sync trims in 1.2s. Chased in #845.
@@ -3660,8 +3663,8 @@ better still, keep working inside the turn rather than parking work for a later 
       the best single win was 11x. **A per-pixel JavaScript loop cannot close it.** What actually keeps
       the app usable is the reduced raster and the adaptive quality ladder, both of which already exist
       and both of which were verified working. Further kernel tuning is small change from here.
-      ❓ **SO THE ONLY THING LEFT IN THIS ENTRY IS YOUR VERDICT**, and it is now a sharper question than
-      "does it feel better": **does a project with one or two effects feel fine while a heavy one crawls?**
+      ~~❓ **SO THE ONLY THING LEFT IN THIS ENTRY IS YOUR VERDICT**, and it is now a sharper question than
+      "does it feel better": **does a project with one or two effects feel fine while a heavy one crawls?**~~ (superseded — by the 29 Aug ask below and the ❓ASK at the bottom)
       If yes, that matches every measurement and the remaining work is architectural, not arithmetic.
       ✅ **27 Aug — I CAN MEASURE PHONE SPEED AFTER ALL, and it changes the answer. `tools/_phoneprobe.py`.**
       Every number above says "desktop only, cannot speak for your phone" — and that was half true. I
@@ -3994,8 +3997,8 @@ better still, keep working inside the turn rather than parking work for a later 
       the part that is not. How fast your phone's graphics chip is, only your phone can say.
       🚨 **AND THE CONTROL RAN BOTH TIMES** — chains 9 / gpu 45 on the chained rows, gpu 0 / cpu 45 on
       the CPU rows. Without it a run where WebGL had quietly failed would read as a very fast CPU.
-      ❓ **WHAT IS LEFT IN THIS ENTRY IS STILL ONLY YOUR VERDICT** — and the question is now the sharp
-      one: **does a project with several effects stacked on one layer still crawl on your phone?**
+      ~~❓ **WHAT IS LEFT IN THIS ENTRY IS STILL ONLY YOUR VERDICT** — and the question is now the sharp
+      one: **does a project with several effects stacked on one layer still crawl on your phone?**~~ (superseded — the ❓ASK at the bottom)
       Everything measurable has been measured, and the stacking cost this entry identified as "your
       lag" is the part that just got 35x cheaper.
 
@@ -4039,6 +4042,7 @@ better still, keep working inside the turn rather than parking work for a later 
       paste it. The **GPU** and **DEVICE** lines will say, in your own phone's words, whether the last
       three releases actually reached you. That is the thing nothing here can measure for you.
       ⏸ **2 Sep — BUILT OUT UNTIL HE pastes a Measure report** (Settings → Measure, with a few effects stacked on one layer). The instrument shipped v14.13–v14.30; every buildable half is built. Re-checked today because he asked for strict oldest-first: this is the oldest open item and this line is what is left.
+      ❓ASK: since v16.95, is playing and editing still laggy on your phone, or fine now? If still laggy: put a few effects on a video layer, then Settings → What's slow → Measure, press play and let it play for the ten seconds, then Copy, and paste it. One report taken WHILE PLAYING answers this entry, #202 and #692 together (asked with #202 — the logging chat's note, 29 Sep).
 
 - [x] **72 — Audio import loses parts of the file.** **DONE v6.64 — it was TWO separate bugs.** *"when it's importing the audio it literally cuts
       out certain parts making it jumpy, even on the timeline you can see how it's missing parts"*.
@@ -9659,7 +9663,7 @@ better still, keep working inside the turn rather than parking work for a later 
       ⚠️ **DELIBERATELY NOT TICKED (v12.52).** Three real silent-export paths were measured and made to
       speak, but none is PROVEN to be what happened on his phone — ticking it would claim something I
       cannot support, which is the one thing this file exists to prevent.
-      **His question is now one line: export something with sound — does a message appear?** A message
+      ~~**His question is now one line: export something with sound — does a message appear?**~~ (superseded: answered 25 Aug — no message — and then the 10 Sep report, #844) A message
       names the cause and closes this. Silence with STILL no message is genuinely new evidence and sends
       the next round back to the muxer with something to go on.
       **I rate this the most serious open item.** Everything else is the app being awkward; this is the
@@ -9875,7 +9879,7 @@ better still, keep working inside the turn rather than parking work for a later 
       of the timeline would export silently. If his timeline had a clip out there, that is the cause.
       **NEXT, if it recurs:** ask for the toast text. No toast at all + a silent file now means the mix
       was built and the loss is in the muxer, which is the one region still without a witness.
-      ⏳ **WAITING ON EZRA — the toast text if a silent export happens again.** All four known silent
+      ⏳ ~~**WAITING ON EZRA — the toast text if a silent export happens again.**~~ (superseded: 25 Aug, no toast; 10 Sep, the report itself — #844) All four known silent
       losses now name themselves on screen (v11.21 closed the last one). No toast AND a silent file would
       mean the mix was built and the loss is in the muxer — the one region still without a witness.
 
@@ -9895,7 +9899,7 @@ better still, keep working inside the turn rather than parking work for a later 
       muxer declare audio unconditionally fires it exactly: *"the file DECLARES an audio track that was
       never fed"*. **An assertion nothing has ever made fail is not yet a test.**
       **Still the one region without a witness: the muxer itself**, if a silent file ever arrives with
-      NO toast. That still needs your screenshot.
+      NO toast. ~~That still needs your screenshot.~~ (superseded: his phone's own export report now says what the muxer wrote — TRACK WRITTEN, 10 Sep, #844)
 
       🔴 **REPRODUCED BY HIM AGAIN, 25 Aug at v12.48, WITH THE EXACT SETTINGS — screenshot of the dialog.**
       His words, verbatim:
@@ -10019,11 +10023,14 @@ better still, keep working inside the turn rather than parking work for a later 
       It now says `none of the audio clips could be read`. `encode-failed` was toast-only too — also
       invisible on a phone — and now speaks. **Both fixes mutation-tested; both caught.**
       ⚠️ **The old test demanded 3 of the 6 sites.** It now demands all six.
-      ❓ **WHAT I STILL NEED, AND IT IS NOT AN ANSWER — IT IS ONE EXPORT.** Export something with sound
+      ~~❓ **WHAT I STILL NEED, AND IT IS NOT AN ANSWER — IT IS ONE EXPORT.** Export something with sound
       on your phone. If it comes out silent: **Settings → Your last export → Copy**, and paste it.
-      That report is now trustworthy for the first time, and it will name which of the six it was.
-      ⏸ **2 Sep — BUILT OUT UNTIL HE pastes "Your last export"** (export something with sound on the phone; if silent, Settings → Your last export → Copy). All six failure sites now speak in the report; both fixes mutation-tested. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his 21 Aug answer described the export; the report ask came after the readout was built
+      That report is now trustworthy for the first time, and it will name which of the six it was.~~ — answered 10 Sep: he pasted it (#844), TRACK WRITTEN.
+      ~~⏸ **2 Sep — built out until he pastes "Your last export"** (export something with sound on the phone; if silent, Settings → Your last export → Copy). All six failure sites now speak in the report; both fixes mutation-tested. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his 21 Aug answer described the export; the report ask came after the readout was built~~ — answered 10 Sep (#844): the paste came — TRACK WRITTEN, peak 0.931, none of the six loss paths.
       ↪ **6 Sep (v15.88): the PC export checked here with an audible source carries a real AAC track (see #604's block); the two audio fixtures are silent for their first three seconds, so a check against them reads mix-silent and means nothing. The phone paste is still the missing half.**
+      ❓ASK: export something short with sound on your phone, save it to the camera roll, and play it from Photos — does it play WITH sound? One answer closes this, #604 and #677 (the export itself wrote a real audio track on 10 Sep, #844; what is left is whether the saved file plays with sound for you). ✔ reply checked 30 Sep — the 10 Sep paste answered the report ask struck above; this is the camera-roll half.
+      ⏸ **30 Sep — BUILT OUT UNTIL HE says whether an export saved to the camera roll plays with sound** (the ❓ASK just above). ✔ reply checked 30 Sep — same.
+      ⚠️ **Worth checking beside it (the logging chat's note, 29 Sep):** the 10 Sep export was 27 KB for 2.05 s at 1080×1080 @60fps — `audio TRACK WRITTEN` proves the SOUND track, not that the VIDEO track is fine (#844 flagged the size; #845 checks it).
 
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -10287,6 +10294,7 @@ better still, keep working inside the turn rather than parking work for a later 
       There is nothing to build until that reading arrives.
       🔧 **25 Sep, v16.95 (#935):** three measured causes of slowdown over a session fixed — every effect/filter thumbnail kept in memory for the whole session; after one heavy stretch of playback the preview stayed blurry for the rest of the session (the quality ladder never climbed back); filmstrips of the open project queued behind clips from projects already left.
       ⚠️ **25 Sep — this ask was HIDDEN for weeks.** "nothing to build until that reading arrives" matched the standing-note detector, so #202 sat under "standing note" — off next.sh's waiting list and off the unblock page, and he was never shown it. Found by the waiting-on-him sweep; tools/_classify.py now reads "nothing to build until …" as a park (self-tested). ⏸ **BUILT OUT UNTIL HE pastes one What's slow → Measure report taken WHILE PLAYING, or says "still laggy" / "fine now" after v16.95** — put to him in the 25 Sep list (item 39).
+      ❓ASK: (asked once, together with the unnumbered "Editing lags" entry) since v16.95, is it still laggy on your phone, or fine now? If still laggy: Settings → What's slow → Measure, press play and let it play for the ten seconds, then Copy, and paste it. ✔ reply checked 30 Sep — his 21 Aug answer was about readouts already sent; this is the one taken WHILE PLAYING.
 - [x] **179 — Finishing a vector drawing leaves you stuck in the full-height panel.** ✅ **CLOSED 23 Aug — it was FIXED, and the fix is in the code with your quote on it.** His words: *"When
       you finish adding a vector drawing it does this and you have to swipe down"* — with a phone shot of
       the nine-category inspector filling the ENTIRE screen: the nine cards at the top and roughly two
@@ -13073,7 +13081,7 @@ wait for them to report back."*
       📐 Measure at a desktop width in the Studio layout (what he uses), and re-check 380px is untouched.
 
 - [ ] **482 — 🔵 THE BIG ONE, IF I WANT IT: go through EVERY effect and improve it.** (23 Aug.)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       ═══ 🔬 **31 AUG — 29 SLIDERS MEASURABLY STOP SHORT OF WHAT THEIR OWN EFFECT CAN DO.** ═══
       Same shape as queue 540 (Motion Blur (Object), 4 → 12) and queue 578 (Motion Blur (Footage),
       2 → 6, closed at v14.71): the ceiling was the SLIDER, not the algorithm. Each of these still
@@ -13255,7 +13263,7 @@ wait for them to report back."*
       Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 ·
       Repetition 5), or "no" parks it. Meanwhile I will keep running rounds like this one — mechanical,
       no guessing — because they need nothing from you.
-      ~~⏸ **2 Sep — BUILT OUT UNTIL HE names the first category to judge by eye, or says "no"** (Colouring 43 · Warping 28 · Blur 19 · Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 · Repetition 5). Three mechanical rounds shipped (v12.17–v12.19: slider travel, defaults visible, both effect tables walked) and their tests stand; the audit of 2 Sep (#718–#759) is the mechanical work that remains and is queued in its own entries. What is left here is the subjective half, which only his eye can do. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his 1 Sep "raise them" answered the caps question; which category to judge by eye is newer~~ struck 6 Sep — rule 16: he stayed silent, so Colouring was picked and judged (below).
+      ~~⏸ **2 Sep — built out until he names the first category to judge by eye, or says "no"** (Colouring 43 · Warping 28 · Blur 19 · Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 · Repetition 5). Three mechanical rounds shipped (v12.17–v12.19: slider travel, defaults visible, both effect tables walked) and their tests stand; the audit of 2 Sep (#718–#759) is the mechanical work that remains and is queued in its own entries. What is left here is the subjective half, which only his eye can do. Re-checked today for strict oldest-first: this line is what is left. ✔ reply checked 5 Sep — his 1 Sep "raise them" answered the caps question; which category to judge by eye is newer~~ struck 6 Sep — rule 16: he stayed silent, so Colouring was picked and judged (below).
       🔁 **6 Sep (v15.79) — ROUND FOUR: the canvas and warp tables, the gap named above, are measured now.** `tests/_482ceil2.html`
       walks all 61 through `FM.renderScene` on a real layer (they take no ImageData, which is why the first scan could not reach them),
       with the three lies guarded the same way: seeds, speeds, rates, phases and counts excluded by name; a ceiling that stops depending
@@ -13278,7 +13286,7 @@ wait for them to report back."*
       (a shadow cast off a full-frame layer lands outside it); HSL Bands, Match Grade, Spot Colour (need an input). **Two taste
       calls, unchanged, yours:** Gradient Overlay's default amount 1 replaces the picture; Palette Map's default palette bands
       the sky pink and green. Sheet, before/after and findings: https://claude.ai/code/artifact/1865b863-9713-4230-a19e-fb132604d722
-      ~~⏸ **6 Sep — BUILT OUT UNTIL HE names the next category to judge the same way (Warping 28 · Blur 19 · Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 · Repetition 5), says "move Gradient Overlay" / "move Palette Map", or says "no".** Colouring is done; every other half of this entry that needs no word from him has shipped.~~ struck 6 Sep — rule 16 again: still silent, so Warping went next (below).
+      ~~⏸ **6 Sep — built out until he names the next category to judge the same way (Warping 28 · Blur 19 · Generative 19 · Stylize 19 · 3D 18 · Drawing/Edge 16 · Keying 11 · Opacity 7 · Text 6 · Repetition 5), says "move Gradient Overlay" / "move Palette Map", or says "no".** Colouring is done; every other half of this entry that needs no word from him has shipped.~~ struck 6 Sep — rule 16 again: still silent, so Warping went next (below).
       👁 **6 Sep (v15.83) — SECOND CATEGORY: WARPING, decided under rule 16.** All 29 rendered on the section's own photograph
       ('towers') at defaults / main slider at ¼ / at the top — and this time at the phone's true frame size (1080px, scaled into
       the tile), because a pixel-unit control judged on a 150px tile reads seven times too strong; each tile carries its mean
@@ -13288,7 +13296,7 @@ wait for them to report back."*
       wall-collision effect that needs motion, which its description says. Everything else alive across its slider, the raised
       ceilings of v15.79 (Wave 720, Ripple 480, Tile Rotate 1600, Bulge 4) still changing the picture at the top. Sheet,
       before/after and findings: https://claude.ai/code/artifact/8b17ffed-1990-4ac2-88c4-24efcf752315
-      ~~⏸ **6 Sep — BUILT OUT UNTIL HE names the next category (Blur 19 · Generative 19 · Stylize 20 · 3D 18 · Drawing/Edge 16 · Keying 11 · Text 10 · Opacity 7 · Repetition 6 · Movement 7), says "move Gradient Overlay" / "move Palette Map", or says "no".** Colouring and Warping are done; every other half of this entry that needs no word from him has shipped.~~ struck 6 Sep — the rest of the catalogue was swept by number instead of waiting (below); the by-eye look at each remaining category is what still needs his word.
+      ~~⏸ **6 Sep — built out until he names the next category (Blur 19 · Generative 19 · Stylize 20 · 3D 18 · Drawing/Edge 16 · Keying 11 · Text 10 · Opacity 7 · Repetition 6 · Movement 7), says "move Gradient Overlay" / "move Palette Map", or says "no".** Colouring and Warping are done; every other half of this entry that needs no word from him has shipped.~~ struck 6 Sep — the rest of the catalogue was swept by number instead of waiting (below); the by-eye look at each remaining category is what still needs his word.
       📐 **6 Sep (v15.84) — THE TEN REMAINING CATEGORIES, SWEPT BY NUMBER at the phone's frame size** (the sheet tool with
       `?res=1080` and a mean-difference per tile; Text skipped, its effects act on text layers only). 155 effects: Blur 19 ·
       Generative 19 · Stylize 20 · 3D 18 · Drawing 16 · Keying 11 · Opacity 7 · Repetition 6 · Movement 7. **One fix: Electric
@@ -13302,7 +13310,8 @@ wait for them to report back."*
       nothing to streak — a design, not a fault. Squircle Corners' radius reads constant because the continuous-curve toggle is on
       by default and says so. VHS Tape at 5.4 is real tape wobble at 1:1. **Text, swept on 6 Sep too** with a text-layer subject (`?subject=text`): all ten alive; Text Pad's zero at defaults is the subject ("Motion" is longer than a 3-wide pad), Type-On and Scramble at progress 1 are the finished word; and the sweep turned up #800, a negative Curve mirroring the word. The sweep, the zeros and the fix for him: https://claude.ai/code/artifact/ee514086-66d2-4388-a757-a944a0385ec9
       The ⏸ line below is unchanged in substance.
-        ⏸ **6 Sep — BUILT OUT UNTIL HE names the next category to judge BY EYE (Blur 19 · Generative 19 · Stylize 20 · 3D 18 · Drawing/Edge 16 · Keying 11 · Text 10 · Opacity 7 · Repetition 6 · Movement 7), says "move Gradient Overlay" / "move Palette Map", or says "no".** Colouring and Warping are judged by eye; every category is swept by number; every other half of this entry that needs no word from him has shipped. ✔ reply checked 24 Sep — "raise them" (1 Sep) answered an earlier ask; the next category is still his to name.
+        ~~⏸ **6 Sep — built out until he names the next category to judge BY EYE (Blur 19 · Generative 19 · Stylize 20 · 3D 18 · Drawing/Edge 16 · Keying 11 · Text 10 · Opacity 7 · Repetition 6 · Movement 7), says "move Gradient Overlay" / "move Palette Map", or says "no".** Colouring and Warping are judged by eye; every category is swept by number; every other half of this entry that needs no word from him has shipped. ✔ reply checked 24 Sep — "raise them" (1 Sep) answered an earlier ask; the next category is still his to name.~~ — stale since #859 (11 Sep on): the every-effect pass he asked for runs there, all 205 effects on one sheet, so this no longer waits for a category name; Palette Map's banding was fixed by #904.
+      📋 **30 Sep — what is left here (the logging chat's #993 note), builder work first:** (1) one taste call, Gradient Overlay's default amount — ask it with **0.8**, not 1 ("Keep" 1 vs "Gentler" 0.8), and render Keep vs Gentler on a photo at phone size with one marked Recommended BEFORE sending it; (2) the speed-slider offer above ("the speed controls opened up too") — decide it under LOOP.md rule 16 rather than asking. Palette Map is off the list: #904 fixed it.
 
 - [x] **483 — The undo/redo icons need more polish: the start and end of the circle are too close.** ✅ **DONE v12.06.** (23 Aug.)
       You were reading the ARC, and you were right — v11.93 had enlarged the arrowhead and never touched
@@ -15757,17 +15766,16 @@ wait for them to report back."*
       reversible.** The second is the better fix and is a real (if unreported) bug in its own right: anyone
       who narrows a desktop window past 700px gets that wrapped row for real.
 
-- [ ] **406 — 🚨 HE IS ASKING A QUESTION AND WANTS AN ANSWER: what is the difference between saving a
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **406 — 🚨 HE IS ASKING A QUESTION AND WANTS AN ANSWER: what is the difference between saving a
       ➡️ **CLAUSE 1 IS NOT ACTUALLY BLOCKED — his own conditional decides it.** He wrote *"if you realise we just have two buttons for the same thing just get rid of the one isn't just saving as effects"*, and that antecedent is provably true: `js/app.js` (layer ⋯) and `js/inspector.js` (Presets card) call the SAME `FM.savePresetPrompt(layer)`. ⚠️ **And it collides with #454, which this file already says is wrong to ask separately** — clause 1 falls out of whatever #454 settles. **Only clause 3 still rides along: the acknowledgement he asked to be chased for.**
-      ❓ASK: two answers — (1) acknowledge you have read the preset answer, which you asked me to chase you for; (2) which preset saver goes: A the layer ⋯ menu (recommended) · B an effect row ⋯ · C the Effects card button.
+      ~~❓ASK: two answers — (1) acknowledge you have read the preset answer, which you asked me to chase you for; (2) which preset saver goes: A the layer ⋯ menu (recommended) · B an effect row ⋯ · C the Effects card button.~~ — answered 1 Sep via #454 (below): both kinds of preset stay, which settles (2), and that reply is the acknowledgement (1) chased.
       preset with just effects and saving a layer as a preset? And drop preset-saving from that menu.**
       (19 Aug, via the phone inbox.) His words, verbatim, in full:
 
       > Get rid of saving presets from this menu and also make sure you grab my attention and let me know what the difference between saving a preset with just effects and saving a layer as a preset coz I assumed presets are just effects anyways so I'm confused. Let me know and don't stop until I reply acknowledging it, remind me to acknowledge as well, and if you realise we just have two buttons for the same thing just get rid of the one isn't just saving as effects.
 
       **Clauses:**
-      1. [ ] **Saving presets is removed from that menu.** ⚠️ WHICH menu is not named — it arrived without
+      1. [ ] **Saving presets is removed from that menu.** ➜ **tracked in #994** (30 Sep) — builder work unlocked by his 1 Sep answer. ⚠️ WHICH menu is not named — it arrived without
              a screenshot.
              ✅ **22 Aug — all three located, so this is now a pick-one instead of a guess.** The entry
              warned against deleting on a guess and it was right to: there are three separate savers in
@@ -15783,7 +15791,7 @@ wait for them to report back."*
              that names what it does. B and C are each the only route to their own thing.
              **Nothing is deleted until he points at one.**
       2. [x] **Tell him the difference** — ANSWERED v10.44, from the code, and the answer is below.
-      3. [ ] **Keep reminding him to acknowledge** — his words: *"don't stop until I reply acknowledging
+      3. [x] ✅ 30 Sep — his 1 Sep reply via #454 is the acknowledgement. **Keep reminding him to acknowledge** — his words: *"don't stop until I reply acknowledging
              it, remind me to acknowledge as well"*. So this rides along at the top of every reply until
              he answers, rather than being asked once and forgotten.
       4. [x] **RESOLVED — they are NOT the same thing, so nothing was deleted.** See the answer below; the
@@ -15807,7 +15815,9 @@ wait for them to report back."*
       ⏸️ **CLAUSE 1 IS STILL OPEN and needs one line from him:** *"Get rid of saving presets from this
       menu"* arrived with no screenshot, and there are now three menus it could mean. Nothing was deleted —
       deleting the wrong one costs a capability that has no other route.
-      ⏸ **2 Sep — BUILT OUT UNTIL HE names which menu** clause 1 ("Get rid of saving presets from this menu") means — there are three, and deleting the wrong one removes the only route to a capability. The question he asked (what the three preset saves capture) is answered in the entry and the labels were renamed. Re-checked today for strict oldest-first: this line is what is left.
+      ~~⏸ **2 Sep — built out until he names which menu** clause 1 ("Get rid of saving presets from this menu") means — there are three, and deleting the wrong one removes the only route to a capability. The question he asked (what the three preset saves capture) is answered in the entry and the labels were renamed. Re-checked today for strict oldest-first: this line is what is left.~~ — answered 1 Sep via #454: both kinds of preset stay, so the duplicate door goes (A, the layer ⋯ menu); that build is #994.
+      ✅ **HE ANSWERED 1 Sep (found by the logging chat, 29 Sep):** *"Actually u are right to keep both options to save effect presets and full layer preseets i change my mind"* — recorded in #454. It answers this entry's preset question too (both kinds stay), and it is the acknowledgement clause 3 chased.
+      ✅ **CLOSED 30 Sep** (#993 housekeeping): clauses 2 and 4 were done, clause 3 is his 1 Sep reply, and clause 1's build — take "Save whole look as preset…" off the layer ⋯ menu (`js/app.js` ~5311; the layer's Presets card keeps both saves) and decide about ⧉ "Save look as preset" (~7215) — is its own item, **#994**. (Unblock card 24 goes with it.)
 
 - [x] **407 — The elements/presets round-trip is "convoluted and stupid": open a preset, edit it, and it
       should just update that preset.** ✅ **v10.45 + v10.46.** (19 Aug, via the phone inbox.) His words, verbatim, in full:
@@ -20153,6 +20163,7 @@ re-opened #480, which I had marked done and had not fixed.
       palette, type scale and panel styles as a real library), or *"do the identity pass first"* — which
       lifts the hold on BEFORE-PUBLISHING and makes this a natural follow-on. **Until then the rule is
       live and being followed**, which is what you actually asked for.
+      📋 **30 Sep — the logging chat's #993 note:** the "honest catch" above is out of date — the Artifact tool now has Design System types. Raise it only when he talks about publishing, together with BEFORE-PUBLISHING.md and the unnumbered identity-pass entry (both held on purpose, and neither owed now); #855 is held for launch too.
 
 - [x] **546 — The template icon, designed with Claude Design.** (24 Aug.)
       ✅ **A dashed master with a solid copy in front** — which is what a template actually is, a thing you
@@ -21527,7 +21538,7 @@ re-opened #480, which I had marked done and had not fixed.
       `FM._fxPreview` is that mechanism. **FIRST JOB: prove whether the live preview actually renders the
       picked stack at 380px. If it does not, that is the bug and it is the whole complaint.**
       ⚠️ **Do NOT touch the effects, the filters, or their defaults — all measured working, three ways.**
-- [ ] **604 — 🔴 EXPORTED VIDEO STILL HAS NO AUDIO — on PHONE and PC — and a single sound effect cut
+- [ ] **604 — 🔴 EXPORTED VIDEO STILL HAS NO AUDIO — on PHONE and PC (his 27 Aug report; both export paths since measured WITH a sound track: the PC path 6 Sep, his phone's own report 10 Sep, #844) — and a single sound effect cut
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
       in and out during playback.** (27 Aug, v13.43, export screenshot.)
       His words, verbatim:
@@ -21652,14 +21663,14 @@ re-opened #480, which I had marked done and had not fixed.
       🚨 **SO EVERY LINK INSIDE FREEMOTION IS NOW MEASURED AND SOUND:** mix → encode → mux → byte
       assembly → file structure → decodable, audible content. **The file that leaves the app has sound
       in it.** `deliver()` cannot change that; it hands over the same bytes.
-      ❓ **THE NEXT EVIDENCE CAN ONLY COME FROM HIS DEVICE, AND IT IS ONE ACTION, NOT A SESSION.**
+      ~~❓ **THE NEXT EVIDENCE CAN ONLY COME FROM HIS DEVICE, AND IT IS ONE ACTION, NOT A SESSION.**
       ➡️ **On the PC: export something short with sound, then DRAG THE EXPORTED .mp4 INTO A CHROME TAB
       and press play.**
       · **Sound in Chrome** → the file is good and the loss is in the camera-roll import / the player,
         which is outside FreeMotion and is worth knowing before another session goes into the exporter.
       · **No sound in Chrome either** → it is something about the PROJECT (a solo'd shape silences every
         soundtrack — see the mixer's own comment) or his environment, and the mixer's drop report will
-        name it. Send the toast if one appears.
+        name it. Send the toast if one appears.~~ — done here instead on 6 Sep (the PC check below), and his phone's report came 10 Sep (#844).
 
       **SECOND CLAUSE — playback:** one sound effect *"played good the first time but it was inconsistent
       and would cut in and out"*. Related to #96 and #148 and probably the same audio path. **Log it, do
@@ -21681,11 +21692,11 @@ re-opened #480, which I had marked done and had not fixed.
       the buzz it replaces, and a mix that never crosses 1.0 is left byte-for-byte untouched.
       ⚠️ **THIS FITS *"it was inconsistent"* BETTER THAN ANYTHING ELSE FOUND** — a soundtrack that
       distorts only while two sounds overlap is exactly a sound that seems fine and then is not.
-      ❓ **THE ENTRY STAYS OPEN FOR ONE THING ONLY, and it is one action on your side, not a session:**
+      ~~❓ **THE ENTRY STAYS OPEN FOR ONE THING ONLY, and it is one action on your side, not a session:**
       export something short with sound on the PC, **drag the exported .mp4 into a Chrome tab and press
       play**. Sound → the file is good and the loss is in the camera-roll import or the player. No sound
-      → it is the project or the environment, and the mixer's own drop report will name it.
-        ⏸ **2 Sep — BUILT OUT UNTIL HE does the one check above** (export something short with sound on the PC, drag the .mp4 into a Chrome tab, press play — sound or no sound decides which half this is). The mixer's own drop report is in Settings → Your last export; #215 waits on the same paste. Re-checked today for strict oldest-first: this line is what is left.
+      → it is the project or the environment, and the mixer's own drop report will name it.~~ — the same PC check, done here 6 Sep (below).
+        ~~⏸ **2 Sep — built out until he does the one check above** (export something short with sound on the PC, drag the .mp4 into a Chrome tab, press play — sound or no sound decides which half this is). The mixer's own drop report is in Settings → Your last export; #215 waits on the same paste. Re-checked today for strict oldest-first: this line is what is left.~~ — stale: the PC check was done here 6 Sep, and the paste #215 waited on came 10 Sep (#844).
       🔬 **6 Sep (v15.88) — THE PC HALF OF THE CHECK, DONE HERE.** He was asked to export something short with sound on the PC and
       listen; I did it on this Mac in Chrome 148 through the app's own paths (a File through the picker's `handleFiles`, the
       exporter's `run`, the finished file caught and its container parsed). Two results, and the first is a trap worth writing
@@ -21696,6 +21707,9 @@ re-opened #480, which I had marked done and had not fixed.
       0.600`, a 14KB file. Sample table of the tone export: 97 AAC frames, 9858 bytes, 6–194 bytes each (the silent one had 97 frames of 6 bytes). The PC export path carries sound on this
       machine. So the PC half is not a general fault; if his PC export was silent it is his clip or his machine, and the
       report in Settings → Your last export names which. The phone half still needs his paste.
+      ✅ **ANSWERED BY EZRA 10 Sep (#844)** — he pasted his phone's export report: `audio TRACK WRITTEN`, mix peak 0.931, no drops, none of the loss paths fired. With the PC path measured WITH sound here on 6 Sep, both halves of "no audio" now point past the exporter, at the saved file.
+      ❓ASK: (asked once, under #215) does an export saved to your camera roll play WITH sound from Photos? ✔ reply checked 30 Sep — the 10 Sep paste answered the report ask; this is the camera-roll half.
+      ⏸ **30 Sep — BUILT OUT UNTIL HE answers #215's camera-roll ask** — one answer closes #215, this and #677. ✔ reply checked 30 Sep — same.
 
 - [x] **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.** ✅ **DONE v13.45.**
       (27 Aug, annotated phone screenshot at v13.43.)
@@ -22663,6 +22677,7 @@ re-opened #480, which I had marked done and had not fixed.
       Media* screen — the template's slots listed, each one tapped to drop in your own clip, and THEN it
       becomes a project. Not a fork you then have to hunt through.
         ⏸ **2 Sep — BUILT OUT UNTIL HE has seen the fill-in sheet** — and one change he should know about before he looks: his 1 Sep answer on #505 ("the element opens as its own document", asked for elements AND templates) makes the PRIMARY tap on a template card open it for EDITING; the swap-your-media flow this entry asked for stays exactly as built, one tap away under ⋯ → **New project from template**. "Pressing a template just forks it into a project" is therefore over either way: the tap no longer forks anything. Re-checked today for strict oldest-first: this line is what is left.
+      ❓ASK: have a look at the fill-in sheet: Home → Templates → a template card's ⋯ → **New project from template**, then tap each slot (a clip, a caption, a shape) and put in your own. Is that what you asked for? (Tapping the card itself now opens the template for editing — your 1 Sep answer on #505.)
 
 - [x] **620 — The magnet button should switch off snapping on the CANVAS too, not just the timeline.** ✅ **DONE v13.69.**
       (27 Aug, at v13.51.)
@@ -24262,7 +24277,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **591 — Standing steer: stop waiting on his answers, there is plenty I can already do.** (26 Aug.)
       **STATUS: 📌 NOTE — nothing to build**
-      ❓ASK: nothing. This is your standing steer, not a question — it should not be classified as waiting on you.
+      ~~❓ASK: nothing.~~ (reworded 30 Sep — not an ask) This is your standing steer, not a question — it should not be classified as waiting on you.
       His words, verbatim:
       > I’m not in a rush to answer every question coz you still have hours of work in the things that you can do
       **Read as a correction, because it is one.** The last several replies have LED with questions — the
@@ -26156,8 +26171,7 @@ re-opened #480, which I had marked done and had not fixed.
       exactly. It measures **5.50:1** now, live. The dark-theme note beside it had already made this
       argument years of releases ago; nobody had applied it to the light side.
 
-- [ ] **657 — Performance sample from the PC, 10 s: it reads HEALTHY, which is itself the finding.**
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **657 — Performance sample from the PC, 10 s: it reads HEALTHY, which is itself the finding.**
       (27 Aug, pasted from the app's own "what's slow" tool at v13.70.)
       The sample, verbatim:
       > FRAMES 50.7 fps average - median gap 16.7ms - p95 33.4ms - worst 83.4ms - 2 of 507 frames late
@@ -26205,8 +26219,9 @@ re-opened #480, which I had marked done and had not fixed.
       percentage means nothing to him, "softer while playing" is the same fact in his words — plus where
       the switch is. ⚠️ **It does not cry wolf above 75%**, because a report that hedges on every sample
       stops being read: that is the same failure the queue's own half-done warning had this morning.
-        ⏸ **3 Sep — BUILT OUT UNTIL HE pastes a 10-second sample taken WHILE SCRUBBING** (press play AND drag the playhead, then Settings → what's slow → Copy). The report itself was corrected — it now says the smoothness was bought at what scale and what that looks like — and everything measurable here is measured; the half he complains about most is the half no sample has covered yet. Re-checked for strict oldest-first: this line is what is left.
+        ~~⏸ **3 Sep — built out until he pastes a 10-second sample taken WHILE SCRUBBING** (press play AND drag the playhead, then Settings → what's slow → Copy). The report itself was corrected — it now says the smoothness was bought at what scale and what that looks like — and everything measurable here is measured; the half he complains about most is the half no sample has covered yet. Re-checked for strict oldest-first: this line is what is left.~~ — the scrubbing sample is #768's ask now (Settings → Your last scrub, v15.09, records every scrub by itself); closed into #768.
       🔧 **25 Sep, v16.95 (#935):** see #202's note — three measured slowdown/memory causes fixed.
+      ✅ **CLOSED 30 Sep into #768** (#993 housekeeping, from the logging chat's note): the one thing left here was a sample taken while scrubbing on the phone, and #768's own report (Settings → Your last scrub) records exactly that — #768 carries the ask, paired with #508's project-open paste. This entry's own fix (the report no longer calling a reduced-scale run healthy) shipped v14.15. (Unblock card 42 goes with it.)
 - [x] **658 — Hovering the thumbnail benchmark should turn the playhead FULLY blue.** (28 Aug, at v13.79,
       two phone screenshots.)
       His words, verbatim:
@@ -26494,10 +26509,12 @@ re-opened #480, which I had marked done and had not fixed.
       · and it **saves** to the key Settings reads, so there is something to copy.
       **Both directions are tested**, because a watcher that cried wolf on healthy playback would be
       worse than none — it would send us chasing your phone for a fault that was not there.
-      ❓ **So the ask stands and it is real:** play it on your phone until it cuts out, press stop, then
-      **Settings → Your last playback → Copy**.
-        ✅ ~~2 Sep — BUILT OUT UNTIL HE pastes "Your last playback"~~ **PASTED 10 Sep, see #844 — this line is closed.** Was: (play on the phone until the sound cuts out, stop, Settings → Your last playback → Copy) — the same paste #95 and #96 wait on; the watcher that records it is tested both ways. Re-checked today for strict oldest-first: this line is what is left.
+      ~~❓ **So the ask stands and it is real:** play it on your phone until it cuts out, press stop, then
+      **Settings → Your last playback → Copy**.~~ — answered 10 Sep by the paste (#844).
+        ✅ ~~2 Sep — built out until he pastes "Your last playback"~~ **PASTED 10 Sep, see #844 — this line is closed.** Was: (play on the phone until the sound cuts out, stop, Settings → Your last playback → Copy) — the same paste #95 and #96 wait on; the watcher that records it is tested both ways. Re-checked today for strict oldest-first: this line is what is left.
       🔧 **25 Sep, v16.94 (#934):** two audio faults found and fixed — after a stall the catch-up played the song ~1.65 semitones sharp for over a second and then left it ~135 ms late; and on his iPhone the preview ignored Mute, volume under 100%, fades and volume keyframes (iOS will not let a page set el.volume, so it now goes through Web Audio). Ask whether the cutting in and out has changed.
+      ❓ASK: (asked once, under #845) is the sound still cutting in and out on your phone since v16.94, now that effects are the known trigger? ✔ reply checked 30 Sep — the 10 Sep paste answered the older ask struck above.
+      ⏸ **30 Sep — BUILT OUT UNTIL HE answers #845's ask** (still glitching with effects on? if yes, the Your last playback paste) — one answer covers this entry and #845. ✔ reply checked 30 Sep — same.
 - [x] **664 — Line height and Curve should BE effects, and add more text effects.** (28 Aug — answering
       #602's standing offer, and the answer is the opposite of what was offered.)
       His words, verbatim:
@@ -26923,17 +26940,19 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **AND THAT IS THE HALF I CANNOT SEE HERE.** The browser this is developed in does not advance
       CSS animations reliably — the same limitation that made the audio watcher and the drag-landing
       unmeasurable today — so the exact thing being reported is the thing this environment cannot show.
-      ❓**ONE LINE FROM YOU SPLITS IT, and it is a description not a decision:** does the sheet **slide up
+      ~~❓**ONE LINE FROM YOU SPLITS IT, and it is a description not a decision:** does the sheet **slide up
       twice in a row**, or does it **open, close, and open again**? The first is one animation replaying
       (a class being re-applied, or the sheet's measured top updating after it has already moved — its
       position IS measured and published after opening, which is a live candidate). The second is two
-      gestures being seen. They need different fixes and I would rather not guess between them.
+      gestures being seen. They need different fixes and I would rather not guess between them.~~ — superseded 30 Sep by the ❓ASK at the bottom, which names both fixes made since.
       **JUMPED: measured as far as this environment allows; the remaining half needs one line from him
       describing what "twice" looks like.** Recorded rather than silently reordered — he asked for the
       drag work (#678) directly, and that is what was done in the same release.
-        ⏸ **2 Sep — BUILT OUT UNTIL HE describes what "twice" looks like** (does the sheet slide up, close, and slide up again — or does it open and a second copy land on top?). The two candidates need different fixes; #706 (2 Sep, "the add layer on mobile still has the glitch that opens up twice now") is the same report and carries the same ask. Re-checked today for strict oldest-first: this line is what is left.
+        ~~⏸ **2 Sep — built out until he describes what "twice" looks like** (does the sheet slide up, close, and slide up again — or does it open and a second copy land on top?). The two candidates need different fixes; #706 (2 Sep, "the add layer on mobile still has the glitch that opens up twice now") is the same report and carries the same ask. Re-checked today for strict oldest-first: this line is what is left.~~ — superseded 30 Sep (below).
         ✅ **v15.08 — the one cheap, safe change is shipped, as an experiment (measured under #706, the same report):** the sheet's base rule transitioned `transform` and `.open` animated it with the hinge keyframe — two motions on one property, which Chrome resolves to one (before and after: one open, one render) and iOS Safari is known to replay. The transition is now off while the keyframe owns the property, and back under reduced motion. Cannot be reproduced here. **If the sheet still opens twice on the phone after v15.08, this was not it,** and the line above is still the one that splits the two remaining candidates.
       🔧 **25 Sep, v16.94 (#934):** one concrete cause found with a REAL finger and fixed — a short downward drag on the Add sheet re-opened it. If he still sees it open twice some other way, that is a second cause; tell him what was fixed and ask.
+      ❓ASK: does the Add menu still open twice on your phone? Two fixes have gone in since you said it — v15.08 (the sheet's slide and its hinge were two motions on one property, the pair iOS replays) and v16.94 (a short downward drag on the Add sheet re-opened it). If yes: what does "twice" look like — it slides up, drops and slides up again, or it opens once and a second copy lands on top?
+      ⏸ **30 Sep — BUILT OUT UNTIL HE says whether the Add menu still opens twice after v15.08 and v16.94** (and, if yes, what "twice" looks like) — #706 is the same report; one answer closes both.
 - [ ] **677 — 🔴 STILL NO AUDIO IN AN EXPORT — and this time the whole soundtrack was TWO SOUND
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** Same paste: TRACK WRITTEN, peak 0.931, none of the six loss paths fired. The two-sound-effects case he reported is not losing audio on this build.
@@ -26957,12 +26976,14 @@ re-opened #480, which I had marked done and had not fixed.
       ⏳ **Waiting on your phone: a REAL-DEVICE report is the only thing that can name the cause, and
       nothing further can be built here until it arrives.**
       ✅ ~~ASK: export something with sound on your phone, then Settings → "Your last export" → Copy, and paste it~~ **ANSWERED 10 Sep (#844).** Was: — I reproduced your exact setup (two sound effects, nothing else) on desktop and it produced a working audio track, so only your device's report can say which of the six loss paths it was.
-      ❓ **THE ONE THING THAT SETTLES IT, and it is a paste rather than an answer:** export something
+      ~~❓ **THE ONE THING THAT SETTLES IT, and it is a paste rather than an answer:** export something
       with sound on your phone, then **Settings → "Your last export" → Copy**, and send it. That report
       was **fixed in v14.35** — before that it could hand back a PREVIOUS export's verdict, which is a
       large part of why three months of asking never resolved this. It is trustworthy now, and it names
-      which of the six loss paths it was.
-        ✅ ~~2 Sep — BUILT OUT UNTIL HE pastes "Your last export"~~ **PASTED 10 Sep, see #844 — TRACK WRITTEN, peak 0.931, no drops, none of the six loss paths. This line is closed.** Was: (export something with sound on the phone, Settings → Your last export → Copy) — trustworthy since v14.35, names which of the six loss paths it was; #215 and #604 wait on the same paste. Re-checked today for strict oldest-first: this line is what is left.
+      which of the six loss paths it was.~~ — answered 10 Sep: he pasted it (#844), TRACK WRITTEN, peak 0.931.
+        ✅ ~~2 Sep — built out until he pastes "Your last export"~~ **PASTED 10 Sep, see #844 — TRACK WRITTEN, peak 0.931, no drops, none of the six loss paths. This line is closed.** Was: (export something with sound on the phone, Settings → Your last export → Copy) — trustworthy since v14.35, names which of the six loss paths it was; #215 and #604 wait on the same paste. Re-checked today for strict oldest-first: this line is what is left.
+      ❓ASK: (asked once, under #215) does an export saved to your camera roll play WITH sound from Photos? ✔ reply checked 30 Sep — the 10 Sep paste answered the report ask; this is the camera-roll half.
+      ⏸ **30 Sep — BUILT OUT UNTIL HE answers #215's camera-roll ask** — one answer closes #215, #604 and this. ✔ reply checked 30 Sep — same.
 
 - [x] **678 — Stress-test the draggable ADD-LAYER row and the draggable TIMELINE — he says both are
       His words, verbatim:
@@ -27332,7 +27353,7 @@ re-opened #480, which I had marked done and had not fixed.
              that matched nothing would pass forever.
 
 - [ ] **690 — Standing direction, 31 Aug, RESTATED 1 Sep (verbatim):**
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       > raise them and just keep going with whatever you can like bug fixing and stuff. Im sure you can find things to do
       **31 Aug:**
       **JUMPED: #690 is a standing brief, not a task with an end — "keep things going, dont stop,
@@ -27361,6 +27382,7 @@ re-opened #480, which I had marked done and had not fixed.
       working, they are good"* — the colour/black-and-white family WORKS on his device now. That closes
       #593, #603 and #645, which had been open since 26 Aug and cost three sessions of testing.
       ↻ **25 Sep, his words in full: *"Keep going"*** — sent right after I stopped the loop at v16.93 with the actionable list dry and everything else waiting on his picks. Read as this brief, restated: the loop is re-armed, and the work is a bug hunt — with REAL touch and mouse input this time (tests/_cdp.py's channel from #924), because his phone complaints kept surviving synthetic tests.
+      UNBLOCKED 30 Sep (#993 housekeeping): a standing brief, not a question — nothing in it waits for an answer (the 25 Sep line just above is about OTHER items), so it should not read as 🟠 NEEDS YOU. The JUMPED line keeps it from holding the queue.
 
 - [x] **691b — SAME BUG, OTHER HALF, found 1 Sep by re-running #691's own audit.** Fixed v14.81.
       JUMPED: this IS #691, which is closed — the same bug in the dispatcher its audit never asked about.
@@ -27697,14 +27719,16 @@ re-opened #480, which I had marked done and had not fixed.
       **What is left in this entry, by design:** the 47 position-dependent unbounded kernels (a grid or a noise field
       genuinely covers the frame) and the seven plate-relative bounded ones keep the full plate. Everything the numbers
       pointed at is done; what remains is his phone's own report, which #95's card asks for.
-        ⏸ **5 Sep — BUILT OUT UNTIL HE pastes "Your last playback"** (Settings → Your last playback → Copy, after playing a ✔ reply checked 5 Sep — his 1 Sep "do it, keep the rim as an option" answered round 3; the playback paste is round 7's ask
+        ~~⏸ **5 Sep — built out until he pastes "Your last playback"** (Settings → Your last playback → Copy, after playing a ✔ reply checked 5 Sep — his 1 Sep "do it, keep the rim as an option" answered round 3; the playback paste is round 7's ask
         project with effects on the phone until it lags). Every kernel the numbers pointed at is cropped or bounded; whether
-        the phone still lags, and on which effect, is a number only his device has. The same paste frees #95, #96 and #663.
+        the phone still lags, and on which effect, is a number only his device has. The same paste frees #95, #96 and #663.~~ — answered 10 Sep by the paste (#844): 32 of 133 frames dropped with the colour effects on the graphics chip.
       ~~2. **Plate-sized**, the real fix: `nestedPlate` sizes the plate from the whole target canvas.~~ (superseded by the readback crop above — same win, no coordinate-system risk)
          Sizing it to the layer's bounds instead would fix EVERY kernel at once with no per-kernel
          edits — and the machinery is already there, since `OX`/`OY` are threaded through `baseT` for
          the viewport crop. Bigger, riskier, touches the most critical path in the app.
       🔧 **25 Sep, v16.95 (#935):** see #202's note — three measured slowdown/memory causes fixed.
+      ❓ASK: (asked once, with #202 and the unnumbered "Editing lags" entry) since v16.95, is it still laggy on your phone, or fine now? ✔ reply checked 30 Sep — the 10 Sep paste answered the 5 Sep ask struck above.
+      ⏸ **30 Sep — BUILT OUT UNTIL HE answers #202's ask** (still laggy since v16.95, or fine now; if laggy, one What's slow → Measure report taken while playing) — one answer closes this, #202 and the unnumbered "Editing lags" entry. ✔ reply checked 30 Sep — same.
 - [x] **693 — The test harness leaked a Chrome per KILLED run, and it eventually stopped the suite
       starting at all.** Found 1 Sep when a release failed for no visible reason. ✅ v14.78
       **DONE — reaped at startup, and verified in the case it exists for.**
@@ -28174,15 +28198,17 @@ re-opened #480, which I had marked done and had not fixed.
       add row or the empty area — both open the sheet exactly once here. The two-motions-on-one-property
       finding above is real in the CSS but Chrome renders it as one motion (the keyframe owns `transform`
       for its 360ms and `fill: both` holds the end frame, so the underlying transition never shows).
-      ❓ **QUESTION FOR EZRA (logged, not blocking):** which button, and what does "twice" look like — the
+      ~~❓ **QUESTION FOR EZRA (logged, not blocking):** which button, and what does "twice" look like — the
       sheet slides up, drops, slides up again? Or the layer gets added twice? Or the EDIT sheet opens after
-      the add? A 3-second screen recording would settle it in one look. Until then the best guess is
+      the add? A 3-second screen recording would settle it in one look.~~ (superseded 30 Sep: "which button" is moot — the + FAB is display:none on the phone, styles.css ~4177 — and the ❓ASK at the bottom names both fixes) Until then the best guess is
       **iOS Safari-specific**: a `perspective()`+`rotateX()` keyframe on a `position:fixed` sheet that also
       carries a `transform` transition is exactly the combination Safari is known to re-run at the
       animation's end. The cheap, low-risk experiment is `#add-sheet.open { transition: none }` while the
       hinge is active — it changes nothing in Chrome and removes the only second motion in the CSS.
-        ✅ **v15.08 — THE ONE CHEAP, SAFE CHANGE IS SHIPPED, said plainly as an experiment.** The sheet's base rule transitions `transform` and `.open` animates it with the hinge keyframe — two motions on one property; Chrome resolves them to one (measured, before and after) and iOS Safari is known to replay exactly that pair, which is a sheet that arrives twice. The transition is now off while the keyframe owns the property (and back under reduced motion, where there is no keyframe). Test pins both halves. **BUILT OUT UNTIL HE says whether the add menu still opens twice on his phone at v15.08** — if it does, the remaining candidate is two gestures being seen, and that needs his description of what "twice" looks like (#676 carries the same ask).
+        ✅ **v15.08 — THE ONE CHEAP, SAFE CHANGE IS SHIPPED, said plainly as an experiment.** The sheet's base rule transitions `transform` and `.open` animates it with the hinge keyframe — two motions on one property; Chrome resolves them to one (measured, before and after) and iOS Safari is known to replay exactly that pair, which is a sheet that arrives twice. The transition is now off while the keyframe owns the property (and back under reduced motion, where there is no keyframe). Test pins both halves. ~~**built out until he says whether the add menu still opens twice on his phone at v15.08** — if it does, the remaining candidate is two gestures being seen, and that needs his description of what "twice" looks like (#676 carries the same ask).~~ — superseded 30 Sep (below; v16.94 is a second fix since).
       🔧 **25 Sep, v16.94 (#934):** one concrete cause found with a REAL finger and fixed — a short downward drag on the Add sheet re-opened it. If he still sees it open twice some other way, that is a second cause.
+      ❓ASK: (asked once, under #676) does the Add menu still open twice on your phone after v15.08 and v16.94?
+      ⏸ **30 Sep — BUILT OUT UNTIL HE answers #676's ask** (does the Add menu still open twice after v15.08 and v16.94; if yes, what "twice" looks like) — one answer closes both.
 - [x] **707 — PHONE (real touch): a trim from a grip lands SECONDS from where the finger is.** Found 2 Sep
       while finishing #699, with trusted CDP touch (`Input.dispatchTouchEvent`) at 380px — NOT the synthetic
       events the suite uses, which cannot see it. Pre-existing: identical on HEAD before #699's change.
@@ -29018,6 +29044,7 @@ re-opened #480, which I had marked done and had not fixed.
       📐 **Third probe, same session — Position / Scale open under the selection: still flat** (40 frames, median 16.7ms, worst 18.5ms, 0 over 33). So every state stageable here is smooth, and the entry is honest about what that means: the jank is on HIS device, not reproducible on this Mac — the same wall as #95, #125, #387 and #508. **What is buildable without him:** the #508 frame probe's pattern applied to the scrub — record every frame of a scrub on the device, with what was selected and which panel was open, behind Settings → Copy — so the next paste names the cost instead of the next guess. That is the plan for this entry's turn.
       ✅ **v15.09 — THE INSTRUMENT IS BUILT, the step this entry named.** Every horizontal scrub records its frames on the device that runs it — with what was selected (type, and whether it carries effects), which inspector panel was open, whether the effects browser was up, the layer count — and writes **Settings → Your last scrub → Copy**: frames, median and worst gap, every frame over 33ms with its time, a one-line verdict. Nothing about the scrub changed. Test drives the real gesture at phone width with a shape selected and reads the report back. **BUILT OUT UNTIL HE scrubs once on his phone with a layer selected and pastes that report** — it will name the cost instead of the next guess.
       🔧 **25 Sep, v16.94 (#934):** a likely part of this, found with a REAL finger: with a layer selected, a sideways swipe that started on a keyframe diamond (and the one at the playhead sits mid-timeline) did nothing; and a flick from a clip or a layer name stopped dead on lift. Both fixed. Ask whether scrubbing with a layer selected still feels jumpy.
+      📋 **30 Sep (#993 housekeeping):** #657's scrubbing-sample ask lives here now (#657 is closed into this entry) — this report is the sample it wanted. Put it to him in the same sitting as #508's Settings → Your last project open paste: one go on the phone answers both. (Unblock cards 33 and 44 become one.)
 - [x] **769 — "The lines when editing points … STILLLLLLL … don't line up with the actual object when you zoom in the canvas"** (2 Sep, phone screenshot at v15.02) ✅ **logged and redirected on arrival: this is #561 re-opened, not a new item.**
       His words: *"The lines when editing points for some reason STILLLLLLL even tho I told you to fix still don't line up with the actual object when you zoom in the canvas"*
       His screenshot: the Person shape at **200%** canvas zoom, panned; Customise Points open; the point squares, hollow rings, curve
@@ -29146,6 +29173,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⏸ **BUILT OUT UNTIL HE picks A, B or C for the narrow-window transport row.** Clause 1 is done and found the
       defect; clauses 2–5 (the timeline/add-menu separation, the effects browser, the tab switching, the re-test)
       resume the moment he picks, since the fix touches the same row.
+      📋 **30 Sep — next step, from the logging chat's #993 note:** re-measure the 900px row on v17.13 first (#979 gave every transport control its own click at 701–1226px). If nothing overlaps: strike the ⏸ above, drop unblock card 21, strike #918's finding-2 lines and tick #918 finding 2 on #979's fix — clauses 2–5 then go back to builder work, and his 26 Sep words ("the draggable add menu on PC… doesn't go as far up as it should") are fresh evidence for clause 2.
 
 - [x] **776 — 🚨 THE INTRO LOADING SCREEN IS BROKEN — it just flashes black-and-white and white and does nothing.** Logged 4 Sep, verbatim, the moment he said it: ✅ DONE v15.47.
       His words: *"You've broken the intro loading screen by the way it does not do anything anymore just like flashing black-and-white and white"*
@@ -29252,8 +29280,9 @@ re-opened #480, which I had marked done and had not fixed.
       ↻ **23 Sep — source brought current (v16.83).** Removed #810's card (answered by him asking again, shipped as #922). Added five: the ten filter candidates to pick from (#912), whether the top-of-screen fade is gone after re-adding the app (#920), and three look choices from the #912 audit — the Export box cutting off its own values on a phone, the see-through Add sheet, and the black custom-colour box (#917). Today's five are in "New today"; the previous five moved to their kind's section. Checked in a headless phone: 32 cards, no errors, the tally and every section count derive themselves. **Still NOT published** — the link is dead and republishing is his call.
 
       🔧 **25 Sep — the source is current again.** `tools/unblock/unblock.html` rebuilt from the waiting-on-him sweep (60 asks + the decisions made for him, in the same numbering as the list he was sent in chat on 25 Sep). The cards are one JSON block rendered with textContent, so a card can no longer drift from the list; the old page's "New today" answer boxes had never been wired to Copy (fixed); saved answers moved to a new key so old picks cannot tick new questions. Verified at 380px: 61 cards, a pick and a typed answer both counted. **Not published** — whether it gets a new link is his call (item 49).
+      📋 **30 Sep — the logging chat's #993 note, for when this is answered:** merge the two asks (the ❓ASK at the top and the one in the 21 Sep block) into one. Whatever the answer, update #777, the summary at the top of this file and CLAUDE.md together — all three link the dead 0ab35f83. If it is "publish", first remove the obsolete cards 1–4, 21, 22, 24, 37 and 42; card 28 (#920) still describes the older v16.96 ask.
 - [ ] **778 — New chat, 5 Sep: build a system that never stops, never forgets the rules, never assumes a fix worked; then audit the autonomous work for delusion; then bug-hunt, polish effects, add filters.** Logged the moment he said it, verbatim:
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       **JUMPED: his words are "THE FIRST THING I WANT YOU TO DO" — an explicit now, which is the one thing that jumps the queue.**
       > *"Okay starting a new freemotion chat, its been a while. THE FIRST THING I WANT YOU TO DO, is figure out how to
       > achieve a chat where you keep going no matter what, never stopping, never forgetting base rules and instructions,
@@ -29309,6 +29338,7 @@ re-opened #480, which I had marked done and had not fixed.
       8. [x] **Keep looping every minute** so work does not stop. ✅ cron armed 5 Sep, `* * * * *`, prompt = run tick.sh.
       9. [x] **Log every request; oldest first.** ✅ this entry was written before any work began; next.sh unchanged.
       10. [ ] **Do what makes sense with the send-off.**
+      UNBLOCKED 30 Sep (#993 housekeeping): a standing brief with clauses still being worked, not a question — nothing in it waits for an answer, so it should not read as 🟠 NEEDS YOU. The JUMPED line keeps it from holding the queue.
 
 - [x] **779 — v15.53 wrote a false premise into code, test, log and commit: "curl was never prepped" — it was, at v13.28, and its speed-up has had NO real reference since v13.29 (hunt HIGH #45)** (5 Sep, found by re-proving v15.53 with `tools/spotcheck.sh` under #778 clause 2) ✅ DONE v15.57.
       **JUMPED: this is #778 clause 2 — his "first thing" — not a new request jumping his queue.**
@@ -29883,6 +29913,7 @@ re-opened #480, which I had marked done and had not fixed.
       18. [ ] Pinch-to-resize silently fails when the second finger lands on a selection handle (low)
       19. [x] A corner-handle drag does nothing on a layer whose scale keyframes to ~0 at the playhead, and silently adds 0.02 to every scale keyframe (low) ✅ v16.07 — the gesture is refused with a sentence instead of quietly lifting the whole animation off zero
       20. [ ] The sketching bar's "Cancel" does not cancel — every stroke is already a committed layer (low)
+      📋 **30 Sep — the logging chat's #993 note:** under LOOP.md rule 16 the builder can ship B for clause 20 (rename the sketching bar's Cancel to Close) and tell him "say A to change it" — which leaves only the pinch reading (clause 18) for him.
 
 - [x] **835 — Get rid of the CLIP OPTIONS / Done row on the phone.** (7 Sep, his words in full:) ✅ DONE v16.06.
       > *"Get rid of the row that says clip options and done. Make sure that menu still opens up fully and covers the
@@ -30084,7 +30115,9 @@ re-opened #480, which I had marked done and had not fixed.
              separate "the sound cut out" from "the main thread froze for 1205ms" — and those need opposite fixes. The
              instrument is fixed as of v16.10, so one more paste answers it. Everything the code alone could settle is
              already done and shipped.
-             ❓ASK: play something with audio EFFECTS on it until it glitches, then Settings → Your last playback → Copy.
+             ~~❓ASK: play something with audio EFFECTS on it until it glitches, then Settings → Your last playback → Copy.~~ — replaced 30 Sep by the one ask below ("still glitching?" first).
+             ❓ASK: is audio with EFFECTS on it still glitching on your phone since v16.94 (two audio faults were fixed there)? If yes: play it until it glitches, stop, then Settings → Your last playback → Copy, and paste it.
+      📋 **30 Sep (#993 housekeeping):** #96 is closed into this entry on his 9 Sep words (*"…sounded fine deciding effects to them. They start to glitch out on my phone."*) — reopen #96 as a second cause if a song with NO effects ever fails again. #663 points here too: one answer covers both.
 
 - [ ] **846 — Standing instruction, 10 Sep (verbatim):**
       **STATUS: 📌 NOTE — nothing to build**
@@ -30121,6 +30154,7 @@ re-opened #480, which I had marked done and had not fixed.
              FreeMotion chat re-arms it. The only real fix is a scheduler outside the session; the nearest thing that
              exists today is the cloud `/schedule` routine, which would run as its own agent rather than in this chat.
              ❓ASK: want me to set up a cloud routine as the backstop, so the loop survives this chat being closed?
+             📋 30 Sep — the logging chat's #993 note: recommended answer **No** — a cloud agent works from a GitHub clone, cannot see the local INBOX.md, and would push beside the local session.
       3. [x] **First thing every tick checks is INBOX.md**, because #843 makes that the way his words arrive now.
              ✅ Proven on its first real use, 10 Sep: the logging chat wrote two requests into INBOX.md, `tools/next.sh`
              REFUSED to hand out any work until they were drained, and both reached this file as #850 and #851 inside
@@ -30933,16 +30967,15 @@ re-opened #480, which I had marked done and had not fixed.
       not left overlapping the band — "it just kinda ends up going on top of other stuff". It deliberately
       does NOT assert a fixed offset, which would pin today's layout rather than his complaint.
 
-- [ ] **867 — PC: the Controller and New group tiles look too alike, both look bad, and New group is the same colour as the custom-elements background.** (11 Sep, via INBOX. His words, verbatim and in full:)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
-      ❓ASK: which of the three drawn options for Controller / New group — 1 (recommended) · 2 · 3?
+- [x] **867 — PC: the Controller and New group tiles look too alike, both look bad, and New group is the same colour as the custom-elements background.** (11 Sep, via INBOX. His words, verbatim and in full:)
+      ~~❓ASK: which of the three drawn options for Controller / New group — 1 (recommended) · 2 · 3?~~ — built as option 1 in v16.21 (below).
       > The controller and New group options are both very similar looking while also both looking kind of shit so if you could just work those a bit so they look different and also the problem with the new group button is that like the exact same colour as the custom elements background so change colour as well. It’s just on PC. I noticed it more because on PC the buttons are bigger and that Connor makes them look a lot more shit when they’re bigger.
 
       ("that Connor makes them" is dictation — read as "that kinda makes them".)
       **Three separable things:**
-      1. [ ] Controller and New group must stop looking like each other.
-      2. [ ] Both need to look better in their own right — "both looking kind of shit".
-      3. [ ] New group's colour clashes with the custom-elements background — it is "the exact same colour", so it
+      1. [x] ✅ v16.21 (option 1) — Controller and New group must stop looking like each other.
+      2. [x] ✅ v16.21 (option 1; say 3 for a stronger plate on both) — Both need to look better in their own right — "both looking kind of shit".
+      3. [x] ✅ v16.21 (option 1: leaf green) — New group's colour clashes with the custom-elements background — it is "the exact same colour", so it
              disappears into what it sits on. Change the colour.
       **PC only**, and he says why: the tiles are bigger there, which makes it obvious. Probably present on the
       phone too, just smaller.
@@ -30955,7 +30988,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **DESIGN REQUEST — his standing rule applies:** draw real options, render them at the size they ship at on
       PC as well as at 380px, and show him the picture before anything ships. He has not waived it here.
 
-      ⏸ **20 Sep — BUILT OUT UNTIL HE picks an option: 1 (recommended) · 2 · 3.**
+      ~~⏸ **20 Sep — built out until he picks an option: 1 (recommended) · 2 · 3.**~~ — built as option 1 (v16.21).
       Options drawn and sent: **`tools/design/867-options.html`**, rendered at the REAL PC tile size next to the
       real neighbours, and again at 380px. Nothing ships until he answers, per #545 — that is the rule, not a
       hedge, and it is why this is parked rather than guessed at.
@@ -30979,6 +31012,7 @@ re-opened #480, which I had marked done and had not fixed.
       other card here ADDS a layer while Custom elements OPENS A BROWSER — so the quiet grey should be Custom
       elements' alone). 2 = keep it quiet but make it properly blue. 3 = option 1 plus a stronger plate on both
       tiles, if "washed out" is as much the problem as "too alike".
+      ✅ **BUILT v16.21 as option 1 — say 2 or 3 to change it** (recorded 30 Sep by the #993 housekeeping; the ask had stayed open after the build). New group is leaf green with a solid folder icon and no dashes; Controller keeps its red and gets the null-object mark (corner ticks + crosshair); the false "still clearly two things" note in `js/addmenu.js` was corrected. 2 = keep New group quiet but properly blue · 3 = option 1 plus a stronger plate on both tiles. (Unblock card 22 goes with it.)
 
 - [x] **868 — "whats the fail safe if an ai fucks up all the code? how do i undo what they did"** (12 Sep) ✅ DONE.
       His words, verbatim and in full:
@@ -31074,7 +31108,8 @@ re-opened #480, which I had marked done and had not fixed.
 
       ⚠️ **This is in direct tension with `LOOP.md` rule 5 and `tools/ship.sh`, which runs the full 964-test suite TWICE on every shipped source change** (desktop + 380px) and takes ~8 minutes of quota per release. He is not asking for zero tests — he names the exception himself ("if it's something that desperately needs testing, then do it") and he names his own role ("I'm always there to test as well").
       1. [ ] Decide what the suite run should be per release — the full double run, a targeted slice (CLAUDE.md already documents running ONE test or a slice), or the floor only.
-      2. [ ] ❓ **ASK HIM:** this one is his call, because the trade is his: a shorter suite ships faster and burns less quota, and the cost is that regressions reach his phone instead of being caught here. His own words cut both ways — "just get stuff done", but also the reason the suite exists at all is the string of regressions that reached him.
+      2. [x] ~~❓ **ASK HIM:** this one is his call, because the trade is his: a shorter suite ships faster and burns less quota, and the cost is that regressions reach his phone instead of being caught here. His own words cut both ways — "just get stuff done", but also the reason the suite exists at all is the string of regressions that reached him.~~ — decided, not asked: #882 clause 2 (20 Sep) keeps ship.sh as it is, on his words below.
+      ✅ **HE ANSWERED 20 Sep (found by the logging chat, 29 Sep):** *"use ur own reasoning and sence / stop asking me for permision"* — his words in #879 (19 Sep) and #872 (12 Sep), applied to this clause in #882 clause 2 (20 Sep): keep `tools/ship.sh` as it is — it already runs one suite on a docs-only change, and the double run only on a real code change.
 
 - [ ] **876 — Standing instruction: preferences must survive a new chat.** (12 Sep, via INBOX. His words, verbatim and in full:)
       **STATUS: 📌 NOTE — nothing to build**
@@ -31144,6 +31179,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⏸ **BUILT OUT UNTIL HE answers 3 or 4.** Both of the remaining clauses are things only he can do: the Xcode ✔ reply checked 24 Sep — his 20 Sep answer closed clause 1 (cadence); 3 and 4 are still his.
       line needs his password (and the `DEVELOPER_DIR` workaround is already permanent in `~/.zshenv`, so nothing
       is broken meanwhile), and the ChatGPT logs are his to send. Clauses 1 and 2 are answered and struck.
+      📋 **30 Sep — the logging chat's #993 note:** `env -u DEVELOPER_DIR xcode-select -p` still prints the Xcode.app path, so the sudo line for clause 3 has not been run yet.
 
 
 - [x] **883 — 🔴 A WHITE BAR AT THE TOP WHEN YOU ARE INSIDE A PROJECT. (hunt HIGH #883)** ✅ FIXED v16.18. (20 Sep, in chat. His words, verbatim and in full:)
@@ -32554,7 +32590,7 @@ re-opened #480, which I had marked done and had not fixed.
          *What he would see:* The background swatch row (.hm-bg-row, 202-214px wide) is wider than the row it sits in. In New project at 320 it ends at x=318 while .hm-fld ends at 288. The custom-colour input #hm-new-bg is clipped at the right, and .hm-dlg-scroll gets horizontal scroll (scrollWidth 291 > clientWidth 264) with a 
       6. [x] ✖ not real (re-verified: the bar is meant to float; the list scrolls out from under it) [medium] Effects browser, after picking an effect card — Picking an effect card brings up the commit bar ('Clear / Add naked / Add 1 effect'). It lands on top of the gold FAVES — `380x800 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* Picking an effect card brings up the commit bar ('Clear / Add naked / Add 1 effect'). It lands on top of the gold FAVES button and covers half of it, cutting the '★ FAVES' label in two. Measured: .fxb-commit has a transparent background, z-index 4 and spans y 742-800; .fxb-favmore spans y 717-778. T
-      7. [ ] [medium] Export dialog — The Resolution and Frame rate selects are 179px wide (155px at 320), so they cut off their own value. 'Same as project — — `380x800 and 320x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
+      7. [ ] ➜ **tracked in #985** (folded in 30 Sep — the Export menu redesign re-lays these rows, so the look is chosen there) [medium] Export dialog — The Resolution and Frame rate selects are 179px wide (155px at 320), so they cut off their own value. 'Same as project — — `380x800 and 320x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The Resolution and Frame rate selects are 179px wide (155px at 320), so they cut off their own value. 'Same as project — 1080×1920' shows as 'Same as project …' and at 320 as 'Same as proj…'. The part that tells you the actual size and fps is exactly the part that gets hidden.
       8. [x] ✅ v16.79 (before/after sent) [medium] Inspector > Position / Scale: X Y Z value boxes — The X/Y/Z value boxes (.mt-vbox-val) run out of room. At 320, even the default '540.0' and '960.0' touch the box edges, — `320x700 editor (also 380x800)` — ✔ both skeptics confirmed
          *What he would see:* The X/Y/Z value boxes (.mt-vbox-val) run out of room. At 320, even the default '540.0' and '960.0' touch the box edges, and the keyframe diamond sits on top of the '.0' (crop-n320-xyz.png). With an off-canvas value such as -1234.5 the text is clipped: scrollWidth 74 > clientWidth 59 renders '-1234.'
@@ -32577,8 +32613,9 @@ re-opened #480, which I had marked done and had not fixed.
       17. [ ] [low] Effect control rows: segmented option rows — The option rows (.fx-seg) wrap unevenly and leave one item alone on its last line. Match Grade 'Contrast only' at 380 (f — `380x800 and 320x700 editor` — ✔ both skeptics confirmed
          *What he would see:* The option rows (.fx-seg) wrap unevenly and leave one item alone on its last line. Match Grade 'Contrast only' at 380 (fx-match.png). At 320: HSL Bands 'Custom', Squish 'Floor + ceiling' and 'Every layer' (n320-fx-hsl.png, n320-fx-squish.png). The label column ('Band', 'Walls') takes about a third o
 
-      ❓ Look choices left for him (not bugs; everything is on screen and tappable): 7 — the Export dialog's Resolution / Frame rate values are cut on a phone (labels above the dropdowns, or shorter wording); 11b — the Add sheet is see-through glass, so the timeline shows faintly through it (more solid, or keep the glass); 15b — the custom-colour box starts black and looks like a second Black swatch (a rainbow ring like Settings' shape-colour swatch); 17 — some effect option rows leave one button alone on a second line at 320px (labels above buttons on phones).
-      ⏸ **BUILT OUT UNTIL HE picks the four looks** listed just above (7, 11b, 15b, 17) — they are choices, not bugs, and every other finding here is fixed. All four are on the unblock page source.
+      ❓ Look choices left for him (not bugs; everything is on screen and tappable): 7 — the Export dialog's Resolution / Frame rate values are cut on a phone (labels above the dropdowns, or shorter wording) → folded into #985, 30 Sep; 11b — the Add sheet is see-through glass, so the timeline shows faintly through it (more solid, or keep the glass); 15b — the custom-colour box starts black and looks like a second Black swatch (a rainbow ring like Settings' shape-colour swatch) — #918 finding 11 is the same question, asked once, here; 17 — some effect option rows leave one button alone on a second line at 320px (labels above buttons on phones).
+      ~~⏸ **built out until he picks the four looks** listed just above (7, 11b, 15b, 17) — they are choices, not bugs, and every other finding here is fixed. All four are on the unblock page source.~~ — 7 folded into #985 (30 Sep); the three left are on the line below.
+      ⏸ **30 Sep — BUILT OUT UNTIL HE picks the three looks left: 11b, 15b and 17** (listed above). 15b also answers #918 finding 11 — the same question, asked once, here.
 - [ ] **918 — #912 audit: Visual issues — PC layout (1280 / 900) — 15 findings. (hunt MEDIUM #918)** (22 Sep, found by the #912 audit workflow under his words "do a bug hunt" / "check for visual issues" — NOT his words.)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **JUMPED: a container of independent findings (the #904 lesson) — each closes on its own as `queue 918 (partial)`; it must not hold the queue.** Full detail per finding (repro, evidence, both skeptics' verdicts): `audits/912-audit.json` → `visual-pc`.
@@ -32602,7 +32639,7 @@ re-opened #480, which I had marked done and had not fixed.
          *What he would see:* The white top bar in the light look has a near-black 1px bottom border (rgb(18,32,41)) that curves round its 20px bottom corners, like a dark outline under a light card. It comes from html[data-theme="glass"] .hm-top { border-bottom: 1px solid var(--line-soft) } (theme-glass.css:256-262, --line-soft
       10. [x] ✅ v16.79 (before/after sent) [low] Editor › Layer actions menu (#btn-layermenu) — The Layer actions menu opens detached from its button. js/app.js (~line 5813) places it at r.right − 200, but the menu i — `1280x900 and 900x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The Layer actions menu opens detached from its button. js/app.js (~line 5813) places it at r.right − 200, but the menu is only about 151px wide, so its right edge lands 49px left of the button. At 1280 it opens over the Back chevron (menu at x 322-473, button at 488-522). At 900 it opens over the in
-      11. [ ] [low] Editor › ⚙ Canvas settings pop-up; Home › New project dialog — The custom background colour picker is a bare native input[type=color]. In Canvas settings it is a 50×27 bo — `1280x900 and 900x700 editor; home light/dark` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
+      11. [ ] ➜ asked once, under **#917 15b** (the same question, 30 Sep) [low] Editor › ⚙ Canvas settings pop-up; Home › New project dialog — The custom background colour picker is a bare native input[type=color]. In Canvas settings it is a 50×27 bo — `1280x900 and 900x700 editor; home light/dark` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The custom background colour picker is a bare native input[type=color]. In Canvas settings it is a 50×27 box with a white frame and a black bar. Its right edge (x 1134) runs 19px past the column where the selects and values end (1115), only 6px from the card edge (1140). It is also not the same size
       12. [x] ✅ v16.79 (before/after sent) [low] Editor › Export pop-up — The Resolution and Frame rate values are cut off to 'Same as project …' in the 179px selects on the 330px card. The full — `1280x900 and 900x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The Resolution and Frame rate values are cut off to 'Same as project …' in the 179px selects on the 330px card. The full values are 'Same as project — 1080×1920' and 'Same as project — 30 fps', so the actual size and rate never show. 'Export just this layer' (#exp-solo-btn, 'All layers') is a button
@@ -32613,8 +32650,8 @@ re-opened #480, which I had marked done and had not fixed.
       15. [x] ✅ v16.79 (before/after sent) [low] Editor › floating text-edit bar — The top control row of the text-edit bar (colour, align, font, size, Aa, ✓) stops about 34px short of the bar's right ed — `1280x900 and 900x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The top control row of the text-edit bar (colour, align, font, size, Aa, ✓) stops about 34px short of the bar's right edge, while its left inset is 10px and the text box below runs the full width. The row looks off-centre and unfinished on the right.
 
-      ❓ Left for him: 2 — at a 900px PC window Layer actions and Back overlap; this is #775, waiting on his pick for the narrow row. 11 — Canvas settings' custom colour picker is a bare native box 19px past its column; a look to choose (same as #917 15b). 16 — NEW, found while re-checking: a v16.76 light-Home rule also darkened the editor's Canvas settings size text — ✅ fixed v16.79.
-      ⏸ **BUILT OUT UNTIL HE picks** the two left above (2 — the narrow-PC row, which is #775's pick; 11 — the custom colour picker's look). Every other finding here is fixed.
+      ❓ Left for him: 2 — at a 900px PC window Layer actions and Back overlap; this is #775, waiting on his pick for the narrow row. 11 — Canvas settings' custom colour picker is a bare native box 19px past its column; a look to choose (same as #917 15b — asked once, there, 30 Sep). 16 — NEW, found while re-checking: a v16.76 light-Home rule also darkened the editor's Canvas settings size text — ✅ fixed v16.79.
+      ⏸ **BUILT OUT UNTIL HE picks** the two left above (2 — the narrow-PC row, which is #775's pick; 11 — the custom colour picker's look, asked once under #917 15b). Every other finding here is fixed.
 - [x] **919 — Replace Home's native pop-ups (Rename, Delete, Save as template / element, Update template, …) with FreeMotion's own dialogs that follow light/dark and animate.** (22 Sep, his answer to the #912 big-change ask, verbatim: **"Yes, make our own (Recommended)"**, to: *"Rename, Delete, Save as template and similar pop-ups on Home are the phone's built-in grey boxes. They can't follow light/dark or animate. Replace them with FreeMotion's own pop-ups?"*)
       The 13 call sites (from the #912 audit): js/home.js:1289, 1304, 1312, 1319, 1348, 1563, 1728, 1818, 1959, 1967, 2025, 2047, 2058 — `window.prompt()` / `window.confirm()`.
       **JUMPED: (22 Sep, v16.77)** #916's ten audio/export fixes were built in parallel with this and finished first, while this one was cut off half-built by the session limit. Holding finished, proven fixes behind a half-built dialog helps nothing, so v16.77 ships them. **#919 is the very next thing built** — the half-built work is on branch `fm-popups` (worktree wt/popups: js/ask.js + CSS, no tests yet).
@@ -32827,9 +32864,12 @@ re-opened #480, which I had marked done and had not fixed.
       3. [ ] The heart's outline has no odd lines / no bulge near the bottom point — a clean heart.
       4. [x] ✅ (sheets sent 25 Sep, people resent 26 Sep) (his standing design rule, #545) show him options as a picture, at the size they ship at, before anything ships.
       🎨 **25 Sep — options drawn from REAL published pictograms** (branch `fm-design-929`): people **A AIGA/US DOT airport sign (public domain, recommended)** / B Mapbox Maki (CC0) / C Google Material Symbols (Apache-2.0, no arms) / keep today's; each card shows the original, the trace and an overlay, and the real Add → Shape tiles at phone and PC size. Heart: found both faults — the knee on each lower side (bend 45 against 3.7 on the lobes) and a HAND-TYPED tile path with an S-bend (the "little lines"); **A his heart with the bulge fixed (recommended)** / B Google's / C textbook, and the tile drawn from the heart's own geometry (outline recommended, or filled) — plus the same fix for the other 6 data-shape tiles and a test that fails if a tile is ever hand-drawn again. Criticised and revised once. Sent to his phone as 14 pages.
-      ⏸ **BUILT OUT UNTIL HE picks** people A / B / C / today's, heart A / B / C, and an outline or filled heart tile. (Picking any new people option means rewriting the 6 old people tests around it — they were written around today's figure; the sheet says so plainly.)
+      ~~⏸ **built out until he picks** people A / B / C / today's, heart A / B / C, and an outline or filled heart tile.~~ (Picking any new people option means rewriting the 6 old people tests around it — they were written around today's figure; the sheet says so plainly.) — people answered 26 Sep ("Do the airport sign", below; built v17.02); the heart is the live line at the bottom.
 
-      **HE ASKED (26 Sep), verbatim:** *"5 You gotta show me what these look like"* (item 5 = the people shapes) → the four people pages resent the same minute (scratchpad d929/929-people-part0..3). ⏸ **BUILT OUT UNTIL HE picks the people (A airport sign, recommended · B Mapbox · C Google · keep today's), the heart (A/B/C) and the heart icon (outline/filled).** ✔ reply checked 26 Sep.
+      ~~**HE ASKED (26 Sep), verbatim:** *"5 You gotta show me what these look like"* (item 5 = the people shapes) → the four people pages resent the same minute (scratchpad d929/929-people-part0..3). ⏸ **built out until he picks the people (A airport sign, recommended · B Mapbox · C Google · keep today's), the heart (A/B/C) and the heart icon (outline/filled).** ✔ reply checked 26 Sep.~~ — resolved: the people pages were sent and he picked the airport sign (below).
+      ✅ **HE ANSWERED 26 Sep (found by the logging chat, 29 Sep):** *"Do the airport sign"* (2026-09-26T02:25Z) — the people half, built v17.02 (clause 1). Only the heart is left.
+      ❓ASK: the heart — A today's heart with the bulge fixed (recommended) · B Google's · C textbook — and its tile in the Shape menu: outline (recommended) or filled? ✔ reply checked 30 Sep — his 26 Sep answer was the people half only.
+      ⏸ **30 Sep — BUILT OUT UNTIL HE picks the heart (A/B/C) and its tile (outline/filled)** — resend the heart pages (branch `fm-design-929`) with the question. ✔ reply checked 30 Sep — his 26 Sep answer was the people half only.
 - [x] **930 — The ASSISTANT and DIRECTOR menus open on top of each other; and the API key belongs in App Settings, reachable from both.** (24 Sep, his words in full, verbatim:)
       > *"the assistant menu and the director menu both pop up at the same time and go on top of each other, you should make it when you open one or the other, the other one closes. And also, the only way you can put in an API key is in the director menu. So basically what you should do is move it so that there's a button in both pages that takes you to app settings and it takes you to a section in the app settings where you put in the API key and you put it in there instead. But also you should add an option to do like password protected. Oh, actually, never mind. Don't do that because when we actually make this thing, we'll add accounts to it so people can have accounts and stuff. And people will just you know be protected by their account."*
       His clauses:
@@ -33190,8 +33230,8 @@ re-opened #480, which I had marked done and had not fixed.
   2. [x] ✅ v17.13 — It should "actually look really good and be really well thought out".
   3. [x] ✅ v17.13 — (his standing design rule, #545) options drawn and shown to him before it ships.
   **26 Sep — three options drawn and SENT** (`tools/design/947-options.html`, frames in `tools/design/947/`, clips `947-A/B/C.gif`; every frame is the real Home + the real New project dialog at 390×844, the entrance driven by the throwaway `tools/design/947-proto.js` and frozen at exact points by `tools/design/947-render.py`, both Home looks). A = the orb becomes the card (recommended; Cancel reverses it into the orb); B = a 9:16 canvas outline is drawn out of the + and grows into the card; C = a ripple from the + reveals the dimmed screen and the card rises with a bounce.
-  ❓ASK: A, B or C? (A recommended.)
-  BUILT OUT UNTIL HE picks A, B or C (the sheet and three clips were sent 26 Sep).
+  ~~❓ASK: A, B or C? (A recommended.)~~ — answered 28 Sep (all three, at random, #974) and 29 Sep (the white line that pulses out, built v17.13).
+  ~~built out until he picks A, B or C (the sheet and three clips were sent 26 Sep).~~ — answered, same.
       ✅ **HE ANSWERED 28 Sep (#974): all three + animations go in the app, one at random each time** — built under #974; the loser(s) are deleted once he says which he likes.
       ✅ **v17.12 (#974): all three entrances are in the app and one plays at random on every tap of +.** built out until he says which he likes (the others are then deleted) — ANSWERED 29 Sep, below.
       ✅ **HE ANSWERED, 29 Sep (in the builder chat), verbatim:** *"My fave animation for pressing the create button is the one where the white line pulses out. I also like that when you press cancel it goes away straight away."*
@@ -33460,7 +33500,7 @@ re-opened #480, which I had marked done and had not fixed.
           - (c) whether some other limit (CSS max-height, the `--am-bottom` placement, the drag handler) stops it before `amClamp`.
           Write the numbers into the entry.
       - Fix idea: make the ceiling "up to the top", independent of the timeline. Either `ceil = vh − (top bar's bottom edge) − a small margin`, measured from the top bar and not a fraction, or the full `vh`. Keep the #244 behaviours: the floor at the timeline's top, the snap and blue flash at the line, the coupling when dragged down past it, and floating OVER the canvas without shrinking it.
-      - ❓ASK: at full height, should the Add menu stop just under the top bar (Back, project name, ?, notes, settings, Export all stay clickable) or cover the top bar too? Recommended: stop just under the top bar. Build that now; don't block on it.
+      - ~~❓ASK: at full height, should the Add menu stop just under the top bar (Back, project name, ?, notes, settings, Export all stay clickable) or cover the top bar too? Recommended: stop just under the top bar. Build that now; don't block on it.~~ — moot on PC: PC has no top bar in the way (the plan's measurement, §B); built as B1 in v17.07.
       - Test idea: with the timeline at its MIN height, drag the Add menu's handle to y=0. Its top edge must end within a few px of the top bar's bottom, at 900, 1280 and 1920 wide. Repeat with the timeline at its max: same top edge. Fails on HEAD, which stops at 0.62·vh. Also re-run the #244 and #512 tests (snap, coupling, floor).
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
@@ -33532,7 +33572,7 @@ re-opened #480, which I had marked done and had not fixed.
         - (a) Give Import audio the same treatment: `icoMulti` with the same two gradient stops, under its OWN namespaced id (e.g. `fm-ic-impau`). The comment at ~392 warns that a duplicate id silently steals the paint from whichever element asks second.
         - (b) Then compare the two tiles' computed styles side by side (card background, border, box-shadow, icon paint, label weight) and make any other difference match.
         - (c) Rename the Media tile's label `'Import'` → `'Import media'`. `BY_LABEL` already has an `'Import media'` key, and the PC drop hint (`index.html` ~423) already says "click **Import media**", a button that does not exist under that name today, so the rename fixes that mismatch too.
-      - ❓ASK: the PC toolbar has its own `#btn-import` (`index.html` ~282) that also just says "Import". Rename it to "Import media" too? Recommended: yes, same words everywhere, but check it still fits the toolbar at 900px. Do the Add-menu tile now; don't block on this.
+      - ~~❓ASK: the PC toolbar has its own `#btn-import` (`index.html` ~282) that also just says "Import". Rename it to "Import media" too? Recommended: yes, same words everywhere, but check it still fits the toolbar at 900px. Do the Add-menu tile now; don't block on this.~~ — built: the PC toolbar's `#btn-import` reads "Import media" (index.html, checked 30 Sep).
       - Tests: about 3 lines in tests.js mention 'Import' / 'Import audio'. Any that find the tile by the label 'Import' must follow the rename. New test: both tiles' icon strokes resolve to a `url(#…)` gradient (not currentColor), and the Media tile reads "Import media". It fails on HEAD.
       - #545: small, and he named the exact look to copy, so one before/after picture of both tabs is enough. Send it with the release.
 
@@ -33556,7 +33596,7 @@ re-opened #480, which I had marked done and had not fixed.
       - **Its own comment already records a weak point:** the tyre-to-arch gap is 0.023 normalised, sub-pixel below ~60px. So at the 34px icon the arches close up and the wheels read as hub dots on the body. That is a likely part of what he sees, but he did not say what is wrong. Do not assume it is the whole of it.
       - **Do it the way #929 (the people) finally landed**, after "Ive asked u to make the people shapes look good over 10 times": trace 2–3 options from real published pictograms, not from scratch. For example: AIGA/US DOT symbol signs (public domain), Mapbox Maki `car` (CC0), Google Material `directions_car` (Apache 2.0). Offer a side view and a front-¾ view. Keep the fills clean (the body winds one way and the windows/hubs the other, so they stay holes).
       - **#545:** render every option BIG on the canvas AND at the 34px menu-icon size, beside its neighbours in the Shape menu, and send them with one marked Recommended. The 34px test is the one the current car fails.
-      - ❓ASK (optional, only if the options do not settle it): what bothers him about the current car: the look overall, the wheels, or the proportions? Build the options without waiting.
+      - ~~❓ASK (optional, only if the options do not settle it): what bothers him about the current car: the look overall, the wheels, or the proportions? Build the options without waiting.~~ — answered 28 Sep: keep the original car AND add the head-on car (#973).
       - Test idea: the chosen car keeps a visible tyre-to-arch gap (≥ 1.5px) at the 34px icon size, measured on the rendered icon. The current car fails that.
 
       ⏳ PLAN PENDING: the logging chat is drawing a full plan for this (its 17:46 note, below each block it planned): **don't start building before its plan block lands** (`tools/design/plans/2026-09-26-<name>/plan.md`). Then follow the plan; if the tree has moved and a step no longer fits, say so here rather than improvising (his steer, 17:43).
@@ -33688,11 +33728,11 @@ re-opened #480, which I had marked done and had not fixed.
         - Limit '616' to the slim row.
       - **His picks, sent to him in the logging chat as `send-pick-and-timing.jpg`. PENDING:**
         - ❓ASK 1, the colour: **A Aurora (recommended)**, B Rings and sparks, or C Key ripple.
-        - ❓ASK 2, the menu: open it 300ms after the press, with a quicker 360ms lap, so the lights meet at the top before the sheet covers it (**recommended**). Or 300/620, or no hold.
+        - ~~❓ASK 2, the menu: open it 300ms after the press, with a quicker 360ms lap, so the lights meet at the top before the sheet covers it (**recommended**). Or 300/620, or no hold.~~ — answered 29 Sep: no wait, the menu opens straight away (#981, v17.13).
         - ❓ASK 3, where the lights start: **bottom-middle, meeting at the top (recommended)**, or the edge nearest the finger.
         - **What can ship without him:** the outline fix (top edge, not sticking, the travelling pulse) and removing the stuck states. Per #545, the COLOUR option waits for his pick unless he says "do recommended". His picks come back as their own block.
       ⏸ 27 Sep: BUILT in a worktree (outline pulse, stuck states gone, :focus-visible ring, AND the colour + timing) but HELD from v17.07: the plan says the colour and the lap timing wait for his picks (sent in the logging chat as send-pick-and-timing.jpg), and the build did not split the outline fix out. The branch is kept: worktree-wf_9e749931-857-8 (commit 07cdd8d7).
-      BUILT OUT UNTIL HE picks the #964 colour (A Aurora recommended), the menu timing and where the lights start — or says "do recommended".
+      ~~built out until he picks the #964 colour (A Aurora recommended), the menu timing and where the lights start — or says "do recommended".~~ — stale: answered 28 Sep (all of them, at random, #974) and 29 Sep (no wait, #981); what is left is which he likes (the line at the bottom).
       ✅ **HE ANSWERED 28 Sep (#974): “make them all happen in the app but it's just random which one”** — the HOLD is lifted: A Aurora / B Rings and sparks / C Key ripple (and both outline starts) are built under #974 and chosen at random each time, until he says which he likes.
       ✅ **v17.12 (#974): A Aurora / B Rings and sparks / C Key ripple and both outline starts are in the app, one at random on every press, all with the 300 ms hold and 360 ms lap.** BUILT OUT UNTIL HE says which he likes (the others are then deleted).
       ✅ **HE ANSWERED ASK 2 (how long the menu waits), 29 Sep: no wait — the menu pops up straight away, with the glowing border lines on its edges as it opens.** Built under #981.
@@ -33725,7 +33765,7 @@ re-opened #480, which I had marked done and had not fixed.
           - Replace the light rule at ~1145 (`html[data-home="light"] body.home-open .set-close {background-color…; color: #23304a…}`) with `html[data-home="light"] body.home-open .set-close { background: transparent; border: none; box-shadow: none; } html[data-home="light"] body.home-open .set-x-disc { fill: #8792a4; } html[data-home="light"] body.home-open .set-x-cross { stroke: #fff; }`. Scoped to `home-open` so Settings opened from the dark editor keeps the dark disc.
         - Bump `?v=` for `js/settings.js`, `styles.css` and `theme-glass.css` in `index.html`.
       - Test: copy #951's test (`tests/tests.js` ~100755). Open Settings; `.set-close` must contain `.set-x-disc` and `.set-x-cross`, and the cross's bbox centre must be within 0.5px of the button's centre. No test references `set-close` today, so nothing breaks. It fails on HEAD because there is no svg.
-      - ❓ASK (optional, recommend YES): the same text ✕ is used by five more close buttons: `js/ai-chat.js` ~293 `.aic-close`, `js/ai-panel.js` ~62 `.ai-close`, `js/elements-browser.js` ~133 `.fxb-close`, `js/voice-rec.js` ~270 `.vr-close`, and the notepad/caption/preset delete ✕s. Give all the close buttons the same drawn ✕ so there is one ✕ in the app? Do Settings now, the rest only on his yes.
+      - ~~❓ASK (optional, recommend YES): the same text ✕ is used by five more close buttons: `js/ai-chat.js` ~293 `.aic-close`, `js/ai-panel.js` ~62 `.ai-close`, `js/elements-browser.js` ~133 `.fxb-close`, `js/voice-rec.js` ~270 `.vr-close`, and the notepad/caption/preset delete ✕s. Give all the close buttons the same drawn ✕ so there is one ✕ in the app? Do Settings now, the rest only on his yes.~~ — answered 26 Sep: "do reconmended" (below).
       - Verify: Settings opened from light Home, dark Home and the editor, at 380/440 and on PC.
 
       ✅ HE ANSWERED (21:08, via INBOX), whole block:
@@ -33807,7 +33847,7 @@ re-opened #480, which I had marked done and had not fixed.
       - ⭐ 5. Comments you can find, and asking for edit access — Comments are reachable from the phone editor without going through Canvas settings. A new comment is noticed, and a Viewer told to 'ask for edit access' has a way to ask.
       Batch 1 has no new looks — building now. Batches 2–5: an options sheet goes to him first (#545).
       **26 Sep — the Batch 2–5 options sheet SENT** (`tools/design/967-options.html`, pictures in `tools/design/967/` drawn over the real app by the throwaway `tools/design/967-proto.js`): four pictures of the recommended looks (How it works + a switch that stays in the Friends block; ● LIVE on the owner's video; ● Live · Ezra for a guest; a worded Join on Home) and 19 questions, each with a recommendation.
-      ❓ASK: the 19 picks on the #967 sheet — "do recommended", or per line. (Batch 1 needs none of them and is being built.)
+      ~~❓ASK: the 19 picks on the #967 sheet — "do recommended", or per line. (Batch 1 needs none of them and is being built.)~~ — stale since v17.08: batches 2–5 were built as recommended (v17.08–v17.10); any single pick can still be changed by naming it — an optional veto, not a question.
       ✅ **v17.06 — BATCH 1 SHIPPED** (queue 967 partial). Built in a worktree by a workflow agent, reviewed three ways (regressions / arming & off / does it fix the first-timer findings), fixed, re-reviewed with two real Chromes, fixed again (a phone going to the background must not cut a friend off), re-checked: "ship". What changed, in his terms:
       - the code swap no longer dies after 20 s — measured with two Chromes and a 3-minute gap: before, the friend's sheet gave up at 20.2 s; after, in at 182.8 s. A friend's own phone or the owner's going to the background keeps the link (Offline shows, it comes back); a dead phone is still said ("<name>'s connection dropped"), and the row goes after a 120 s grace.
       - Step 3 ("They match") scrolls into view and is the only blue button; closing mid-check says "Not let in — they'll need a fresh code".
@@ -33944,6 +33984,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔨 **28 Sep — BUILT, HELD FOR HIS EYE** (branch fix-970, commit bebd4560 on 2d06a3f5, reviewed): the cause was #801's band threshold (1160px) measured with ONE layer selected — with two or more the group is 80px wider, so at 1180–1360 (to 1440 with sharing on) the version chip covered ⋯ (37 of 156 width × selection states had a covered control). The fix measures the widest group and drops the right-hand run into a band under the row whenever it would collide: 0 of 156 covered, and 701–899 fixed too. **But it makes the video 40px shorter at those widths** (560 → 520px tall at 1280×800), whether or not anything is selected — a visible change to his PC screen, so it waits for him. Before/after at 1280 sent 28 Sep.
       ❓ASK: A — the band under the row below ~1380px (the build; video 40px shorter there) · B — keep one row and put the band on only while two or more layers are selected (the row jumps when a second layer is shift-clicked). A recommended.
       BUILT OUT UNTIL HE picks A or B for the band.
+      📋 **30 Sep — the logging chat's #993 note:** branch `fix-970` (bebd4560) is based on v17.11 — rebase it on v17.13 before merging.
 
 - [x] **971 — Collab: an edit made while a friend's phone is paused can take up to ~a minute to reach them after they come back (hunt LOW #971)** (27 Sep — found by #967's two-Chrome re-check; NOT his words)
       Measured (2 of 9 runs, two Chromes, the guest's Chrome SIGSTOPped 25 s while the owner added a layer 3 s in): the guest came back online, then went Offline again and stayed so until ~60 s, while both sides read 'connected' and the owner's send buffer grew (ctl 205→1584, pres 168→9772) — then everything flushed at once and caught up, no data lost. Looks like the SCTP data channel's retransmit backoff after a long outage, not app logic. With no edit during the pause it never happened (3/3).
@@ -34167,7 +34208,7 @@ re-opened #480, which I had marked done and had not fixed.
       - On the phone this is #945 (v17.04): `js/app.js` ~8183–8430 (the FRIENDS BESIDE CANVAS SETTINGS pair, the FLIP swap ~8236, `openCanvasDialog({ block: 'last' })` ~8427 remembering the last block), and `js/collab-ui.js` ~821+ (the Friends block, `U.renderFriends`). It is gated to the phone.
       - On PC today, the invite lives on the **Share button beside Export** (v17.02, #944). The PC Canvas settings card hangs from the cog and opens upward (#241/#252). He wants the same door as the phone.
       - Direction: reuse #945's pair on PC. Canvas settings from the cog opens WITH the Friends block, one small and one big, and ⤢ swaps them with the same FLIP flight; reopening lands on the last block.
-        - ❓ASK: keep the Share button beside Export as a shortcut that opens the same pair with Friends big, like the phone's person+? **Recommended: yes**, because it is how people look for sharing on PC.
+        - ~~❓ASK: keep the Share button beside Export as a shortcut that opens the same pair with Friends big, like the phone's person+? **Recommended: yes**, because it is how people look for sharing on PC.~~ — answered no by #983 (29 Sep): the PC Share button is gone; the cog is the way in.
         - PC has the width for a side-by-side layout, so the plan renders both "stacked like the phone" and "side by side" at 900/1280/1920 for him to pick (#545). **Don't start before the PLAN READY block lands.**
 
       ### 28 Sep 2026, ~14:40 AWST — PLAN READY: PC Friends + Canvas settings from the cog (the block above, "on pc there isnt a way to access the friends invite menu")
@@ -34186,7 +34227,7 @@ re-opened #480, which I had marked done and had not fixed.
         - **B, side by side (recommended).** Friends sits left, Canvas beside the cog, and ⤢ slides the divider. Both blocks stay on the cog's row within 3px the whole way, and 83% of the Friends list is visible. It falls back to A's stack when the window is too narrow (cog right edge < 562px, a window of about 744px).
         - ❓ASK 1: A or B. **His pick: pending.** If none has arrived when you reach this, build B.
       - Decided: the cog reopens on the last block (per device, like the phone); opening the pair never starts sharing; with the feature off the pair shows the one switch.
-        - ❓ASK 2: Share beside Export opens this same pair with Friends big. **Recommended yes**, and the faces chip, LIVE pill and Home's "Share live…" follow. **Pending.** Part 2 of the plan is built only on his yes, or by default if no answer.
+        - ~~❓ASK 2: Share beside Export opens this same pair with Friends big. **Recommended yes**, and the faces chip, LIVE pill and Home's "Share live…" follow. **Pending.** Part 2 of the plan is built only on his yes, or by default if no answer.~~ — answered no by #983 (29 Sep): the PC Share button is gone; the cog is the way in.
       - Code: Part 1 (the cog) buildable now. Version bumps are in the plan (`styles.css` → 735, `app.js` → 462, `collab-ui.js` → 16); re-read them from your tree. Seven new tests (T1–T7) are written to fail on HEAD, with a phone control unchanged at 380 and a pixel check that the phone is identical. The plan names the 945/944 tests to retune and when. **Every new test must run inside `with945`**, because the PC now honours `fm.cvPair`.
 
       Clauses (his):
@@ -34336,36 +34377,39 @@ re-opened #480, which I had marked done and had not fixed.
       C · “Sliders + size”: a Video/GIF/Picture/Sound/Frames switch, the file size in big type, three sliders with a star on the recommended stop; Exact numbers and More open the typed boxes and the expert switches.
       ❓ASK: A, B or C — or "do recommended".
       BUILT OUT UNTIL HE picks A, B or C for the export card.
+      ➕ **30 Sep — #917 finding 7 folded in here** (the logging chat's #993 note): on a phone the Export dialog's Resolution and Frame rate selects cut off their own values ("Same as project — 1080×1920" shows as "Same as project …", and "Same as proj…" at 320) — the part that tells you the size and fps. Whichever option he picks, the full value must show at 380 and 320.
 
 - [ ] **986 — Bugs found reading every effect, filter and sound for the #966 backlog — 26 likely real, C1 a filter on an adjustment layer renders nothing (hunt HIGH #986)** (29 Sep — found by the #966 inventory agents, NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full evidence with file:line and a suggested fix for each: `tools/design/plans/2026-09-29-idle-backlog/backlog.md` §C “Likely real bugs” (the “weak by design” list below it is LOW and belongs to the polish batches). Reproduce each before fixing — these were found by READING the code (R), not yet run.
-      1. [ ] **C1 HIGH** — A filter on an ADJUSTMENT layer renders nothing.
-      2. [ ] **C2 MEDIUM** — The Limiter's Ceiling is not a ceiling
-      3. [ ] **C3 MEDIUM** — Chroma Key Pro despill always suppresses GREEN
-      4. [ ] **C4 MEDIUM** — Only the first enabled Chroma Key and the first Luma Key on a layer run
-      5. [ ] **C5 MEDIUM** — Film Grain "Grain size" has no `unit:'px'`
-      6. [ ] **C6 MEDIUM** — Night Vision's scanlines (`y%3`) and sensor noise are per PLATE pixel, and the kernel takes no ps
+      1. [x] ✅ v17.14 — **C1 HIGH** — A filter on an ADJUSTMENT layer renders nothing.
+      2. [x] ✅ v17.14 — **C2 MEDIUM** — The Limiter's Ceiling is not a ceiling
+      3. [x] ✅ v17.14 — **C3 MEDIUM** — Chroma Key Pro despill always suppresses GREEN
+      4. [x] ✅ v17.14 — **C4 MEDIUM** — Only the first enabled Chroma Key and the first Luma Key on a layer run
+      5. [x] ✅ v17.14 — **C5 MEDIUM** — Film Grain "Grain size" has no `unit:'px'`
+      6. [x] ✅ v17.14 — **C6 MEDIUM** — Night Vision's scanlines (`y%3`) and sensor noise are per PLATE pixel, and the kernel takes no ps
       7. [ ] **C7 MEDIUM** — 
-      8. [ ] **C8 MEDIUM** — Vignette has two renderers that disagree.
-      9. [ ] **C9 MEDIUM** — A filter saved with "Save this effect as preset…" cannot be found again.
-      10. [ ] **C10 MEDIUM** — The sound-effect ▶ is not what Add produces.
+      8. [x] ✅ v17.14 — **C8 MEDIUM** — Vignette has two renderers that disagree.
+      9. [x] ✅ v17.14 — **C9 MEDIUM** — A filter saved with "Save this effect as preset…" cannot be found again.
+      10. [x] ✅ v17.14 — **C10 MEDIUM** — The sound-effect ▶ is not what Add produces.
       11. [ ] **C11 LOW** — Every noise buffer of the same length and colour is identical
-      12. [ ] **C12 LOW** — The sound row's "playing" highlight clears only on its own timer
+      12. [x] ✅ v17.14 — **C12 LOW** — The sound row's "playing" highlight clears only on its own timer
       13. [ ] **C13 LOW** — Audio-effect search misses the words people use
-      14. [ ] **C14 LOW** — The Compressor's knee is never set
-      15. [ ] **C15 MEDIUM** — Ring Mod drives `playbackRate` = Hz on a 1 s buffer
+      14. [x] ✅ v17.14 — **C14 LOW** — The Compressor's knee is never set
+      15. [x] ✅ v17.14 — **C15 MEDIUM** — Ring Mod drives `playbackRate` = Hz on a 1 s buffer
       16. [ ] **C16 LOW** — The Flanger's swept DelayNode sits in its own feedback cycle
       17. [ ] **C17 LOW** — The Phaser's 1 ms feedback delay is in a cycle
       18. [ ] **C18 LOW** — Bit Crush bits 13–16 ≈ dry.
-      19. [ ] **C22 MEDIUM** — Drop Shadow never draws beneath partially transparent pixels
-      20. [ ] **C24 MEDIUM** — On a device where `ctx.filter` does not work (the reason the GPU colour fallback exists, #661), these effects silently lose their blur.
-      21. [ ] **C27 MEDIUM** — Shake, Swing, Spin and Pulse, plus Trail and Scatter Array, never get the `expand` plate
-      22. [ ] **C39 MEDIUM** — Mirror sizes its plate from the PROJECT
+      19. [x] ✅ v17.14 — **C22 MEDIUM** — Drop Shadow never draws beneath partially transparent pixels
+      20. [x] ✅ v17.14 — **C24 MEDIUM** — On a device where `ctx.filter` does not work (the reason the GPU colour fallback exists, #661), these effects silently lose their blur.
+      21. [x] ✅ v17.14 — **C27 MEDIUM** — Shake, Swing, Spin and Pulse, plus Trail and Scatter Array, never get the `expand` plate
+      22. [x] ✅ v17.14 — **C39 MEDIUM** — Mirror sizes its plate from the PROJECT
       23. [ ] **C40 LOW** — Chroma Key Pro "View: Matte" writes alpha 255 for every pixel, including transparent ones
-      24. [ ] **C41 LOW** — Sharpen leaves an r-pixel border unsharpened
+      24. [x] ✅ v17.14 — **C41 LOW** — Sharpen leaves an r-pixel border unsharpened
       25. [ ] **C52 LOW** — The filter tile-pick preview uses raw recipe params via `Object.assign`
       26. [ ] **C60 LOW** — Find Edges' 3×3 Sobel (compositor.js:5068-5105) and Emboss's ±1 px kernel (5123-5149) work in plate pixels.
+      ✅ **v17.14 — batch 1 SHIPPED** (queue 986 partial): 17 of the 26 fixed, each reproduced by measurement first and reviewed (render / audio / keying), the review's regressions fixed (vignette export parity on a keyframed crop and its halo; Trail spacing; Film Grain strength on reduced previews; Night Vision highlights; a sound's lit row after a star tap). C9's new “Your filters” row is HELD for his eye (#545) — the preset is kept whole meanwhile. Deliberate changes he may notice are listed in the POLISH-LOG line (Limiter quieter by the removed makeup; vignettes on text/shapes use the photo curve; blue-screen despill). Still open: the rest of §C, and the other ctx.filter sites C24 did not list (shape-mask feather, matte feather, Box shade, Temporal Denoise, Light Wrap, motion-blur px) — next batch.
+
 
 - [ ] **987 — In a collab edit, each note shows a colour indicator of WHO left it** (29 Sep, in the builder chat — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -34422,3 +34466,71 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by #991's PC test: in the full suite (never in slices from test 1600 on, never alone) the + at 1280 was covered — elementFromPoint at its centre returned an `.hm-card` for 6 s. The + is `position: fixed` at the bottom, so a card over it means a card was raised above it (a drag, a lifted/pressed state, a z-index left behind) or the + lost its layer — by an earlier test, or by app state he could reach. The 991 test now opens the dialog through the +'s own handler when the + is covered, so this finding no longer blocks the ship — but it must be explained.
       1. [ ] Find what puts a card over the + (bisect the full suite with the cover probe; the runner cuts a FAIL line at "<", so use " > " in the probe's path) and fix it at the cause — the test that leaks it, or the app if a real user can reach it.
+
+- [ ] **993 — “A fat juicy list of everything I need to do that I haven't done yet” — the list (sent by the logging chat) and the REQUESTS.md housekeeping so it stays true** (29 Sep, ~23:17 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+
+
+      ### 29 Sep 2026, ~23:17 AWST — He asked for 'a fat juicy list of everything i need to do': the logging chat's re-verified list (67 items), plus housekeeping for REQUESTS.md
+
+      **His words (verbatim):** "Pull up a fat juicy list of everything i need to do that i havent done yet - like questions you have for me.. There should be alot that you have logged- i remember u used to have 100s of stuff that i havent answered to this day - i just havent had much time and theres always somehting new"
+
+      **Logger's note (not his words).**
+      - The list was rebuilt from all 69 candidate entries. Each entry was read in full, then refuted against his messages from every chat.
+      - It came to 67 items: 25 quick picks, 11 phone tests, 3 bigger calls, 5 pages, 2 Mac-only, and 21 simple-mode decisions. It was given to him in the logging chat, numbered, and his answers come back as their own blocks.
+      - **Answers found in his chats but still NOT recorded (some were already raised in #953; record them verbatim):**
+        - #929 (people half): "Do the airport sign" (2026-09-26T02:25:43.301Z)
+        - #96 (closes into #845): "Pretty much all of the files audio files are added sounded fine deciding effects to them. They start to glitch out on my phone." (2026-09-09T23:29:00Z)
+        - #406 (via #454): "Actually u are right to keep both options to save effect presets and full layer preseets i change my mind" (2026-09-01)
+        - #875 clause 2 (via #879, #872, #882 clause 2): "use ur own reasoning and sence / stop asking me for permision" (2026-09-20)
+      - **Housekeeping, so `asks.sh` shows him exactly this list:**
+        - No questions from him to us are outstanding. INPUT B found none.
+        - #929: quote 'Do the airport sign' (26 Sep) in the entry. Strike 'the people' from the ⏸ at ~L32830 and the 'HE ASKED … You gotta show me' line at ~L32832. Only the heart (A/B/C) and its icon (outline/filled) are still open. Resend the heart pages (branch fm-design-929) with the question.
+        - #96: strike the ❓ASK at ~L1942 and the 24 Sep ⏸ at ~L2091, close it into #845 citing his 9 Sep words, and drop unblock card 37. Reopen as a second cause if a bare song ever fails again.
+        - #406: strike the ❓ASK at ~L15763 and the ⏸ at ~L15810, and tick clause 3 citing #454. Builder work: remove 'Save whole look as preset…' from the layer ⋯ menu (js/app.js:5311). Decide whether the ⧉ 'Save look as preset' (js/app.js:7215) goes too. Tell him in one line what went, and drop card 24.
+        - #875: strike clause 2's '❓ ASK HIM' (~L31077) and point it at #882 clause 2.
+        - #129: strike the old '.mov or .mp4?' ❓ (~L334) and add one ❓ASK for the Settings paste. Side clue: his 27 Aug upload was an .mp4 screen recording, which leans toward the codec theory (a hint, not proof).
+        - Unnumbered 'Editing lags' (~L3533): the header still says 'Status (v6.33)'. Strike the superseded ❓ lines at ~L3663 and ~L3997. Ask it together with #202; one Measure report taken while playing answers both.
+        - #215: strike ~L10022 ('WHAT I STILL NEED') and the ~L10025 ⏸, and mark ~9669, ~9880 and ~9900 superseded. #604: add 'ANSWERED BY EZRA 10 Sep (#844)', strike the PC/Chrome asks and the 2 Sep ⏸ (~L21688), and fix the 'PHONE and PC' header. #677: strike ~L26960. All three close on the one camera-roll answer. Note the 27 KB for 2.05s at 1080p60 file: TRACK WRITTEN doesn't prove the video is fine.
+        - #657: strike the 3 Sep paste line (~L26208) and its STATUS, and drop card 42. #768 carries the ask, so merge cards 33 and 44 into one. Pair it with #508's project-open paste.
+        - #663: point it at #845 and strike the '❓ So the ask stands' line (~L26497), which the 10 Sep paste answered. #845: one ❓ASK with 'still glitching?' first and the paste second.
+        - #676/#706: write one updated ❓ASK naming both fixes (v15.08 and v16.94) and drop 'which button' (the + FAB is display:none on the phone, styles.css:4177). Card 32.
+        - #692: strike the 5 Sep ⏸ (~L27700), which #844 answered. Close it on #202's answer.
+        - #591, #690, #778, #949, #953: standing notes or bookkeeping, not questions. Reword the '❓ASK: nothing' in #591 and the stale '🟠 NEEDS YOU' in #690 and #778, and add UNBLOCKED to #778 so next.sh stops listing it as waiting on him.
+        - #775: re-measure at 900px on v17.13. If nothing overlaps, strike the ⏸ (~L29146), card 21, and #918's finding-2 lines (~L32616-32617), and tick #918 finding 2 on #979's fix. Clauses 2–5 go back to builder work; his 26 Sep words ('the draggable add menu on PC… doesn't go as far up as it should') are fresh evidence for clause 2.
+        - #777: merge the two asks (L29186, L29250). Whatever he answers, update #777, the REQUESTS.md top summary and CLAUDE.md together (all three link the dead 0ab35f83). If he says publish, first remove obsolete cards 1–4, 21, 22, 24, 37 and 42. Card 28 (#920) still describes the older v16.96 ask.
+        - #867: strike the ❓ASK (L30938) and the ⏸ (L30958), record 'built as option 1, say 2 or 3 to change it', tick it, and drop card 22.
+        - #883: its ❓ lines are struck but the classifier still reads them. Tighten it (#953).
+        - #917 finding 7 (the Export box values cut off) is overtaken by #985; fold it in there. #918 finding 11 is the same question as #917 15b; ask it once, under 15b.
+        - #921: its steps are stale (Settings → Labs no longer exists, and the PC Share button went in v17.13; the cog is the way in). #967: the 19-picks ❓ASK (~L33810) is stale because v17.08 built them as recommended. Strike it or reword it as an optional veto.
+        - #947: strike the stale ❓ASK and BUILT OUT lines at the top; his 29 Sep 'white line pulses out' is recorded. #958: strike the ❓ASK (moot on PC). #961: strike the optional ask (answered 28 Sep). #965: strike the leftover ❓ASK ('do reconmended', 26 Sep). #960: strike the PC toolbar 'Import media' ask (built). #978: strike ASK 2 (answered by #983). #964: ASK 2 was answered ('no wait', #981).
+        - #482: strike the category ⏸ (~L13305) and the NEEDS YOU header, citing #859; Palette Map was fixed by #904. Ask with 0.8, not 1. Render Keep vs Gentler on a photo at phone size and mark one Recommended before sending. Decide the speed-slider offer (~L13163) yourself.
+        - #545: its 'honest catch' is out of date, because the Artifact tool now has Design System types. Raise it only when he talks about publishing, together with BEFORE-PUBLISHING.md and the unnumbered identity-pass entry (both held on purpose, and neither owed now). #855 is held for launch too.
+        - #619: add a ❓ASK line with the route. #948 clause-2 item (5) (~L33211) has been stale since v15.04.
+        - #834: under LOOP.md rule 16 the builder could ship B (rename Cancel to Close) and say 'say A to change it', which leaves only the pinch reading for him.
+        - #847: recommended No, because a cloud agent works from a GitHub clone, can't see the local INBOX.md, and would push beside the local session.
+        - #912: resend both filter sheets with the question; the branch is fm912-filters. #948: sheet tools/design/948-options.html. #954: sheet tools/design/954-options.html. #985: tools/design/985/985-compare.jpg. #987: tools/design/987/987-options.png. #982: tools/design/982/982-options.png.
+        - #956: the artifact 4hddzpLiJvQvkUifK2sdw5 returns 'not found' from this account, so its contents are unknown.
+        - #970: branch fix-970 (bebd4560) is based on v17.11, so rebase it on v17.13 before merging.
+        - #987: whichever option he picks, the same release fixes the open Notes panel not updating when a friend edits, and ✕ deleting by position. The host stamps the author. The Commenter role text says 'leave notes' where it means comments.
+        - #882: `env -u DEVELOPER_DIR xcode-select -p` still prints the Xcode.app path, so he hasn't run the sudo line.
+
+      Clauses (his):
+      1. [x] ✅ sent 29 Sep — Pull up a list of everything he still has to do — the questions we have for him (sent 29 Sep by the logging chat: 67 items).
+      2. [x] ✅ sent 29 Sep — …including the old ones he never answered (“there should be alot”).
+      Builder's clauses (from the logger's note):
+      3. [x] ✅ 30 Sep (each entry now carries a dated ✅ HE ANSWERED line with his words) — Record the four answers found in his chats verbatim (#929 people, #96, #406, #875 clause 2).
+      4. [x] ✅ 30 Sep (every entry the note names; see the builder's note below) — Strike every stale ❓ASK / ⏸ the note lists, so the list and REQUESTS.md agree.
+      5. [ ] Build the bits the answers unlock (#406: the layer ⋯ duplicate; #867 as built; #834 B) as their own items.
+      ✅ **30 Sep — housekeeping done (builder's note, not his words).** Answers recorded: #929 (people), #96, #406, #875 clause 2. Closed: #96 into #845, #406 (clause 3 on #454; clause 1's build is #994), #657 into #768 (its scrubbing ask is #768's), #867 (built v16.21 as option 1). Stale asks struck in #929, #96, #406, #875, #129, the unnumbered "Editing lags", #215, #604, #677, #657, #663, #692, #591, #676, #706, #867, #947, #958, #961, #965, #960, #978, #964, #967, #482; #690 and #778 marked as unblocked standing briefs. New single asks: #129, "Editing lags" (with #202 and #692), #845 (with #663), #676 (with #706), #619, #215 (the camera-roll half, with #604 and #677), #929 (the heart). #917 finding 7 folded into #985; #918 finding 11 asked once under #917 15b. Pointers added to #775, #777, #545, #847, #834, #882, #970, #768. The unblock-page card changes the note names (drop 22, 24, 37 and 42; merge 33 + 44; reword 32; drop 21 only if #775's re-measure finds no overlap) are for whoever next edits `tools/unblock/unblock.html` — #777.
+      Clause 5 stays open: #406's half is logged as #994; #867 needed no build (v16.21); #834 B is not built yet.
+- [ ] **994 — Remove "Save whole look as preset…" from the layer ⋯ menu (js/app.js ~5311) and decide whether ⧉ "Save look as preset" (~7215) goes too — his 1 Sep words via #454** (28 Sep housekeeping — his 1 Sep answer)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **Builder work, not his new words** — #406 clause 1, unlocked by his answer and logged 30 Sep by the #993 housekeeping. What decides it, verbatim:
+      > *"Actually u are right to keep both options to save effect presets and full layer preseets i change my mind"* (1 Sep, recorded in #454)
+      > *"if you realise we just have two buttons for the same thing just get rid of the one isn't just saving as effects"* (19 Aug, #406)
+      Both kinds of preset stay. The layer ⋯ menu's "Save whole look as preset…" and the Presets card both call the same `FM.savePresetPrompt(layer)`, so the ⋯ copy is the duplicate door (option A in #406, the recommended one).
+      1. [ ] Take "Save whole look as preset…" off the layer ⋯ menu (`js/app.js` ~5311). The layer's Presets card keeps both saves (whole look + effects only), so nothing is lost.
+      2. [ ] Read where ⧉ "Save look as preset" (`js/app.js` ~7215) lives and decide whether it goes too (LOOP.md rule 16) — say which in this entry.
+      3. [ ] Tell him in one line what went, and drop unblock card 24.

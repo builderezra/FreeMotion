@@ -103,16 +103,27 @@ window.FM = window.FM || {};
    * file is the exact failure this whole entry exists to prevent. */
   /* The limiter on its own, so the REVERSED preview (audio-play.js) can put the very same one at the end
    * of its path (queue 916, clause 5) — one definition, not a second copy of five numbers to drift. */
+  /* ⚠️ IT IS TWO NODES, { input, output } (queue 986, hunt C2). A DynamicsCompressorNode adds a makeup gain
+   * of its own that nothing can switch off — +0.86 dB at this −1.5 dBFS threshold — so the "limiter" let a
+   * 1000 % full-scale sine out at 1.11, over full scale, and lifted everything under the threshold on a
+   * boosted clip by 0.86 dB. MEASURED in the suite's Chrome. The gain after it cancels that makeup (the
+   * spec's own formula, FM._hardKneeMakeupCancel in audio-fx.js): signal goes into `input`, and `output`
+   * is what gets connected onward. The forward preview, the reversed preview (js/audio-play.js) and the
+   * export (js/exporter.js) all build it here, so the three cannot drift apart. */
+  const BOOST_LIM_T = -1.5, BOOST_LIM_R = 20;
   function makeLimiter(ctx) {
     const lim = ctx.createDynamicsCompressor();
     try {
-      lim.threshold.value = -1.5;    // dBFS — start holding just under the ceiling
+      lim.threshold.value = BOOST_LIM_T;   // dBFS — start holding just under the ceiling
       lim.knee.value = 0;            // hard knee: a limiter, not a compressor colouring the sound
-      lim.ratio.value = 20;
+      lim.ratio.value = BOOST_LIM_R;
       lim.attack.value = 0.003;
       lim.release.value = 0.12;
     } catch (e) {}
-    return lim;
+    const trim = ctx.createGain();
+    trim.gain.value = FM._hardKneeMakeupCancel ? FM._hardKneeMakeupCancel(BOOST_LIM_T, BOOST_LIM_R) : 1;
+    lim.connect(trim);
+    return { input: lim, output: trim, comp: lim };
   }
   /* The gain and its limiter are handed back UNJOINED (queue 690): sync() puts the gain before the audio
      effects and the limiter after them, with the effects in between — see the wiring there. */
@@ -120,7 +131,7 @@ window.FM = window.FM || {};
     const gain = ctx.createGain();
     gain.gain.value = 1;
     const lim = makeLimiter(ctx);
-    return { input: gain, output: lim, gain: gain, lim: lim };
+    return { input: gain, output: lim.output, gain: gain, lim: lim };
   }
   /* THE LEVEL STAGE (queue 690): the same gain, and NO limiter, because it only ever turns a clip DOWN.
    * A limiter sitting at -1.5 dBFS would squash the peaks of a song mastered near full scale even at 90%,
@@ -264,8 +275,8 @@ window.FM = window.FM || {};
        * of its volume has no fx chain, and then the stage IS the whole path, exactly as before. */
       const boost = needsBoost(layer) ? makeBoostStage(ctx) : (needsLevel(layer, m) ? makeLevelStage(ctx) : null);
       m._boost = boost;
-      const out = (boost && boost.lim) ? boost.lim : ctx.destination;   // where the path ends: the limiter, if there is one
-      if (boost && boost.lim) { try { boost.lim.connect(ctx.destination); } catch (e) {} }
+      const out = (boost && boost.lim) ? boost.lim.input : ctx.destination;   // where the path ends: the limiter, if there is one
+      if (boost && boost.lim) { try { boost.lim.output.connect(ctx.destination); } catch (e) {} }
       if (!chain) {
         try { mes.connect(boost ? boost.gain : ctx.destination); } catch (e) {}
         if (boost) { try { boost.gain.connect(out); } catch (e) {} }

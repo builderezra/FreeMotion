@@ -624,7 +624,7 @@ window.FM = window.FM || {};
   function byId(id) { return SFX.find(s => s.id === id) || null; }
 
   // ---- preview (live) ---------------------------------------------------------------------------
-  let liveCtx = null, liveStop = null;
+  let liveCtx = null;
   /* ⚠️ NO PROTOTYPE-PROXY. THAT IS WHAT MADE EVERY PREVIEW SILENT (queue 562).
    * This used to build `Object.create(liveCtx)` and redefine `destination` on it, so the recipes would
    * connect to the trim gain instead of the speakers. A plain object with the context as its PROTOTYPE
@@ -641,10 +641,60 @@ window.FM = window.FM || {};
    * immediately after calling it, and a suspended context's clock does not advance, so on a phone the
    * first tap could schedule into the past. (Measured here the context was already `running`, so this
    * was not the fault — it is fixed because it is wrong, not because it was the cause.) */
+
+  /* ═══ THE ▶ PLAYS WHAT Add GIVES YOU (queue 986, hunt C10) ═══════════════════════════════════════════
+   * The ▶ used to render the recipe LIVE, raw, through the 0.82 trim, while Add renders it offline and
+   * normalises it (0.89 × level ÷ its own peak). MEASURED in the suite's Chrome, the clip Add put on the
+   * timeline was up to 9.9× louder than its ▶ (Reverse whoosh 0.09 → 0.89, Whoosh 7.8×, Swoosh-by 5.9×),
+   * Click was 1.8× QUIETER, and Punch, Glass break and Reverse cymbal peaked OVER full scale on the ▶
+   * (1.00–1.04) — so the list could not tell him how loud a sound would land. It also rendered at the
+   * device's own rate, which seeds different noise than Add's 44.1 kHz.
+   * So both paths take the same buffer: rendered once (renderBuffer, normalised), cached by id, played
+   * at unity through an AudioBufferSource. `add` reuses the cache. The render is a few milliseconds;
+   * FM.audioCtx() still runs inside the tap, before anything is awaited, because that call is what
+   * unlocks audio on an iPhone (it resumes the context in the gesture — audio-fx-browser.js says the same).
+   * Returns a promise that settles once the sound has been started (or refused), for the suite. */
+  const _rendered = new Map();   // id -> Promise<AudioBuffer>; a handful at most, mono, a few seconds each
+  const RENDER_CACHE_MAX = 8;
+  function rendered(def) {
+    let p = _rendered.get(def.id);
+    if (p) { _rendered.delete(def.id); _rendered.set(def.id, p); return p; }   // most recent last
+    p = renderBuffer(def);
+    _rendered.set(def.id, p);
+    p.catch(() => { if (_rendered.get(def.id) === p) _rendered.delete(def.id); });   // a failed render is not remembered
+    while (_rendered.size > RENDER_CACHE_MAX) _rendered.delete(_rendered.keys().next().value);
+    return p;
+  }
+
+  /* ONE preview at a time, and it knows its row (queue 986, hunt C12). The row's highlight used to be cleared
+     by its own timer and nothing else, so hearing a second sound left the first row lit for the rest of its
+     length, and nothing could stop a sound once started — tapping it again only restarted it. Now starting
+     a sound stops the one before AND unlights its row at once, the highlight goes out when the sound really
+     ends, and tapping the row that is playing stops it.
+     KEYED BY THE SOUND, NOT BY ONE ROW (986 review). The ★ rebuilds the list, and a starred sound sits in
+     two rows (Favourites and its category). Tied to the row that was tapped, the playing state was lost on
+     a ★ tap — the sound played on with no lit row and a "Hear" ▶, so a tap restarted it instead of stopping
+     it — and the other copy of a starred sound restarted it too. So every row of the playing sound is lit,
+     a row built while it plays comes back lit (rowFor), and a tap on any of them stops it. */
+  let _cur = null;   // { def, src } — the preview in flight, if any
+  function paintRow(row, on, def) {
+    row.classList.toggle('playing', !!on);
+    const play = row.querySelector('.sfx-play');
+    if (play) {
+      const say = (on ? 'Stop ' : 'Hear ') + def.name;
+      play.title = say; play.setAttribute('aria-label', say);
+    }
+  }
+  function markRow(def, on) {   // every row of this sound in the open sheet
+    document.querySelectorAll('.sfx-row .sfx-star[data-sfxid]').forEach(star => {
+      const row = star.dataset.sfxid === def.id && star.closest('.sfx-row');
+      if (row) paintRow(row, on, def);
+    });
+  }
   function preview(def) {
     stopPreview();
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) { if (FM.toast) FM.toast('This browser cannot play sound effects'); return; }
+    if (!AC) { if (FM.toast) FM.toast('This browser cannot play sound effects'); return Promise.resolve(false); }
     try {
       // THE one context (queue 740, hunt MEDIUM #23): audio-fx.js owns it and says never to construct another. This built a
       // second live AudioContext for previews and never closed it; iOS caps a page at about four, after which everything is silent.
@@ -652,29 +702,50 @@ window.FM = window.FM || {};
     } catch (e) {
       if (FM.reportError) FM.reportError('starting audio for a sound effect', e);   // queue 674
       if (FM.toast) FM.toast('Could not start audio \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
-      return;
+      return Promise.resolve(false);
     }
-    const go = () => {
-      try {
-        const trim = liveCtx.createGain(); trim.gain.value = MASTER;
-        trim.connect(liveCtx.destination);
-        const t0 = liveCtx.currentTime + 0.01;
-        def.render(liveCtx, t0, def.dur, trim);   // the real context, and the trim as the destination
-        liveStop = () => { try { trim.disconnect(); } catch (e) {} };
-      } catch (e) {
-        /* SAID, NOT SWALLOWED. A preview that fails silently is indistinguishable from one that works
-           on a muted phone, which is exactly how this lasted. */
-        if (FM.reportError) FM.reportError('playing the sound effect ' + def.name, e);   // queue 674
-        if (FM.toast) FM.toast('Could not play ' + def.name + ' \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
-      }
+    const me = { def: def, src: null };
+    _cur = me;
+    markRow(def, true);
+    const ctx = liveCtx;
+    const fail = (e) => {
+      if (_cur === me) { _cur = null; markRow(def, false); }
+      /* SAID, NOT SWALLOWED. A preview that fails silently is indistinguishable from one that works
+         on a muted phone, which is exactly how this lasted. */
+      if (FM.reportError) FM.reportError('playing the sound effect ' + def.name, e);   // queue 674
+      if (FM.toast) FM.toast('Could not play ' + def.name + ' \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
+      return false;
     };
-    if (liveCtx.state === 'suspended') liveCtx.resume().then(go, go); else go();
+    const go = (buf) => {
+      if (_cur !== me) return false;            // stopped, or another sound started, while this one rendered
+      try {
+        const src = ctx.createBufferSource();
+        src.buffer = buf;                         // the very samples Add puts on the timeline, at unity
+        src.connect(ctx.destination);
+        src.onended = () => { if (_cur === me) { _cur = null; markRow(def, false); } try { src.disconnect(); } catch (e) {} };
+        src.start(ctx.currentTime + 0.01);
+        me.src = src;
+        return true;
+      } catch (e) { return fail(e); }
+    };
+    return rendered(def).then(buf => {
+      if (_cur !== me) return false;
+      if (ctx.state === 'suspended') return ctx.resume().then(() => go(buf), () => go(buf));
+      return go(buf);
+    }, fail);
   }
-  function stopPreview() { if (liveStop) { liveStop(); liveStop = null; } }
+  function stopPreview() {
+    const me = _cur;
+    if (!me) return;
+    _cur = null;
+    if (me.src) { try { me.src.stop(); } catch (e) {} try { me.src.disconnect(); } catch (e) {} }
+    markRow(me.def, false);
+  }
+  function previewing() { return _cur ? _cur.def.id : null; }   // suite seam: which sound is playing, if any
 
   // ---- add to the project -----------------------------------------------------------------------
   async function add(def) {
-    const buf = await renderBuffer(def);
+    const buf = await rendered(def);   // the buffer the ▶ played, when it has been heard (queue 986)
     const blob = encodeWav(buf);
     const name = def.name + '.wav';
     let file;
@@ -754,7 +825,8 @@ window.FM = window.FM || {};
       const name = el('button', 'sfx-name', def.name);
       name.type = 'button';
       const secs = el('span', 'sfx-dur', def.dur.toFixed(2).replace(/0$/, '') + 's');
-      const hear = () => { preview(def); row.classList.add('playing'); setTimeout(() => row.classList.remove('playing'), Math.round(def.dur * 1000) + 60); };
+      // Tap = hear it; tap a row of the sound that is playing = stop it (queue 986). preview() owns the highlight now.
+      const hear = () => { if (_cur && _cur.def.id === def.id) { stopPreview(); return; } preview(def); };
       play.addEventListener('click', hear);
       name.addEventListener('click', hear);
       const star = el('button', 'sfx-star' + (isFav(def.id) ? ' on' : ''), '★');
@@ -782,6 +854,7 @@ window.FM = window.FM || {};
         catch (e) { addBtn.disabled = false; addBtn.textContent = 'Add'; if (FM.toast) FM.toast('Could not add that sound'); }
       });
       row.append(play, name, secs, star, addBtn);
+      if (_cur && _cur.def.id === def.id) paintRow(row, true, def);   // rebuilt (the ★) while it plays: still lit, still Stop
       return row;
     }
     function fillList() {
@@ -829,6 +902,7 @@ window.FM = window.FM || {};
     encodeWav: encodeWav,
     preview: preview,
     stopPreview: stopPreview,
+    previewing: previewing,   // suite seam (queue 986): the id of the sound the ▶ is playing, or null
     add: add,
   };
 })(window.FM);

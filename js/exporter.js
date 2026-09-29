@@ -709,17 +709,18 @@ window.FM = window.FM || {};
       const boosted = FM.audioFxLive && FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
       let limiter = null;
       if (boosted) {
+        /* THE PREVIEW'S OWN LIMITER, not a copy of its five numbers (queue 986, hunt C2): the copy that sat here
+           matched the preview, and so both carried the node's hidden +0.86 dB makeup. makeLimiter now cancels it,
+           and building it in one place is what keeps preview and file agreeing about that. { input, output }. */
         try {
-          limiter = oac.createDynamicsCompressor();
-          limiter.threshold.value = -1.5; limiter.knee.value = 0;
-          limiter.ratio.value = 20; limiter.attack.value = 0.003; limiter.release.value = 0.12;
-          limiter.connect(oac.destination);
+          limiter = FM.audioFxLive.makeLimiter(oac);
+          limiter.output.connect(oac.destination);
         } catch (e) { limiter = null; }
       }
-      const sink = limiter || oac.destination;
+      const sink = limiter ? limiter.input : oac.destination;
       if (chain) {
         // re-point the chain's output at the limiter rather than straight at the destination
-        if (limiter) { try { chain.output.disconnect(); chain.output.connect(limiter); } catch (e) {} }
+        if (limiter) { try { chain.output.disconnect(); chain.output.connect(limiter.input); } catch (e) {} }
       } else {
         gain.connect(sink);
       }

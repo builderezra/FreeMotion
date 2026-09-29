@@ -190,10 +190,11 @@ window.FM = window.FM || {};
         const boosted = FM.audioFxLive && FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
         let lim = null;
         if (boosted && FM.audioFxLive.makeLimiter) {
-          try { lim = FM.audioFxLive.makeLimiter(audioCtx); lim.connect(audioCtx.destination); limiters.push(lim); }
+          // { input, output } since queue 986: the compressor, then the gain that cancels its hidden makeup
+          try { lim = FM.audioFxLive.makeLimiter(audioCtx); lim.output.connect(audioCtx.destination); limiters.push(lim); }
           catch (e) { lim = null; }
         }
-        const sink = lim || audioCtx.destination;
+        const sink = lim ? lim.input : audioCtx.destination;
         node.connect(gain);
         if (chain) {
           gain.connect(chain.input);
@@ -217,7 +218,7 @@ window.FM = window.FM || {};
       voices = [];
       chains.forEach(c => { try { c.dispose(); } catch (e) {} });
       chains = [];
-      limiters.forEach(l => { try { l.disconnect(); } catch (e) {} });   // queue 916 — never leave one wired to the speakers
+      limiters.forEach(l => { try { l.output.disconnect(); } catch (e) {} try { l.input.disconnect(); } catch (e) {} });   // queue 916 — never leave one wired to the speakers
       limiters = [];
     },
     /* A FADE MOVED: RE-SCHEDULE THE LIVE VOICES, DO NOT RESTART THEM (queue 894). The fade strips used to reach
