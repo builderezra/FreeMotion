@@ -106747,6 +106747,10 @@
           await tap968(document.getElementById('hm-new'), 'a tap on + (new project)');
           await hcUntil('the New project dialog', () => { const d = document.getElementById('hm-dialog'); return d && !d.classList.contains('hidden'); }, 4000);
           await sleep927(400);
+          /* #947: the card opens by the ripple, which clips the screen to a circle growing from the + for its first ~350 ms of
+             animation time — under load the ripple can start late, and Create was still outside the circle at 400 ms (a press
+             there reaches Home). Wait until it can really be pressed, as a finger would, rather than for a fixed time. */
+          await hcUntil('Create to be reachable once the ripple has opened the card', () => { const c = document.getElementById('hm-create'), r = c.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && (h === c || c.contains(h)); }, 4000);
           await tap968(document.getElementById('hm-create'), 'a tap on Create');
           const b = await hcUntil('the new project to open in the editor', () => { const id = FM.storage.openProjectId(); return !FM.home.isOpen() && id && id !== a ? id : null; }, 8000);
           made.push(b);
@@ -108675,17 +108679,14 @@
     });
   });
 
-  /* ═══ #947 — THE NEW PROJECT + GETS ITS OWN ENTRANCE (all three of its options, one at random, per #974) ═══════════════
+  /* ═══ #947 — THE NEW PROJECT + GETS ITS OWN ENTRANCE: THE RIPPLE HE PICKED ═══════════════════════════════════════════
      His words (#944): the + to make a new project should not open "the same you've done for everything else"; it should
-     "actually look really good and be really well thought out". The three drawn options (tools/design/947-options.html)
-     are each forced and SEEKED at the points that make them what they are, measured against the real + and the real card:
-       A · the flying disc starts ON the + and lands AS the card, the + itself shrinks away into it, the card's own
-           surface waits for the landing;
-       B · a 9:16 frame starts on the +, its outline draws itself by 42%, and it lands as the card;
-       C · the screen opens as a circle from the +'s centre, reaching the farthest corner by 55%, and the + turns 135°.
+     "actually look really good and be really well thought out". Three were drawn and #974 played them at random; on 29 Sep
+     he picked C ("the one where the white line pulses out") and A and B were deleted. The ripple is SEEKED at the points
+     that make it what it is, measured against the real + and the real card: the screen opens as a circle from the +'s
+     centre, reaching the farthest corner by 55%, a ring spreads from the +, and the + turns 135° into an ×.
      Then the part that matters most on Home afterwards: nothing outlives the card, and the + is whole again. */
-  test('947 the New project + opens with its own entrance - A the orb becomes the card, B a canvas is drawn, C a ripple opens it - and gives the + back', { item: '947', budgetMs: 40000 }, async function () {
-    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the + has no entrance options to play (queue 947 / 974)');
+  test('947 the New project + opens with the ripple he picked - the screen opens as a circle from the +, a ring spreads out, the + turns to an x - and gives the + back', { item: '947', budgetMs: 40000 }, async function () {
     const wasOpen = FM.home.isOpen();
     const dlg = document.getElementById('hm-dialog'), card = dlg.querySelector('.hm-dlg-card'), orb = document.getElementById('hm-new');
     const np = () => document.getAnimations().filter(a => /^np947-/.test(a.id || ''));
@@ -108699,74 +108700,47 @@
       await sleep(80);
       for (const width of ['phone', 'pc']) {
         await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
-          for (const v of ['A', 'B', 'C']) {
-            FM.variant.force('newproject', v);
-            dlg.classList.add('hidden'); await sleep(40);
-            const O = orb.getBoundingClientRect();
-            if (!(O.width > 20)) throw new Error(width + ': the + is not on screen (' + box(O) + ') before it is pressed');
-            orb.click();
-            if (dlg.classList.contains('hidden')) throw new Error(width + ': tapping + did not open the New project card');
-            const list = np();
-            if (!list.length) throw new Error(width + ', ' + v + ': the card opened with no entrance of its own');
-            const stray = list.filter(a => a.id.indexOf('np947-' + v + '-') !== 0);
-            if (stray.length) throw new Error(width + ': with ' + v + ' chosen, ' + stray[0].id + ' also plays');
-            const pop = card.getAnimations().concat(dlg.getAnimations()).filter(a => a.animationName);
-            if (pop.length) throw new Error(width + ', ' + v + ': the card still pops like every other card (' + pop.map(a => a.animationName).join(', ') + ') - #947 asked for an entrance of its own');
-            seek(list, 640);
-            const Cr = card.getBoundingClientRect();
-            if (v === 'A') {
-              const m = dlg.querySelector('.np-fx-orb');
-              if (!m) throw new Error(width + ', A: no flying disc');
-              seek(list, 0);
-              if (!near(m.getBoundingClientRect(), O, 2)) throw new Error(width + ', A: the disc starts at ' + box(m.getBoundingClientRect()) + ', not on the + ' + box(O));
-              if (getComputedStyle(card).backgroundColor !== 'rgba(0, 0, 0, 0)') throw new Error(width + ', A: the card\'s own surface shows before the disc lands (' + getComputedStyle(card).backgroundColor + ')');
-              seek(list, 320);
-              if (orb.getBoundingClientRect().width > 2) throw new Error(width + ', A: half-way through, the + is still ' + Math.round(orb.getBoundingClientRect().width) + 'px wide - the orb itself is meant to become the card');
-              seek(list, 640);
-              if (!near(m.getBoundingClientRect(), Cr, 2)) throw new Error(width + ', A: the disc lands at ' + box(m.getBoundingClientRect()) + ', not as the card ' + box(Cr));
-              if (getComputedStyle(card).backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error(width + ', A: landed, the card has no surface of its own');
-            } else if (v === 'B') {
-              const fr = dlg.querySelector('.np-fx-frame'), out = fr && fr.querySelector('.np-fx-outline');
-              if (!fr || !out) throw new Error(width + ', B: no frame being drawn');
-              seek(list, 0);
-              const f0 = fr.getBoundingClientRect();
-              if (Math.hypot(f0.left + f0.width / 2 - (O.left + O.width / 2), f0.top + f0.height / 2 - (O.top + O.height / 2)) > 2) throw new Error(width + ', B: the frame does not rise out of the + (' + box(f0) + ' vs ' + box(O) + ')');
-              if (Math.abs(f0.height / f0.width - 16 / 9) > 0.05) throw new Error(width + ', B: the frame is ' + (f0.height / f0.width).toFixed(2) + ' tall per wide - a new project\'s 9:16 canvas is 1.78');
-              if (Math.abs(parseFloat(getComputedStyle(out).strokeDashoffset) - 1) > 0.01) throw new Error(width + ', B: the outline is already drawn at the start');
-              seek(list, 0.42 * 640);
-              if (Math.abs(parseFloat(getComputedStyle(out).strokeDashoffset)) > 0.01) throw new Error(width + ', B: the outline is not drawn in full by 42% (' + getComputedStyle(out).strokeDashoffset + ')');
-              seek(list, 640);
-              if (!near(fr.getBoundingClientRect(), Cr, 2)) throw new Error(width + ', B: the frame lands at ' + box(fr.getBoundingClientRect()) + ', not as the card ' + box(Cr));
-            } else {
-              const cx = O.left + O.width / 2, cy = O.top + O.height / 2;
-              const clip = () => { const m = /circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)/.exec(getComputedStyle(dlg).clipPath || ''); return m ? { r: +m[1], x: +m[2], y: +m[3] } : null; };
-              seek(list, 0);
-              const c0 = clip();
-              if (!c0 || c0.r > 1 || Math.hypot(c0.x - cx, c0.y - cy) > 2) throw new Error(width + ', C: the screen does not open from the +\'s centre (' + getComputedStyle(dlg).clipPath + ')');
-              if (+getComputedStyle(card).opacity > 0.05) throw new Error(width + ', C: the card is visible before the ripple has opened the screen');
-              const ring = document.querySelector('.np-fx-ring');
-              if (!ring) throw new Error(width + ', C: no ring spreads from the +');
-              seek(list, 0.55 * 640);
-              const far = Math.max(Math.hypot(cx, cy), Math.hypot(innerWidth - cx, cy), Math.hypot(cx, innerHeight - cy), Math.hypot(innerWidth - cx, innerHeight - cy));
-              const c1 = clip();
-              if (!c1 || c1.r < far - 1) throw new Error(width + ', C: by 55% the opening is ' + (c1 ? Math.round(c1.r) : '?') + 'px, short of the farthest corner at ' + Math.round(far) + 'px');
-              seek(list, 640);
-              const mt = new DOMMatrix(getComputedStyle(orb).transform), deg = Math.round(Math.atan2(mt.b, mt.a) * 180 / Math.PI);
-              if (Math.abs(deg - 135) > 1) throw new Error(width + ', C: the + turns ' + deg + '° - it is meant to turn 135° into an ×');
-            }
-            // IT LANDS AND CLEANS UP on a timer; only the +'s own pose stays while the card is open
-            list.forEach(a => a.play());
-            await sleep(640 + 250);
-            if (document.querySelector('.np-fx')) throw new Error(width + ', ' + v + ': the entrance\'s layers are still in the page after it landed');
-            const still = np().filter(a => !/-button$/.test(a.id));
-            if (still.length) throw new Error(width + ', ' + v + ': ' + still.map(a => a.id).join(', ') + ' still running after the card landed');
-            // …and the card goes, the + is whole
-            dlg.classList.add('hidden'); await sleep(40);
-            if (np().length) throw new Error(width + ', ' + v + ': ' + np().map(a => a.id).join(', ') + ' outlived the card');
-            const back = orb.getBoundingClientRect();
-            if (!near(back, O, 1)) throw new Error(width + ', ' + v + ': after the card closed the + is ' + box(back) + ', not the ' + box(O) + ' it was - it would be missing or turned on Home');
-            if (card.style.animation || dlg.style.animation) throw new Error(width + ', ' + v + ': the card keeps its entrance switch-off after it closed');
-          }
+          dlg.classList.add('hidden'); await sleep(40);
+          const O = orb.getBoundingClientRect();
+          if (!(O.width > 20)) throw new Error(width + ': the + is not on screen (' + box(O) + ') before it is pressed');
+          orb.click();
+          if (dlg.classList.contains('hidden')) throw new Error(width + ': tapping + did not open the New project card');
+          const list = np();
+          if (!list.length) throw new Error(width + ': the card opened with no entrance of its own');
+          const stray = list.filter(a => a.id.indexOf('np947-C-') !== 0);
+          if (stray.length) throw new Error(width + ': ' + stray[0].id + ' plays - the ripple (C) is the only entrance he kept');
+          const pop = card.getAnimations().concat(dlg.getAnimations()).filter(a => a.animationName);
+          if (pop.length) throw new Error(width + ': the card still pops like every other card (' + pop.map(a => a.animationName).join(', ') + ') - #947 asked for an entrance of its own');
+          const cx = O.left + O.width / 2, cy = O.top + O.height / 2;
+          const clip = () => { const m = /circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)/.exec(getComputedStyle(dlg).clipPath || ''); return m ? { r: +m[1], x: +m[2], y: +m[3] } : null; };
+          seek(list, 0);
+          const c0 = clip();
+          if (!c0 || c0.r > 1 || Math.hypot(c0.x - cx, c0.y - cy) > 2) throw new Error(width + ': the screen does not open from the +\'s centre (' + getComputedStyle(dlg).clipPath + ')');
+          if (+getComputedStyle(card).opacity > 0.05) throw new Error(width + ': the card is visible before the ripple has opened the screen');
+          const ring = document.querySelector('.np-fx-ring');
+          if (!ring) throw new Error(width + ': no ring spreads from the +');
+          const r0 = ring.getBoundingClientRect();
+          if (Math.hypot(r0.left + r0.width / 2 - cx, r0.top + r0.height / 2 - cy) > 2) throw new Error(width + ': the ring does not start on the + (' + box(r0) + ' vs ' + box(O) + ')');
+          seek(list, 0.55 * 640);
+          const far = Math.max(Math.hypot(cx, cy), Math.hypot(innerWidth - cx, cy), Math.hypot(cx, innerHeight - cy), Math.hypot(innerWidth - cx, innerHeight - cy));
+          const c1 = clip();
+          if (!c1 || c1.r < far - 1) throw new Error(width + ': by 55% the opening is ' + (c1 ? Math.round(c1.r) : '?') + 'px, short of the farthest corner at ' + Math.round(far) + 'px');
+          if (!(ring.getBoundingClientRect().width > r0.width * 4)) throw new Error(width + ': by 55% the ring is ' + Math.round(ring.getBoundingClientRect().width) + 'px across - it has not spread out from the + (' + Math.round(r0.width) + 'px)');
+          seek(list, 640);
+          const mt = new DOMMatrix(getComputedStyle(orb).transform), deg = Math.round(Math.atan2(mt.b, mt.a) * 180 / Math.PI);
+          if (Math.abs(deg - 135) > 1) throw new Error(width + ': the + turns ' + deg + '° - it is meant to turn 135° into an ×');
+          // IT LANDS AND CLEANS UP on a timer; only the +'s own pose stays while the card is open
+          list.forEach(a => a.play());
+          await sleep(640 + 250);
+          if (document.querySelector('.np-fx')) throw new Error(width + ': the ripple\'s ring is still in the page after it landed');
+          const still = np().filter(a => !/-button$/.test(a.id));
+          if (still.length) throw new Error(width + ': ' + still.map(a => a.id).join(', ') + ' still running after the card landed');
+          // …and the card goes, the + is whole
+          dlg.classList.add('hidden'); await sleep(40);
+          if (np().length) throw new Error(width + ': ' + np().map(a => a.id).join(', ') + ' outlived the card');
+          const back = orb.getBoundingClientRect();
+          if (!near(back, O, 1)) throw new Error(width + ': after the card closed the + is ' + box(back) + ', not the ' + box(O) + ' it was - it would be missing or turned on Home');
+          if (card.style.animation || dlg.style.animation) throw new Error(width + ': the card keeps its entrance switch-off after it closed');
         });
       }
       // REDUCED MOTION: no entrance at all - and the card still opens (the control)
@@ -108776,88 +108750,11 @@
         return realMM.call(window, q);
       };
       try {
-        FM.variant.force('newproject', null);
         dlg.classList.add('hidden'); await sleep(40);
         orb.click();
         if (dlg.classList.contains('hidden')) throw new Error('CONTROL: under reduced motion tapping + did not open the card at all');
-        if (np().length || document.querySelector('.np-fx')) throw new Error('with reduced motion asked for, the + still flies/draws/ripples into the card');
+        if (np().length || document.querySelector('.np-fx')) throw new Error('with reduced motion asked for, the + still ripples into the card');
       } finally { window.matchMedia = realMM; }
-    } finally {
-      FM.variant.force('newproject', null);
-      dlg.classList.add('hidden');
-      await sleep(40);
-      if (!wasOpen) FM.home.close();
-    }
-  });
-
-  test('947 A: Cancel runs the entrance backwards - the card shrinks back into the + - then it closes and the + is whole', { item: '947', budgetMs: 15000 }, async function () {
-    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option A cannot be chosen (queue 947 / 974)');
-    const wasOpen = FM.home.isOpen();
-    const dlg = document.getElementById('hm-dialog'), card = dlg.querySelector('.hm-dlg-card'), orb = document.getElementById('hm-new');
-    const np = () => document.getAnimations().filter(a => /^np947-/.test(a.id || ''));
-    const near = (r, s, tol) => Math.abs(r.left - s.left) <= tol && Math.abs(r.top - s.top) <= tol && Math.abs(r.width - s.width) <= tol && Math.abs(r.height - s.height) <= tol;
-    try {
-      if (!wasOpen) { FM.home.open(); await sleep(700); }
-      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
-      if (tabBtn) tabBtn.click();
-      await sleep(80);
-      await atPhoneWidth(async function () {
-        FM.variant.force('newproject', 'A');
-        dlg.classList.add('hidden'); await sleep(40);
-        const O = orb.getBoundingClientRect();
-        orb.click();
-        await sleep(640 + 200);
-        const Cr = card.getBoundingClientRect();
-        document.getElementById('hm-cancel').click();
-        if (dlg.classList.contains('hidden')) throw new Error('Cancel closed the card at once - with A the card is meant to shrink back into the + first');
-        const back = np();
-        const m = dlg.querySelector('.np-fx-orb');
-        if (!m || !back.length) throw new Error('Cancel ran no reverse flight (no disc, ' + back.length + ' animations)');
-        const dur = back.map(a => a.effect.getComputedTiming().duration).reduce((x, y) => Math.max(x, y), 0);
-        back.forEach(a => { a.pause(); a.currentTime = 0; });
-        if (!near(m.getBoundingClientRect(), Cr, 2)) throw new Error('the reverse flight does not start as the card');
-        back.forEach(a => { a.currentTime = dur; });
-        if (!near(m.getBoundingClientRect(), O, 2)) throw new Error('the reverse flight does not end on the + (' + JSON.stringify(m.getBoundingClientRect()) + ')');
-        back.forEach(a => { a.currentTime = 0; a.play(); });
-        await sleep(dur + 250);
-        if (!dlg.classList.contains('hidden')) throw new Error('after running backwards the card did not close');
-        if (np().length || document.querySelector('.np-fx')) throw new Error('the reverse flight outlived the card');
-        if (!near(orb.getBoundingClientRect(), O, 1)) throw new Error('after Cancel the + is not whole on Home');
-        // CONTROL: B keeps the plain close - Cancel hides it at once, so the check above is about A, not about Cancel
-        FM.variant.force('newproject', 'B');
-        orb.click(); await sleep(60);
-        document.getElementById('hm-cancel').click();
-        if (!dlg.classList.contains('hidden')) throw new Error('CONTROL: with B, Cancel did not close the card at once');
-      });
-    } finally {
-      FM.variant.force('newproject', null);
-      dlg.classList.add('hidden');
-      await sleep(40);
-      if (!wasOpen) FM.home.close();
-    }
-  });
-
-  test('974 the New project +: 60 real taps open it with all three entrances at random', { item: '974', budgetMs: 30000 }, async function () {
-    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the + only ever opens one way (queue 974)');
-    const wasOpen = FM.home.isOpen();
-    const dlg = document.getElementById('hm-dialog'), orb = document.getElementById('hm-new');
-    try {
-      if (!wasOpen) { FM.home.open(); await sleep(700); }
-      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
-      if (tabBtn) tabBtn.click();
-      await sleep(80);
-      FM.variant.force('newproject', null);
-      const got = {};
-      for (let i = 0; i < 60; i++) {
-        dlg.classList.add('hidden'); await sleep(0);
-        orb.click();
-        const ids = document.getAnimations().map(a => a.id || '').filter(id => /^np947-/.test(id));
-        const v = (ids[0] || '').charAt(6);
-        if (!v) throw new Error('tap ' + (i + 1) + ' of 60 opened the card with no entrance');
-        if (FM.variant.last.newproject !== v) throw new Error('FM.variant.last names ' + FM.variant.last.newproject + ' but ' + v + ' played');
-        got[v] = (got[v] || 0) + 1;
-      }
-      if (Object.keys(got).sort().join() !== 'A,B,C') throw new Error('60 taps on + opened with ' + JSON.stringify(got) + ' - all three entrances must come up at random (#974 clause 2)');
     } finally {
       dlg.classList.add('hidden');
       await sleep(40);
@@ -108883,7 +108780,6 @@
         });
       });
     } finally {
-      if (FM.variant && FM.variant.force) FM.variant.force('newproject', null);
       dlg.classList.add('hidden');
       await sleep(40);
       if (wasOpen) FM.home.open(); else FM.home.close();
@@ -108893,16 +108789,15 @@
   const tap974 = (x, y, what) => realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
 
   test('974 review: with #947 C the + turns into an x under the card - a real tap on that x closes the card, it does not open it again', { item: '974', budgetMs: 40000 }, async function () {
-    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - there is no option C to turn the + into an x (queue 947 / 974)');
     const running = () => document.getAnimations().filter(a => /^np947-/.test(a.id || '') && a.playState === 'running');
     return home974(async function (dlg, orb) {
-      FM.variant.force('newproject', 'C');
       const O = orb.getBoundingClientRect(), x = O.left + O.width / 2, y = O.top + O.height / 2;
       hitIs927(x, y, orb, 'the New project +');
       await tap974(x, y, 'a real tap on the +');
+      const played = document.getAnimations().some(a => /^np947-C-/.test(a.id || ''));
       await sleep(900);   // C has landed (640 ms): the + stands turned into an x under the card
       if (dlg.classList.contains('hidden')) throw new Error('CONTROL: a real tap on the + did not open the New project card - nothing below would mean anything');
-      if (FM.variant.last.newproject !== 'C') throw new Error('CONTROL: the card opened with ' + FM.variant.last.newproject + ', not the forced C');
+      if (!played) throw new Error('CONTROL: the card opened without the ripple (no np947-C- animation) - the + would not be an x');
       const mt = new DOMMatrix(getComputedStyle(orb).transform), deg = Math.round(Math.atan2(mt.b, mt.a) * 180 / Math.PI);
       if (Math.abs(deg - 135) > 2) throw new Error('CONTROL: the + is turned ' + deg + ' degrees - C leaves it as an x (135) under the card');
       const hit = document.elementFromPoint(x, y);
@@ -108915,77 +108810,6 @@
       }
       await sleep(400);
       if (!dlg.classList.contains('hidden')) throw new Error('the card closed on the tap on the x and then came back');
-    });
-  });
-
-  test('974 review: #947 A closed before it lands (a real double-tap on the +, or Escape at once) turns round from where the disc is - it never jumps to the whole card', { item: '974', budgetMs: 40000 }, async function () {
-    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - there is no option A to close mid-flight (queue 947 / 974)');
-    return home974(async function (dlg, orb, card) {
-      const disc = () => dlg.querySelector('.np-fx-orb');
-      /* the flying disc's width on every frame, and which frame first comes after the close arrived */
-      function sampler() {
-        const s = { w: [], at: -1, on: true, cw: 0, log: [] }, t0 = performance.now();
-        const mark = () => { if (s.at < 0) s.at = s.w.length; };
-        const note = e => { if (s.log.length < 12) s.log.push(e.type + '@' + Math.round(performance.now() - t0) + (e.target && e.target.id ? '#' + e.target.id : '')); };
-        dlg.addEventListener('click', mark, true);
-        document.addEventListener('keydown', mark, true);
-        ['pointerdown', 'click', 'keydown'].forEach(t => document.addEventListener(t, note, true));
-        (function tick() {
-          const m = disc();
-          s.w.push(m ? m.getBoundingClientRect().width : null);
-          if (!dlg.classList.contains('hidden')) s.cw = Math.max(s.cw, card.getBoundingClientRect().width);
-          if (s.on) requestAnimationFrame(tick);
-        })();
-        s.stop = () => {
-          s.on = false; dlg.removeEventListener('click', mark, true); document.removeEventListener('keydown', mark, true);
-          ['pointerdown', 'click', 'keydown'].forEach(t => document.removeEventListener(t, note, true));
-        };
-        return s;
-      }
-      for (const how of ['a real double-tap on the +', 'Escape 200 ms in']) {
-        FM.variant.force('newproject', 'A');
-        dlg.classList.add('hidden'); await sleep(120);
-        const O = orb.getBoundingClientRect(), x = O.left + O.width / 2, y = O.top + O.height / 2;
-        hitIs927(x, y, orb, 'the New project +');
-        const s = sampler();
-        try {
-          if (how.indexOf('double') >= 0) {
-            /* his double-tap: the second tap lands on the card's backdrop, which now covers the +. The flight is held at
-               150 ms as soon as the first tap has started it: the runner delivers the second tap anywhere from 150 to
-               350 ms later (measured — the page is busy building the card), and by 350 ms the disc is card-sized */
-            const hold = e => {
-              if (!(e.target === orb || orb.contains(e.target))) return;
-              document.removeEventListener('click', hold, true);
-              setTimeout(() => document.getAnimations().filter(a => /^np947-A-/.test(a.id || '')).forEach(a => { a.pause(); a.currentTime = 150; }), 0);
-            };
-            document.addEventListener('click', hold, true);
-            try {
-              await realInput924([{ t: 'touchStart', x: x, y: y, ms: 40 }, { t: 'touchEnd', x: x, y: y, ms: 50 }, { t: 'touchStart', x: x, y: y, ms: 40 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], how);
-            } finally { document.removeEventListener('click', hold, true); }
-          } else {
-            await tap974(x, y, 'a real tap on the +');
-            const list = document.getAnimations().filter(a => /^np947-A-/.test(a.id || ''));
-            if (!list.length) throw new Error('CONTROL: ' + how + ': the + opened the card with no A entrance');
-            list.forEach(a => { a.pause(); a.currentTime = 200; });   // mid-flight, whatever the runner's timing
-            await sleep(60);
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-          }
-          await sleep(700);
-        } finally { s.stop(); }
-        if (s.at < 0) throw new Error('CONTROL: ' + how + ': the close never reached the card');
-        const before = s.w[s.at - 1], after = s.w.slice(s.at).filter(w => w != null);
-        if (!(before > 0)) throw new Error('setup: ' + how + ': there was no disc in flight when the close came (the card had landed first) - nothing to measure (' + s.log.join(' ') + ')');
-        // the jump lands on the whole card, so it can be told apart from any disc a few px narrower than the card
-        if (!(before < s.cw - 12)) throw new Error('setup: ' + how + ': the disc was already ' + Math.round(before) + ' wide of the card\'s ' + Math.round(s.cw) + ' when the close came - no jump could be told apart (' + s.log.join(' ') + ')');
-        const top = Math.max.apply(null, after.concat([0]));
-        if (top > before + 3) throw new Error(how + ': the disc was ' + Math.round(before) + 'px wide when the card was closed, then ' + Math.round(top) + 'px - it jumped to the whole card before shrinking back into the +');
-        if (!after.some(w => w < before - 3) && before > O.width + 6) throw new Error('CONTROL: ' + how + ': after the close the disc never got smaller than ' + Math.round(before) + ' - it did not run backwards at all');
-        if (!dlg.classList.contains('hidden')) throw new Error(how + ': 700 ms after the close the card is still open');
-        /* whole = its full size and upright. Not its exact spot: after a key the focused + takes its :hover/:focus-visible
-           lift (2px up) — measured the same with B, whose close is the plain one, so it is not this entrance's doing */
-        const R = orb.getBoundingClientRect(), om = new DOMMatrix(getComputedStyle(orb).transform);
-        if (Math.abs(R.width - O.width) > 1.5 || Math.abs(R.height - O.height) > 1.5 || Math.abs(om.b) > 0.01) throw new Error(how + ': after the close the + is ' + Math.round(R.width) + 'x' + Math.round(R.height) + ' and turned (' + getComputedStyle(orb).transform + ') - not whole on Home');
-      }
     });
   });
 
@@ -110002,6 +109826,78 @@
     } finally {
       FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
       if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
+    }
+  });
+
+  /* ═══ #947 — HIS PICK, 29 SEP: "My fave animation for pressing the create button is the one where the white line pulses
+     out. I also like that when you press cancel it goes away straight away." ════════════════════════════════════════════
+     Two clauses, two halves. (1) The ripple is the ONLY entrance: 40 real opens with nothing forced must ALL play it — on
+     v17.12 the + picked A, B or C at random, so 40 in a row all C is (1/3)^40 ≈ 1e-19 there, never luck. Each open is
+     recognised by what only C draws: the ring and the circular reveal, and no layer A or B made (.np-fx-orb / .np-fx-frame).
+     (2) Cancel, Escape and a press on the backdrop each take the card away AT ONCE — hidden by the time the next frame is
+     drawn, with the ripple's ring gone and the + (which C turned into an ×) upright again. Each is tried twice: in the
+     middle of the ripple and after it has landed, since "straight away" has to hold whenever he presses. */
+  test('947 his pick - 40 unforced opens of the New project + all play the ripple, and Cancel, Escape and the backdrop hide the card within one frame', { item: '947', budgetMs: 40000 }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const dlg = document.getElementById('hm-dialog'), card = dlg.querySelector('.hm-dlg-card'), orb = document.getElementById('hm-new');
+    const np = () => document.getAnimations().filter(a => /^np947-/.test(a.id || ''));
+    const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+    const turned = () => { const m = new DOMMatrix(getComputedStyle(orb).transform); return Math.round(Math.atan2(m.b, m.a) * 180 / Math.PI); };
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      dlg.classList.add('hidden');
+      await sleep(80);
+      await atPhoneWidth(async function () {
+        // (1) FORTY OPENS, NOTHING FORCED
+        const got = {};
+        for (let i = 0; i < 40; i++) {
+          dlg.classList.add('hidden'); await sleep(0);
+          orb.click();
+          if (dlg.classList.contains('hidden')) throw new Error('CONTROL: tap ' + (i + 1) + ' on + did not open the New project card');
+          const ids = np().map(a => a.id);
+          if (!ids.length) throw new Error('tap ' + (i + 1) + ' of 40 opened the card with no entrance of its own');
+          const kinds = {};
+          ids.forEach(id => { kinds[id.charAt(6)] = 1; });   // np947-<option>-<part>
+          if (document.querySelector('.np-fx-orb')) kinds.A = 1;
+          if (document.querySelector('.np-fx-frame')) kinds.B = 1;
+          const k = Object.keys(kinds).sort().join('');
+          got[k] = (got[k] || 0) + 1;
+          if (k === 'C' && (!document.querySelector('.np-fx-ring') || !ids.some(id => /-reveal$/.test(id)))) throw new Error('tap ' + (i + 1) + ': the entrance is named C but has no ring spreading from the + or no circular reveal');
+        }
+        if (Object.keys(got).join() !== 'C') throw new Error('40 unforced taps on + opened with ' + JSON.stringify(got) + ' - he picked the ripple (C) on 29 Sep, so every open plays it and A and B are gone');
+        // (2) CANCEL, ESCAPE, THE BACKDROP: GONE BY THE NEXT FRAME, MID-RIPPLE AND LANDED
+        const routes = {
+          'Cancel': () => document.getElementById('hm-cancel').click(),
+          'Escape': () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+          'a press on the backdrop': () => { dlg.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); dlg.click(); }
+        };
+        for (const how of Object.keys(routes)) {
+          for (const when of [200, 640 + 200]) {
+            const at = when < 640 ? 'in the middle of the ripple' : 'after it landed';
+            dlg.classList.add('hidden'); await sleep(40);
+            const O = orb.getBoundingClientRect();
+            orb.click();
+            if (dlg.classList.contains('hidden')) throw new Error('CONTROL: ' + how + ', ' + at + ': tapping + did not open the card');
+            await sleep(when);
+            if (dlg.classList.contains('hidden')) throw new Error('CONTROL: ' + how + ', ' + at + ': the card closed by itself before it was dismissed');
+            if (when > 640 && Math.abs(turned() - 135) > 2) throw new Error('CONTROL: ' + how + ', ' + at + ': the + is turned ' + turned() + ' degrees, not the x (135) the ripple leaves - the check below would not show it coming back');
+            routes[how]();
+            await frame();
+            const cr = card.getBoundingClientRect();
+            if (!dlg.classList.contains('hidden') || cr.width > 0) throw new Error(how + ', ' + at + ': one frame later the New project card is still on screen (' + Math.round(cr.width) + 'px wide, ' + np().length + ' np947 animations) - he asked for it to go away straight away');
+            if (document.querySelector('.np-fx')) throw new Error(how + ', ' + at + ': the card went but the ripple\'s ring is still in the page');
+            if (np().length) throw new Error(how + ', ' + at + ': ' + np().map(a => a.id).join(', ') + ' outlived the card');
+            const R = orb.getBoundingClientRect();
+            if (Math.abs(turned()) > 1 || Math.abs(R.width - O.width) > 1.5 || Math.abs(R.height - O.height) > 1.5) throw new Error(how + ', ' + at + ': after the card went the + is ' + Math.round(R.width) + 'x' + Math.round(R.height) + ' turned ' + turned() + ' degrees - not whole on Home');
+          }
+        }
+      });
+    } finally {
+      dlg.classList.add('hidden');
+      await sleep(40);
+      if (!wasOpen) FM.home.close();
     }
   });
 
