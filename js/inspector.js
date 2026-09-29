@@ -1356,14 +1356,18 @@ window.FM = window.FM || {};
     return row;
   }
   function kfColorRow(container, key, label, dflt) {
+    /* `dflt` may be a FUNCTION (#482 polish 1.2): a colour that follows another — Light Leak's Leak edge — shows the colour
+       it follows while it is absent, which is what the effect draws, rather than a fixed swatch that would be a lie the
+       moment he changed the colour it follows. */
+    const dv = typeof dflt === 'function' ? dflt : () => dflt;
     const row = el('div', 'prop-row kf-color-row');
     const c0 = container[key];
     const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
     kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate colour';
-    kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt); afterKf(); });
+    kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dv()); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('label', null, label));
-    row.appendChild(colorField(() => FM.evalProp(container[key], FM.time) || dflt, v => { FM.setProp(container, key, v, FM.time); }));
+    row.appendChild(colorField(() => FM.evalProp(container[key], FM.time) || dv(), v => { FM.setProp(container, key, v, FM.time); }));
     return row;
   }
   function segRow(label, options, get, set) {
@@ -1791,7 +1795,7 @@ window.FM = window.FM || {};
            entry asked.
            The row is asked for the value through evalProp and writes through setProp, so a static colour
            stays a plain string and only becomes a keyframe object when he presses the ◆. */
-        else if (p.type === 'color') { body.appendChild(kfColorRow(fx.params, p.key, p.label, p.default)); }
+        else if (p.type === 'color') { body.appendChild(kfColorRow(fx.params, p.key, p.label, p.follows ? () => (FM.evalProp(fx.params[p.follows], FM.time) || p.default) : p.default)); }   // follows: #482 polish 1.2
         else if (p.type === 'layer') {   // Displacement Map: pick which OTHER layer drives the warp
           const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, p.label || 'Source'));
           const sel = document.createElement('select');

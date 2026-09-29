@@ -11858,7 +11858,9 @@
       a.transform.opacity = 0.66; a.transform.rotation = 17.5; a.transform.scaleX = 1.3;
       a.stroke = { enabled: true, width: 9, color: '#ff5fa2', position: 'outside', dash: { enabled: true, length: 14, gap: 6, offset: 3 } };
       a.shadow = { enabled: true, blur: 22, dx: 0, dy: 0, color: '#001122', alpha: 80 };
-      a.effects = [{ type: 'blur', enabled: true, params: { radius: 7 } }, { type: 'glow', enabled: true, params: { radius: 12, passes: 2, color: '#ffcc00' } }];
+      // strength: #482 polish 1.3 gave Glow a Strength; the render fills an absent one (queue 784) and the loader writes keys
+      // in schema order, so the fixture states it where the schema puts it, like every other default it states explicitly.
+      a.effects = [{ type: 'blur', enabled: true, params: { radius: 7 } }, { type: 'glow', enabled: true, params: { radius: 12, passes: 2, strength: 100, color: '#ffcc00' } }];
       a.blend = 'screen'; a.locked = true;
       const b = FM.makeLayer('text', { name: 'Title', text: 'Hello <&> "world"', x: 540, y: 1300 });
       b.start = 0.5; b.duration = 2; b.trimPath = { enabled: true, start: 0.1, end: 0.8, offset: 0.05 };
@@ -112678,6 +112680,376 @@
         for (let x = 0; x < w; x++) for (const y of [0, h - 1]) { const i = (y * w + x) * 4; if (s[i] !== 0x20 || s[i + 1] !== 0x30 || s[i + 2] !== 0x40) throw new Error('in ' + where + ' a SMALL sharpened clip changed the empty frame edge at ' + x + ',' + y + ' to (' + [s[i], s[i + 1], s[i + 2]].join(',') + ')'); }
       });
     } finally { ids.forEach(id => FM.media.remove(id)); }
+  });
+
+  /* ═══ #482 / #966 POLISH BATCH 1 — "Film looks you already use" ═══════════════════════════════════════════════════════
+   * His words (#966): "you can polish other effects just giving them more features and making them work a bit better and
+   * have more customisation … more choices always better … this is the complex version". Batch 1 of the idle backlog
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md §A): new controls on Film Grain, Light Leak, Glow, Letterbox,
+   * Faded Film, Colour Temperature and Colour Balance. The rule that makes it safe (§0.3): every new key's default is the
+   * old look, because a filter recipe gets every key it does not set from makeInstance — and all 56 library filters are
+   * built from these effects. The first test pins that against hashes captured on v17.14 (1924ade0) BEFORE the first edit,
+   * with the same fixture: a textured 200x150 clip in a 240x180 project, the export (t 0.7) and a half-size preview (t 1.3). */
+  function fix482() {
+    const tex = offscreen(200, 150), tc = tex.getContext('2d'), ti = tc.createImageData(200, 150);
+    for (let y = 0; y < 150; y++) for (let x = 0; x < 200; x++) {
+      const i = (y * 200 + x) * 4;
+      ti.data[i] = (x * 255 / 199) | 0; ti.data[i + 1] = (y * 255 / 149) | 0; ti.data[i + 2] = ((x * 7 + y * 13) % 256); ti.data[i + 3] = 255;
+    }
+    tc.putImageData(ti, 0, 0);
+    return tex;
+  }
+  function hash482(x, cv) {
+    const d = x.getImageData(0, 0, cv.width, cv.height).data; let h = 0x811c9dc5 >>> 0;
+    for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; }
+    return ('00000000' + h.toString(16)).slice(-8);
+  }
+  function shots482(L) {
+    return [[240, 0.7], [120, 1.3]].map(([w, t]) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  const NEW482 = {
+    filmgrain: { speed: 24, soft: 0, seed: 0 },
+    lightleak: { speed: 100, wander: 100, flicker: 0, blend: 0, color2: null },
+    glow: { strength: 100 },
+    letterbox: { ratio: 0, offset: 0, feather: 0, opacity: 100 },
+    faded: { crush: 100, rolloff: 0, fadecol: '#808080' },
+    temperature: { method: 0, range: 0 },
+    colorbalance: { preserve: 0, soft: 100 },
+  };
+
+  test('482 polish 1 every new control is in the catalogue at a default that draws the old look - the 56 library filters and the seven effects render byte for byte as on v17.14', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
+       render-time fill (queue 784) agrees with that default — a fill that read a different literal off the kernel would
+       restyle every saved project the first time it drew. Leak edge is the one that must stay ABSENT: it follows Leak. */
+    Object.keys(NEW482).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW482[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW482[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (k === 'color2') {
+          if (pd.follows !== 'color') throw new Error('Light Leak edge colour does not follow the Leak colour (follows ' + JSON.stringify(pd.follows) + ')');
+          if ('color2' in inst.params) throw new Error('a new Light Leak carries its own edge colour ' + inst.params.color2 + ' - it would stay orange the moment he picked another Leak colour');
+          return;
+        }
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    /* …and a saved value survives the load sanitiser, at a non-default value for each key. */
+    const SET = { filmgrain: { speed: 0, soft: 50, seed: 7 }, lightleak: { speed: 0, wander: 250, flicker: 0.5, blend: 2, color2: '#2040ff' }, glow: { strength: 40 },
+      letterbox: { ratio: 1, offset: 30, feather: 12, opacity: 60 }, faded: { crush: 150, rolloff: 40, fadecol: '#3050ff' }, temperature: { method: 1, range: 2 }, colorbalance: { preserve: 1, soft: 160 } };
+    const lay = [{ id: 'l482', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.14. */
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/1e519c24', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/72a7bbef', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    const HEAD_FX = { 'filmgrain/image': '2e19d26a/0f06368b', 'filmgrain/shape': '4c6e1d70/1923071e', 'lightleak/image': '8d3548c2/dd26433f', 'lightleak/shape': '85f6b0dc/a682c6df', 'glow/image': '4982cf31/73d5725a', 'glow/shape': '079f0f43/40fb8939', 'letterbox/image': '13ff85ed/ac039da2', 'letterbox/shape': '3842b4f7/62416c45', 'faded/image': '5fdf89a1/0bf1c4cb', 'faded/shape': 'dc16c171/9d8844ae', 'temperature/image': '971867df/50ef3714', 'temperature/shape': '6f093827/cf9c7296', 'colorbalance/image': '971867df/50ef3714', 'colorbalance/shape': '6f093827/cf9c7296' };
+    const all = FM.filters.all();
+    if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
+    const tex = fix482(), ids = [], moved = [];
+    const clip = () => { const L = FM.makeLayer('image', { name: '482 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    try {
+      all.forEach(f => {
+        const L = clip(); L.effects = [FM.filters.makeInstance(f.id)];
+        const got = shots482(L);
+        if (got !== HEAD_FILTERS[f.id]) moved.push(f.name + ' ' + HEAD_FILTERS[f.id] + ' -> ' + got);
+      });
+      Object.keys(NEW482).forEach(type => {
+        ['image', 'shape'].forEach(kind => {
+          const L = kind === 'image' ? clip() : FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 });
+          L.start = 0; L.duration = 4; L.effects = [FM.fxRegistry.makeInstance(type)];
+          const got = shots482(L);
+          if (got !== HEAD_FX[type + '/' + kind]) moved.push('a new ' + type + ' on ' + kind + ' ' + HEAD_FX[type + '/' + kind] + ' -> ' + got);
+        });
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.14 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+    /* 3. THE GPU GLOW PATH (a phone without ctx.filter): Strength 100 must hand the shader the very colour it had. Compared
+       in-run rather than pinned, because WebGL output is the GPU's. */
+    const was = FM._forceNoCtxFilter;
+    try {
+      FM._forceNoCtxFilter = true;
+      const g = (over) => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('glow'); if (over === 'absent') delete e.params.strength; else Object.assign(e.params, over); L.effects = [e]; return shots482(L); };
+      const a = g('absent'), b = g({ strength: 100 }), c = g({ strength: 30 });
+      if (a !== b) throw new Error('on a device without ctx.filter a Glow at Strength 100 (' + b + ') draws differently from one with no Strength key (' + a + ')');
+      if (c === a) throw new Error('on a device without ctx.filter Strength 30 draws the same halo as 100 - the GPU fallback ignores it');
+    } finally { FM._forceNoCtxFilter = was; }
+  });
+
+  /* 1.1 FILM GRAIN — Grain speed, Softness, Pattern. The grain re-rolled at a welded 24 a second (Math.floor(t*24)), so it
+     could not be held still for a paper texture; every grained layer drew the same pattern; and a grain had one hard edge.
+     Driven through the kernel on a flat mid-grey plate at the export scale, where the grain is plainest. */
+  test('482 1.1 Film Grain - Grain speed 0 holds the grain still, a keyframed speed never runs it backwards, Pattern gives a layer its own grain, Softness softens it', { item: '482' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.filmgrain) throw new Error('the Film Grain kernel is not reachable');
+    const W = 64, H = 48;
+    const run = (over, t) => {
+      const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 128; d[i + 3] = 255; }
+      K.filmgrain(d, W, H, Object.assign({}, FM.fxRegistry.makeInstance('filmgrain').params, over), t, 1);
+      return d;
+    };
+    const same = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+    if (same(run({}, 0), run({}, 0.5))) throw new Error('CONTROL: a default Film Grain draws the same grain at 0 s and 0.5 s - it should re-roll 24 times a second');
+    if (!same(run({ speed: 0 }, 0), run({ speed: 0 }, 0.5))) throw new Error('at Grain speed 0 the grain still changes between 0 s and 0.5 s - it cannot be held still for a paper texture');
+    if (!same(run({ speed: 12 }, 0.5), run({}, 0.25))) throw new Error('at Grain speed 12 the grain at 0.5 s is not the 24-a-second grain at 0.25 s - the speed is not a rate');
+    /* A KEYFRAMED speed is integrated: 24 easing linearly to 0 over one second has re-rolled floor(24·0.9 − 12·0.81) = 11 times at
+       0.9 s — the 24-a-second grain at 0.47 s. Read as speed(now) × t it would be floor(0.9 × 2.4) = 2: the grain jumps back. */
+    const kf = { kf: [{ t: 0, v: 24 }, { t: 1, v: 0 }] };
+    if (!same(run({ speed: kf }, 0.9), run({}, 0.47))) throw new Error('a Grain speed keyframed from 24 to 0 is not at the grain it has reached by 0.9 s (frame 11) - it is not integrated, so easing the speed down runs the grain backwards');
+    if (!same(run({ speed: kf }, 1.5), run({ speed: kf }, 3))) throw new Error('a Grain speed keyframed down to 0 does not hold the grain once it gets there');
+    if (same(run({ seed: 7 }, 0.3), run({}, 0.3))) throw new Error('Pattern 7 draws exactly the grain Pattern 0 draws - two grained layers still move in lockstep');
+    if (!same(run({ seed: 7 }, 0.3), run({ seed: 7 }, 0.3))) throw new Error('Pattern 7 draws a different grain each time at the same moment - it must be a function of time and pattern only');
+    /* SOFTNESS: the grain loses its hard cell edges (neighbouring pixels differ far less) but is still there (its spread stays
+       well above zero). Square size-4 grain, where the edges are the plainest. */
+    const rough = d => { let s = 0, n = 0; for (let y = 0; y < H; y++) for (let x = 0; x + 1 < W; x++) { const i = (y * W + x) * 4; s += Math.abs(d[i] - d[i + 4]); n++; } return s / n; };
+    const spread = d => { let m = 0, n = 0; for (let i = 0; i < d.length; i += 4) { m += d[i]; n++; } m /= n; let v = 0; for (let i = 0; i < d.length; i += 4) v += (d[i] - m) * (d[i] - m); return Math.sqrt(v / n); };
+    const hardG = run({ size: 4, shape: 0, amount: 100, color: 0 }, 0.2), softG = run({ size: 4, shape: 0, amount: 100, color: 0, soft: 100 }, 0.2);
+    if (!(rough(hardG) > 3)) throw new Error('setup: square grain measured a neighbour difference of ' + rough(hardG).toFixed(2) + ' - there is no grain to soften');
+    if (!(rough(softG) < rough(hardG) * 0.8)) throw new Error('Softness 100 left the grain as hard-edged as 0 (neighbour difference ' + rough(softG).toFixed(2) + ' against ' + rough(hardG).toFixed(2) + ')');
+    if (!(spread(softG) > spread(hardG) * 0.4)) throw new Error('Softness 100 all but erased the grain (spread ' + spread(softG).toFixed(2) + ' against ' + spread(hardG).toFixed(2) + ')');
+    if (same(run({ soft: 40, color: 60 }, 0.2), run({ color: 60 }, 0.2))) throw new Error('Softness does nothing to colour grain');
+  });
+
+  /* 1.2 LIGHT LEAK — Drift speed, Wander, Leak edge, Flicker, Blend. The drift was welded (ph = t·0.15, a fixed ±12/±10%
+     wander), so a leak could never hold still; it was one colour, always screened, and never flickered. */
+  test('482 1.2 Light Leak - Drift speed 0 holds it still, Wander, a Leak edge colour at the rim that follows Leak until set, a stateless Flicker and three blends', { item: '482' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.lightleak) throw new Error('the Light Leak kernel is not reachable');
+    const W = 80, H = 60;
+    const run = (over, t, grey) => {
+      const g = grey == null ? 128 : grey, d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = g; d[i + 3] = 255; }
+      K.lightleak(d, W, H, Object.assign({}, FM.fxRegistry.makeInstance('lightleak').params, over), t);
+      return d;
+    };
+    const same = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+    const at = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    if (same(run({}, 0), run({}, 3))) throw new Error('CONTROL: a default leak is in the same place at 0 s and 3 s - it should drift');
+    if (!same(run({ speed: 0 }, 0), run({ speed: 0 }, 3))) throw new Error('at Drift speed 0 the leak still moves between 0 s and 3 s - it can never hold still');
+    if (!same(run({ wander: 0 }, 0), run({ wander: 0 }, 3))) throw new Error('at Wander 0 the leak still roams between 0 s and 3 s');
+    if (!same(run({ speed: 200 }, 1), run({}, 2))) throw new Error('at Drift speed 200 the leak at 1 s is not where the default leak is at 2 s - the speed is not a rate');
+    if (same(run({ wander: 300 }, 2), run({}, 2))) throw new Error('Wander 300 roams exactly as far as 100');
+    const kf = { kf: [{ t: 0, v: 100 }, { t: 1, v: 0 }] };
+    if (!same(run({ speed: kf }, 1.5), run({ speed: kf }, 3))) throw new Error('a Drift speed keyframed down to 0 does not park the leak once it gets there');
+    /* LEAK EDGE: blue at the rim of an orange leak. Heart = the source (85%, 12%) at speed 0 / wander 0; the rim is further out. */
+    const still = { speed: 0, wander: 0 }, full = { speed: 0, wander: 0, amount: 1 };
+    const hx = Math.round(W * 0.85), hy = Math.round(H * 0.12), rx = hx - 27, ry = hy + 6;   // the rim probe sits about half-way out (g0 ≈ 0.5)
+    const plain = run(full, 1), edged = run(Object.assign({ color2: '#2040ff' }, full), 1);
+    const pr = at(plain, rx, ry), er = at(edged, rx, ry);
+    if (!(pr[0] > 130)) throw new Error('setup: the rim pixel is not lit by the leak (' + pr.join(',') + ') - move the probe');
+    if (!(er[2] > pr[2] + 8 && er[0] < pr[0])) throw new Error('a blue Leak edge left the rim of an orange leak at ' + er.join(',') + ' (orange-only ' + pr.join(',') + ') - the edge colour is not drawn');
+    const hp = at(plain, hx, hy), he = at(edged, hx, hy);
+    if (Math.abs(he[0] - hp[0]) > 6 || Math.abs(he[2] - hp[2]) > 12) throw new Error('a Leak edge colour changed the HEART of the leak too (' + he.join(',') + ' against ' + hp.join(',') + ') - the heart is the Leak colour');
+    if (!same(run(Object.assign({ color2: '#ff7a3c' }, full), 1), plain)) throw new Error('a Leak edge the same as the Leak colour draws differently from no edge colour');
+    /* …and ABSENT it follows Leak, even after the renderer's fill has seen it: a new leak drawn once must not come back with an
+       edge colour frozen at the default (the queue-784 fill would do exactly that). */
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#808080', start: 0, duration: 3 });
+    const inst = FM.fxRegistry.makeInstance('lightleak'); L.effects = [inst];
+    FM.renderScene(offscreen(160, 120).getContext('2d'), scene([L]), 0.5);
+    if (inst.params.color2 !== undefined) throw new Error('drawing a new Light Leak once gave it an edge colour of ' + inst.params.color2 + ' - it no longer follows the Leak colour');
+    inst.params.color = '#00ff00';
+    const fl = run({ color: '#00ff00', speed: 0, wander: 0 }, 1), fl2 = run(Object.assign({ color: '#00ff00', color2: '#00ff00' }, still), 1);
+    if (!same(fl, fl2)) throw new Error('with no edge colour a green leak is not one green leak');
+    /* FLICKER: at a fixed position the heart's brightness changes over time, the same at the same moment. */
+    const heartR = (over, t) => at(run(Object.assign({}, still, over), t, 60), hx, hy)[1];
+    const flat = [0.1, 0.35, 0.6, 0.85, 1.1].map(t => heartR({}, t)), fk = [0.1, 0.35, 0.6, 0.85, 1.1].map(t => heartR({ flicker: 1 }, t));
+    if (new Set(flat).size !== 1) throw new Error('CONTROL: a still leak with no flicker changes brightness over time: ' + flat.join(','));
+    if (new Set(fk).size < 3) throw new Error('Flicker 1 barely changes the leak over time (' + fk.join(',') + ') - it does not flicker');
+    if (fk.some(v => v > flat[0])) throw new Error('Flicker made the leak brighter than its own Amount (' + fk.join(',') + ' against ' + flat[0] + ')');
+    if (heartR({ flicker: 1 }, 0.6) !== heartR({ flicker: 1 }, 0.6)) throw new Error('Flicker draws a different pulse at the same moment - it must be stateless');
+    /* BLEND on mid-grey under an orange (#ff7a3c) leak at its heart: Screen lifts blue, Soft light pulls it DOWN (the leak's blue
+       is below half), Add lifts red further than Screen. */
+    const sc = at(run(still, 1), hx, hy), ad = at(run(Object.assign({ blend: 1 }, still), 1), hx, hy), so = at(run(Object.assign({ blend: 2 }, still), 1), hx, hy);
+    if (!(sc[2] >= 128)) throw new Error('CONTROL: Screen lowered blue at the heart (' + sc.join(',') + ')');
+    if (!(so[2] < 124)) throw new Error('Soft light left blue at ' + so[2] + ' at the heart of an orange leak on grey (Screen ' + sc[2] + ') - it is not a soft-light');
+    if (!(ad[0] > sc[0])) throw new Error('Add is not brighter in red than Screen at the heart (' + ad.join(',') + ' against ' + sc.join(',') + ')');
+  });
+
+  /* 1.3 GLOW — Strength. The halo was always at its colour's full alpha, so a faint glow meant a smaller one. */
+  test('482 1.3 Glow - Strength is the halo colour alpha on PC and on a phone without ctx.filter, and at 100 the filter string is the old one', { item: '482' }, function () {
+    const g = over => { const e = FM.fxRegistry.makeInstance('glow'); Object.assign(e.params, over); return FM.effectFilter({ effects: [e] }, 0); };
+    const old = 'drop-shadow(0 0 16px #ffffff)';
+    if (g({}) !== old) throw new Error('a new Glow emits ' + g({}) + ', not the ' + old + ' it always did');
+    const s50 = g({ strength: 50 });
+    if (!/^drop-shadow\(0 0 16px rgba\(255,\s*255,\s*255,\s*0\.5\)\)$/.test(s50)) throw new Error('a Glow at Strength 50 emits ' + s50 + ' - the halo colour carries no 0.5 alpha');
+    const red = g({ strength: 25, color: '#ff0000', passes: 2 });
+    if ((red.match(/rgba\(255,\s*0,\s*0,\s*0\.25\)/g) || []).length !== 2) throw new Error('a red two-pass Glow at Strength 25 emits ' + red);
+    const kf = g({ strength: { kf: [{ t: 0, v: 20 }, { t: 1, v: 100 }] } });
+    if (!/0\.2\)\)$/.test(kf)) throw new Error('a keyframed Strength starting at 20 emits ' + kf + ' at 0 s');
+    /* ON SCREEN: a white disc on black with a 16px glow; the halo just outside the disc at Strength 50 is about half the halo at
+       100 — through ctx.filter, and through the GPU fallback a phone without ctx.filter uses. */
+    const halo = (strength, noFilter) => {
+      const was = FM._forceNoCtxFilter;
+      try {
+        FM._forceNoCtxFilter = !!noFilter;
+        const L = FM.makeLayer('shape', { shape: 'ellipse', x: 160, y: 120, shapeW: 100, shapeH: 100, fill: '#ffffff', start: 0, duration: 3 });
+        const e = FM.fxRegistry.makeInstance('glow'); e.params.strength = strength; L.effects = [e];
+        const cv = offscreen(320, 240), x = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(x, scene([L]), 0.5);
+        let s = 0; [[160, 64], [160, 176], [104, 120], [216, 120]].forEach(([px0, py0]) => { s += x.getImageData(px0, py0, 1, 1).data[0]; });   // 6 px outside the disc's edge, all four sides
+        return s / 4;
+      } finally { FM._forceNoCtxFilter = was; }
+    };
+    [[false, 'with ctx.filter'], [true, 'on a device without ctx.filter']].forEach(([nf, where]) => {
+      const h100 = halo(100, nf), h50 = halo(50, nf), h0 = halo(0, nf);
+      if (!(h100 > 25)) throw new Error('setup (' + where + '): the halo just outside the disc is only ' + h100.toFixed(1) + ' at Strength 100 - the probe misses it');
+      if (!(h50 > h100 * 0.3 && h50 < h100 * 0.7)) throw new Error(where + ' the halo at Strength 50 is ' + h50.toFixed(1) + ' against ' + h100.toFixed(1) + ' at 100 - Strength does not scale it');
+      if (!(h0 < 3)) throw new Error(where + ' Strength 0 still draws a halo of ' + h0.toFixed(1));
+    });
+  });
+
+  /* 1.4 LETTERBOX — Shape, Strength, Feather, Picture position. The bars were a Size % only, solid, hard and centred. */
+  test('482 1.4 Letterbox - a 2.39 Shape on a 1080x1920 frame draws the cinema bars, 4:5 on 16:9 goes to the sides, and Strength, Feather and Picture position blend, soften and slide them', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.letterbox) throw new Error('the Letterbox kernel is not reachable');
+    const plate = (W, H, a) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = 120; d[i + 1] = 160; d[i + 2] = 200; d[i + 3] = a == null ? 255 : a; } return d; };
+    const run = (W, H, over, a) => { const d = plate(W, H, a); K.letterbox(d, W, H, Object.assign({}, FM.fxRegistry.makeInstance('letterbox').params, over), 0, 1); return d; };
+    const barRows = (d, W, H, fromTop) => { let n = 0; for (let k = 0; k < H; k++) { const y = fromTop ? k : H - 1 - k, i = (y * W + (W >> 1)) * 4; if (d[i] === 0 && d[i + 1] === 0 && d[i + 2] === 0) n++; else break; } return n; };
+    const barCols = (d, W, H, fromLeft) => { let n = 0; for (let k = 0; k < W; k++) { const x = fromLeft ? k : W - 1 - k, i = (((H >> 1) * W) + x) * 4; if (d[i] === 0 && d[i + 1] === 0 && d[i + 2] === 0) n++; else break; } return n; };
+    const c14 = run(1080, 1920, {});
+    if (Math.abs(barRows(c14, 1080, 1920, true) - Math.round(1920 * 0.14)) > 1) throw new Error('CONTROL: Custom (Size 14) drew a ' + barRows(c14, 1080, 1920, true) + ' px top bar, not 14% of 1920');
+    const want = Math.round((1920 - 1080 / 2.39) / 2), cine = run(1080, 1920, { ratio: 1 });
+    const top = barRows(cine, 1080, 1920, true), bot = barRows(cine, 1080, 1920, false);
+    if (Math.abs(top - want) > 1 || Math.abs(bot - want) > 1) throw new Error('Shape 2.39:1 on a 1080x1920 frame drew bars of ' + top + ' and ' + bot + ' px - a 2.39:1 window needs ' + want + ' each');
+    const land = run(1920, 1080, { ratio: 8 }), wantS = Math.round((1920 - 1080 * 0.8) / 2);
+    if (Math.abs(barCols(land, 1920, 1080, true) - wantS) > 1 || barRows(land, 1920, 1080, true) !== 0) throw new Error('Shape 4:5 on a 1920x1080 frame drew a ' + barCols(land, 1920, 1080, true) + ' px left bar and a ' + barRows(land, 1920, 1080, true) + ' px top bar - a 4:5 window needs ' + wantS + ' px bars at the SIDES');
+    /* STRENGTH 50 on a see-through layer: the bar is the bar colour at half alpha — not a solid bar, and not a darkened one. */
+    const half = run(200, 200, { opacity: 50, color: '#ff0000' }, 0), hi = (5 * 200 + 100) * 4;
+    if (!(Math.abs(half[hi + 3] - 128) <= 2 && half[hi] > 250 && half[hi + 1] < 5)) throw new Error('a Strength 50 red bar on a see-through layer is ' + [half[hi], half[hi + 1], half[hi + 2], half[hi + 3]].join(',') + ' - it should be red at about half alpha');
+    const halfOpaque = run(200, 200, { opacity: 50 }), ho = (5 * 200 + 100) * 4;
+    if (Math.abs(halfOpaque[ho] - 60) > 2 || Math.abs(halfOpaque[ho + 2] - 100) > 2) throw new Error('a Strength 50 black bar over (120,160,200) is ' + [halfOpaque[ho], halfOpaque[ho + 1], halfOpaque[ho + 2]].join(',') + ', not half-way to black');
+    /* FEATHER 20 at the export scale: the rows around the 28 px bar edge ramp instead of stepping. */
+    const fe = run(200, 200, { feather: 20 }), col = y => fe[(y * 200 + 100) * 4 + 2];
+    const hard = run(200, 200, {}), edge = Math.round(200 * 0.14);
+    if (!(hard[((edge - 1) * 200 + 100) * 4 + 2] === 0 && hard[(edge * 200 + 100) * 4 + 2] === 200)) throw new Error('CONTROL: the hard bar does not end at row ' + edge);
+    const mids = [edge - 6, edge - 2, edge + 2, edge + 6].map(col);
+    if (!(mids[0] < mids[1] && mids[1] < mids[2] && mids[2] < mids[3] && mids[0] > 0 && mids[3] < 200)) throw new Error('Feather 20 does not ramp across the bar edge (blue at rows ' + (edge - 6) + ',' + (edge - 2) + ',' + (edge + 2) + ',' + (edge + 6) + ': ' + mids.join(',') + ')');
+    if (!(col(0) < 20 && col(199) < 20 && col(100) === 200)) throw new Error('Feather 20 lost the solid bar or tinted the middle (' + col(0) + ',' + col(100) + ',' + col(199) + ')');
+    /* PICTURE POSITION +50: the window sits against the bottom — the top bar is both bars, the bottom one is gone. */
+    const pos = run(200, 200, { offset: 50 });
+    if (Math.abs(barRows(pos, 200, 200, true) - 2 * edge) > 1 || barRows(pos, 200, 200, false) !== 0) throw new Error('Picture position +50 drew a top bar of ' + barRows(pos, 200, 200, true) + ' and a bottom bar of ' + barRows(pos, 200, 200, false) + ' px - the window should slide to the bottom (' + 2 * edge + ' and 0)');
+  });
+
+  /* 1.5 FADED FILM — Fade colour, Contrast loss, Fade whites. The lifted blacks were always grey, the crush welded at a quarter
+     of Amount and the white point never moved. */
+  test('482 1.5 Faded Film - a blue Fade colour lifts the blacks blue, a grey one is the old look, Contrast loss and Fade whites move the ends', { item: '482' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.faded) throw new Error('the Faded Film kernel is not reachable');
+    const run = (over, v) => { const d = new Uint8ClampedArray([v, v, v, 255]); K.faded(d, 1, 1, Object.assign({ amount: 0.6, lift: 26, desat: 15, tone: 100 }, over), 0); return Array.from(d.slice(0, 3)); };
+    const b0 = run({}, 0);
+    if (!(b0[0] > b0[2])) throw new Error('CONTROL: the old fixed cast should leave a lifted black warm (R ' + b0[0] + ' > B ' + b0[2] + ')');
+    const bb = run({ fadecol: '#3050ff' }, 0);
+    if (!(bb[2] > bb[0] + 8)) throw new Error('a blue Fade colour left black at ' + bb.join(',') + ' - the lifted blacks are not blue');
+    if (run({ fadecol: '#404040' }, 0).join() !== b0.join() || run({ fadecol: '#404040' }, 200).join() !== run({}, 200).join()) throw new Error('a grey Fade colour changes the picture - grey must be the old neutral lift');
+    const spread = over => run(over, 255)[1] - run(over, 0)[1];
+    if (!(spread({ crush: 0 }) > spread({}) + 20)) throw new Error('Contrast loss 0 kept a black-to-white spread of ' + spread({ crush: 0 }) + ' against ' + spread({}) + ' at 100 - it does not stop the crush');
+    if (!(spread({ crush: 200 }) < spread({}) - 20)) throw new Error('Contrast loss 200 does not crush harder than 100');
+    if (!(run({ rolloff: 100 }, 255)[1] < run({}, 255)[1] - 20)) throw new Error('Fade whites 100 left white at ' + run({ rolloff: 100 }, 255).join(',') + ' (' + run({}, 255).join(',') + ' at 0) - the whites do not fade');
+  });
+
+  /* 1.6 COLOUR TEMPERATURE — Method and Affects (hunt C46). Shift adds, so a warm-up turned black into rgb(20,0,0). */
+  test('482 1.6 Colour Temperature - White balance leaves black black and warms white, and Affects confines the move to the darks or the lights', { item: '482' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.temperature) throw new Error('the Colour Temperature kernel is not reachable');
+    const run = (over, v) => { const d = new Uint8ClampedArray([v, v, v, 255]); K.temperature(d, 1, 1, Object.assign({ amount: 40 }, over), 0); return Array.from(d.slice(0, 3)); };
+    if (run({}, 0).join() !== '20,0,0') throw new Error('CONTROL: Shift at 40 should still turn black into 20,0,0 (got ' + run({}, 0).join() + ')');
+    if (run({ method: 1 }, 0).join() !== '0,0,0') throw new Error('White balance at 40 turned black into ' + run({ method: 1 }, 0).join() + ' - a white balance multiplies, black stays black');
+    const w = run({ method: 1 }, 200);
+    if (!(w[0] > 215 && w[2] < 185 && w[1] === 200)) throw new Error('White balance at 40 left a 200 grey at ' + w.join(',') + ' - it should warm it (red up, blue down)');
+    if (!(run({ method: 1, amount: -40 }, 200)[2] > 215)) throw new Error('White balance at -40 does not cool');
+    if (!(run({ method: 1, tint: 60 }, 200)[1] < 185)) throw new Error('Tint does nothing under White balance');
+    if (run({ range: 1 }, 255).join() !== '255,255,255' || run({ range: 1 }, 0).join() !== '20,0,0') throw new Error('Affects Darks moved white to ' + run({ range: 1 }, 255).join() + ' or left black at ' + run({ range: 1 }, 0).join());
+    if (run({ range: 3 }, 0).join() !== '0,0,0' || !(run({ range: 3 }, 240)[0] > 250)) throw new Error('Affects Lights tinted black (' + run({ range: 3 }, 0).join() + ') or left a light grey alone');
+    const m = run({ range: 2 }, 128), md = run({ range: 1 }, 128);
+    if (!(m[0] > md[0])) throw new Error('Affects Mids moves a mid-grey less than Affects Darks (' + m.join(',') + ' against ' + md.join(',') + ')');
+  });
+
+  /* 1.7 COLOUR BALANCE — Keep brightness and Range width. Red 100 lifted a grey ramp's mean luma by about 20 levels. */
+  test('482 1.7 Colour Balance - Keep brightness holds a grey ramp at its own luma, and Range width widens or narrows the tonal range', { item: '482' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.colorbalance) throw new Error('the Colour Balance kernel is not reachable');
+    const ramp = over => { const n = 256, d = new Uint8ClampedArray(n * 4); for (let i = 0; i < n; i++) { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = i; d[i * 4 + 3] = 255; } K.colorbalance(d, n, 1, Object.assign({ red: 100, green: 0, blue: 0 }, over), 0); return d; };
+    const lift = d => { let s = 0; for (let i = 0; i < 256; i++) s += 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2] - i; return s / 256; };
+    const off = ramp({}), on = ramp({ preserve: 1 });
+    if (!(lift(off) > 10)) throw new Error('CONTROL: Red 100 without Keep brightness lifted the ramp by only ' + lift(off).toFixed(2) + ' levels');
+    if (!(Math.abs(lift(on)) <= 1)) throw new Error('Keep brightness left a grey ramp ' + lift(on).toFixed(2) + ' levels off its own luma (' + lift(off).toFixed(2) + ' without it)');
+    const mid = (on[128 * 4] - on[128 * 4 + 1]);
+    if (!(mid > 30)) throw new Error('Keep brightness took the colour away as well - mid-grey is ' + [on[512], on[513], on[514]].join(',') + ' under Red 100');
+    const px = (v, over) => { const d = new Uint8ClampedArray([v, v, v, 255]); K.colorbalance(d, 1, 1, Object.assign({ red: 100, green: 0, blue: 0, range: 1 }, over), 0); return d[0] - v; };
+    const n100 = px(160, {}), wide = px(160, { soft: 200 }), narrow = px(160, { soft: 10 });
+    if (!(wide > n100 + 5 && narrow < n100 - 5)) throw new Error('under Affects Darks a light-mid grey moved ' + narrow + ' / ' + n100 + ' / ' + wide + ' at Range width 10 / 100 / 200 - the width does not change the range');
+    if (px(160, { soft: 100 }) !== px(160, {})) throw new Error('Range width 100 is not the old weights');
+  });
+
+  /* THE NEW CONTROLS FIT THE PANEL, at a phone's 390 px and at a 1280 px PC window: every new row is on screen inside the
+     inspector, its name is not cut off, and each option button shows its whole label. And the rows that another control
+     switches off say so: Letterbox's Size and Bars at under a cinema Shape, Colour Balance's Range width under Affects All.
+     Leak edge shows the Leak colour while it follows it. */
+  test('482 polish 1 the new controls fit the effect panel at 390 and at 1280 px, and say when another control switches them off', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { filmgrain: ['Grain speed', 'Softness', 'Pattern'], lightleak: ['Drift speed', 'Wander', 'Flicker', 'Blend', 'Leak edge'], glow: ['Strength'],
+      letterbox: ['Shape', 'Picture position', 'Feather', 'Strength'], faded: ['Contrast loss', 'Fade whites', 'Fade colour'], temperature: ['Method', 'Affects'], colorbalance: ['Keep brightness', 'Range width'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    let inst = null;
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label, #inspector-panel .fx-row.fx-open .kf-color-row > label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row') } : null;
+    };
+    const show = async (type, set) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S482', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await show(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const r = rowOf(label);
+          if (!r) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = r.row.getBoundingClientRect();
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+          [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+        }
+      }
+      await show('letterbox');
+      if (rowOf('Size').row.classList.contains('fx-overridden')) throw new Error(where + ': CONTROL - Letterbox Size is greyed out under Custom, where it is the whole control');
+      await show('letterbox', p => { p.ratio = 1; });
+      ['Size', 'Bars at'].forEach(l => { if (!rowOf(l).row.classList.contains('fx-overridden')) throw new Error(where + ': under Shape 2.39:1 Letterbox ' + l + ' still looks live - the shape decides the bars'); });
+      await show('colorbalance');
+      if (!rowOf('Range width').row.classList.contains('fx-overridden')) throw new Error(where + ': Colour Balance Range width looks live under Affects All, where there is no range to widen');
+      await show('colorbalance', p => { p.range = 1; });
+      if (rowOf('Range width').row.classList.contains('fx-overridden')) throw new Error(where + ': Range width is greyed out under Affects Darks');
+      await show('lightleak', p => { p.color = '#00ff00'; });
+      const hex = rowOf('Leak edge').row.querySelector('.hex-input');
+      if (!hex || hex.value.toLowerCase() !== '#00ff00') throw new Error(where + ': with a green Leak and no edge colour, Leak edge shows ' + (hex && hex.value) + ' - it should show the green it follows');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
   });
 
 })();

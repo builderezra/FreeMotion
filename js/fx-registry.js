@@ -220,6 +220,10 @@ window.FM = window.FM || {};
         // `toggle` is a tick box, not a two-button segment: it reads as ON/OFF rather than as a choice
         // between two equal options, which matters when the thing it switches on overrides other controls.
         if (pp.toggle) out.push({ key: pp.key, label: pp.label, type: 'toggle', default: pp.def, legacy: pp.legacy, note: pp.note || '', keyframable: false });
+        /* A COLOUR ROW INSIDE `params` (#482 polish 1.5, Faded Film's Fade colour). The def-level colour flags can only make
+           keys named color…color4; `swatch` gives a colour its own key. It is the same row as every effect colour (type
+           'color', keyframable), so the inspector, the load sanitiser (safeColor) and the AI vocabulary need nothing new. */
+        else if (pp.swatch) out.push({ key: pp.key, label: pp.label, type: 'color', default: pp.def || '#ffffff', keyframable: true, follows: pp.follows || '' });
         // `legacy` is the value the RENDERER falls back to when the key is absent, which is not always
         // the schema default (byte-identity: an old instance must keep rendering as it always did).
         // The UI needs it so the highlighted button matches what actually draws.
@@ -258,7 +262,9 @@ window.FM = window.FM || {};
        Only effect colours were wired to a plain row and flagged off. ai-ops still gates itself on
        `type === 'range'`, so the AI vocabulary is unaffected by this. */
     if (def.color)  out.push({ key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true });
-    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true });
+    /* `follows` (#482 polish 1.2, Light Leak's Leak edge): a colour that, ABSENT, is the colour it names. makeInstance leaves it
+       out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
+    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '' });
     if (def.color3) out.push({ key: 'color3', label: def.color3Label || 'Colour 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: true });
     if (def.color4) out.push({ key: 'color4', label: def.color4Label || 'Colour 4', type: 'color', default: def.defColor4 || '#ffffff', keyframable: true });
     return out;
@@ -622,7 +628,7 @@ window.FM = window.FM || {};
     makeInstance: function (id) {
       const e = REG[id]; if (!e) return null;
       const params = {};
-      e.params.forEach(p => { params[p.key] = p.default; });
+      e.params.forEach(p => { if (!p.follows) params[p.key] = p.default; });   // a following colour stays absent (#482 polish 1.2)
       return { type: e.type, enabled: true, params: params };
     },
     /* Does a FILTER apply to this layer? Not answerable by supportsLayer, which is asked about a TYPE:
