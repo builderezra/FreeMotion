@@ -32651,7 +32651,12 @@
     });
   });
 
-  test('921 S3 the Share panel and the Join sheet fit a 380px phone with no sideways scroll, and on a desktop the Share panel comes out of the share button', { item: '921', budgetMs: 180000 }, async function () {
+  /* #983 RENAMED AND RETUNED THIS, ON HIS WORD: "on pc get rid of the button that was originally to invite friends, as we now
+     have it built into the settings cog". It was '921 S3 … and on a desktop the Share panel comes out of the share button' —
+     the desktop half opened the Share card off #btn-share beside Export, and there is no such button on a PC now. The same
+     teardown and rebuild now prove the opposite (nothing of ours in the row, after an install too), and the light-Home check,
+     which never needed the button, stays as it was. */
+  test('921 S3 the Share panel and the Join sheet fit a 380px phone with no sideways scroll, and a desktop transport rebuild puts no share button in the row', { item: '921', budgetMs: 180000 }, async function () {
     /* ⚠️ WAIT FOR THE ENTRANCE, AND MEASURE THE LAYOUT BOX RATHER THAN THE PAINTED ONE.
        `.fm-ask-card` swings in with `fm-hinge-panel` — `perspective(1600px) rotateX(-42deg)` — and
        getBoundingClientRect() returns the TRANSFORMED box, so a 364px sheet measures 433px for the
@@ -32702,42 +32707,21 @@
           if (j.offsetWidth > window.innerWidth) throw new Error('the Join sheet lays out at ' + j.offsetWidth + 'px in a ' + window.innerWidth + 'px viewport');
           ui.close();
         }, 380);
-        /* And the desktop half of §19.1: the card is placed against #btn-share rather than dropped in
-           the middle of the screen, which is the `FM.popFrom` family every other desktop menu uses. */
         /* ⚠️ TEAR THE PC TRANSPORT ROW DOWN FIRST, so the next call really REBUILDS it. `pcTransportLayout`
-           latches `_pcBuilt` and returns early otherwise, and the far-list entry that carries #btn-share
-           runs only on a build. Narrowing past 701px is what tears it down — the same thing resizing a
-           desktop window does (queue 405). */
+           latches `_pcBuilt` and returns early otherwise, and the far list runs only on a build. Narrowing past
+           701px is what tears it down — the same thing resizing a desktop window does (queue 405). */
         await atPhoneWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 380);
         await atWideWidth(async function () {
           if (FM.pcTransportLayout) FM.pcTransportLayout();
-          const b0 = document.getElementById('btn-share'), e0 = document.getElementById('btn-export');
-          /* ⚠️ THIS IS THE ASSERTION THAT FOUND THE TEARDOWN BUG. `pcTransportTeardown` puts back the
-             controls it borrowed and then removes the wrappers, so a share button sitting in `#t-far`
-             that it never borrowed is deleted with the wrapper — measured, and it is what a desktop
-             window narrowed past 701px does. */
-          if (!b0) throw new Error('#btn-share vanished across a transport teardown and rebuild — narrowing a desktop window past 701px takes the wrapper it lives in with it');
-          if (!e0) throw new Error('#btn-export vanished across a transport rebuild');
-          /* The point of the app.js change: Export is MOVED out of #topbar into the transport row and
-             #topbar is then off screen on a desktop, so a share button left behind in #topbar is a
-             button he cannot see. It rides the same list. */
-          if (b0.parentNode !== e0.parentNode) throw new Error('after a transport rebuild #btn-share is in ' + (b0.parentNode && (b0.parentNode.id || b0.parentNode.className)) + ' while #btn-export is in ' + (e0.parentNode && (e0.parentNode.id || e0.parentNode.className)) + ' \u2014 on a desktop that first one is not on screen');
-          if (b0.nextSibling !== e0) throw new Error('#btn-share is no longer immediately before #btn-export after a rebuild');
-          ui.install();                       // an ENSURE: it re-homes the button beside Export wherever Export now lives
+          const t0 = document.getElementById('transport'), e0 = document.getElementById('btn-export');
+          if (!e0 || !t0 || !t0.contains(e0)) throw new Error('CONTROL: #btn-export is not in the transport row after a rebuild, so the row this checks was never built');
+          /* #983: the row is built without it, and an install (the ENSURE Settings runs on every change) does not put it
+             back — the one #btn-share is the phone's person+ on the video, which has no box on a PC. */
+          ui.install();
+          const inRow = t0.querySelector('#btn-share');
+          if (inRow) throw new Error('after a transport rebuild and an install #btn-share is in the row (' + (inRow.parentNode && (inRow.parentNode.id || inRow.parentNode.className)) + ') — on a PC the settings cog is the way in (#983)');
           const b = document.getElementById('btn-share');
-          if (!b) throw new Error('there is no #btn-share with Labs on');
-          const br = b.getBoundingClientRect();
-          if (!(br.width > 0 && br.height > 0)) throw new Error('#btn-share is in the page but has no box (parent ' + (b.parentNode && b.parentNode.id) + ') — on this layout he cannot see or press it');
-          await ui.share();
-          const card = document.getElementById('collab-share');
-          if (!card.classList.contains('pop-card')) throw new Error('the Share panel is not placed by FM.popFrom at a desktop width — it opens in the middle of the screen with no tie to the button that opened it');
-          if (!document.querySelector('.pop-tail')) throw new Error('the popFrom tail that points back at #btn-share is missing');
-          await settled();
-          const cr = card.getBoundingClientRect();
-          if (Math.abs((cr.left + cr.right) / 2 - (br.left + br.right) / 2) > 340) throw new Error('the card is centred ' + Math.round(Math.abs((cr.left + cr.right) / 2 - (br.left + br.right) / 2)) + 'px from the button it is meant to come out of');
-          if (card.offsetWidth !== 380) throw new Error('the desktop card lays out at ' + card.offsetWidth + 'px, not the 380 §19.1 asks for');
-          fits(card, 'the Share panel at 1280px');
-          ui.close();
+          if (b && b.getClientRects().length) throw new Error('#btn-share has a box on a PC (in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — he took the PC share button away (#983)');
           /* ⚠️ AND THE LIGHT-HOME LOOK, WHICH WAS FOUND BY PHOTOGRAPHING THE CARD RATHER THAN READING
              IT. `.cs-code`, the Paste chip and the Copy button all declare the DARK theme's
              `var(--panel-2)` / `var(--text)`, so on the white Home they rendered as near-black slabs on
@@ -33259,12 +33243,14 @@
             (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — on a phone it is the round invite in the stage’s corner');
           if (r.top > window.innerHeight || r.bottom < 0) throw new Error('#btn-share is off screen vertically at 380px');
         }, 380);
-        /* CONTROL: the desktop placement is unchanged — beside Export, wherever Export currently lives. */
+        /* CONTROL, retuned by #983 (it held the desktop's Share beside Export, which he took away — "on pc get rid of the
+           button that was originally to invite friends, as we now have it built into the settings cog"): the phone's button
+           is the ONLY one — at 1280 it is still the person+ on the video, and it has no box there. */
         await atWideWidth(async function () {
           ui.install();
-          const b = document.getElementById('btn-share'), e = document.getElementById('btn-export');
-          if (!b || !e) throw new Error('CONTROL: the desktop pair is missing');
-          if (b.nextSibling !== e) throw new Error('CONTROL: at 1280 #btn-share is no longer immediately before #btn-export, so the phone move broke the desktop one');
+          const b = document.getElementById('btn-share'), t = document.getElementById('transport');
+          if (!b || b.parentNode !== document.getElementById('stage')) throw new Error('CONTROL: at 1280 the one #btn-share is not the person+ on the video (it is in ' + (b && b.parentNode && (b.parentNode.id || b.parentNode.className)) + ')');
+          if (b.getClientRects().length || (t && t.contains(b))) throw new Error('at 1280 a Share button is on screen or in the transport row — on a PC the cog is the way in (#983)');
         }, 1280);
       });
     });
@@ -33402,35 +33388,39 @@
   test('921 S3 a share button removed with Labs off does not come back when the window narrows', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S3('the §23 guard across a transport rebuild');
     await withLabs921(async function () {
-      /* Put the row through the one order that matters: narrow (teardown) → wide (a BUILD, which is the
-         only thing that records #btn-share in `_pcHomes`) → Labs off → narrow again. */
+      /* Put the row through the one order that matters: narrow (teardown) → wide (a BUILD) → Labs off → narrow again. */
       await atPhoneWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); }, 380);
-      /* #967 batch 2: Labs goes off AT 1280, where the button really is the bar's, and §23 is now doors23's rule — the phone's
-         door on the video is allowed (a NEW node, on #stage); the node the transport row borrowed must never come back. */
-      let old = null;
+      /* #983 CHANGED THIS, ON HIS WORD ("on pc get rid of the button that was originally to invite friends, as we now have it
+         built into the settings cog"). The build used to BORROW #btn-share into `_pcHomes`, and a borrowed node that Labs-off
+         took away was what a teardown could put back, dead. The row does not list it any more — the one #btn-share is the
+         phone's person+ on the video — so the same order now proves the root of it: the row never takes the button at all,
+         and after the switch goes off, and the window narrows, the page holds the door and nothing else. */
       await atWideWidth(async function () {
         if (FM.pcTransportLayout) FM.pcTransportLayout();
         const t = document.getElementById('transport');
         const homes = (t && t._pcHomes) || [];
-        if (!homes.some(function (h) { return h && h.el && h.el.id === 'btn-share'; })) {
-          throw new Error('CONTROL: the transport row did not borrow #btn-share, so the teardown below has nothing of ours to put back and this test measures nothing');
+        if (!homes.some(function (h) { return h && h.el && h.el.id === 'btn-export'; })) {
+          throw new Error('CONTROL: the transport row did not build (Export was not borrowed), so this test measures nothing');
         }
-        old = document.getElementById('btn-share');
+        if (homes.some(function (h) { return h && h.el && h.el.id === 'btn-share'; })) {
+          throw new Error('the transport row borrowed #btn-share — on a PC there is no Share button (#983), and a borrowed one is the node a teardown can bring back dead');
+        }
         FM.settings.set('collabLabs', false);
-        if (old.isConnected) throw new Error('CONTROL: turning Labs off did not remove the button in the first place');
         doors23('at 1280 with Labs off');
       }, 1280);
-      const came = function () {
-        if (!old.isConnected) return;
-        throw new Error('#btn-share is back in the page with Labs OFF, in ' + (old.parentNode && (old.parentNode.id || old.parentNode.className)) +
-          ' — pcTransportTeardown re-inserts every node it recorded whether or not it is still in the document, and the click listener survives removeChild, so §23’s "one door, nothing else" is broken by a live-looking button that does nothing (U.share returns early with Labs off). uninstall() cannot sweep it either: it had already latched installed=false');
+      const inBar = function (where) {
+        ['topbar', 'topbar-m', 'transport'].forEach(function (id) {
+          const bar = document.getElementById(id);
+          const b = bar && bar.querySelector('#btn-share');
+          if (b) throw new Error('#btn-share is in #' + id + ' with Labs OFF (' + where + ') — the one share door allowed is the person+ on the video');
+        });
       };
       await atPhoneWidth(async function () {
         if (FM.pcTransportLayout) FM.pcTransportLayout();
-        came();
+        inBar('narrowed to 380');
         doors23('narrowed to 380 with Labs off');
       }, 380);
-      came();
+      inBar('back at the runner’s width');
       FM.settings.set('collabLabs', true);
     });
   });
@@ -38970,7 +38960,10 @@
     });
   });
 
-  test('921 S7 with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on the stage, which opens Canvas settings with Friends big and never starts sharing (queue 945), and on a PC it stays beside Export', { item: '921', budgetMs: 120000 }, async function () {
+  /* #983 RENAMED THIS, ON HIS WORD: it was '921 S7 … (queue 945), and on a PC it stays beside Export'. He took that button away —
+     "on pc get rid of the button that was originally to invite friends, as we now have it built into the settings cog" — so the
+     control at the end asserts a PC has no Share button at all, and the phone half is unchanged. */
+  test('921 S7 with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on the stage, which opens Canvas settings with Friends big and never starts sharing (queue 945), and a PC has none — the cog is its way in', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S7('the phone top bar');
     const wasLabs = FM.settings.get('collabLabs');
     let wasPair = null; try { wasPair = localStorage.getItem('fm.cvPair'); } catch (e) {}
@@ -39015,12 +39008,13 @@
           if (C.session) C.end();
         });
       }, 380);
-      /* CONTROL: on a PC nothing moved — beside Export, wherever Export is. */
+      /* On a PC there is none (#983): the one #btn-share is this person+, and above 700 px it has no box. */
       await withLabs921(async function (ui) {
         await atWideWidth(async function () {
           ui.install();
-          const b = document.getElementById('btn-share'), e = document.getElementById('btn-export');
-          if (!b || b.nextSibling !== e) throw new Error('CONTROL: at 1280 #btn-share is not immediately before #btn-export');
+          const b = document.getElementById('btn-share'), t = document.getElementById('transport');
+          if (!b || b.parentNode !== document.getElementById('stage')) throw new Error('at 1280 the one #btn-share is not the person+ on the video (it is in ' + (b && b.parentNode && (b.parentNode.id || b.parentNode.className)) + ')');
+          if (b.getClientRects().length || (t && t.querySelector('#btn-share'))) throw new Error('at 1280 a Share button is on screen or in the transport row — on a PC the cog is the way in (#983)');
         }, 1280);
       });
     }); } finally {
@@ -100588,43 +100582,11 @@
     } finally { chip.className = cls0; if (made) chip.remove(); }
   });
 
-  test('944 on PC a second click on the Share button closes the Share panel — it does not open it again', { item: '944', budgetMs: 90000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const wasHome = FM.home.isOpen();
-    if (wasHome) { FM.home.close(); await sleep(450); }
-    try {
-    await withLabs921(async function (ui) {
-      /* with945: opening Friends is remembered per device (fm.cvPair) — put it back, or every later PC cog opens on Friends. */
-      await with945(async function () { await atWideWidth(async function () {
-        await sleep(300);
-        const b = document.getElementById('btn-share');
-        if (!b || !b.getBoundingClientRect().width) throw new Error('setup: no Share button beside Export on PC with Labs on');
-        /* #978: the Share button opens Canvas settings with Friends big now (the phone's door), hung off this button. */
-        const open = () => { const d = document.getElementById('canvas-dialog'); return !!d && !d.classList.contains('hidden') && d.classList.contains('cv-fr-big'); };
-        /* A click as the browser delivers it: the press goes to whatever is under the pointer when it lands, the click
-           to whatever is under it when it LIFTS — hit-tested again, after anything the press did. That second hit-test is
-           the whole bug: a backdrop that closes on the press is gone by the lift, so the click lands on the button. */
-        const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
-        const press = function () {
-          const down = document.elementFromPoint(x, y);
-          down.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
-          down.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
-          const up = document.elementFromPoint(x, y);
-          (up || down).dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
-          return { down: down, up: up };
-        };
-        const first = press();
-        if (first.down !== b && !b.contains(first.down)) throw new Error('setup: the first press did not land on the Share button (' + (first.down && (first.down.id || first.down.className)) + ')');
-        await hcUntil('the Share panel to open', open, 8000);
-        await sleep(450);   // past the entrance
-        press();   // on PC the button sits above the card's backdrop, so this press reaches the button itself
-        await sleep(700);
-        if (open()) throw new Error('on PC a second click on the Share button left the Share panel open — it shut on the press and opened again on the release (his words: it just reopens it)');
-        ui.close();
-      }, 1280); });
-    });
-    } finally { if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200); }
-  });
+  /* #983 REMOVED '944 on PC a second click on the Share button closes the Share panel — it does not open it again'. The button
+     it pressed — Share beside Export — is gone, on his word: "on pc get rid of the button that was originally to invite friends, as
+     we now have it built into the settings cog". The rule it held (a second press on the PC's friends door closes what the first
+     opened, as the browser really delivers it) is kept on the door that is left: '983 on a PC the settings cog is the way in…'
+     presses the cog twice with Friends big, and the 978 tests close the pair with the same press978. */
 
 
   /* ═══ QUEUE 929 — THE PEOPLE ARE THE AIRPORT SIGN HE PICKED ══════════════════════════════════════════════════════════════
@@ -104075,7 +104037,9 @@
                 FM.selectMode = false; FM.selectLayer(null); FM.syncSelectionChrome(); FM.refreshAll(); await settle921(100);
               }, 390);
             }
-            /* A PC keeps its layout: no door with the feature off, its own Share beside Export with it on. */
+            /* A PC keeps its layout: no door with the feature off — and, since #983, none with it on either. It had its own Share
+               beside Export with the feature on, and he took it away: "on pc get rid of the button that was originally to invite
+               friends, as we now have it built into the settings cog". */
             FM.settings.set('collabLabs', false); C.ui.syncLabs();
             await atWideWidth(async function () {
               if (FM.pcTransportLayout) FM.pcTransportLayout();
@@ -104084,7 +104048,8 @@
               doors23('a PC, feature off');
               FM.settings.set('collabLabs', true); C.ui.syncLabs(); await settle921(80);
               const b2 = document.getElementById('btn-share');
-              if (!b2 || !b2.getClientRects().length || b2.parentNode.id === 'stage') throw new Error('CONTROL: with the feature on the PC has no Share button beside Export');
+              if (!b2 || b2.parentNode.id !== 'stage') throw new Error('CONTROL: with the feature on the one #btn-share is not the person+ on the video (it is in ' + (b2 && b2.parentNode && (b2.parentNode.id || b2.parentNode.className)) + ')');
+              if (b2.getClientRects().length) throw new Error('with the feature on a PC shows a Share button — the cog is the PC’s way in (#983)');
             }, 1280);
           } finally { FM.selectMode = false; FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
         });
@@ -109873,67 +109838,22 @@
     }); });
   });
 
-  test('978 on a PC the Share button opens the pair with Friends big, hung off it, starting nothing — and a second click closes it', { item: '978', budgetMs: 90000 }, async function () {
-    const C = need921S7('the Share button on a PC');
-    const wasHome = FM.home.isOpen();
-    if (wasHome) { FM.home.close(); await sleep(450); }
-    try {
-      await withFakeNet921(async function (net) {
-        await withLabs921(async function (ui) {
-          await with945(async function () {
-            await atWideWidth(async function () {
-              await sleep(300);
-              const pid = FM.projects.currentId();
-              const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
-              const b = document.getElementById('btn-share');
-              if (!b || !b.getBoundingClientRect().width || b.parentNode.id === 'stage') throw new Error('setup: no Share button beside Export on a PC with the feature on');
-              const c0 = net.constructed;
-              const quiet = function (door) {
-                if (C.session) throw new Error(door + ' started a live session');
-                if (ui._relay()) throw new Error(door + ' started the relay');
-                if (ui._wake()) throw new Error(door + ' took a wake lock');
-                if (net.constructed !== c0) throw new Error(door + ' opened ' + (net.constructed - c0) + ' relay socket(s)');
-                if (hostRec921(pid)) throw new Error(door + ' wrote a host record');
-                if (ui._locks().indexOf('fm-collab-host-' + pid) >= 0) throw new Error(door + ' took the host lock');
-              };
-              const first = press978(b);
-              if (first.down !== b && !b.contains(first.down)) throw new Error('setup: the press did not land on the Share button (' + (first.down && (first.down.id || first.down.className)) + ')');
-              await hcUntil('Canvas settings to open', function () { return !dlg.classList.contains('hidden'); }, 8000);
-              await entranceDone(dlg); await sleep(60);
-              if (!dlg.classList.contains('cv-pair') || !dlg.classList.contains('cv-fr-big')) throw new Error('on a PC the Share button did not open Canvas settings with Friends big (' + dlg.className + ')');
-              if (document.getElementById('collab-share') || document.getElementById('collab-profile')) throw new Error('on a PC the Share button still opened the old Share card (or its name prompt)');
-              quiet('the Share button');
-              const br = b.getBoundingClientRect();
-              const at = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
-              if (!at || (at !== b && !b.contains(at))) throw new Error('the Share button is under the blur — its centre is ' + (at && (at.id || at.className)));
-              const right = Math.max(card.getBoundingClientRect().right, fr.getBoundingClientRect().right);
-              if (Math.abs(right - br.right) > 12) throw new Error('the pair (right edge ' + Math.round(right) + ') is not hung off the Share button (' + Math.round(br.right) + ')');
-              if (!document.body.classList.contains('cv-share-src')) throw new Error('hung off Share, the cog was not put back under the blur (no cv-share-src)');
-              press978(b); await sleep(700);
-              if (!dlg.classList.contains('hidden')) throw new Error('a second click on the Share button left the pair open — or opened it again (#944)');
-              quiet('the second click');
-              /* CONTROL: the cog still hangs the pair off the cog. */
-              const cog = document.getElementById('btn-settings');
-              cog.click(); await entranceDone(dlg); await sleep(60);
-              if (dlg.classList.contains('hidden')) throw new Error('CONTROL: the cog did not open Canvas settings after Share');
-              if (document.body.classList.contains('cv-share-src')) throw new Error('CONTROL: after Share, the cog opened the pair still hung off Share');
-              const off = Math.abs(card.getBoundingClientRect().right - cog.getBoundingClientRect().right);
-              if (off > 12) throw new Error('CONTROL: the cog’s pair is ' + Math.round(off) + ' px off the cog');
-              document.getElementById('cv-cancel').click(); await sleep(60);
-            }, 1280);
-          });
-        });
-      });
-    } finally { if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200); }
-  });
+  /* #983 REMOVED '978 on a PC the Share button opens the pair with Friends big, hung off it, starting nothing — and a second click
+     closes it'. That button — Share beside Export, #978's Part 2 — is gone on his word: "on pc get rid of the button that was
+     originally to invite friends, as we now have it built into the settings cog" (his answer NO to #978's ASK 2). What it held
+     for the doors that are left: the cog opening the pair and a second click closing it are in '983 on a PC the settings cog is
+     the way in…', and opening Friends never starting anything is '978 on a PC opening Friends never starts sharing…'. */
 
-  /* #978 review: THE SWITCH IN THE PAIR MOVES THE BUTTON THE PAIR HANGS FROM. On a PC the Friends block holds the only Work
-     with friends switch, and flipping it adds or takes away the Share button beside Export — which shifts the cog along the
-     transport row. The pair was placed once, at open, so turning it on left the pair and its tail pointing at the new Share
-     button (blurred under the scrim) with the lifted cog 42 px to the left of its corner; and turning it off from a pair Share
-     had opened left `cv-share-src` on, the cog blurred under a tail now pointing at it. His clauses 2 and 3 are that picture:
-     hung off the button, the button sharp. */
-  test('978 on a PC the pair stays hung off its button when the switch in its own Friends block moves the bar — on, the cog shifts and the canvas block and its tail follow it; off from a pair Share opened, it hangs off the cog again with the cog sharp', { item: '978', budgetMs: 90000 }, async function () {
+  /* #978 review: THE SWITCH IN THE PAIR MOVED THE BUTTON THE PAIR HANGS FROM. On a PC the Friends block holds the only Work
+     with friends switch, and flipping it added or took away the Share button beside Export — which shifted the cog along the
+     transport row, and the pair was left hanging off where its button USED to be.
+     #983 RENAMED AND RETUNED THIS: it was '978 on a PC the pair stays hung off its button when the switch in its own Friends
+     block moves the bar — on, the cog shifts and the canvas block and its tail follow it; off from a pair Share opened, it hangs
+     off the cog again with the cog sharp'. Share beside Export is gone in every state ("on pc get rid of the button that was
+     originally to invite friends, as we now have it built into the settings cog"), so the switch moves NOTHING in the row any
+     more — which is the stronger form of the same promise: on and off, the cog stays put, and the pair, its tail and the sharp
+     cog stay with it. */
+  test('978 on a PC the switch in the pair’s own Friends block moves nothing in the row — on and off, the cog stays where it was, and the canvas block, its tail and the sharp cog stay with it', { item: '978', budgetMs: 90000 }, async function () {
     const C = need921S7('the Work with friends switch in the PC pair');
     const was = FM.settings.get('collabLabs');
     const wasHome = FM.home.isOpen();
@@ -109954,6 +109874,12 @@
             const at = document.elementFromPoint(kcx, kr.top + kr.height / 2);
             if (!at || (at !== src && !src.contains(at))) throw new Error(what + ': the button the pair hangs from is under the blur — its centre is ' + (at && (at.id || at.className)));
           };
+          const still = function (what, k0) {
+            const k = cog.getBoundingClientRect();
+            if (Math.abs(k.left - k0.left) > 0.5 || Math.abs(k.top - k0.top) > 0.5) throw new Error(what + ': the cog moved (' + Math.round(k0.left) + ',' + Math.round(k0.top) + ' → ' + Math.round(k.left) + ',' + Math.round(k.top) + ') — something joined or left the transport row');
+            const inRow = document.getElementById('transport').querySelector('#btn-share');
+            if (inRow) throw new Error(what + ': a Share button is in the transport row — on a PC the cog is the way in (#983)');
+          };
           FM.settings.set('collabLabs', false); C.ui.syncLabs();
           /* ON: the cog opens the pair, ⤢ to Friends, and its one switch turns the feature on. */
           press978(cog); await entranceDone(dlg); await sleep(60);
@@ -109964,24 +109890,12 @@
           const sw = body.querySelector('[role=switch][aria-checked=false]');
           if (!sw) throw new Error('setup: the Friends block with the feature off has no switch');
           press978(sw);
-          await until921S6('the switch to turn the feature on and put Share beside Export', function () {
-            const b = document.getElementById('btn-share');
-            return C.ui.labsOn() && b && b.parentNode.id !== 'stage' && b.getBoundingClientRect().width > 0 ? b : null;
-          }, 4000);
+          await until921S6('the switch to turn the feature on', function () { return C.ui.labsOn() && C.ui.isInstalled() ? 1 : 0; }, 4000);
           await settle921(80);
-          const k1 = cog.getBoundingClientRect();
-          if (Math.abs(k1.right - k0.right) < 20) throw new Error('setup: turning the feature on did not move the cog (' + Math.round(k0.right) + ' → ' + Math.round(k1.right) + ') — this test would prove nothing');
           if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('turning the feature on in the block closed the pair or left Friends');
+          still('after the switch turned the feature on', k0);
           hung('after the switch turned the feature on', cog);
-          const sb = document.getElementById('btn-share'), sr = sb.getBoundingClientRect();
-          if (document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2) !== dlg) throw new Error('the Share button the switch added is not under the blur — the pair was not opened from it');
-          document.getElementById('cv-cancel').click(); await sleep(60);
-          /* OFF: Share opens the pair hung off itself, and the block's switch turns the feature off — Share leaves the bar. */
-          press978(sb);
-          await hcUntil('Share to open the pair', function () { return !dlg.classList.contains('hidden'); }, 8000);
-          await entranceDone(dlg); await sleep(60);
-          if (!document.body.classList.contains('cv-share-src') || !dlg.classList.contains('cv-fr-big')) throw new Error('setup: Share did not open the pair hung off itself with Friends big');
-          hung('CONTROL, opened from Share', sb);
+          /* OFF: the block's switch turns the feature off again, from the same open pair. */
           const sw2 = body.querySelector('[role=switch][aria-checked=true]');
           if (!sw2) throw new Error('setup: the Friends block with the feature on has no on switch');
           press978(sw2);
@@ -109992,15 +109906,228 @@
             return false;
           }, 6000);
           await settle921(80);
-          if (sb.isConnected && sb.getClientRects().length) throw new Error('setup: the Share button stayed in the bar with the feature off');
           if (!open945(dlg)) throw new Error('turning the feature off in the block closed the pair');
-          if (document.body.classList.contains('cv-share-src')) throw new Error('the Share button left the bar, but the pair still hangs off it (cv-share-src) — the cog stays blurred under a tail pointing at it');
+          still('after the switch turned the feature off', k0);
           hung('after the switch turned the feature off', cog);
           document.getElementById('cv-cancel').click(); await sleep(60);
         }, 1280);
       }); }); });
     } finally {
       FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
+      if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
+    }
+  });
+
+
+  /* ═══ QUEUE 983 — PC: THE SHARE BUTTON BESIDE EXPORT IS GONE; THE SETTINGS COG IS THE WAY IN ═══════════════════════════════
+     His words (29 Sep): "on pc get rid of the button that was originally to invite friends, as we now have it built into the
+     settings cog". The button: Share beside Export (#944, v17.02), which since #978 (v17.12) only opened the same Friends +
+     Canvas pair the cog opens. Gone on a PC in EVERY state — the feature off and on, sharing or not, his project or a friend's
+     — and not hidden with a gap: the row has to lay out exactly as it does with the feature off. The phone's person+ on the
+     video is a different door and stays exactly as it is. Both tests fail on v17.12 (ea1ff320). */
+  function row983() {
+    const t = document.getElementById('transport'), far = document.getElementById('t-far');
+    if (!t || !far) throw new Error('setup: no PC transport row / far run at ' + innerWidth + 'px');
+    const fr = far.getBoundingClientRect(), kr = document.getElementById('btn-settings').getBoundingClientRect(), er = document.getElementById('btn-export').getBoundingClientRect();
+    return { ids: Array.prototype.map.call(far.children, function (c) { return c.id || String(c.className); }).join(' · '), w: fr.width, cog: kr.left, exp: er.left };
+  }
+  function noShare983(where) {
+    const t = document.getElementById('transport');
+    const inRow = t.querySelector('#btn-share');
+    if (inRow) throw new Error(where + ': the transport row still holds the Share button (in #' + (inRow.parentNode && inRow.parentNode.id) + ') — his words: "on pc get rid of the button that was originally to invite friends, as we now have it built into the settings cog"');
+    Array.prototype.forEach.call(t.querySelectorAll('button'), function (x) {
+      const said = (x.getAttribute('aria-label') || '') + ' ' + (x.title || '');
+      if (/share|invite/i.test(said) && x.getClientRects().length) throw new Error(where + ': a button in the transport row still offers sharing (#' + x.id + ', “' + said.trim() + '”)');
+    });
+    const b = document.getElementById('btn-share');
+    if (b && b.getClientRects().length) throw new Error(where + ': a Share button is on screen on a PC (#btn-share in #' + (b.parentNode && b.parentNode.id) + ')');
+  }
+  function sameRow983(where, base, now) {
+    if (now.ids !== base.ids) throw new Error(where + ': the far run is ' + now.ids + ' — with the feature off it is ' + base.ids);
+    if (Math.abs(now.w - base.w) > 0.5) throw new Error(where + ': the far run is ' + Math.round(now.w) + ' px wide, ' + Math.round(base.w) + ' px with the feature off — the row did not lay out as if the button was never there');
+    if (Math.abs(now.cog - base.cog) > 0.5 || Math.abs(now.exp - base.exp) > 0.5) throw new Error(where + ': the cog / Export moved (' + Math.round(base.cog) + '/' + Math.round(base.exp) + ' → ' + Math.round(now.cog) + '/' + Math.round(now.exp) + ')');
+  }
+
+  test('983 on a PC there is no Share button in the transport row at 900, 1280 and 1920 — the feature off and on, sharing or not, his project or a friend’s, across a rebuild — and the row lays out exactly as it does with the feature off', { item: '983', budgetMs: 150000 }, async function () {
+    const C = need921S7('the PC transport row with the feature on');
+    const was = FM.settings.get('collabLabs');
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(450); }
+    const WIDTHS = [900, 1280, 1920];
+    const base = {};
+    const fxIds = [];
+    try {
+      await withFakeNet921(async function () {
+        /* The feature off, then on, at every width — and a narrow-and-widen rebuild of the row in between. */
+        for (const w of WIDTHS) {
+          await atWideWidth(async function () {
+            FM.settings.set('collabLabs', false); C.ui.syncLabs(); await settle921(80);
+            const b0 = base[w] = row983();
+            if (!/btn-settings · btn-export/.test(b0.ids)) throw new Error('CONTROL: at ' + w + ' with the feature off the far run is ' + b0.ids + ' — not the cog then Export, so this row is not the one he uses');
+            noShare983('the feature off at ' + w);
+            FM.settings.set('collabLabs', true); C.ui.syncLabs(); await settle921(80);
+            if (!C.ui.isInstalled()) throw new Error('CONTROL: the feature did not come on at ' + w);
+            noShare983('the feature on at ' + w); sameRow983('the feature on at ' + w, b0, row983());
+            await atPhoneWidth(async function () { if (FM.pcTransportLayout) FM.pcTransportLayout(); await settle921(40); }, 380);
+            if (FM.pcTransportLayout) FM.pcTransportLayout();
+            await settle921(80);
+            noShare983('the feature on, after a rebuild at ' + w); sameRow983('the feature on, after a rebuild at ' + w, b0, row983());
+          }, w);
+        }
+        await withLabs921(async function (ui) {
+          /* Sharing — his project, live, with a friend in it. */
+          await withCollab921([layer921('A')], async function (ctx) {
+            ctx.addGuest({ name: 'Sam' });
+            ui.syncBanner(); if (C.presence && C.presence.refresh) C.presence.refresh();
+            if (!C.session || !C.session.isOwner) throw new Error('CONTROL: the fixture is not his live session');
+            for (const w of WIDTHS) {
+              await atWideWidth(async function () {
+                await settle921(80);
+                noShare983('sharing at ' + w); sameRow983('sharing at ' + w, base[w], row983());
+              }, w);
+            }
+          });
+          /* A friend's copy — he joined someone else's project. */
+          const fx = guest967(C);
+          fxIds.push(fx.gpid);
+          C.attach(fx.G, { autoTick: false });
+          ui.syncBanner();
+          if (!C.session || C.session.isOwner) throw new Error('CONTROL: the fixture is not a friend’s session');
+          for (const w of WIDTHS) {
+            await atWideWidth(async function () {
+              await settle921(80);
+              noShare983('in a friend’s project at ' + w); sameRow983('in a friend’s project at ' + w, base[w], row983());
+            }, w);
+          }
+          await dropFixture967(C, fxIds.splice(0));
+        });
+      });
+      /* CONTROL: the phone keeps its person+ on the video, with the feature on and off. */
+      for (const on of [true, false]) {
+        FM.settings.set('collabLabs', on); C.ui.syncLabs();
+        await atPhoneWidth(async function () {
+          await settle921(80);
+          const b = document.getElementById('btn-share'), st = document.getElementById('stage');
+          if (!b || b.parentNode !== st) throw new Error('CONTROL: at 380 with the feature ' + (on ? 'on' : 'off') + ' the person+ is not on the video (' + (b && b.parentNode && b.parentNode.id) + ')');
+          const r = b.getBoundingClientRect();
+          if (!(r.width >= 24 && r.height >= 24)) throw new Error('CONTROL: at 380 with the feature ' + (on ? 'on' : 'off') + ' the person+ has no box');
+          const cl = b.classList;
+          if (!cl.contains('collab-people') || !cl.contains('cp-invite') || !cl.contains('cs-stagebtn') || cl.contains('cs-door') === on || b.getAttribute('aria-label') !== 'Share live') throw new Error('CONTROL: at 380 the person+ changed — “' + b.className + '” / “' + b.getAttribute('aria-label') + '”');
+        }, 380);
+      }
+    } finally {
+      if (fxIds.length) await dropFixture967(C, fxIds);
+      FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
+      if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
+    }
+  });
+
+  test('983 on a PC the settings cog is the way in — Friends beside Canvas settings, hung off the cog with the cog sharp, a second click closes it — and every other door lands there too: the people chip, LIVE, Home’s Share live…, and a pair the phone’s person+ opened when the window widens', { item: '983', budgetMs: 150000 }, async function () {
+    const C = need921S7('the PC doors to Friends');
+    const wasHome = FM.home.isOpen();
+    if (wasHome) { FM.home.close(); await sleep(450); }
+    let other = null;
+    const orig = FM.projects.currentId();
+    try {
+      await withFakeNet921(async function () { await withLabs921(async function (ui) { await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), fr = document.getElementById('cv-friends');
+        const hung = function (what) {
+          const cog = document.getElementById('btn-settings'), kr = cog.getBoundingClientRect();
+          if (!open945(dlg)) throw new Error(what + ' opened nothing');
+          if (!dlg.classList.contains('cv-pair') || !dlg.classList.contains('cv-fr-big')) throw new Error(what + ' did not open Friends big beside Canvas settings (' + dlg.className + ')');
+          if (!document.body.classList.contains('cv-anchored')) throw new Error(what + ': the pair is not hung off a button — it opened in the middle of the screen');
+          if (!(kr.width > 0)) throw new Error(what + ': there is no cog on screen to hang it from');
+          const right = Math.max(card.getBoundingClientRect().right, fr.getBoundingClientRect().right);
+          if (Math.abs(right - kr.right) > 12) throw new Error(what + ': the pair (right edge ' + Math.round(right) + ') is not hung off the cog (' + Math.round(kr.left) + '..' + Math.round(kr.right) + ')');
+          const at = document.elementFromPoint(kr.left + kr.width / 2, kr.top + kr.height / 2);
+          if (!at || (at !== cog && !cog.contains(at))) throw new Error(what + ': the cog is under the blur — its centre is ' + (at && (at.id || at.className)));
+        };
+        const shut = async function () { FM.closeCanvasDialog(); await sleep(80); };
+        const opened = async function () { await entranceDone(dlg); await land945(); await sleep(60); };
+        await editorWithShape(async function () {
+          await atWideWidth(async function () {
+            const cog = document.getElementById('btn-settings');
+            /* The one #btn-share on a PC is the phone's person+ on the video, with no box. */
+            const pb = document.getElementById('btn-share');
+            if (!pb || !pb.parentNode || pb.parentNode.id !== 'stage') throw new Error('on a PC with the feature on the one #btn-share is in #' + (pb && pb.parentNode && pb.parentNode.id) + ' — it should be the phone’s person+ on the video, with no box here (his words: "on pc get rid of the button that was originally to invite friends, as we now have it built into the settings cog")');
+            /* CONTROL: the cog opens the pair; ⤢ makes Friends big; a second click closes it (the 944 rule, as the browser delivers
+               a click); and the cog comes back on Friends, the block open last. */
+            press978(cog); await entranceDone(dlg); await sleep(60);
+            if (!open945(dlg) || !dlg.classList.contains('cv-pair')) throw new Error('CONTROL: the cog did not open Canvas settings with Friends');
+            document.getElementById('cv-fr-exp').click(); await land945();
+            hung('the cog, then ⤢');
+            await sleep(400);
+            press978(cog); await sleep(500);
+            if (open945(dlg)) throw new Error('a second click on the cog left the pair open, or opened it again — the PC’s friends door must close what it opened (#944)');
+            press978(cog); await opened();
+            hung('the cog reopening on Friends, the block open last');
+            await shut();
+            /* The person+ passes itself to the pair; on a PC it has no box, so the pair hangs from the cog. */
+            ui.openPeople(pb); await opened();
+            hung('the person+ door on a PC');
+            await shut();
+          }, 1280);
+          /* A pair the phone's person+ opened, and then the window widened to a PC's. */
+          await atPhoneWidth(async function () {
+            const pb = document.getElementById('btn-share');
+            pb.click(); await opened();
+            if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: at 380 the person+ did not open Friends big');
+            if (document.body.classList.contains('cv-anchored')) throw new Error('CONTROL: at 380 the pair is hung off a button — a phone centres it');
+            await atWideWidth(async function () {
+              await sleep(250);   // cvOnWidth re-hangs it on a setTimeout, once the row has laid out at the new width
+              hung('a pair the phone’s person+ opened, the window then widened to 1280');
+            }, 1280);
+            await shut();
+          }, 380);
+        });
+        /* Sharing, with a friend in: the faces chip — which a PC shows once somebody is in (#944 hid only its lone invite) —
+           pressed as the browser delivers it, and LIVE, a phone's pill that a PC hides, so its door is called directly. Both
+           must land on the pair off the cog, with his Share panel (Stop sharing) in the Friends block. */
+        await withCollab921([layer921('A')], async function (ctx) {
+          const k = clock921(C);
+          try {
+            rawGuest921(ctx, 'Sam', C.presence.PALETTE[0]).pr({});   // a friend who is here (a presence frame), so the chip has a face
+            k.step(100);
+            await atWideWidth(async function () {
+              ui.syncBanner(); C.presence.tick(); C.presence._draw(); await settle921(200);
+              const live = document.getElementById('collab-live'), chip = document.getElementById('collab-people');
+              if (!live || !chip) throw new Error('setup: sharing, there is no LIVE pill (' + !!live + ') or people chip (' + !!chip + ') in the page');
+              if (!chip.getClientRects().length || chip.classList.contains('cp-invite')) throw new Error('setup: with a friend in, the faces chip is not on screen at 1280 (' + chip.className + ')');
+              const got = press978(chip);
+              if (got.down !== chip && !chip.contains(got.down)) throw new Error('setup: the press did not land on the faces chip (' + (got.down && (got.down.id || got.down.className)) + ')');
+              await opened();
+              hung('the faces chip');
+              if (!document.querySelector('#cv-fr-body .cs-stop')) throw new Error('the faces chip did not open his Share panel in the Friends block');
+              await shut();
+              live.click(); await opened();
+              hung('LIVE');
+              if (!document.querySelector('#cv-fr-body .cs-stop')) throw new Error('LIVE did not open his Share panel in the Friends block');
+              await shut();
+            }, 1280);
+          } finally { C.presence._clock(null); }
+        });
+        /* Home's "Share live…" on a PC: it opens the project, then the pair off the cog. */
+        other = await FM.projects.create({ name: 'Home 983', width: 320, height: 240 });
+        await atWideWidth(async function () {
+          FM.home.open(); await settle921(450);
+          const c = document.querySelector('.hm-card[data-pid="' + other + '"]');
+          if (!c) throw new Error('setup: the project is not on Home');
+          c.querySelector('.hm-card-more').click();
+          const item = Array.prototype.filter.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return x.textContent.trim() === 'Share live…'; })[0];
+          if (!item) { FM.contextMenu.hide(); throw new Error('setup: the ⋯ of an unshared project has no Share live…'); }
+          item.click();
+          await until921S6('Share live… to open the pair', function () { return !dlg.classList.contains('hidden') && dlg.classList.contains('cv-fr-big') ? 1 : 0; }, 6000)
+            .catch(function () { throw new Error('on a PC Home’s Share live… opened nothing'); });
+          await opened();
+          hung('Home’s Share live…');
+          if (C.session) throw new Error('Home’s Share live… started sharing by itself');
+          await shut();
+        }, 1280);
+      }); }); });
+    } finally {
+      try { FM.contextMenu.hide(); } catch (e) {}
+      if (FM.home.isOpen()) FM.home.close();
+      if (other) { try { if (FM.projects.currentId() === other && orig) await FM.projects.open(orig); await FM.projects.remove(other); } catch (e) {} }
       if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
     }
   });

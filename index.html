@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=736">
+<link rel="stylesheet" href="styles.css?v=737">
 <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -1028,7 +1028,7 @@
     </div>
     <!-- queue 945: FRIENDS — the live-sharing block that opens WITH Canvas settings (his design: a bar above the card; ⤢ swaps
          them, and the small one always sits on top). The pair, every width (#978): on a PC it hangs off the cog, side by side
-         where there is room, and the Share button beside Export opens it with Friends big.
+         where there is room (the Share button beside Export that also opened it went with #983 — the cog is the PC's door).
          AFTER the canvas card, so every "the dialog's first .export-card / first button" lookup still finds the canvas.
          The body is drawn by js/collab-ui.js (U.renderFriends) and never starts sharing by being opened. -->
     <div id="cv-friends" role="group" aria-label="Friends">
@@ -1110,7 +1110,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=58"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=463"></script>
+  <script src="js/app.js?v=464"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=14"></script>
@@ -1152,7 +1152,7 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=16"></script>
+  <script src="js/collab-ui.js?v=17"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->

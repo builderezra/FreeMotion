@@ -8371,9 +8371,8 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #canvas-dialog.cv-pair.cv-side.cv-flying > .export-card > :not(.cv-mini):not(.dialog-actions) { width: 310px; }
   #canvas-dialog.cv-pair.cv-side.cv-flying > .export-card > .dialog-actions { width: 358px; }
   #canvas-dialog.cv-pair.cv-side.cv-flying > #cv-friends > #cv-fr-body { width: 358px; }
-  /* Opened from the Share button beside Export: the pair hangs from Share (popFrom's .pop-src lifts it), and the cog goes
-     back under the blur — a press on it lands on the backdrop and closes (#944), it does not reopen. */
-  body.cv-anchored.cv-share-src #btn-settings { z-index: auto; }
+  /* (#983: `body.cv-anchored.cv-share-src #btn-settings { z-index: auto }` — the cog back under the blur while the pair hung
+     off the Share button beside Export — went with that button. Every PC door hangs the pair from the cog now.) */
   @keyframes cv-grow {
     from { opacity: 0; transform: scale(.82) translate(6px, -10px); }
     to   { opacity: 1; transform: scale(1) translate(0, 0); }
@@ -10631,7 +10630,8 @@ body.text-editing .collab-people { display: none; }
    chip stays with layers selected. In Select it was the one way to the people, and to Stop sharing, that vanished.) */
 /* queue 944 — ON PC THE CHIP DOES NOT OFFER AN INVITE. His words: "On PC, get rid of the little plus at the top left to add friends.
    There's already another button for on PC". Alone, the chip is only an invite (+ and a person), and on a desktop the Share button
-   beside Export already is one. With people in the room it shows their faces, and that stays. */
+   beside Export already is one. With people in the room it shows their faces, and that stays.
+   (#983: that Share button is gone too — the PC's invite is the cog, which opens Friends beside Canvas settings, #978.) */
 @media (min-width: 701px) { #collab-people.cp-invite { display: none; } }
 .collab-people .cp-av {
   position: relative; flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
@@ -10834,9 +10834,13 @@ body.text-editing .collab-people { display: none; }
    a pick says so (Home's Join, the Settings order, the off switch). */
 /* The person+ on the video: a 44 px target round its 28 px circle (it was 44 × 40). With the feature off it is the
    phone's one door (§23 as relaxed: one button, no network, no listeners), and a PC never shows it — the PC's Share
-   comes with the feature, beside Export. */
+   comes with the feature, beside Export.
+   #983 — …and a PC never shows it WITH the feature either: "on pc get rid of the button that was originally to invite friends,
+   as we now have it built into the settings cog". The Share beside Export is gone (it is not in the transport row in any
+   state), and the one #btn-share left is this person+, on the video at every width — so above a phone's width it has no box,
+   on or off, sharing or not. The PC's way in is the cog: Friends beside Canvas settings (#978). */
 #btn-share.cs-stagebtn::before { inset: -8px; }
-@media (min-width: 701px) { #btn-share.cs-door { display: none; } }
+@media (min-width: 701px) { #btn-share { display: none; } }
 /* LIVE on the video (his pick A): a red pill right of the chip while he shares — even with nobody in, so shared and not
    shared no longer look the same — and a dark one with a green dot, "Live · <owner>", for a friend. Placed by collab-ui.js
    (placeLive) just past the chip, whose width is whatever the faces make it. A tap opens the people / Leave. */
