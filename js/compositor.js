@@ -10048,7 +10048,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   function renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM) {
     const tr = layer.transform || {};
-    const sz = (FM.layerSize ? FM.layerSize(layer) : { w: PW, h: PH });
+    const sz = layerSizeAt(layer, t) || { w: PW, h: PH };   // the crop at THIS frame, not the playhead's (#986 review)
     const sc = Math.abs(FM.evalProp(tr.scale, t) || 1);
     // Half the diagonal is the exact bound on how far the layer can reach from its anchor under ANY
     // rotation, so it is both tight and safe. transform.x/y are ABSOLUTE project coordinates of the
@@ -10734,7 +10734,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const proj = (scene && scene.project) || FM.scene.project;
       const media = !!layer && (layer.type === 'video' || layer.type === 'image');
       const M = media && scene ? layerCTM(layer, t, scene) : null;
-      const sz = M && FM.layerSize ? FM.layerSize(layer) : null;
+      /* The frame at t, not at the playhead: the exporter draws frame t without moving FM.time, so a keyframed crop
+         sized by FM.layerSize exported every frame with the vignette of wherever the playhead was parked (#986
+         review, measured: 98442 channel values off, up to 72 levels). layerSizeAt reads the crop at the frame drawn. */
+      const sz = M ? layerSizeAt(layer, t) : null;
       B.save();
       B.globalCompositeOperation = 'source-atop'; B.globalAlpha = 1; B.filter = 'none';
       B.setTransform(s, 0, 0, s, -oX * s, -oY * s);            // project units → this plate's pixels
@@ -10746,12 +10749,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           B.transform(M.a, M.b, M.c, M.d, M.e, M.f);           // …and the clip's own space on top of that
           const tr = layer.transform || {};
           cx = sz.w * (0.5 - anchorX(tr)); cy = sz.h * (0.5 - anchorY(tr)); R = Math.hypot(sz.w, sz.h) / 2;
-          let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-          [[oX, oY], [oX + W / s, oY], [oX, oY + H / s], [oX + W / s, oY + H / s]].forEach(q => {
-            const lx = I.a * q[0] + I.c * q[1] + I.e, ly = I.b * q[0] + I.d * q[1] + I.f;
-            if (lx < x0) x0 = lx; if (lx > x1) x1 = lx; if (ly < y0) y0 = ly; if (ly > y1) y1 = ly;
-          });
-          cover = [x0, y0, x1 - x0, y1 - y0];
+          /* ONLY THE CLIP'S OWN FRAME, the rect the inline vignette always filled. What the media draw puts on this
+             plate OUTSIDE the frame — Glow's halo, the layer's own shadow — is not the picture, and a plate-wide fill
+             darkened it, by the full Amount past the half-diagonal (#986 review, measured: the halo round a clip at
+             60% went from a mean of 50.5 to 16.5). source-atop still keeps a PNG's clear corners clear. */
+          cover = [-sz.w * anchorX(tr), -sz.h * anchorY(tr), sz.w, sz.h];
         }
       }
       if (R > 0) {
@@ -11835,22 +11837,48 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.drawImage(A, 0, 0);                                           // the original stays exactly where it is
       if (n < 2) return;
       // How far the content reaches along the repeat axis — the honest basis for "one copy over".
-      const along = Math.abs(Math.cos(ang)) * bb.w + Math.abs(Math.sin(ang)) * bb.h;
-      const step = Math.max(1, along * spread);
+      const alongOf = (w, h) => Math.abs(Math.cos(ang)) * w + Math.abs(Math.sin(ang)) * h;
       /* #986 C27: the copies are offsets of the whole layer, so a clip half off the frame repeats as a whole clip —
          the plate the copies are drawn from reaches as far past the edge as the furthest copy looks. The original
          (drawn above, from A) is untouched. */
-      const offs = [];
-      for (let i = 1; i < n; i++) {
-        const dx = Math.round(Math.cos(ang) * step * i);
-        const dy = Math.round(Math.sin(ang) * step * i);
-        // Nothing to see once a copy has walked entirely off the frame; stop rather than pay for it.
-        if (dx <= -W || dx >= W || dy <= -H || dy >= H) break;
-        const a = fade ? 1 - fade * (i / (n - 1)) : 1;
-        if (fade && a <= 0.004) break;
-        offs.push([dx, dy, a]);
+      const offsAt = (along) => {
+        const step = Math.max(1, along * spread), offs = [];
+        for (let i = 1; i < n; i++) {
+          const dx = Math.round(Math.cos(ang) * step * i);
+          const dy = Math.round(Math.sin(ang) * step * i);
+          // Nothing to see once a copy has walked entirely off the frame; stop rather than pay for it.
+          if (dx <= -W || dx >= W || dy <= -H || dy >= H) break;
+          const a = fade ? 1 - fade * (i / (n - 1)) : 1;
+          if (fade && a <= 0.004) break;
+          offs.push([dx, dy, a]);
+        }
+        return offs;
+      };
+      const mats = (offs) => offs.map(q => new DOMMatrix().translateSelf(q[0], q[1]));
+      let offs = offsAt(alongOf(bb.w, bb.h)), src = null;
+      /* …AND "ONE COPY OVER" HAS TO MEAN THE CONTENT THE COPIES DRAW (#986 review). bb is the ON-FRAME alpha box, so a
+         clip half off the frame stepped by its visible half while each copy drew the whole clip: at Spacing 100 every
+         copy overlapped the one before it by the off-frame width and covered part of the original (measured: 4480 of
+         its 11200 visible pixels). Where the layer's own box runs past the plate, and bb reaches that edge (so the
+         frame is what cut it), bb is extended to the layer's edge on that side; an in-frame layer keeps bb exactly.
+         Used only when the copies really come from the expanded plate — copies of A are copies of what bb measured. */
+      const box = (expand && layer && scene) ? layerAABB(layer, t, scene) : null;
+      if (box) {
+        const oX = A.__fmOX || 0, oY = A.__fmOY || 0, s = ps > 0 ? ps : 1;
+        const px0 = (box.x0 - oX) * s, px1 = (box.x1 - oX) * s, py0 = (box.y0 - oY) * s, py1 = (box.y1 - oY) * s;
+        let ex0 = bb.x, ex1 = bb.x + bb.w, ey0 = bb.y, ey1 = bb.y + bb.h;
+        if (px0 < 0 && ex0 <= 0.5) ex0 = px0;
+        if (px1 > W && ex1 >= W - 0.5) ex1 = px1;
+        if (py0 < 0 && ey0 <= 0.5) ey0 = py0;
+        if (py1 > H && ey1 >= H - 0.5) ey1 = py1;
+        if (ex1 - ex0 > bb.w + 0.5 || ey1 - ey0 > bb.h + 0.5) {
+          const whole = offsAt(alongOf(ex1 - ex0, ey1 - ey0));
+          // every whole copy already off the frame → none to draw; no plate past the edge after all → copies of A, by bb
+          const s2 = whole.length ? moverSource(A, W, H, ps, expand, layer, t, scene, mats(whole)) : { cv: A, x: 0, y: 0 };
+          if (s2.cv !== A || !whole.length) { offs = whole; src = s2; }
+        }
       }
-      const src = moverSource(A, W, H, ps, expand, layer, t, scene, offs.map(q => new DOMMatrix().translateSelf(q[0], q[1])));
+      if (!src) src = moverSource(A, W, H, ps, expand, layer, t, scene, mats(offs));
       for (const q of offs) {
         if (fade) {
           B.save(); B.globalAlpha = q[2]; B.drawImage(src.cv, q[0] + src.x, q[1] + src.y); B.restore();
@@ -13072,10 +13100,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return c.getTransform();
   }
   FM._layerCTM = layerCTM;   // exposed for the motion-blur tests
+  /* FM.layerSize answers for the PLAYHEAD: a cropped clip's frame is its crop at FM.time, which is right for the
+     selection box and wrong for a render at any other t. The exporter renders frame t without moving FM.time, so
+     anything that sizes a clip while RENDERING asks here instead — the crop at the frame being drawn, the rule
+     drawCopyBg and Magnify already follow. Same answer as layerSize whenever the crop is not keyframed or t is the
+     playhead. (#986 review: a keyframed crop exported every frame with the vignette of wherever the playhead sat.) */
+  function layerSizeAt(l, t) {
+    const sz = FM.layerSize ? FM.layerSize(l) : null;
+    if (!sz || !l || !(l.type === 'video' || l.type === 'image') || !l.crop || !FM.cropOf || t == null) return sz;
+    const cr = FM.cropOf(l, t);
+    return (cr && cr.w > 0 && cr.h > 0) ? { w: cr.w, h: cr.h } : sz;
+  }
   /* A layer's axis-aligned box in PROJECT px at time t: its transform box under its full CTM (parents included) —
-     the same four corners drawSquish walks for its plate estimate. Layer-vs-layer collision reads it (queue 539). */
+     the same four corners drawSquish walks for its plate estimate. Layer-vs-layer collision reads it (queue 539).
+     Its size is the crop at t (layerSizeAt), so an exported frame gets the same box the preview does at that frame. */
   function layerAABB(l, t, scene) {
-    const sz = FM.layerSize ? FM.layerSize(l) : null; if (!sz) return null;
+    const sz = layerSizeAt(l, t); if (!sz) return null;
     const tr = l.transform || {}, kx = anchorX(tr), ky = anchorY(tr), bw = sz.w || 0, bh = sz.h || 0;
     const M = layerCTM(l, t, scene);
     if (!M) {

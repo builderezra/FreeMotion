@@ -111847,4 +111847,127 @@
     } finally { delete T.POSTFX.__spy986; delete T.PIXEL_FX.__spy986; }
   });
 
+  /* ═══ #986 review fixes — three things the first build got wrong, each measured on a15fac8d before it was fixed. ═══ */
+  test('986 C8 an exported frame of a clip with a keyframed crop gets that frame’s vignette and layer box, not the playhead’s', { item: '986', budgetMs: 60000 }, function () {
+    /* The exporter renders frame t WITHOUT moving FM.time, and FM.layerSize reads the crop at FM.time. MEASURED on
+       a15fac8d: a Vignette on a photo whose crop shrinks 240x320 → 80x120 over 4 s, exported at t=2 with the playhead
+       parked at 0, differed from the same frame rendered with the playhead at 2 in 98442 channel values (up to 72 levels);
+       on 913186b6 the two were byte-identical (the inline vignette read the crop at t). The layer box, which decides
+       whether Shake and the other movers get the plate past the frame edge, read the playhead's crop on both. */
+    const W = 240, H = 320;
+    const art = document.createElement('canvas'); art.width = W; art.height = H;
+    const ax = art.getContext('2d'); const gr = ax.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#f0e0c0'); gr.addColorStop(1, '#80c0f0'); ax.fillStyle = gr; ax.fillRect(0, 0, W, H);
+    const had = FM.media.get('_986kfc');
+    FM.media.set('_986kfc', { kind: 'image', el: art, width: W, height: H, duration: 0 });
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 4, v: b, e: 'linear' }] });
+    const clip = (fx, sc) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_986kfc'; l.transform.scale = sc || 1; l.crop = { x: 0, y: 0, w: kf(240, 80), h: kf(320, 120) }; l.effects = fx; return l; };
+    const scene = (layers) => ({ project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] });
+    const diff = (a, b) => { let n = 0, mx = 0; for (let i = 0; i < a.d.length; i++) { const d = Math.abs(a.d[i] - b.d[i]); if (d > 1) n++; if (d > mx) mx = d; } return [n, mx]; };
+    const was = { time: FM.time, exp: FM._exporting };
+    const bad = [];
+    try {
+      FM._exporting = true;   // the exporter's own flag — the crop tool's preview-only whole frame stays out of it
+      FM.time = 0; const sz0 = FM.layerSize(clip([])); FM.time = 2; const sz2 = FM.layerSize(clip([]));
+      if (!(Math.abs(sz0.w - sz2.w) > 50)) throw new Error('CONTROL: the crop is not keyframed — layerSize reads ' + sz0.w + ' at 0 s and ' + sz2.w + ' at 2 s');
+      for (const rs of [1, 0.5]) {
+        FM.time = 2;
+        const bare = _986shot([clip([])], 2, W, H, rs), atT = _986shot([clip([_986fx('vignette', { amount: 0.8, size: 20 })])], 2, W, H, rs);
+        if (!(diff(bare, atT)[0] > 1000)) throw new Error('CONTROL at scale ' + rs + ': the vignette does not change the frame');
+        FM.time = 0;
+        const parked = _986shot([clip([_986fx('vignette', { amount: 0.8, size: 20 })])], 2, W, H, rs);
+        const [n, mx] = diff(parked, atT);
+        if (n) bad.push('at scale ' + rs + ' the vignette exported at 2 s with the playhead at 0 differs from the same frame with the playhead at 2 in ' + n + ' values (up to ' + mx + ' levels)');
+        // Shake on a clip at 130% that runs past the frame at 0.5 s and sits inside it by 4 s: the frame at 0.5 s must not
+        // depend on where the playhead is (the layer box decides whether the shake draws from the plate past the edge)
+        const shaken = () => [clip([_986fx('shake', { amount: 20, twist: 0, speed: 3 })], 1.3)];
+        FM.time = 0.5; const here = _986shot(shaken(), 0.5, W, H, rs, null);
+        FM.time = 4; const away = _986shot(shaken(), 0.5, W, H, rs, null);
+        const [n2, mx2] = diff(away, here);
+        if (n2) bad.push('at scale ' + rs + ' a Shake exported at 0.5 s with the playhead at 4 s differs from the same frame with the playhead at 0.5 s in ' + n2 + ' values (up to ' + mx2 + ' levels)');
+      }
+      // …and the layer box itself, which layer-vs-layer collision reads as well
+      const L = clip([]), sc = scene([L]);
+      FM.time = 0; const b0 = FM._layerAABB(L, 2, sc); FM.time = 2; const b2 = FM._layerAABB(L, 2, sc);
+      if (!b0 || !b2) throw new Error('CONTROL: FM._layerAABB gave no box');
+      if (['x0', 'y0', 'x1', 'y1'].some(k => Math.abs(b0[k] - b2[k]) > 0.01)) bad.push('the layer box at 2 s is ' + [b0.x0, b0.y0, b0.x1, b0.y1].map(v => v.toFixed(1)) + ' with the playhead at 0 and ' + [b2.x0, b2.y0, b2.x1, b2.y1].map(v => v.toFixed(1)) + ' with it at 2 — it reads the playhead’s crop');
+    } finally {
+      FM.time = was.time; FM._exporting = was.exp;
+      if (had) FM.media.set('_986kfc', had); else if (FM.media.remove) FM.media.remove('_986kfc');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C8 a clip’s vignette darkens only the clip, not its Glow or its own shadow outside the frame', { item: '986' }, function () {
+    /* The one-renderer vignette filled the whole plate (source-atop), so everything the clip drew OUTSIDE its frame got
+       darkened too. MEASURED on a15fac8d: Glow round a photo at 60% had its halo's mean go from 50.5 to 16.5 with a
+       Vignette added (28176 values changed outside the clip); on 913186b6 the halo was untouched. The layer's own shadow
+       was darkened the same way — and on 913186b6 the inline vignette CAST that shadow, painting it again outside. */
+    const W = 240, H = 320;
+    const art = document.createElement('canvas'); art.width = W; art.height = H;
+    const ax = art.getContext('2d'); ax.fillStyle = '#f0e0c0'; ax.fillRect(0, 0, W, H);
+    const had = FM.media.get('_986halo');
+    FM.media.set('_986halo', { kind: 'image', el: art, width: W, height: H, duration: 0 });
+    const clip = (fx, sc, rot, shadow) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_986halo'; l.transform.scale = sc; if (rot) l.transform.rotation = rot; if (shadow) l.shadow = { enabled: true, blur: 12, dx: 14, dy: 14, color: '#40ff40', alpha: 100 }; l.effects = fx; return l; };
+    const V = () => _986fx('vignette', { amount: 0.8, size: 20 });
+    const bad = [];
+    try {
+      for (const [sc, rot] of [[0.6, 0], [0.7, 15]]) for (const rs of [1, 0.5]) {
+        // pixels more than 3 px outside the clip's rotated frame
+        const outside = (fn) => { const th = -rot * Math.PI / 180, hw = W * sc / 2 + 3, hh = H * sc / 2 + 3; const w = Math.round(W * rs), h = Math.round(H * rs);
+          for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const px = (x + 0.5) / rs - W / 2, py = (y + 0.5) / rs - H / 2;
+            if (Math.abs(px * Math.cos(th) - py * Math.sin(th)) < hw && Math.abs(px * Math.sin(th) + py * Math.cos(th)) < hh) continue; fn((y * w + x) * 4); } };
+        const cmp = (a, b) => { let n = 0, mx = 0, sa = 0, sb = 0, c = 0; outside(i => { for (let k = 0; k < 4; k++) { const d = Math.abs(a.d[i + k] - b.d[i + k]); if (d > 1) n++; if (d > mx) mx = d; } sa += a.d[i] + a.d[i + 1] + a.d[i + 2]; sb += b.d[i] + b.d[i + 1] + b.d[i + 2]; c++; }); return { n: n, mx: mx, ma: sa / c, mb: sb / c }; };
+        const where = 'on a clip at ' + Math.round(sc * 100) + '%' + (rot ? ' turned ' + rot + '°' : '') + ', scale ' + rs;
+        const g = _986shot([clip([_986fx('glow')], sc, rot)], 0.5, W, H, rs), gv = _986shot([clip([_986fx('glow'), V()], sc, rot)], 0.5, W, H, rs);
+        const r1 = cmp(gv, g);
+        if (!(r1.mb > 15)) throw new Error('CONTROL ' + where + ': Glow drew no halo outside the clip (mean ' + r1.mb.toFixed(1) + ')');
+        if (r1.n) bad.push('Glow with a Vignette ' + where + ': ' + r1.n + ' values of the halo outside the clip changed (mean ' + r1.mb.toFixed(1) + ' → ' + r1.ma.toFixed(1) + ')');
+        const s = _986shot([clip([], sc, rot, 1)], 0.5, W, H, rs), sv = _986shot([clip([V()], sc, rot, 1)], 0.5, W, H, rs);
+        const r2 = cmp(sv, s);
+        if (!(r2.mb > 15)) throw new Error('CONTROL ' + where + ': the shadow drew nothing outside the clip (mean ' + r2.mb.toFixed(1) + ')');
+        if (r2.n) bad.push('the layer’s shadow with a Vignette ' + where + ': ' + r2.n + ' values outside the clip changed, up to ' + r2.mx + ' levels (mean ' + r2.mb.toFixed(1) + ' → ' + r2.ma.toFixed(1) + ')');
+        // …while the vignette still darkens the clip's own corner
+        const c0 = _986shot([clip([], sc, rot)], 0.5, W, H, rs), c1 = _986shot([clip([V()], sc, rot)], 0.5, W, H, rs);
+        const th = rot * Math.PI / 180, lx = -W * sc / 2 + 8, ly = -H * sc / 2 + 8;
+        const cx = Math.round((W / 2 + lx * Math.cos(th) - ly * Math.sin(th)) * rs), cy = Math.round((H / 2 + lx * Math.sin(th) + ly * Math.cos(th)) * rs), ci = (cy * Math.round(W * rs) + cx) * 4;
+        if (!(c1.d[ci] < c0.d[ci] - 60)) bad.push('the vignette no longer darkens the clip’s own corner ' + where + ' (' + c0.d[ci] + ' → ' + c1.d[ci] + ')');
+      }
+    } finally { if (had) FM.media.set('_986halo', had); else if (FM.media.remove) FM.media.remove('_986halo'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C27 Trail of a clip half off the frame lays whole copies one after another, none over the original', { item: '986' }, function () {
+    /* Spacing 100 means one copy over, edge to edge. The copies became whole clips (from the plate past the edge) while
+       the step was still measured from the ON-FRAME part. MEASURED on a15fac8d: a 120-wide photo with half of it past the
+       left edge, Trail 4 at spacing 100 — the first copy covered 4480 of the original's 11200 visible pixels; on 913186b6
+       none were covered, but each copy was only the visible 80 px. */
+    const W = 400, H = 320;   // wide enough that the first copy is never cut by the right edge
+    const art = document.createElement('canvas'); art.width = 240; art.height = 320;
+    const ax = art.getContext('2d'); const gr = ax.createLinearGradient(0, 0, 240, 0); gr.addColorStop(0, '#ff0000'); gr.addColorStop(1, '#0000ff'); ax.fillStyle = gr; ax.fillRect(0, 0, 240, 320);
+    const had = FM.media.get('_986trail');
+    FM.media.set('_986trail', { kind: 'image', el: art, width: 240, height: 320, duration: 0 });
+    const clip = (x, fx) => { const l = FM.makeLayer('image', { x: x, y: H / 2, start: 0, duration: 4 }); l.id = '_986trail'; l.transform.scale = 0.5; l.effects = fx; return l; };
+    const trail = () => [_986fx('linearrepeat', { count: 4, spacing: 100 })];
+    const bad = [];
+    try {
+      for (const rs of [1, 0.5]) {
+        const w = Math.round(W * rs), row = Math.round(160 * rs);
+        const runs = (r) => { const out = []; let start = -1; for (let x = 0; x <= w; x++) { const i = (row * w + x) * 4; const on = x < w && r.d[i + 3] > 128; if (on && start < 0) start = x; if (!on && start >= 0) { out.push([start, x]); start = -1; } } return out; };
+        // CONTROL: the same clip fully inside the frame repeats edge to edge in whole copies
+        const inRuns = runs(_986shot([clip(60, trail())], 0.5, W, H, rs, null));   // no background: the runs are the clip's own ink
+        if (!(inRuns.length >= 2 && Math.abs(inRuns[1][1] - inRuns[1][0] - 120 * rs) <= 2)) throw new Error('CONTROL at scale ' + rs + ': the in-frame clip’s Trail runs are ' + JSON.stringify(inRuns) + ', not whole 120 px copies');
+        const bare = _986shot([clip(20, [])], 0.5, W, H, rs, null), tr = _986shot([clip(20, trail())], 0.5, W, H, rs, null);
+        let covered = 0, tot = 0;
+        for (let y = Math.round(90 * rs); y < Math.round(230 * rs); y++) for (let x = 0; x < Math.round(80 * rs); x++) {
+          const i = (y * w + x) * 4; tot++;
+          if (Math.abs(bare.d[i] - tr.d[i]) > 4 || Math.abs(bare.d[i + 2] - tr.d[i + 2]) > 4) covered++;
+        }
+        if (covered) bad.push('at scale ' + rs + ' the copies cover ' + covered + ' of the ' + tot + ' pixels of the original’s visible part');
+        const r = runs(tr);
+        if (!(r.length >= 2 && Math.abs(r[1][1] - r[1][0] - 120 * rs) <= 2)) bad.push('at scale ' + rs + ' the first copy is not one whole clip (' + Math.round(120 * rs) + ' px) standing clear of the original: runs of ink ' + JSON.stringify(r));
+      }
+    } finally { if (had) FM.media.set('_986trail', had); else if (FM.media.remove) FM.media.remove('_986trail'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
