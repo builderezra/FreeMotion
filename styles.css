@@ -707,7 +707,7 @@ body.text-editing .sb-wrap { display: none !important; }
    .dh-t-a / .dh-t-b / .dh-t-c on #drop-hint) and the line colour on every clap ('clapper.lines' → .dh-grey):
      A — open, then a clap every 6 s while the project stays empty (dh-clap / dh-jolt / dh-whack, as shipped in v17.07)
      B — one clap, then it stays shut (…-b, 1000 ms, once)
-     C — non-stop, a clap every 1.6 s (…-c)
+     C — non-stop, a clap every 3.6 s (…-c) — it was 1.6 s until queue 988 (below)
    All three slam at 470 ms into their cycle (the keyframes are the plan's §5d blocks, tools/design/plans/2026-09-26-
    clapper/plan.md). The CHOICE rides on custom properties, never on a more specific `animation` rule: the Home and
    reduced-motion rules below switch `animation` off on the same three elements at their own specificity, and a
@@ -715,7 +715,7 @@ body.text-editing .sb-wrap { display: none !important; }
    for less motion. With no class (the first frame, or FM.variant missing) the defaults are A. */
 #drop-hint { --dh-clap: dh-clap; --dh-jolt: dh-jolt; --dh-whack: dh-whack; --dh-dur: 6s; --dh-n: infinite; }
 #drop-hint.dh-t-b { --dh-clap: dh-clap-b; --dh-jolt: dh-jolt-b; --dh-whack: dh-whack-b; --dh-dur: 1000ms; --dh-n: 1; }
-#drop-hint.dh-t-c { --dh-clap: dh-clap-c; --dh-jolt: dh-jolt-c; --dh-whack: dh-whack-c; --dh-dur: 1600ms; --dh-n: infinite; }
+#drop-hint.dh-t-c { --dh-clap: dh-clap-c; --dh-jolt: dh-jolt-c; --dh-whack: dh-whack-c; --dh-dur: 3600ms; --dh-n: infinite; }
 .dh-stick { transform-box: view-box; transform-origin: 0 0; animation: var(--dh-clap) var(--dh-dur) .4s var(--dh-n) both; }
 .dh-body { animation: var(--dh-jolt) var(--dh-dur) .4s var(--dh-n) both; }
 .dh-whack path { opacity: 0; stroke-dasharray: 1 2; stroke-dashoffset: 1; animation: var(--dh-whack) var(--dh-dur) .4s var(--dh-n) both; }
@@ -764,28 +764,35 @@ body.text-editing .sb-wrap { display: none !important; }
   54% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
   70%, 100% { opacity: 0; stroke-dashoffset: -.95; }
 }
-/* C — non-stop (plan §5d): 1600 ms, the slam at 29.375% = 470 ms, open again by the end so the loop has no seam. */
+/* C — non-stop, SLOWER (queue 988). Ezra, 29 Sep, on his phone: *"The snap animation for when a project is empty goes too
+   fast - like it repeats instantly but should repeat a bit slower"*. At 1600 ms C sat shut for 0.3 s and was already
+   lifting for the next clap — a snap every 1.6 s with no rest between. Now 3600 ms: the clap itself is untouched, in
+   milliseconds (lift 300→380, SLAM at 470 = 13.056%, rebound 530, shut by 600, lines gone by 700), then it rests shut
+   for 2.3 s and lifts open over the last 0.7 s, so 100% = 0% and the loop has no seam — the same shape as A with a shorter
+   rest. 3.6 s, not 3 or 4: a clear pause between snaps, still a little over half of A's 6 s so the three options stay
+   different to compare (he has not picked; they stay random). A (6 s) and B (once) are as they were — "repeats
+   instantly" can only be C. */
 @keyframes dh-clap-c {
   0% { transform: rotate(-20.32deg); }
-  18.75% { transform: rotate(-20.32deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
-  23.75% { transform: rotate(-23.32deg); animation-timing-function: cubic-bezier(.6, 0, 1, .6); }
-  29.375% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
-  33.125% { transform: rotate(4.18deg); animation-timing-function: ease-in; }
-  37.5% { transform: rotate(7.68deg); }
-  56.25% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  8.333% { transform: rotate(-20.32deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
+  10.556% { transform: rotate(-23.32deg); animation-timing-function: cubic-bezier(.6, 0, 1, .6); }
+  13.056% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  14.722% { transform: rotate(4.18deg); animation-timing-function: ease-in; }
+  16.667% { transform: rotate(7.68deg); }
+  80.556% { transform: rotate(7.68deg); animation-timing-function: cubic-bezier(.45, 0, .25, 1); }
   100% { transform: rotate(-20.32deg); }
 }
 @keyframes dh-jolt-c {
   0% { transform: translateY(0px); }
-  29.375% { transform: translateY(0px); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
-  31.875% { transform: translateY(.5px); animation-timing-function: ease-in; }
-  37.5%, 100% { transform: translateY(0px); }
+  13.056% { transform: translateY(0px); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  14.167% { transform: translateY(.5px); animation-timing-function: ease-in; }
+  16.667%, 100% { transform: translateY(0px); }
 }
 @keyframes dh-whack-c {
-  0%, 29.313% { opacity: 0; stroke-dashoffset: 1; }
-  29.375% { opacity: 1; stroke-dashoffset: .7; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
-  33.75% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
-  43.75%, 100% { opacity: 0; stroke-dashoffset: -.95; }
+  0%, 13.028% { opacity: 0; stroke-dashoffset: 1; }
+  13.056% { opacity: 1; stroke-dashoffset: .7; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  15% { opacity: 1; stroke-dashoffset: 0; animation-timing-function: ease-in; }
+  19.444%, 100% { opacity: 0; stroke-dashoffset: -.95; }
 }
 body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path { animation: none; }
 @media (prefers-reduced-motion: reduce) { .dh-stick, .dh-body, .dh-whack path { animation: none; } }

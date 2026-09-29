@@ -84121,11 +84121,12 @@
       danger.disabled = cleared.d; cleared = null;
 
       /* LIVE: his switch, inside the open panel, re-themes it without closing it. */
-      const row = [].find.call(p.querySelectorAll('.set-row'), r => /New light look/.test(r.textContent));
+      // (#990 renamed his switch Toggle dark mode — ON is dark — so the same tap from the light Home still turns it dark)
+      const row = [].find.call(p.querySelectorAll('.set-row'), r => /Toggle dark mode/.test(r.textContent));
       const sw = row && row.querySelector('.set-switch');
-      if (!sw) throw new Error('setup: the New light look switch is not in the panel');
+      if (!sw) throw new Error('setup: the Toggle dark mode switch is not in the panel');
       sw.click(); await sleep912(60);
-      if (html.getAttribute('data-home') !== 'dark') throw new Error('setup: the switch did not turn the light look off');
+      if (html.getAttribute('data-home') !== 'dark') throw new Error('setup: the switch did not turn dark mode on');
       if (lum912(getComputedStyle(p).backgroundColor) > 0.15) throw new Error('light look switched OFF with Settings open and the panel is still ' + getComputedStyle(p).backgroundColor + ' — it only re-themes on the next open');
       sw.click(); await sleep912(60);
       if (lum912(over912(getComputedStyle(p).backgroundColor, behind)) < 0.8) throw new Error('switched back ON and the panel stayed dark (' + getComputedStyle(p).backgroundColor + ')');
@@ -108584,7 +108585,7 @@
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // nothing claps there, by design ('957 the empty project clapper…' holds that)
     if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the clapper can only ever play one timing (queue 974)');
     return onEmptyStage974(async function () {
-      const want = { A: { name: 'dh-clap', it: Infinity, lo: 4000, hi: 8000 }, B: { name: 'dh-clap-b', it: 1, lo: 700, hi: 1600 }, C: { name: 'dh-clap-c', it: Infinity, lo: 1200, hi: 2000 } };
+      const want = { A: { name: 'dh-clap', it: Infinity, lo: 4000, hi: 8000 }, B: { name: 'dh-clap-b', it: 1, lo: 700, hi: 1600 }, C: { name: 'dh-clap-c', it: Infinity, lo: 3000, hi: 4500 } };   // C: 1.6 s until #988 slowed it to 3.6 s
       for (const v of ['A', 'B', 'C']) {
         const d = await clapFresh974(v, 'cyan');
         const m = clapSample974(d);
@@ -108641,7 +108642,7 @@
     });
   });
 
-  test('974 the clapper\'s impact lines: cyan or grey, a new pick on every clap', { item: '974', budgetMs: 20000 }, async function () {
+  test('974 the clapper\'s impact lines: cyan or grey, a new pick on every clap', { item: '974', budgetMs: 30000 }, async function () {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the clapper\'s lines can only ever be one colour (queue 974)');
     return onEmptyStage974(async function () {
@@ -108659,7 +108660,8 @@
       if (cyan !== accent) throw new Error('with cyan chosen the lines are ' + cyan + ', not the accent ' + accent);
       if (cyan === grey) throw new Error('CONTROL: cyan and grey came out the same colour (' + cyan + '), so neither check above means anything');
       /* EVERY CLAP picks again. Real time (a seek does not fire animationiteration — measured), on timing C: 0.4 s delay +
-         two 1.6 s laps. Counted in the log, which is exactly what he would be read back. */
+         two laps (1.6 s each until #988, 3.6 s since — read off the animation, not assumed). Counted in the log, which is
+         exactly what he would be read back. */
       d = await clapFresh974('C');
       // counted by time, not by length: the log keeps the newest 50 per animation, so a full log does not grow
       const since = Date.now() + 1;
@@ -108667,9 +108669,10 @@
       const n0 = count();
       const stick = d.querySelector('.dh-stick').getAnimations()[0];
       const t0 = stick ? stick.currentTime : null;
-      await sleep(400 + 1600 * 2 + 400);
+      const lap = stick ? stick.effect.getComputedTiming().duration : 1600;
+      await sleep(400 + lap * 2 + 400);
       const moved = stick ? stick.currentTime - t0 : 0;
-      if (!(moved > 3000)) throw new Error('CONTROL: the clap\'s clock moved ' + moved + 'ms in 4.4 s, so animations are not running here and this cannot count claps');
+      if (!(moved > lap * 2)) throw new Error('CONTROL: the clap\'s clock moved ' + moved + 'ms in ' + ((800 + lap * 2) / 1000) + ' s, so animations are not running here and this cannot count claps');
       const n1 = count();
       if (n1 - n0 < 2) throw new Error('two claps went by and the line colour was picked ' + (n1 - n0) + ' more time(s) - it is picked again on every clap');
     });
@@ -110002,6 +110005,277 @@
     } finally {
       FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
       if (wasHome && !FM.home.isOpen()) FM.home.open(); await sleep(200);
+    }
+  });
+
+
+  /* ═══ #988 — THE EMPTY PROJECT'S CLAPPER, TIMING C, REPEATS A BIT SLOWER ═══════════════════════════════════════════
+     His words (29 Sep, with a screenshot of an empty project on his iPhone, the clapperboard circled): "The snap animation
+     for when a project is empty goes too fast - like it repeats instantly but should repeat a bit slower".
+     Since #974 the timing is random per open: A open + every 6 s, B once, C non-stop — and C lapped every 1.6 s, shut for
+     only 0.3 s before it lifted again. Measured ON THE DRAWING through the same seeked CTM read as '974 the clapper's three
+     timings…' (clapSample974): C must clap at most every 3 s, with the stick lying still and shut for at least 2 s between
+     snaps, the snap itself unchanged (shut 470 ms in, as A) and open again at the seam. CONTROL: A and B are what they
+     were — A a 6 s lap, B one clap — so a red here is C, not the reading. */
+  test('988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were', { item: '988', budgetMs: 30000 }, async function () {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // nothing claps there, by design
+    if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - there is no timing C to slow down (queue 974)');
+    return onEmptyStage974(async function () {
+      const got = {};
+      for (const v of ['A', 'B', 'C']) {
+        const d = await clapFresh974(v, 'cyan');
+        const m = clapSample974(d, 0);
+        if (!m.clap) throw new Error('with timing ' + v + ' chosen nothing animates the stick');
+        const period = m.tm.duration, S = [];
+        for (let ms = 0; ms < period; ms += 20) S.push(m.at(ms));
+        const hit = S.filter(s => s.deg < 1)[0];
+        if (!hit) throw new Error('timing ' + v + ': the stick never shuts in its ' + period + ' ms cycle');
+        /* the longest stretch after the snap where the stick lies shut and does not move (the rebound is 3.5 degrees, so
+           it is not counted). MEASURED: A's shut stretch reads 4720 ms against the 4700 ms its keyframes draw (600 → 5300,
+           at 20 ms steps), so the seek's noise is far under both the 0.3-degree and the 0.05-degree-per-step thresholds. */
+        let run = 0, best = 0;
+        for (let i = 1; i < S.length; i++) {
+          if (S[i].ms <= hit.ms) continue;
+          if (S[i].deg < 0.3 && Math.abs(S[i].deg - S[i - 1].deg) < 0.05) { run += 20; best = Math.max(best, run); } else run = 0;
+        }
+        got[v] = { period: period, it: m.tm.iterations, hit: hit.ms, still: best, seam: m.at(period).deg };
+        m.running.forEach(a => a.play());
+      }
+      const C = got.C, A = got.A, B = got.B, say = JSON.stringify(got).replace(/"/g, "'");
+      // CONTROL — A and B are untouched: A one clap every 6 s, B one clap and then shut
+      if (A.period !== 6000 || A.it !== Infinity) throw new Error('CONTROL: timing A changed - it laps every ' + A.period + ' ms, ' + A.it + ' times (it is his 6 s, open then every 6 s): ' + say);
+      if (B.period !== 1000 || B.it !== 1) throw new Error('CONTROL: timing B changed - ' + B.period + ' ms, ' + B.it + ' time(s) (it claps once): ' + say);
+      if (!(A.still >= 4000)) throw new Error('CONTROL: timing A reads only ' + A.still + ' ms still between its claps, so this reading cannot see a rest at all: ' + say);
+      // HIS BUG — C repeated almost at once
+      if (C.it !== Infinity) throw new Error('timing C no longer repeats (' + C.it + ') - it is the non-stop option, only slower');
+      if (!(C.period >= 3000)) throw new Error('timing C claps every ' + (C.period / 1000).toFixed(1) + ' s - his "it repeats instantly but should repeat a bit slower": ' + say);
+      if (!(C.period <= 4500)) throw new Error('timing C now claps only every ' + (C.period / 1000).toFixed(1) + ' s - he asked for "a bit slower", and A is already the slow one: ' + say);
+      if (!(C.still >= 2000)) throw new Error('timing C lies still for only ' + C.still + ' ms between snaps - no clear gap, it is lifting for the next one straight away: ' + say);
+      if (Math.abs(C.hit - A.hit) > 30) throw new Error('timing C now shuts ' + C.hit + ' ms into its cycle, A at ' + A.hit + ' - the snap itself was meant to stay as it was: ' + say);
+      if (!(C.seam > 20)) throw new Error('at the end of its cycle timing C is ' + C.seam.toFixed(1) + ' degrees open - the next lap would start shut, a seam: ' + say);
+    });
+  });
+
+  /* ═══ #989 — AFTER A REFRESH THE HOME ARROW DRAWS ONCE, FROM ITS START ═════════════════════════════════════════════
+     His words (29 Sep): "The drawn arrow is currently a bit buggy and broken when you refresh the page it draws from the
+     middle and start at ththe same time".
+     MEASURED (a real reload at 390 and 1280, light and dark, frames captured): a reload inside the session opens Home with
+     no intro, the arrow starts drawing at ~0.2 s, and ~0.45 s later Home's thumbnail grab re-renders the grid; render()
+     cleared the half-drawn arrow — it had just reached the curl in the middle — and a new one began again from the start.
+     So this is REAL RELOADS of a REAL instance (the rig921 frames on their own origin, tests/collab-agent.js), with the
+     frame ON SCREEN so it paints: a boot-time recorder in the frame reads, every painted frame, how much of the arrow's main
+     stroke is drawn and how many arrows are up. Three launches, each checked on its cold boot and again after a reload:
+     390 light; 390 dark; 1280 light with a project made and deleted first (a warm reload with projects deleted).
+     Pass: every frame shows at most one arrow, the first frame it shows is near its start, the drawn part never goes
+     backwards (a new draw from the start shows as a drop), and it ends drawn in full. CONTROL: the recorder caught the
+     arrow mid-draw (the frame really painted), and Home re-rendered while it was up after the reload (his case happened). */
+  function arrowRun989(rec, label, needRender) {
+    const pct = f => Math.round(f * 100) + '%';
+    const S = (rec && rec.s || []).filter(s => s.vis && s.f != null);
+    if (!S.length) throw new Error(label + ': the arrow to the + never showed on the empty Projects tab (' + JSON.stringify({ projects: rec && rec.projects, home: rec && rec.homeOpen }).replace(/"/g, "'") + ')');
+    const two = S.filter(s => s.n > 1)[0];
+    if (two) throw new Error(label + ': at ' + two.t + ' ms there were ' + two.n + ' arrows on screen at once');
+    const mid = S.filter(s => s.f > 0.05 && s.f < 0.95);
+    if (mid.length < 3) throw new Error(label + ': CONTROL: only ' + mid.length + ' painted frames caught the arrow mid-draw - this frame is not being painted, so a second draw could not be seen here');
+    if (S[0].f > 0.15) throw new Error(label + ': the arrow first showed already ' + pct(S[0].f) + ' drawn (at ' + S[0].t + ' ms) - it did not draw from its start');
+    for (let i = 1; i < S.length; i++) {
+      if (S[i].f < S[i - 1].f - 0.02) throw new Error(label + ': the arrow drew to ' + pct(S[i - 1].f) + ' (at ' + S[i - 1].t + ' ms) and then began again from ' + pct(S[i].f) + ' (at ' + S[i].t + ' ms) - two draws, his "draws from the middle and start at the same time"' + (rec.grid.some(g => g >= S[i - 1].t - 40 && g <= S[i].t) ? ' (Home had just re-rendered)' : ''));
+    }
+    const last = S[S.length - 1];
+    if (last.f < 0.99) throw new Error(label + ': the arrow ended only ' + pct(last.f) + ' drawn');
+    const renders = rec.grid.filter(g => g > S[0].t).length;
+    if (needRender && !renders) throw new Error(label + ': CONTROL: Home never re-rendered while the arrow was up, so his case (a re-render mid-draw) did not happen here: ' + JSON.stringify(rec.grid));
+    return { from: S[0].t, frames: S.length, renders: renders };
+  }
+  test('989 after a real reload the Home arrow draws once - one front from its start to the tip, never again from the start - on the phone and the PC, light and dark', { item: '989', budgetMs: 240000 }, async function () {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // the arrow is drawn still there: nothing to draw twice
+    const R = rig921();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const cases = [
+      { tag: 'r989a', w: 390, h: 844, look: 'light' },
+      { tag: 'r989b', w: 390, h: 844, look: 'dark' },
+      { tag: 'r989c', w: 1280, h: 800, look: 'light', deleted: true }
+    ];
+    const rows = [];
+    await onScreen924(async function () {
+      for (const c of cases) {
+        try {
+          const src = 'http://' + c.tag + '.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&fmseed=0&rec989=1&tag=' + c.tag;
+          await R.bootSrc(c.tag, src, c.w, c.h);
+          const f = document.querySelector('iframe[src*="tag=' + c.tag + '"]');
+          if (!f) throw new Error('setup: the ' + c.tag + ' frame is not in the page');
+          f.style.left = '0px'; f.style.top = '0px'; f.style.zIndex = '2147483000';   // ON SCREEN: an off-screen frame is not painted
+          const settled = async (what) => R.until(what, async () => {
+            const r = await R.rpc(c.tag, 'arrow989');
+            const v = r && r.s.filter(s => s.vis && s.f != null);
+            return v && v.length && r.now - v[0].t > 2800 ? r : null;
+          }, 40000);
+          const cold = await settled(c.tag + ' to boot and draw its arrow');
+          rows.push(c.tag + ' cold ' + JSON.stringify(arrowRun989(cold, c.w + ' light, the first launch', false)));
+          if (c.look === 'dark') {
+            await R.rpc(c.tag, 'settings', { key: 'homeLight', value: false });
+            await sleep(200);
+          }
+          if (c.deleted) {
+            const m = await R.rpc(c.tag, 'fresh936make');
+            if (m.projects !== 1) throw new Error('setup: ' + c.tag + ' could not make a project to delete');
+            const dl = await R.rpc(c.tag, 'fresh936delete');
+            if (dl.projects !== 0 || !dl.homeOpen) throw new Error('setup: deleting the project did not bring ' + c.tag + ' back to the empty Projects tab');
+          }
+          await R.reboot(c.tag);   // A REAL RELOAD: location.replace, inside the same session (no intro), as a pull-to-refresh
+          const warm = await settled(c.tag + ' to draw its arrow after the reload');
+          if (warm.look !== c.look) throw new Error('setup: after the reload ' + c.tag + ' shows the ' + warm.look + ' Home, not ' + c.look);
+          if (warm.w !== c.w) throw new Error('setup: the ' + c.tag + ' frame is ' + warm.w + ' wide, not ' + c.w);
+          rows.push(c.tag + ' reload ' + JSON.stringify(arrowRun989(warm, c.w + ' ' + c.look + (c.deleted ? ' (projects deleted)' : '') + ', after a reload', true)));
+        } finally { R.drop(c.tag); }
+      }
+    });
+    window.__fm989rows = rows;
+  });
+
+  /* ═══ #990 — THE LOOK SWITCH JUST SAYS "TOGGLE DARK MODE" ══════════════════════════════════════════════════════════
+     His words (29 Sep): "Make the dark mode light mode toggle just say toggle dark mode and get rid of explanation".
+     It was "New light look" with a paragraph about the white projects screen. Now the row is those three words and nothing
+     else, and the switch means what it says: ON is the dark Home. The stored setting keeps its meaning (homeLight, true =
+     light) so every saved look stays as it was — ON writes homeLight false. CONTROL: the Home's own ground really changes
+     between the two positions (measured, not read off the attribute). */
+  test('990 the look switch in Settings reads exactly Toggle dark mode with no explanation, and turning it ON gives the dark Home', { item: '990', budgetMs: 30000 }, async function () {
+    const html = document.documentElement, look0 = html.getAttribute('data-home'), wasLight = FM.settings.get('homeLight'), wasOpen = FM.home.isOpen();
+    const homeGround = () => lum912(getComputedStyle(document.getElementById('home-screen')).backgroundColor);
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep912(400); }
+      FM.settings.set('homeLight', true); await sleep912(80);
+      FM.settings.open(); await sleep912(380);
+      const p = lastPanel912();
+      if (!p) throw new Error('setup: Settings did not open');
+      const rows = [].filter.call(p.querySelectorAll('.set-row'), r => /dark mode|light look|dark look/i.test(r.textContent));
+      if (rows.length !== 1) throw new Error('Settings has ' + rows.length + ' rows about the dark or light look (' + rows.map(r => r.textContent.trim().slice(0, 60)).join(' | ') + ') - there should be one');
+      const row = rows[0], label = row.querySelector('.set-label'), sw = row.querySelector('.set-switch');
+      if (!label || label.textContent !== 'Toggle dark mode') throw new Error('the look switch is labelled ' + JSON.stringify(label ? label.textContent : null).replace(/"/g, "'") + ' - he asked for it to just say Toggle dark mode');
+      if (row.querySelector('.set-hint')) throw new Error('the look switch still has an explanation under it: ' + JSON.stringify(row.querySelector('.set-hint').textContent).replace(/"/g, "'") + ' - he asked to get rid of it');
+      if (row.textContent.trim() !== 'Toggle dark mode') throw new Error('the row reads ' + JSON.stringify(row.textContent.trim()).replace(/"/g, "'") + ' - nothing but Toggle dark mode');
+      if (!sw) throw new Error('the Toggle dark mode row has no switch');
+      if (sw.getAttribute('aria-label') !== 'Toggle dark mode') throw new Error('the switch is announced as ' + sw.getAttribute('aria-label') + ', not Toggle dark mode');
+      // the light Home: the switch is OFF
+      const g0 = homeGround();
+      if (html.getAttribute('data-home') !== 'light' || sw.getAttribute('aria-checked') !== 'false' || sw.classList.contains('on')) throw new Error('on the LIGHT Home the dark mode switch reads ' + sw.getAttribute('aria-checked') + ' - it must be OFF (the label says what ON does)');
+      // ON = the dark Home, stored the old way round
+      sw.click(); await sleep912(120);
+      if (sw.getAttribute('aria-checked') !== 'true' || !sw.classList.contains('on')) throw new Error('a tap did not turn Toggle dark mode ON (' + sw.getAttribute('aria-checked') + ')');
+      if (html.getAttribute('data-home') !== 'dark') throw new Error('Toggle dark mode is ON and the Home is ' + html.getAttribute('data-home') + ' - ON must be the dark Home');
+      if (FM.settings.get('homeLight') !== false) throw new Error('with dark mode ON the saved setting reads homeLight ' + FM.settings.get('homeLight') + ' - the stored meaning must stay (true = light) or every saved look flips');
+      const g1 = homeGround();
+      if (!(g1 < 0.2 && g0 > 0.6)) throw new Error('CONTROL: the Home ground went from luminance ' + g0.toFixed(2) + ' to ' + g1.toFixed(2) + ' - it did not turn dark');
+      // and OFF again = light
+      sw.click(); await sleep912(120);
+      if (sw.getAttribute('aria-checked') !== 'false' || html.getAttribute('data-home') !== 'light' || FM.settings.get('homeLight') !== true) throw new Error('turning Toggle dark mode OFF did not bring the light Home back (' + html.getAttribute('data-home') + ', homeLight ' + FM.settings.get('homeLight') + ')');
+    } finally {
+      try { FM.settings.close(); } catch (e) {}
+      await sleep912(300);
+      FM.settings.set('homeLight', wasLight);
+      if (look0 == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', look0);
+      try { if (wasOpen && !FM.home.isOpen()) FM.home.open(); else if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep912(150);
+    }
+  });
+
+  /* ═══ #991 — ON THE PHONE THE SUGGESTED NAME CLEARS ITSELF WHEN HE GOES TO TYPE ════════════════════════════════════
+     His words (29 Sep): "On mobile when naming a project you have to delete the text saying project 1 before you start
+     typing - just make it auto delete that when you want to name ur project".
+     The phone does not auto-focus the name (the keyboard would push Create off screen), so his tap put the caret after
+     "Project N" and what he typed was added to it. Driven with a REAL finger and REAL keys at 390 (tests/_cdp.py), with the
+     page answering the pointer questions as his phone does ((hover: hover) and (pointer: fine) is false — the one gate the
+     dialog reads to decide whether to focus the field itself). Tap +, tap the name, type Beach: the project is Beach, not
+     Project NBeach. An untouched name still makes Project N, and so does tapping into the field and leaving it empty.
+     Rename… (Home ⋯) the same way: the old name is selected when it opens, so typing replaces it.
+     CONTROL: the tap really focused the field, and the keys really typed (a letter reached the field). */
+  function key991(ch) {
+    const up = ch.toUpperCase();
+    return { t: 'key', key: ch, code: 'Key' + up, vk: up.charCodeAt(0), text: ch, ms: 40 };
+  }
+  test('991 on the phone the New project name clears itself when he goes to type - a real tap and Beach makes Beach, an untouched name still makes Project N', { item: '991', budgetMs: 150000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], mm = window.matchMedia;
+    let remembered = null; try { remembered = localStorage.getItem('fm.newproj'); } catch (e) {}
+    const dlg = document.getElementById('hm-dialog');
+    const openDialog = async function () {
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+      const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+      if (tab && !tab.classList.contains('active')) { tab.click(); await sleep(300); }
+      await h3aTap(document.getElementById('hm-new'), 'a tap on + (new project)');
+      await hcUntil('the New project dialog', () => !dlg.classList.contains('hidden'), 4000);
+      await sleep(800);   // #947/#974: the + has its own entrance - a real finger waits for the card to land
+      return document.getElementById('hm-new-name');
+    };
+    const create = async function (what) {
+      const before = FM.projects.currentId();
+      await h3aTap(document.getElementById('hm-create'), 'a tap on Create (' + what + ')');
+      await hcUntil('the new project to open (' + what + ')', () => FM.projects.currentId() !== before && !FM.home.isOpen(), 8000);
+      await sleep(400);
+      made.push(FM.projects.currentId());
+      return FM.scene.project && FM.scene.project.name;
+    };
+    const type = async function (text, what) { await realInput924(text.split('').map(key991), what); await sleep(120); };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      window.matchMedia = function (q) {   // his phone: no hover, a coarse pointer - the dialog does not focus the field itself
+        if (/\(hover:\s*hover\)|\(pointer:\s*fine\)|\(any-hover:\s*hover\)/.test(q)) return { matches: false, media: q, addEventListener: function () {}, removeEventListener: function () {}, addListener: function () {}, removeListener: function () {} };
+        if (/\(hover:\s*none\)|\(pointer:\s*coarse\)/.test(q)) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {}, addListener: function () {}, removeListener: function () {} };
+        return mm.call(window, q);
+      };
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          /* 1 — tap the name, type Beach */
+          let inp = await openDialog();
+          const def1 = inp.value;
+          if (!/^Project \d+$/.test(def1)) throw new Error('setup: the dialog suggests ' + JSON.stringify(def1).replace(/"/g, "'") + ', not a Project N');
+          if (document.activeElement === inp) throw new Error('setup: the name field was focused before he touched it - this is not his phone (the dialog focuses it only with a mouse and keyboard)');
+          await h3aTap(inp, 'a tap on the name field');
+          if (document.activeElement !== inp) throw new Error('CONTROL: the tap on the name field did not focus it (' + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + ')');
+          await type('Beach', 'typing Beach');
+          if (!/Beach$/.test(inp.value)) throw new Error('CONTROL: real keys did not type into the field (it reads ' + JSON.stringify(inp.value).replace(/"/g, "'") + ')');
+          if (inp.value !== 'Beach') throw new Error('he tapped the name and typed Beach, and the name is ' + JSON.stringify(inp.value).replace(/"/g, "'") + ' - he still has to delete ' + def1 + ' first');
+          const n1 = await create('Beach');
+          if (n1 !== 'Beach') throw new Error('he named it Beach and the project opened as ' + JSON.stringify(n1).replace(/"/g, "'"));
+          /* 2 — untouched: Project N */
+          inp = await openDialog();
+          const def2 = inp.value;
+          if (!/^Project \d+$/.test(def2)) throw new Error('setup: the second dialog suggests ' + JSON.stringify(def2).replace(/"/g, "'"));
+          const n2 = await create('untouched');
+          if (n2 !== def2) throw new Error('with the name left alone the project is ' + JSON.stringify(n2).replace(/"/g, "'") + ', not ' + def2);
+          /* 3 — tapped into, nothing typed: Project N, and the field shows it again */
+          inp = await openDialog();
+          const def3 = inp.value;
+          await h3aTap(inp, 'a tap on the name field, then nothing typed');
+          if (document.activeElement !== inp) throw new Error('CONTROL: the second tap on the name field did not focus it');
+          if (inp.value !== '' || inp.placeholder !== def3) throw new Error('tapped into the name, the field reads ' + JSON.stringify(inp.value).replace(/"/g, "'") + ' with the hint ' + JSON.stringify(inp.placeholder).replace(/"/g, "'") + ' - the suggestion should clear and stay on show as the hint (' + def3 + ')');
+          const n3 = await create('tapped in, left empty');
+          if (n3 !== def3) throw new Error('he tapped into the name and typed nothing, and the project is ' + JSON.stringify(n3).replace(/"/g, "'") + ', not ' + def3);
+          /* 4 — Rename… on the Beach card: the old name goes the moment he types */
+          FM.home.open(); await sleep(900);
+          const card = [].find.call(document.querySelectorAll('#home-screen .hm-card'), c => { const nm = c.querySelector('.hm-name'); return nm && nm.textContent === 'Beach'; });
+          if (!card) throw new Error('setup: no Beach card on Home to rename');
+          card.scrollIntoView({ block: 'center' }); await sleep(300);
+          await h3aTap(card.querySelector('.hm-card-more'), 'a tap on the Beach card’s ⋯');
+          await h3aTap(await hcMenuItem(/Rename/), 'a tap on Rename…');
+          const ask = await hcUntil('the Rename box', () => { const a = document.querySelector('#fm-ask:not(.hidden) .fm-ask-input:not(.hidden)'); return a || null; }, 3000);
+          await sleep(300);
+          await type('Dunes', 'typing Dunes into Rename');
+          if (ask.value !== 'Dunes') throw new Error('Rename opened on Beach and he typed Dunes: the box reads ' + JSON.stringify(ask.value).replace(/"/g, "'") + ' - he would have to delete the old name first');
+          await h3aTap(document.querySelector('#fm-ask .fm-ask-ok'), 'a tap on Rename');
+          await sleep(500);
+          const renamed = FM.projects.list().filter(p => made.indexOf(p.id) >= 0).map(p => p.name);
+          if (renamed.indexOf('Dunes') < 0) throw new Error('Rename did not rename Beach to Dunes: ' + JSON.stringify(renamed).replace(/"/g, "'"));
+        });
+      }, 390);
+    } finally {
+      window.matchMedia = mm;
+      try { dlg.classList.add('hidden'); } catch (e) {}
+      try { const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const c = a.querySelector('.fm-ask-cancel'); if (c) c.click(); } } catch (e) {}
+      try { if (remembered == null) localStorage.removeItem('fm.newproj'); else localStorage.setItem('fm.newproj', remembered); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
     }
   });
 

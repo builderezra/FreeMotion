@@ -240,6 +240,13 @@
     /* queue 936: what a fresh start left behind — projects listed, one open, the empty state, the OPEN badge, and
        every project doc in storage (a fresh start must write none). */
     fresh936: function () { return snap936(); },
+    /* #989: what the boot's arrow recorder (window.__fm989, below) saw, with this boot's clock now */
+    arrow989: function () {
+      const r = window.__fm989;
+      if (!r) return null;
+      return { now: Math.round(performance.now() - r.t0), s: r.s.slice(), grid: r.grid.slice(), look: document.documentElement.getAttribute('data-home'),
+        w: innerWidth, projects: snap936().projects, homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()) };
+    },
     /* queue 942: into the editor on a project, as he leaves the app from inside one */
     enterEditor942: async function () {
       if (!FM.projects.currentId()) await FM.projects.create({ name: 'In the editor', confirmed: true });
@@ -452,6 +459,44 @@
     for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * hz * i / rate) * 24000), true);
     return new Blob([buf], { type: 'audio/wav' });
   }
+
+  /* #989: THE HOME ARROW'S DRAW, WATCHED FROM THE FIRST SCRIPT OF EVERY BOOT. His words (29 Sep): "when you refresh the
+     page it draws from the middle and start at the same time". A snapshot taken after the reload can only see the finished
+     arrow, so every painted frame from here on records how much of the arrow's main stroke is drawn (its mask path's dash:
+     1 - offset / dash, what is on screen) and how many arrows are up, and every rebuild of Home's grid is timed. Recorded
+     only — nothing here touches the arrow. Read back by the arrow989 action. Needs the frame ON SCREEN: an off-screen frame
+     is not painted, so neither its rAF nor its animations move (the test puts it there). Only in a frame booted with
+     `rec989=1` (a reload keeps it), so no other Tier-3 frame pays for a per-frame read it does not need. */
+  window.__fm989 = param('rec989') === '1' ? { t0: performance.now(), s: [], grid: [] } : null;
+  if (window.__fm989) (function () {
+    const rec = window.__fm989, ids = new WeakMap();
+    let n = 0;
+    const frac = function (svg) {
+      const mp = svg.querySelector('mask path');
+      if (!mp) return null;
+      const cs = getComputedStyle(mp), dash = parseFloat(cs.strokeDasharray), off = parseFloat(cs.strokeDashoffset);
+      if (!(dash > 0)) return 1;                                    // a still arrow has no dash: drawn in full
+      return Math.max(0, Math.min(1, 1 - (off || 0) / dash));
+    };
+    const tick = function () {
+      const t = Math.round(performance.now() - rec.t0);
+      const all = document.querySelectorAll('svg[id^="hm-arrow936"]');
+      if (all.length) {
+        const a = all[0], home = document.getElementById('home-screen');
+        if (!ids.has(a)) ids.set(a, ++n);
+        rec.s.push({ t: t, n: all.length, id: ids.get(a), f: frac(a),
+          vis: !!home && !home.classList.contains('hidden') && !home.classList.contains('hm-preintro') });
+      }
+      if (rec.s.length < 4000 && t < 30000) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    const watchGrid = function () {                                 // render() empties the grid and fills it again
+      const g = document.querySelector('#home-screen .hm-grid');
+      if (!g) { if (performance.now() - rec.t0 < 30000) setTimeout(watchGrid, 30); return; }
+      new MutationObserver(function () { rec.grid.push(Math.round(performance.now() - rec.t0)); }).observe(g, { childList: true });
+    };
+    watchGrid();
+  })();
 
   /* #967: every arm from here on, and whether Home was on screen when it happened; and every toast. Recorded only — both
      calls go straight through — so a relaunch can be judged by what happened during it, not only by what is left. */

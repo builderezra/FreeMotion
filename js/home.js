@@ -1730,6 +1730,7 @@ window.FM = window.FM || {};
      played behind the logo. */
   function arrowSoon() {
     if (!FM.homeArrow || !root) return;
+    if (FM.homeArrow.hold) FM.homeArrow.hold();   // queue 989: still empty — the arrow that is up stays until its redraw takes over
     // not isOpen(): render() runs INSIDE open(), before the screen is un-hidden; one frame later it is laid out
     // …and a timer as well as the frame: a page the browser is not painting (hidden, or off screen) runs no frames at all
     const draw = () => {
@@ -2532,7 +2533,10 @@ window.FM = window.FM || {};
     document.body.classList.toggle('hm-selecting', selectMode);   // hides the pins and the + while selecting (a finger still scrolls — see selectify)
     grid.innerHTML = '';
     shownIds = [];
-    if (FM.homeArrow) FM.homeArrow.clear();   // queue 936: the drawn arrow belongs to the EMPTY Projects tab only — redrawn below when it is
+    // queue 936: the drawn arrow belongs to the EMPTY Projects tab only — redrawn below when it is. queue 989: on a Home that
+    // is already on screen (a thumbnail grab, a migrate, a sort change) the clear is SOFT — arrowSoon() below holds the arrow
+    // and its redraw carries the draw on from where it was, instead of starting it again from the middle of it
+    if (FM.homeArrow) FM.homeArrow.clear({ soft: !root.classList.contains('hidden') });
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     // header Select toggle (built once, kept in sync)
     const selBtn = document.getElementById('hm-select-btn');
@@ -3066,6 +3070,18 @@ window.FM = window.FM || {};
     f.backTimer = setTimeout(() => { if (npFx === f) dlg.classList.add('hidden'); }, NP_FX_BACK_MS + 30);
   }
 
+  /* queue 991 — THE SUGGESTED NAME GETS OUT OF HIS WAY. Ezra, 29 Sep: *"On mobile when naming a project you have to delete
+     the text saying project 1 before you start typing - just make it auto delete that when you want to name ur project"*.
+     On a phone the field is not auto-focused (the keyboard would push Create off screen — below), so his tap put the caret
+     after "Project 1" and "Beach" became "Project 1Beach" (reproduced with a real tap at 390). A select-all on focus is the
+     obvious answer and the riskier one for his phone: iOS Safari is known to place the caret from the tap AFTER the focus
+     event, undoing a selection made there, and a selection it keeps comes with handles and a Cut/Copy/Paste bar (known
+     behaviour, not measured here — there is no iPhone in this build). So instead: the moment the field is focused while
+     it still holds the untouched suggestion, it empties, and the suggestion stays on show as the placeholder; typing
+     starts a fresh name, leaving it empty (blur) puts "Project N" back, and Create uses "Project N" whenever it is left
+     empty — so an untouched name still makes "Project N". The PC's own auto-focus keeps its select-all (the first key
+     replaces it there already); a later click back into the field empties it just the same. */
+  let npDefaultName = '', npAutoFocus = false;
   function newProjectDialog() {
     const dlg = document.getElementById('hm-dialog');
     const orb = document.getElementById('hm-new');
@@ -3095,6 +3111,8 @@ window.FM = window.FM || {};
     let nth = mine.length + 1;
     while (taken.has('project ' + nth)) nth++;
     input.value = 'Project ' + nth;
+    npDefaultName = input.value;       // queue 991: what an empty name means, and what the empty field shows
+    input.placeholder = npDefaultName;
     npUpdate();
     dlg.classList.remove('hidden');
     npEntrance(dlg, orb, orbRect);   // queue 947 / 974: the +'s own entrance, one of three at random
@@ -3103,11 +3121,11 @@ window.FM = window.FM || {};
     // (measured: a 667pt screen leaves ~380pt, the card is ~550pt) — the name already has a sane
     // default, so tapping the field when you actually want to rename is the better trade.
     const hasKeyboard = !window.matchMedia || matchMedia('(hover: hover) and (pointer: fine)').matches;
-    if (hasKeyboard) setTimeout(() => { input.focus(); input.select(); }, 30);
+    if (hasKeyboard) setTimeout(() => { npAutoFocus = true; try { input.focus(); input.select(); } finally { npAutoFocus = false; } }, 30);
   }
   async function createFromDialog() {
     const dlg = npEl('hm-dialog');
-    const name = (npEl('hm-new-name').value || '').trim() || 'Untitled';
+    const name = (npEl('hm-new-name').value || '').trim() || npDefaultName || 'Untitled';   // queue 991: left empty = the suggestion
     const s = npCompute(), fps = npFps();
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
@@ -3228,6 +3246,9 @@ window.FM = window.FM || {};
       npEl('hm-new-fps').addEventListener('change', npUpdate);
       ['hm-new-w', 'hm-new-h', 'hm-new-fps-num'].forEach(id => { const inp = npEl(id); if (inp) inp.addEventListener('input', npUpdate); });
       npEl('hm-new-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); createFromDialog(); } });
+      // queue 991: the untouched suggestion empties when he goes to name the project, and comes back if he leaves it empty
+      npEl('hm-new-name').addEventListener('focus', () => { const f = npEl('hm-new-name'); if (!npAutoFocus && npDefaultName && f.value === npDefaultName) f.value = ''; });
+      npEl('hm-new-name').addEventListener('blur', () => { const f = npEl('hm-new-name'); if (npDefaultName && !f.value.trim()) f.value = npDefaultName; });
       dlg.querySelector('#hm-create').addEventListener('click', createFromDialog);
       dlg.querySelector('#hm-cancel').addEventListener('click', npDismiss);   // queue 947: A shrinks back into the orb
     },
