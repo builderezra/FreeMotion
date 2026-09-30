@@ -571,7 +571,13 @@ window.FM = window.FM || {};
     { type: 'flicker', label: 'Flicker', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 14, unit: 'Hz' }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: Pattern — two flickering layers were always in lockstep
     /* Beside Flicker on purpose, because that is where you look for it — and named for what separates
        them: this one darkens, it does not make the layer vanish (queue 349). */
-    { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0.15 }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: Pattern
+    /* RHYTHM and HOLD DARK (#482 polish 2.3, his #966 "as much choice as possible"). The flashes were only ever random, so a
+       strobe on the beat, a double hit or a build-up into a drop meant keyframing Depth by hand. Random is the old rhythm, byte
+       for byte, and stays the default; Pattern only steers Random, so it greys out under the others. Darkest is untouched
+       (#904 waits on his A/B). */
+    { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0.15 }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0, overriddenBy: 'rhythm', liveWhen: 0 },
+      { key: 'rhythm', label: 'Rhythm', def: 0, options: [[0, 'Random'], [1, 'Steady'], [2, 'Double hit'], [3, 'Build-up']] },
+      { key: 'hold', label: 'Hold dark', min: 0, max: 1, step: 0.02, def: 0, overriddenBy: 'rhythm', liveWhen: [1, 2, 3] }] },   // queue 904: Pattern
     { type: 'pulseopacity', label: 'Breathe', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase — two Breathe layers could never be offset
     { type: 'dissolve', label: 'Dissolve', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -1039,6 +1045,10 @@ window.FM = window.FM || {};
          so nothing already made costs a penny more — you only pay when you crank it. */
       { key: 'shutter', label: 'Shutter', min: 0, max: 12, step: 0.05, def: 0.5 },
       { key: 'samples', label: 'Samples', min: 2, max: 48, step: 1, def: 8 },
+      /* SHUTTER PHASE (#482 polish 2.6). The shutter window was always centred on the frame, so half the smear ran AHEAD of
+         a moving layer. −100 opens it before the frame (a trail behind only, the comic-book streak), +100 after it. 0 is the
+         old centred window, byte for byte. */
+      { key: 'phase', label: 'Shutter phase', min: -100, max: 100, step: 1, def: 0, unit: '%', note: '−100 trails behind only · +100 runs ahead' },
     ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
     { type: 'softglow', label: 'Soft Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', params: [   // queue 904: was hardcoded white
@@ -1246,6 +1256,11 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Mode', options: [[0, 'Hold'], [1, 'Strobe'], [2, 'Hold + Trail']], def: 0 },
       { key: 'blend', label: 'Blend live', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'duty', label: 'Strobe on-time', min: 0.05, max: 1, step: 0.01, def: 0.5, overriddenBy: 'mode', liveWhen: 1 },
+      /* TRAIL STRENGTH, PHASE, IRREGULAR HOLDS (#482 polish 2.4). The ghost was welded at 45%, the holds always changed on
+         the same grid, and every hold was the same length — stop-motion never is. Each default is the old picture. */
+      { key: 'trail', label: 'Trail strength', min: 0, max: 1, step: 0.02, def: 0.45, overriddenBy: 'mode', liveWhen: 2 },
+      { key: 'offset', label: 'Phase', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'random', label: 'Irregular holds', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     // Shockwave — ONE expanding pressure ring that travels out and leaves frame. Keyframe Radius and
     // that is the whole move. Not Circular Ripple, which is an infinite centre-locked standing sine.
@@ -3292,7 +3307,13 @@ window.FM = window.FM || {};
      * `layer` still owns the EFFECTS (the proxy carries the group's own list), so only the geometry
      * is redirected. */
     const mSrc = layer._ofGroup || layer;
-    const _travel = layerMotionBetween(mSrc, t - dt / 2, t + dt / 2, scene);
+    /* SHUTTER PHASE (#482 polish 2.6): where the window sits against the frame. 0 is centred on t (the old window, and the
+       old arithmetic — `tc` IS t); −100 opens it one window before t, so the smear trails behind only; +100 after. The
+       "did it move?" early-out below asks about THIS window, not the centred one: a layer that stops at t has moved in
+       the window behind it and not in the one around it. */
+    const _ph = (mb.phase == null) ? 0 : Math.max(-100, Math.min(100, _num(mb.phase, 0))) / 100;
+    const tc = _ph ? t + _ph * dt / 2 : t;
+    const _travel = layerMotionBetween(mSrc, tc - dt / 2, tc + dt / 2, scene);
     if (!_hasMoverFx && _travel != null && _travel * plateScale(ctx) < 0.75) return false;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = P.width, PH = P.height, ps = plateScale(ctx);
@@ -3386,7 +3407,7 @@ window.FM = window.FM || {};
       const lo = cs, hi = cs + (layer.duration || 0);
       let drawn = 0;
       for (let k = 0; k < N; k++) {
-        const tau = t + ((k + 0.5) / N - 0.5) * dt;
+        const tau = tc + ((k + 0.5) / N - 0.5) * dt;   // tc: the phased window's centre (t itself at phase 0)
         if (tau < lo || tau >= hi) continue;    // outside the clip's life — partial shutter coverage is real, so it simply contributes less
         /* TWO WAYS TO MAKE A SUB-FRAME (queue 382).
          * RE-PROJECTION (default): one plate at `t`, pushed through D = M(tau)·M(t)⁻¹. Enormously
@@ -4158,7 +4179,7 @@ window.FM = window.FM || {};
           const sub = actx.getImageData(rect.x, rect.y, rect.w, rect.h);
           // a bounded kernel gets its box measured on the cropped buffer — the same scan, 1/50th of the pixels
           const bb2 = bounded ? fxBounds(sub.data, rect.w, rect.h) : null;
-          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2);
+          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2, layer);   // layer: the few kernels on the clip's own clock (Flash (darken)'s rhythms, #482 2.3)
           bctx.putImageData(sub, rect.x, rect.y);
         }
         ctx.save();
@@ -4183,7 +4204,7 @@ window.FM = window.FM || {};
        * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
        * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
       // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
-      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -6883,7 +6904,18 @@ window.FM = window.FM || {};
        export that disagree about a random number is a bug class this file has already been bitten by.
        `soft` interpolates between one step's value and the next, so 0 is a hard strobe and 1 a pulse;
        `floor` is how dark it may ever get, so it can be a wash rather than a blackout. */
-    flashdark: function (d, W, H, p, t) {
+    /* RHYTHM (#482 polish 2.3). Random (0) is the code below it, untouched, on the comp clock it always ran on. The other
+       three are HITS on the LAYER's own clock, so the first hit lands the moment the clip starts — put a clip on a beat and
+       its strobe is on the beat:
+         Steady (1)     one hit every 1/Speed.
+         Double hit (2) two hits 80 ms apart every 1/Speed (closer when the period is too short to fit them).
+         Build-up (3)   the period shrinks from 1/Speed to 1/(4·Speed) across the clip — geometric, so each stretch of the
+                        clip speeds up by the same ratio, the way a drum build doubles its subdivisions. Past the clip's end
+                        (or with no clip to measure) it holds the fastest rate.
+       A hit is the same shape everywhere: fully dark for the first Hold dark of its window, then it lets go — Softness 0
+       lets go at half-way (a hard strobe), 1 as a smooth fall, the SAME lerp between a hard and a smooth value the Random
+       rhythm has always used. Stateless in t (floor and frac of an explicit phase), so preview, export and scrub agree. */
+    flashdark: function (d, W, H, p, t, ps, bb, layer) {
       var fdN = function (i) {
         var h = (i ^ 0x9e3779b9) >>> 0;
         h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
@@ -6894,12 +6926,35 @@ window.FM = window.FM || {};
       var fdS = FM.evalProp(p.speed, t); if (fdS == null || isNaN(fdS)) fdS = 10; if (fdS < 1) fdS = 1; if (fdS > 30) fdS = 30;
       var fdSo = FM.evalProp(p.soft, t); if (fdSo == null || isNaN(fdSo)) fdSo = 0.3; if (fdSo < 0) fdSo = 0; if (fdSo > 1) fdSo = 1;
       var fdF = FM.evalProp(p.floor, t); if (fdF == null || isNaN(fdF)) fdF = 0.15; if (fdF < 0) fdF = 0; if (fdF > 1) fdF = 1;
-      var fdT = (t < 0) ? 0 : t;
-      var fdStep = Math.floor(fdT * fdS), fdFrac = fdT * fdS - fdStep;
-      var fdSeed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fdSeed) fdStep = (fdStep + Math.imul(fdSeed, 7919)) | 0;   // PATTERN (queue 904); 0 = the old sequence
-      var fd0 = fdN(fdStep), fd1 = fdN(fdStep + 1);
-      var fdSmooth = fd0 + (fd1 - fd0) * (0.5 - 0.5 * Math.cos(Math.PI * fdFrac));
-      var fdV = fd0 + (fdSmooth - fd0) * fdSo;
+      var fdR = p.rhythm == null ? 0 : (Math.round(FM.evalProp(p.rhythm, t)) | 0);
+      var fdV;
+      if (fdR >= 1 && fdR <= 3) {
+        var fdHo = p.hold == null ? 0 : FM.evalProp(p.hold, t); if (!(fdHo >= 0)) fdHo = 0; if (fdHo > 1) fdHo = 1;
+        var fdHit = function (u) {   // u: where in its window this moment sits, 0..1 → 1 = full hit, 0 = none
+          if (u < fdHo) return 1;
+          var r = (u - fdHo) / (1 - fdHo), hard = r < 0.5 ? 1 : 0;
+          return hard + ((0.5 + 0.5 * Math.cos(Math.PI * r)) - hard) * fdSo;
+        };
+        var fdTl = layer ? FM.fxLocalTime(layer, t) : t; if (!(fdTl > 0)) fdTl = 0;
+        var fdPh;
+        if (fdR === 3) {
+          var fdD = layer && layer.duration > 0 ? +layer.duration : 0, fdL4 = Math.log(4);
+          if (fdD > 0 && fdTl < fdD) fdPh = fdS * fdD / fdL4 * (Math.pow(4, fdTl / fdD) - 1);
+          else fdPh = (fdD > 0 ? fdS * fdD / fdL4 * 3 : 0) + 4 * fdS * (fdTl - fdD);
+        } else fdPh = fdTl * fdS;
+        var fdU = fdPh - Math.floor(fdPh);
+        if (fdR === 2) {
+          var fdP = 1 / fdS, fdG = Math.min(0.08, fdP / 2), fdIn = fdU * fdP;   // seconds into this period
+          fdV = fdIn < fdG ? fdHit(fdIn / fdG) : (fdIn < 2 * fdG ? fdHit((fdIn - fdG) / fdG) : 0);
+        } else fdV = fdHit(fdU);
+      } else {
+        var fdT = (t < 0) ? 0 : t;
+        var fdStep = Math.floor(fdT * fdS), fdFrac = fdT * fdS - fdStep;
+        var fdSeed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fdSeed) fdStep = (fdStep + Math.imul(fdSeed, 7919)) | 0;   // PATTERN (queue 904); 0 = the old sequence
+        var fd0 = fdN(fdStep), fd1 = fdN(fdStep + 1);
+        var fdSmooth = fd0 + (fd1 - fd0) * (0.5 - 0.5 * Math.cos(Math.PI * fdFrac));
+        fdV = fd0 + (fdSmooth - fd0) * fdSo;
+      }
       var fdK = 1 - fdA * fdV;
       if (fdK < fdF) fdK = fdF;
       if (fdK > 1) fdK = 1;
@@ -11966,8 +12021,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const blend = clamp01(p.blend == null ? 0 : FM.evalProp(p.blend, t));
       const duty = Math.max(0.05, Math.min(1, p.duty == null ? 0.5 : FM.evalProp(p.duty, t)));
       const rec = _mfRec(((layer && layer.id) || '_anon') + ':fs', W, H);
-      const phase = Math.max(0, tl) * rate;
-      const q = Math.floor(phase);
+      /* PHASE and IRREGULAR HOLDS (#482 polish 2.4). Phase slides every hold boundary by a fraction of a hold. Irregular
+         holds moves each boundary k by a hash of k (up to ±45% of a hold at 100%, so the boundaries can never cross and a
+         hold runs 0.1× to 1.9× its length) — the uneven "on twos, then threes" of hand-made stop-motion. Hashed on the
+         boundary index, never Math.random, so which hold a moment belongs to is a function of the clock alone; the first
+         boundary stays at the clip's start. At 0 and 0 this is the old `floor(tl·rate)`, byte for byte. */
+      const offs = p.offset == null ? 0 : clamp01(FM.evalProp(p.offset, t) || 0);
+      const irr = p.random == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.random, t) || 0)) / 100;
+      let phase = Math.max(0, tl) * rate, q, qLo = 0, qLen = 1;
+      if (offs > 0) phase += offs;
+      if (irr > 0) {
+        const jit = k => { if (k <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
+        const f = Math.floor(phase), b0 = f + jit(f), b1 = f + 1 + jit(f + 1);
+        q = phase < b0 ? f - 1 : (phase >= b1 ? f + 1 : f);
+        qLo = q + jit(q); qLen = (q + 1 + jit(q + 1)) - qLo;
+      } else { q = Math.floor(phase); qLo = q; }
       if (rec.t !== q) {
         // New quantum: the frame before it becomes the trail, this frame becomes the hold.
         if (mode === 2) {
@@ -11984,8 +12052,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       // Strobe: the layer is only visible for the first `duty` of each quantum. Leaving B empty is
       // the point — the gap has to be a gap, not a dimmer frame.
-      if (mode === 1 && (phase - q) > duty) return;
-      if (mode === 2 && rec.prev) { B.globalAlpha = 0.45; B.drawImage(rec.prev, 0, 0); B.globalAlpha = 1; }
+      if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > duty) return;
+      if (mode === 2 && rec.prev) {
+        const trail = p.trail == null ? 0.45 : clamp01(FM.evalProp(p.trail, t));   // Trail strength (#482 2.4) — 0.45 was welded
+        if (trail > 0) { B.globalAlpha = trail; B.drawImage(rec.prev, 0, 0); B.globalAlpha = 1; }
+      }
       B.drawImage(rec.cv, 0, 0);
       if (blend > 0) { B.globalAlpha = blend; B.drawImage(A, 0, 0); B.globalAlpha = 1; }
     },

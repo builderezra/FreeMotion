@@ -114285,4 +114285,310 @@
     }
   });
 
+
+  /* ═══ #482 / #966 POLISH BATCH 2 (rhythm) — Flash (darken), Frame Stutter, Motion Blur (Object) ═══════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Items 2.3, 2.4 and 2.6 of the idle
+   * backlog (tools/design/plans/2026-09-29-idle-backlog/backlog.md §A Batch 2). The rule that makes it safe (§0.3): every
+   * new key's default is the old picture. The renders pinned below were captured on v17.18 (5803cf55) BEFORE the first
+   * edit, with batch 1's texture on a clip that MOVES and TURNS — the stutter and the blur draw nothing new on a still
+   * layer — and every pinned set is followed by a CONTROL showing a non-default value changes that same fixture, because
+   * a hash that cannot move proves nothing. Frame Stutter is stateful (the held plate), so its picture is a whole run. */
+  const HEAD482B = {
+    'flashdark/image': '873fb6dd/8c8f6a5e/48a39cd0/1cf893d7', 'flashdark/shape': 'c09bbdd7/f34bde0f/39d600d1/cd6ebd73',
+    'objectblur/image': '28851006/a32fd362/0171bed1', 'objectblur/shape': 'e4b1831f/6e4e1f21/cb7963c0',
+    'framestutter0/image': 'd6c619cd', 'framestutter1/image': '755ef8d5', 'framestutter2/image': '83e9eef1',
+    'framestutter0/shape': 'cce99039', 'framestutter1/shape': '6b0cf5fd', 'framestutter2/shape': 'aa1b606d',
+  };
+  function make482b(kind, type, over, ids) {
+    const L = kind === 'image' ? FM.makeLayer('image', { name: 'r482', x: 120, y: 90, start: 0, duration: 4 })
+      : FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 });
+    if (kind === 'image') { FM.media.set(L.id, { kind: 'image', el: fix482(), width: 200, height: 150 }); ids.push(L.id); }
+    L.start = 0; L.duration = 4;
+    L.transform.x = { kf: [{ t: 0, v: 60, ease: 'linear' }, { t: 2, v: 180, ease: 'linear' }] };
+    L.transform.rotation = { kf: [{ t: 0, v: 0, ease: 'linear' }, { t: 2, v: 40, ease: 'linear' }] };
+    const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, over || {}); L.effects = [e];
+    return L;
+  }
+  function shot482b(L, w, t) {
+    const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+    return hash482(x, cv);
+  }
+  function run482b(L) {
+    if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();   // a cleared hold, as an export starts
+    const hs = []; for (let n = 0; n < 14; n++) hs.push(shot482b(L, 240, n / 30));
+    let h = 0x811c9dc5 >>> 0; hs.join('').split('').forEach(ch => { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; });
+    return ('00000000' + h.toString(16)).slice(-8);
+  }
+  const PICS482B = {
+    flashdark: (kind, over, ids) => [[240, 0.13], [240, 0.7], [120, 1.3], [240, 2.05]].map(([w, t]) => shot482b(make482b(kind, 'flashdark', over, ids), w, t)).join('/'),
+    objectblur: (kind, over, ids) => [[240, 0.5], [120, 1.0], [240, 1.7]].map(([w, t]) => shot482b(make482b(kind, 'objectblur', Object.assign({ shutter: 2 }, over), ids), w, t)).join('/'),
+    framestutter: (kind, over, ids) => run482b(make482b(kind, 'framestutter', over, ids)),
+  };
+  /* The half every item test shares. DECLARED in the catalogue (so the load sanitiser keeps them — the whitelist-drift
+     lesson), at a default that is the old look, filled at render time with that same value (queue 784 would otherwise
+     restyle every saved instance the first time it drew), surviving a save at a non-default value — then the pictures
+     at the defaults against v17.18, and a control that the fixture can see the new controls at all. */
+  function defaults482b(type, NEW, SET, pics, control) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l482b', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: Object.assign({}, SET) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (got.params[k] !== SET[k]) throw new Error('a saved ' + type + ' ' + k + ' of ' + SET[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    const ids = [], moved = [];
+    try {
+      pics.forEach(([name, kind, over]) => {
+        const h = PICS482B[type](kind, over, ids);
+        if (h !== HEAD482B[name]) moved.push(name + ' ' + HEAD482B[name] + ' -> ' + h);
+      });
+      if (moved.length) throw new Error(moved.length + ' pictures differ from v17.18 at the new defaults - a new control changed a look he already has: ' + moved.join('; '));
+      control.forEach(([name, kind, over, what]) => {
+        if (PICS482B[type](kind, over, ids) === HEAD482B[name]) throw new Error('CONTROL: ' + what + ' draws the default picture on this fixture - the pinned hashes cannot see the new control, so they prove nothing');
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+  }
+
+  /* 2.3 FLASH (DARKEN) — Rhythm and Hold dark. The flashes were only ever random value-noise, so a strobe on the beat, a
+     double hit or a build-up into a drop meant keyframing Depth by hand. Driven through the kernel on a grey pixel (200) at
+     the default Depth 0.45, so a full hit reads 110; the clip is passed as the kernel's 8th argument, as the renderer does. */
+  test('482 2.3 Flash (darken) - Steady, Double hit and Build-up put full-depth hits on the beat from the clip start, Hold dark holds them, the preview matches the export, and the defaults draw the old picture', { item: '482', budgetMs: 90000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.flashdark) throw new Error('the Flash (darken) kernel is not reachable');
+    const base = FM.fxRegistry.makeInstance('flashdark').params;
+    const lv = (over, t, clip) => { const d = new Uint8ClampedArray([200, 200, 200, 255]); K.flashdark(d, 1, 1, Object.assign({}, base, over), t, 1, null, clip); return d[0]; };
+    const clip = { start: 0, duration: 2 }, FULL = 110;
+    /* CONTROL: Random at 4 Hz does NOT land a full hit on every beat — without this nothing below tells the rhythms apart. */
+    const beatFrame = k => Math.ceil(k * 30 / 4 - 1e-9);
+    const rnd = [0, 1, 2, 3, 4, 5, 6, 7].map(k => lv({ speed: 4 }, beatFrame(k) / 30, clip));
+    if (rnd.every(v => Math.abs(v - FULL) <= 3)) throw new Error('CONTROL: the Random rhythm already hits full depth on every beat (' + rnd.join(',') + ') - the test cannot see a Steady strobe');
+    /* STEADY 4 Hz on a 2 s clip: the first 30 fps frame at or after each beat is a full hit, and the frame before it is light. */
+    for (let k = 0; k < 8; k++) {
+      const n = beatFrame(k), on = lv({ speed: 4, rhythm: 1 }, n / 30, clip);
+      if (Math.abs(on - FULL) > 3) throw new Error('Steady at 4 Hz: the frame at ' + (n / 30).toFixed(3) + ' s (beat ' + k + ' is at ' + (k / 4) + ' s) reads ' + on + ', not a full hit (' + FULL + ') - the flashes are not on the beat');
+      if (k > 0) { const before = lv({ speed: 4, rhythm: 1 }, (n - 1) / 30, clip); if (!(before > 170)) throw new Error('Steady at 4 Hz: the frame just before beat ' + k + ' reads ' + before + ' - it should be light between hits'); }
+    }
+    /* Onsets at 1 ms: the moments a light picture turns fully dark. */
+    const onsets = (over, t0, t1, c) => { const o = []; let prev = 255; for (let i = Math.round(t0 * 1000); i <= Math.round(t1 * 1000); i++) { const v = lv(over, i / 1000, c); if (v <= FULL + 3 && prev > 150) o.push(i / 1000); prev = v; } return o; };
+    const near = (got, want, tol, what) => {
+      if (got.length !== want.length || got.some((v, i) => Math.abs(v - want[i]) > tol)) throw new Error(what + ': the hits land at ' + got.map(v => v.toFixed(3)).join(', ') + ' s, not ' + want.map(v => v.toFixed(3)).join(', '));
+    };
+    near(onsets({ speed: 4, rhythm: 1 }, 0, 1.999, clip), [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75], 0.002, 'Steady at 4 Hz');
+    /* ON THE CLIP'S CLOCK: the same strobe on a clip that starts at 1.37 s hits at 1.37 s. */
+    const late = { start: 1.37, duration: 2 };
+    near(onsets({ speed: 4, rhythm: 1 }, 1.37, 2.369, late), [1.37, 1.62, 1.87, 2.12], 0.002, 'Steady at 4 Hz on a clip starting at 1.37 s');
+    /* DOUBLE HIT: two hits 80 ms apart every period; at 20 Hz the period is too short for 80 ms, so they close up to half of it. */
+    near(onsets({ speed: 2, rhythm: 2 }, 0, 1.999, clip), [0, 0.08, 0.5, 0.58, 1, 1.08, 1.5, 1.58], 0.002, 'Double hit at 2 Hz');
+    near(onsets({ speed: 20, rhythm: 2 }, 0, 0.099, clip), [0, 0.025, 0.05, 0.075], 0.002, 'Double hit at 20 Hz');
+    /* BUILD-UP at 2 Hz over the 2 s clip: the period shrinks geometrically from 1/2 s to 1/8 s — hit k lands where
+       2·2/ln4·(4^(t/2) − 1) = k — so every gap is shorter than the one before. */
+    const bu = onsets({ speed: 2, rhythm: 3 }, 0, 1.999, clip), buWant = [];
+    for (let k = 0; ; k++) { const tk = 2 * Math.log(1 + k * Math.log(4) / 4) / Math.log(4); if (tk >= 1.999) break; buWant.push(tk); }
+    near(bu, buWant, 0.003, 'Build-up at 2 Hz on a 2 s clip');
+    const gaps = bu.slice(1).map((v, i) => v - bu[i]);
+    if (!(gaps.every((g, i) => i === 0 || g < gaps[i - 1]) && gaps[0] > 0.38 && gaps[gaps.length - 1] < 0.16)) throw new Error('Build-up does not speed up from about 1/2 s to about 1/8 s between hits: gaps ' + gaps.map(g => g.toFixed(3)).join(', '));
+    /* HOLD DARK: Steady 4 Hz at Softness 0 is fully dark for half of each period at Hold 0, and for 0.6 + 0.4/2 = 80% at 0.6. */
+    const dark = over => { let n = 0; for (let i = 0; i < 1000; i++) if (lv(Object.assign({ speed: 4, rhythm: 1, soft: 0 }, over), i / 1000, clip) <= FULL + 1) n++; return n / 1000; };
+    const d0 = dark({}), d6 = dark({ hold: 0.6 });
+    if (Math.abs(d0 - 0.5) > 0.01 || Math.abs(d6 - 0.8) > 0.01) throw new Error('Hold dark keeps a Steady strobe dark for ' + (d0 * 100).toFixed(1) + '% of each beat at 0 and ' + (d6 * 100).toFixed(1) + '% at 0.6 - it should be 50% and 80%');
+    if (dark({ hold: 1 }) !== 1) throw new Error('Hold dark 1 lets the picture go light again - it should stay dark');
+    /* …and at the default Softness the held part is a full hit, not the start of the fall: the first 60% of each beat reads 110. */
+    for (let i = 0; i < 150; i += 5) { const v = lv({ speed: 4, rhythm: 1, hold: 0.6 }, i / 1000, clip); if (Math.abs(v - FULL) > 1) throw new Error('Hold dark 0.6 at the default Softness reads ' + v + ' at ' + i + ' ms into a beat - the hold is not held at full depth'); }
+    /* Pattern steers Random only; the new rhythms are functions of the clock alone. */
+    [0.1, 0.33, 0.9].forEach(t => { if (lv({ speed: 4, rhythm: 1, seed: 37 }, t, clip) !== lv({ speed: 4, rhythm: 1 }, t, clip)) throw new Error('Pattern moves a Steady strobe at ' + t + ' s - a strobe on the beat must not wander'); });
+    /* THROUGH THE APP: a grey clip starting at 0.37 s (off the comp's 4 Hz grid, so only the clip's own clock puts a hit at its
+       start), Steady 4 Hz — export (240 wide), half-size preview and his phone's 0.28 all read the same level at the clip start
+       (a hit), 0.2 s later (between hits) and on its fourth beat — on the cropped read-back and on the full plate alike. */
+    const read = (w, t, full) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 240, shapeH: 180, fill: '#c8c8c8', start: 0.37, duration: 3 });
+      L.start = 0.37; L.duration = 3; const e = FM.fxRegistry.makeInstance('flashdark'); Object.assign(e.params, { speed: 4, rhythm: 1 }); L.effects = [e];
+      const h = Math.round(w * 3 / 4), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      const cm = FM._cropMode;
+      try { if (full) FM._cropMode = -1; FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t); } finally { FM._cropMode = cm; }
+      return x.getImageData(w >> 1, h >> 1, 1, 1).data[0];
+    };
+    [false, true].forEach(full => {
+      const path = full ? 'on the full plate' : 'on the cropped read-back';
+      [[0.37, 'the clip start'], [0.57, '0.2 s in'], [1.13, 'the fourth beat']].forEach(([t, where]) => {
+        const ex = read(240, t, full), pv = read(120, t, full), ph = read(68, t, full);
+        if (Math.abs(pv - ex) > 1 || Math.abs(ph - ex) > 1) throw new Error(path + ', at ' + where + ' the export reads ' + ex + ', the half-size preview ' + pv + ' and the phone preview ' + ph + ' - preview and export disagree about the strobe');
+      });
+      const a0 = read(240, 0.37, full), a2 = read(240, 0.57, full), a4 = read(240, 1.13, full);
+      if (Math.abs(a0 - FULL) > 2 || Math.abs(a4 - FULL) > 2 || !(a2 > 180)) throw new Error(path + ', a Steady strobe on a clip starting at 0.37 s reads ' + a0 + ' at its start, ' + a2 + ' 0.2 s later and ' + a4 + ' on its fourth beat - the hits are not on the clip\'s own beat');
+    });
+    /* DEFAULTS: Random, Hold 0 — and the pictures of v17.18. */
+    defaults482b('flashdark', { rhythm: 0, hold: 0 }, { rhythm: 3, hold: 0.4 },
+      [['flashdark/image', 'image', {}], ['flashdark/shape', 'shape', {}]],
+      [['flashdark/shape', 'shape', { rhythm: 1 }, 'a Steady rhythm']]);
+  });
+
+  /* 2.4 FRAME STUTTER — Trail strength, Phase, Irregular holds. The ghost was welded at 45%, the holds always changed on the
+     same grid, and every hold was the same length. A white 20 px square crossing a black frame at 110 px/s, at 5 holds a
+     second (six frames each at 30 fps), is 22 px on per hold — so a hold is read off the square's left edge and the ghost
+     never overlaps it. Played in order from a cleared hold, frame by frame, as an export plays it. */
+  test('482 2.4 Frame Stutter - Trail strength sets the ghost, Phase moves the hold boundaries, Irregular holds vary the hold lengths the same way every run and on the preview, and the defaults draw the old picture', { item: '482', budgetMs: 90000 }, function () {
+    const P = { width: 240, height: 180, fps: 30, duration: 3, background: '#000000' };
+    const play = (over, w, frames) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 90, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 3 });
+      L.start = 0; L.duration = 3; L.transform.x = { kf: [{ t: 0, v: 10, ease: 'linear' }, { t: 2, v: 230, ease: 'linear' }] };
+      const e = FM.fxRegistry.makeInstance('framestutter'); Object.assign(e.params, Object.assign({ rate: 5 }, over)); L.effects = [e];
+      if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+      const out = [], h = Math.round(w * 3 / 4), k = w / 240;
+      for (let n = 0; n < (frames || 60); n++) {
+        const cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(x, { project: P, layers: [L], selectedId: null, selectedIds: [] }, n / 30);
+        const row = x.getImageData(0, h >> 1, w, 1).data;
+        let left = -1; for (let i = 0; i < w; i++) if (row[i * 4] > 200) { left = i; break; }
+        out.push({ left: left < 0 ? -1 : Math.round(left / k), at10: row[Math.round(10 * k) * 4], lit: left >= 0 });   // at10: the centre of the square held at 0 s
+      }
+      return out;
+    };
+    const jumps = run => { const j = []; for (let n = 1; n < run.length; n++) if (run[n].left !== run[n - 1].left) j.push(n); return j; };
+    const grid = off => { const j = []; let q = Math.floor(0 + off); for (let n = 1; n < 60; n++) { const qn = Math.floor((n / 30) * 5 + off); if (qn !== q) { j.push(n); q = qn; } } return j; };
+    /* CONTROL: the default holds change on the old grid, every sixth frame. */
+    const d0 = jumps(play({}, 240));
+    if (d0.join() !== grid(0).join()) throw new Error('CONTROL: default holds change at frames ' + d0.join(',') + ', not the old grid ' + grid(0).join(',') + ' - the fixture does not read the holds');
+    /* PHASE 0.5 slides every boundary by half a hold. */
+    const p5 = jumps(play({ offset: 0.5 }, 240));
+    if (p5.join() !== grid(0.5).join()) throw new Error('Phase 0.5 changes the hold at frames ' + p5.join(',') + ', not half a hold earlier (' + grid(0.5).join(',') + ')');
+    /* IRREGULAR HOLDS 100: uneven hold lengths — not the grid, not all one length, none shorter than a tenth of a hold or longer
+       than two — the same on a second run (the clock decides, not the playback) and on a half-size preview. */
+    const ir = jumps(play({ random: 100 }, 240)), ir2 = jumps(play({ random: 100 }, 240)), irp = jumps(play({ random: 100 }, 120));
+    const lens = [ir[0]].concat(ir.slice(1).map((v, i) => v - ir[i]));
+    if (ir.join() === grid(0).join() || new Set(lens).size < 3) throw new Error('Irregular holds 100 still holds every frame for the same time (holds change at ' + ir.join(',') + ')');
+    if (lens.some(l => l > 12)) throw new Error('Irregular holds 100 held one frame for ' + Math.max.apply(null, lens) + ' frames - more than two holds');
+    if (ir2.join() !== ir.join()) throw new Error('Irregular holds changes at ' + ir.join(',') + ' on one run and ' + ir2.join(',') + ' on the next - it is not a function of the clock');
+    if (irp.join() !== ir.join()) throw new Error('Irregular holds changes at ' + irp.join(',') + ' on the half-size preview and ' + ir.join(',') + ' in the export');
+    if (jumps(play({ random: 30 }, 240)).join() === ir.join()) throw new Error('Irregular holds 30 is exactly as irregular as 100');
+    /* …and Strobe honours its on-time inside an irregular hold: visible for about half the frames, never all or none. */
+    const sv = play({ random: 100, mode: 1 }, 240).filter(f => f.lit).length;
+    if (!(sv >= 22 && sv <= 38)) throw new Error('Strobe with Irregular holds shows the square on ' + sv + ' of 60 frames - about half, at a 50% on-time');
+    /* TRAIL STRENGTH in Hold + Trail: at the first new hold (frame 6) the square held at 0 s — centred on x 10, clear of the new
+       one at 22-42 — is the ghost, drawn at the strength's alpha on black: 0.45 reads about 115, 0.9 about 230, 0 nothing, at the
+       export and on the half-size preview. */
+    const g1 = grid(0)[0];
+    const ghostAt = (trail, w) => { const r = play(trail == null ? { mode: 2 } : { mode: 2, trail: trail }, w, g1 + 1); return r[g1].at10; };
+    if (play({ mode: 2 }, 240, g1)[g1 - 1].at10 !== 255) throw new Error('setup: before the first new hold the square is not at x 10 - the ghost probe is in the wrong place');
+    const g45 = ghostAt(null, 240), g90 = ghostAt(0.9, 240), g0 = ghostAt(0, 240);
+    if (Math.abs(g45 - 115) > 4) throw new Error('CONTROL: the default ghost reads ' + g45 + ' - it should be the old 45% of white (about 115)');
+    if (Math.abs(g90 - 230) > 4) throw new Error('Trail strength 0.9 draws the ghost at ' + g90 + ', not about 230 (the default 0.45 draws ' + g45 + ')');
+    if (g0 !== 0) throw new Error('Trail strength 0 still draws a ghost of ' + g0);
+    if (Math.abs(ghostAt(0.9, 120) - g90) > 4) throw new Error('Trail strength 0.9 reads ' + ghostAt(0.9, 120) + ' on the half-size preview and ' + g90 + ' in the export');
+    /* DEFAULTS: Trail 0.45, Phase 0, Irregular 0 — and the pictures of v17.18 in all three modes. */
+    defaults482b('framestutter', { trail: 0.45, offset: 0, random: 0 }, { trail: 0.8, offset: 0.25, random: 60 },
+      [['framestutter0/image', 'image', { mode: 0 }], ['framestutter1/image', 'image', { mode: 1 }], ['framestutter2/image', 'image', { mode: 2 }],
+       ['framestutter0/shape', 'shape', { mode: 0 }], ['framestutter1/shape', 'shape', { mode: 1 }], ['framestutter2/shape', 'shape', { mode: 2 }]],
+      [['framestutter2/shape', 'shape', { mode: 2, trail: 0.9 }, 'Trail strength 0.9'], ['framestutter0/shape', 'shape', { mode: 0, offset: 0.5 }, 'Phase 0.5'],
+       ['framestutter0/shape', 'shape', { mode: 0, random: 100 }, 'Irregular holds 100']]);
+  });
+
+  /* 2.6 MOTION BLUR (OBJECT) — Shutter phase. The shutter window was always centred on the frame, so half the smear ran
+     AHEAD of a moving layer. A white 40 px box crossing a black 480x120 frame at 400 px/s, Shutter 6 frames (80 px of
+     travel), 48 samples; the lit extent of the centre row says where the smear is. */
+  test('482 2.6 Motion Blur (Object) - Shutter phase -100 trails behind only, +100 runs ahead, a layer that has just stopped still smears behind, the preview matches the export, and the default draws the old picture', { item: '482', budgetMs: 90000 }, function () {
+    const P = { width: 480, height: 120, fps: 30, duration: 2, background: '#000000' };
+    const span = (over, t, w, stop) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 2 });
+      L.start = 0; L.duration = 2;
+      L.transform.x = stop ? { kf: [{ t: 0, v: 40, ease: 'linear' }, { t: 0.5, v: 240, ease: 'linear' }] } : { kf: [{ t: 0, v: 40, ease: 'linear' }, { t: 1, v: 440, ease: 'linear' }] };
+      if (over) { const e = FM.fxRegistry.makeInstance('objectblur'); Object.assign(e.params, { shutter: 6, samples: 48 }, over); L.effects = [e]; }
+      const k = w / 480, h = Math.round(120 * k), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: P, layers: [L], selectedId: null, selectedIds: [] }, t);
+      const row = x.getImageData(0, h >> 1, w, 1).data;
+      let lo = -1, hi = -1; for (let i = 0; i < w; i++) if (row[i * 4] > 2) { if (lo < 0) lo = i; hi = i; }
+      return { lo: lo / k, hi: (hi + 1) / k };
+    };
+    const sharp = span(null, 0.5, 480);
+    if (Math.abs(sharp.lo - 220) > 1 || Math.abs(sharp.hi - 260) > 1) throw new Error('setup: the unblurred box spans ' + sharp.lo + '-' + sharp.hi + ' at 0.5 s, not 220-260');
+    const c0 = span({}, 0.5, 480), back = span({ phase: -100 }, 0.5, 480), ahead = span({ phase: 100 }, 0.5, 480);
+    if (!(c0.hi > 290 && c0.lo < 190)) throw new Error('CONTROL: the centred smear spans ' + c0.lo + '-' + c0.hi + ' - it should reach about 40 px past both edges of 220-260');
+    if (!(back.hi <= 262 && back.lo < 150)) throw new Error('Shutter phase -100 smears ' + back.lo + '-' + back.hi + ' - it should trail behind only (nothing past the leading edge at 260, about 80 px behind 220)');
+    if (!(ahead.lo >= 218 && ahead.hi > 330)) throw new Error('Shutter phase +100 smears ' + ahead.lo + '-' + ahead.hi + ' - it should run ahead only (nothing behind 220, about 80 px past 260)');
+    const half = span({ phase: -50 }, 0.5, 480);
+    if (!(half.hi > back.hi + 10 && half.hi < c0.hi - 10)) throw new Error('Shutter phase -50 smears ' + half.lo + '-' + half.hi + ' - between -100 (' + back.hi + ') and 0 (' + c0.hi + ') ahead of the box');
+    /* A LAYER THAT HAS JUST STOPPED: it stops at 240 at 0.5 s. At 0.62 s a centred window (0.52-0.72) sees no movement and
+       stays sharp — but -100's window (0.42-0.62) saw the last 80 ms of the move and must smear behind. The "did it move?"
+       early-out has to ask about the phased window, not the centred one. */
+    const st0 = span({}, 0.62, 480, true), stB = span({ phase: -100 }, 0.62, 480, true);
+    if (!(st0.lo >= 219 && st0.hi <= 261)) throw new Error('CONTROL: a box that stopped 0.12 s ago is smeared ' + st0.lo + '-' + st0.hi + ' by a centred shutter that opened after it stopped');
+    if (!(stB.lo < 205 && stB.hi <= 261)) throw new Error('Shutter phase -100 draws a box that stopped 0.12 s ago at ' + stB.lo + '-' + stB.hi + ' - its shutter was open while it moved, so it should trail behind (from about 188)');
+    /* PREVIEW = EXPORT: the half-size preview's smear lands where the export's does, for all three phases. */
+    [[-100, back], [0, c0], [100, ahead]].forEach(([ph, ex]) => {
+      const pv = span({ phase: ph }, 0.5, 240);
+      if (Math.abs(pv.lo - ex.lo) > 4 || Math.abs(pv.hi - ex.hi) > 4) throw new Error('Shutter phase ' + ph + ' smears ' + pv.lo + '-' + pv.hi + ' on the half-size preview and ' + ex.lo + '-' + ex.hi + ' in the export');
+    });
+    /* DEFAULTS: phase 0 — and the pictures of v17.18. */
+    defaults482b('objectblur', { phase: 0 }, { phase: -75 },
+      [['objectblur/image', 'image', {}], ['objectblur/shape', 'shape', {}]],
+      [['objectblur/shape', 'shape', { phase: -100 }, 'Shutter phase -100']]);
+  });
+
+  /* THE NEW CONTROLS FIT THE PANEL at a phone's 390 px and at a 1280 px PC window — every new row on screen inside the
+     inspector, its name whole, each option whole — and the rows another control switches off say so. */
+  async function panel482b(type, labels, gated) {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row') } : null;
+    };
+    const show = async set => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'P482b', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) Object.assign(inst.params, set);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      await show();
+      const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+      for (const label of labels) {
+        const r = rowOf(label);
+        if (!r) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+        r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+        const rr = r.row.getBoundingClientRect();
+        if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+        if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+        [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+          const br = b.getBoundingClientRect();
+          if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+        });
+      }
+      for (const [set, dead, live] of gated) {
+        await show(set);
+        dead.forEach(l => { const r = rowOf(l); if (!r) throw new Error(where + ': no ' + l + ' row'); if (!r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + type + ' ' + l + ' looks live with ' + JSON.stringify(set) + ', where it does nothing'); });
+        live.forEach(l => { const r = rowOf(l); if (!r) throw new Error(where + ': no ' + l + ' row'); if (r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + type + ' ' + l + ' is greyed out with ' + JSON.stringify(set) + ', where it is the control that matters'); });
+      }
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  }
+  test('482 2.3 Flash (darken) - Rhythm and Hold dark fit the effect panel at 390 and 1280 px, Hold dark greys out under Random and Pattern under the steady rhythms', { item: '482', budgetMs: 60000 }, async function () {
+    await panel482b('flashdark', ['Rhythm', 'Hold dark'], [[{}, ['Hold dark'], ['Pattern']], [{ rhythm: 1 }, ['Pattern'], ['Hold dark']], [{ rhythm: 3 }, ['Pattern'], ['Hold dark']]]);
+  });
+  test('482 2.4 Frame Stutter - Trail strength, Phase and Irregular holds fit the effect panel at 390 and 1280 px, and Trail strength greys out outside Hold + Trail', { item: '482', budgetMs: 60000 }, async function () {
+    await panel482b('framestutter', ['Trail strength', 'Phase', 'Irregular holds'], [[{}, ['Trail strength'], ['Phase', 'Irregular holds']], [{ mode: 2 }, [], ['Trail strength']]]);
+  });
+  test('482 2.6 Motion Blur (Object) - Shutter phase fits the effect panel at 390 and 1280 px and says which way it trails', { item: '482', budgetMs: 60000 }, async function () {
+    await panel482b('objectblur', ['Shutter phase'], []);
+    const reg = (FM.fxRegistry.paramsOf('objectblur') || []).filter(p => p.key === 'phase')[0];
+    if (!reg || !/behind/.test(reg.note || '') || !/ahead/.test(reg.note || '')) throw new Error('Shutter phase carries no note saying which way is behind and which ahead (' + JSON.stringify(reg && reg.note) + ')');
+  });
+
 })();

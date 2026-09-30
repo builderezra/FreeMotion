@@ -442,7 +442,7 @@ window.FM = window.FM || {};
     // Opacity / visibility
     blink: 'Switches the layer on and off at a steady rate.',
     flicker: 'Flickers the opacity irregularly, like a failing bulb.',
-    flashdark: 'Darkens the picture in irregular flashes — like a black wash pulsing over it. The layer never disappears, because only its brightness moves, not its opacity.',
+    flashdark: 'Darkens the picture in flashes — at random, or on a steady beat, a double hit or a build-up — like a black wash pulsing over it. The layer never disappears, because only its brightness moves, not its opacity.',   // #482 2.3: Rhythm
     pulseopacity: 'Fades the layer smoothly in and out, over and over.',
     dissolve: 'Punches random holes in the layer. Keyframe Amount to dissolve it away.',
     blockdissolve: 'The same, in blocks rather than single pixels — a chunkier, more digital exit.',
