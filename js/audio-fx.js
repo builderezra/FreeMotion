@@ -361,6 +361,12 @@ window.FM = window.FM || {};
     return { key: key, label: label, min: min, max: max, step: step, def: def, unit: unit || '', keyframable: !!kf };
   }
   const MIX = def => P('mix', 'Mix', 0, 1, 0.01, def, '', true);
+  /* A CONTROL THAT DOES NOTHING WHILE ANOTHER IS AT 0 SAYS SO (#482 3.6 review). A shelf's or a band's corner moves a
+     boost or a cut, and at 0 dB there is none: a Bass & Treble whose Bass at is dragged with Bass at 0 plays the clip
+     bit for bit (measured on noise through the export chain) — and 0 dB is the default of every new and every saved
+     one. The panel greys the row and says "Not used when Bass is 0", the rule the visual effects already follow
+     (inspector.js markOverridden). `deadAt` is judged over every keyframe, like liveAbove: one keyframe off 0 wakes it. */
+  const DEAD0 = (p, by) => Object.assign(p, { overriddenBy: by, deadAt: 0 });
 
   const DEFS = [];
 
@@ -395,7 +401,7 @@ window.FM = window.FM || {};
     type: 'bassTreble', label: 'Bass & Treble', category: 'eq',
     params: [
       P('bass', 'Bass', -24, 24, 0.5, 0, 'dB', true), P('treble', 'Treble', -24, 24, 0.5, 0, 'dB', true),
-      P('bassFreq', 'Bass at', 40, 500, 1, 200, 'Hz', true), P('trebleFreq', 'Treble at', 1000, 16000, 10, 3000, 'Hz', true),
+      DEAD0(P('bassFreq', 'Bass at', 40, 500, 1, 200, 'Hz', true), 'bass'), DEAD0(P('trebleFreq', 'Treble at', 1000, 16000, 10, 3000, 'Hz', true), 'treble'),
     ],
     build: function (ctx) {
       const s = shop(ctx);
@@ -410,10 +416,10 @@ window.FM = window.FM || {};
       P('low', 'Low', -24, 24, 0.5, 0, 'dB', true),
       P('mid', 'Mid', -24, 24, 0.5, 0, 'dB', true),
       P('high', 'High', -24, 24, 0.5, 0, 'dB', true),
-      P('midFreq', 'Mid Freq', 200, 6000, 10, 1000, 'Hz', true),
-      P('midWidth', 'Mid width', 0.1, 10, 0.1, 1, '×', true),
-      P('lowFreq', 'Low at', 40, 1000, 1, 250, 'Hz', true),
-      P('highFreq', 'High at', 1000, 16000, 10, 4000, 'Hz', true),
+      DEAD0(P('midFreq', 'Mid Freq', 200, 6000, 10, 1000, 'Hz', true), 'mid'),
+      DEAD0(P('midWidth', 'Mid width', 0.1, 10, 0.1, 1, '×', true), 'mid'),
+      DEAD0(P('lowFreq', 'Low at', 40, 1000, 1, 250, 'Hz', true), 'low'),
+      DEAD0(P('highFreq', 'High at', 1000, 16000, 10, 4000, 'Hz', true), 'high'),
     ],
     build: function (ctx) {
       const s = shop(ctx);
@@ -1101,27 +1107,90 @@ window.FM = window.FM || {};
       winB.connect(lB2); lB2.connect(wB2.gain);
       input.connect(gA2); gA2.connect(wA2); wA2.connect(wd.wet);
       input.connect(gB2); gB2.connect(wB2); wB2.connect(wd.wet);
+      /* ═══ A SMALL SHIFT KEEPS ITS LEVEL (#482 3.5 review) ════════════════════════════════════════════════════════════
+       * The two grains are cross-faded with equal-POWER windows (sin and cos, `win`), right when the two lines carry
+       * DIFFERENT sound. Under a small shift they carry almost the SAME sound (the lines differ by half a grain's slide:
+       * 29 µs at 1 cent, 3 ms at a semitone), and equal-power windows over equal signals sum to between 1 and 1.41 in
+       * amplitude. Before Fine tune nothing could sit there — Semitones moves in whole steps — but Fine tune can.
+       * MEASURED on the build before this (tools/design/482/polish3/tone/level.js, export path): a voice-like 140 Hz
+       * tone came out +2.1 dB at 1 to 8 cents with a ±0.9 dB pump at the grain rate, so taking Fine tune off 0 by one
+       * cent was an audible jump in level.
+       * So for 0 < |v| < 1, a share of each window is its SQUARE (sin², cos²: equal-GAIN, summing to exactly 1 over
+       * equal signals), handing back to today's window as the shift reaches a semitone: sin share b = |v|, sin² share
+       * 1 − b. sin² is the sin window multiplied by itself (a gain node whose gain the window also drives), so it rides
+       * the very same LFO and cannot drift out of phase with it.
+       * ONLY WHILE FINE TUNE IS IN PLAY. A keyframed Semitones already glides through fractional values, and a saved
+       * project's glide must sound exactly as it did, so with Fine tune at 0 the sin² depth is 0 (x + 0 = x) and every
+       * window is today's, sample for sample. With Fine tune at 0 and Semitones static, v is a whole number anyway. */
+      const sqA = s.gain(0), sqB = s.gain(0);   // gain 0 + the window on .gain, fed the window = the window squared
+      winA.connect(sqA); winA.connect(sqA.gain);
+      winB.connect(sqB); winB.connect(sqB.gain);
+      const qA = s.gain(0), qB = s.gain(0);     // the squared window's depth — 0 unless Fine tune is in play
+      sqA.connect(qA); qA.connect(wA.gain);
+      sqB.connect(qB); qB.connect(wB.gain);
       wd.wet.connect(out);
       let st = Math.round(initNum(inst, 'semitones', 0, -24, 24));
       let ct = initNum(inst, 'cents', 0, -100, 100);   // Fine tune (#482 3.5)
-      /* The values the knobs drive, as functions of v = Semitones + Fine tune / 100. Written once and read by BOTH paths below,
-         because the static and animated versions differing by a stray sign is the kind of bug that only
-         ever shows up as "the export sounds wrong", long after anyone would connect it to this. */
+      /* The values the knobs drive, as functions of v = Semitones + Fine tune / 100. Written once and read by EVERY path
+         below (the build, a slider moved in the preview, the keyframed glide), because the static and animated versions
+         differing by a stray sign is the kind of bug that only ever shows up as "the export sounds wrong", long after
+         anyone would connect it to this. `fine` is the Fine tune term; only whether it is 0 matters (see above). */
       const dOf = function (v) { const r = Math.pow(2, v / 12); return Math.abs(1 - r) * G; };   // one grain's slide
       const upOf = function (v) { return Math.pow(2, v / 12) > 1; };
-      const shape = function (v) {
+      const targets = function (v, fine) {
         const up = upOf(v), D = dOf(v);   // the ramp's slope IS 1 − ratio
         const long = v > LONG_AT, on = v ? 1 : 0;
         // the short lines never get asked for more than they hold (they are silent whenever it would be more)
         const Ds = Math.min(D, SHORT_MAX);
-        gA.delayTime.value = up ? Ds : 0; gB.delayTime.value = up ? Ds : 0;
-        gA2.delayTime.value = up ? D : 0; gB2.delayTime.value = up ? D : 0;
-        mA.gain.value = up ? -D : D; mB.gain.value = up ? -D : D;
-        // At 0 st both lines carry the identical dry signal, and two equal-POWER windows over identical
-        // signals sum to +3 dB, not unity. Hold line A wide open and mute line B instead — a real bypass.
-        lA.gain.value = long ? 0 : on; wA.gain.value = v ? 0 : 1;
-        lB.gain.value = long ? 0 : on;
-        lA2.gain.value = long ? 1 : 0; lB2.gain.value = long ? 1 : 0;
+        const depth = long ? 0 : on, b = fine ? Math.min(1, Math.abs(v)) : 1;
+        return [
+          [gA.delayTime, up ? Ds : 0], [gB.delayTime, up ? Ds : 0],
+          [gA2.delayTime, up ? D : 0], [gB2.delayTime, up ? D : 0],
+          [mA.gain, up ? -D : D], [mB.gain, up ? -D : D],
+          // At 0 st both lines carry the identical dry signal, and two equal-POWER windows over identical
+          // signals sum to +3 dB, not unity. Hold line A wide open and mute line B instead — a real bypass.
+          [lA.gain, depth * b], [lB.gain, depth * b], [qA.gain, depth * (1 - b)], [qB.gain, depth * (1 - b)],
+          [wA.gain, v ? 0 : 1],
+          [lA2.gain, long ? 1 : 0], [lB2.gain, long ? 1 : 0],
+        ];
+      };
+      // At build: ASSIGNED, exactly as always — nothing is playing yet, and a saved project renders from these values.
+      const built0 = targets(st + ct / 100, ct);
+      built0.forEach(function (t) { t[0].value = t[1]; });
+      /* ═══ A SLIDER MOVED WHILE THE PREVIEW PLAYS GLIDES, IT DOES NOT JUMP (#482 3.5 review) ═══════════════════════════
+       * The live preview never rebuilds the chain for a moved value — applyAt hands the new value in, every frame. These
+       * params used to be ASSIGNED, so each new value was a step: the grain delay jumped, the read position jumped with
+       * it, and the sound clicked. Fine tune is the slider people drag in small steps while listening, so a drag crackled
+       * end to end. MEASURED (tools/design/482/polish3/tone/clicks.js: applyAt every 16 ms in an OfflineAudioContext; a
+       * click = the biggest jump in the waveform's slope in 2 ms, against the render's median): dragging Fine tune 0 → 60
+       * scored 150, one step 30 → 31 cents 28, leaving 0 by one cent 49, a Semitones step 625; a steady tone scores 1.5.
+       * So after the build every change RAMPS to where it is going, across SLEW (a screen frame and a bit).
+       * ⚠️ A RAMP STILL UNDER WAY IS APPENDED TO, NEVER CANCELLED. The first version cancelled the ramp in flight and
+       * re-anchored at "now" (cancelScheduledValues + setValueAtTime) — and still scored 32 on the drag, from ONE-SAMPLE
+       * spikes at some frames and not others: an event time of ctx.currentTime can land a sample late once Chrome turns
+       * it back into a frame, and that one sample then fell back to the value before the cancelled ramp. Only a ramp
+       * shorter than a frame (never interrupted) was clean. So a new value is a linear ramp that starts where the last one
+       * ends — nothing is ever removed from under the sample being played, and the path stays continuous however fast
+       * the frames come. At rest, the ramp is anchored at the value the param rests on, which is known exactly.
+       * THIS NEVER RUNS IN AN EXPORT: schedule() hands the static path the value the chain was built with, which changes
+       * nothing (FM._pitchReshapes counts it), so every saved render is untouched. The KEYFRAMED preview (glide, set per
+       * frame) is left as it was on purpose: ramping it would change today's keyframed-Semitones preview. */
+      const SLEW = 0.02;
+      let slewAt = -Infinity, slewTo = built0.map(function (t) { return t[1]; }), glided = false;
+      const reshape = function (v, fine) {
+        FM._pitchReshapes = (FM._pitchReshapes || 0) + 1;
+        const now = ctx.currentTime, tg = targets(v, fine), end = now + SLEW;
+        const again = now <= slewAt, moving = now < slewAt + SLEW;
+        tg.forEach(function (t, i) {
+          const ap = t[0];
+          try {
+            if (glided) { const cur = ap.value; ap.cancelScheduledValues(now); ap.setValueAtTime(cur, now); }   // a keyframed glide ran since
+            else if (again) ap.cancelScheduledValues(end);   // a second move in the SAME frame (both keys at once): replace this frame's ramp, which has not begun
+            else if (!moving) ap.setValueAtTime(slewTo[i], now);   // at rest: anchor on the value it rests at
+            ap.linearRampToValueAtTime(t[1], end);
+          } catch (e) { try { ap.value = t[1]; } catch (e2) {} }
+        });
+        slewAt = now; slewTo = tg.map(function (t) { return t[1]; }); glided = false;
       };
       /* ---- THE ANIMATED PATH (the unnumbered per-effect-slider entry) ----------------------------
        * Pitch Shift is the last of the six, and it is NOT the crossfaded-shaper-bank fix that Distortion,
@@ -1148,28 +1217,22 @@ window.FM = window.FM || {};
         if (typeof v !== 'number' || !isFinite(v)) v = 0;
         return clamp(v, lo, hi);
       };
-      const glide = function (v, when, ramp) {
+      const glide = function (v, fine, when, ramp) {
         // Counted so the suite can prove a STATIC pitch never takes this path. Sound alone cannot police
         // that: scheduling one value 120 times renders identically to assigning it once. Same lesson as
         // the shaper-bank counter above, and as the motion-blur slice counter in queue 382.
         FM._pitchGlides = (FM._pitchGlides || 0) + 1;
-        const up = upOf(v), D = dOf(v), on = v ? 1 : 0, long = v > LONG_AT, Ds = Math.min(D, SHORT_MAX);
-        const at = function (ap, x) {
-          try { ramp ? ap.linearRampToValueAtTime(x, when) : ap.setValueAtTime(x, when); } catch (e) {}
-        };
-        at(gA.delayTime, up ? Ds : 0); at(gB.delayTime, up ? Ds : 0);
-        at(gA2.delayTime, up ? D : 0); at(gB2.delayTime, up ? D : 0);
-        at(mA.gain, up ? -D : D); at(mB.gain, up ? -D : D);
-        at(lA.gain, long ? 0 : on); at(wA.gain, 1 - on); at(lB.gain, long ? 0 : on);
-        at(lA2.gain, long ? 1 : 0); at(lB2.gain, long ? 1 : 0);
+        glided = true;
+        targets(v, fine).forEach(function (t) {
+          try { ramp ? t[0].linearRampToValueAtTime(t[1], when) : t[0].setValueAtTime(t[1], when); } catch (e) {}
+        });
       };
-      shape(st + ct / 100);
       /* TWO KEYS, ONE SHIFT (#482 3.5). Both sliders feed v, and the scheduler hands each key its values separately
          (the whole window for Semitones, then the whole window for Fine tune), so the two cannot each glide on their
          own — the second would overwrite the first. So ONE key drives: Semitones when it is keyframed, reading Fine
          tune at the same scene moment (sceneT, which the chain passes), otherwise a keyframed Fine tune, reading the
          plain Semitones. The key that does not drive does nothing. With neither keyframed it is the static path, as
-         before: whole semitones assigned, plus a plain Fine tune. */
+         before: whole semitones plus a plain Fine tune, assigned at the build and ramped when moved after it. */
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
         custom: {
@@ -1178,14 +1241,16 @@ window.FM = window.FM || {};
                is 0 and not null. Guarding on `when == null` is exactly the bug the Distortion bank
                shipped with, where every static instance in every project quietly took the expensive
                path while sounding identical. */
-            if (!kfd('semitones') && !kfd('cents')) { v = Math.round(clamp(v, -24, 24)); if (v !== st) { st = v; shape(st + ct / 100); } return; }
+            if (!kfd('semitones') && !kfd('cents')) { v = Math.round(clamp(v, -24, 24)); if (v !== st) { st = v; reshape(st + ct / 100, ct); } return; }
             if (!kfd('semitones')) return;   // a keyframed Fine tune drives, and reads this value itself
-            glide(clamp(v, -24, 24) + other('cents', sceneT, -100, 100) / 100, Math.max(0, when || 0), !!ramp);
+            const c = other('cents', sceneT, -100, 100);
+            glide(clamp(v, -24, 24) + c / 100, c, Math.max(0, when || 0), !!ramp);
           },
           cents: function (v, when, ramp, sceneT) {
-            if (!kfd('semitones') && !kfd('cents')) { v = clamp(v, -100, 100); if (v !== ct) { ct = v; shape(st + ct / 100); } return; }
+            if (!kfd('semitones') && !kfd('cents')) { v = clamp(v, -100, 100); if (v !== ct) { ct = v; reshape(st + ct / 100, ct); } return; }
             if (kfd('semitones')) return;    // a keyframed Semitones drives, and reads Fine tune at the same moment
-            glide(Math.round(other('semitones', sceneT, -24, 24)) + clamp(v, -100, 100) / 100, Math.max(0, when || 0), !!ramp);
+            const c = clamp(v, -100, 100);
+            glide(Math.round(other('semitones', sceneT, -24, 24)) + c / 100, c, Math.max(0, when || 0), !!ramp);
           },
           mix: wd.set,
         },

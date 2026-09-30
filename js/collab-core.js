@@ -30,8 +30,10 @@ window.FM = window.FM || {};
      Balance gained controls, so an older build's sanitiser would drop keys this one keeps — the two would normalise the
      same project differently, which is exactly what the gate below refuses.
      Bumped to 4 by #482 polish batch 2 for the same reason: Wiggle, Shake, Pulse, Swing, Orbit, Drift, Flash (darken), Frame
-     Stutter, Motion Blur (Object), Speed Lines and Glitch gained controls. */
-  C.SCHEMA_REV = 4;
+     Stutter, Motion Blur (Object), Speed Lines and Glitch gained controls.
+     Bumped to 5 by #482 polish batch 3: Pitch Shift gained Fine tune and Semitones now reaches ±24, and Bass & Treble and
+     3-Band EQ gained their corner controls — the first AUDIO keys, which the fingerprint now also hashes. */
+  C.SCHEMA_REV = 5;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -217,12 +219,20 @@ window.FM = window.FM || {};
         return [p.key, p.type, p.default, p.legacy, p.min, p.max, p.keyframable !== false ? 1 : 0];
       })];
     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
-    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV);
+    /* …AND THE AUDIO EFFECTS' (#482 batch 3 review). Only FM.fxRegistry was hashed, and the fixture's one audio effect is
+       a Reverb, so a build that gave Pitch Shift a Fine tune, moved Semitones to ±24 and gave both EQs their corners
+       hashed the same as the build before it — and the two would have joined one session while their sanitisers
+       normalised the same effects differently (the older one strips Fine tune and clamps Semitones 20 to 12). The audio
+       sanitiser keeps exactly these five facts per param (storage.js sanitizeAudioFx), so these are what can disagree. */
+    const adefs = FM.audioFxRegistry ? (FM.audioFxRegistry.all() || []).map(function (e) {
+      return [e.type, (e.params || []).map(function (p) { return [p.key, p.min, p.max, p.def, p.keyframable !== false ? 1 : 0]; })];
+    }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }) : null;
+    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV);
   };
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 2718858111987276;   // #482 polish batch 2 (SCHEMA_REV 4): eleven movers/rhythm/pixel effects gained controls
+  C.SCHEMA_FP = 5931223863543533;   // #482 polish batch 3 (SCHEMA_REV 5): Pitch Shift and the two EQs gained audio keys, and the audio registry is hashed now
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *

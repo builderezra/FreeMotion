@@ -41,6 +41,27 @@ return (async function () {
     var d = await render([{ type: 'pitch', enabled: true, params: { semitones: st, cents: ct, mix: 1 } }], saw(220), Math.round(1.6 * SR));
     return acPitch(d, want);
   }
+  /* THE PITCH EACH GRAIN PLAYS (#482 3.5 review, for the Fine tune sheet). One autocorrelation over 1.3 s folds in the
+     shifter's 20 Hz grain rhythm and read +50 cents as 227.0 Hz — 4.6 cents sharp of the 226.4 Hz it plays. Inside a grain
+     the output IS the tone resampled by exactly 2^(cents/1200) (the delay slides at 1 − ratio), and a grain's delay only
+     jumps where its window is silent, so a 25 ms autocorrelation centred on each grain's loudest moment (every 50 ms,
+     alternating lines) reads the shifted pitch itself; the median over the grains is the dot. Measured against the
+     target (tone/pitch50.js): within 1 cent from −100 to +150 cents, +50 reading 226.44. */
+  function grainPitch(d, want) {
+    var res = [], half = Math.round(0.0125 * SR), lo = Math.floor(SR / (want * 1.1)), hi = Math.ceil(SR / (want / 1.1));
+    for (var t = 0.3; t + 0.05 < d.length / SR; t += 0.05) {
+      var c = Math.round(t * SR), r = {}, best = -1e9, bl = lo;
+      for (var L = lo - 1; L <= hi + 1; L++) { var s = 0; for (var i = c - half; i < c + half; i++) s += d[i] * d[i + L]; r[L] = s; if (L >= lo && L <= hi && s > best) { best = s; bl = L; } }
+      res.push(SR / (bl + 0.5 * (r[bl - 1] - r[bl + 1]) / (r[bl - 1] - 2 * r[bl] + r[bl + 1])));
+    }
+    res.sort(function (a, b) { return a - b; });
+    return res[res.length >> 1];
+  }
+  async function grainPitchOf(st, ct) {
+    var want = 220 * Math.pow(2, (st + ct / 100) / 12);
+    var d = await render([{ type: 'pitch', enabled: true, params: { semitones: st, cents: ct, mix: 1 } }], saw(220), Math.round(1.6 * SR));
+    return grainPitch(d, want);
+  }
 
   // ---- drawing ----
   var ov = document.createElement('div');
@@ -68,10 +89,18 @@ return (async function () {
     (o.yt || []).forEach(function (t) { S('line', { x1: L, x2: W - R, y1: Y(t[0]), y2: Y(t[0]), stroke: 'rgba(255,255,255,.07)' }, svg); txt(svg, L - 4, Y(t[0]) + 3.5, t[1], { 'text-anchor': 'end' }); });
     (o.xt || []).forEach(function (t) { S('line', { x1: X(t[0]), x2: X(t[0]), y1: T, y2: H - B, stroke: 'rgba(255,255,255,.05)' }, svg); txt(svg, X(t[0]), H - 6, t[1], { 'text-anchor': 'middle' }); });
     (o.words || []).forEach(function (t) { txt(svg, X(t[0]), 12, t[1], { 'text-anchor': 'middle', fill: '#6f7788', 'font-size': 9.5 }); });
+    // areas: [{ pts: [[x, lo, hi], …], fill }] — a shaded band, e.g. how far the level pumps either side of its average
+    (o.areas || []).forEach(function (a) {
+      var cl = function (v) { return Y(Math.max(o.y0, Math.min(o.y1, v))).toFixed(1); };
+      var d = a.pts.map(function (p, i) { return (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + cl(p[2]); }).join(' ') + ' ' +
+        a.pts.slice().reverse().map(function (p) { return 'L' + X(p[0]).toFixed(1) + ' ' + cl(p[1]); }).join(' ') + ' Z';
+      S('path', { d: d, fill: a.fill, stroke: 'none' }, svg);
+    });
     (o.series || []).forEach(function (s) {
       var d = s.pts.map(function (p, i) { return (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(Math.max(o.y0, Math.min(o.y1, p[1]))).toFixed(1); }).join(' ');
       if (!s.dots) S('path', { d: d, fill: 'none', stroke: s.color, 'stroke-width': s.w || 2.2, 'stroke-dasharray': s.dash || '', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
-      if (s.dots) s.pts.forEach(function (p) { S('circle', { cx: X(p[0]), cy: Y(p[1]), r: s.r || 4.5, fill: s.color }, svg); if (p[2]) txt(svg, X(p[0]) + (p[3] || 0), Y(p[1]) + (p[4] || -9), p[2], { 'text-anchor': 'middle', fill: s.color, 'font-size': 10 }); });
+      // a dot's label: [x, y, text, dx, dy, anchor] — the anchor lets a label sit beside its OWN dot, clear of the next one
+      if (s.dots) s.pts.forEach(function (p) { S('circle', { cx: X(p[0]), cy: Y(p[1]), r: s.r || 4.5, fill: s.color }, svg); if (p[2]) txt(svg, X(p[0]) + (p[3] || 0), Y(p[1]) + (p[4] || -9), p[2], { 'text-anchor': p[5] || 'middle', fill: s.color, 'font-size': 10 }); });
       if (s.label) txt(svg, X(s.lx), Y(s.ly), s.label, { fill: s.color, 'font-size': 11, 'font-weight': 600, 'text-anchor': s.anchor || 'start' });
     });
     (o.marks || []).forEach(function (m) { S('line', { x1: X(m[0]), x2: X(m[0]), y1: T, y2: H - B, stroke: m[2] || '#e9ecf3', 'stroke-dasharray': '3 3', 'stroke-width': 1 }, svg); if (m[1]) txt(svg, X(m[0]) + (m[3] || 4), T + (m[4] || 24), m[1], { fill: m[2] || '#e9ecf3', 'font-size': 10, 'text-anchor': m[5] || 'start' }); });
@@ -154,17 +183,20 @@ return (async function () {
   } else if (SHEET === 'pitch-finetune') {
     title('Pitch Shift · Fine tune', 'Semitones moves a sound in whole musical steps. Fine tune moves it in between — 100 cents is one step — so a voice can go a touch higher, or a clip can be nudged into tune with a song.');
     var steps = [];
-    for (var s = -1; s <= 2; s++) steps.push([s * 100, await pitchOf(s, 0)]);
+    for (var s = -1; s <= 2; s++) steps.push([s * 100, await grainPitchOf(s, 0)]);
     var fine = [];
-    for (var c = -100; c <= 200; c += 25) fine.push([c, await pitchOf(Math.floor(c / 100), c - 100 * Math.floor(c / 100))]);
+    for (var c = -100; c <= 200; c += 25) fine.push([c, await grainPitchOf(Math.floor(c / 100), c - 100 * Math.floor(c / 100))]);
     out.steps = steps; out.fine = fine;
     var yl = [[207.65, 'G#'], [220, 'A'], [233.08, 'A#'], [246.94, 'B']];
     var ax = { w: 362, h: 180, xLog: false, x0: -120, x1: 220, y0: 202, y1: 252, yLog: true, xt: [[-100, '−1 step'], [0, '0'], [100, '+1 step'], [200, '+2 steps']], yt: yl.map(function (p) { return [p[0], p[1]]; }) };
     head('Today — a whole step or nothing');
     chart(Object.assign({}, ax, { series: [{ dots: true, pts: steps.map(function (p) { return [p[0], p[1], p[1].toFixed(1) + ' Hz', 0, p[0] === 200 ? 16 : -9]; }), color: GREY }] }));
     head('New — Fine tune lands in between (every 25 cents)', true);
-    chart(Object.assign({}, ax, { series: [{ pts: fine, color: 'rgba(79,209,165,.35)', w: 1.5 }, { dots: true, r: 3.6, pts: fine.map(function (p) { return [p[0], p[1], (p[0] % 100 === 50) ? p[1].toFixed(1) + ' Hz' : '', 0, 14]; }), color: '#4fd1a5' }] }));
-    note('Each dot is the pitch a buzzy, voice-like 220 Hz tone comes out at, measured after the app’s own Pitch Shift. Fine tune adds to Semitones, and it can be keyframed: it glides smoothly, as Semitones does. Fine tune 0 is today’s sound exactly.');
+    /* THE HALF-STEP LABELS SIT BESIDE THEIR OWN DOTS (#482 3.5 review). They were centred under the ±50 dots, 14 px down —
+       which ran them into the dot BEFORE (25 cents left and a step lower), so "227.0 Hz" read as the +25 dot's pitch. Each
+       now starts just right of its own dot and a little below it: the dots climb to the right, so that corner is empty. */
+    chart(Object.assign({}, ax, { series: [{ pts: fine, color: 'rgba(79,209,165,.35)', w: 1.5 }, { dots: true, r: 3.6, pts: fine.map(function (p) { return [p[0], p[1], (Math.abs(p[0] % 100) === 50) ? p[1].toFixed(1) + ' Hz' : '', 7, 14, 'start']; }), color: '#4fd1a5' }] }));
+    note('Each dot is the pitch a buzzy, voice-like 220 Hz tone comes out at, measured after the app’s own Pitch Shift — piece by piece, since the shifter plays the sound in overlapping tenth-of-a-second pieces. The labelled dots are the half-steps: −50, +50 and +150 cents. Fine tune adds to Semitones, and it can be keyframed: it glides smoothly, as Semitones does. Fine tune 0 is today’s sound exactly.');
   } else if (SHEET === 'pitch-semitones') {
     title('Pitch Shift · Semitones to ±24', 'Semitones used to stop at 12 steps (one octave) either way. It now reaches 24 (two octaves): a voice can drop to a deep monster growl or rise to a tiny squeak.');
     var pts = [];
@@ -221,6 +253,60 @@ return (async function () {
     head('The line under the sliders');
     ov.appendChild(h('div', 'background:#161a22;border-radius:10px;padding:10px 12px;color:#a8afbf;font-size:12.5px;line-height:1.4', FM.audioFxRegistry.get('pitch').hint));
     note('Measured through the app’s own Pitch Shift: where a click’s sound lands on average, and a clap through +12 steps. The shifter reads the sound in short overlapping pieces, so a sharp hit comes out spread over about a tenth of a second. The lag grows with the shift, which is why the line gives the octave figure. The sound itself did not change; this line explains it.');
+  } else if (SHEET === 'pitch-finetune-level') {
+    /* #482 3.5 review, finding 2 — the level. Numbers from data.py (level.js on the build as reviewed, then on the fix). */
+    var LD = window.__sheetData482t;
+    title('Pitch Shift · Fine tune keeps the volume', 'In the first build, moving Fine tune off 0 made a voice about 2 dB louder at once — a small but clear jump — and made it flutter slightly, 20 times a second. Now a small Fine tune leaves the volume where it was, and it eases into the old sound as it nears a whole step.');
+    var CS = [-100, -75, -50, -30, -15, -8, -3, -1, 0, 1, 3, 8, 15, 30, 50, 75, 100];
+    var lvl = function (d, key) { return CS.map(function (c) { var v = c === 0 ? d[key].st0 : d[key]['c' + c]; return [c, v[0], v[1]]; }); };
+    var lax = { w: 362, h: 168, x0: -110, x1: 110, y0: -4, y1: 4, xt: [[-100, '−100'], [-50, '−50'], [0, '0'], [50, '+50'], [100, '+100']], yt: [[-3, '−3 dB'], [0, '0'], [3, '+3 dB']] };
+    var lchart = function (d, color, band) {
+      var pts = lvl(d, 'voice');
+      chart(Object.assign({}, lax, {
+        areas: [{ pts: pts.map(function (p) { return [p[0], p[1] - p[2], p[1] + p[2]]; }), fill: band }],
+        series: [{ pts: pts, color: color }, { dots: true, r: 3, pts: pts.filter(function (p) { return p[0] === 3; }).map(function (p) { return [p[0], p[1], (p[1] >= 0 ? '+' : '') + p[1].toFixed(1) + ' dB at 3 cents', 8, p[1] > 1 ? -10 : -12, 'start']; }), color: color }],
+      }));
+    };
+    head('First build — louder the moment Fine tune leaves 0');   // across: Fine tune in cents; up: louder
+    lchart(LD.before, GREY, 'rgba(174,181,196,.18)');
+    head('Fixed — a few cents keep the volume', true);
+    lchart(LD.after, '#4fd1a5', 'rgba(79,209,165,.18)');
+    out.level = { before: lvl(LD.before, 'voice'), after: lvl(LD.after, 'voice') };
+    var pn = function (d, c) { return d.pink['c' + c][0]; }, wn = function (d, c) { return d.noise['c' + c][0]; };
+    note('Across: Fine tune, in cents. The line is how much louder (up) or quieter (down) a voice-like tone comes out than the clip itself, in dB: 0 is exactly as recorded, +2 a small but noticeable lift. The shaded band is the flutter — how far the volume swings either side, 20 times a second. Measured through the app’s own Pitch Shift. Fine tune 0 and whole steps did not change. One trade-off: pure hiss (white noise) now comes out a little quieter at small Fine tune values (' + wn(LD.after, 3).toFixed(1) + ' dB at 3 cents, was ' + wn(LD.before, 3).toFixed(1) + '); ordinary room noise does not (pink noise ' + pn(LD.after, 3).toFixed(1) + ' dB, was +' + pn(LD.before, 3).toFixed(1) + ').');
+  } else if (SHEET === 'pitch-finetune-drag') {
+    /* #482 3.5 review, finding 1 — the crackle in the preview. Numbers and waveforms from data.py (clicks.js, both builds). */
+    var KD = window.__sheetData482t;
+    title('Pitch Shift · no crackle while you drag', 'Moving Fine tune or Semitones while the sound plays used to crackle: each new value was a jump in the sound. Now every move glides to the new pitch over a fiftieth of a second. Exports were never affected.');
+    head('One Semitones step while it plays — 12 ms of the sound');
+    var wv = S('svg', { width: 362, height: 150, viewBox: '0 0 362 150' }); wv.style.display = 'block';
+    S('rect', { x: 0, y: 0, width: 362, height: 150, rx: 10, fill: '#161a22' }, wv);
+    [[KD.before.snipSemi, GREY, 'First build: the sound jumps', 40], [KD.after.snipSemi, '#4fd1a5', 'Fixed: it glides', 110]].forEach(function (r) {
+      var dd = r[0], mid = r[3], pth = '';
+      for (var i = 0; i < dd.length; i++) pth += (i ? 'L' : 'M') + (12 + i / (dd.length - 1) * 338).toFixed(1) + ' ' + (mid - dd[i] * 44).toFixed(1);
+      S('path', { d: pth, fill: 'none', stroke: r[1], 'stroke-width': 1.4, 'stroke-linejoin': 'round' }, wv);
+      txt(wv, 12, mid - 24, r[2], { fill: r[1], 'font-size': 11 });
+    });
+    var xs = 12 + 0.5 * 338; S('line', { x1: xs, x2: xs, y1: 8, y2: 142, stroke: 'rgba(233,236,243,.35)', 'stroke-dasharray': '3 3' }, wv);
+    txt(wv, xs + 4, 146, 'the step', { fill: '#a8afbf', 'font-size': 9.5 });
+    ov.appendChild(wv);
+    head('How much each move crackles', true);
+    var rowsK = [['Drag Fine tune 0 → +60', 'drag0to60'], ['Drag on a 120 Hz phone screen', 'drag120Hz'], ['One small Fine tune step', 'step30to31'], ['Fine tune off 0 by one cent', 'leave0to1'], ['One Semitones step', 'semiStep0to1'], ['Both at once (Reset, undo)', 'bothAtOnce']];
+    var bh2 = 20 + rowsK.length * 40, bs = S('svg', { width: 362, height: bh2, viewBox: '0 0 362 ' + bh2 }); bs.style.display = 'block';
+    S('rect', { x: 0, y: 0, width: 362, height: bh2, rx: 10, fill: '#161a22' }, bs);
+    var bx = function (v) { return 12 + Math.log10(Math.max(1, v)) / Math.log10(1000) * 250; };
+    [1, 10, 100, 1000].forEach(function (g) { S('line', { x1: bx(g), x2: bx(g), y1: 8, y2: bh2 - 14, stroke: 'rgba(255,255,255,.07)' }, bs); txt(bs, bx(g), bh2 - 4, String(g), { 'text-anchor': 'middle', 'font-size': 9.5 }); });
+    rowsK.forEach(function (r, i) {
+      var y = 12 + i * 40, b = KD.before[r[1]], a = KD.after[r[1]];
+      txt(bs, 12, y + 7, r[0], { fill: '#e9ecf3', 'font-size': 11 });
+      S('rect', { x: 12, y: y + 11, width: Math.max(2, bx(b) - 12), height: 8, rx: 3, fill: '#5d6678' }, bs);
+      txt(bs, bx(b) + 5, y + 18.5, b.toFixed(0), { fill: '#aeb5c4', 'font-size': 10 });
+      S('rect', { x: 12, y: y + 21, width: Math.max(2, bx(a) - 12), height: 8, rx: 3, fill: '#4fd1a5' }, bs);
+      txt(bs, bx(a) + 5, y + 28.5, a.toFixed(1), { fill: '#4fd1a5', 'font-size': 10 });
+    });
+    ov.appendChild(bs);
+    out.clicks = rowsK.map(function (r) { return [r[1], KD.before[r[1]], KD.after[r[1]]]; });
+    note('Grey = first build, green = fixed. The score is the biggest sudden jump in the waveform in any 2 ms, compared with the sound around it: a steady tone scores about 1.5, and a click scores tens to hundreds. Measured by playing the app’s own Pitch Shift the way the preview does, the new value handed in once per screen frame. A keyframed Pitch Shift still steps in the preview (a later fix); its export was always smooth.');
   }
   await new Promise(function (r) { setTimeout(r, 50); });
   var last = ov.lastElementChild, bottom = last ? last.getBoundingClientRect().bottom + 16 : 800;

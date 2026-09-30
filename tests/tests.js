@@ -116068,4 +116068,220 @@
     }
   });
 
+  /* ═══ #482 BATCH 3 (tone) — THE REVIEW'S FIVE FINDINGS ═══════════════════════════════════════════════════════════════
+   * A review of the build measured five faults; four are fixed in the app and tested here (the fifth was a picture's
+   * labels). Every number quoted was measured by the scripts in tools/design/482/polish3/tone/ (clicks.js, level.js)
+   * through FM.buildAudioFxChain, before and after, and each test fails on 7bbeb5bc. */
+  /* THE PREVIEW'S OWN PATH, FRAME BY FRAME. audio-fx-live.js never rebuilds a chain for a moved value: it calls
+     chain.applyAt(scene) every screen frame, and that is the only way a dragged slider reaches the sound. This replays
+     exactly that in an OfflineAudioContext — suspend every `fr` samples (768 = 16 ms, one 60 Hz frame), apply the moves
+     due at that frame, call applyAt, resume. `moves` is [[time, paramsPatch], …]. */
+  async function frames482t(params, moves, sig, secs, fr) {
+    const SR = 48000, n = Math.round(SR * secs); fr = fr || 768;
+    const oac = new OfflineAudioContext(1, n, SR), b = oac.createBuffer(1, n, SR), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = sig(i / SR);
+    const src = oac.createBufferSource(); src.buffer = b;
+    const fx = pitch482t(params);
+    const chain = FM.buildAudioFxChain(oac, { audioFx: fx }, 0);
+    chain.applyAt(0);
+    for (let k = 1; k * fr < n; k++) {
+      const t = k * fr / SR, mv = moves.filter(m => Math.abs(m[0] - t) < 1e-6)[0];
+      oac.suspend(t).then(() => { if (mv) Object.assign(fx[0].params, mv[1]); chain.applyAt(t); oac.resume(); });
+    }
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const r = await oac.startRendering();
+    try { chain.dispose(); } catch (e) {}
+    return r.getChannelData(0);
+  }
+  /* A CLICK is a sudden change in the waveform's slope: the biggest |2nd difference| in any 2 ms window between a and b s,
+     over the render's median window. A steady tone scores about 1.5 whatever it is; a step in a delay or a gain scores tens. */
+  function click482t(d, a, b) {
+    const SR = 48000, W = 96, wins = [];
+    for (let s = 1; s + W < d.length - 1; s += W) {
+      let m = 0; for (let i = s; i < s + W; i++) m = Math.max(m, Math.abs(d[i + 1] - 2 * d[i] + d[i - 1]));
+      wins.push([s / SR, m]);
+    }
+    const med = wins.map(w => w[1]).sort((x, y) => x - y)[wins.length >> 1] || 1e-12;
+    let worst = 0; wins.forEach(w => { if (w[0] >= a && w[0] < b) worst = Math.max(worst, w[1]); });
+    return worst / med;
+  }
+
+  /* FINDING 1 — FINE TUNE CRACKLED IN THE PREVIEW. The static path ASSIGNED its params, so every new value was a step in the
+   * grain delay and the read position jumped with it. MEASURED on the build (click482t, 60 Hz frames): dragging Fine tune
+   * 0 -> +60 scored 150, one step 30 -> 31 cents 28, leaving 0 by a cent 49, a Semitones step 625, both keys at once 639, a
+   * drag on a 120 Hz screen 36 — against 1.5 for a steady tone. Fixed (a moved value ramps over 20 ms, appended to any ramp
+   * still under way, never cancelled): 1.1, 1.5, 1.0, 1.5, 3.3, 1.1. The limit, 6, sits between. The export never runs the
+   * ramp (FM._pitchReshapes), which is why saved renders stay sample-exact. */
+  test('482 3.5 Pitch Shift - dragging Fine tune or stepping Semitones while the preview plays glides to the new pitch without a click, and the export never takes that path', { item: '482', budgetMs: 120000 }, async function () {
+    const two = t => 0.3 * Math.sin(2 * Math.PI * 180 * t) + 0.2 * Math.sin(2 * Math.PI * 470 * t);
+    const T0 = 0.256, F = 768 / 48000, LIMIT = 6;
+    // CONTROL: the instrument hears a click. A steady render scores low, and the same render with a 0.02 step added at 0.5 s
+    // (a twenty-fifth of the tone’s height) scores well over the limit.
+    const steady = await frames482t({ cents: 30 }, [], two, 1.5);
+    const s0 = click482t(steady, 0.25, 1.4);
+    const stepped = Float32Array.from(steady, (x, i) => x + (i >= 24000 ? 0.02 : 0));
+    const s1 = click482t(stepped, 0.25, 1.4);
+    if (!(s0 < 3 && s1 > 2 * LIMIT)) throw new Error('CONTROL: a steady Fine tune scores ' + s0.toFixed(1) + ' and the same sound with a 0.02 step scores ' + s1.toFixed(1) + ' - the click probe cannot tell a click from none');
+    const drag = []; for (let k = 0; k <= 30; k++) drag.push([T0 + k * F, { cents: 2 * k }]);
+    const drag120 = []; for (let k = 0; k <= 60; k++) drag120.push([T0 + k * 384 / 48000, { cents: k }]);
+    const cases = [
+      ['dragging Fine tune from 0 to +60, 2 cents a frame', {}, drag, 0.9, 768],
+      ['dragging Fine tune from 0 to +60 on a 120 Hz screen (8 ms frames, faster than a ramp)', {}, drag120, 0.9, 384],
+      ['one Fine tune step from 30 to 31 cents', { cents: 30 }, [[T0, { cents: 31 }]], 0.4, 768],
+      ['taking Fine tune off 0 by one cent', {}, [[T0, { cents: 1 }]], 0.4, 768],
+      ['one Semitones step from 0 to +1', {}, [[T0, { semitones: 1 }]], 0.4, 768],
+      ['Semitones and Fine tune both moved in one frame (a Reset, an undo)', { semitones: 2, cents: 40 }, [[T0, { semitones: -1, cents: -30 }]], 0.4, 768],
+    ];
+    const bad = [];
+    FM._pitchReshapes = 0;
+    for (const [what, params, moves, end, fr] of cases) {
+      const sc = click482t(await frames482t(params, moves, two, 1.5, fr), 0.25, end);
+      if (!(sc < LIMIT)) bad.push(what + ' clicks in the preview: ' + sc.toFixed(1) + ' against ' + s0.toFixed(1) + ' for a steady tone');
+    }
+    if (!(FM._pitchReshapes > 0)) bad.push('CONTROL: FM._pitchReshapes did not count the ramps those moves made (' + FM._pitchReshapes + '), so the check below proves nothing');
+    // …and it gets there: a drag of Fine tune from 0 to +100 ends one semitone up (the comb-aligned tone of the tests above).
+    const F0 = 336.36, UP = F0 * Math.pow(2, 1 / 12), up = []; for (let k = 0; k <= 25; k++) up.push([T0 + k * F, { cents: 4 * k }]);
+    const u = hz482t(await frames482t({}, up, tone482t(F0), 2), 1.0, 1.9);
+    if (Math.abs(u - UP) > 2) bad.push('Fine tune dragged from 0 to +100 in the preview ends at ' + u.toFixed(1) + ' Hz, not ' + UP.toFixed(1) + ' (one semitone up)');
+    // THE EXPORT NEVER RAMPS: schedule() and a fresh preview chain hand the static path the value the chain was built with.
+    FM._pitchReshapes = 0;
+    await afx986(pitch482t({ semitones: 3, cents: 40 }), two, 0.5);
+    await afx986(pitch482t({ semitones: -7, cents: -15, mix: 0.6 }), two, 0.5, { live: true });
+    if (FM._pitchReshapes) bad.push('an export and a fresh preview of a plain Pitch Shift took the moved-slider ramp ' + FM._pitchReshapes + ' times - a saved render would no longer be the sound it was');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FINDING 2 — A FEW CENTS WERE 2 dB LOUDER. The grains are cross-faded with equal-POWER windows, which sum to 1 to 1.41
+   * in amplitude over two nearly identical lines — and under a few cents the lines are nearly identical. MEASURED on the
+   * build, export path, a voice-like 140 Hz tone with a 5 Hz vibrato: +2.12 dB at 1 cent, +2.05 at 3, +1.83 at 8, +1.53 at
+   * 15, +1.75 at -10, each with a pump of about ±0.9 dB; Fine tune 0 is 0.00. Fixed (a share of each window is its square,
+   * equal-GAIN, handing back to today's window as the shift reaches a semitone; only while Fine tune is in play): +0.01,
+   * +0.02, -0.02, -0.07, -0.03, pump at most ±0.43. Limits: ±0.5 dB and ±0.7 dB of pump. */
+  test('482 3.5 Pitch Shift - a few cents of Fine tune keep the clip at its own level, with no pump, in the export and the preview, and still move the pitch', { item: '482', budgetMs: 120000 }, async function () {
+    const SR = 48000;
+    const voice = t => { const ph = 140 * (t - 0.02 * Math.cos(2 * Math.PI * 5 * t) / (2 * Math.PI * 5)); let s = 0; for (let k = 1; k * 140 < 4000; k++) s += Math.sin(2 * Math.PI * k * ph) / k; return 0.25 * s; };
+    const dry = new Float32Array(Math.round(1.6 * SR)); for (let i = 0; i < dry.length; i++) dry[i] = Math.fround(voice(i / SR));
+    const rmsA = (d, a, b) => { let t = 0; for (let i = a; i < b; i++) t += d[i] * d[i]; return Math.sqrt(t / (b - a)); };
+    const level = d => {
+      const a = Math.round(0.3 * SR), b = Math.round(1.5 * SR), W = Math.round(0.01 * SR), g = [];
+      for (let s = a; s + W <= b; s += W) g.push(20 * Math.log10(rmsA(d, s, s + W) / rmsA(dry, s, s + W)));
+      g.sort((x, y) => x - y);
+      return [20 * Math.log10(rmsA(d, a, b) / rmsA(dry, a, b)), (g[Math.round(0.95 * (g.length - 1))] - g[Math.round(0.05 * (g.length - 1))]) / 2];
+    };
+    // CONTROL: the instrument. Fine tune 0 is the effect's bypass - the clip at its own level, no pump.
+    const z = level(await afx986(pitch482t({ cents: 0 }), voice, 1.6));
+    if (Math.abs(z[0]) > 0.01 || z[1] > 0.01) throw new Error('CONTROL: Fine tune 0 reads ' + z[0].toFixed(2) + ' dB / pump ' + z[1].toFixed(2) + ' - the level probe is broken');
+    const bad = [];
+    for (const c of [1, 3, 8, 15, -10]) {
+      for (const live of [false, true]) {
+        const [m, w] = level(await afx986(pitch482t({ cents: c }), voice, 1.6, { live: live }));
+        const path = live ? 'the preview' : 'the export';
+        if (Math.abs(m) > 0.5) bad.push(path + ' plays Fine tune ' + c + ' at ' + (m >= 0 ? '+' : '') + m.toFixed(2) + ' dB against the clip - a few cents must not change the level');
+        if (w > 0.7) bad.push(path + ' pumps Fine tune ' + c + ' by ' + w.toFixed(2) + ' dB either way, 20 times a second');
+      }
+    }
+    /* …and those cents still move the pitch. A buzzy 220 Hz tone, read GRAIN BY GRAIN: inside a grain the output is the input
+       resampled by exactly 2^(cents/1200), so a 25 ms autocorrelation centred on each grain's loudest moment reads the
+       shifted pitch; one long window folds in the 20 Hz grain rhythm and reads +50 cents 4.6 cents sharp (227.05 Hz). */
+    const saw = t => { const p = (t * 220) % 1; return 0.3 * (2 * p - 1); };
+    const grainPitch = (d, want) => {
+      const res = [], half = Math.round(0.0125 * SR), lo = Math.floor(SR / (want * 1.1)), hi = Math.ceil(SR / (want / 1.1));
+      for (let t = 0.3; t + 0.05 < d.length / SR; t += 0.05) {
+        const c = Math.round(t * SR), r = {}; let best = -1e9, bl = lo;
+        for (let L = lo - 1; L <= hi + 1; L++) { let s = 0; for (let i = c - half; i < c + half; i++) s += d[i] * d[i + L]; r[L] = s; if (L >= lo && L <= hi && s > best) { best = s; bl = L; } }
+        res.push(SR / (bl + 0.5 * (r[bl - 1] - r[bl + 1]) / (r[bl - 1] - 2 * r[bl] + r[bl + 1])));
+      }
+      return res.sort((x, y) => x - y)[res.length >> 1];
+    };
+    for (const c of [8, 50]) {
+      const want = 220 * Math.pow(2, c / 1200), got = grainPitch(await afx986(pitch482t({ cents: c }), saw, 1.6), want);
+      if (Math.abs(1200 * Math.log2(got / want)) > 2) bad.push('Fine tune +' + c + ' plays a 220 Hz tone at ' + got.toFixed(2) + ' Hz, not ' + want.toFixed(2) + ' - a level fix must not stop the shift');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FINDING 3 — THE CORNERS SAT BRIGHT AND DID NOTHING. With its band at 0 dB a shelf or a peak is no filter at all, so Bass
+   * at, Treble at, Low at, High at, Mid width and Mid Freq change nothing while their band is 0 - the default of every new
+   * and every saved Bass & Treble and 3-Band EQ - and they showed bright, live and silent. The audio rows never got the
+   * visual rows' "Only used when..." rule: inspector.js afxParam dropped overriddenBy. Fixed: deadAt 0 (judged over the
+   * keyframes), "Not used when Bass is 0", and a row wakes the moment its band moves, because a greyed row is
+   * pointer-events:none and the panel is not rebuilt for a slider move. */
+  test('482 3.6 Bass & Treble and 3-Band EQ - Bass at, Treble at, Low at, High at, Mid width and Mid Freq say Not used when their band is 0, and wake the moment it moves, at 390 and 1280 px', { item: '482', budgetMs: 150000 }, async function () {
+    // The rule is TRUE first: with its band at 0 a corner changes nothing, bit for bit (noise through the export chain).
+    const noiseOf = () => { let s = 7; return () => { s = (s * 1103515245 + 12345) >>> 0; return (s / 4294967296 * 2 - 1) * 0.5; }; };
+    const diff = async (a, b) => { const x = await afx986(a, noiseOf(), 0.4), y = await afx986(b, noiseOf(), 0.4); let w = 0; for (let i = 0; i < x.length; i++) w = Math.max(w, Math.abs(x[i] - y[i])); return w; };
+    const BT = p => [{ type: 'bassTreble', enabled: true, params: Object.assign({ bass: 0, treble: 0 }, p) }];
+    const EQ = p => [{ type: 'eq3', enabled: true, params: Object.assign({ low: 0, mid: 0, high: 0 }, p) }];
+    const live3 = await diff(BT({ bass: 3, bassFreq: 40 }), BT({ bass: 3, bassFreq: 500 }));
+    if (!(live3 > 0.01)) throw new Error('Bass at 40 and 500 Hz sound the same even with Bass at +3 (' + live3.toExponential(2) + ') - Bass at does nothing at all');
+    for (const [what, a, b] of [['Bass at', BT({ bassFreq: 40 }), BT({ bassFreq: 500 })], ['Treble at', BT({ trebleFreq: 1000 }), BT({ trebleFreq: 16000 })],
+      ['Low at', EQ({ lowFreq: 40 }), EQ({ lowFreq: 1000 })], ['High at', EQ({ highFreq: 1000 }), EQ({ highFreq: 16000 })],
+      ['Mid width', EQ({ midWidth: 0.1 }), EQ({ midWidth: 10 })], ['Mid Freq', EQ({ midFreq: 200 }), EQ({ midFreq: 6000 })]]) {
+      const w = await diff(a, b);
+      if (w !== 0) throw new Error('with its band at 0, ' + what + ' moved from end to end changes the sound by ' + w.toExponential(2) + ' - it is not dead there, so it must not be greyed');
+    }
+    const want = {
+      bassTreble: { dead: [['Bass at', 'Bass'], ['Treble at', 'Treble']], live: ['Bass', 'Treble'] },
+      eq3: { dead: [['Mid Freq', 'Mid'], ['Mid width', 'Mid'], ['Low at', 'Low'], ['High at', 'High']], live: ['Low', 'Mid', 'High'] },
+    };
+    const greyed = (p, label) => { const r = p.rowOf(label); if (!r) throw new Error(p.where + ': no ' + label + ' row'); return r.row.classList.contains('fx-overridden'); };
+    for (const type of Object.keys(want)) {
+      // a FRESH effect: every band at 0
+      await audioPanel482t(type, null, async p => {
+        for (const [label, by] of want[type].dead) {
+          if (!greyed(p, label)) throw new Error(p.where + ': a fresh ' + type + ' shows ' + label + ' bright and live, where it does nothing until ' + by + ' moves off 0');
+          const tag = p.rowOf(label).row.querySelector('.fx-ovr-tag'), say = 'Not used when ' + by + ' is 0';
+          if (!tag || tag.textContent !== say) throw new Error(p.where + ': ' + label + ' is greyed with ' + JSON.stringify(tag && tag.textContent) + ', not ' + JSON.stringify(say));
+          await p.fits(tag, 'the pill on ' + label);
+          const rg = document.createRange(); rg.selectNodeContents(tag);
+          if (new Set([].map.call(rg.getClientRects(), q => Math.round(q.top))).size > 1) throw new Error(p.where + ': the pill ' + JSON.stringify(say) + ' wraps onto two lines');
+        }
+        for (const label of want[type].live) if (greyed(p, label)) throw new Error(p.where + ': ' + type + ' ' + label + ' is greyed out - it is the control that matters');
+        // WAKE: move the band off 0 the way a typed or dragged value lands, and the corner comes alive under the finger - then back.
+        for (const [label, by] of want[type].dead) {
+          const box = p.rowOf(by).val;
+          box.value = '3'; box.dispatchEvent(new Event('change')); await sleep(30);
+          if (greyed(p, label)) throw new Error(p.where + ': ' + label + ' stays greyed and locked after ' + by + ' moved to 3 - he cannot reach it until the panel is rebuilt');
+          box.value = '0'; box.dispatchEvent(new Event('change')); await sleep(30);
+          if (!greyed(p, label)) throw new Error(p.where + ': ' + label + ' does not grey again when ' + by + ' goes back to 0');
+        }
+      });
+    }
+    // A cut uses the corner too, and keyframes are judged all together: one keyframe off 0 makes the row live.
+    const zero = { kf: [{ t: 0, v: 0 }, { t: 2, v: 0 }] }, rise = { kf: [{ t: 0, v: 0 }, { t: 2, v: 4 }] };
+    await audioPanel482t('bassTreble', { bass: -6, treble: zero }, async p => {
+      if (greyed(p, 'Bass at')) throw new Error(p.where + ': Bass at is greyed under a Bass cut of -6 dB, where it moves the cut');
+      if (!greyed(p, 'Treble at')) throw new Error(p.where + ': Treble at looks live with Treble keyframed at 0 throughout');
+    });
+    await audioPanel482t('eq3', { low: rise }, async p => {
+      if (greyed(p, 'Low at')) throw new Error(p.where + ': Low at is greyed with Low keyframed from 0 up to 4 - it is used from the first frame after 0');
+      if (!greyed(p, 'High at')) throw new Error(p.where + ': CONTROL - High at looks live with High at 0 beside a keyframed Low');
+    });
+  });
+
+  /* FINDING 4 — THE COLLAB DOOR COULD NOT SEE AUDIO. schemaFingerprint() hashed FM.fxRegistry's params and a fixture whose one
+   * audio effect is a Reverb, so this batch (Fine tune, Semitones to 24, five EQ corners) hashed exactly like v17.19, and
+   * the two would have joined one session while their sanitisers normalised the same effects differently (MEASURED: v17.19
+   * reads {semitones: 20, cents: 37} as {semitones: 12} and strips every corner). Fixed: the audio registry's params are in
+   * the hash, SCHEMA_REV is 5. */
+  test('482 3.6 Collab - the sync schema fingerprint sees the audio effects controls, so a build whose Pitch Shift or EQ differ is refused at the door', { item: '482' }, function () {
+    const C = FM.collab;
+    if (!C || !C.schemaFingerprint) throw new Error('FM.collab.schemaFingerprint is missing');
+    const got = C.schemaFingerprint();
+    if (got === null) throw new Error('schemaFingerprint() could not be computed');
+    const realAll = FM.audioFxRegistry.all, realFx = FM.fxRegistry.all;
+    const moves = (mk, reg, real) => { try { reg.all = function () { return mk(real.call(reg)); }; return C.schemaFingerprint() !== got; } finally { reg.all = real; } };
+    const pitchWith = f => list => list.map(e => e.type === 'pitch' ? { type: e.type, params: f(e.params.slice()) } : e);
+    // CONTROL: the harness moves the fingerprint when a VISUAL effect's param is dropped - the part that always worked.
+    const first = (realFx.call(FM.fxRegistry) || []).findIndex(e => (e.params || []).length);
+    if (!moves(list => list.map((e, i) => i === first ? { type: e.type, params: e.params.slice(1) } : e), FM.fxRegistry, realFx)) throw new Error('CONTROL: dropping a visual effect param did not move the fingerprint - the harness is broken');
+    const bad = [];
+    if (!moves(pitchWith(ps => ps.filter(p => p.key !== 'cents')), FM.audioFxRegistry, realAll)) bad.push('a Pitch Shift without Fine tune (the build before) hashes the same as this one');
+    if (!moves(pitchWith(ps => ps.map(p => p.key === 'semitones' ? Object.assign({}, p, { min: -12, max: 12 }) : p)), FM.audioFxRegistry, realAll)) bad.push('Semitones stopping at 12 hashes the same as Semitones to 24');
+    if (!moves(list => list.map(e => e.type === 'bassTreble' ? { type: e.type, params: e.params.map(p => p.key === 'bassFreq' ? Object.assign({}, p, { def: 150 }) : p) } : e), FM.audioFxRegistry, realAll)) bad.push('a different Bass at default hashes the same');
+    if (C.schemaFingerprint() !== got) bad.push('the registry was not restored: the fingerprint is now ' + C.schemaFingerprint());
+    if (!(C.SCHEMA_REV >= 5)) bad.push('SCHEMA_REV is ' + C.SCHEMA_REV + ' - the build that added the audio keys must not share a revision with the one before');
+    if (bad.length) throw new Error(bad.join(' · ') + ' - two builds that disagree about these normalise the same project differently, and would be let into one session');
+  });
+
 })();

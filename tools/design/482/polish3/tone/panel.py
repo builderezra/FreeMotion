@@ -13,7 +13,10 @@ SUFFIX = os.environ.get('SUFFIX', '')
 # (file tag, audio effect, params to set, the row to bring into view)
 SHOTS = [('pitch', 'pitch', {'semitones': 5, 'cents': 30}, 'Mix'),
          ('basstreble', 'bassTreble', {'bass': 6, 'bassFreq': 80}, 'Treble at'),
-         ('eq3', 'eq3', {'mid': 4, 'midWidth': 2.5}, 'High at')]
+         ('eq3', 'eq3', {'mid': 4, 'midWidth': 2.5}, 'High at'),
+         # the review fix (#482 3.6): a FRESH effect, every band at 0, where the corners do nothing and now say so
+         ('basstreble-fresh', 'bassTreble', {}, 'Treble at'),
+         ('eq3-fresh', 'eq3', {}, 'High at')]
 JS = r"""
 (async () => {
   const [type, set, label] = %s;
