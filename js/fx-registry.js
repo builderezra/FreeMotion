@@ -304,7 +304,7 @@ window.FM = window.FM || {};
     noise: 'Random speckle over the whole frame.',
     scanlines: 'Horizontal lines across the picture, like an old CRT.',
     crt: 'The whole old-television look: scanlines, curvature and a shadow mask.',
-    glitch: 'Tears the image into displaced bands, digital-fault style.',
+    glitch: 'Tears the image into displaced bands and broken blocks, digital-fault style.',
     rgbsplit: 'Separates the red, green and blue channels so they sit slightly apart.',
     chromaticaberration: 'Colour fringing toward the edges, the way a real lens misfocuses each colour.',
     pixelate: 'Averages the image into blocks.',

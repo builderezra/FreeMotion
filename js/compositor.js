@@ -276,6 +276,14 @@ window.FM = window.FM || {};
       { key: 'speed', label: 'Re-roll', min: 0, max: 30, step: 1, def: 10, unit: 'Hz' },
       { key: 'split', label: 'RGB tear', min: 0, max: 20, step: 0.1, def: 1, unit: '×' },
       { key: 'dir', label: 'Tears', def: 0, options: [[0, 'Sideways'], [1, 'Up / down']] },   // queue 904: it could only ever tear horizontally
+      /* #482 polish 2.7 (#966 "more customisation"). The slices were all one height, the only damage was the sideways slip,
+         every Glitch tore the same pattern, and a slipped slice always wrapped round to the other side. Each default runs
+         the old loop exactly — 0 evens the slices, 0 adds no blocks, Pattern 0 adds nothing to the hash, Wrap around is
+         the old wrap — and Up / down transposes the whole picture, so all four come along with it. */
+      { key: 'jitter', label: 'Uneven slices', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'blocks', label: 'Block damage', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'wrap', label: 'Edges', def: 0, options: [[0, 'Wrap around'], [1, 'Stretch edge'], [2, 'Leave gap']] },
     ] },
     { type: 'zoomblur', label: 'Zoom Blur', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -1262,13 +1270,21 @@ window.FM = window.FM || {};
     // Speed Lines — tapered ink strokes driving in from the edge toward a clear disc around the
     // subject. Radial Rays is a per-pixel cosine wash; this is drawn geometry, and the TAPER is
     // what makes it read as ink rather than as light.
-    { type: 'speedlines', label: 'Speed Lines', desc: 'Tapered manga impact lines driving in from the frame edge, with a clear disc left around your subject.', params: [
+    { type: 'speedlines', label: 'Speed Lines', desc: 'Tapered manga impact lines driving in from the frame edge or laid side by side, with a clear space left around your subject.', params: [
       { key: 'count', label: 'Lines', min: 4, max: 200, step: 1, def: 64 },
+      /* #482 polish 2.5 (#966 "more customisation"). The lines could only drive in to a point, the clear zone was always a
+         circle, and the ink was frozen apart from Spin. Style Parallel lays them side by side at Angle — the across-the-
+         panel rush — Clear zone shape stretches the clear disc into an oval, and Boil redraws the lines a number of times
+         a second, the hand-drawn shimmer. Radial, 100 % and 0 draw the old lines exactly. */
+      { key: 'mode', label: 'Style', def: 0, options: [[0, 'Radial'], [1, 'Parallel']] },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'mode', liveWhen: 1 },
       { key: 'inner', label: 'Clear zone', min: 0, max: 80, step: 1, def: 26, unit: '%' },
+      { key: 'aspect', label: 'Clear zone shape', min: 25, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'length', label: 'Length', min: 5, max: 100, step: 1, def: 55, unit: '%' },
       { key: 'width', label: 'Weight', min: 1, max: 60, step: 1, def: 12, unit: 'px' },
       { key: 'jitter', label: 'Scatter', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'boil', label: 'Boil', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
       { key: 'x', label: 'Focus X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Focus Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
@@ -5868,14 +5884,68 @@ window.FM = window.FM || {};
       const speed = p.speed == null ? 10 : FM.evalProp(p.speed, t);
       const split = p.split == null ? 1 : FM.evalProp(p.split, t);
       const s = d.slice(), bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(t * speed);
+      /* #482 polish 2.7. PATTERN salts every hash after the band/frame mix, so 0 is the old tear. UNEVEN SLICES moves each
+         inner slice edge by up to half a slice (hashed per re-roll), and the uneven slices are measured as a share of the
+         whole height, so the phone's smaller preview plate tears in the same places as the export. EDGES says what a
+         slipped slice shows where it moved away from: the other side (the old wrap), its own edge pixel stretched, or a
+         gap. BLOCK DAMAGE adds hashed rectangles after the slices, each slipped and channel-swapped. */
+      const seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0);
+      const sMix = seed ? Math.imul(seed, 0x27d4eb2d) : 0;
+      const ghash = function (n) { let h = (n ^ sMix) | 0; h = (h ^ (h >> 13)) * 1274126177; h = h ^ (h >> 16); return h; };
+      const jitRaw = p.jitter == null ? 0 : FM.evalProp(p.jitter, t);
+      const jit = jitRaw > 0 ? Math.min(1, jitRaw / 100) : 0;
+      const edgeMode = p.wrap == null ? 0 : (Math.round(FM.evalProp(p.wrap, t)) | 0);
+      const edgeAt = function (b) {                                   // an inner slice edge, moved by Uneven slices
+        if (b <= 0) return 0; if (b >= bands) return H;
+        const r = (ghash((b * 1597334677 + frame * 3812015801) | 0) & 1023) / 1023 - 0.5;
+        return Math.max(0, Math.min(H, Math.round((b + r * jit) * H / bands)));
+      };
+      const slip = function (y, shift) {                              // one row slipped by `shift`, per the Edges setting
+        const row = y * W * 4;
+        if (edgeMode === 1) {
+          for (let x = 0; x < W; x++) { let sx = x - shift; if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; const i = row + x * 4, si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        } else if (edgeMode === 2) {
+          for (let x = 0; x < W; x++) { const sx = x - shift, i = row + x * 4; if (sx < 0 || sx >= W) { d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0; continue; } const si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        } else {
+          for (let x = 0; x < W; x++) { let sx = x - shift; if (sx < 0) sx += W; else if (sx >= W) sx -= W; const i = row + x * 4, si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        }
+      };
       for (let b = 0; b < bands; b++) {
-        let h = (b * 2654435761 + frame * 40503) | 0; h = (h ^ (h >> 13)) * 1274126177; h = h ^ (h >> 16);
+        const h = ghash((b * 2654435761 + frame * 40503) | 0);   // at Pattern 0 this IS the old mix: h ^ 0 changes nothing
         const shift = Math.round(((h & 255) / 255 - 0.5) * amt * W * 0.28);
         if (!shift) continue;
+        if (jit > 0 || edgeMode !== 0) {
+          const y0 = jit > 0 ? edgeAt(b) : b * bandH, y1 = jit > 0 ? edgeAt(b + 1) : Math.min(H, b * bandH + bandH);
+          for (let y = y0; y < y1; y++) slip(y, shift);
+          continue;
+        }
         const y0 = b * bandH, y1 = Math.min(H, y0 + bandH);
         for (let y = y0; y < y1; y++) {
           const row = y * W * 4;
           for (let x = 0; x < W; x++) { let sx = x - shift; if (sx < 0) sx += W; else if (sx >= W) sx -= W; const i = row + x * 4, si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        }
+      }
+      const blk = p.blocks == null ? 0 : clamp01(FM.evalProp(p.blocks, t));
+      if (blk > 0) {
+        /* BLOCK DAMAGE: up to 24 rectangles a re-roll, each 4–34 % of the width and 2–10 % of the height (shares of the plate,
+           so the preview and the export break in the same places), lifted from where the slices left the picture, slipped
+           sideways by up to Amount × a quarter of the width and drawn back with its colour channels swapped round. */
+        const sb = d.slice(), n = Math.round(blk * 24);
+        const PERM = [[1, 2, 0], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 0, 2]];
+        for (let k = 0; k < n; k++) {
+          const q = (j) => (ghash((k * 747796405 + j * 2891336453 + frame * 1181783497 + 0x2545f491) | 0) & 65535) / 65535;
+          const bw = Math.max(1, Math.round(W * (0.04 + 0.30 * q(1)))), bh = Math.max(1, Math.round(H * (0.02 + 0.08 * q(2))));
+          const bx = Math.floor(q(3) * (W - bw + 1)), by = Math.floor(q(4) * (H - bh + 1));
+          const dx = Math.round((q(5) - 0.5) * amt * W * 0.5), pm = PERM[Math.min(4, Math.floor(q(6) * 5))];
+          for (let y = by; y < by + bh && y < H; y++) {
+            const row = y * W * 4;
+            for (let x = bx; x < bx + bw && x < W; x++) {
+              let sx = x - dx;
+              if (sx < 0 || sx >= W) { if (edgeMode === 1) sx = sx < 0 ? 0 : W - 1; else if (edgeMode === 2) continue; else sx = ((sx % W) + W) % W; }
+              const i = row + x * 4, si = row + sx * 4;
+              d[i] = sb[si + pm[0]]; d[i + 1] = sb[si + pm[1]]; d[i + 2] = sb[si + pm[2]]; d[i + 3] = sb[si + 3];
+            }
+          }
         }
       }
       const cs = Math.round(amt * 9 * split);
@@ -11814,7 +11884,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cy = H * (p.y == null ? 50 : FM.evalProp(p.y, t)) / 100;
       const add = Math.round(FM.evalProp(p.blend, t) || 0) === 1;
       const rgb = hexToRGB(p.color || '#0d0d12');
-      const hash = function (n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return (n >>> 0) / 4294967296; };
+      const hash0 = function (n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return (n >>> 0) / 4294967296; };
+      /* BOIL (#482 polish 2.5): the lines are redrawn `boil` times a second — a hand-drawn panel's shimmer. The redraw number
+         salts every hash, so it is a pure function of the layer's own clock and the preview, the export and a scrub agree. A
+         KEYFRAMED boil is integrated (FM.integrateProp), like Film Grain's speed, so easing it down slows the redraws rather
+         than jumping back through old ones. 0 — every saved Speed Lines — adds nothing: hash0 is the old hash exactly. */
+      const lt = tl == null ? t : tl;
+      const boil = p.boil == null ? 0 : FM.evalProp(p.boil, t);
+      const slFr = FM.isAnimated(p.boil)
+        ? Math.floor(FM.integrateProp(p.boil, t - lt, t, (u) => { const k = FM.evalProp(p.boil, u); return k > 0 ? (k < 30 ? k : 30) : 0; }))
+        : (boil > 0 ? Math.floor(lt * (boil < 30 ? boil : 30)) : 0);
+      const slSalt = slFr > 0 ? Math.imul(slFr, 0x9E3779B1) : 0;
+      const hash = slSalt ? function (n) { return hash0((n + slSalt) | 0); } : hash0;
+      /* STYLE and CLEAR ZONE SHAPE (#482 polish 2.5). Parallel lays the strokes side by side, pointing along Angle (+ Spin);
+         the shape stretches the clear disc into an oval of the same area — sqrt(k) wide by 1/sqrt(k) tall. At Radial and
+         100 % the old code below runs untouched: the oval maths is only entered when the shape is not a circle. */
+      const parallel = Math.round(p.mode == null ? 0 : FM.evalProp(p.mode, t)) === 1;
+      const zkRaw = p.aspect == null ? 100 : FM.evalProp(p.aspect, t);
+      const zk = isFinite(zkRaw) ? Math.max(25, Math.min(400, zkRaw)) / 100 : 1;
+      const oval = zk !== 1, zsx = oval ? Math.sqrt(zk) : 1, zsy = oval ? 1 / zsx : 1;
       // The ink is built on its OWN surface, because the clear zone has to erase ink without
       // erasing the picture — a destination-out punch straight into B would knock a hole in the
       // layer. Its own plate also lets Add mean "additive against the picture", which is what a
@@ -11828,25 +11916,68 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B2.fillStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
       const outR = maxR * 1.12;                      // start past the corner so strokes reach the edge
       const step = (Math.PI * 2) / count;
-      for (let i = 0; i < count; i++) {
-        const h1 = hash(i * 3 + 1), h2 = hash(i * 3 + 2), h3 = hash(i * 3 + 3);
-        const a = i * step + spin * (tl || 0) + (h1 - 0.5) * step * 2 * jit;
-        const tip = Math.min(outR - 2, innerR * (0.92 + 0.5 * h2 * jit));
-        const base = Math.min(outR, tip + lenR * (0.55 + 0.9 * h3));
-        if (base - tip < 1) continue;
-        const ca = Math.cos(a), sa = Math.sin(a);
-        const hw = wid * (0.35 + 0.85 * h2) * 0.5;
-        const nx = -sa * hw, ny = ca * hw;
-        B2.beginPath();
-        B2.moveTo(cx + ca * base + nx, cy + sa * base + ny);
-        B2.lineTo(cx + ca * base - nx, cy + sa * base - ny);
-        B2.lineTo(cx + ca * tip, cy + sa * tip);     // the point: one vertex, not a second edge
-        B2.closePath();
-        B2.fill();
+      if (parallel) {
+        /* PARALLEL (#482 polish 2.5): the across-the-panel rush. Every stroke points along Angle (Spin turns it, as it turns
+           the radial fan), the strokes are spread evenly ACROSS the frame — Scatter jostles each by up to one gap, as it
+           jostles a radial line by one step — and each sits at its own hashed place ALONG it, the same wide-to-pointed
+           taper and the same length and weight spread as a radial line. The clear zone below keeps the subject readable. */
+        const th = (p.angle == null ? 0 : FM.evalProp(p.angle, t)) * Math.PI / 180 + spin * (tl || 0);
+        const ux = Math.cos(th), uy = Math.sin(th), vx = -uy, vy = ux;
+        let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+        [[0, 0], [W, 0], [0, H], [W, H]].forEach(function (q) {
+          const dx = q[0] - cx, dy = q[1] - cy, u = dx * ux + dy * uy, v = dx * vx + dy * vy;
+          if (u < u0) u0 = u; if (u > u1) u1 = u; if (v < v0) v0 = v; if (v > v1) v1 = v;
+        });
+        // Length is a share of the frame's extent ALONG the lines here — a radial line's share is of the centre-to-corner
+        const gap = (v1 - v0) / count, lenP = lenR / maxR * (u1 - u0);
+        for (let i = 0; i < count; i++) {
+          const h1 = hash(i * 3 + 1), h2 = hash(i * 3 + 2), h3 = hash(i * 3 + 3), h4 = hash((i * 3 + 1) ^ 0x5bd1e995);
+          const v = v0 + (i + 0.5 + (h1 - 0.5) * 2 * jit) * gap;
+          const len = lenP * (0.55 + 0.9 * h3);
+          const uc = u0 + (u1 - u0) * h4, ub = uc - len / 2, ut = uc + len / 2;
+          if (len < 1) continue;
+          const hw = wid * (0.35 + 0.85 * h2) * 0.5;
+          const bx = cx + ux * ub + vx * v, by = cy + uy * ub + vy * v;
+          B2.beginPath();
+          B2.moveTo(bx + vx * hw, by + vy * hw);
+          B2.lineTo(bx - vx * hw, by - vy * hw);
+          B2.lineTo(cx + ux * ut + vx * v, cy + uy * ut + vy * v);   // the point, downstream along Angle
+          B2.closePath();
+          B2.fill();
+        }
+      } else {
+        for (let i = 0; i < count; i++) {
+          const h1 = hash(i * 3 + 1), h2 = hash(i * 3 + 2), h3 = hash(i * 3 + 3);
+          const a = i * step + spin * (tl || 0) + (h1 - 0.5) * step * 2 * jit;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          // an oval clear zone: the tip sits on the oval's edge in this line's direction (a circle keeps innerR itself)
+          const zr = oval ? innerR / Math.hypot(ca / zsx, sa / zsy) : innerR;
+          const tip = Math.min(outR - 2, zr * (0.92 + 0.5 * h2 * jit));
+          const base = Math.min(outR, tip + lenR * (0.55 + 0.9 * h3));
+          if (base - tip < 1) continue;
+          const hw = wid * (0.35 + 0.85 * h2) * 0.5;
+          const nx = -sa * hw, ny = ca * hw;
+          B2.beginPath();
+          B2.moveTo(cx + ca * base + nx, cy + sa * base + ny);
+          B2.lineTo(cx + ca * base - nx, cy + sa * base - ny);
+          B2.lineTo(cx + ca * tip, cy + sa * tip);     // the point: one vertex, not a second edge
+          B2.closePath();
+          B2.fill();
+        }
       }
       // Punch the focus clear so the subject stays readable — the thing that separates a speed-line
       // panel from a frame someone scribbled over. Feathered, so the strokes fade rather than stop.
-      if (innerR > 1) {
+      if (innerR > 1 && oval) {
+        // the same feathered punch, drawn in a space stretched to the oval (#482 polish 2.5)
+        B2.save();
+        B2.translate(cx, cy); B2.scale(zsx, zsy);
+        const gr = B2.createRadialGradient(0, 0, innerR * 0.35, 0, 0, innerR * 1.25);
+        gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        B2.globalCompositeOperation = 'destination-out';
+        B2.fillStyle = gr;
+        B2.beginPath(); B2.arc(0, 0, innerR * 1.25, 0, Math.PI * 2); B2.fill();
+        B2.restore();
+      } else if (innerR > 1) {
         const gr = B2.createRadialGradient(cx, cy, innerR * 0.35, cx, cy, innerR * 1.25);
         gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
         B2.globalCompositeOperation = 'destination-out';

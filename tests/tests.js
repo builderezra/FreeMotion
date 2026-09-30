@@ -114285,4 +114285,323 @@
     }
   });
 
+
+  /* ═══ #482 / #966 POLISH BATCH 2 (part) — 2.5 Speed Lines and 2.7 Glitch ══════════════════════════════════════════════
+   * His words (#966): "this is the complex version we want as much choice as possible". The idle backlog
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md §A batch 2): Speed Lines gets Boil, a Parallel Style with an
+   * Angle, and a Clear zone shape; Glitch gets Uneven slices, Block damage, Pattern and Edges — and Up / down transposes the
+   * picture, so all four must work there too. The rule that makes it safe (§0.3): a new key's default is the old look —
+   * a filter recipe (Datamosh carries a Glitch) gets every key it does not set from makeInstance. The first test of each
+   * effect pins that against hashes captured on v17.18 (5803cf55) BEFORE the first edit, with new keys present at their
+   * defaults AND absent (a saved project), on the batch-1 fixture (a textured 200x150 clip in a 240x180 project) at the
+   * export, a half-size preview and a third moment, a 1080x1920 export frame, and the Glitch kernel on odd plates. */
+  function shots4822(L) {
+    return [[240, 0.7], [120, 1.3], [240, 2.35]].map(([w, t]) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  const NEW4822 = { speedlines: { mode: 0, angle: 0, aspect: 100, boil: 0 }, glitch: { jitter: 0, blocks: 0, seed: 0, wrap: 0 } };
+  /* The catalogue half, shared by both effects: declared (so the load sanitiser keeps them), at the old look's value, the
+     render-time fill (queue 784) agreeing, and a non-default saved value surviving the sanitiser. */
+  function catalogue4822(type, set) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW4822[type]).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW4822[type][k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l4822', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: Object.assign({}, set) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(set).forEach(k => { if (got.params[k] !== set[k]) throw new Error('a saved ' + type + ' ' + k + ' of ' + set[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+  }
+  /* The pictures half: every config rendered with the new keys at their defaults and with them absent, against v17.18. */
+  function pictures4822(type, CFG, HEAD, extra) {
+    const tex = fix482(), ids = [], moved = [];
+    const clip = () => { const L = FM.makeLayer('image', { name: '4822 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    try {
+      Object.keys(CFG).forEach(name => ['image', 'shape'].forEach(kind => ['present', 'absent'].forEach(how => {
+        const L = kind === 'image' ? clip() : FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, CFG[name]);
+        if (how === 'absent') Object.keys(NEW4822[type]).forEach(k => { delete e.params[k]; });
+        L.effects = [e];
+        const got = shots4822(L), want = HEAD[type + '/' + name + '/' + kind];
+        if (got !== want) moved.push(type + ' ' + name + ' on ' + kind + ' (new keys ' + how + ') ' + want + ' -> ' + got);
+      })));
+      if (extra) extra(moved);
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.18 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  }
+
+  test('482 2.5 Speed Lines - Style, Angle, Clear zone shape and Boil are in the catalogue at defaults that draw the old lines byte for byte as on v17.18', { item: '482', budgetMs: 120000 }, function () {
+    catalogue4822('speedlines', { mode: 1, angle: -35, aspect: 250, boil: 12 });
+    const CFG = { def: {}, spin: { spin: 120 }, add: { blend: 1, color: '#ffffff' }, inner0: { inner: 0 }, many: { count: 200, jitter: 1, width: 40, length: 100 }, off: { x: 20, y: 80, inner: 50 } };
+    const HEAD = { 'speedlines/def/image': '9cf5ac3b/05f39b3c/9cf5ac3b', 'speedlines/def/shape': 'cd37ea72/8b6b3971/cd37ea72', 'speedlines/spin/image': '6e955b1c/dfec28b6/343dbca4', 'speedlines/spin/shape': '7106e761/c60c5739/08bfa79a', 'speedlines/add/image': 'c5c0f61b/88f0f11d/c5c0f61b', 'speedlines/add/shape': 'bc2a11c9/a8ba5b5a/bc2a11c9', 'speedlines/inner0/image': '6aa6368e/f5fcd8a6/6aa6368e', 'speedlines/inner0/shape': '4211fd8e/2cafb3db/4211fd8e', 'speedlines/many/image': '15ee496e/66559f61/15ee496e', 'speedlines/many/shape': '3ce66d4f/a951d271/3ce66d4f', 'speedlines/off/image': '6442e5ed/26600223/6442e5ed', 'speedlines/off/shape': '4d159f4e/0448830f/4d159f4e' };
+    // …and his own size: a 1080x1920 export frame, where the lines' geometry is at full resolution.
+    const BIG = { def: '394b214b', spin: 'f556ded8', add: '8b0c433b', inner0: '61dac916', many: 'fb79cdfc', off: '652e6c3a' };
+    pictures4822('speedlines', CFG, HEAD, moved => {
+      Object.keys(BIG).forEach(name => ['present', 'absent'].forEach(how => {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#d8d0c0', start: 0, duration: 4 }); L.start = 0; L.duration = 4;
+        const e = FM.fxRegistry.makeInstance('speedlines'); Object.assign(e.params, CFG[name]);
+        if (how === 'absent') Object.keys(NEW4822.speedlines).forEach(k => { delete e.params[k]; });
+        L.effects = [e];
+        const cv = offscreen(1080, 1920), x = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(x, { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 1.1);
+        const got = hash482(x, cv);
+        if (got !== BIG[name]) moved.push('speedlines ' + name + ' at 1080x1920 (new keys ' + how + ') ' + BIG[name] + ' -> ' + got);
+      }));
+    });
+  });
+
+  test('482 2.7 Glitch - Uneven slices, Block damage, Pattern and Edges are in the catalogue at defaults that tear byte for byte as on v17.18', { item: '482', budgetMs: 120000 }, function () {
+    catalogue4822('glitch', { jitter: 60, blocks: 0.5, seed: 7, wrap: 2 });
+    const CFG = { def: {}, dir1: { dir: 1 }, speed0: { speed: 0 }, dense: { bands: 240, split: 5, amount: 1 }, few: { bands: 3 }, mosh: { amount: 0.34, bands: 90, split: 5 }, dir1dense: { dir: 1, bands: 60, amount: 0.9 } };
+    const HEAD = { 'glitch/def/image': '07466116/8dace74c/075a01ba', 'glitch/def/shape': '6928a451/fc3540a1/464c242d', 'glitch/dir1/image': 'b1c58630/2dbc480d/db6d58d0', 'glitch/dir1/shape': 'de0eeba2/33f61c51/0c39162e', 'glitch/speed0/image': '286c388a/170b528c/286c388a', 'glitch/speed0/shape': '633afba1/072d0299/633afba1', 'glitch/dense/image': '97248263/9cb12ca0/7f2567ba', 'glitch/dense/shape': '48383ba6/57ac4cfc/b4da1d36', 'glitch/few/image': '673ee562/324fda38/bdb979d6', 'glitch/few/shape': 'ba2187f5/aadfd6dd/5a74939d', 'glitch/mosh/image': '451f4224/ae12a3a2/d557ffdc', 'glitch/mosh/shape': '395bf938/5da855c4/dd62f580', 'glitch/dir1dense/image': 'b3fe9349/73d6cebb/8d4c6b98', 'glitch/dir1dense/shape': '052cf054/726b27b3/f863a1dc' };
+    /* …and the kernel straight, on plates whose height is NOT a multiple of the slice count (the rows below the last slice
+       must stay untouched, as they always were), at four moments. */
+    const KERN = { def: ['7d326e80/806cc930/c811e940/ec79cdb4', 'fa3233f7/38720daf/5c9c28f7/00f5d0bf'], dir1: ['eea0c026/6444297e/c10d2a72/a9cd40ae', '1ef5c6ad/c0736313/1ef4475e/c3aef708'], speed0: ['7d326e80/7d326e80/7d326e80/7d326e80', 'fa3233f7/fa3233f7/fa3233f7/fa3233f7'], dense: ['1c6a645a/9be70e43/18186310/f888adfe', '384abed7/eb8dd3ff/c81e25d7/fe6c660f'], few: ['c41d8060/dc367834/d3ebc52c/b799a354', 'a2f4ae57/b44981f3/d94f31b7/480bbd2b'], mosh: ['a99ded4b/8d01651c/00b402a7/052c6b72', 'cb7c14b9/0f40dae1/d4e1efa9/0a525131'], dir1dense: ['4c34db2b/3d8063a9/08ccd5c2/0cef6cfc', '5d4b90ad/883541dd/e8764d8b/bef8c8d2'] };
+    const hb = d => { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); };
+    const K = FM._FX_TABLES.PIXEL_FX.glitch;
+    pictures4822('glitch', CFG, HEAD, moved => {
+      Object.keys(KERN).forEach(name => [[97, 61], [300, 211]].forEach(([W, H], wi) => ['present', 'absent'].forEach(how => {
+        const got = [0, 0.13, 0.52, 1.77].map(t => {
+          const d = new Uint8ClampedArray(W * H * 4);
+          for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = (x * 5 + y) & 255; d[i + 1] = (y * 7) & 255; d[i + 2] = (x * 3 + y * 11) & 255; d[i + 3] = 255; }
+          const p = Object.assign({}, FM.fxRegistry.makeInstance('glitch').params, CFG[name]);
+          if (how === 'absent') Object.keys(NEW4822.glitch).forEach(k => { delete p[k]; });
+          K(d, W, H, p, t, 1);
+          return hb(d);
+        }).join('/');
+        if (got !== KERN[name][wi]) moved.push('the Glitch kernel ' + name + ' on a ' + W + 'x' + H + ' plate (new keys ' + how + ') ' + KERN[name][wi] + ' -> ' + got);
+      })));
+    });
+  });
+
+  /* 2.5 SPEED LINES — Boil, Style + Angle, Clear zone shape. The ink was hashed on the line index alone, so the lines froze
+     apart from Spin; they could only drive in to a point; and the clear zone was always a circle. Rendered through the app
+     on a flat light full-frame rect, where the ink (#0d0d12) is every pixel darker than luma 110. */
+  test('482 2.5 Speed Lines - Boil redraws the lines on the layer clock, Parallel lays them along Angle, Clear zone shape makes an oval, and a small preview draws them where the export does', { item: '482', budgetMs: 90000 }, function () {
+    const rs = (over, t, w, pw, ph, start) => {
+      pw = pw || 240; ph = ph || 180; w = w || pw;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: pw / 2, y: ph / 2, shapeW: pw, shapeH: ph, fill: '#d8d0c0', start: 0, duration: 4 }); L.start = start || 0; L.duration = 4;
+      const e = FM.fxRegistry.makeInstance('speedlines'); Object.assign(e.params, over || {}); L.effects = [e];
+      const h = Math.round(w * ph / pw), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: pw, height: ph, fps: 30, duration: 6, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return { d: x.getImageData(0, 0, w, h).data, w: w, h: h, cv: cv };
+    };
+    const same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+    const ink = (r, i) => (r.d[i] * 0.299 + r.d[i + 1] * 0.587 + r.d[i + 2] * 0.114) < 110;
+    /* BOIL. CONTROL first: without it the lines stand still, or nothing below means anything. */
+    if (!same(rs({}, 0.3).d, rs({}, 0.7).d)) throw new Error('CONTROL: default Speed Lines differ between 0.3 s and 0.7 s - they should stand still, so a Boil test cannot tell');
+    const b30 = rs({ boil: 12 }, 0.30).d;
+    if (same(b30, rs({ boil: 12 }, 0.34).d)) throw new Error('Boil 12 draws the same lines at 0.30 s and 0.34 s (redraws 3 and 4) - the lines do not boil');
+    if (!same(b30, rs({ boil: 12 }, 0.32).d)) throw new Error('Boil 12 redraws between 0.30 s and 0.32 s, inside one twelfth of a second - it is not 12 redraws a second');
+    rs({ boil: 12 }, 1.9);
+    if (!same(b30, rs({ boil: 12 }, 0.30).d)) throw new Error('Boil 12 draws different lines at 0.30 s after a scrub to 1.9 s - it is not a function of the moment, so the export would not match the preview');
+    if (!same(rs({ boil: 12 }, 1.30, 0, 0, 0, 1).d, b30)) throw new Error('a layer starting at 1 s draws different boiled lines 0.30 s in than a layer starting at 0 - Boil does not run on the layer clock');
+    const kf = { kf: [{ t: 0, v: 12 }, { t: 1, v: 0 }] };
+    if (!same(rs({ boil: kf }, 1.5).d, rs({ boil: kf }, 3).d)) throw new Error('a Boil keyframed down to 0 does not hold the lines still once it gets there');
+    /* STYLE + ANGLE, read as the ink's run lengths: a horizontal line is a long run along a row and a short one down a
+       column. MEASURED at 480x360: Radial 7.2 across / 6.2 down, Parallel 0° 126 / 5.7, Parallel 90° 5.2 / 87. */
+    const runs = r => {
+      let hs = 0, hn = 0, vs = 0, vn = 0;
+      for (let y = 0; y < r.h; y++) { let run = 0; for (let x = 0; x <= r.w; x++) { if (x < r.w && ink(r, (y * r.w + x) * 4)) run++; else if (run) { hs += run; hn++; run = 0; } } }
+      for (let x = 0; x < r.w; x++) { let run = 0; for (let y = 0; y <= r.h; y++) { if (y < r.h && ink(r, (y * r.w + x) * 4)) run++; else if (run) { vs += run; vn++; run = 0; } } }
+      return { h: hs / Math.max(1, hn), v: vs / Math.max(1, vn) };
+    };
+    const rad = runs(rs({}, 0.5, 480, 480, 360)), p0 = runs(rs({ mode: 1, angle: 0 }, 0.5, 480, 480, 360)), p90 = runs(rs({ mode: 1, angle: 90 }, 0.5, 480, 480, 360));
+    if (!(rad.h < rad.v * 2 && rad.v < rad.h * 2)) throw new Error('CONTROL: radial lines measured ' + rad.h.toFixed(1) + ' across / ' + rad.v.toFixed(1) + ' down - they should run every way');
+    if (!(p0.h > p0.v * 4)) throw new Error('Style Parallel at Angle 0 ran ' + p0.h.toFixed(1) + ' px across / ' + p0.v.toFixed(1) + ' down - the lines are not laid side by side horizontally');
+    if (!(p90.v > p90.h * 4)) throw new Error('Style Parallel at Angle 90 ran ' + p90.h.toFixed(1) + ' px across / ' + p90.v.toFixed(1) + ' down - Angle does not turn the lines');
+    if (!same(rs({ angle: 90 }, 0.5).d, rs({}, 0.5).d)) throw new Error('Angle changes Radial lines - it is only meant to act in Parallel (and is greyed out there)');
+    /* CLEAR ZONE SHAPE, read as the nearest ink to the focus in the sideways sector (within 25° of the horizontal) against
+       the up-and-down one. MEASURED at 480x360: 100 % 1.00, 300 % 1.81, 33 % 0.55, 300 % in Parallel 1.94. */
+    const clearZ = r => {
+      const cx = r.w / 2, cy = r.h / 2; let bh = Infinity, bv = Infinity;
+      for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) {
+        if (!ink(r, (y * r.w + x) * 4)) continue;
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy, dd = Math.hypot(dx, dy), a = Math.abs(Math.atan2(dy, dx)) * 180 / Math.PI;
+        if (a < 25 || a > 155) bh = Math.min(bh, dd); else if (a > 65 && a < 115) bv = Math.min(bv, dd);
+      }
+      return bh / bv;
+    };
+    const z100 = clearZ(rs({}, 0.5, 480, 480, 360)), z300 = clearZ(rs({ aspect: 300 }, 0.5, 480, 480, 360)), z33 = clearZ(rs({ aspect: 33 }, 0.5, 480, 480, 360)), z300p = clearZ(rs({ aspect: 300, mode: 1, count: 200 }, 0.5, 480, 480, 360));
+    if (!(z100 > 0.8 && z100 < 1.25)) throw new Error('CONTROL: the default clear zone measured ' + z100.toFixed(2) + ' wide for 1 tall - it should be a circle');
+    if (!(z300 > 1.5)) throw new Error('Clear zone shape 300% measured ' + z300.toFixed(2) + ' wide for 1 tall - it is not a wide oval');
+    if (!(z33 < 0.67)) throw new Error('Clear zone shape 33% measured ' + z33.toFixed(2) + ' wide for 1 tall - it is not a tall oval');
+    if (!(z300p > 1.5)) throw new Error('Clear zone shape 300% in Parallel measured ' + z300p.toFixed(2) + ' wide for 1 tall - the oval does not clear parallel lines');
+    /* THE PREVIEW DRAWS WHAT THE EXPORT DRAWS. The export (480 wide) shrunk to a preview's size against the preview itself,
+       for each new control, measured against the same difference at the defaults (MEASURED: half size 0.97 at the defaults,
+       0.66-1.79 with the new controls; 134 wide, his phone's 0.28, 5.2 and 4.0-5.9). A control drawn in plate pixels, or on a
+       different clock, lands elsewhere on the smaller plate and breaks the bound. */
+    const mad = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; };
+    const shrink = (r, w) => { const c = offscreen(w, Math.round(w * r.h / r.w)), x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingQuality = 'high'; x.drawImage(r.cv, 0, 0, c.width, c.height); return x.getImageData(0, 0, c.width, c.height).data; };
+    const gap = (over, t, w) => mad(shrink(rs(over, t, 480, 480, 360), w), rs(over, t, w, 480, 360).d);
+    [240, 134].forEach(w => {
+      const base = gap({}, 0.5, w);
+      [[{ boil: 12 }, 0.35, 'Boil 12'], [{ mode: 1, angle: 0 }, 0.5, 'Parallel 0°'], [{ mode: 1, angle: 30, width: 20 }, 0.5, 'Parallel 30°'], [{ aspect: 300 }, 0.5, 'Clear zone shape 300%'], [{ aspect: 33, mode: 1, angle: -60 }, 0.5, 'a tall oval in Parallel -60°']].forEach(([over, t, what]) => {
+        const g = gap(over, t, w);
+        if (!(g <= base * 2.5 + 0.5)) throw new Error(what + ': a ' + w + '-wide preview differs from the export by ' + g.toFixed(2) + ' levels, against ' + base.toFixed(2) + ' at the defaults - the preview does not draw what the export draws');
+      });
+    });
+  });
+
+  /* 2.7 GLITCH — Uneven slices, Block damage, Pattern, Edges. The slices were one height, the only damage was the slip,
+     every Glitch tore the same pattern, and a slipped slice always wrapped round. Read straight off the kernel on a picture
+     whose every row is different, so each output row can be named as "the input row slid by s" — or not. */
+  test('482 2.7 Glitch - Uneven slices, Block damage, Pattern and Edges each change the tear sideways and up or down, the same at the same moment, and a half-size preview tears where the export does', { item: '482', budgetMs: 90000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.glitch) throw new Error('the Glitch kernel is not reachable');
+    const W = 120, H = 90;   // 9 slices of 10 rows: no remainder, so every row belongs to a slice
+    const img = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = (x * 7 + y * 31) & 255; d[i + 1] = (x * x * 3 + y * 17) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255; d[i + 3] = 255; } return d; };
+    const run = (over, t, d0, w, h) => { const d = d0 || img(); K.glitch(d, w || W, h || H, Object.assign({}, FM.fxRegistry.makeInstance('glitch').params, { amount: 0.8, bands: 9, speed: 10, split: 0 }, over), t == null ? 0.25 : t); return d; };
+    const same = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+    const src = img();
+    const px = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const eq = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+    // the slide s (wrapping) that turns input row y into output row y, or null when no slide does
+    const slideOf = (d, y) => { for (let s = -W / 2; s <= W / 2; s++) { let ok = true; for (let x = 0; x < W && ok; x++) ok = eq(px(d, x, y), px(src, ((x - s) % W + W) % W, y)); if (ok) return s; } return null; };
+    const slides = d => { const out = []; for (let y = 0; y < H; y++) out.push(slideOf(d, y)); return out; };
+    /* PATTERN */
+    if (same(run({ seed: 5 }), run({}))) throw new Error('Pattern 5 tears exactly where Pattern 0 does - two glitched layers still tear in lockstep');
+    if (!same(run({ seed: 5 }), run({ seed: 5 }))) throw new Error('Pattern 5 tears differently each time at the same moment - it must be a function of the moment and the pattern only');
+    if (!same(run({ seed: 5 }, 0.25), run({ seed: 5 }, 0.27))) throw new Error('Pattern 5 re-rolls between 0.25 s and 0.27 s at 10 Hz - it changed the re-roll rate');
+    /* UNEVEN SLICES. CONTROL: at 0 every slide changes on a 10-row slice edge and every row is a whole slid row. */
+    const even = slides(run({}));
+    if (even.some(s => s === null)) throw new Error('CONTROL: an even tear left a row that is not a slid input row - the row reader cannot be trusted');
+    const evenEdges = []; for (let y = 1; y < H; y++) if (even[y] !== even[y - 1]) evenEdges.push(y);
+    if (!evenEdges.length || evenEdges.some(y => y % 10)) throw new Error('CONTROL: the even tear changes slide at rows ' + evenEdges.join(',') + ' - not on its 10-row slices');
+    const un = slides(run({ jitter: 100 }));
+    if (un.some(s => s === null)) throw new Error('Uneven slices broke a row apart - a slice must still slide whole');
+    const unEdges = []; for (let y = 1; y < H; y++) if (un[y] !== un[y - 1]) unEdges.push(y);
+    if (!unEdges.some(y => y % 10)) throw new Error('Uneven slices 100% still changes slide only on the 10-row edges (' + unEdges.join(',') + ') - the slices are not uneven');
+    const offGrid = d => { const sl = slides(d), o = []; for (let y = 1; y < H; y++) if (sl[y] !== sl[y - 1] && y % 10) o.push(y); return o.join(','); };
+    if (offGrid(run({ jitter: 100 }, 0.25)) === offGrid(run({ jitter: 100 }, 0.35))) throw new Error('the uneven slice edges sit at the same rows (' + offGrid(run({ jitter: 100 }, 0.25)) + ') after a re-roll - they do not re-roll with the tear');
+    /* BLOCK DAMAGE: rows that are no longer a whole slid row, holding pixels that are an input pixel of that row with its
+       colour channels swapped round. */
+    const blk = run({ blocks: 1 }), blkSlides = slides(blk);
+    const broken = blkSlides.map((s, y) => s === null ? y : -1).filter(y => y >= 0);
+    if (!broken.length) throw new Error('Block damage 1 left every row a whole slid row - there are no damaged blocks');
+    let swapped = 0;
+    broken.forEach(y => {
+      const row = new Set(); for (let x = 0; x < W; x++) { const q = px(src, x, y); row.add(q[0] + ',' + q[1] + ',' + q[2]); }
+      for (let x = 0; x < W; x++) {
+        const q = px(blk, x, y), k = q[0] + ',' + q[1] + ',' + q[2];
+        if (row.has(k)) continue;
+        if ([[q[1], q[2], q[0]], [q[2], q[0], q[1]], [q[0], q[2], q[1]], [q[2], q[1], q[0]], [q[1], q[0], q[2]]].some(r => row.has(r.join(',')))) swapped++;
+      }
+    });
+    if (!swapped) throw new Error('Block damage 1 broke ' + broken.length + ' rows but no pixel in them is a colour-swapped pixel of the picture');
+    if (!same(run({ blocks: 1 }), run({ blocks: 1 }))) throw new Error('Block damage lands differently each time at the same moment');
+    /* EDGES. Each slid row of the old (wrap) tear, redrawn: Stretch edge repeats the row's own end pixel where it slid away
+       from; Leave gap leaves it clear; the rest of the row is the same slide. */
+    const str = run({ wrap: 1 }), gp = run({ wrap: 2 });
+    let checkedRows = 0;
+    even.forEach((s, y) => {
+      if (!s) return; checkedRows++;
+      for (let x = 0; x < W; x++) {
+        const sx = x - s, inside = sx >= 0 && sx < W;
+        const wantS = px(src, inside ? sx : (sx < 0 ? 0 : W - 1), y);
+        if (!eq(px(str, x, y), wantS)) throw new Error('Edges Stretch edge: row ' + y + ' slid ' + s + ' shows ' + px(str, x, y).join(',') + ' at x ' + x + ', not ' + wantS.join(',') + (inside ? ' (the slid picture)' : ' (its own end pixel, stretched)'));
+        const g = px(gp, x, y);
+        if (inside ? !eq(g, px(src, sx, y)) : g[3] !== 0) throw new Error('Edges Leave gap: row ' + y + ' slid ' + s + ' shows ' + g.join(',') + ' at x ' + x + (inside ? ' - not the slid picture' : ' - not a clear gap'));
+      }
+    });
+    if (checkedRows < 3) throw new Error('CONTROL: only ' + checkedRows + ' rows slid, so the Edges check saw almost nothing');
+    /* UP / DOWN. The picture is transposed, glitched sideways and transposed back — so every new control must come along. */
+    const tr = (d, w, h) => { const o = new Uint8ClampedArray(d.length); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const a = (y * w + x) * 4, b = (x * h + y) * 4; o[b] = d[a]; o[b + 1] = d[a + 1]; o[b + 2] = d[a + 2]; o[b + 3] = d[a + 3]; } return o; };
+    const ALL = { jitter: 100, blocks: 0.7, seed: 5, wrap: 2 };
+    const ud = run(Object.assign({ dir: 1 }, ALL)), side = tr(run(ALL, 0.25, tr(img(), W, H), H, W), H, W);
+    if (!same(ud, side)) throw new Error('Up / down with the new controls is not the sideways tear of the picture on its side');
+    if (same(run({ dir: 1, seed: 5 }), run({ dir: 1 }))) throw new Error('Pattern does nothing to an Up / down tear');
+    if (same(run({ dir: 1, blocks: 1 }), run({ dir: 1 }))) throw new Error('Block damage does nothing to an Up / down tear');
+    if (same(run({ dir: 1, jitter: 100 }), run({ dir: 1 }))) throw new Error('Uneven slices does nothing to an Up / down tear');
+    let clear = 0; for (let i = 3; i < ud.length; i += 4) if (ud[i] === 0) clear++;
+    if (!clear) throw new Error('Edges Leave gap left no gap in an Up / down tear');
+    /* THROUGH THE APP, and THE PREVIEW TEARS WHERE THE EXPORT DOES: a textured clip in a 480x360 project torn at 12 slices (a
+       height both plates divide, so the old slices agree too), the export shrunk to half size against the half-size preview,
+       for each new control, against the same difference at the defaults (MEASURED: 2.44 at the defaults; 2.29-3.38 with a
+       new control; 3.69 against 2.69 for Up / down with all four). Every size in the new controls is a share of the plate. */
+    const tex = fix482(), mid = '_4822tex';
+    FM.media.set(mid, { kind: 'image', el: tex, width: 200, height: 150 });
+    try {
+      const rsg = (over, w) => {
+        const L = FM.makeLayer('image', { x: 240, y: 180, start: 0, duration: 4 }); L.id = mid; L.start = 0; L.duration = 4; L.transform.scale = 2.4;
+        const e = FM.fxRegistry.makeInstance('glitch'); Object.assign(e.params, { amount: 0.7, split: 0, bands: 12 }, over); L.effects = [e];
+        const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(x, { project: { width: 480, height: 360, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 0.43);
+        return { cv: cv, d: x.getImageData(0, 0, cv.width, cv.height).data };
+      };
+      const mad = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; };
+      const shrink = r => { const c = offscreen(240, 180), x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingQuality = 'high'; x.drawImage(r.cv, 0, 0, 240, 180); return x.getImageData(0, 0, 240, 180).data; };
+      const exDef = rsg({}, 480), gDef = mad(shrink(exDef), rsg({}, 240).d), gDir = mad(shrink(rsg({ dir: 1 }, 480)), rsg({ dir: 1 }, 240).d);
+      [[{ jitter: 100 }, 'Uneven slices 100%'], [{ blocks: 1 }, 'Block damage 1'], [{ seed: 5 }, 'Pattern 5'], [{ wrap: 2 }, 'Leave gap'], [{ wrap: 1 }, 'Stretch edge'], [ALL, 'all four'], [Object.assign({ dir: 1 }, ALL), 'all four Up / down']].forEach(([over, what]) => {
+        const ex = rsg(over, 480);
+        if (same(ex.d, exDef.d)) throw new Error(what + ' rendered through the app tears exactly as the defaults do - the control does not reach the kernel');
+        const g = mad(shrink(ex), rsg(over, 240).d), base = over.dir ? gDir : gDef;
+        if (!(g <= base * 1.6 + 0.5)) throw new Error(what + ': a half-size preview differs from the export by ' + g.toFixed(2) + ' levels, against ' + base.toFixed(2) + ' at the defaults - the preview does not tear where the export does');
+      });
+    } finally { FM.media.remove(mid); }
+  });
+
+  /* THE NEW ROWS FIT THE PANEL at a phone's 390 px and at a 1280 px PC window: on screen inside the inspector, names not cut
+     off, every option button showing its whole label. And Angle, which only means something in Parallel, says so under
+     Radial (greyed and untouchable) and is live under Parallel. */
+  test('482 2.5 Speed Lines and 2.7 Glitch - the new rows fit the effect panel at 390 and 1280 px, and Angle is greyed out under Radial', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { speedlines: ['Style', 'Angle', 'Clear zone shape', 'Boil'], glitch: ['Uneven slices', 'Block damage', 'Pattern', 'Edges'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row') } : null;
+    };
+    const show = async (type, set) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S4822', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await show(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const r = rowOf(label);
+          if (!r || !r.row) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = r.row.getBoundingClientRect();
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+          [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+        }
+      }
+      await show('speedlines');
+      if (!rowOf('Angle').row.classList.contains('fx-overridden')) throw new Error(where + ': Speed Lines Angle looks live under Style Radial, where it does nothing');
+      if (rowOf('Clear zone shape').row.classList.contains('fx-overridden')) throw new Error(where + ': CONTROL - Clear zone shape is greyed out under Radial, where it shapes the clear zone');
+      await show('speedlines', p => { p.mode = 1; });
+      if (rowOf('Angle').row.classList.contains('fx-overridden')) throw new Error(where + ': Speed Lines Angle is greyed out under Style Parallel, the one style it turns');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 })();
