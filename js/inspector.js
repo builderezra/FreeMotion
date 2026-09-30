@@ -2491,6 +2491,8 @@ window.FM = window.FM || {};
         if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));
       });
       if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
+      // One plain line about how the effect behaves, under its sliders (#482 3.5: Pitch Shift's late copy, hunt C20).
+      if (reg.hint) body.appendChild(el('div', 'insp-hint afx-hint', reg.hint));
       wrap.appendChild(body);
     }
     row.appendChild(delBg);

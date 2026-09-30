@@ -115798,4 +115798,274 @@
     });
   });
 
+  /* ═══ #482 BATCH 3 (tone) — 3.5 Pitch Shift (Fine tune, two octaves, the late-copy hint of hunt C20) and 3.6 the Bass &
+   * Treble / 3-Band EQ corners (Bass at, Treble at, Low at, High at, Mid width) ═══════════════════════════════════════════
+   * Everything renders through FM.buildAudioFxChain in an OfflineAudioContext (afx986): the export's schedule() and, with
+   * { live: true }, the preview's per-frame applyAt() — so "the preview matches the export" is measured, not assumed.
+   * THE DEFAULTS ARE NOT TESTED HERE BY EAR. Audio has no `legacy` (the sanitiser fills a missing key with its def), so the
+   * new keys' defaults must render the old sound bit for bit — proven against v17.19 by tools/design/482/polish3/tone/
+   * samecheck.py on noise, a sweep and an impulse, export and preview, including saved +7 / −5 / ±12 st and a keyframed sweep
+   * (78 of 78 renders identical). A test can only hold one version of the code, so these tests hold the controls.
+   * A PURE TONE THROUGH THIS SHIFTER IS A COMB, and the pitch probes are built round it. The two delay lines run half a
+   * 100 ms grain apart, so a sine at f comes out as lines at f + n·20 Hz under an envelope centred on the shifted pitch —
+   * MEASURED: 440 Hz at +100 cents reads 460 on zero crossings, not 466.2. So each probe uses a tone the shift moves by a
+   * whole number of lines: 336.36 Hz × 2^(1/12) = 356.36 Hz is exactly one line up, and 400 Hz × 4 / ÷ 4 = 1600 / 100 Hz. */
+  function hz482t(d, a, b) {
+    const SR = 48000; a = Math.round(a * SR); b = Math.round(b * SR);
+    let first = -1, last = -1, n = 0;
+    for (let i = a + 1; i < b; i++) if (d[i - 1] < 0 && d[i] >= 0) { const x = i - 1 + d[i - 1] / (d[i - 1] - d[i]); if (first < 0) first = x; last = x; n++; }
+    return n > 1 ? (n - 1) / ((last - first) / SR) : 0;
+  }
+  function rms482t(d, a, b) { const SR = 48000; a = Math.round(a * SR); b = Math.round(b * SR); let t = 0; for (let i = a; i < b; i++) t += d[i] * d[i]; return Math.sqrt(t / Math.max(1, b - a)); }
+  const tone482t = f => t => 0.5 * Math.sin(2 * Math.PI * f * t);
+  const pitch482t = p => [{ type: 'pitch', enabled: true, params: Object.assign({ semitones: 0, mix: 1 }, p) }];
+  // the gain, in dB, a steady 0.5-amplitude sine at f comes out with
+  async function gain482t(fx, f, opts) { const d = await afx986(fx, tone482t(f), 1, opts); return 20 * Math.log10(rms482t(d, 0.4, 0.9) / (0.5 / Math.SQRT2)); }
+  /* A SLIDER MOVED WHILE THE PREVIEW PLAYS. The live chain is rebuilt only when the effects' types or on/off change
+     (audio-fx-live.js signature), never for a value, so a moved value reaches the sound only through the next applyAt.
+     This builds the chain, plays one frame at the old value, moves the slider, plays the next frame — then renders. */
+  async function drag482t(fx, change, sig, secs) {
+    const SR = 48000, n = Math.round(SR * secs);
+    const oac = new OfflineAudioContext(1, n, SR);
+    const b = oac.createBuffer(1, n, SR), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = sig(i / SR);
+    const src = oac.createBufferSource(); src.buffer = b;
+    const chain = FM.buildAudioFxChain(oac, { audioFx: fx }, 0);
+    chain.applyAt(0);
+    change(fx[0].params);
+    chain.applyAt(0);
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const r = await oac.startRendering();
+    try { chain.dispose(); } catch (e) {}
+    return r.getChannelData(0);
+  }
+  async function audioPanel482t(type, set, check) {
+    const saved = FM.scene;
+    const run = async where => {
+      const song = await hbAudScene([], 4);
+      const inst = FM.audioFxRegistry.makeInstance(type); inst._expanded = true; if (set) Object.assign(inst.params, set);
+      FM.layerById(FM.scene, song.id).audioFx = [inst];
+      FM.refreshAll(); FM.selectLayer(song.id); await sleep(200);
+      FM.inspector.openCategory('audiofx'); await sleep(500);
+      const panel = document.getElementById('inspector-panel');
+      const open = panel && panel.querySelector('.fx-row.fx-open');
+      if (!open) throw new Error(where + ': the ' + type + ' row did not open in the Audio Effects panel');
+      const rowOf = label => { const lab = [].slice.call(open.querySelectorAll('.fx-scrub-label')).filter(e => (e.textContent || '').trim() === label)[0]; return lab ? { lab: lab, row: lab.closest('.fx-scrub-row'), val: lab.closest('.fx-scrub-row').querySelector('.fx-scrub-val') } : null; };
+      const fits = async (elm, what) => {
+        elm.scrollIntoView({ block: 'nearest' }); await sleep(20);
+        const r = elm.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0) || r.left < pr.left - 1 || r.right > pr.right + 1) throw new Error(where + ': ' + what + ' is at ' + Math.round(r.left) + '-' + Math.round(r.right) + ' px in a panel at ' + Math.round(pr.left) + '-' + Math.round(pr.right) + ' (window ' + window.innerWidth + ')');
+        if (elm.scrollWidth > elm.clientWidth + 1) throw new Error(where + ': ' + what + ' is cut off (' + elm.scrollWidth + ' px of content in ' + elm.clientWidth + ')');
+      };
+      await check({ where: where, open: open, rowOf: rowOf, fits: fits });
+    };
+    try {
+      await atPhoneWidth(() => run('at 390 px'), 390);
+      await atWideWidth(() => run('at 1280 px'), 1280);
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  }
+
+  test('482 3.5 Pitch Shift - Fine tune moves the pitch by the cents it says: +100 lands one semitone up, Semitones +1 with Fine tune -100 is no shift at all, a keyframed Fine tune glides, and the preview hears the export', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = (FM.audioFxRegistry.paramsOf('pitch') || []).find(p => p.key === 'cents');
+    if (!pd) throw new Error('Pitch Shift has no Fine tune (its params are ' + (FM.audioFxRegistry.paramsOf('pitch') || []).map(p => p.key).join(', ') + ')');
+    if (pd.label !== 'Fine tune' || pd.min !== -100 || pd.max !== 100 || pd.def !== 0 || !pd.keyframable) throw new Error('Fine tune is ' + JSON.stringify(pd) + ' - not a keyframable -100..100 cents slider at 0');
+    const F = 336.36, UP = F * Math.pow(2, 1 / 12);   // 356.36: +100 cents moves this tone exactly one line of the comb
+    const c0 = hz482t(await afx986(pitch482t({ cents: 0 }), tone482t(F), 2), 0.5, 1.9);
+    if (Math.abs(c0 - F) > 1) throw new Error('CONTROL: Pitch Shift at 0 st / 0 cents reads a ' + F + ' Hz tone as ' + c0.toFixed(2) + ' Hz - the pitch probe is broken');
+    const up12 = hz482t(await afx986(pitch482t({ semitones: 12 }), tone482t(400), 2), 0.5, 1.9);
+    if (Math.abs(up12 - 800) > 2) throw new Error('CONTROL: +12 st reads a 400 Hz tone as ' + up12.toFixed(1) + ' Hz, not 800 - the probe cannot see a shift');
+    const bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'the preview' : 'the export';
+      const u = hz482t(await afx986(pitch482t({ cents: 100 }), tone482t(F), 2, { live: live }), 0.5, 1.9);
+      if (Math.abs(u - UP) > 2) bad.push(path + ' plays a ' + F + ' Hz tone with Fine tune +100 at ' + u.toFixed(1) + ' Hz, not ' + UP.toFixed(1) + ' (one semitone up)');
+      const d = hz482t(await afx986(pitch482t({ cents: -100 }), tone482t(UP), 2, { live: live }), 0.5, 1.9);
+      if (Math.abs(d - F) > 2) bad.push(path + ' plays a ' + UP.toFixed(2) + ' Hz tone with Fine tune -100 at ' + d.toFixed(1) + ' Hz, not ' + F);
+    }
+    // The two sliders ADD: +1 semitone and -100 cents is no shift, and "no shift" is the effect's own bypass - the clip bit for bit.
+    const sig = t => 0.4 * Math.sin(2 * Math.PI * 523.25 * t) + 0.2 * Math.sin(2 * Math.PI * 1771 * t);
+    const byp = await afx986(pitch482t({ semitones: 1, cents: -100 }), sig, 1);
+    let worst = 0; for (let i = 0; i < byp.length; i++) worst = Math.max(worst, Math.abs(byp[i] - Math.fround(sig(i / 48000))));
+    if (worst > 1e-7) bad.push('Semitones +1 with Fine tune -100 changes the sound by up to ' + worst.toExponential(2) + ' - the sliders do not add up to no shift');
+    // A keyframed Fine tune glides: 0 -> +100 over 4 s starts on the tone and ends a semitone up; the preview at 3.9 s hears the end.
+    const glide = { cents: { kf: [{ t: 0, v: 0 }, { t: 4, v: 100 }] } };
+    const g = await afx986(pitch482t(glide), tone482t(F), 4);
+    const head = hz482t(g, 0.3, 0.8), tail = hz482t(g, 3.5, 3.95);
+    if (Math.abs(head - F) > 2 || Math.abs(tail - UP) > 2) bad.push('a Fine tune keyframed 0 -> +100 over 4 s plays ' + head.toFixed(1) + ' Hz at the start and ' + tail.toFixed(1) + ' Hz at the end, where it should glide from ' + F + ' to ' + UP.toFixed(1));
+    const pv = hz482t(await afx986(pitch482t(glide), tone482t(F), 2, { live: true, anchor: 3.9 }), 0.5, 1.9);
+    if (Math.abs(pv - UP) > 2) bad.push('the preview at 3.9 s of that glide plays ' + pv.toFixed(1) + ' Hz, where the export plays ' + tail.toFixed(1));
+    // Whichever key is keyframed drives, and it must carry the other one with it.
+    const s1 = hz482t(await afx986(pitch482t({ semitones: { kf: [{ t: 0, v: 0 }, { t: 2, v: 0 }] }, cents: 100 }), tone482t(F), 2), 0.5, 1.9);
+    if (Math.abs(s1 - UP) > 2) bad.push('with Semitones keyframed (held at 0) a plain Fine tune +100 plays ' + s1.toFixed(1) + ' Hz, not ' + UP.toFixed(1) + ' - the keyframed Semitones drops the Fine tune');
+    const s2 = hz482t(await afx986(pitch482t({ semitones: 1, cents: { kf: [{ t: 0, v: -100 }, { t: 2, v: -100 }] } }), tone482t(F), 2), 0.5, 1.9);
+    if (Math.abs(s2 - F) > 1) bad.push('with Fine tune keyframed (held at -100) a plain Semitones +1 plays ' + s2.toFixed(1) + ' Hz, not ' + F + ' - the keyframed Fine tune drops the Semitones');
+    // Both keyframed: Semitones drives and must read the Fine tune AT THE SAME MOMENT, not its first keyframe.
+    const both = await afx986(pitch482t({ semitones: { kf: [{ t: 0, v: 0 }, { t: 4, v: 0 }] }, cents: glide.cents }), tone482t(F), 4);
+    const bh = hz482t(both, 0.3, 0.8), bt = hz482t(both, 3.5, 3.95);
+    if (Math.abs(bh - F) > 2 || Math.abs(bt - UP) > 2) bad.push('with both keyframed, a Fine tune gliding 0 -> +100 plays ' + bh.toFixed(1) + ' Hz at the start and ' + bt.toFixed(1) + ' Hz at the end, not ' + F + ' -> ' + UP.toFixed(1));
+    // Dragged while the preview plays: Fine tune 0 -> +100 on a live chain is heard at once, without a rebuild.
+    const dr = hz482t(await drag482t(pitch482t({ cents: 0 }), p => { p.cents = 100; }, tone482t(F), 2), 0.5, 1.9);
+    if (Math.abs(dr - UP) > 2) bad.push('Fine tune dragged from 0 to +100 while the preview plays still sounds at ' + dr.toFixed(1) + ' Hz, not ' + UP.toFixed(1) + ' - the preview keeps the old value until the chain is rebuilt');
+    // COST: a plain Fine tune is the static path - no scheduling, like a plain Semitones.
+    FM._pitchGlides = 0; await afx986(pitch482t({ semitones: 3, cents: 40 }), tone482t(F), 0.3);
+    if (FM._pitchGlides) bad.push('a plain Semitones 3 / Fine tune 40 took the keyframe path ' + FM._pitchGlides + ' times - every plain Pitch Shift would pay for animation it does not use');
+    // A Pitch Shift saved before Fine tune existed opens with it at 0; a saved Fine tune is kept.
+    const old = [{ type: 'video', audioFx: [{ type: 'pitch', enabled: true, params: { semitones: 7, mix: 1 } }, { type: 'pitch', enabled: true, params: { semitones: 2, cents: 37, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (old[0].audioFx[0].params.cents !== 0 || old[0].audioFx[1].params.cents !== 37) bad.push('the sanitiser reads a saved Pitch Shift as Fine tune ' + old[0].audioFx[0].params.cents + ' (no key) and ' + old[0].audioFx[1].params.cents + ' (saved 37)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 3.5 Pitch Shift - Semitones reaches two octaves each way: a 400 Hz tone comes out at 1600 Hz and 100 Hz, with Fine tune on top, and a glide up through the octave keeps its sound', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = (FM.audioFxRegistry.paramsOf('pitch') || []).find(p => p.key === 'semitones');
+    if (!pd || pd.min !== -24 || pd.max !== 24) throw new Error('Semitones runs ' + (pd && pd.min) + '..' + (pd && pd.max) + ', not -24..24');
+    const bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'the preview' : 'the export';
+      const u = hz482t(await afx986(pitch482t({ semitones: 24 }), tone482t(400), 2, { live: live }), 0.5, 1.9);
+      if (Math.abs(u - 1600) > 3) bad.push(path + ' plays a 400 Hz tone at +24 st as ' + u.toFixed(1) + ' Hz, not 1600 (two octaves up)');
+      const d = hz482t(await afx986(pitch482t({ semitones: -24 }), tone482t(400), 2, { live: live }), 0.5, 1.9);
+      if (Math.abs(d - 100) > 2) bad.push(path + ' plays a 400 Hz tone at -24 st as ' + d.toFixed(1) + ' Hz, not 100 (two octaves down)');
+    }
+    // the very top: +24 st and +100 cents slides one grain across 0.32 s - the long lines must hold it all
+    const top = 400 * Math.pow(2, 25 / 12), t25 = hz482t(await afx986(pitch482t({ semitones: 24, cents: 100 }), tone482t(400), 2), 0.5, 1.9);
+    if (Math.abs(t25 - top) > 10) bad.push('+24 st with +100 cents plays ' + t25.toFixed(1) + ' Hz, not ' + top.toFixed(1) + ' - the delay lines run out before the top of the slider');
+    // A keyframed 0 -> +24 over 4 s: above an octave up the long pair takes over, and nothing goes silent on the way through.
+    const g = await afx986(pitch482t({ semitones: { kf: [{ t: 0, v: 0 }, { t: 4, v: 24 }] } }), tone482t(400), 4);
+    const at35 = hz482t(g, 3.3, 3.7);   // 21 st: ~1345 Hz
+    if (!(at35 > 1200 && at35 < 1500)) bad.push('3.5 s into a 0 -> +24 st glide the tone is at ' + at35.toFixed(1) + ' Hz, not near 1345 (21 st) - the glide stops at the old octave');
+    let worst = 1, at = 0; for (let t = 0.5; t + 0.01 < 3.95; t += 0.01) { const r = rms482t(g, t, t + 0.01); if (r < worst) { worst = r; at = t; } }
+    if (worst < 0.02) bad.push('the 0 -> +24 st glide drops to ' + worst.toFixed(4) + ' RMS over 10 ms at ' + at.toFixed(2) + ' s - a hole you would hear');
+    const old = [{ type: 'video', audioFx: [{ type: 'pitch', enabled: true, params: { semitones: -20, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (old[0].audioFx[0].params.semitones !== -20) bad.push('a saved -20 st is read back as ' + old[0].audioFx[0].params.semitones);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 3.5 Pitch Shift - the open effect shows Fine tune in cents and one line saying the shifted sound lands late, and the lag it names is the lag it has, at 390 and 1280 px', { item: '482', budgetMs: 120000 }, async function () {
+    const reg = FM.audioFxRegistry.get('pitch');
+    if (!reg || !reg.hint) throw new Error('Pitch Shift carries no hint line');
+    if (!/late/.test(reg.hint) || !/Mix at 100%/.test(reg.hint) || !/1\/20 of a second an octave up/.test(reg.hint)) throw new Error('the hint does not say the shifted sound lands late, how late, and to keep Mix at 100%: ' + JSON.stringify(reg.hint));
+    // …and "about 1/20 of a second an octave up" is measured, not guessed: the energy of a click through +12 st lands 50 ms late.
+    const click = t => (Math.abs(t - 0.5) < 0.0005 ? 1 : 0);
+    const c = await afx986(pitch482t({ semitones: 12 }), click, 1.2);
+    let m = 0, w = 0; for (let i = 0; i < c.length; i++) { const e = c[i] * c[i]; m += e * i; w += e; }
+    const lag = (m / w / 48000 - 0.5) * 1000;
+    if (Math.abs(lag - 50) > 5) throw new Error('a click through +12 st lands ' + lag.toFixed(1) + ' ms late, not about 50 ms (1/20 s) as the hint says');
+    await audioPanel482t('pitch', { semitones: 5 }, async p => {
+      for (const label of ['Semitones', 'Fine tune', 'Mix']) {
+        const r = p.rowOf(label);
+        if (!r) throw new Error(p.where + ': the open Pitch Shift shows no ' + label + ' row');
+        await p.fits(r.row, 'the ' + label + ' row');
+      }
+      const ft = p.rowOf('Fine tune');
+      if (!ft.val || ft.val.value !== '0¢') throw new Error(p.where + ': Fine tune reads ' + (ft.val && ft.val.value) + ', not 0¢');
+      const hint = p.open.querySelector('.afx-hint');
+      if (!hint || hint.textContent !== reg.hint) throw new Error(p.where + ': the open Pitch Shift shows no hint line (found ' + JSON.stringify(hint && hint.textContent) + ')');
+      await p.fits(hint, 'the hint line');
+      const mix = p.rowOf('Mix').row;
+      if (hint.getBoundingClientRect().top < mix.getBoundingClientRect().bottom - 1) throw new Error(p.where + ': the hint sits above the sliders, not under them');
+    });
+  });
+
+  test('482 3.6 Bass & Treble - Bass at and Treble at move where the shelves start, keyframed too, the defaults are the old 200 and 3000 Hz, and the preview matches the export', { item: '482', budgetMs: 120000 }, async function () {
+    const ps = FM.audioFxRegistry.paramsOf('bassTreble') || [];
+    const bf = ps.find(p => p.key === 'bassFreq'), tf = ps.find(p => p.key === 'trebleFreq');
+    if (!bf || !tf) throw new Error('Bass & Treble has no Bass at / Treble at (params ' + ps.map(p => p.key).join(', ') + ')');
+    if (bf.label !== 'Bass at' || bf.min !== 40 || bf.max !== 500 || bf.def !== 200 || !bf.keyframable) throw new Error('Bass at is ' + JSON.stringify(bf));
+    if (tf.label !== 'Treble at' || tf.min !== 1000 || tf.max !== 16000 || tf.def !== 3000 || !tf.keyframable) throw new Error('Treble at is ' + JSON.stringify(tf));
+    const BT = p => [{ type: 'bassTreble', enabled: true, params: Object.assign({ bass: 0, treble: 0 }, p) }];
+    // A Web Audio shelf is half-way (+6 of +12) at its corner: that is how "where the bass starts" is read off a sine.
+    const bad = [];
+    const half = async (fx, f, what, opts) => { const g = await gain482t(fx, f, opts); if (Math.abs(g - 6) > 0.3) bad.push(what + ': ' + f + ' Hz gets ' + g.toFixed(2) + ' dB, not the +6 dB a +12 shelf has at its corner'); return g; };
+    await half(BT({ bass: 12 }), 200, 'CONTROL, Bass +12 with no Bass at (a saved clip)');
+    await half(BT({ treble: 12 }), 3000, 'CONTROL, Treble +12 with no Treble at (a saved clip)');
+    for (const live of [false, true]) {
+      const path = live ? 'the preview' : 'the export';
+      await half(BT({ bass: 12, bassFreq: 60 }), 60, path + ', Bass +12 at 60 Hz', { live: live });
+      await half(BT({ bass: 12, bassFreq: 500 }), 500, path + ', Bass +12 at 500 Hz', { live: live });
+      await half(BT({ treble: 12, trebleFreq: 10000 }), 10000, path + ', Treble +12 at 10000 Hz', { live: live });
+    }
+    const g200 = await gain482t(BT({ bass: 12, bassFreq: 60 }), 200), g30 = await gain482t(BT({ bass: 12, bassFreq: 60 }), 30);
+    if (!(g200 < 1 && g30 > 10)) bad.push('Bass +12 at 60 Hz lifts 30 Hz by ' + g30.toFixed(2) + ' dB and 200 Hz by ' + g200.toFixed(2) + ' - a sub boost should leave 200 Hz alone');
+    // keyframed: Bass at sliding 60 -> 500 Hz over 2 s takes a 400 Hz tone from untouched to lifted
+    // held at 60 Hz to 0.8 s, moved to 500 Hz by 1.6 s, held there: read inside each hold
+    const kf = await afx986(BT({ bass: 12, bassFreq: { kf: [{ t: 0, v: 60 }, { t: 0.8, v: 60 }, { t: 1.6, v: 500 }, { t: 2, v: 500 }] } }), tone482t(400), 2);
+    const g0 = 20 * Math.log10(rms482t(kf, 0.3, 0.75) / (0.5 / Math.SQRT2)), g1 = 20 * Math.log10(rms482t(kf, 1.7, 1.95) / (0.5 / Math.SQRT2));
+    if (!(g0 < 1 && g1 > 6)) bad.push('Bass at keyframed 60 -> 500 Hz lifts a 400 Hz tone by ' + g0.toFixed(2) + ' dB at the start and ' + g1.toFixed(2) + ' dB at the end - it does not move');
+    // Dragged while the preview plays: Bass at 200 -> 60 Hz on a live chain lets 200 Hz go at once.
+    const dg = await drag482t(BT({ bass: 12, bassFreq: 200 }), p => { p.bassFreq = 60; }, tone482t(200), 1);
+    const dgDb = 20 * Math.log10(rms482t(dg, 0.4, 0.9) / (0.5 / Math.SQRT2));
+    if (!(dgDb < 1)) bad.push('Bass at dragged from 200 to 60 Hz while the preview plays still lifts 200 Hz by ' + dgDb.toFixed(2) + ' dB');
+    const inst = FM.audioFxRegistry.makeInstance('bassTreble'), old = [{ type: 'video', audioFx: [{ type: 'bassTreble', enabled: true, params: { bass: 4, treble: -2 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (inst.params.bassFreq !== 200 || inst.params.trebleFreq !== 3000 || old[0].audioFx[0].params.bassFreq !== 200 || old[0].audioFx[0].params.trebleFreq !== 3000) bad.push('a new Bass & Treble or a saved one opens with Bass at / Treble at ' + [inst.params.bassFreq, inst.params.trebleFreq, old[0].audioFx[0].params.bassFreq, old[0].audioFx[0].params.trebleFreq].join(' / ') + ', not 200 / 3000');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 3.6 3-Band EQ - Low at, High at and Mid width move the bands, a wider Mid is wider, the defaults are the old 250 Hz, 4000 Hz and width 1, and the preview matches the export', { item: '482', budgetMs: 120000 }, async function () {
+    const ps = FM.audioFxRegistry.paramsOf('eq3') || [];
+    const want = { lowFreq: ['Low at', 40, 1000, 250], highFreq: ['High at', 1000, 16000, 4000], midWidth: ['Mid width', 0.1, 10, 1] };
+    Object.keys(want).forEach(k => {
+      const p = ps.find(x => x.key === k), w = want[k];
+      if (!p) throw new Error('3-Band EQ has no ' + w[0] + ' (params ' + ps.map(x => x.key).join(', ') + ')');
+      if (p.label !== w[0] || p.min !== w[1] || p.max !== w[2] || p.def !== w[3] || !p.keyframable) throw new Error(w[0] + ' is ' + JSON.stringify(p));
+    });
+    const EQ = p => [{ type: 'eq3', enabled: true, params: Object.assign({ low: 0, mid: 0, high: 0, midFreq: 1000 }, p) }];
+    const bad = [];
+    const half = async (fx, f, what, opts) => { const g = await gain482t(fx, f, opts); if (Math.abs(g - 6) > 0.3) bad.push(what + ': ' + f + ' Hz gets ' + g.toFixed(2) + ' dB, not the +6 dB a +12 shelf has at its corner'); };
+    await half(EQ({ low: 12 }), 250, 'CONTROL, Low +12 with no Low at (a saved clip)');
+    await half(EQ({ high: 12 }), 4000, 'CONTROL, High +12 with no High at (a saved clip)');
+    for (const live of [false, true]) {
+      const path = live ? 'the preview' : 'the export';
+      await half(EQ({ low: 12, lowFreq: 60 }), 60, path + ', Low +12 at 60 Hz', { live: live });
+      await half(EQ({ low: 12, lowFreq: 800 }), 800, path + ', Low +12 at 800 Hz', { live: live });
+      await half(EQ({ high: 12, highFreq: 12000 }), 12000, path + ', High +12 at 12000 Hz', { live: live });
+      await half(EQ({ high: 12, highFreq: 1500 }), 1500, path + ', High +12 at 1500 Hz', { live: live });
+    }
+    // Mid width: the centre keeps its +12 at any width; an octave off it, a narrow band has let go and a wide one still lifts.
+    const off = async (w, opts) => gain482t(EQ(Object.assign({ mid: 12 }, w == null ? {} : { midWidth: w })), 2000, opts);
+    const o1 = await off(null), oN = await off(0.1), oW = await off(5), oWl = await off(5, { live: true });
+    const c1 = await gain482t(EQ({ mid: 12, midWidth: 5 }), 1000);
+    if (Math.abs(o1 - 3.93) > 0.3) bad.push('CONTROL, Mid +12 with no Mid width (a saved clip) lifts 2000 Hz by ' + o1.toFixed(2) + ' dB, not the 3.93 dB of the old Q 1 band');
+    if (!(oN < 0.5)) bad.push('Mid width 0.1 still lifts 2000 Hz (an octave above a 1000 Hz Mid) by ' + oN.toFixed(2) + ' dB - it is not narrow');
+    if (!(oW > 9)) bad.push('Mid width 5 lifts 2000 Hz by only ' + oW.toFixed(2) + ' dB - it is not wide (the old band gives ' + o1.toFixed(2) + ')');
+    if (Math.abs(oWl - oW) > 0.05) bad.push('the preview lifts 2000 Hz under Mid width 5 by ' + oWl.toFixed(2) + ' dB, the export by ' + oW.toFixed(2));
+    if (Math.abs(c1 - 12) > 0.3) bad.push('at Mid width 5 the Mid centre gets ' + c1.toFixed(2) + ' dB, not its +12');
+    // held at 0.1 to 0.8 s, widened to 5 by 1.6 s, held there: read inside each hold
+    const kf = await afx986(EQ({ mid: 12, midWidth: { kf: [{ t: 0, v: 0.1 }, { t: 0.8, v: 0.1 }, { t: 1.6, v: 5 }, { t: 2, v: 5 }] } }), tone482t(2000), 2);
+    const k0 = 20 * Math.log10(rms482t(kf, 0.3, 0.75) / (0.5 / Math.SQRT2)), k1 = 20 * Math.log10(rms482t(kf, 1.7, 1.95) / (0.5 / Math.SQRT2));
+    if (!(k0 < 0.5 && k1 > 8)) bad.push('Mid width keyframed 0.1 -> 5 lifts a 2000 Hz tone by ' + k0.toFixed(2) + ' dB at the start and ' + k1.toFixed(2) + ' dB at the end - it does not widen');
+    // Dragged while the preview plays: Mid width 1 -> 0.1 and Low at 250 -> 60 Hz on a live chain are heard at once.
+    const dw = await drag482t(EQ({ mid: 12, midWidth: 1 }), p => { p.midWidth = 0.1; }, tone482t(2000), 1);
+    const dwDb = 20 * Math.log10(rms482t(dw, 0.4, 0.9) / (0.5 / Math.SQRT2));
+    if (!(dwDb < 0.5)) bad.push('Mid width dragged from 1 to 0.1 while the preview plays still lifts 2000 Hz by ' + dwDb.toFixed(2) + ' dB');
+    const dl = await drag482t(EQ({ low: 12, lowFreq: 250 }), p => { p.lowFreq = 60; }, tone482t(250), 1);
+    const dlDb = 20 * Math.log10(rms482t(dl, 0.4, 0.9) / (0.5 / Math.SQRT2));
+    if (!(dlDb < 1)) bad.push('Low at dragged from 250 to 60 Hz while the preview plays still lifts 250 Hz by ' + dlDb.toFixed(2) + ' dB');
+    const inst = FM.audioFxRegistry.makeInstance('eq3'), old = [{ type: 'video', audioFx: [{ type: 'eq3', enabled: true, params: { low: 2, mid: 1, high: -1, midFreq: 700 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const got = [inst.params.lowFreq, inst.params.highFreq, inst.params.midWidth, old[0].audioFx[0].params.lowFreq, old[0].audioFx[0].params.highFreq, old[0].audioFx[0].params.midWidth];
+    if (got.join('/') !== '250/4000/1/250/4000/1') bad.push('a new or saved 3-Band EQ opens with Low at / High at / Mid width ' + got.join(' / ') + ', not 250 / 4000 / 1');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 3.6 Bass & Treble and 3-Band EQ - Bass at, Treble at, Low at, High at and Mid width fit the open effect at 390 and 1280 px and read their defaults', { item: '482', budgetMs: 120000 }, async function () {
+    const rows = { bassTreble: [['Bass', '0.0dB'], ['Treble', '0.0dB'], ['Bass at', '200Hz'], ['Treble at', '3000Hz']],
+      eq3: [['Low', '0.0dB'], ['Mid Freq', '1000Hz'], ['Mid width', '1.0×'], ['Low at', '250Hz'], ['High at', '4000Hz']] };
+    for (const type of Object.keys(rows)) {
+      await audioPanel482t(type, null, async p => {
+        for (const [label, val] of rows[type]) {
+          const r = p.rowOf(label);
+          if (!r) throw new Error(p.where + ': the open ' + type + ' shows no ' + label + ' row');
+          await p.fits(r.row, 'the ' + type + ' ' + label + ' row');
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(p.where + ': the ' + type + ' label ' + label + ' is cut off');
+          if (!r.val || r.val.value !== val) throw new Error(p.where + ': ' + label + ' reads ' + (r.val && r.val.value) + ', not ' + val);
+        }
+      });
+    }
+  });
+
 })();
