@@ -271,12 +271,23 @@ window.FM = window.FM || {};
     const needle = q.toLowerCase();
     const catLabel = {};
     (FM.audioFxRegistry.categories() || []).forEach(c => { catLabel[c.key] = (c.label || '').toLowerCase(); });
-    // match the label, the type id, OR the category name — so "eq", "space" or "delay" surface the
-    // whole family, not just effects carrying the word in their title
+    /* Match the label, the type id, OR the category name — so "eq", "space" or "delay" surface the whole family,
+       not just effects carrying the word in their title — AND the names people give the sound (queue 986, hunt
+       C13: the registry's `tags`). A tag matches while it is being typed ("karao") and when it is one of the
+       words typed ("robot voice", "make it underwater"), compared on words so "8-bit" and "8 bit" are one thing.
+       "While it is being typed" means from the START of one of its words: matching anywhere inside one listed
+       Distortion for "low" (blOWn out), Reverb for "the" (caTHEdral) and Stereo Width for "no" (mONO). */
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const qw = words(q), qTrim = qw.trim();
+    const tagHit = r => !!qTrim && (r.tags || []).some(tag => {
+      const tw = words(tag);
+      return tw.indexOf(' ' + qTrim) >= 0 || qw.indexOf(tw) >= 0;
+    });
     FM.audioFxRegistry.all().filter(r =>
       r.label.toLowerCase().indexOf(needle) >= 0 ||
       (r.type || '').toLowerCase().indexOf(needle) >= 0 ||
-      (catLabel[r.category] || '').indexOf(needle) >= 0
+      (catLabel[r.category] || '').indexOf(needle) >= 0 ||
+      tagHit(r)
     ).forEach(reg => grid.appendChild(tile(reg, null)));
     if (!grid.children.length) grid.appendChild(el('div', 'fxb-empty', 'No audio effects match “' + q + '”'));
     return grid;

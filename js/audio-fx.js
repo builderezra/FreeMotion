@@ -83,9 +83,23 @@ window.FM = window.FM || {};
     const norm = Math.tanh(k);
     return curveFrom(x => Math.tanh(k * x) / norm);
   }
+  /* ═══ BITS 13–16 WERE THE DRY SOUND (queue 986, hunt C18) ═══════════════════════════════════════════════
+     A WaveShaper interpolates LINEARLY between its curve points, so a staircase only survives while each step
+     spans several points. At 8192 points a 13-bit step is one point wide and the staircase interpolates back
+     into a straight line: MEASURED at 768c83d0 on a −40 dBFS sine, bits 14, 15 and 16 rendered byte-identical
+     (error −121 dB — float noise, i.e. the dry signal) where a real quantiser leaves −92.5 / −95.4 / −101.1 dB;
+     12 bits was 5 dB too clean and 11 bits 1.5 dB. So the top quarter of the slider did nothing.
+     Now a curve has 8 points per step whatever the depth (2^bits × 8 + 1, so every point lands on an exact
+     multiple of step/8 and each riser is 1/8 of a step wide). Up to 10 bits that is ≤ 8192 and the curve is
+     left EXACTLY as it was, so the default 6 bits — and every depth that already worked — is byte-identical.
+     16 bits is 2 MB of curve, so each depth is built once and shared (a curve is never mutated; setting
+     `.curve` copies it). */
+  const _crushCache = {};
   function crushCurve(bits) {
-    const step = 2 / Math.pow(2, Math.round(clamp(bits, 1, 16)));
-    return curveFrom(x => Math.round(x / step) * step, 8192);
+    const b = Math.round(clamp(bits, 1, 16));
+    if (_crushCache[b]) return _crushCache[b];
+    const step = 2 / Math.pow(2, b);
+    return (_crushCache[b] = curveFrom(x => Math.round(x / step) * step, b <= 10 ? 8192 : Math.pow(2, b) * 8 + 1));
   }
   function lofiCurve(amount) {
     const a = clamp(amount, 0, 1);
@@ -255,6 +269,12 @@ window.FM = window.FM || {};
       }
     };
   }
+
+  /* A FEEDBACK LOOP, UNROLLED (queue 986, hunts C16/C17). A loop's k-th time round is weighted fb^(k−1); these
+     are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
+     Phaser for what the rest of the tail is worth). */
+  const FLANGE_TAPS = 16, PHASE_PASSES = 6;
+  function powOf(k) { return function (v) { return Math.pow(v, k); }; }
 
   // A param's value at scene time t, guarded at every step: a missing/NaN/animated-object read falls back
   // to the default. NaN reaching an AudioParam throws and takes the whole chain down with it.
@@ -843,50 +863,97 @@ window.FM = window.FM || {};
   }, {
     type: 'flanger', label: 'Flanger', category: 'char',
     params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.5, '', true), MIX(0.5)],
+    /* ═══ THE FEEDBACK CAME BACK ONE RENDER QUANTUM LATE (queue 986, hunt C16) ═══════════════════════════════
+     * The feedback was a loop through the swept delay itself (d → fb → d). Web Audio only allows a cycle with a
+     * DelayNode in it, and an engine pays for the cycle with one render quantum (128 frames) on every trip:
+     * MEASURED at 768c83d0 in the suite's Chrome, an impulse at the bottom of the sweep (τ = 1 ms, Feedback 0.5)
+     * came back at 1.00, 4.67, 8.35, 12.06 ms — τ, then τ + 2.67 ms each time — instead of 1, 2, 3, 4; at the top
+     * (τ = 7 ms) at 7.0, 16.6, 26.3 instead of 7, 14, 21; 44.1 kHz the same with 2.90 ms. (The backlog read this as
+     * the sweep being clamped at the bottom; measured, the first pass does reach 1 ms — it is every echo after it
+     * that is late.) So the resonances Feedback adds sat on a comb 1/(τ + 2.67 ms) apart while the notches sit
+     * 1/τ apart: Feedback did not sharpen the flange, it laid a second, unrelated comb over it, at every setting.
+     * THE LOOP IS UNROLLED, SO THERE IS NO CYCLE AT ALL. y = x(t−τ) + fb·y(t−τ) IS the sum of its echoes,
+     * Σ fb^(k−1)·x(t−kτ), and a chain of delays, each swept by the same LFO, produces exactly those echoes: the
+     * k-th delay's output has been through k sweeps, the same time-varying path the recursion takes. Each tap is
+     * weighted fb^(k−1), so a keyframed Feedback still schedules as real gains. FLANGE_TAPS echoes: the rest of
+     * the tail is fb^16 — 0.0015 % at the default 0.5, and at the 0.9 maximum the resonance peaks 1.8 dB under a
+     * perfect loop (the price of no cycle; the old loop reached full height at the wrong frequencies). Delays are
+     * cheap: measured, a second of stereo renders in 8 ms against 2 ms before (a Reverb takes 25). The first
+     * pass — the sweep itself, Feedback 0 — is the same node doing the same thing it always did, and renders
+     * sample-for-sample what it did at 768c83d0. */
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
-      const d = s.delay(0.05); d.delayTime.value = 0.004;   // 1–7 ms sweep
       const lfo = s.lfo(0.3, { key: 'rate' });
-      const amp = s.gain(0.6 * 0.003);
-      lfo.connect(amp); amp.connect(d.delayTime);
-      const fb = s.gain(0.5);
-      input.connect(d);
-      d.connect(fb).connect(d);
-      d.connect(wd.wet); wd.wet.connect(out);
+      const amp = s.gain(0.6 * 0.003);   // 1–7 ms sweep around 4 ms, the same swing on every delay in the chain
+      lfo.connect(amp);
+      const fb0 = initNum(inst, 'feedback', 0.5, 0, 0.9);
+      const sum = s.gain(1), tapT = [];
+      let prev = input;
+      for (let k = 0; k < FLANGE_TAPS; k++) {
+        const d = s.delay(0.05); d.delayTime.value = 0.004;
+        amp.connect(d.delayTime);
+        prev.connect(d); prev = d;
+        const g = s.gain(Math.pow(fb0, k));   // echo k+1 carries fb^k
+        d.connect(g); g.connect(sum);
+        if (k) tapT.push([g.gain, powOf(k)]);
+      }
+      sum.connect(wd.wet); wd.wet.connect(out);
       return unit({
-        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate, feedback: fb.gain },
-        custom: { depth: multi([[amp.gain, 0.003]]), mix: wd.set },
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate },
+        custom: { depth: multi([[amp.gain, 0.003]]), feedback: multi(tapT), mix: wd.set },
       });
     },
   }, {
     type: 'phaser', label: 'Phaser', category: 'char',
     params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.4, '', true)],
-    build: function (ctx) {
+    /* ═══ FEEDBACK WAS A FIXED COMB, NOT A SHARPER PHASER (queue 986, hunt C17) ══════════════════════════════
+     * The feedback ran round a loop — the four allpasses, then back through a 1 ms DelayNode, because Web Audio
+     * mutes a cycle without one — and the engine adds a render quantum to every trip round a cycle. MEASURED at
+     * 768c83d0 (Depth 0, so the allpasses hold still): the response fits a loop of 1 ms + 128 frames = 3.67 ms to
+     * 0.00 dB, and misses the loop a phaser means (none) by 7.6 dB rms at Feedback 0.9, 3.6 dB at the default 0.4.
+     * A 3.67 ms loop is a comb every 272 Hz that stands still while the notches sweep — so turning Feedback up
+     * added a fixed metallic ring instead of the moving resonance it is for.
+     * THE LOOP IS UNROLLED. y = A(x + fb·y), with no delay in the loop, is y = Σ fb^(k−1)·A^k(x): the input
+     * through the allpass chain once, twice, three times…, each pass weighted fb^(k−1). PHASE_PASSES copies of
+     * the chain in series give exactly those terms with no cycle anywhere — every copy swept by the same LFO
+     * through the same four amps, so the resonances move with the notches. What is left out is fb^6: measured
+     * against a perfect loop, 0.03 dB rms at the default 0.4, and 3.3 dB rms at the 0.9 maximum, where the
+     * resonant peaks land about 6 dB under full height (768c83d0's loop: 3.6 and 7.6 dB off, at the wrong
+     * frequencies). Six passes, not more, for the phone: each is four swept biquads, and measured a second of
+     * stereo now renders in 48 ms against 9.5 ms before (eight passes: 58 ms; a Reverb: 25). Sweeping the later
+     * passes at k-rate would nearly have halved that (measured 33 ms), but at Rate 5 / Depth 1 / Feedback 0.9 a
+     * sine then came out differing from the sample-accurate render by a signal only 4.4 dB under the sound itself
+     * — the later passes lagging the first, the resonance off its notch — so every pass sweeps sample-accurately.
+     * Feedback 0 is the first copy alone — the same four nodes, the same wiring — so it renders sample-for-sample
+     * what it did at 768c83d0, and Feedback schedules as real gains, keyframed or not. */
+    build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const dry = s.gain(0.5), wet = s.gain(0.5);   // the notches ARE dry + allpass summed — no mix knob
       input.connect(dry).connect(out);
       const lfo = s.lfo(0.5, { key: 'rate' });
       const bases = [200, 400, 800, 1600];
-      const depthT = [];
-      let first = null, prev = null;
-      bases.forEach(function (b) {
-        const ap = s.biquad('allpass', b, 1);
-        const amp = s.gain(0.7 * b * 0.7);   // each stage sweeps in proportion to its own centre
-        lfo.connect(amp); amp.connect(ap.frequency);
-        if (prev) prev.connect(ap); else first = ap;
-        prev = ap;
-        depthT.push([amp.gain, b * 0.7]);
-      });
-      input.connect(first);
-      prev.connect(wet); wet.connect(out);
-      const fb = s.gain(0.4);
-      const fbd = s.delay(0.02); fbd.delayTime.value = 0.001;   // Web Audio mutes a cycle with no DelayNode in it
-      prev.connect(fb); fb.connect(fbd); fbd.connect(first);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate, feedback: fb.gain }, custom: { depth: multi(depthT) } });
+      // each stage sweeps in proportion to its own centre; one amp per stage drives that stage in every copy
+      const amps = bases.map(function (b) { const a = s.gain(0.7 * b * 0.7); lfo.connect(a); return a; });
+      const depthT = bases.map(function (b, i) { return [amps[i].gain, b * 0.7]; });
+      const fb0 = initNum(inst, 'feedback', 0.4, 0, 0.9);
+      const sum = s.gain(1), tapT = [];
+      let prev = input;
+      for (let k = 0; k < PHASE_PASSES; k++) {
+        bases.forEach(function (b, i) {
+          const ap = s.biquad('allpass', b, 1);
+          amps[i].connect(ap.frequency);
+          prev.connect(ap); prev = ap;
+        });
+        const g = s.gain(Math.pow(fb0, k));   // pass k+1 carries fb^k
+        prev.connect(g); g.connect(sum);
+        if (k) tapT.push([g.gain, powOf(k)]);
+      }
+      sum.connect(wet); wet.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi(depthT), feedback: multi(tapT) } });
     },
   }, {
     type: 'vibrato', label: 'Vibrato', category: 'char',
@@ -1042,6 +1109,43 @@ window.FM = window.FM || {};
 
   const CATEGORY_LABELS = { eq: 'EQ / Filter', space: 'Space / Stereo', dyn: 'Dynamics', char: 'Character' };
   const CATEGORY_ORDER = ['eq', 'space', 'dyn', 'char'];
+
+  /* ═══ WHAT PEOPLE CALL THEM (queue 986, hunt C13) ═════════════════════════════════════════════════════════
+     Search matched an effect's label, its type id and its category, and nothing else — so the words people
+     actually type found nothing. MEASURED at 768c83d0 in the real browser: karaoke, robot, chipmunk, muffled,
+     underwater, radio, bass boost and 8-bit all said "No audio effects match", although this file itself calls
+     Vocal Remove "karaoke" and Pitch Shift "a chipmunk". These are the names for the SOUND each one makes, read
+     by js/audio-fx-browser.js's search alongside the label. One table so it is read in one place. */
+  const TAGS = {
+    bassTreble: ['bass boost', 'bass', 'treble', 'tone', 'warmer', 'brighter'],
+    eq3: ['equaliser', 'equalizer', 'eq', 'tone', 'mids'],
+    lowpass: ['muffled', 'underwater', 'next room', 'through a wall', 'dull', 'dark'],
+    highpass: ['thin', 'rumble', 'cut bass', 'wind noise'],
+    bandpass: ['focus', 'narrow'],
+    notch: ['hum', 'buzz', 'remove hum'],
+    telephone: ['phone', 'phone call', 'radio', 'walkie', 'walkie talkie', 'megaphone', 'call'],
+    reverb: ['room', 'hall', 'church', 'cave', 'cathedral', 'echo'],
+    delay: ['repeat', 'echo'],
+    pingpong: ['bounce', 'left right', 'stereo echo'],
+    width: ['wide', 'stereo', 'mono', 'narrow'],
+    pan: ['left', 'right', 'balance'],
+    autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
+    gain: ['louder', 'quieter', 'volume', 'boost'],
+    compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
+    limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
+    tremolo: ['wobble', 'pulse', 'throb'],
+    distortion: ['fuzz', 'overdrive', 'crunch', 'guitar', 'distorted', 'blown out'],
+    bitcrush: ['8-bit', '8 bit', 'retro', 'game', 'chiptune', 'crushed'],
+    lofi: ['vintage', 'cassette', 'tape', 'old', 'retro', 'lo fi'],
+    chorus: ['double', 'thicken', 'shimmer', 'ensemble'],
+    flanger: ['jet', 'whoosh', 'sweep'],
+    phaser: ['swirl', 'sweep', 'swoosh'],
+    vibrato: ['warble', 'wobble', 'wavy'],
+    ringmod: ['robot', 'robot voice', 'dalek', 'metallic', 'alien'],
+    vocalremove: ['karaoke', 'instrumental', 'acapella', 'a cappella', 'remove vocals', 'no vocals', 'backing track'],
+    pitch: ['chipmunk', 'deep voice', 'helium', 'higher', 'lower', 'key', 'voice changer'],
+  };
+  DEFS.forEach(d => { d.tags = TAGS[d.type] || []; });
 
   FM.AUDIO_EFFECTS = DEFS;
   DEFS.forEach(d => { REG[d.type] = d; });

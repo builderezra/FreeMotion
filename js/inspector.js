@@ -2035,24 +2035,26 @@ window.FM = window.FM || {};
      things drift apart.
      Cleared on commit and on leaving the tab, for the same reason the browser clears it: a preview that
      outlives the picking is a canvas showing something the project does not contain. */
-  function filterPreviewStack() {
+  /* ⚠️ THE PREVIEW IS WHAT ADD WILL ADD (#986 C52, hunt). This built its own list from the RAW recipe — every child with
+     `Object.assign` of the recipe's params — while Add lands `fitToLayer(filters.makeInstance(id))`: children validated and
+     clamped by saneChild, and the ones that do not suit the layer dropped. So the canvas could show ingredients Add
+     throws away. Now each pick is the very container Add pushes, fitted to the layer being previewed, and a pick that
+     suits nothing here previews as nothing — as Add refuses it. The compositor renders a container like any effect. */
+  function filterPreviewStack(layer) {
+    const L = layer || (FM.selectedLayer ? FM.selectedLayer(FM.scene) : null);
     const out = [];
+    if (!L || !FM.filters || !FM.filters.makeInstance) return out;
     _fltPicks.forEach(id => {
-      const f = FM.filters && FM.filters.get ? FM.filters.get(id) : null;
-      (f && f.effects || []).forEach(c => {
-        if (!c || !c.type) return;
-        const inst = FM.fxRegistry.makeInstance(c.type);
-        if (!inst) return;
-        if (c.params) Object.assign(inst.params, c.params);
-        out.push(inst);
-      });
+      const box = FM.filters.makeInstance(id);
+      const fitted = box ? FM.fxRegistry.fitToLayer(box, L) : null;
+      if (fitted) out.push(fitted);
     });
     return out;
   }
   function restartFilterPreview() {
     const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     if (!layer) { FM._fxPreview = null; if (FM.requestRender) FM.requestRender(); return; }
-    FM._fxPreview = _fltPicks.length ? { id: layer.id, list: filterPreviewStack() } : null;
+    FM._fxPreview = _fltPicks.length ? { id: layer.id, list: filterPreviewStack(layer) } : null;
     if (FM.requestRender) FM.requestRender();
   }
   FM._filterPreviewStack = filterPreviewStack;   // suite seam

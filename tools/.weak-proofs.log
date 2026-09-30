@@ -93,3 +93,4 @@
 2026-09-29 04:45	WEAK	971 a friend’s connection that is down is sent nothing — what the owner does meanwhile waits in order and reaches the friend the moment the connection is back, presence is shed, and down/Offline/close are unchanged	while the friend’s connection was down the link handed 6 message(s) to the data channel (["ctl:1","pres:1","ctl:2","bulk:undefined","ctl:3","pres:3"]) — on 
 2026-09-29 04:45	WEAK	973 the front car reads at the Shape menu's 34px: open headlights, feet below the bumper	seams missing: SHAPE_POLYS.carfront / renderScene / makeLayer
 2026-09-29 04:45	WEAK	976: a filter row draws one dot for each place › can take it — a row of exactly two pages has two dots, not three	FM._railGeometry is not a function
+2026-09-30 09:53	WEAK	986 C7 review Starfield at every star size on a reduced preview is the export shrunk, and its cells are found once for all sizes	FM._sfStats is not exposed - the reduced-plate Starfield has no scan count to read

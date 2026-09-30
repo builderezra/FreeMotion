@@ -39,13 +39,24 @@
 
   /* One shader, driven by a uniform matrix, rather than one program per effect stack. A colour filter
      chain composes: every op below is a 4x5 affine map on RGBA, and the product of the chain is one
-     matrix. So the shader never changes and is compiled exactly once, however long the stack. */
+     matrix. So the shader never changes and is compiled exactly once, however long the stack.
+     ⚠️ …BUT ctx.filter CLAMPS AFTER EVERY FUNCTION (#986 batch 2 review), and one product clamps once, at the end. A
+     chain that pushes past 1 before a later op — Contrast 1.6 then Sepia, Brightness then Contrast — came out a
+     different picture: MEASURED against the real filter, Polaroid on an adjustment layer 0.53 of its own look, Acid
+     Wash 0.72, Whiteout 0.43. So the chain is cut into SEGMENTS, each ending after an op that can leave [0,1], and
+     the shader clamps between them — up to MAX_SEG of them, the product of each still one matrix. An op that cannot
+     leave the range (grayscale, invert, saturate/brightness/contrast within 1) joins the next segment, which is the
+     same picture: its clamp would have been a no-op. A plain one-segment chain is the arithmetic it always was.
+     Each segment is THREE vec4 rows (the 3x3 row and its offset), not a mat4 + vec4: 25 uniform vectors for all eight
+     rather than 41, because WebGL only promises 16 and a shader that fails to link takes the whole colour fallback
+     with it. */
+  const MAX_SEG = 8;
   const FS = [
     'precision highp float;',
     'varying vec2 uv;',
     'uniform sampler2D src;',
-    'uniform mat4 m;',
-    'uniform vec4 off;',
+    'uniform vec4 rows[' + (3 * MAX_SEG) + '];',
+    'uniform int nseg;',
     'void main(){',
     '  /* ⚠️ 1.0 - uv.y. The framebuffer\'s origin is BOTTOM-left; texImage2D from a canvas puts the',
     '     image\'s FIRST row at v=0, i.e. the TOP. Sampling uv directly hands back a vertically',
@@ -62,8 +73,13 @@
     '     is exactly the alpha, the fingerprint of a value driven past 1.0 and clamped. Opaque pixels',
     '     matched throughout, which is why only the translucent row disagreed. */',
     '  float a = c.a;',
-    '  vec4 r = m * vec4(c.rgb, 1.0) + off;',
-    '  gl_FragColor = vec4(clamp(r.rgb, 0.0, 1.0), a);',
+    '  vec3 rgb = c.rgb;',
+    '  for (int i = 0; i < ' + MAX_SEG + '; i++) {',
+    '    if (i >= nseg) break;',
+    '    vec4 r0 = rows[3 * i], r1 = rows[3 * i + 1], r2 = rows[3 * i + 2];',
+    '    rgb = clamp(vec3(dot(r0.xyz, rgb) + r0.w, dot(r1.xyz, rgb) + r1.w, dot(r2.xyz, rgb) + r2.w), 0.0, 1.0);',
+    '  }',
+    '  gl_FragColor = vec4(rgb, a);',
     '}'
   ].join('\n');
 
@@ -172,7 +188,7 @@
     g.linkProgram(p);
     if (!g.getProgramParameter(p, g.LINK_STATUS)) throw new Error('colour link: ' + g.getProgramInfoLog(p));
     _prog = p;
-    _u = { src: g.getUniformLocation(p, 'src'), m: g.getUniformLocation(p, 'm'), off: g.getUniformLocation(p, 'off') };
+    _u = { src: g.getUniformLocation(p, 'src'), rows: g.getUniformLocation(p, 'rows'), nseg: g.getUniformLocation(p, 'nseg') };
     _stats.compiled++;
     return p;
   }
@@ -226,6 +242,34 @@
   }
   FM._glColorMatrix = opMatrix;   // suite seam: the arithmetic is asserted directly, not only through pixels
 
+  /* CAN THIS OP LEAVE [0,1] for a colour inside it (#986 batch 2 review)? Then ctx.filter's clamp after it matters and
+     the chain is cut there. The amounts are read exactly as opMatrix reads them. */
+  function leavesRange(type, v) {
+    const a = Number.isFinite(v) ? v : 1;
+    switch (type) {
+      case 'brightness': case 'saturate': return !(a >= 0 && a <= 1);
+      case 'contrast': return !(Math.abs(a) <= 1);
+      case 'sepia': return Math.max(0, Math.min(1, a)) > 0;    // its rows sum past 1: white goes to (1.35, 1.2, 0.94)
+      case 'hue': return (a || 0) % 360 !== 0;
+      default: return false;                                   // grayscale, invert: a mix of in-range values
+    }
+  }
+  /* ops → the chain's segments, each one matrix; a clamp follows every segment (see FS). */
+  function segmentsOf(ops) {
+    const segs = [];
+    let acc = null;
+    for (let i = 0; i < ops.length; i++) {
+      const om = opMatrix(ops[i].type, ops[i].value);
+      if (!om) return null;
+      acc = mul(acc || ident(), om);
+      if (leavesRange(ops[i].type, ops[i].value)) { segs.push(acc); acc = null; }
+    }
+    if (acc) segs.push(acc);
+    // more cuts than the shader holds: the last ones merge — one clamp for the tail, the old arithmetic there
+    while (segs.length > MAX_SEG) { const b = segs.pop(); segs[segs.length - 1] = mul(segs[segs.length - 1], b); }
+    return segs;
+  }
+
   /* ops = [{type, value}, …] in stack order. Returns null for anything it cannot express, and the
      caller must then behave exactly as it did before — a partial answer would be worse than none. */
   FM.glColor = {
@@ -235,12 +279,11 @@
     apply: function (srcCanvas, W, H, ops) {
       if (FM._noGL) { _stats.cpu++; _stats.reason = 'disabled by FM._noGL'; return null; }
       if (!srcCanvas || !ops || !ops.length || !(W > 0) || !(H > 0)) { _stats.cpu++; return null; }
-      let acc = ident();
       for (let i = 0; i < ops.length; i++) {
-        const om = opMatrix(ops[i].type, ops[i].value);
-        if (!om) { _stats.cpu++; _stats.reason = 'unsupported op: ' + ops[i].type; return null; }
-        acc = mul(acc, om);
+        if (!opMatrix(ops[i].type, ops[i].value)) { _stats.cpu++; _stats.reason = 'unsupported op: ' + ops[i].type; return null; }
       }
+      const segs = segmentsOf(ops);
+      if (!segs || !segs.length) { _stats.cpu++; return null; }
       const g = gl();
       if (!g) { _stats.cpu++; return null; }
       try {
@@ -256,14 +299,14 @@
         g.bindTexture(g.TEXTURE_2D, _tex);
         g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, srcCanvas);
         g.uniform1i(_u.src, 0);
-        // column-major mat4 from the 3x3, with the unused row/column left as the identity
-        const M = acc.m;
-        g.uniformMatrix4fv(_u.m, false, new Float32Array([
-          M[0], M[3], M[6], 0,
-          M[1], M[4], M[7], 0,
-          M[2], M[5], M[8], 0,
-          0, 0, 0, 1]));
-        g.uniform4f(_u.off, acc.o[0], acc.o[1], acc.o[2], 0);
+        // each segment as three rows: (the 3x3's row r, its offset r) — see FS
+        const RW = new Float32Array(12 * MAX_SEG);
+        for (let s = 0; s < segs.length; s++) {
+          const M = segs[s].m, o = segs[s].o;
+          RW.set([M[0], M[1], M[2], o[0], M[3], M[4], M[5], o[1], M[6], M[7], M[8], o[2]], s * 12);
+        }
+        g.uniform4fv(_u.rows, RW);
+        g.uniform1i(_u.nseg, segs.length);
         g.viewport(0, 0, W, H);
         g.drawArrays(g.TRIANGLES, 0, 3);
         _stats.gpu++;

@@ -112919,8 +112919,12 @@
       if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
       Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
     });
-    /* 2. THE PICTURES, against v17.14. */
-    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/1e519c24', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/72a7bbef', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    /* 2. THE PICTURES, against v17.14. Comic Ink and Blueprint carry Find Edges, whose REDUCED-plate picture #986 C60 changed
+       on purpose (the line is the export's, shrunk, not 2 plate pixels at full strength): their second hash (the 120-wide,
+       0.5 render) is re-captured after that fix — and again after the #986 batch 2 review taught it a ramp from a step (this
+       texture's blue channel is a steep sawtooth: MEASURED against the export shrunk, Blueprint's 0.5 render went from 56
+       levels off to 22, Comic Ink's from 7.7 to 6.3); the first (240 wide, the export) is v17.14's to the byte. */
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
     const HEAD_FX = { 'filmgrain/image': '2e19d26a/0f06368b', 'filmgrain/shape': '4c6e1d70/1923071e', 'lightleak/image': '8d3548c2/dd26433f', 'lightleak/shape': '85f6b0dc/a682c6df', 'glow/image': '4982cf31/73d5725a', 'glow/shape': '079f0f43/40fb8939', 'letterbox/image': '13ff85ed/ac039da2', 'letterbox/shape': '3842b4f7/62416c45', 'faded/image': '5fdf89a1/0bf1c4cb', 'faded/shape': 'dc16c171/9d8844ae', 'temperature/image': '971867df/50ef3714', 'temperature/shape': '6f093827/cf9c7296', 'colorbalance/image': '971867df/50ef3714', 'colorbalance/shape': '6f093827/cf9c7296' };
     const all = FM.filters.all();
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
@@ -113383,6 +113387,757 @@
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
       try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
     }
+  });
+
+  /* ═══ #986 batch 2 — the second half of the render bugs the #966 inventory found by READING the code (hunt), each
+   * reproduced with a measurement first. Every test here fails on 768c83d0. ═══════════════════════════════════════ */
+  /* The export shrunk to a reduced preview's plate the honest way: each plate pixel is the area-weighted mean of the
+     project pixels it covers (the plate is the frame at `ps`, so a plate pixel is 1/ps project px on a side). */
+  const _986boxDown = (d, SW, SH, w, h, ps) => {
+    const out = new Float32Array(w * h * 3), inv = 1 / ps;
+    for (let y = 0; y < h; y++) {
+      const Y0 = y * inv, Y1 = Math.min(SH, (y + 1) * inv);
+      for (let x = 0; x < w; x++) {
+        const X0 = x * inv, X1 = Math.min(SW, (x + 1) * inv);
+        let r = 0, g = 0, b = 0, A = 0;
+        for (let yy = Math.floor(Y0); yy < Math.ceil(Y1); yy++) {
+          const oy = Math.min(Y1, yy + 1) - Math.max(Y0, yy); if (!(oy > 0)) continue;
+          for (let xx = Math.floor(X0); xx < Math.ceil(X1); xx++) {
+            const ox = Math.min(X1, xx + 1) - Math.max(X0, xx); if (!(ox > 0)) continue;
+            const i = (yy * SW + xx) * 4, q = ox * oy; r += d[i] * q; g += d[i + 1] * q; b += d[i + 2] * q; A += q;
+          }
+        }
+        const o = (y * w + x) * 3; out[o] = A ? r / A : 0; out[o + 1] = A ? g / A : 0; out[o + 2] = A ? b / A : 0;
+      }
+    }
+    return out;
+  };
+  /* mean |difference| and correlation between a preview plate and the export shrunk to it, interior only (a 2px border
+     is where the frame edge splits a plate pixel) */
+  const _986vsShrunk = (pv, ref, w, h) => {
+    let s = 0, n = 0, sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0;
+    for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
+      const i = (y * w + x) * 4, o = (y * w + x) * 3;
+      for (let c = 0; c < 3; c++) { const a = pv[i + c], b = ref[o + c]; s += Math.abs(a - b); sa += a; sb += b; saa += a * a; sbb += b * b; sab += a * b; n++; }
+    }
+    const ma = sa / n, mb = sb / n, cov = sab / n - ma * mb, va = saa / n - ma * ma, vb = sbb / n - mb * mb;
+    return { mad: s / n, corr: cov / Math.sqrt(Math.max(1e-9, va * vb)), meanPv: ma, meanRef: mb };
+  };
+
+  test('986 C7 Clouds and Starfield on a reduced preview are the export shrunk - the same clouds and the same stars, not bigger ones somewhere else', { item: '986', budgetMs: 60000 }, function () {
+    /* Both kernels worked in PLATE pixels: Clouds' octave cells were 64/32/16 plate px and Drift moved them in plate
+       px, and Starfield hashed each plate pixel for a star — so on his phone's 0.28 preview the clouds were 3.5x the
+       size and the stars were other stars in other places. MEASURED on 768c83d0 against the export shrunk to the
+       preview's size: Clouds a mean error of 27 levels at 0.28 and 18 at 0.5 (means 54 against 67); Starfield 7.3
+       levels on a field whose whole mean is 3.9 — nothing lined up. A full-frame black clip in a 320x240 project; the
+       export is rendered at 320 and shrunk here by area, the preview is rendered at 160 and at 90 (ps 0.28). */
+    const PW = 320, PH = 240;
+    const clip = (fxs) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#000000' }); L.start = 0; L.duration = 4; L.effects = fxs; return L; };
+    const cases = [
+      ['Clouds', () => [_986fx('clouds')], 2.5, 0.97],
+      ['Clouds drifting at 60 px/s, scale 50', () => [_986fx('clouds', { drift: 60, scale: 50 })], 2.5, 0.97],
+      ['Starfield', () => [_986fx('starfield')], 0.5, 0.97],
+      ['Starfield, star size 3', () => [_986fx('starfield', { size: 3 })], 0.5, 0.97],
+      ['Starfield with brightness spread and twinkle', () => [_986fx('starfield', { variation: 0.6, twinkle: 0.5, amount: 1 })], 0.5, 0.97],
+    ];
+    const bad = [];
+    cases.forEach(([name, fxs, madLim, corrLim]) => {
+      const ex = _986shot([clip(fxs())], 1.3, PW, PH);
+      const exMean = (() => { let s = 0; for (let i = 0; i < ex.d.length; i += 4) s += ex.d[i] + ex.d[i + 1] + ex.d[i + 2]; return s / (ex.d.length / 4) / 3; })();
+      if (!(exMean > 1)) throw new Error('setup: the exported ' + name + ' draws nothing to compare (mean ' + exMean.toFixed(2) + ')');
+      [160, 90].forEach(w => {
+        const ps = w / PW, pv = _986shot([clip(fxs())], 1.3, PW, PH, ps);
+        const ref = _986boxDown(ex.d, PW, PH, pv.w, pv.h, ps);
+        const m = _986vsShrunk(pv.d, ref, pv.w, pv.h);
+        if (!(m.mad <= madLim && m.corr >= corrLim)) bad.push(name + ' on a ' + ps.toFixed(2) + ' preview is off the export shrunk to it by ' + m.mad.toFixed(2) + ' levels (limit ' + madLim + '), correlation ' + m.corr.toFixed(3) + ' (means ' + m.meanPv.toFixed(1) + ' against ' + m.meanRef.toFixed(1) + ')');
+      });
+    });
+    /* CONTROL: the ruler can tell two different fields apart — the export of a DIFFERENT field (Clouds at scale 50 vs
+       100, star size 1 vs 3) shrunk the same way must NOT pass the test above. */
+    const a = _986shot([clip([_986fx('starfield')])], 1.3, PW, PH), b = _986shot([clip([_986fx('starfield', { size: 3 })])], 1.3, PW, PH, 90 / PW);
+    const c = _986vsShrunk(b.d, _986boxDown(a.d, PW, PH, b.w, b.h, 90 / PW), b.w, b.h);
+    if (c.corr > 0.5) throw new Error('CONTROL: a size-3 field correlates ' + c.corr.toFixed(3) + ' with a size-1 field shrunk - the ruler cannot tell different stars apart');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C40 Chroma Key Pro View Matte keeps the clip edge - no grey band round a clip smaller than the frame, in the export and on a reduced preview', { item: '986' }, function () {
+    /* The matte view wrote alpha 255 into EVERY pixel it was handed — including the transparent ones round a clip
+       smaller than the frame, and the kernel is handed the clip's box plus a crop margin. MEASURED on 768c83d0: 8 project
+       px outside a 100x80 green clip over red, the export showed (220,220,220) opaque grey where the red belongs, and
+       so did a 0.28 preview; far outside the margin the red was untouched — a grey frame exactly as wide as the crop. */
+    const W = 320, H = 240, bad = [];
+    const scene = (fill) => {
+      const bg = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#ff0000' }); bg.start = 0; bg.duration = 4;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 100, shapeH: 80, fill: fill }); L.start = 0; L.duration = 4;
+      L.effects = [_986fx('chromakeypro', { view: 1 })];
+      return [L, bg];
+    };
+    [[1, 'the export'], [90 / W, 'a 0.28 preview'], [0.5, 'a half-size preview']].forEach(([rs, what]) => {
+      const at = (r, x, y) => { const i = (Math.round(y * rs) * r.w + Math.round(x * rs)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2], r.d[i + 3]]; };
+      const g = _986shot(scene('#00c23c'), 0.5, W, H, rs === 1 ? undefined : rs), m = _986shot(scene('#ff00ff'), 0.5, W, H, rs === 1 ? undefined : rs);
+      const inG = at(g, 160, 120), inM = at(m, 160, 120);
+      if (!(inG[0] < 20 && inM[0] > 235 && inM[1] > 235)) throw new Error('CONTROL on ' + what + ': the matte view is not showing a matte - a keyed green clip reads ' + inG + ' (black expected), a magenta one ' + inM + ' (white expected)');
+      [[160 + 58, 120], [160, 120 + 48], [160 - 58, 120 - 20]].forEach(([x, y]) => {
+        const p = at(m, x, y);
+        if (!(p[0] > 245 && p[1] < 10 && p[2] < 10)) bad.push(what + ': 8 project px outside the clip at (' + x + ',' + y + ') reads ' + p + ' - the red layer below should show there, the matte painted an opaque band over it');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C52 a picked filter previews exactly what Add adds - on an adjustment layer it grades the canvas, with only the ingredients that suit it', { item: '986', budgetMs: 60000 }, async function () {
+    /* The preview was built from the RAW recipe (every child, params copied), while Add lands the container fitted to
+       the layer — and on an ADJUSTMENT layer the preview was never read at all. MEASURED on 768c83d0: picking Teal &
+       Orange on an adjustment layer over red changed 0 pixels (preview (232,68,63) = no grade), Add then graded it, and
+       the previewed list held all 4 ingredients where Add keeps 2. Driven through the real Filters tab. */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.filters || !FM.filters.get || !FM.filters.get('tealorange')) throw new Error('setup: the Teal & Orange filter is not in the library');
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMountFilter = FM.fxThumbs && FM.fxThumbs.mountFilter;   // see queue 554's test: the tile thumbnails leak into later tests
+    if (realMountFilter) FM.fxThumbs.mountFilter = function () {};
+    const render = () => { const P = FM.scene.project, c = offscreen(160, Math.round(160 * P.height / P.width)), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, FM.scene, 0.5); return g.getImageData(0, 0, c.width, c.height).data; };
+    const diffPx = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 3 || Math.abs(a[i + 1] - b[i + 1]) > 3 || Math.abs(a[i + 2] - b[i + 2]) > 3) n++; return n; };
+    const cv = document.getElementById('preview');
+    const grab = () => { const c = offscreen(cv.width, cv.height); c.getContext('2d').drawImage(cv, 0, 0); return c.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; };
+    const bad = [];
+    try {
+      if (homeWasOpen) FM.home.close();
+      await sleep(120);
+      for (const kind of ['adjustment', 'shape']) {
+        const P = FM.scene.project;
+        FM.scene.layers.length = 0;
+        const bg = FM.makeLayer('shape', { name: 'bg', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: '#e8443f' });
+        bg.start = 0; bg.duration = 4; bg.effects = [];
+        const L = kind === 'adjustment'
+          ? Object.assign(FM.makeLayer('adjustment', { name: 'grade' }), { start: 0, duration: 4, effects: [] })
+          : Object.assign(FM.makeLayer('shape', { name: 'A', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width * 0.7, shapeH: P.height * 0.7, fill: '#3060c0' }), { start: 0, duration: 4, effects: [] });
+        FM.scene.layers.push(L, bg);
+        FM.selectLayer(L.id); FM.refreshAll();
+        await sleep(400);
+        if (FM.inspector.openCategory) FM.inspector.openCategory('Effects');
+        await sleep(350);
+        if (FM.inspector.openFxTab) FM.inspector.openFxTab('filters');
+        await sleep(500);
+        const panel = document.getElementById('inspector-panel');
+        const tile = panel.querySelector('.flt-tile[data-fltid="tealorange"]');
+        if (!tile) throw new Error('setup: no Teal & Orange tile on the Filters tab of the ' + kind + ' layer');
+        await sleep(250);
+        const base = render(), baseCv = grab();
+        tile.click();
+        await sleep(700);
+        const shown = render(), shownCv = grab();
+        const list = (FM._fxPreview && FM._fxPreview.list) || [];
+        if (L.effects.length) throw new Error('picking wrote ' + L.effects.length + ' effect(s) onto the ' + kind + ' layer - a preview must not touch the project');
+        const go = panel.querySelector('.flt-commit .fxb-commit-go');
+        if (!go) throw new Error('setup: no Add button on the Filters tab');
+        go.click();
+        await sleep(600);
+        if (L.effects.length !== 1) throw new Error('CONTROL: Add put ' + L.effects.length + ' entries on the ' + kind + ' layer, not the one filter');
+        const added = render();
+        const want = (L.effects[0].effects || []).map(e => e.type).join(',');
+        const got = list.map(e => (e.effects ? '[' + e.effects.map(k => k.type).join(',') + ']' : e.type)).join(',');
+        if (diffPx(base, added) < 500) throw new Error('CONTROL: on the ' + kind + ' layer, Add changed only ' + diffPx(base, added) + ' pixels - the fixture is not grading');
+        if (diffPx(baseCv, shownCv) < 500) bad.push('on the ' + kind + ' layer, picking Teal & Orange changed ' + diffPx(baseCv, shownCv) + ' pixels on his canvas - the preview shows nothing');
+        const off = diffPx(shown, added);
+        if (off > 20) bad.push('on the ' + kind + ' layer, the previewed frame differs from the frame after Add in ' + off + ' pixels');
+        if (got !== '[' + want + ']') bad.push('on the ' + kind + ' layer the preview holds ' + (got || 'nothing') + ' where Add lands [' + want + ']');
+      }
+    } finally {
+      FM._fxPreview = null;
+      FM.scene.layers = layers0; FM.selectLayer(sel0 || null);
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      if (realMountFilter) FM.fxThumbs.mountFilter = realMountFilter;
+      await sleep(250);
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C60 Find Edges and Emboss lines on a reduced preview weigh what the export lines weigh - not 3.5x fatter', { item: '986' }, function () {
+    /* Both read the neighbour ONE PLATE PIXEL away, so on a reduced plate the 2-pixel line a hard edge makes was 2 plate
+       pixels wide at full strength. MEASURED on 768c83d0, the line's weight across a hard edge (brightness above the flat
+       level, summed over project px): Find Edges 510 in the export, 1020 at 0.5, 1813 at 0.28; Emboss 254 / 508 / 903.
+       The export must keep its lines exactly: 2 pixels at 255 (Find Edges) and 2 at 255 over 128 (Emboss). */
+    const PW = 320, PH = 240;
+    const art = document.createElement('canvas'); art.width = PW; art.height = PH;
+    const ax = art.getContext('2d'); ax.fillStyle = '#202020'; ax.fillRect(0, 0, PW, PH); ax.fillStyle = '#e0e0e0'; ax.fillRect(90, 50, 140, 140);
+    const had = FM.media.get('_986c60');
+    FM.media.set('_986c60', { kind: 'image', el: art, width: PW, height: PH, duration: 0 });
+    const bad = [];
+    try {
+      const weigh = (fx, rs) => {
+        const I = FM.makeLayer('image', { x: 160, y: 120, start: 0, duration: 4 }); I.id = '_986c60'; I.effects = [fx];
+        const r = _986shot([I], 0.5, PW, PH, rs === 1 ? undefined : rs), s = rs;
+        const y = Math.round(120 * s), flat = r.d[(y * r.w + Math.round(40 * s)) * 4];
+        let en = 0; const prof = [];
+        for (let x = Math.round(60 * s); x < Math.round(120 * s); x++) { const v = r.d[(y * r.w + x) * 4]; prof.push(v); en += Math.abs(v - flat) / s; }
+        return { en: en, flat: flat, prof: prof };
+      };
+      [['Find Edges', () => _986fx('edge'), 510, 0], ['Find Edges, Black on white', () => _986fx('edge', { polarity: 1 }), 510, 255],
+       ['Find Edges, Ignore below 30', () => _986fx('edge', { threshold: 30 }), 510, 0], ['Emboss', () => _986fx('emboss'), 254, 128],
+       ['Emboss, grey at 45 degrees', () => _986fx('emboss', { mono: 1, angle: 45 }), null, 128]].forEach(([name, fx, want, flat]) => {
+        const ex = weigh(fx(), 1);
+        if (ex.flat !== flat) throw new Error('setup: ' + name + ' reads ' + ex.flat + ' on the flat area of the export, not ' + flat);
+        if (want != null && ex.en !== want) bad.push('the EXPORT line of ' + name + ' moved: it weighs ' + ex.en + ', it was ' + want + ' (' + ex.prof.filter(v => v !== flat).join(',') + ')');
+        if (!(ex.en > 100)) throw new Error('setup: the exported ' + name + ' draws no line across the edge');
+        [[0.5, '0.5'], [90 / PW, '0.28 - his phone']].forEach(([rs, label]) => {
+          const pv = weigh(fx(), rs);
+          if (Math.abs(pv.en / ex.en - 1) > 0.12) bad.push(name + ' on a ' + label + ' preview: the line weighs ' + pv.en.toFixed(0) + ' against ' + ex.en.toFixed(0) + ' in the export (x' + (pv.en / ex.en).toFixed(2) + ')');
+        });
+      });
+    } finally { if (had) FM.media.set('_986c60', had); else if (FM.media.remove) FM.media.remove('_986c60'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C24 batch 2 on a device without ctx.filter, the mask feather, Luma Matte feather, 3D shading, Temporal Denoise smoothing, Light Wrap, camera focus blur and an adjustment grade keep their look', { item: '986', budgetMs: 120000 }, function () {
+    /* The v17.14 C24 fix covered five effects; these seven sites set ctx.filter too, and where it is silently ignored
+       (his class of phone) each lost its look. MEASURED on 768c83d0 with ctx.filter made genuinely dead (the descriptor
+       swap C24's test uses), the error against the real filter as a share of the look itself: the shape mask's
+       feather 1.00 (a hard edge), Luma Matte's feather 1.00, a Cube's shading 1.00 (flat), Temporal Denoise's Extra
+       smoothing 1.00, Light Wrap 1.00 (it drew nothing — the subject was subtracted from itself), the camera's focus
+       blur 0.41 (the layer sharp), an adjustment layer's Saturation/Brightness/Blur 1.00 and a filter on one 1.00. */
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter in this browser, so there is no reference picture to compare against');
+    if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available, so his phone’s path cannot be exercised: ' + (FM.glColor ? FM.glColor.stats().reason : 'no FM.glColor'));
+    const W = 200, H = 150;
+    let RS = 1;   // the export (1), then a half-size preview: a radius written in project px must follow the plate either way
+    const render = (layers, t) => _986shot(layers, t, W, H, RS === 1 ? undefined : RS).d;
+    const mean = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3]); return s / (a.length / 4); };
+    const art = document.createElement('canvas'); art.width = 80; art.height = 60;
+    const ax = art.getContext('2d'); for (let y = 0; y < 60; y += 10) for (let x = 0; x < 80; x += 10) { ax.fillStyle = ((x / 10 + y / 10) % 2) ? '#ff2d55' : '#0a84ff'; ax.fillRect(x, y, 10, 10); }
+    const had = FM.media.get('_986c24b');
+    FM.media.set('_986c24b', { kind: 'image', el: art, width: 80, height: 60, duration: 0 });
+    const photo = (fx, sc) => { const l = FM.makeLayer('image', { x: 100, y: 75, start: 0, duration: 4 }); l.id = '_986c24b'; l.transform.scale = sc || 1; l.effects = fx || []; return l; };
+    const rect = (o) => { const L = FM.makeLayer('shape', Object.assign({ shape: 'rect', x: 100, y: 75, shapeW: 120, shapeH: 90, fill: '#ffffff' }, o)); L.start = 0; L.duration = 4; return L; };
+    const adj = (fx) => { const A = FM.makeLayer('adjustment', { name: 'a' }); A.start = 0; A.duration = 4; A.effects = fx; return A; };
+    // [build(on) → () => pixels, GL limit, no-GL limit or null when the look needs the shader (the nine CSS effects do, everywhere)]
+    const cases = {
+      'the shape mask feather': [(on) => { const L = rect({ fill: '#ffcc00' }); L.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 100, h: 70, feather: on ? 14 : 0 }; return () => render([L]); }, 0.1, 0.15],
+      'Luma Matte feather': [(on) => { const m = rect({ x: 150, shapeW: 100, shapeH: 150 }); const L = photo([_986fx('lumamatte', { source: m.id, feather: on ? 12 : 0 })], 2); return () => render([L, m]); }, 0.1, 0.15],
+      'a Cube shading': [(on) => { const L = photo([_986fx('cube3d', { shading: on ? 0.8 : 0 })], 1.5); return () => render([L]); }, 0.1, 0.1],
+      'Temporal Denoise Extra smoothing': [(on) => { const L = photo([_986fx('filmgrain', { amount: 100 }), _986fx('temporaldenoise', { spatial: on ? 5 : 0, strength: 1 })], 2); return () => { [0.4, 0.433, 0.467, 0.5].forEach(t => render([L], t)); return render([L], 0.533); }; }, 0.15, 0.15],
+      'Light Wrap': [(on) => { const bg = rect({ shapeW: 200, shapeH: 150, fill: '#fff4a0' }); const L = photo(on ? [_986fx('lightwrap', { reach: 18, radius: 20 })] : [], 1.4); return () => render([L, bg]); }, 0.1, 0.15],
+      'the camera focus blur': [(on) => { const cam = FM.makeLayer('camera', { name: 'C', x: W / 2, y: H / 2, start: 0, duration: 4 }); cam.focus = { enabled: true, distance: 0, dof: 40, blur: 1 }; const L = photo([], 1.5); L.transform.z = on ? 260 : 0; return () => render([L, cam]); }, 0.1, 0.15],
+      'an adjustment layer grade (Saturation, Brightness, Blur)': [(on) => { const p = photo([], 2.5); const A = adj(on ? [_986fx('saturate', { amount: 0.2 }), _986fx('brightness', { amount: 1.3 }), _986fx('blur', { radius: 4 })] : []); return () => render([A, p]); }, 0.1, null],
+      'a filter at Strength 0.6 on an adjustment layer': [(on) => { const p = photo([], 2.5); const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = [_986fx('grayscale'), _986fx('contrast', { amount: 1.5 })]; b.params.strength = 0.6; return () => render([adj(on ? [b] : []), p]); }, 0.1, null],
+    };
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    const was = { force: FM._forceNoCtxFilter, noGL: FM._noGL };
+    const bad = [];
+    /* …AND HIS PHONE'S 0.28 PLATE (#986 batch 2 review: the test only rendered 1 and 0.5, so it could not see it). There
+       every feather is a blur of one to four device px, and at that size the reference itself moves: ctx.filter's CPU
+       raster rounds blur(r) to a box window floor(1.88 r + 0.5) px wide — MEASURED here on a sharp square, blur(1px)
+       draws the spread of a Gaussian 1.08 wide, blur(2.8px) one 2.45 wide, blur(3.9px) 3.46 — where the no-filter blur
+       draws the spec's own r, which is what a GPU-rastered canvas draws and what keeps a preview the export shrunk.
+       MEASURED at 0.28 with every fix in: the shape mask 0.09 of its look (GL and not), Luma Matte 0.08 / 0.14 without
+       WebGL, Light Wrap 0.095 / 0.147 without WebGL, the rest 0.05 or under — inside the old limits, but Light Wrap's
+       0.147 sits on its 0.15 (and an inverted rect mask, feather 10 on a photo, is 0.11 / 0.16). PROOF it is the
+       reference and not the fallback: with the GPU blur handed Chrome's own box width instead of r, every one of those
+       drops to 0.03–0.045 at 0.28, level with 1 and 0.5. So the phone plate is held to PHONE_SLACK more of the look for
+       that rounding, and 1 and 0.5 keep their limits. */
+    const PHONE_SLACK = 0.05;
+    try {
+      for (const rs of [1, 0.5, 90 / 320]) {
+        RS = rs;
+        const phone = rs < 0.3;
+        const where = rs === 1 ? '' : (phone ? ' on his phone-size (0.28) preview' : ' on a half-size preview');
+        for (const name in cases) {
+          const [build, limGL, limNoGL] = cases[name];
+          FM._forceNoCtxFilter = false; FM._noGL = false; FM.glColor._reset();
+          const ref = build(1)(), bare = build(0)();
+          const size = mean(ref, bare);
+          if (!(size > 1)) throw new Error('CONTROL: ' + name + where + ' changes the picture by only ' + size.toFixed(2) + ' with ctx.filter working - the fixture is not showing it');
+          for (const noGL of (limNoGL == null ? [false] : [false, true])) {
+            if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, get: function () { return 'none'; }, set: function () {} });
+            FM._forceNoCtxFilter = true; FM._noGL = noGL; FM.glColor._reset();
+            let dead;
+            try { dead = build(1)(); } finally { if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc); FM._forceNoCtxFilter = false; FM._noGL = false; }
+            const err = mean(dead, ref), lim = (noGL ? limNoGL : limGL) + (phone ? PHONE_SLACK : 0);
+            if (!(err <= size * lim)) bad.push(name + where + (noGL ? ' (no WebGL either)' : '') + ' misses the real filter by ' + err.toFixed(2) + ' - ' + (err / size).toFixed(2) + ' of the look itself (' + size.toFixed(2) + ')');
+          }
+        }
+      }
+    } finally {
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      FM._forceNoCtxFilter = was.force; FM._noGL = was.noGL; FM.glColor._reset();
+      if (had) FM.media.set('_986c24b', had); else if (FM.media.remove) FM.media.remove('_986c24b');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #986 batch 2 REVIEW — what the review of the batch-2 build found, each reproduced with a measurement first and
+   * each failing on 768c83d0. ════════════════════════════════════════════════════════════════════════════════════ */
+  /* ctx.filter made genuinely dead for one render (the descriptor swap C24's tests use), with or without WebGL */
+  const _986r2Dead = (fn, noGL) => {
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, get: function () { return 'none'; }, set: function () {} });
+    FM._forceNoCtxFilter = true; FM._noGL = !!noGL; FM.glColor._reset();
+    try { return fn(); } finally { if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc); FM._forceNoCtxFilter = false; FM._noGL = false; FM.glColor._reset(); }
+  };
+  const _986r2Mean = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3]); return s / (a.length / 4); };
+  /* runs cases { name: build(on, render) → () => pixels } at the export, a half-size and his phone's 0.28 preview, and
+     returns every miss: the dead-filter picture off the real one by more than `lim(noGL, phone)` of the look itself */
+  const _986r2Sweep = (cases, noGLs, lim) => {
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter in this browser, so there is no reference picture to compare against');
+    if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available, so his phone’s path cannot be exercised: ' + (FM.glColor ? FM.glColor.stats().reason : 'no FM.glColor'));
+    const was = { force: FM._forceNoCtxFilter, noGL: FM._noGL }, bad = [];
+    try {
+      for (const rs of [1, 0.5, 90 / 320]) {
+        const phone = rs < 0.3, where = rs === 1 ? '' : (phone ? ' on his phone-size (0.28) preview' : ' on a half-size preview');
+        const R = (layers, t) => _986shot(layers, t, 200, 150, rs === 1 ? undefined : rs).d;
+        for (const name in cases) {
+          FM._forceNoCtxFilter = false; FM._noGL = false; FM.glColor._reset();
+          const ref = cases[name](1, R)(), bare = cases[name](0, R)();
+          const size = _986r2Mean(ref, bare);
+          if (!(size > 1)) throw new Error('CONTROL: ' + name + where + ' changes the picture by only ' + size.toFixed(2) + ' with ctx.filter working - the fixture is not showing it');
+          for (const noGL of noGLs) {
+            const err = _986r2Mean(_986r2Dead(() => cases[name](1, R)(), noGL), ref), L = lim(noGL, phone);
+            if (!(err <= size * L)) bad.push(name + where + (noGL ? ' (no WebGL either)' : '') + ' misses the real filter by ' + err.toFixed(2) + ' - ' + (err / size).toFixed(2) + ' of the look itself (' + size.toFixed(2) + '), limit ' + L);
+          }
+        }
+      }
+    } finally { FM._forceNoCtxFilter = was.force; FM._noGL = was.noGL; FM.glColor._reset(); }
+    return bad;
+  };
+  /* an 80x60 picture under a media id for the duration of fn: a checker (hard colour edges), or with `soft` a diagonal
+     gradient under a checker (the mid-tones and highlights a colour chain can push past 1) */
+  const _986r2Art = (id, soft, fn) => {
+    const art = document.createElement('canvas'); art.width = 80; art.height = 60;
+    const ax = art.getContext('2d');
+    if (soft) {
+      const gr = ax.createLinearGradient(0, 0, 80, 60); gr.addColorStop(0, '#102040'); gr.addColorStop(0.5, '#e8a060'); gr.addColorStop(1, '#f0f0ff');
+      ax.fillStyle = gr; ax.fillRect(0, 0, 80, 60);
+      for (let y = 0; y < 60; y += 10) for (let x = 0; x < 80; x += 20) { ax.fillStyle = ((x / 20 + y / 10) % 2) ? '#ff2d55' : '#0a84ff'; ax.fillRect(x, y, 10, 10); }
+    } else for (let y = 0; y < 60; y += 10) for (let x = 0; x < 80; x += 10) { ax.fillStyle = ((x / 10 + y / 10) % 2) ? '#ff2d55' : '#0a84ff'; ax.fillRect(x, y, 10, 10); }
+    const had = FM.media.get(id);
+    FM.media.set(id, { kind: 'image', el: art, width: 80, height: 60, duration: 0 });
+    try { return fn((fx, sc) => { const l = FM.makeLayer('image', { x: 100, y: 75, start: 0, duration: 4 }); l.id = id; l.transform.scale = sc || 1; l.effects = fx || []; return l; }); }
+    finally { if (had) FM.media.set(id, had); else if (FM.media.remove) FM.media.remove(id); }
+  };
+  const _986r2Rect = (o) => { const L = FM.makeLayer('shape', Object.assign({ shape: 'rect', x: 100, y: 75, shapeW: 120, shapeH: 90, fill: '#ffffff' }, o)); L.start = 0; L.duration = 4; return L; };
+  const _986r2Adj = (fx) => { const A = FM.makeLayer('adjustment', { name: 'a' }); A.start = 0; A.duration = 4; A.effects = fx; return A; };
+
+  test('986 C24 review Glow after a colour effect keeps the grade on a device without ctx.filter - on an adjustment layer and on a clip', { item: '986', budgetMs: 90000 }, function () {
+    /* The colour pass renders into the GPU's one canvas and the Glow's halo is blurred into that SAME canvas — with no
+       Blur between them nothing copied the graded picture out first, so the halo overwrote it and the layer drew as the
+       frame blurred under its own glow. MEASURED with ctx.filter dead and WebGL on, the error against the real filter
+       as a share of the look: on an adjustment layer Glow + Hue 90 0.60 and Saturation 1.8 + Glow 6.1 on the batch-2
+       build (1.00 on 768c83d0, where the grade was simply gone); on a clip Hue 90 + Glow 0.43 and on a shape Saturation +
+       Glow 0.59, in both trees. The shader is the only path here, so there is no no-WebGL row. */
+    const bad = _986r2Art('_986r2g', false, (photo) => _986r2Sweep({
+      'an adjustment layer holding Glow then Hue 90': (on, R) => { const p = photo([], 2.5); return () => R([_986r2Adj(on ? [_986fx('glow'), _986fx('hue', { deg: 90 })] : []), p]); },
+      'an adjustment layer holding Saturation 1.8 then Glow': (on, R) => { const p = photo([], 2.5); return () => R([_986r2Adj(on ? [_986fx('saturate', { amount: 1.8 }), _986fx('glow')] : []), p]); },
+      'a clip with Hue 90 then Glow': (on, R) => { const p = photo(on ? [_986fx('hue', { deg: 90 }), _986fx('glow')] : [], 1); return () => R([p]); },
+      'a shape with Saturation 1.8 then Glow': (on, R) => { const L = _986r2Rect({ fill: '#3080e0', shapeW: 60, shapeH: 40 }); L.effects = on ? [_986fx('saturate', { amount: 1.8 }), _986fx('glow')] : []; return () => R([L]); },
+    }, [false], () => 0.1));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C24 review a feathered pen mask keeps its feather on a device without ctx.filter', { item: '986', budgetMs: 120000 }, function () {
+    /* buildMaskAlpha (js/masks.js) blurs each pen mask's fill with ctx.filter and had no other way, so where the filter
+       is ignored every feathered pen mask drew a hard edge. MEASURED with ctx.filter dead: 1.00 of the feather's look
+       lost on a shape, on a photo and inverted, at 1, 0.5 and 0.28, with WebGL or without, on 768c83d0 and on the
+       batch-2 build (which swept js/compositor.js only). Limits as the batch-2 test: 0.1 of the look with WebGL, 0.15
+       without, and on the 0.28 plate 0.05 more for ctx.filter's own box rounding of a 1–4 px blur (see that test). */
+    const pen = (path, feather, invert) => [{ id: 'pm', enabled: true, mode: 'add', feather: feather, opacity: 1, invert: !!invert, closed: true, path: path }];
+    const bad = _986r2Art('_986r2p', false, (photo) => _986r2Sweep({
+      'a pen mask feathered 12 on a shape': (on, R) => { const L = _986r2Rect({ fill: '#ffcc00', shapeW: 200, shapeH: 150 }); L.masks = pen([[40, 30], [160, 40], [150, 120], [50, 110]], on ? 12 : 0); return () => R([L]); },
+      'a triangle pen mask feathered 12 on a photo': (on, R) => { const L = photo([], 2.5); L.masks = pen([[30, 130], [100, 20], [170, 130]], on ? 12 : 0); return () => R([L]); },
+      'an inverted pen mask feathered 10 on a photo': (on, R) => { const L = photo([], 2.5); L.masks = pen([[60, 50], [140, 50], [140, 100], [60, 100]], on ? 10 : 0, true); return () => R([L]); },
+    }, [false, true], (noGL, phone) => (noGL ? 0.15 : 0.1) + (phone ? 0.05 : 0)));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C24 review a defocused layer casts its drop shadow from the blurred layer on a device without ctx.filter', { item: '986', budgetMs: 90000 }, function () {
+    /* ctx.filter draws the layer blurred and THEN takes the shadow from that blurred picture, under it. The batch-2
+       fallback drew the layer and its shadow sharp on its plate and blurred the pair, so the shadow came out lighter
+       through the soft edge. MEASURED with ctx.filter dead, a 90x60 shape 250 deep behind the focus with a shadow at
+       dx/dy 6, blur 6, over a blue frame: 0.22–0.25 of the look off the real filter at 1, 0.5 and 0.28 on the batch-2
+       build, where the same layer without its shadow sits at 0.02 (768c83d0: 0.49, the layer not blurred at all). */
+    const cam = () => { const c = FM.makeLayer('camera', { name: 'C', x: 100, y: 75, start: 0, duration: 4 }); c.focus = { enabled: true, distance: 0, dof: 40, blur: 1 }; return c; };
+    const bg = () => _986r2Rect({ shapeW: 200, shapeH: 150, fill: '#80a0ff' });
+    const lay = (on, sh) => { const L = _986r2Rect({ shapeW: 90, shapeH: 60, fill: '#ffd060' }); L.transform.z = on ? 250 : 0; if (sh) L.shadow = Object.assign({ enabled: true, color: '#000000', alpha: 100 }, sh); return L; };
+    const bad = _986r2Sweep({
+      'a defocused shape with a soft shadow (6 px out, blur 6)': (on, R) => { const L = lay(on, { blur: 6, dx: 6, dy: 6 }); return () => R([L, cam(), bg()]); },
+      'a defocused shape with a hard shadow (20 px out)': (on, R) => { const L = lay(on, { blur: 0, dx: 20, dy: 20 }); return () => R([L, cam(), bg()]); },
+      'CONTROL a defocused shape without a shadow': (on, R) => { const L = lay(on, null); return () => R([L, cam(), bg()]); },
+    }, [false, true], () => 0.1);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C24 review a colour chain that passes 1 clamps between effects as ctx.filter does - in the shader and on an adjustment layer', { item: '986', budgetMs: 150000 }, function () {
+    /* ctx.filter clamps after EVERY function; the shader multiplied the whole chain into one matrix and clamped once, so
+       a value pushed past 1 by Contrast or Brightness came back down under a later Sepia or Contrast instead of staying
+       white. MEASURED against the real filter with ctx.filter dead: library filters on an adjustment layer — Acid Wash
+       0.72 of their look, Whiteout 0.43, Static 0.37, Ultraviolet 0.23, Cold Steel 0.21, Bleach 0.19, Moonbeam 0.15,
+       Arctic 0.13 (0.96–1.00 on 768c83d0, which had no fallback there); on a clip Acid Wash 0.44 and Ultraviolet 0.29 in
+       both trees. With the clamp between segments every one of the 56 is 0.07 of its look or under, on an adjustment
+       layer and on a clip, at 1 and at 0.28 — except Polaroid (Brightness 1.03, Contrast 0.94), left out on purpose:
+       0.53 before, 0.2 after, of a look only 10.6 levels deep — 2 levels at the very worst channel, which is rounding
+       (ctx.filter runs brightness and contrast through 8-bit tables), not clamping. */
+    if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available: ' + (FM.glColor ? FM.glColor.stats().reason : 'no FM.glColor'));
+    const bad = [];
+    // 1) the shader against ctx.filter directly — the arithmetic, on a spread of colours and a translucent row
+    const W = 64, H = 64;
+    const src = document.createElement('canvas'); src.width = W; src.height = H;
+    const sx = src.getContext('2d', { willReadFrequently: true });
+    ['#e8443f', '#3fa9e8', '#7ae83f', '#ffffff', '#000000', '#808080', '#ff00ff', '#f0c890'].forEach((c, i) => { sx.fillStyle = c; sx.fillRect(i * 8, 0, 8, H); });
+    sx.globalAlpha = 0.4; sx.fillStyle = '#ffcc00'; sx.fillRect(0, 40, W, 12); sx.globalAlpha = 1;
+    const ref = document.createElement('canvas'); ref.width = W; ref.height = H;
+    const rx = ref.getContext('2d', { willReadFrequently: true });
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    const ox = out.getContext('2d', { willReadFrequently: true });
+    const CHAINS = [
+      { css: 'contrast(1.6) sepia(1)', ops: [{ type: 'contrast', value: 1.6 }, { type: 'sepia', value: 1 }] },
+      { css: 'brightness(1.5) contrast(0.6)', ops: [{ type: 'brightness', value: 1.5 }, { type: 'contrast', value: 0.6 }] },
+      { css: 'saturate(2) hue-rotate(90deg)', ops: [{ type: 'saturate', value: 2 }, { type: 'hue', value: 90 }] },
+      { css: 'hue-rotate(150deg) saturate(0.5) contrast(1.8)', ops: [{ type: 'hue', value: 150 }, { type: 'saturate', value: 0.5 }, { type: 'contrast', value: 1.8 }] },
+      { css: 'sepia(1) contrast(0.5)', ops: [{ type: 'sepia', value: 1 }, { type: 'contrast', value: 0.5 }] },
+    ];
+    if (typeof FM._glColorMatrix !== 'function') throw new Error('setup: FM._glColorMatrix is not exposed');
+    /* CONTROL: the whole chain as one product, clamped once at the end (the old arithmetic), in plain JS — it must be
+       visibly off ctx.filter on every chain here, or the chain never passes 1 and proves nothing */
+    const oneClamp = (d, ops) => {
+      const o = new Uint8ClampedArray(d.length);
+      for (let i = 0; i < d.length; i += 4) {
+        let v = [d[i] / 255, d[i + 1] / 255, d[i + 2] / 255];
+        for (const op of ops) { const M = FM._glColorMatrix(op.type, op.value), m = M.m; v = [0, 1, 2].map(r => m[r * 3] * v[0] + m[r * 3 + 1] * v[1] + m[r * 3 + 2] * v[2] + M.o[r]); }
+        o[i] = v[0] * 255; o[i + 1] = v[1] * 255; o[i + 2] = v[2] * 255; o[i + 3] = d[i + 3];
+      }
+      return o;
+    };
+    const offPct = (A, B) => { let off = 0, worst = 0; for (let i = 0; i < A.length; i += 4) { let o = false; for (let k = 0; k < 4; k++) { const d = Math.abs(A[i + k] - B[i + k]); if (d > worst) worst = d; if (d > 8) o = true; } if (o) off++; } return { pct: 100 * off / (A.length / 4), worst: worst }; };
+    const srcPx = sx.getImageData(0, 0, W, H).data;
+    for (const c of CHAINS) {
+      rx.clearRect(0, 0, W, H); rx.filter = c.css; rx.drawImage(src, 0, 0); rx.filter = 'none';
+      FM.glColor._reset();
+      const got = FM.glColor.apply(src, W, H, c.ops);
+      if (!got) throw new Error(c.css + ': the GPU path returned nothing (' + FM.glColor.stats().reason + ')');
+      ox.clearRect(0, 0, W, H); ox.drawImage(got, 0, 0);
+      const A = rx.getImageData(0, 0, W, H).data, B = ox.getImageData(0, 0, W, H).data;
+      const ctl = offPct(A, oneClamp(srcPx, c.ops));
+      if (!(ctl.pct > 5)) throw new Error('CONTROL: ' + c.css + ' clamped once at the end is off ctx.filter on only ' + ctl.pct.toFixed(1) + '% of pixels - this chain never passes 1, so it cannot tell the two apart');
+      const m = offPct(A, B);
+      if (m.pct > 1) bad.push('the shader draws ' + c.css + ' off ctx.filter on ' + m.pct.toFixed(1) + '% of pixels, worst channel ' + m.worst + ' (clamped once it would be ' + ctl.pct.toFixed(1) + '%)');
+    }
+    // 2) library filters on an adjustment layer (and two on a clip), with ctx.filter dead and WebGL on
+    const lib = ['acidwash', 'whiteout', 'static', 'ultraviolet', 'coldsteel', 'bleach', 'moonbeam', 'arctic'];
+    lib.forEach(id => { if (!FM.filters.get(id)) throw new Error('setup: the ' + id + ' filter is not in the library'); });
+    const fitted = (id, L) => { const f = FM.fxRegistry.fitToLayer(FM.filters.makeInstance(id), L); if (!f) throw new Error('setup: ' + id + ' does not fit a ' + L.type + ' layer'); return f; };
+    const cases = {};
+    lib.forEach(id => {
+      const inst = fitted(id, _986r2Adj([]));
+      cases[id + ' on an adjustment layer'] = (on, R) => () => R([_986r2Adj(on ? [JSON.parse(JSON.stringify(inst))] : []), cases._photo([], 2.5)]);
+    });
+    ['acidwash', 'ultraviolet'].forEach(id => {
+      cases[id + ' on a clip'] = (on, R) => { const probe = cases._photo([], 2.5); const inst = fitted(id, probe); return () => R([cases._photo(on ? [inst] : [], 2.5)]); };
+    });
+    _986r2Art('_986r2c', true, (photo) => {
+      Object.defineProperty(cases, '_photo', { value: photo, enumerable: false });
+      bad.push.apply(bad, _986r2Sweep(cases, [false], () => 0.1));
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C60 review Find Edges and Emboss across a soft ramp on a reduced preview weigh what the export weighs - a gradient is not capped like a thin line', { item: '986', budgetMs: 90000 }, function () {
+    /* C60 made a reduced plate draw a hard edge's line at ps of its clamped strength — right for a step, whose export
+       line is 2 project px, but across a RAMP the export's response fills the whole plate pixel at reading × ps, and
+       clamping first capped it at 255 × ps (72 on his phone's plate). MEASURED against the export shrunk to the plate
+       (mean |difference|, levels, at 0.5 / 0.28), on a triangle-wave ramp of 6.7 levels a project px: Find Edges Amount
+       6 was 123 / 178 on the batch-2 build (preview 125 / 70 where the export shows 248), Emboss Amount 3 was 55 / 79;
+       on 768c83d0, before C60, plain Find Edges was 74 / 158 and plain Emboss 37 / 79 (the lines 1/ps too strong). The
+       same holds on a clean photo-like picture. The no-effect floor here is 0.4 / 1.6. */
+    const PW = 320, PH = 240;
+    const pic = (kind) => {
+      const c = document.createElement('canvas'); c.width = PW; c.height = PH;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      if (kind === 'ramp') {
+        const img = g.createImageData(PW, PH);
+        for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) { const u = x % 76, v = (u < 38 ? u : 76 - u) * 6.7, i = (y * PW + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+        g.putImageData(img, 0, 0);
+      } else {
+        const gr = g.createLinearGradient(0, 0, PW, PH); gr.addColorStop(0, '#203050'); gr.addColorStop(0.5, '#a07050'); gr.addColorStop(1, '#e0d0b0');
+        g.fillStyle = gr; g.fillRect(0, 0, PW, PH);
+        g.fillStyle = '#f0f0e0'; g.beginPath(); g.arc(100, 110, 50, 0, 7); g.fill();
+        g.fillStyle = '#304020'; g.fillRect(190, 40, 90, 150);
+        const rg = g.createRadialGradient(240, 170, 5, 240, 170, 60); rg.addColorStop(0, '#ffe080'); rg.addColorStop(1, 'rgba(255,224,128,0)'); g.fillStyle = rg; g.fillRect(0, 0, PW, PH);
+        g.strokeStyle = '#101010'; g.lineWidth = 3; g.beginPath(); g.moveTo(20, 220); g.lineTo(300, 180); g.stroke();
+      }
+      return c;
+    };
+    const vs = (pv, ref, w, h) => { let s = 0, n = 0, a = 0, b = 0; for (let y = 3; y < h - 3; y++) for (let x = 3; x < w - 3; x++) { const i = (y * w + x) * 4, o = (y * w + x) * 3; for (let c = 0; c < 3; c++) { s += Math.abs(pv[i + c] - ref[o + c]); a += pv[i + c]; b += ref[o + c]; n++; } } return { mad: s / n, pv: a / n, ex: b / n }; };
+    const had = FM.media.get('_986r2e'), bad = [];
+    try {
+      for (const kind of ['ramp', 'photo']) {
+        FM.media.set('_986r2e', { kind: 'image', el: pic(kind), width: PW, height: PH, duration: 0 });
+        const lay = (fx) => { const I = FM.makeLayer('image', { x: 160, y: 120, start: 0, duration: 4 }); I.id = '_986r2e'; I.effects = fx ? [fx] : []; return I; };
+        [['Find Edges', () => _986fx('edge')], ['Find Edges Amount 6', () => _986fx('edge', { amount: 6 })], ['Find Edges, Ignore below 30', () => _986fx('edge', { threshold: 30 })],
+         ['Emboss', () => _986fx('emboss')], ['Emboss Amount 3', () => _986fx('emboss', { amount: 3 })], ['Emboss, grey at 45 degrees', () => _986fx('emboss', { mono: 1, angle: 45 })]].forEach(([name, fx]) => {
+          const ex = _986shot([lay(fx())], 0.5, PW, PH);
+          [[0.5, 12], [90 / PW, 25]].forEach(([ps, lim]) => {
+            const pv = _986shot([lay(fx())], 0.5, PW, PH, ps), m = vs(pv.d, _986boxDown(ex.d, PW, PH, pv.w, pv.h, ps), pv.w, pv.h);
+            if (!(m.mad <= lim)) bad.push(name + ' on the ' + kind + ' at ' + ps.toFixed(2) + ' is off the export shrunk by ' + m.mad.toFixed(1) + ' levels (limit ' + lim + '; means ' + m.pv.toFixed(0) + ' against ' + m.ex.toFixed(0) + ')');
+          });
+        });
+      }
+    } finally { if (had) FM.media.set('_986r2e', had); else if (FM.media.remove) FM.media.remove('_986r2e'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('986 C7 review Starfield at every star size on a reduced preview is the export shrunk, and its cells are found once for all sizes', { item: '986', budgetMs: 90000 }, function () {
+    /* The reduced-plate Starfield cached its candidate cells per (star size, grid), three deep. A fourth Starfield of
+       another Star size evicted one every frame and the whole field was hashed again — MEASURED at 1080x1920 on the
+       0.28 plate, 3.5–4 ms a frame with three sizes and 10 ms with four (5 ms with one list). The hash reads only the cell, so one list for
+       the biggest grid serves every size; the scan count below is the seam that says so (it cannot exist on 768c83d0,
+       which had no reduced path — there the stars at these sizes were other stars in other places, which part 1
+       catches). */
+    if (!FM._sfStats) throw new Error('FM._sfStats is not exposed - the reduced-plate Starfield has no scan count to read');
+    const PW = 320, PH = 240;
+    const clip = (sz) => { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#000000' }); L.start = 0; L.duration = 4; L.effects = [_986fx('starfield', { size: sz, amount: 1 })]; return L; };
+    const bad = [];
+    // 1) each size is the export's field shrunk — the list the sizes now share must hand each its own cells
+    [2, 4, 5, 8].forEach(sz => {
+      const ex = _986shot([clip(sz)], 1.3, PW, PH);
+      [160, 90].forEach(w => {
+        const ps = w / PW, pv = _986shot([clip(sz)], 1.3, PW, PH, ps), m = _986vsShrunk(pv.d, _986boxDown(ex.d, PW, PH, pv.w, pv.h, ps), pv.w, pv.h);
+        if (!(m.mad <= 0.5 && m.corr >= 0.97)) bad.push('Star size ' + sz + ' on a ' + ps.toFixed(2) + ' preview is off the export shrunk by ' + m.mad.toFixed(2) + ' levels, correlation ' + m.corr.toFixed(3));
+      });
+    });
+    // 2) frames of eight sizes, round and round, at two preview sizes: the cells are found once, not per size per frame
+    _986shot([clip(1)], 0.5, PW, PH, 90 / PW);
+    const s0 = FM._sfStats.scans;
+    for (let f = 0; f < 3; f++) for (let sz = 1; sz <= 8; sz++) { _986shot([clip(sz)], 0.5 + f / 30, PW, PH, 90 / PW); _986shot([clip(sz)], 0.5 + f / 30, PW, PH, 0.5); }
+    const extra = FM._sfStats.scans - s0;
+    if (extra !== 0) bad.push('48 frames of Starfield at Star sizes 1-8 scanned the whole field ' + extra + ' more times after the first - a frame should cost the stars, not the field');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 986 batch 2 (hunt LOW, found by the #966 inventory — NOT his words): five sound faults, each measured before it was
+   * fixed (idle backlog §C: C11, C13, C16, C17, C18). Every one was reproduced with a number at 768c83d0 and each test below
+   * fails there for the reason it names. The audio-effect ones render through FM.buildAudioFxChain on an OfflineAudioContext
+   * (afx986, above) in BOTH the export's path (schedule) and the preview's (applyAt), so they measure numbers, not ears. */
+
+  /* C11 — EVERY NOISE BUFFER OF THE SAME LENGTH AND COLOUR WAS THE SAME NOISE. The seed was (length, colour, rate) and nothing
+   * else, so a sound that asked for several of one kind got one buffer many times. MEASURED at 768c83d0 by catching every
+   * buffer a recipe makes: Fire crackle's 10 crackles were 1 distinct buffer, Ticking build's 29 ticks 1, Camera shutter's two
+   * clicks 1. Fixed (js/sfx.js noiseSeed): a repeat of a seed in the same render gets a stream of its own; the FIRST request
+   * gets exactly the old one. Measured across all 30 sounds, only those three changed; the other 27 render as at 768c83d0.
+   * CONTROLS: the first buffer of a kind is still the old formula's stream, sample for sample, and a sound renders the same
+   * twice (the ▶ and Add each render it afresh, so that promise is what makes them the same sound). */
+  test('986 C11 no two noise buffers in one sound are the same noise - every Fire crackle, every Ticking build tick and both shutter clicks are their own, and a sound still renders the same twice', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.sfx || !FM.sfx.byId || !FM.sfx.renderBuffer || !FM.sfx._noiseBuffer) throw new Error('FM.sfx seams (byId, renderBuffer, _noiseBuffer) are missing');
+    const SR = 44100;
+    async function buffersOf(id) {
+      const def = FM.sfx.byId(id);
+      if (!def) throw new Error('setup: there is no sound ' + id);
+      const ctx = new OfflineAudioContext(1, Math.ceil((def.dur + 0.05) * SR), SR);
+      const made = [], orig = ctx.createBuffer.bind(ctx);
+      ctx.createBuffer = function () { const b = orig.apply(null, arguments); made.push(b); return b; };
+      const trim = ctx.createGain(); trim.connect(ctx.destination);
+      def.render(ctx, 0, def.dur, trim);
+      await ctx.startRendering();
+      return made;
+    }
+    const sig = b => Array.prototype.slice.call(b.getChannelData(0), 0, 48).join(',');
+    const bad = [];
+    for (const [id, len, name] of [['fire', 2205, 'crackles'], ['build-tick', 1323, 'ticks'], ['shutter', 2205, 'clicks']]) {
+      const bufs = (await buffersOf(id)).filter(b => b.length === len);
+      if (bufs.length < 2) throw new Error('setup: ' + id + ' made ' + bufs.length + ' noise buffers of ' + len + ' samples - the recipe changed and this probe no longer reaches its repeats');
+      const distinct = new Set(bufs.map(sig)).size;
+      if (distinct !== bufs.length) bad.push(FM.sfx.byId(id).name + ' plays ' + bufs.length + ' ' + name + ' from ' + distinct + ' distinct noise buffer' + (distinct === 1 ? '' : 's'));
+    }
+    // CONTROL 1: the first white 0.05 s buffer in a fresh context is the stream the old seed made (mulberry32, seed n*31+3+rate/100).
+    const ref = (function (seed) { let a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })(2205 * 31 + 3 + Math.floor(SR / 100));
+    const oc = new OfflineAudioContext(1, 128, SR);
+    const first = FM.sfx._noiseBuffer(oc, 0.05, 'white').getChannelData(0);
+    let worst = 0; for (let i = 0; i < first.length; i++) worst = Math.max(worst, Math.abs(first[i] - Math.fround(ref() * 2 - 1)));
+    if (worst !== 0) throw new Error('CONTROL: the first noise buffer of a kind is no longer the stream it always was (up to ' + worst.toExponential(2) + ' away) - every sound would change, not just the repeats');
+    const second = FM.sfx._noiseBuffer(oc, 0.05, 'white').getChannelData(0);
+    if (sig({ getChannelData: () => second }) === sig({ getChannelData: () => first })) bad.push('asking the same context twice for 0.05 s of white noise hands back the same noise');
+    // CONTROL 2: the same sound renders the same twice - Fire, whose crackles are now each their own.
+    const a = (await FM.sfx.renderBuffer(FM.sfx.byId('fire'))).getChannelData(0), b = (await FM.sfx.renderBuffer(FM.sfx.byId('fire'))).getChannelData(0);
+    let d = 0; for (let i = 0; i < a.length; i++) d = Math.max(d, Math.abs(a[i] - b[i]));
+    if (d > 1e-6) throw new Error('CONTROL: Fire crackle renders up to ' + d.toFixed(4) + ' apart from itself - the ▶ and the clip Add makes would be different sounds');
+    if (bad.length) throw new Error('the same noise is replayed inside one sound: ' + bad.join('; '));
+  });
+
+  /* C13 — AUDIO-EFFECT SEARCH MISSED THE WORDS PEOPLE USE. It matched the label, the type id and the category, and nothing else.
+   * MEASURED at 768c83d0 in the real browser: karaoke, robot, chipmunk, deep voice, muffled, underwater, radio, bass boost and
+   * 8-bit each showed No audio effects match. Fixed: a tag list per effect (js/audio-fx.js TAGS) read by the search, matched
+   * while it is typed and as one of several words. Driven through the real search box on a song, then the found tile is
+   * tapped: it is on screen at this width and it adds the effect. CONTROL: reverb finds Reverb (the label match that always
+   * worked), and a word that means nothing still says so. */
+  test('986 C13 audio-effect search finds what people call the sound - karaoke, robot voice, chipmunk, muffled, radio, bass boost, 8-bit - and the found effect adds with one tap', { item: '986', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.audioFxBrowser || !FM.audioFxBrowser.open) throw new Error('FM.audioFxBrowser is not reachable');
+    const saved = FM.scene;
+    let recents = null; try { recents = localStorage.getItem('fm.afx.recents'); } catch (e) {}
+    const root = document.getElementById('afx-browser');
+    try {
+      const song = await hbAudScene([], 4);
+      FM.audioFxBrowser.open(FM.layerById(FM.scene, song.id)); await sleep(350);
+      if (!root || root.classList.contains('hidden')) throw new Error('setup: the audio effects browser did not open on a song');
+      const btn = root.querySelector('.fxb-search-btn'), input = root.querySelector('.fxb-search-input');
+      if (!btn || !input) throw new Error('setup: the audio browser has no search button / field');
+      btn.click(); await sleep(60);
+      if (input.classList.contains('hidden')) throw new Error('setup: the search button did not show the search field');
+      const search = async q => { input.value = q; input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(320); return [].slice.call(root.querySelectorAll('.fxb-search-grid .fxb-tile')); };
+      const names = tiles => tiles.map(t => (t.querySelector('.fxb-tile-name') || {}).textContent || '').map(s => s.trim());
+      const ctl = names(await search('reverb'));
+      if (ctl.indexOf('Reverb') < 0) throw new Error('CONTROL: searching reverb shows ' + (ctl.join(', ') || 'nothing') + ' - the search itself is broken, nothing below means anything');
+      await search('zzqx');
+      const empty = root.querySelector('.fxb-search-grid .fxb-empty');
+      if (!empty || root.querySelectorAll('.fxb-search-grid .fxb-tile').length) throw new Error('CONTROL: a word that means nothing (zzqx) does not say No audio effects match');
+      const want = [['karaoke', 'Vocal Remove'], ['karao', 'Vocal Remove'], ['robot', 'Ring Mod'], ['robot voice', 'Ring Mod'], ['chipmunk', 'Pitch Shift'], ['deep voice', 'Pitch Shift'],
+        ['muffled', 'Low-Pass'], ['underwater', 'Low-Pass'], ['radio', 'Telephone'], ['megaphone', 'Telephone'], ['bass boost', 'Bass & Treble'], ['8-bit', 'Bit Crush'], ['8 bit', 'Bit Crush']];
+      const bad = [];
+      for (const [q, label] of want) { const got = names(await search(q)); if (got.indexOf(label) < 0) bad.push(q + ' finds ' + (got.length ? got.join(', ') : 'nothing') + ', not ' + label); }
+      const robot = names(await search('robot voice'));
+      if (robot.length !== 1) bad.push('robot voice lists ' + robot.join(', ') + ' - one word of a phrase pulled in effects that have nothing to do with it');
+      if (bad.length) throw new Error('audio-effect search misses the words people use: ' + bad.join('; '));
+      /* A typed tag matches from the START of one of its words, not from the middle of one (review of batch 2, measured
+       * at 3f5a972b in this box: low listed Distortion from blOWN out, the listed Reverb from caTHEdral, on listed Bass &
+       * Treble, 3-Band EQ and Stereo Width from tONe and mONo, no listed Stereo Width from mONO). CONTROL: low still
+       * finds Low-Pass (its label) and Pitch Shift (the word lower begins with it). */
+      const low = names(await search('low'));
+      if (low.indexOf('Low-Pass') < 0 || low.indexOf('Pitch Shift') < 0) throw new Error('CONTROL: low lists ' + (low.join(', ') || 'nothing') + ' - it must still find Low-Pass (label) and Pitch Shift (lower)');
+      const stray = [['low', ['Distortion']], ['the', ['Reverb']], ['on', ['Bass & Treble', '3-Band EQ', 'Stereo Width']], ['no', ['Stereo Width']]];
+      for (const [q, never] of stray) { const got = names(await search(q)); const hit = never.filter(n => got.indexOf(n) >= 0); if (hit.length) bad.push(q + ' lists ' + hit.join(', ') + ' (all: ' + got.join(', ') + ') - a tag matched in the middle of a word'); }
+      if (bad.length) throw new Error('audio-effect search matches a tag from the middle of a word: ' + bad.join('; '));
+      const tile =(await search('karaoke')).filter(t => (t.querySelector('.fxb-tile-name') || {}).textContent === 'Vocal Remove')[0];
+      const r = tile.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0 && r.left >= -1 && r.right <= window.innerWidth + 1 && r.top >= -1 && r.bottom <= window.innerHeight + 1)) throw new Error('the Vocal Remove tile that karaoke finds is at ' + Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' in a ' + window.innerWidth + 'x' + window.innerHeight + ' window - not on screen');
+      tile.click(); await sleep(250);
+      const L = FM.layerById(FM.scene, song.id);
+      if (!(L.audioFx || []).some(f => f.type === 'vocalremove')) throw new Error('tapping the Vocal Remove that karaoke found did not add it to the song (' + JSON.stringify((L.audioFx || []).map(f => f.type)) + ')');
+    } finally {
+      try { FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (recents == null) localStorage.removeItem('fm.afx.recents'); else localStorage.setItem('fm.afx.recents', recents); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* C16 — THE FLANGER'S FEEDBACK CAME BACK ONE RENDER QUANTUM LATE. Its feedback was a loop through the swept delay, and a
+   * cycle in Web Audio costs a render quantum (128 frames, 2.67 ms at 48 kHz) per trip. MEASURED at 768c83d0, an impulse at
+   * the bottom of a Depth 1 sweep (tau = 1 ms, Feedback 0.5, Mix 1) came back at 1.00, 4.67, 8.35, 12.06 ms - not 1, 2, 3, 4 -
+   * and at the top (tau = 7 ms) at 7.0, 16.6, 26.3 - not 7, 14, 21. (The backlog expected the sweep itself to stop at 2.7 ms;
+   * measured, the first pass reached 1.000 ms in both paths - it is the echoes after it that were late.) Fixed: the loop is
+   * unrolled into a chain of swept delays with no cycle. Each echo k is summed within 4 samples of k x tau and must carry
+   * Feedback^(k-1); nothing may sit at tau + 2.67 ms. CONTROL: the first pass lands at tau (1 ms / 7 ms) and at Feedback 0
+   * there is no second echo. A Feedback keyframed from 0 up to 0.5 is checked too (the taps are scheduled gains). */
+  test('986 C16 Flanger feedback echoes land every tau, not tau plus a render quantum - at the bottom and top of the sweep, in the export and the preview', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const SR = 48000, CLICK = 2400;   // the impulse is 50 ms into the window
+    const click = t => (Math.round(t * SR) === CLICK ? 1 : 0);
+    const fl = (fb, over) => [{ type: 'flanger', enabled: true, params: Object.assign({ rate: 0.3, depth: 1, feedback: fb, mix: 1 }, over || {}) }];
+    const near = (y, ms) => { const c = CLICK + ms * SR / 1000; let s = 0; for (let i = Math.floor(c - 4); i <= Math.ceil(c + 4); i++) s += Math.abs(y[i] || 0); return s; };
+    const QMS = 128 / SR * 1000;
+    // rate 0.3 Hz: the sweep's bottom (tau 1 ms) is scene 2.5 s, its top (tau 7 ms) scene 0.8333 s; the click lands on each.
+    const spots = [['bottom', 2.45, 1], ['top', 0.78333, 7]];
+    const bad = [];
+    for (const [where, anchor, tau] of spots) {
+      for (const live of [false, true]) {
+        const path = live ? 'preview' : 'export';
+        const y0 = await afx986(fl(0), click, 0.2, { anchor: anchor, live: live });
+        if (Math.abs(near(y0, tau) - 1) > 0.05) throw new Error('CONTROL: at the ' + where + ' of the sweep the first pass (' + path + ') carries ' + near(y0, tau).toFixed(3) + ' at ' + tau + ' ms, not 1 - the probe is not where the sweep is');
+        if (near(y0, 2 * tau) > 0.02) throw new Error('CONTROL: at Feedback 0 there is still an echo at ' + 2 * tau + ' ms (' + near(y0, 2 * tau).toFixed(3) + ')');
+        for (const fb of [0.5, 0.9]) {
+          const y = await afx986(fl(fb), click, 0.2, { anchor: anchor, live: live });
+          for (let k = 2; k <= 4; k++) {
+            const got = near(y, k * tau), want = Math.pow(fb, k - 1);
+            if (Math.abs(got - want) > 0.2 * want) bad.push(path + ', ' + where + ' (tau ' + tau + ' ms), Feedback ' + fb + ': echo ' + k + ' at ' + (k * tau) + ' ms carries ' + got.toFixed(3) + ', not ' + want.toFixed(3));
+          }
+          const late = near(y, tau + QMS);
+          if (late > 0.1 * fb) bad.push(path + ', ' + where + ', Feedback ' + fb + ': ' + late.toFixed(3) + ' comes back at ' + (tau + QMS).toFixed(2) + ' ms - tau plus a render quantum');
+        }
+      }
+    }
+    // Feedback keyframed 0 -> 0.5 before the click (scene time), held: the second echo carries 0.5.
+    const kf = await afx986(fl({ kf: [{ t: 2.45, v: 0 }, { t: 2.48, v: 0.5 }, { t: 2.7, v: 0.5 }] }), click, 0.2, { anchor: 2.45 });
+    if (Math.abs(near(kf, 2) - 0.5) > 0.1) bad.push('a Feedback keyframed up to 0.5 gives a second echo of ' + near(kf, 2).toFixed(3) + ' at 2 ms, not 0.5');
+    if (bad.length) throw new Error('the Flanger feedback is not a flanger feedback: ' + bad.slice(0, 8).join('; '));
+  });
+
+  /* C17 — THE PHASER'S FEEDBACK WAS A FIXED COMB. The loop went through a 1 ms DelayNode (a cycle needs one) and the engine adds
+   * a render quantum per trip, so the loop was 3.67 ms: a comb every 272 Hz that stands still while the notches sweep.
+   * MEASURED at 768c83d0 against a phaser with no delay in its loop (the model: 0.5 + 0.5 A / (1 - fb A), A the four allpasses
+   * read back from the engine's own BiquadFilterNode.getFrequencyResponse), 60 Hz - 6 kHz: Depth 0, Feedback 0.4 missed it by
+   * 3.62 dB rms and 0.9 by 7.68, with the strongest resonance at 1360 Hz where the phaser puts it at 240; at the top of a
+   * Depth 0.7 sweep 3.82 dB rms and 1920 Hz for 1980. Fixed: the loop unrolled into six passes of the chain, no cycle - 0.03 /
+   * 3.26 dB rms, 240 Hz, and 0.03 dB / 1980 Hz while sweeping (Feedback 0.9 keeps fb^6 of its tail, hence 3.3 dB). CONTROL:
+   * Feedback 0 matches the model to 0.05 dB (it did at 768c83d0 too - the measurement and the model are right). */
+  test('986 C17 Phaser feedback resonates where the phaser notches are, not on a fixed comb - held still and mid-sweep, in the export and the preview', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const SR = 48000;
+    const freqs = []; for (let f = 60; f <= 6000; f += 20) freqs.push(f);
+    function allpass(scale) {
+      const oc = new OfflineAudioContext(1, 128, SR), F = new Float32Array(freqs);
+      const re = freqs.map(() => 1), im = freqs.map(() => 0);
+      [200, 400, 800, 1600].forEach(b => {
+        const bq = oc.createBiquadFilter(); bq.type = 'allpass'; bq.frequency.value = b * scale; bq.Q.value = 1;
+        const mag = new Float32Array(F.length), ph = new Float32Array(F.length); bq.getFrequencyResponse(F, mag, ph);
+        for (let i = 0; i < F.length; i++) { const r = mag[i] * Math.cos(ph[i]), q = mag[i] * Math.sin(ph[i]); const nr = re[i] * r - im[i] * q, ni = re[i] * q + im[i] * r; re[i] = nr; im[i] = ni; }
+      });
+      return { re: re, im: im };
+    }
+    const model = (A, fb) => freqs.map((f, i) => { const dr = 1 - fb * A.re[i], di = -fb * A.im[i], dd = dr * dr + di * di; const qr = (A.re[i] * dr + A.im[i] * di) / dd, qi = (A.im[i] * dr - A.re[i] * di) / dd; return Math.hypot(0.5 + 0.5 * qr, 0.5 * qi); });
+    const response = (h, i0) => freqs.map(f => { let re = 0, im = 0; for (let n = i0; n < h.length; n++) { const w = 2 * Math.PI * f * (n - i0) / SR; re += h[n] * Math.cos(w); im -= h[n] * Math.sin(w); } return Math.hypot(re, im); });
+    const dB = x => 20 * Math.log10(Math.max(1e-9, x));
+    const rms = (m, id) => { let s = 0; for (let i = 0; i < m.length; i++) { const e = dB(m[i]) - dB(id[i]); s += e * e; } return Math.sqrt(s / m.length); };
+    const peak = m => { let bi = 0; for (let i = 1; i < m.length; i++) if (m[i] > m[bi]) bi = i; return freqs[bi]; };
+    const imp = i0 => t => (Math.round(t * SR) === i0 ? 1 : 0);
+    const ph = (fb, over) => [{ type: 'phaser', enabled: true, params: Object.assign({ rate: 0.5, depth: 0, feedback: fb }, over || {}) }];
+    const A0 = allpass(1), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const c = rms(response(await afx986(ph(0), imp(0), 0.5, { live: live }), 0), model(A0, 0));
+      if (c > 0.05) throw new Error('CONTROL: at Feedback 0 the ' + path + ' misses the allpass model by ' + c.toFixed(2) + ' dB rms - the model or the measurement is broken');
+      for (const [fb, lim] of [[0.4, 0.5], [0.9, 4.5]]) {
+        const m = response(await afx986(ph(fb), imp(0), 0.5, { live: live }), 0), id = model(A0, fb), e = rms(m, id);
+        if (e > lim) bad.push(path + ', held still, Feedback ' + fb + ': ' + e.toFixed(2) + ' dB rms from a phaser with no delay in its loop (limit ' + lim + ')');
+        if (Math.abs(peak(m) - peak(id)) > 20) bad.push(path + ', held still, Feedback ' + fb + ': the strongest resonance is at ' + peak(m) + ' Hz, the phaser puts it at ' + peak(id));
+      }
+    }
+    // Mid-sweep: Rate 0.05, Depth 0.7 - the top of the sweep is scene 5 s, where every stage sits at 1.49 x its centre.
+    const A1 = allpass(1.49);
+    for (const [fb, lim] of [[0.4, 0.5], [0.9, 4.5]]) {
+      const m = response(await afx986(ph(fb, { rate: 0.05, depth: 0.7 }), imp(2400), 0.45, { anchor: 4.95 }), 2400), id = model(A1, fb), e = rms(m, id);
+      if (e > lim) bad.push('at the top of a Depth 0.7 sweep, Feedback ' + fb + ': ' + e.toFixed(2) + ' dB rms from a phaser with no delay in its loop (limit ' + lim + ')');
+      if (Math.abs(peak(m) - peak(id)) > 20) bad.push('at the top of a Depth 0.7 sweep, Feedback ' + fb + ': the strongest resonance is at ' + peak(m) + ' Hz, the phaser puts it at ' + peak(id));
+    }
+    if (bad.length) throw new Error('the Phaser feedback does not follow its notches: ' + bad.slice(0, 8).join('; '));
+  });
+
+  /* C18 — BIT CRUSH BITS 13-16 WERE THE DRY SOUND. Its staircase lived on an 8192-point WaveShaper curve, and a WaveShaper
+   * interpolates linearly, so once a step is about one point wide the staircase interpolates back into a straight line.
+   * MEASURED at 768c83d0 on a -40 dBFS 1 kHz sine, error (output - input) against a true quantiser (JS, same rounding):
+   *   bits 12: -81.4 vs -76.5 dB   13: -78.5 vs -81.4   14 / 15 / 16: -121.3 (float noise) vs -92.5 / -95.4 / -101.1
+   * and 14, 15 and 16 rendered byte-identical. Fixed (crushCurve): 8 curve points per step from 11 bits up - 11-16 now land
+   * within 1.1 dB of the quantiser; up to 10 bits the curve is untouched. Checked through the static shaper (export and
+   * preview) and the keyframed bank, whose top four shapers were all the dry line. CONTROL: 6 bits (the default) is the
+   * quantiser to 0.3 dB and 14 bits differs from 16. */
+  test('986 C18 Bit Crush 11 to 16 bits quantise like the bits they say - 14, 15 and 16 are no longer the dry sound, in the export, the preview and a keyframed Bits', { item: '986', budgetMs: 60000 }, async function () {
+    if (!FM.buildAudioFxChain) throw new Error('FM.buildAudioFxChain is not reachable');
+    const SR = 48000, sine = sine986(0.01);
+    const crush = bits => [{ type: 'bitcrush', enabled: true, params: { bits: bits, mix: 1 } }];
+    const errDb = y => { let e = 0; for (let i = 0; i < y.length; i++) { const d = y[i] - Math.fround(sine(i / SR)); e += d * d; } return 10 * Math.log10(e / y.length); };
+    const idealDb = (bits, n) => { const step = 2 / Math.pow(2, bits); let e = 0; for (let i = 0; i < n; i++) { const x = Math.fround(sine(i / SR)); const d = Math.round(x / step) * step - x; e += d * d; } return 10 * Math.log10(e / n); };
+    const ctl = await afx986(crush(6), sine, 0.5);
+    if (Math.abs(errDb(ctl) - idealDb(6, ctl.length)) > 0.3) throw new Error('CONTROL: 6 bits (the default) sits ' + (errDb(ctl) - idealDb(6, ctl.length)).toFixed(2) + ' dB from a true 6-bit quantiser - the measurement is broken');
+    const bad = [], outs = {};
+    for (let b = 11; b <= 16; b++) {
+      const want = idealDb(b, SR / 2);
+      for (const [path, fx, opts] of [['export', crush(b), {}], ['preview', crush(b), { live: true }], ['keyframed', crush({ kf: [{ t: 0, v: b }, { t: 0.5, v: b }] }), {}]]) {
+        const y = await afx986(fx, sine, 0.5, opts), got = errDb(y);
+        if (path === 'export') outs[b] = y;
+        if (Math.abs(got - want) > 2) bad.push(path + ' ' + b + ' bits leaves ' + got.toFixed(1) + ' dB of quantisation error where ' + b + ' bits leaves ' + want.toFixed(1));
+      }
+    }
+    let d = 0; for (let i = 0; i < outs[14].length; i++) d = Math.max(d, Math.abs(outs[14][i] - outs[16][i]));
+    if (!(d > 1e-5)) bad.push('14 bits and 16 bits render ' + (d === 0 ? 'byte-identical' : 'within ' + d.toExponential(1)));
+    if (bad.length) throw new Error('the top of the Bits slider does not crush: ' + bad.join('; '));
   });
 
 })();

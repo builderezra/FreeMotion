@@ -34,11 +34,29 @@ window.FM = window.FM || {};
      seeded from the request itself (length, colour, rate) gives identical samples for identical requests and
      different noise for different buffers, which is all the ear ever needed. */
   function seeded(seed) { let a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  /* ═══ …BUT NOT THE SAME NOISE TWICE IN ONE SOUND (queue 986, hunt C11) ═══════════════════════════════════
+     Seeded by (length, colour, rate) alone, every buffer of the same length and colour in one render was the
+     SAME noise. MEASURED at 768c83d0: Fire crackle's 10 crackles were one buffer ten times, Ticking build's
+     29 ticks one buffer 29 times, Camera shutter's two clicks one buffer twice — a fire that crackles the same
+     crackle, a clock with one tick. So the seed also counts how many times it has already been handed out IN
+     THIS CONTEXT: the first request for a seed gets exactly the stream it always did (every sound with no
+     repeated buffer renders byte-for-byte as before, and so does each sound's first crackle), a repeat gets a
+     stream of its own. Still stateless where it matters: Add and the ▶ each render into a FRESH
+     OfflineAudioContext and the recipes ask in a fixed order, so the same sound renders the same twice. And it
+     is structural, so a recipe written tomorrow cannot fall into it. */
+  const _seedUse = new WeakMap();   // context -> Map(seed -> times already handed out in it)
+  function noiseSeed(ctx, base) {
+    let used = _seedUse.get(ctx);
+    if (!used) { used = new Map(); _seedUse.set(ctx, used); }
+    const k = used.get(base) || 0;
+    used.set(base, k + 1);
+    return k ? (Math.imul(base ^ 0x5bd1e995, 0x9E3779B1) + Math.imul(k, 0x85EBCA6B)) >>> 0 : base;
+  }
   function noiseBuffer(ctx, secs, colour) {
     const n = Math.max(1, Math.floor(secs * ctx.sampleRate));
     const buf = ctx.createBuffer(1, n, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    const rnd = seeded(n * 31 + (colour === 'brown' ? 7 : colour === 'pink' ? 11 : 3) + Math.floor(ctx.sampleRate / 100));
+    const rnd = seeded(noiseSeed(ctx, n * 31 + (colour === 'brown' ? 7 : colour === 'pink' ? 11 : 3) + Math.floor(ctx.sampleRate / 100)));
     let last = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
     for (let i = 0; i < n; i++) {
       const w = rnd() * 2 - 1;

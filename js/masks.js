@@ -175,14 +175,23 @@ window.FM = window.FM || {};
       // 1) render THIS mask's coverage into the temp: a white fill of its path, blurred by feather.
       tctx.setTransform(1, 0, 0, 1, 0, 0);
       tctx.globalAlpha = 1; tctx.globalCompositeOperation = 'source-over';
+      /* WHERE ctx.filter DOES NOTHING (his class of phone) the feather was a hard edge — MEASURED, the whole feather's
+         look gone on a shape and on a photo at every preview size (#986 batch 2 review). The path goes down sharp
+         and is blurred by the compositor's no-filter blur at the same device-pixel radius instead. A healthy device
+         never takes this branch. */
+      const noFilt = feather > 0 && FM.ctxFilterOK && !FM.ctxFilterOK() && typeof FM._drawBlurredDrawNoFilter === 'function';
       // feather is PROJECT px and ctx.filter is DEVICE px on this buffer, so it follows `s` too.
-      tctx.filter = feather > 0 ? ('blur(' + (feather * s) + 'px)') : 'none';
+      tctx.filter = feather > 0 && !noFilt ? ('blur(' + (feather * s) + 'px)') : 'none';
       tctx.clearRect(0, 0, W, H);
       tctx.fillStyle = '#fff';
       if (mapped) tctx.setTransform(s, 0, 0, s, -ox * s, -oy * s);   // pts are project coordinates — see `s` and `ox` above
-      tctx.beginPath();
-      FM.buildSubPath(tctx, pts, m.closed !== false, null);   // identity map: pts already in canvas space
-      tctx.fill();
+      const fillPath = (g) => {
+        g.beginPath();
+        FM.buildSubPath(g, pts, m.closed !== false, null);   // identity map: pts already in canvas space
+        g.fill();
+      };
+      if (noFilt) FM._drawBlurredDrawNoFilter(tctx, feather * s, g => { g.fillStyle = '#fff'; fillPath(g); });
+      else fillPath(tctx);
       if (mapped) tctx.setTransform(1, 0, 0, 1, 0, 0);   // back to buffer pixels — the rect below must cover ALL of it
       // 2) invert WITHIN the frame if asked: source-out draws white only where the shape did NOT cover,
       //    so temp alpha becomes 1 - coverage (the feather edge reverses). No blur on the full-frame rect.
