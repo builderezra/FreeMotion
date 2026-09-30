@@ -276,6 +276,14 @@ window.FM = window.FM || {};
       { key: 'speed', label: 'Re-roll', min: 0, max: 30, step: 1, def: 10, unit: 'Hz' },
       { key: 'split', label: 'RGB tear', min: 0, max: 20, step: 0.1, def: 1, unit: '×' },
       { key: 'dir', label: 'Tears', def: 0, options: [[0, 'Sideways'], [1, 'Up / down']] },   // queue 904: it could only ever tear horizontally
+      /* #482 polish 2.7 (#966 "more customisation"). The slices were all one height, the only damage was the sideways slip,
+         every Glitch tore the same pattern, and a slipped slice always wrapped round to the other side. Each default runs
+         the old loop exactly — 0 evens the slices, 0 adds no blocks, Pattern 0 adds nothing to the hash, Wrap around is
+         the old wrap — and Up / down transposes the whole picture, so all four come along with it. */
+      { key: 'jitter', label: 'Uneven slices', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'blocks', label: 'Block damage', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'wrap', label: 'Edges', def: 0, options: [[0, 'Wrap around'], [1, 'Stretch edge'], [2, 'Leave gap']] },
     ] },
     { type: 'zoomblur', label: 'Zoom Blur', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -571,7 +579,13 @@ window.FM = window.FM || {};
     { type: 'flicker', label: 'Flicker', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 14, unit: 'Hz' }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: Pattern — two flickering layers were always in lockstep
     /* Beside Flicker on purpose, because that is where you look for it — and named for what separates
        them: this one darkens, it does not make the layer vanish (queue 349). */
-    { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0.15 }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: Pattern
+    /* RHYTHM and HOLD DARK (#482 polish 2.3, his #966 "as much choice as possible"). The flashes were only ever random, so a
+       strobe on the beat, a double hit or a build-up into a drop meant keyframing Depth by hand. Random is the old rhythm, byte
+       for byte, and stays the default; Pattern only steers Random, so it greys out under the others. Darkest is untouched
+       (#904 waits on his A/B). */
+    { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0.15 }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0, overriddenBy: 'rhythm', liveWhen: 0 },
+      { key: 'rhythm', label: 'Rhythm', def: 0, options: [[0, 'Random'], [1, 'Steady'], [2, 'Double hit'], [3, 'Build-up']] },
+      { key: 'hold', label: 'Hold dark', min: 0, max: 1, step: 0.02, def: 0, overriddenBy: 'rhythm', liveWhen: [1, 2, 3] }] },   // queue 904: Pattern
     { type: 'pulseopacity', label: 'Breathe', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase — two Breathe layers could never be offset
     { type: 'dissolve', label: 'Dissolve', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -936,7 +950,20 @@ window.FM = window.FM || {};
     ] },
     { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
-    { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' }] },
+    /* #482 polish 2.1 (his #966: "as much choice as possible"). Wiggle moved one way only: the same distance both ways, never
+       turned, never grew, one smooth curve, and every wiggling layer on the same curve (C28: two layers added together moved
+       in lockstep). Every new control's default is the old wiggle exactly. VERTICAL AMOUNT follows Amount while it has no
+       value of its own (`follows`, the Light Leak edge-colour rule on a slider): a saved wiggle and a new one keep wiggling
+       the same distance both ways, and moving Amount still moves both until he sets a vertical of his own. */
+    { type: 'wiggle', label: 'Wiggle', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px' },
+      { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' },
+      { key: 'amounty', label: 'Vertical amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px', follows: 'amount' },
+      { key: 'rotate', label: 'Rotation wiggle', min: 0, max: 180, step: 0.5, def: 0, unit: '°' },
+      { key: 'scale', label: 'Scale wiggle', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'octaves', label: 'Roughness', min: 1, max: 4, step: 1, def: 1 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+    ] },
     // Shake is a headline tool for beat-drop edits, so it runs HOT: violent ranges, a zoom punch, a
     // hardness blend (smooth noise → stepped jitter), axis lock for slam shakes, and a velocity smear so
     // big displacements read as motion instead of teleporting. NOTE the render fn's fparam fallbacks stay
@@ -954,17 +981,40 @@ window.FM = window.FM || {};
       { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3, legacy: 0 },
       { key: 'smearlen', label: 'Smear length', min: 1, max: 6, step: 0.5, def: 1, unit: '×', overriddenBy: 'smear', liveAbove: 0 },   // queue 904: the smear was 3 fixed ghosts over one frame of motion
       { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
+      /* #482 polish 2.1. HIDE EDGES zooms a layer that fills the frame just enough that the shake can never show the empty
+         frame behind it — the 110% he used to set by hand, worked out from the biggest shake and twist the effect will ever
+         reach, one zoom wherever the clip is; a caption, which fills nothing, keeps its size (review). PATTERN (C28) gives a
+         layer its own shake, so two shaken layers stop moving in lockstep. Off and 0 are the old shake exactly. */
+      { key: 'overscan', label: 'Hide edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
-    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 0, unit: '%' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase
+    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 0, unit: '%' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'damping', label: 'Damping', min: 0, max: 5, step: 0.1, def: 0, unit: '/s' }] },   // queue 904: Phase. #482 polish 2.2: Damping lets a swing settle (the angle × e^(−damping × time)); 0 swings for ever, as before
     { type: 'spin', label: 'Spin', params: [
       { key: 'speed', label: 'Speed', min: -720, max: 720, step: 5, def: 90, unit: '°/s' },
       { key: 'offset', label: 'Start angle', min: -360, max: 360, step: 5, def: 0, unit: '°' },
       { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
-    { type: 'pulse', label: 'Pulse', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.2 }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase
-    { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -1200, max: 1200, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -1200, max: 1200, step: 5, def: 0, unit: 'px/s' }] },
-    { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 1200, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }, { key: 'phase', label: 'Start angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Start angle
+    /* #482 polish 2.2. Pulse was a sine about the middle of the layer, the same amount both ways. WAVE picks the shape of each
+       beat, SQUASH & STRETCH trades width for height as it grows (1 = wider as it grows, −1 = taller), and the PIVOT puts the
+       growth anywhere on the layer (a bottom pivot grows up off the floor). Sine, 0 and 50/50 are the old pulse exactly. */
+    { type: 'pulse', label: 'Pulse', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.2 }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' },   // queue 904: Phase
+      { key: 'wave', label: 'Wave', def: 0, options: [[0, 'Sine'], [1, 'Heartbeat'], [2, 'Bounce'], [3, 'Square'], [4, 'Triangle']] },
+      { key: 'stretch', label: 'Squash & stretch', min: -1, max: 1, step: 0.05, def: 0 },
+      { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }] },
+    /* #482 polish 2.2: WRAP AROUND FRAME turns Drift into a ticker — what leaves one edge comes back in at the other, for ever,
+       instead of drifting away and never being seen again. Off is the old drift exactly. */
+    { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -1200, max: 1200, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -1200, max: 1200, step: 5, def: 0, unit: 'px/s' },
+      { key: 'wrap', label: 'Wrap around frame', def: 0, options: [[0, 'Off'], [1, 'On']] }] },
+    /* #482 polish 2.2: Orbit only went round a circle, upright. ELLIPSE squashes (or stretches) the circle's height, DEPTH
+       shrinks the layer on the far side (the top) as if the orbit were tilted away from you, and FACE DIRECTION OF TRAVEL
+       turns the layer to point along its path (a car driving round, not sliding round). 100/0/Off are the old orbit exactly. */
+    { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 1200, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }, { key: 'phase', label: 'Start angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },   // queue 904: Start angle
+      { key: 'ry', label: 'Ellipse', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'face', label: 'Face direction of travel', def: 0, options: [[0, 'Off'], [1, 'On']] }] },
     // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
     { type: 'squeeze', label: 'Squeeze', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -1039,6 +1089,10 @@ window.FM = window.FM || {};
          so nothing already made costs a penny more — you only pay when you crank it. */
       { key: 'shutter', label: 'Shutter', min: 0, max: 12, step: 0.05, def: 0.5 },
       { key: 'samples', label: 'Samples', min: 2, max: 48, step: 1, def: 8 },
+      /* SHUTTER PHASE (#482 polish 2.6). The shutter window was always centred on the frame, so half the smear ran AHEAD of
+         a moving layer. −100 opens it before the frame (a trail behind only, the comic-book streak), +100 after it. 0 is the
+         old centred window, byte for byte. */
+      { key: 'phase', label: 'Shutter phase', min: -100, max: 100, step: 1, def: 0, unit: '%', note: '−100 trails behind only · +100 runs ahead' },
     ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
     { type: 'softglow', label: 'Soft Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', params: [   // queue 904: was hardcoded white
@@ -1246,6 +1300,11 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Mode', options: [[0, 'Hold'], [1, 'Strobe'], [2, 'Hold + Trail']], def: 0 },
       { key: 'blend', label: 'Blend live', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'duty', label: 'Strobe on-time', min: 0.05, max: 1, step: 0.01, def: 0.5, overriddenBy: 'mode', liveWhen: 1 },
+      /* TRAIL STRENGTH, PHASE, IRREGULAR HOLDS (#482 polish 2.4). The ghost was welded at 45%, the holds always changed on
+         the same grid, and every hold was the same length — stop-motion never is. Each default is the old picture. */
+      { key: 'trail', label: 'Trail strength', min: 0, max: 1, step: 0.02, def: 0.45, overriddenBy: 'mode', liveWhen: 2 },
+      { key: 'offset', label: 'Phase', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'random', label: 'Irregular holds', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     // Shockwave — ONE expanding pressure ring that travels out and leaves frame. Keyframe Radius and
     // that is the whole move. Not Circular Ripple, which is an infinite centre-locked standing sine.
@@ -1262,13 +1321,21 @@ window.FM = window.FM || {};
     // Speed Lines — tapered ink strokes driving in from the edge toward a clear disc around the
     // subject. Radial Rays is a per-pixel cosine wash; this is drawn geometry, and the TAPER is
     // what makes it read as ink rather than as light.
-    { type: 'speedlines', label: 'Speed Lines', desc: 'Tapered manga impact lines driving in from the frame edge, with a clear disc left around your subject.', params: [
+    { type: 'speedlines', label: 'Speed Lines', desc: 'Tapered manga impact lines driving in from the frame edge or laid side by side, with a clear space left around your subject.', params: [
       { key: 'count', label: 'Lines', min: 4, max: 200, step: 1, def: 64 },
+      /* #482 polish 2.5 (#966 "more customisation"). The lines could only drive in to a point, the clear zone was always a
+         circle, and the ink was frozen apart from Spin. Style Parallel lays them side by side at Angle — the across-the-
+         panel rush — Clear zone shape stretches the clear disc into an oval, and Boil redraws the lines a number of times
+         a second, the hand-drawn shimmer. Radial, 100 % and 0 draw the old lines exactly. */
+      { key: 'mode', label: 'Style', def: 0, options: [[0, 'Radial'], [1, 'Parallel']] },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'mode', liveWhen: 1 },
       { key: 'inner', label: 'Clear zone', min: 0, max: 80, step: 1, def: 26, unit: '%' },
+      { key: 'aspect', label: 'Clear zone shape', min: 25, max: 400, step: 5, def: 100, unit: '%', overriddenBy: 'inner', liveAbove: 0 },   // no clear zone, nothing to shape (review of polish 2.5)
       { key: 'length', label: 'Length', min: 5, max: 100, step: 1, def: 55, unit: '%' },
       { key: 'width', label: 'Weight', min: 1, max: 60, step: 1, def: 12, unit: 'px' },
       { key: 'jitter', label: 'Scatter', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'boil', label: 'Boil', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
       { key: 'x', label: 'Focus X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Focus Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
@@ -2571,6 +2638,50 @@ window.FM = window.FM || {};
   // Smooth deterministic pseudo-noise in ~[-1,1] (sum of incommensurate sines) — same at a given
   // time every render, so wiggle is flicker-free and exports identically.
   function wnoise(u) { return Math.sin(u * 6.283) * 0.5 + Math.sin(u * 14.77 + 1.3) * 0.3 + Math.sin(u * 28.6 + 2.7) * 0.2; }
+  /* PATTERN — EACH ONE ITS OWN WAVES (#482 polish 2 review, C28). A Pattern was first a TIME OFFSET (pattern × 61.8034), and
+     wnoise's main wave repeats every 1.0003 of u (6.283 is 2π to four figures), so only the offset's fraction mattered: in the
+     app Patterns 25 apart moved at 0.96 correlation, 8.6 px apart on a 31 px reach, and 141 of the 999 correlated past 0.6
+     with Pattern 0. Rotation and Scale wiggle rode the same noise at u + 200 / u + 300 — whole periods again — so the layer
+     turned WITH its sideways move (0.73). A random phase per wave is not enough on its own (measured offline: 127 of 399
+     past 0.6, because the main wave dominates and cos of a random angle crowds ±1). So each (pattern, channel) draws its own
+     three waves from a hash: each its own phase AND its own pace within a tenth of the Speed, so two patterns drift apart
+     instead of repeating each other a beat later — 21 of 399 past 0.6 over 8 s at 1 Hz, none past 0.8. Returns
+     [phase, pace] for each of wnoise's three waves. Pattern 0's sideways and up-down never come here: they are the old
+     wnoise, byte for byte. */
+  function noiseWaves(seed, ch) {
+    const h = function (k) {
+      let n = Math.imul(seed | 0, 0x9E3779B1) ^ Math.imul((ch | 0) + 1, 0x85EBCA77) ^ Math.imul(k, 0xC2B2AE3D);
+      n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+    };
+    return [h(1) * 2 * Math.PI, 0.9 + 0.2 * h(11), h(2) * 2 * Math.PI, 0.9 + 0.2 * h(12), h(3) * 2 * Math.PI, 0.9 + 0.2 * h(13)];
+  }
+  function wnoiseP(u, w) { return Math.sin(u * 6.283 * w[1] + w[0]) * 0.5 + Math.sin(u * 14.77 * w[3] + 1.3 + w[2]) * 0.3 + Math.sin(u * 28.6 * w[5] + 2.7 + w[4]) * 0.2; }
+  /* ROUGHNESS (#482 polish 2.1): the smooth wiggle at full size, plus up to three finer octaves of the same noise, each ~twice
+     as fast and half as strong — then a SOFT CEILING, x / (1 + |x|^p)^(1/p): all but identical below 0.8, never past 1. So the
+     slow float keeps the size it has today and a rougher wiggle is rougher, not bigger. (Dividing by the octaves' total weight
+     was tried first and measured: at Roughness 4 the float shrank to about half its reach — his layer would have stopped
+     wandering the moment he asked for it to be rougher.) A fractional value — a keyframed Roughness between whole steps —
+     fades its last octave in, and the ceiling tightens with it (p is huge just above 1), so nothing jumps. Wiggle calls
+     wnoise itself at Roughness 1. */
+  function roughNoise(u, oct, waves) {
+    const n = waves ? function (v) { return wnoiseP(v, waves); } : wnoise;   // a Pattern's own waves (noiseWaves), else the old noise
+    let sum = n(u), a = 0.5, f = 2.13;
+    for (let k = 1; k < 4 && k < oct; k++) { const w = Math.min(1, oct - k); sum += a * w * n(u * f + k * 17.31); a *= 0.5; f *= 2.13; }
+    const pw = Math.min(400, 8 / Math.max(0.02, Math.min(1, oct - 1)));
+    return sum / Math.pow(1 + Math.pow(Math.abs(sum), pw), 1 / pw);
+  }
+  /* PULSE WAVES (#482 polish 2.2): one beat's shape, f in cycles (the whole part ignored), in −1..1 like the sine it replaces
+     and in step with it (each is at its biggest at f = 0.25, where the sine peaks) — except Heartbeat, which only ever grows
+     (0..1: a strong beat, a softer second one, then rest — lub-dub). Bounce has round tops and a hard landing at f = 0.75. */
+  function pulseWave(w, f) {
+    f -= Math.floor(f);
+    if (w === 1) { const b = function (c, wd) { const z = (f - c) / wd; return Math.exp(-z * z); }; return Math.min(1, b(0.12, 0.045) + 0.6 * b(0.3, 0.05)); }
+    if (w === 2) return 2 * Math.abs(Math.sin(Math.PI * (f + 0.25))) - 1;
+    if (w === 3) return f < 0.5 ? 1 : -1;
+    if (w === 4) { const g = (f + 0.25) % 1; return 1 - 4 * Math.abs(g - 0.5); }
+    return Math.sin(2 * Math.PI * f);
+  }
   FM.wiggleOffset = function (layer, t) {
     const w = layer.wiggle;
     if (!w || !w.enabled || !w.amp) return null;
@@ -3292,7 +3403,13 @@ window.FM = window.FM || {};
      * `layer` still owns the EFFECTS (the proxy carries the group's own list), so only the geometry
      * is redirected. */
     const mSrc = layer._ofGroup || layer;
-    const _travel = layerMotionBetween(mSrc, t - dt / 2, t + dt / 2, scene);
+    /* SHUTTER PHASE (#482 polish 2.6): where the window sits against the frame. 0 is centred on t (the old window, and the
+       old arithmetic — `tc` IS t); −100 opens it one window before t, so the smear trails behind only; +100 after. The
+       "did it move?" early-out below asks about THIS window, not the centred one: a layer that stops at t has moved in
+       the window behind it and not in the one around it. */
+    const _ph = (mb.phase == null) ? 0 : Math.max(-100, Math.min(100, _num(mb.phase, 0))) / 100;
+    const tc = _ph ? t + _ph * dt / 2 : t;
+    const _travel = layerMotionBetween(mSrc, tc - dt / 2, tc + dt / 2, scene);
     if (!_hasMoverFx && _travel != null && _travel * plateScale(ctx) < 0.75) return false;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = P.width, PH = P.height, ps = plateScale(ctx);
@@ -3342,7 +3459,10 @@ window.FM = window.FM || {};
     // move cannot allocate the world.
     // No margin on the mover path: nothing is re-projected there, so nothing is pushed past the comp
     // edge and there is no smear to clip. Each slice is rendered complete instead.
-    const m = _hasMoverFx ? 0 : Math.min(Math.ceil((_travel == null ? 0 : _travel)) + 2, PW * 0.25);
+    /* A PHASED WINDOW PUSHES FURTHER (#482 2.6 review). Centred, the slices push the plate at most half the travel from t;
+       at ±100 they push it the WHOLE travel, so the old quarter-frame cap cut a fast streak off at half the speed — a layer
+       leaving the frame lost its trail while the trail was still in frame. The cap grows with the phase; 0 keeps PW·0.25. */
+    const m = _hasMoverFx ? 0 : Math.min(Math.ceil((_travel == null ? 0 : _travel)) + 2, PW * 0.25 * (1 + Math.abs(_ph)));
     /* INSIDE A CAMERA PLATE THAT REACHES PAST THE FRAME (queue 690, fifth hunt) the plates cover what that plate covers,
        not the frame, so a blurred layer is not cut off at the frame edge as the camera pans. The blur has no geometry
        of its own — it moves the layer's own picture — so it can; the plate is marked, so what is nested in it keeps the
@@ -3383,11 +3503,21 @@ window.FM = window.FM || {};
       // between consecutive frames. _clipStart matters because start/duration are SYNTHETIC on a
       // flattened-group proxy.
       const cs = (layer._clipStart != null) ? layer._clipStart : (layer.start || 0);
-      const lo = cs, hi = cs + (layer.duration || 0);
+      /* _clipDuration: a flattened group's proxy carries a SYNTHETIC 2 s duration, so a moving group stopped blurring 2 s
+         into itself (#482 2.6 review; the proxy now carries the group's real length beside its real start). */
+      const lo = cs, hi = cs + ((layer._clipDuration != null ? layer._clipDuration : layer.duration) || 0);
       let drawn = 0;
       for (let k = 0; k < N; k++) {
-        const tau = t + ((k + 0.5) / N - 0.5) * dt;
-        if (tau < lo || tau >= hi) continue;    // outside the clip's life — partial shutter coverage is real, so it simply contributes less
+        let tau = tc + ((k + 0.5) / N - 0.5) * dt;   // tc: the phased window's centre (t itself at phase 0)
+        if (tau < lo || tau >= hi) {
+          /* Centred (phase 0, the old window, byte for byte): outside the clip's life — partial shutter coverage is real, so
+             it simply contributes less. PHASED, a window that opens before the clip starts (−100) or closes after it ends
+             (+100) would leave the first frame with NO slice inside — handed back to the sharp, fully opaque draw — and the
+             next with one in six: a layer that moves from its first frame POPPED on and nearly vanished. Phased, the layer
+             is held at its first (or last) moment instead, the way a clip holds its first frame, so every frame is whole. */
+          if (!_ph || !(hi > lo)) continue;
+          tau = tau < lo ? lo : Math.max(lo, hi - 1e-6);
+        }
         /* TWO WAYS TO MAKE A SUB-FRAME (queue 382).
          * RE-PROJECTION (default): one plate at `t`, pushed through D = M(tau)·M(t)⁻¹. Enormously
          * cheaper, and useless for a mover — the mover's displacement sits inside that one plate and is
@@ -4158,7 +4288,7 @@ window.FM = window.FM || {};
           const sub = actx.getImageData(rect.x, rect.y, rect.w, rect.h);
           // a bounded kernel gets its box measured on the cropped buffer — the same scan, 1/50th of the pixels
           const bb2 = bounded ? fxBounds(sub.data, rect.w, rect.h) : null;
-          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2);
+          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2, layer, scene);   // layer, scene: the few kernels on the clip's own clock and the project's frame rate (Flash (darken)'s rhythms, #482 2.3)
           bctx.putImageData(sub, rect.x, rect.y);
         }
         ctx.save();
@@ -4183,7 +4313,7 @@ window.FM = window.FM || {};
        * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
        * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
       // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
-      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -5868,14 +5998,75 @@ window.FM = window.FM || {};
       const speed = p.speed == null ? 10 : FM.evalProp(p.speed, t);
       const split = p.split == null ? 1 : FM.evalProp(p.split, t);
       const s = d.slice(), bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(t * speed);
+      /* #482 polish 2.7. PATTERN salts every hash after the band/frame mix, so 0 is the old tear. UNEVEN SLICES moves each
+         inner slice edge by up to half a slice (hashed per re-roll), and the uneven slices are measured as a share of the
+         whole height, so the phone's smaller preview plate tears in the same places as the export. EDGES says what a
+         slipped slice shows where it moved away from: the other side (the old wrap), its own edge pixel stretched, or a
+         gap. BLOCK DAMAGE adds hashed rectangles after the slices, each slipped and channel-swapped. */
+      const seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0);
+      const sMix = seed ? Math.imul(seed, 0x27d4eb2d) : 0;
+      const ghash = function (n) { let h = (n ^ sMix) | 0; h = (h ^ (h >> 13)) * 1274126177; h = h ^ (h >> 16); return h; };
+      const jitRaw = p.jitter == null ? 0 : FM.evalProp(p.jitter, t);
+      const jit = jitRaw > 0 ? Math.min(1, jitRaw / 100) : 0;
+      const edgeMode = p.wrap == null ? 0 : (Math.round(FM.evalProp(p.wrap, t)) | 0);
+      /* A slice edge, moved by Uneven slices. It BLENDS from the even grid (b × bandH, the old slices, whose leftover bottom
+         rows are never torn) towards the uneven one ((b + r) slices of the whole height) by the amount, so leaving 0 moves
+         each edge by a fraction of a row rather than snapping the whole grid on the first frame a keyframe leaves 0 (review
+         of polish 2.7: 0 → 1 % moved 1248 of 1920 rows at 90 slices, 1 → 2 % moved 9). At 100 % it is the uneven grid. */
+      const edgeAt = function (b) {
+        if (b <= 0) return 0;
+        const g = Math.min(bands, b) * bandH;
+        if (b >= bands) return Math.max(0, Math.min(H, Math.round(g + jit * (H - g))));
+        const r = (ghash((b * 1597334677 + frame * 3812015801) | 0) & 1023) / 1023 - 0.5;
+        return Math.max(0, Math.min(H, Math.round(g + jit * ((b + r) * H / bands - g))));
+      };
+      const slip = function (y, shift) {                              // one row slipped by `shift`, per the Edges setting
+        const row = y * W * 4;
+        if (edgeMode === 1) {
+          for (let x = 0; x < W; x++) { let sx = x - shift; if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; const i = row + x * 4, si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        } else if (edgeMode === 2) {
+          for (let x = 0; x < W; x++) { const sx = x - shift, i = row + x * 4; if (sx < 0 || sx >= W) { d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0; continue; } const si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        } else {
+          for (let x = 0; x < W; x++) { let sx = x - shift; if (sx < 0) sx += W; else if (sx >= W) sx -= W; const i = row + x * 4, si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        }
+      };
       for (let b = 0; b < bands; b++) {
-        let h = (b * 2654435761 + frame * 40503) | 0; h = (h ^ (h >> 13)) * 1274126177; h = h ^ (h >> 16);
+        const h = ghash((b * 2654435761 + frame * 40503) | 0);   // at Pattern 0 this IS the old mix: h ^ 0 changes nothing
         const shift = Math.round(((h & 255) / 255 - 0.5) * amt * W * 0.28);
         if (!shift) continue;
+        if (jit > 0 || edgeMode !== 0) {
+          const y0 = jit > 0 ? edgeAt(b) : b * bandH, y1 = jit > 0 ? edgeAt(b + 1) : Math.min(H, b * bandH + bandH);
+          for (let y = y0; y < y1; y++) slip(y, shift);
+          continue;
+        }
         const y0 = b * bandH, y1 = Math.min(H, y0 + bandH);
         for (let y = y0; y < y1; y++) {
           const row = y * W * 4;
           for (let x = 0; x < W; x++) { let sx = x - shift; if (sx < 0) sx += W; else if (sx >= W) sx -= W; const i = row + x * 4, si = row + sx * 4; d[i] = s[si]; d[i + 1] = s[si + 1]; d[i + 2] = s[si + 2]; d[i + 3] = s[si + 3]; }
+        }
+      }
+      const blk = p.blocks == null ? 0 : clamp01(FM.evalProp(p.blocks, t));
+      if (blk > 0) {
+        /* BLOCK DAMAGE: up to 24 rectangles a re-roll, each 4–34 % of the width and 2–10 % of the height (shares of the plate,
+           so the preview and the export break in the same places), lifted from where the slices left the picture, slipped
+           sideways by up to Amount × a quarter of the width and drawn back with its colour channels swapped round. */
+        // at least one block above 0: round(0.02 × 24) is 0, so the slider's first notch drew nothing (review of polish 2.7)
+        const sb = d.slice(), n = Math.max(1, Math.round(blk * 24));
+        const PERM = [[1, 2, 0], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 0, 2]];
+        for (let k = 0; k < n; k++) {
+          const q = (j) => (ghash((k * 747796405 + j * 2891336453 + frame * 1181783497 + 0x2545f491) | 0) & 65535) / 65535;
+          const bw = Math.max(1, Math.round(W * (0.04 + 0.30 * q(1)))), bh = Math.max(1, Math.round(H * (0.02 + 0.08 * q(2))));
+          const bx = Math.floor(q(3) * (W - bw + 1)), by = Math.floor(q(4) * (H - bh + 1));
+          const dx = Math.round((q(5) - 0.5) * amt * W * 0.5), pm = PERM[Math.min(4, Math.floor(q(6) * 5))];
+          for (let y = by; y < by + bh && y < H; y++) {
+            const row = y * W * 4;
+            for (let x = bx; x < bx + bw && x < W; x++) {
+              let sx = x - dx;
+              if (sx < 0 || sx >= W) { if (edgeMode === 1) sx = sx < 0 ? 0 : W - 1; else if (edgeMode === 2) continue; else sx = ((sx % W) + W) % W; }
+              const i = row + x * 4, si = row + sx * 4;
+              d[i] = sb[si + pm[0]]; d[i + 1] = sb[si + pm[1]]; d[i + 2] = sb[si + pm[2]]; d[i + 3] = sb[si + 3];
+            }
+          }
         }
       }
       const cs = Math.round(amt * 9 * split);
@@ -6883,7 +7074,30 @@ window.FM = window.FM || {};
        export that disagree about a random number is a bug class this file has already been bitten by.
        `soft` interpolates between one step's value and the next, so 0 is a hard strobe and 1 a pulse;
        `floor` is how dark it may ever get, so it can be a wash rather than a blackout. */
-    flashdark: function (d, W, H, p, t) {
+    /* RHYTHM (#482 polish 2.3). Random (0) is the code below it, untouched, on the comp clock it always ran on. The other
+       three are HITS on the LAYER's own clock, so the first hit lands the moment the clip starts — put a clip on a beat and
+       its strobe is on the beat:
+         Steady (1)     one hit every 1/Speed.
+         Double hit (2) two hits 80 ms apart every 1/Speed, then a REST: the pair takes at most two thirds of the period.
+         Build-up (3)   the rate climbs from Speed/4 at the clip's start to Speed at its end — geometric, so each stretch of
+                        the clip speeds up by the same ratio, the way a drum build doubles its subdivisions — and Speed is
+                        where it arrives, the drop. Past the clip's end (or with no clip to measure) it holds Speed.
+       NO FASTER THAN THE FRAME RATE CAN SHOW (review of the first build). A strobe past half the project's fps is not a
+       faster strobe in the export, it is a slower one or none: Steady 30 in a 30 fps project landed every frame on a hit
+       and was dark throughout, and a Build-up that ended at 40 Hz visibly SLOWED DOWN and froze into eight dark frames just
+       where it should have been fastest. So a hit rate is held at fps/2 (one dark frame, one light), and a Double hit at
+       fps/6 — hit, gap, hit, gap, rest, rest is the fewest frames that still reads as a pair; at the default Speed 10 the
+       pair once filled the whole period and was byte for byte Steady at 20. The scene's fps arrives as the kernel's 9th
+       argument (`scene`), so the preview and the export hold the same rate; with no scene it assumes 30.
+       A KEYFRAMED Speed is INTEGRATED (queue 913's rule — Boil, Twinkle, Light Leak): rate(now) × elapsed re-timed the
+       whole strobe on every frame and ran it BACKWARDS while Speed eased down. An unanimated Speed keeps the closed form.
+       BUILD-UP'S LENGTH is the clip's on the effect clock: fxTimeOffset + length, so a split's tail half and a left trim
+       keep the original ramp (the clock and its length measured the same way), the longest half of a split lineage, so
+       the head half keeps it too, and a flattened group's REAL length (`_clipDuration` — its proxy's own is a synthetic 2 s).
+       A hit is the same shape everywhere: fully dark for the first Hold dark of its window, then it lets go — Softness 0
+       lets go at half-way (a hard strobe), 1 as a smooth fall, the SAME lerp between a hard and a smooth value the Random
+       rhythm has always used. Stateless in t (floor and frac of an explicit phase), so preview, export and scrub agree. */
+    flashdark: function (d, W, H, p, t, ps, bb, layer, scene) {
       var fdN = function (i) {
         var h = (i ^ 0x9e3779b9) >>> 0;
         h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
@@ -6894,12 +7108,63 @@ window.FM = window.FM || {};
       var fdS = FM.evalProp(p.speed, t); if (fdS == null || isNaN(fdS)) fdS = 10; if (fdS < 1) fdS = 1; if (fdS > 30) fdS = 30;
       var fdSo = FM.evalProp(p.soft, t); if (fdSo == null || isNaN(fdSo)) fdSo = 0.3; if (fdSo < 0) fdSo = 0; if (fdSo > 1) fdSo = 1;
       var fdF = FM.evalProp(p.floor, t); if (fdF == null || isNaN(fdF)) fdF = 0.15; if (fdF < 0) fdF = 0; if (fdF > 1) fdF = 1;
-      var fdT = (t < 0) ? 0 : t;
-      var fdStep = Math.floor(fdT * fdS), fdFrac = fdT * fdS - fdStep;
-      var fdSeed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fdSeed) fdStep = (fdStep + Math.imul(fdSeed, 7919)) | 0;   // PATTERN (queue 904); 0 = the old sequence
-      var fd0 = fdN(fdStep), fd1 = fdN(fdStep + 1);
-      var fdSmooth = fd0 + (fd1 - fd0) * (0.5 - 0.5 * Math.cos(Math.PI * fdFrac));
-      var fdV = fd0 + (fdSmooth - fd0) * fdSo;
+      var fdR = p.rhythm == null ? 0 : (Math.round(FM.evalProp(p.rhythm, t)) | 0);
+      var fdV;
+      if (fdR >= 1 && fdR <= 3) {
+        var fdHo = p.hold == null ? 0 : FM.evalProp(p.hold, t); if (!(fdHo >= 0)) fdHo = 0; if (fdHo > 1) fdHo = 1;
+        /* fdEps: a frame that lands ON a beat, or on the middle of a hit, to within float error is on it (the later side). At
+           the fastest rate the frames sit exactly on those boundaries, and 0.49999999999999994 would keep every frame dark. */
+        var fdEps = 1e-9;
+        var fdWin = function (x) { var k = Math.floor(x + fdEps), f = x - k; return [k, f > 0 ? f : 0]; };   // [which window, how far into it]
+        var fdHit = function (u) {   // u: where in its window this moment sits, 0..1 → 1 = full hit, 0 = none
+          if (u < fdHo) return 1;
+          var r = (u - fdHo) / (1 - fdHo), hard = r < 0.5 - fdEps ? 1 : 0;
+          return hard + ((0.5 + 0.5 * Math.cos(Math.PI * r)) - hard) * fdSo;
+        };
+        var fdFps = scene && scene.project && +scene.project.fps > 0 ? +scene.project.fps : 30;
+        var fdCap = fdR === 2 ? fdFps / 6 : fdFps / 2;   // hits (pairs, for a Double hit) a second this frame rate can show
+        var fdTl = layer ? FM.fxLocalTime(layer, t) : t; if (!(fdTl > 0)) fdTl = 0;
+        var fdE = 0;   // Build-up: the clip's end on the effect clock — its ramp runs from 0 to here
+        if (fdR === 3 && layer) {
+          var fdOff = function (l) { var o = l.fxTimeOffset, n = (typeof o === 'number') ? o : parseFloat(o); return isFinite(n) ? n : 0; };
+          var fdLen = function (l) { var n = l._clipDuration != null ? +l._clipDuration : +l.duration; return n > 0 ? n : 0; };
+          if (fdLen(layer) > 0) fdE = fdOff(layer) + fdLen(layer);
+          if (layer.splitOf && scene && scene.layers) {
+            for (var fdi = 0; fdi < scene.layers.length; fdi++) {
+              var fdl = scene.layers[fdi];
+              if (fdl && fdl.splitOf === layer.splitOf && fdLen(fdl) > 0 && fdOff(fdl) + fdLen(fdl) > fdE) fdE = fdOff(fdl) + fdLen(fdl);
+            }
+          }
+        }
+        var fdL4 = Math.log(4), fdTop = fdS < fdCap ? fdS : fdCap;
+        var fdPh;
+        if (FM.isAnimated(p.speed)) {
+          var fdT0 = t - fdTl;   // the comp moment this clip's effect clock reads 0 — Speed's keyframes are on the comp clock
+          fdPh = FM.integrateProp(p.speed, fdT0, t, function (u) {
+            var k = FM.evalProp(p.speed, u); if (k == null || isNaN(k)) k = 10; if (k < 1) k = 1; if (k > 30) k = 30;
+            if (fdR === 3 && fdE > 0) k *= Math.pow(4, Math.min(u - fdT0, fdE) / fdE - 1);
+            return k < fdCap ? k : fdCap;
+          });
+        } else if (fdR === 3 && fdE > 0) {
+          /* ∫ min(S·4^(τ/E − 1), cap) dτ: the geometric climb until it meets the cap at τc (the end, when Speed is under
+             it), then flat at the top rate. */
+          var fdTc = fdS > fdCap ? fdE * (1 + Math.log(fdCap / fdS) / fdL4) : fdE; if (fdTc < 0) fdTc = 0;
+          fdPh = fdS * fdE / fdL4 * (Math.pow(4, Math.min(fdTl, fdTc) / fdE - 1) - 0.25) + fdTop * Math.max(0, fdTl - fdTc);
+        } else fdPh = fdTl * fdTop;
+        var fdU = fdWin(fdPh)[1];
+        if (fdR === 2) {
+          /* The pair and its rest: two hit windows of fdG, at most a third of the period each, so a third is always rest. */
+          var fdP = 1 / fdTop, fdG = Math.min(Math.max(0.08, 2 / fdFps), fdP / 3), fdIn = fdWin(fdU * fdP / fdG);   // [hit window, into it]
+          fdV = fdIn[0] <= 1 ? fdHit(fdIn[1]) : 0;
+        } else fdV = fdHit(fdU);
+      } else {
+        var fdT = (t < 0) ? 0 : t;
+        var fdStep = Math.floor(fdT * fdS), fdFrac = fdT * fdS - fdStep;
+        var fdSeed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fdSeed) fdStep = (fdStep + Math.imul(fdSeed, 7919)) | 0;   // PATTERN (queue 904); 0 = the old sequence
+        var fd0 = fdN(fdStep), fd1 = fdN(fdStep + 1);
+        var fdSmooth = fd0 + (fd1 - fd0) * (0.5 - 0.5 * Math.cos(Math.PI * fdFrac));
+        fdV = fd0 + (fdSmooth - fd0) * fdSo;
+      }
       var fdK = 1 - fdA * fdV;
       if (fdK < fdF) fdK = fdF;
       if (fdK > 1) fdK = 1;
@@ -10781,6 +11046,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     try { drawLayer(ec, tmp, t, scene); } finally { _expDepth--; }
     return { cv: _expC, mx: mx, my: my, ps: ps };
   }
+  /* THE CLEAN LAYER ON A PLATE WHOSE ORIGIN IS MOVED (#482 polish 2.2 review) — a plate the size of the effect's own, W x H,
+     whose pixel (0, 0) is project (ox, oy): the layer drawn as though the frame stood somewhere else. Drift's Wrap draws a
+     ticker at its wrapped place from this. The expanded plate above stops 0.6 of the frame past the edge (its cost ceiling),
+     so a ticker longer than about 2.2 frames lost its ends; this costs one plate whatever the ticker's length. Same pool
+     and depth as the expanded plate, for the same re-entry reason. */
+  function renderShiftedPlate(layer, fx, t, scene, ps, W, H, ox, oy) {
+    FM._fxStats.plates++;
+    const _e = _expDepth;
+    if (!_expPool[_e]) _expPool[_e] = document.createElement('canvas');
+    const cv = _expPool[_e];
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    cv.__fmRS = ps; cv.__fmOX = ox; cv.__fmOY = oy;
+    const ec = _fx2d(cv);
+    ec.setTransform(1, 0, 0, 1, 0, 0); ec.clearRect(0, 0, W, H);
+    baseT(ec);
+    ec.globalAlpha = 1; ec.globalCompositeOperation = 'source-over'; ec.filter = 'none';
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    _expDepth++;
+    try { drawLayer(ec, tmp, t, scene); } finally { _expDepth--; }
+    return cv;
+  }
 
   /* Test seam: the read-back hint above is invisible in the picture, so nothing else would notice if
    * a future edit created one of these contexts without it. Reports what the pools actually hold. */
@@ -10836,6 +11122,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const _srcIdx = Array.isArray(_src) ? _src[0] : (_src == null ? 1 : _src);   // options land as an index, sometimes [idx,label]
       if (_srcIdx !== 0) bbox = { x: 0, y: 0, w: W, h: H };                        // 0 = "On screen", which SHOULD stay empty
     }
+    /* …and Drift with Wrap around frame (#482 polish 2.2 review): a ticker parked past the edge has no alpha on this plate,
+       so the call below never happened and the wrap never brought it in — 0 px at every moment. The kernel places it from
+       the layer's own box and draws it from a plate of its own, so the full plate stands in here exactly as for tiles. */
+    if (fx.type === 'drift' && (!bbox || bbox.w <= 2 || bbox.h <= 2) && fx.params && Math.round(fparam(fx.params, 'wrap', 0, t)) === 1) bbox = { x: 0, y: 0, w: W, h: H };
     // Guard the resize (assigning width even to the same value frees+reallocs the ~8MB buffer every
     // frame — the exact churn the guard above avoids for A); the clearRect does the reset either way.
     const bctx = _cfB.getContext('2d');
@@ -10846,6 +11136,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // comp-sized plate has already thrown away. Handed over as a callback so the plate machinery
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
+    expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
@@ -11433,6 +11724,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { cv: ex.cv, x: (-ex.mx - (A.__fmOX || 0)) * ex.ps, y: (-ex.my - (A.__fmOY || 0)) * ex.ps };
   }
   FM._moverSource = moverSource;   // suite seam (#986)
+  /* The layer's EXACT alpha box inside the loose one a canvas effect is handed (the 4x-downsampled scan pads it by up to ~20
+     px). For the controls that put something ON an edge — a Pulse pivot (#482 polish 2.2), and Shake's Hide edges only when the
+     layer has no box of its own to be had (it sizes from layerAABB: the plate's box is cut by the frame edge — review) — at the
+     cost of reading back only that box. The loose box itself whenever the plate cannot be read. */
+  function exactBoxOf(A, bb) {
+    if (!bb || !(bb.w > 0) || !(bb.h > 0)) return bb;
+    let e = null; try { e = alphaBBoxWithin(_fx2d(A), bb); } catch (err) { e = null; }
+    return e && e.w > 0 && e.h > 0 ? e : bb;
+  }
   const CANVAS_FX = {
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
      * There were two. A video or photo drew an inline black radial gradient over its clip rect inside the media draw:
@@ -11814,7 +12114,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cy = H * (p.y == null ? 50 : FM.evalProp(p.y, t)) / 100;
       const add = Math.round(FM.evalProp(p.blend, t) || 0) === 1;
       const rgb = hexToRGB(p.color || '#0d0d12');
-      const hash = function (n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return (n >>> 0) / 4294967296; };
+      const hash0 = function (n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return (n >>> 0) / 4294967296; };
+      /* BOIL (#482 polish 2.5): the lines are redrawn `boil` times a second — a hand-drawn panel's shimmer. The redraw number
+         salts every hash, so it is a pure function of the layer's own clock and the preview, the export and a scrub agree. A
+         KEYFRAMED boil is integrated (FM.integrateProp), like Film Grain's speed, so easing it down slows the redraws rather
+         than jumping back through old ones. 0 — every saved Speed Lines — adds nothing: hash0 is the old hash exactly. */
+      const lt = tl == null ? t : tl;
+      const boil = p.boil == null ? 0 : FM.evalProp(p.boil, t);
+      const slFr = FM.isAnimated(p.boil)
+        ? Math.floor(FM.integrateProp(p.boil, t - lt, t, (u) => { const k = FM.evalProp(p.boil, u); return k > 0 ? (k < 30 ? k : 30) : 0; }))
+        : (boil > 0 ? Math.floor(lt * (boil < 30 ? boil : 30)) : 0);
+      const slSalt = slFr > 0 ? Math.imul(slFr, 0x9E3779B1) : 0;
+      const hash = slSalt ? function (n) { return hash0((n + slSalt) | 0); } : hash0;
+      /* STYLE and CLEAR ZONE SHAPE (#482 polish 2.5). Parallel lays the strokes side by side, pointing along Angle (+ Spin);
+         the shape stretches the clear disc into an oval of the same area — sqrt(k) wide by 1/sqrt(k) tall. At Radial and
+         100 % the old code below runs untouched: the oval maths is only entered when the shape is not a circle. */
+      const parallel = Math.round(p.mode == null ? 0 : FM.evalProp(p.mode, t)) === 1;
+      const zkRaw = p.aspect == null ? 100 : FM.evalProp(p.aspect, t);
+      const zk = isFinite(zkRaw) ? Math.max(25, Math.min(400, zkRaw)) / 100 : 1;
+      const oval = zk !== 1, zsx = oval ? Math.sqrt(zk) : 1, zsy = oval ? 1 / zsx : 1;
       // The ink is built on its OWN surface, because the clear zone has to erase ink without
       // erasing the picture — a destination-out punch straight into B would knock a hole in the
       // layer. Its own plate also lets Add mean "additive against the picture", which is what a
@@ -11828,25 +12146,68 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B2.fillStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
       const outR = maxR * 1.12;                      // start past the corner so strokes reach the edge
       const step = (Math.PI * 2) / count;
-      for (let i = 0; i < count; i++) {
-        const h1 = hash(i * 3 + 1), h2 = hash(i * 3 + 2), h3 = hash(i * 3 + 3);
-        const a = i * step + spin * (tl || 0) + (h1 - 0.5) * step * 2 * jit;
-        const tip = Math.min(outR - 2, innerR * (0.92 + 0.5 * h2 * jit));
-        const base = Math.min(outR, tip + lenR * (0.55 + 0.9 * h3));
-        if (base - tip < 1) continue;
-        const ca = Math.cos(a), sa = Math.sin(a);
-        const hw = wid * (0.35 + 0.85 * h2) * 0.5;
-        const nx = -sa * hw, ny = ca * hw;
-        B2.beginPath();
-        B2.moveTo(cx + ca * base + nx, cy + sa * base + ny);
-        B2.lineTo(cx + ca * base - nx, cy + sa * base - ny);
-        B2.lineTo(cx + ca * tip, cy + sa * tip);     // the point: one vertex, not a second edge
-        B2.closePath();
-        B2.fill();
+      if (parallel) {
+        /* PARALLEL (#482 polish 2.5): the across-the-panel rush. Every stroke points along Angle (Spin turns it, as it turns
+           the radial fan), the strokes are spread evenly ACROSS the frame — Scatter jostles each by up to one gap, as it
+           jostles a radial line by one step — and each sits at its own hashed place ALONG it, the same wide-to-pointed
+           taper and the same length and weight spread as a radial line. The clear zone below keeps the subject readable. */
+        const th = (p.angle == null ? 0 : FM.evalProp(p.angle, t)) * Math.PI / 180 + spin * (tl || 0);
+        const ux = Math.cos(th), uy = Math.sin(th), vx = -uy, vy = ux;
+        let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+        [[0, 0], [W, 0], [0, H], [W, H]].forEach(function (q) {
+          const dx = q[0] - cx, dy = q[1] - cy, u = dx * ux + dy * uy, v = dx * vx + dy * vy;
+          if (u < u0) u0 = u; if (u > u1) u1 = u; if (v < v0) v0 = v; if (v > v1) v1 = v;
+        });
+        // Length is a share of the frame's extent ALONG the lines here — a radial line's share is of the centre-to-corner
+        const gap = (v1 - v0) / count, lenP = lenR / maxR * (u1 - u0);
+        for (let i = 0; i < count; i++) {
+          const h1 = hash(i * 3 + 1), h2 = hash(i * 3 + 2), h3 = hash(i * 3 + 3), h4 = hash((i * 3 + 1) ^ 0x5bd1e995);
+          const v = v0 + (i + 0.5 + (h1 - 0.5) * 2 * jit) * gap;
+          const len = lenP * (0.55 + 0.9 * h3);
+          const uc = u0 + (u1 - u0) * h4, ub = uc - len / 2, ut = uc + len / 2;
+          if (len < 1) continue;
+          const hw = wid * (0.35 + 0.85 * h2) * 0.5;
+          const bx = cx + ux * ub + vx * v, by = cy + uy * ub + vy * v;
+          B2.beginPath();
+          B2.moveTo(bx + vx * hw, by + vy * hw);
+          B2.lineTo(bx - vx * hw, by - vy * hw);
+          B2.lineTo(cx + ux * ut + vx * v, cy + uy * ut + vy * v);   // the point, downstream along Angle
+          B2.closePath();
+          B2.fill();
+        }
+      } else {
+        for (let i = 0; i < count; i++) {
+          const h1 = hash(i * 3 + 1), h2 = hash(i * 3 + 2), h3 = hash(i * 3 + 3);
+          const a = i * step + spin * (tl || 0) + (h1 - 0.5) * step * 2 * jit;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          // an oval clear zone: the tip sits on the oval's edge in this line's direction (a circle keeps innerR itself)
+          const zr = oval ? innerR / Math.hypot(ca / zsx, sa / zsy) : innerR;
+          const tip = Math.min(outR - 2, zr * (0.92 + 0.5 * h2 * jit));
+          const base = Math.min(outR, tip + lenR * (0.55 + 0.9 * h3));
+          if (base - tip < 1) continue;
+          const hw = wid * (0.35 + 0.85 * h2) * 0.5;
+          const nx = -sa * hw, ny = ca * hw;
+          B2.beginPath();
+          B2.moveTo(cx + ca * base + nx, cy + sa * base + ny);
+          B2.lineTo(cx + ca * base - nx, cy + sa * base - ny);
+          B2.lineTo(cx + ca * tip, cy + sa * tip);     // the point: one vertex, not a second edge
+          B2.closePath();
+          B2.fill();
+        }
       }
       // Punch the focus clear so the subject stays readable — the thing that separates a speed-line
       // panel from a frame someone scribbled over. Feathered, so the strokes fade rather than stop.
-      if (innerR > 1) {
+      if (innerR > 1 && oval) {
+        // the same feathered punch, drawn in a space stretched to the oval (#482 polish 2.5)
+        B2.save();
+        B2.translate(cx, cy); B2.scale(zsx, zsy);
+        const gr = B2.createRadialGradient(0, 0, innerR * 0.35, 0, 0, innerR * 1.25);
+        gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        B2.globalCompositeOperation = 'destination-out';
+        B2.fillStyle = gr;
+        B2.beginPath(); B2.arc(0, 0, innerR * 1.25, 0, Math.PI * 2); B2.fill();
+        B2.restore();
+      } else if (innerR > 1) {
         const gr = B2.createRadialGradient(cx, cy, innerR * 0.35, cx, cy, innerR * 1.25);
         gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
         B2.globalCompositeOperation = 'destination-out';
@@ -11966,8 +12327,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const blend = clamp01(p.blend == null ? 0 : FM.evalProp(p.blend, t));
       const duty = Math.max(0.05, Math.min(1, p.duty == null ? 0.5 : FM.evalProp(p.duty, t)));
       const rec = _mfRec(((layer && layer.id) || '_anon') + ':fs', W, H);
-      const phase = Math.max(0, tl) * rate;
-      const q = Math.floor(phase);
+      /* PHASE and IRREGULAR HOLDS (#482 polish 2.4). Phase slides every hold boundary by a fraction of a hold. Irregular
+         holds moves each boundary k by a hash of k (up to ±45% of a hold at 100%, so the boundaries can never cross and a
+         hold runs 0.1× to 1.9× its length) — the uneven "on twos, then threes" of hand-made stop-motion. Hashed on the
+         boundary index, never Math.random, so which hold a moment belongs to is a function of the clock alone; the first
+         boundary stays at the clip's start. At 0 and 0 this is the old `floor(tl·rate)`, byte for byte. */
+      const offs = p.offset == null ? 0 : clamp01(FM.evalProp(p.offset, t) || 0);
+      const irr = p.random == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.random, t) || 0)) / 100;
+      let phase = Math.max(0, tl) * rate, q, qLo = 0, qLen = 1;
+      if (offs > 0) phase += offs;
+      if (irr > 0) {
+        const jit = k => { if (k <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
+        const f = Math.floor(phase), b0 = f + jit(f), b1 = f + 1 + jit(f + 1);
+        q = phase < b0 ? f - 1 : (phase >= b1 ? f + 1 : f);
+        qLo = q + jit(q); qLen = (q + 1 + jit(q + 1)) - qLo;
+      } else { q = Math.floor(phase); qLo = q; }
       if (rec.t !== q) {
         // New quantum: the frame before it becomes the trail, this frame becomes the hold.
         if (mode === 2) {
@@ -11984,8 +12358,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       // Strobe: the layer is only visible for the first `duty` of each quantum. Leaving B empty is
       // the point — the gap has to be a gap, not a dimmer frame.
-      if (mode === 1 && (phase - q) > duty) return;
-      if (mode === 2 && rec.prev) { B.globalAlpha = 0.45; B.drawImage(rec.prev, 0, 0); B.globalAlpha = 1; }
+      if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > duty) return;
+      if (mode === 2 && rec.prev) {
+        const trail = p.trail == null ? 0.45 : clamp01(FM.evalProp(p.trail, t));   // Trail strength (#482 2.4) — 0.45 was welded
+        if (trail > 0) { B.globalAlpha = trail; B.drawImage(rec.prev, 0, 0); B.globalAlpha = 1; }
+      }
       B.drawImage(rec.cv, 0, 0);
       if (blend > 0) { B.globalAlpha = blend; B.drawImage(A, 0, 0); B.globalAlpha = 1; }
     },
@@ -12773,13 +13150,44 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.drawImage(A, 0, 0);
     },
     // ---- Move / Transform (motion about the layer's rendered bounds) ----
-    wiggle: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    /* #482 polish 2.1 — PATTERN, VERTICAL AMOUNT, ROTATION WIGGLE, SCALE WIGGLE, ROUGHNESS. Pattern gives the layer its own
+       waves (C28: every wiggle was `wnoise(tl*spd)`, so two layers moved in lockstep); Roughness adds finer
+       octaves on top of the smooth curve under a soft ceiling, so it never reaches past Amount; Rotation and Scale wiggle turn and grow the
+       layer about its middle on channels of their own. At the defaults u is tl*spd exactly, the noise is
+       wnoise itself and the old translate-only lines below run untouched — byte for byte the old wiggle. */
+    wiggle: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const S = ps || 1;
       const amt = fparam(p, 'amount', 40, t) * S, spd = fparam(p, 'speed', 2, t);
-      const dx = amt * wnoise(tl * spd), dy = amt * wnoise(tl * spd + 100);
-      const near = !!bb && (bb.x < amt || bb.y < amt || bb.x + bb.w > W - amt || bb.y + bb.h > H - amt);
+      const ay = p.amounty == null ? amt : Math.max(0, FM.evalProp(p.amounty, t)) * S;   // Vertical amount: absent = Amount (it follows)
+      const sd = Math.round(fparam(p, 'seed', 0, t)), u = tl * spd;
+      const oct = Math.max(1, Math.min(4, fparam(p, 'octaves', 1, t)));
+      /* One noise per channel: 0 sideways, 1 up and down, 2 rotation, 3 scale. Pattern 0's sideways and up-down are the old
+         wiggle's own lines — wnoise at u and u + 100 — and every other channel, and every channel of any other Pattern, draws
+         its own waves (noiseWaves), so no two of them move as one (#482 polish 2 review). */
+      const chan = function (ch) {
+        if (!sd && ch < 2) { const v = ch ? u + 100 : u; return oct <= 1 ? wnoise(v) : roughNoise(v, oct); }
+        const w = noiseWaves(sd, ch);
+        return oct <= 1 ? wnoiseP(u, w) : roughNoise(u, oct, w);
+      };
+      const rdeg = Math.max(0, Math.min(180, fparam(p, 'rotate', 0, t))), scw = Math.max(0, Math.min(100, fparam(p, 'scale', 0, t)));
+      const dx = amt * chan(0), dy = ay * chan(1);
+      if (rdeg > 0 || scw > 0) {
+        const rot = rdeg * chan(2), sc = 1 + (scw / 100) * chan(3);
+        if (!(sc > 0.001)) return;   // a scale wiggle of 100% touches zero: nothing to draw at that instant
+        /* About the layer's EXACT middle: the box handed in is the fast scan's, padded by a different number of project px on
+           each plate, so turning about its centre would put the layer somewhere else on the phone than in the export. */
+        const eb = exactBoxOf(A, bb);
+        const cx = eb ? eb.x + eb.w / 2 : W / 2, cy = eb ? eb.y + eb.h / 2 : H / 2;
+        const m = new DOMMatrix().translateSelf(cx + dx, cy + dy).rotateSelf(rot).scaleSelf(sc, sc).translateSelf(-cx, -cy);
+        const src = moverSource(A, W, H, ps, expand, layer, t, scene, [m]);
+        B.save(); B.translate(cx + dx, cy + dy); B.rotate(rot * Math.PI / 180); B.scale(sc, sc); B.translate(-cx, -cy);
+        B.drawImage(src.cv, src.x, src.y); B.restore();
+        return;
+      }
+      const reach = ay > amt ? ay : amt;   // the old margin whenever the vertical is not the bigger of the two
+      const near = !!bb && (bb.x < reach || bb.y < reach || bb.x + bb.w > W - reach || bb.y + bb.h > H - reach);
       if (near && expand) {
-        const ex = expand(Math.ceil(amt / S) + 2);
+        const ex = expand(Math.ceil(reach / S) + 2);
         FM._wigTried = (FM._wigTried || 0) + 1;
         if (ex && ex.cv) {
           FM._wigUsed = (FM._wigUsed || 0) + 1;
@@ -12804,16 +13212,61 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
         return (((n ^ (n >>> 16)) >>> 0) / 4294967296) * 2 - 1;
       };
+      /* PATTERN (#482 polish 2.1, C28; review): a Pattern gives each channel of this layer's shake its own waves (noiseWaves —
+         every shake used to be `wnoise(tl*spd + off)`, so two layers shaken together moved as one), and its own run of hard
+         steps (the pattern moves the step hash thousands of steps along). 0 takes the old lines, untouched. */
+      const sd = Math.round(fparam(p, 'seed', 0, t)), waves = {};
+      const smooth = sd ? function (u, off) { return wnoiseP(u, waves[off] || (waves[off] = noiseWaves(sd, off))); } : null;
       const noise = jit <= 0
-        ? function (u, off) { return wnoise(u + off); }   // exact legacy path
-        : function (u, off) { return (1 - jit) * wnoise(u + off) + jit * ihash((Math.floor(u * 2) + ((off * 131) | 0)) | 0); };   // ×2: a step per half-cycle keeps perceived speed
+        ? (smooth || function (u, off) { return wnoise(u + off); })   // exact legacy path at Pattern 0
+        : function (u, off) { return (1 - jit) * (smooth ? smooth(u, off) : wnoise(u + off)) + jit * ihash((Math.floor(u * 2) + ((off * 131) | 0) + Math.imul(sd, 7919)) | 0); };   // ×2: a step per half-cycle keeps perceived speed
       const dampX = dir === 2 ? 0.12 : 1, dampY = dir === 1 ? 0.12 : 1;   // axis lock leaves a whisper of cross-shake so it doesn't read robotic
       const disp = function (u) { return [amt * noise(u, 0) * dampX, amt * noise(u, 55) * dampY]; };
       const u0 = tl * spd;
       const d0 = disp(u0);
-      const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      let px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;   // `let`: Hide edges re-centres on the layer's own middle below
       const rot = tw * noise(u0, 200) * Math.PI / 180;
       const s = zoom > 0 ? 1 + (zoom / 100) * Math.abs(noise(u0, 313)) : 1;   // |n| → always punches IN (impact), never breathes out
+      /* HIDE EDGES (#482 polish 2.1; sized again by the review): the zoom a clip that FILLS THE FRAME needs so that no shake, at
+         its biggest, shows the empty frame behind it — what he did by hand by scaling the clip to 110%. From the PEAK Amount
+         and Twist (the largest keyframe when they are animated, so a Beat Slam that dies away holds one zoom instead of
+         breathing with it) and the direction lock.
+         It is sized on the layer's WHOLE box (its size under its transform, layerAABB) and the frame, in project px — never on
+         the part of it the plate can see. The first build used the plate's alpha box, which the frame edge cuts: a clip
+         sliding in with 20 px showing was zoomed 3.3x, 1.43x with 100 px, and 1.25x once centred, and a small layer drew 12%
+         smaller on the phone plate than in the export (whole plate pixels). The region to keep covered is the part of the
+         frame the layer covers at rest, T; each side of T, pushed out by the shake and turned by the twist about the layer's
+         middle, must stay inside the zoomed layer — so on each axis the zoom is (e·cos θ + e'·sin θ) / half the layer, e
+         and e' the far side of T from the middle plus the shake. A frame-filling clip centred gets
+         1 + 2·amount / min(W, H) with no twist (the backlog's figure), and the same wherever it slides: the side of it
+         inside the frame is its own edge, as far from its middle as the frame's edge was.
+         ONLY A LAYER THAT SPANS THE FRAME ON AN AXIS IS ZOOMED ON IT: a caption's edges are meant to be seen — there is
+         nothing to hide, and hiding them would take it to 3x (the build drew a 600x120 caption 7.3x the area). The weight
+         rises from 0 at three quarters of the frame to 1 at all of it, so a layer grown across that line by a scale
+         keyframe zooms in smoothly instead of jumping. The noise never leaves ±1, so the bound holds on every frame. Off = 1. */
+      let so = 1;
+      if (Math.round(fparam(p, 'overscan', 0, t)) === 1 && bb.w > 0 && bb.h > 0) {
+        const kp = ps || 1, oX = A.__fmOX || 0, oY = A.__fmOY || 0, P = scene && scene.project;
+        const FW = P && P.width > 0 ? P.width : W / kp, FH = P && P.height > 0 ? P.height : H / kp;
+        let box = layer && scene ? layerAABB(layer, t, scene) : null;
+        if (!(box && isFinite(box.x0) && isFinite(box.x1) && isFinite(box.y0) && isFinite(box.y1) && box.x1 > box.x0 && box.y1 > box.y0)) {
+          const eb = exactBoxOf(A, bb);   // no box of its own to be had: the exact alpha box, in project px
+          box = { x0: eb.x / kp + oX, y0: eb.y / kp + oY, x1: (eb.x + eb.w) / kp + oX, y1: (eb.y + eb.h) / kp + oY };
+        }
+        const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2, hw = (box.x1 - box.x0) / 2, hh = (box.y1 - box.y0) / 2;
+        px = (cx - oX) * kp; py = (cy - oY) * kp;
+        const peak = function (k, d) { const v = p[k]; if (v == null) return d; if (FM.isAnimated(v)) return (v.kf || []).reduce(function (m, q) { return Math.max(m, Math.abs(+q.v || 0)); }, 0); return Math.abs(FM.evalProp(v, t) || 0); };
+        const pa = peak('amount', 20), th = Math.min(89, peak('twist', 4)) * Math.PI / 180;   // project px, like the box
+        const c = Math.cos(th), sn = Math.sin(th);
+        // T = the frame the layer covers at rest; e = the far side of T from the layer's middle, plus the shake
+        const ex = Math.max(cx - Math.max(box.x0, 0), Math.min(box.x1, FW) - cx) + pa * dampX;
+        const ey = Math.max(cy - Math.max(box.y0, 0), Math.min(box.y1, FH) - cy) + pa * dampY;
+        const span = function (r) { return Math.max(0, Math.min(1, (r - 0.75) / 0.25)); };
+        const kx = span(2 * hw / FW), ky = span(2 * hh / FH);
+        if (kx > 0 && ex > 0) so = Math.max(so, 1 + kx * ((ex * c + ey * sn) / hw - 1));
+        if (ky > 0 && ey > 0) so = Math.max(so, 1 + ky * ((ex * sn + ey * c) / hh - 1));
+      }
+      const sz = so === 1 ? s : s * so;
       /* #986 C27: every stamp is queued first, so the expanded plate is asked for once, with the margin the furthest
          stamp needs; then they are drawn exactly as before, from that plate when the layer reaches past the frame. */
       const stamps = [];
@@ -12822,7 +13275,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const src = moverSource(A, W, H, ps, expand, layer, t, scene, stamps.map(q => {
           const m = new DOMMatrix().translateSelf(px + q[0], py + q[1]);
           if (rot) m.rotateSelf(rot * 180 / Math.PI);
-          if (s !== 1) m.scaleSelf(s, s);
+          if (sz !== 1) m.scaleSelf(sz, sz);
           return m.translateSelf(-px, -py);
         }));
         for (const q of stamps) {
@@ -12830,7 +13283,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           B.globalAlpha = q[2];
           B.translate(px + q[0], py + q[1]);
           if (rot) B.rotate(rot);
-          if (s !== 1) B.scale(s, s);
+          if (sz !== 1) B.scale(sz, sz);
           B.translate(-px, -py);
           B.drawImage(src.cv, src.x, src.y);
           B.restore();
@@ -12841,7 +13294,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // displacement is recomputed from the same noise, no cross-frame state.
       if (smear > 0) {
         const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
-        const d1 = disp((tl - 1 / fps) * spd);
+        const d1 = disp((tl - 1 / fps) * spd);   // the same pattern (it lives in `noise`) one frame ago
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
           /* SMEAR LENGTH (queue 904): how many frames of motion the trail reaches back, with ghosts added in proportion so a long smear
@@ -12863,7 +13316,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 0 ? bb.y : bb.y + bb.h * (fy / 100);
       const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old swing exactly
-      const ang = amp * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180;
+      /* DAMPING (#482 polish 2.2): the swing dies away — the angle × e^(−damping × time since the clip began), a door that
+         settles or a sign that stops rocking. 0 is the old expression below, never touched. */
+      const damp = Math.max(0, fparam(p, 'damping', 0, t));
+      const ang = damp > 0 ? amp * Math.exp(-damp * Math.max(0, tl)) * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180
+        : amp * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180;
       const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
@@ -12892,11 +13349,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     pulse: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const amt = fparam(p, 'amount', 0.2, t), spd = fparam(p, 'speed', 1.5, t);
       const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old pulse exactly
-      const s = 1 + amt * Math.sin(2 * Math.PI * spd * tl + ph);
-      const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
-      const src = s > 0 ? moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).scaleSelf(s, s).translateSelf(-px, -py)]) : { cv: A, x: 0, y: 0 };   // #986 C27 (a shrink pulls in what was past the edge)
+      /* WAVE, SQUASH & STRETCH, PIVOT (#482 polish 2.2). Sine is the old line; every other wave is a shape through one beat
+         (pulseWave), on the same clock and phase. Squash & stretch k scales one axis by s and the other by s^(1−2|k|) — at 1 the
+         height shrinks exactly as the width grows (s^−1, the area held), at 0.5 only the width pulses, at −1 the other way
+         round. The pivot is Spin's, in the same units; 50/50 takes the old centre expression. All at their defaults: the old
+         pulse, byte for byte. */
+      const wave = Math.round(fparam(p, 'wave', 0, t));
+      const s = wave >= 1 && wave <= 4 ? 1 + amt * pulseWave(wave, spd * tl + ph / (2 * Math.PI)) : 1 + amt * Math.sin(2 * Math.PI * spd * tl + ph);
+      const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t), fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
+      /* An off-centre pivot is measured on the layer's EXACT edges: the box handed in is the fast scan's, up to ~20 px loose,
+         and a pivot on its bottom edge would sit below the floor it is meant to grow from — and the looseness is a different
+         number of project px on each plate, so the phone would pulse about a different point from the export. So is any new
+         wave or a squash. The old sine about the centre keeps the box it always had (byte for byte). */
+      const k = Math.max(-1, Math.min(1, fparam(p, 'stretch', 0, t)));
+      const pb = (fx !== 50 || fy !== 50 || k !== 0 || (wave >= 1 && wave <= 4)) ? exactBoxOf(A, bb) : bb;
+      const px = fx === 50 ? pb.x + pb.w / 2 : pb.x + pb.w * (fx / 100);
+      const py = fy === 50 ? pb.y + pb.h / 2 : pb.y + pb.h * (fy / 100);
+      let sx = s, sy = s;
+      if (k !== 0 && s > 0) { const b = Math.max(0.05, s); if (k > 0) sy = Math.pow(b, 1 - 2 * k); else sx = Math.pow(b, 1 + 2 * k); }
+      const src = s > 0 ? moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).scaleSelf(sx, sy).translateSelf(-px, -py)]) : { cv: A, x: 0, y: 0 };   // #986 C27 (a shrink pulls in what was past the edge)
       B.save();
-      B.translate(px, py); B.scale(s, s); B.translate(-px, -py);
+      B.translate(px, py); B.scale(sx, sy); B.translate(-px, -py);
       B.drawImage(src.cv, src.x, src.y); B.restore();
     },
     /* DRIFT AND ORBIT GET WIGGLE'S EXPANDED PLATE (queue 228) — they are the same three lines wiggle
@@ -12914,10 +13387,40 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * than allocating an ever-larger canvas.
      * The `near` test keeps the cost off every other frame: a layer nowhere near an edge cannot lose
      * anything, so it takes the cheap path exactly as before. */
-    drift: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    drift: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const k = ps || 1;   // the plate is in its own pixels — a distance in project px must ride the scale
       const vx = fparam(p, 'x', 120, t) * k, vy = fparam(p, 'y', 0, t) * k;
       const dx = vx * tl, dy = vy * tl;
+      /* WRAP AROUND FRAME (#482 polish 2.2) — a ticker. The layer's leading box runs round a loop one frame plus one layer long,
+         so the instant it has wholly left one edge it starts coming in at the other: never gone, never doubled. Measured on the
+         layer's WHOLE box (its own size under its transform, not the part on screen), and drawn again at its wrapped place when
+         the layer reaches past the frame, so a ticker of any length scrolls all of itself. Stateless in time like the
+         rest of Drift, so the preview, a scrub and the export agree. Off leaves the lines below untouched. */
+      if (Math.round(fparam(p, 'wrap', 0, t)) === 1) {
+        let x0 = bb.x, y0 = bb.y, bw = bb.w, bh = bb.h;
+        const oX = A.__fmOX || 0, oY = A.__fmOY || 0;
+        const box = layer && scene ? layerAABB(layer, t, scene) : null;
+        const whole = !!(box && isFinite(box.x0) && isFinite(box.x1) && isFinite(box.y0) && isFinite(box.y1) && box.x1 > box.x0 && box.y1 > box.y0);
+        if (whole) { x0 = (box.x0 - oX) * k; y0 = (box.y0 - oY) * k; bw = (box.x1 - box.x0) * k; bh = (box.y1 - box.y0) * k; }
+        /* A layer PARKED past an edge and drifting toward the frame (a ticker placed off the right so it scrolls in — review) is
+           drawn where it really is until it first arrives, so it comes in from that edge; from then on it loops. Moving away
+           from the frame, or resting on it, it loops from the start — never gone. The switch is where the two agree (the
+           loop leaves a layer on the frame where it is), so nothing jumps. */
+        const loop = function (at, d, v, size, span) {
+          if (v < 0 && at >= span && at + d >= span) return d;
+          if (v > 0 && at + size <= 0 && at + d + size <= 0) return d;
+          const P = span + size; return (((at + d + size) % P) + P) % P - size - at;
+        };
+        const wx = bw > 0 && vx !== 0 ? loop(x0, dx, vx, bw, W) : dx, wy = bh > 0 && vy !== 0 ? loop(y0, dy, vy, bh, H) : dy;
+        /* The layer at its wrapped place. Wholly on this plate, the plate itself moved is exact. Past it, the clean layer is drawn
+           again with the plate's origin moved by the wrap (review): the expanded plate this used first stops 0.6 of the frame past
+           the edge, so a ticker longer than ~2.2 frames lost its ends and a gap scrolled through it. */
+        const onPlate = whole && box.x0 >= oX - 0.5 && box.y0 >= oY - 0.5 && box.x1 <= oX + W / k + 0.5 && box.y1 <= oY + H / k + 0.5;
+        const moved = !onPlate && expand && expand.shifted ? expand.shifted(wx, wy) : null;
+        if (moved) { B.drawImage(moved, 0, 0); return; }
+        B.save(); B.translate(wx, wy); B.drawImage(A, 0, 0); B.restore();
+        return;
+      }
       const need = Math.max(Math.abs(dx), Math.abs(dy));
       const near = !!bb && need > 0.5 && (bb.x < need || bb.y < need || bb.x + bb.w > W - need || bb.y + bb.h > H - need);
       if (near && expand) {
@@ -12926,16 +13429,41 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
     },
-    orbit: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    orbit: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const k = ps || 1;
       const r = fparam(p, 'radius', 80, t) * k, spd = fparam(p, 'speed', 0.5, t);
       const a = 2 * Math.PI * spd * tl + (p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180);   // START ANGLE (queue 904); 0 = the old orbit exactly
-      const dx = r * Math.cos(a), dy = r * Math.sin(a);
+      /* ELLIPSE, DEPTH, FACE DIRECTION OF TRAVEL (#482 polish 2.2). Ellipse scales the orbit's height (100 = the circle, 0 = a
+         straight side-to-side pass, 200 = twice as tall); Depth shrinks the layer toward the TOP of its path, the far side of an
+         orbit tilted away from you (at 100 it is 0.3 of its size there, full size at the bottom); Face direction of travel turns
+         it to point along the path — its right-hand side leads, the way a car image drives round. 100/0/Off take the old lines. */
+      const ey = Math.max(0, Math.min(200, fparam(p, 'ry', 100, t))) / 100;
+      const dx = r * Math.cos(a), dy = ey === 1 ? r * Math.sin(a) : r * ey * Math.sin(a);
+      const face = Math.round(fparam(p, 'face', 0, t)) === 1, depth = Math.max(0, Math.min(100, fparam(p, 'depth', 0, t))) / 100;
+      if (face || depth > 0) {
+        const eb = exactBoxOf(A, bb);   // the layer's exact middle, as Wiggle's turn: the loose box's centre moves with the plate
+        const cx = eb ? eb.x + eb.w / 2 : W / 2, cy = eb ? eb.y + eb.h / 2 : H / 2;
+        let rot = 0;
+        if (face) {   // the tangent of (cos a, ey·sin a), the way the orbit is turning
+          const dir = spd < 0 ? -1 : 1, tx = -Math.sin(a) * dir, ty = ey * Math.cos(a) * dir;
+          rot = Math.abs(tx) + Math.abs(ty) > 1e-9 ? Math.atan2(ty, tx) : 0;
+        }
+        const sc = depth > 0 ? 1 - 0.7 * depth * (1 - Math.sin(a)) / 2 : 1;
+        const m = new DOMMatrix().translateSelf(cx + dx, cy + dy);
+        if (rot) m.rotateSelf(rot * 180 / Math.PI);
+        if (sc !== 1) m.scaleSelf(sc, sc);
+        m.translateSelf(-cx, -cy);
+        const src = moverSource(A, W, H, ps, expand, layer, t, scene, [m]);
+        B.save(); B.translate(cx + dx, cy + dy); if (rot) B.rotate(rot); if (sc !== 1) B.scale(sc, sc); B.translate(-cx, -cy);
+        B.drawImage(src.cv, src.x, src.y); B.restore();
+        return;
+      }
       // The RADIUS bounds how far it can ever reach, so the margin is the same all the way round and
-      // the plate is built once rather than re-sized every frame of the orbit.
-      const near = !!bb && r > 0.5 && (bb.x < r || bb.y < r || bb.x + bb.w > W - r || bb.y + bb.h > H - r);
+      // the plate is built once rather than re-sized every frame of the orbit. (A taller ellipse reaches further up and down.)
+      const reach = ey > 1 ? r * ey : r;
+      const near = !!bb && reach > 0.5 && (bb.x < reach || bb.y < reach || bb.x + bb.w > W - reach || bb.y + bb.h > H - reach);
       if (near && expand) {
-        const ex = expand(Math.ceil(r / k) + 2);
+        const ex = expand(Math.ceil(reach / k) + 2);
         if (ex && ex.cv) { B.drawImage(ex.cv, ex.mx * ex.ps - dx, ex.my * ex.ps - dy, W, H, 0, 0, W, H); return; }
       }
       B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
@@ -17035,6 +17563,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (R) { tmp._canvasX = RX; tmp._canvasY = RY; }   // …and where that box starts, when it is not the frame
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
     tmp._clipStart = g.start || 0;   // real clip start for effect clocks — tl from tmp.start would be a CONSTANT 1, freezing every time-driven effect (spin/wiggle/particles…) on a group
+    if (+g.duration > 0) tmp._clipDuration = +g.duration;   // …and its real length: Motion Blur's clip window and Flash (darken)'s Build-up read it (#482 2.6/2.3 review)
     tmp.effects = g.effects || [];
     // group BORDER = the existing alpha-outline 'stroke' effect run on the flattened unit
     const gbw = (g.stroke && g.stroke.enabled) ? (FM.evalProp(g.stroke.width, t) || 0) : 0;

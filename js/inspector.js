@@ -1127,13 +1127,16 @@ window.FM = window.FM || {};
     // the default. Same rule fxSegment already follows; a slider that displays a number the renderer
     // is not using is the same lie in a different control.
     const fallback = p.legacy != null ? p.legacy : p.default;
-    const read = () => { const c = fx.params[p.key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : fallback); };
+    /* …and a slider that FOLLOWS another (#482 polish 2.1, Wiggle's Vertical amount) renders, while absent, at the value of the
+       slider it names, so that is what it shows — the Light Leak edge-colour rule on a number. */
+    const followed = p.follows ? () => { const c = fx.params[p.follows]; const v = c == null ? NaN : FM.evalProp(c, FM.time); return isFinite(v) ? v : fallback; } : null;
+    const read = () => { const c = fx.params[p.key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : (followed ? followed() : fallback)); };
     // keyframe gutter (only for keyframable params)
     if (p.keyframable) {
       const c = fx.params[p.key];
       const kfb = el('button', 'fx-kf' + (FM.isAnimated(c) ? ' active' : '') + (FM.hasKeyframeAt(c, FM.time) ? ' here' : ''), '◆');
       kfb.title = FM.isAnimated(c) ? 'Keyframe at playhead (click to remove)' : 'Animate this parameter';
-      kfb.addEventListener('click', () => { FM.toggleProp(fx.params, p.key, FM.time, fallback); afterFx(); });
+      kfb.addEventListener('click', () => { FM.toggleProp(fx.params, p.key, FM.time, followed ? followed() : fallback); afterFx(); });
       row.appendChild(kfb);
     } else { row.appendChild(el('span', 'fx-kf-spacer')); }
     // easing curve for THIS parameter's keyframes (every effect param eases, like Move & Transform)
@@ -1151,7 +1154,13 @@ window.FM = window.FM || {};
     // The NAME selects the row (AM): tap it and this parameter's keyframes become the live ones on
     // the timeline. Only offered where it can mean something — kfScope covers the OPEN effect of the
     // Effects panel, so audio-effect rows (which share this builder) render a plain label.
-    row.appendChild(paramName('fx-scrub-label', p.label, layer, 'fx:' + p.key));
+    const nameEl = paramName('fx-scrub-label', p.label, layer, 'fx:' + p.key);
+    /* A control with NO VALUE of its own yet — Wiggle's Vertical amount while it follows Amount, or a control added after this
+       effect was saved — is not in the keyframe scope (kfScope lists the keys the effect holds), so its name got no pill and
+       sat 10 px left of every other name in the open effect (#482 polish 2 review; measured 96 vs 106 px at 390). It keeps
+       the pill's INSET, not the pill: there is nothing to select until it has a value. Only where its neighbours are pills. */
+    if (!nameEl.classList.contains('kf-selectable') && fx.params && fx.params[p.key] == null && layer && Object.keys(fx.params).some(k => kfInScope(layer, 'fx:' + k))) nameEl.classList.add('kf-inset');
+    row.appendChild(nameEl);
     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
     function apply(v, commit) {
       v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
@@ -1159,6 +1168,7 @@ window.FM = window.FM || {};
       valBox.value = v.toFixed(prec) + (p.unit || '');
       FM.requestRender();
       if (commit && FM.history) FM.history.commit();
+      row.dispatchEvent(new CustomEvent('fx-range-set'));   // a slider that follows this one re-reads it (#482 polish 2.1)
     }
     const strip = tickStrip({
       min: p.min, max: p.max, step: p.step, unit: p.unit, dflt: p.default, read: read, q: p.q,
@@ -1169,6 +1179,8 @@ window.FM = window.FM || {};
     valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + (p.unit || ''); });
     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
     row.appendChild(strip); row.appendChild(valBox);
+    // A following slider with no value of its own shows its leader's new value the moment the leader moves.
+    if (followed) row._resync = () => { if (fx.params[p.key] != null) return; strip._sync(read()); valBox.value = read().toFixed(prec) + (p.unit || ''); };
     return row;
   }
 
@@ -1244,6 +1256,11 @@ window.FM = window.FM || {};
         return String(v);
       }).join(' or ');
       why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + lbl;
+      /* EVERY OPTION BUT ONE (#482 2.3 review): "Only used when Rhythm is Steady or Double hit or Build-up" was a 382 px
+         pill that cannot wrap, cut off at '…OR BUIL' on the phone and '…OR DOU' on the PC — in the DEFAULT state of every
+         Flash (darken). Three or more live options with one that ignores the row: name that one instead. */
+      const deadOpts = opts.map((o, oi) => Array.isArray(o) ? o : [oi, o]).filter(o => lives.every(v => Number(o[0]) !== Number(v)));
+      if (lives.length >= 3 && deadOpts.length === 1) why = 'Not used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + deadOpts[0][1];
     } else {
       active = vals.every(v => !!v);
       why = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
@@ -1778,9 +1795,13 @@ window.FM = window.FM || {};
          tooltip and still the written record of what each effect does — which is the "somewhere else"
          he asked for. Deleting 190-odd strings would have thrown away the thing he asked to keep. */
       const colourRows = {};   // colour rows by key, so a colour that follows another can listen to it (#482 polish 1.2)
+      const rangeRows = {};    // …and slider rows, for a slider that follows another (#482 polish 2.1)
       reg.params.forEach(p => {
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);
+          rangeRows[p.key] = row;
+          const leadR = p.follows && rangeRows[p.follows];
+          if (leadR && row._resync) leadR.addEventListener('fx-range-set', row._resync);
           // Dim and lock a slider whose value is currently being overridden by a tick box above it,
           // and say WHICH one — a greyed control with no explanation just reads as broken.
           markOverridden(row, fx, p, reg);
