@@ -223,6 +223,11 @@ or a gate — not a paragraph.
 ## ⚠️ RUN THE SUITE IN THE FOREGROUND WITH A LONG TIMEOUT — never background-and-poll
 
 **`python3 tests/_cdp.py --port 8777` takes 3–4 minutes. The Bash tool's default timeout is 2 minutes.**
+
+⚠️ **30 Sep: THE 3–4 MINUTES ABOVE IS YEARS STALE — a full pass is now ~35 minutes (2186 tests), and a ship (two passes +
+prove) ~90.** The real number is in `tools/.suite-seconds`, written by every green ship pass, and ship.sh sets its cap from
+it (1.6x, never below an hour). Believing "4 minutes" cost an afternoon: a slow pass read as a hang and was chased as one.
+So a full suite run always goes in the background (`run_in_background: true`) — it cannot fit the Bash tool's 600 s cap.
 So a plain foreground call ALWAYS times out, and the reflex after that — background it, then poll for
 the result — is slower than the run itself and has repeatedly ended in waiting on nothing.
 

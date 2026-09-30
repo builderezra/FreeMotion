@@ -645,6 +645,13 @@ if not fs:
     for m in re.findall(r"FAIL[^\n]{0,400}", raw)[:6]: print("   " + m)
 '; }
 SUITE_TIMEOUT=2700
+# THE CAP GROWS WITH THE SUITE (30 Sep, v17.18). 2700 was right at 1971 tests; at 2186 an idle pass is ~2050 s and a
+# ship takes ~90 minutes end to end (v17.16: 09:51 → 11:20; v17.17: 12:12 → 13:43), so the first busy afternoon put
+# both of v17.18's attempts over the line (stall points 991, then 690 — MOVING, the load sign). A fixed number is a
+# note that goes stale as tests are added, so each green pass now records its real length in tools/.suite-seconds
+# (committed with the release) and the cap is 1.6x the last one, never below an hour.
+_last_suite=$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9'); _last_suite=${_last_suite:-0}
+SUITE_TIMEOUT=$(( _last_suite * 16 / 10 )); [ "$SUITE_TIMEOUT" -lt 3600 ] && SUITE_TIMEOUT=3600
 # ⚠️ A TIMEOUT'S REAL CAUSE IS USUALLY THE MACHINE, AND NOTHING HERE MEASURED IT (21 Sep). Three ship
 # cycles went on "the suite ran out of time" — first at prove's 600s, then at the suite's 1800s — before
 # anyone thought to run `uptime`. The answer was a 6-core Mac in a Spotlight/Photos indexing storm
@@ -663,8 +670,11 @@ _whyslow() {
   echo "      again — and confirm it is load by checking whether the last test above MOVES between runs."
 }
 
-echo "→ running the suite (4-5 minutes)…"
+if [ "$_last_suite" -gt 0 ]; then echo "→ running the suite (the last green pass took $(( _last_suite / 60 )) minutes; cap ${SUITE_TIMEOUT}s)…"
+else echo "→ running the suite (cap ${SUITE_TIMEOUT}s)…"; fi
+_suite_t0=$SECONDS
 OUT="$(python3 tests/_cdp.py --port 8777 --timeout $SUITE_TIMEOUT 2>&1)"
+_suite_secs=$(( SECONDS - _suite_t0 ))
 SUM="$(printf '%s' "$OUT" | grep -o '"summary": "[^"]*"' | head -1)"
 if printf '%s' "$OUT" | grep -q 'did not finish within'; then
   echo "⏱  THE SUITE RAN OUT OF TIME after ${SUITE_TIMEOUT}s — it did NOT fail. Nothing is committed or pushed."
@@ -693,7 +703,8 @@ fi
 # …and that it actually RAN. `"ok": true` is only "nothing failed", which a suite of zero tests also is.
 . tools/_testfloor.sh
 test_floor_check "$OUT" || { echo "   Not committing, not pushing."; exit 1; }
-echo "✅ $SUM"
+echo "✅ $SUM  (${_suite_secs}s)"
+echo "$_suite_secs" > tools/.suite-seconds
 
 # ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
 # "make sure everything is quality tested as good as possible" — and this app is MOBILE-FIRST, while

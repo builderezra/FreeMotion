@@ -124,6 +124,7 @@ def main():
     ap.add_argument("--height", type=int, default=900)
     ap.add_argument("--timeout", type=int, default=600, help="seconds to wait for the suite")
     ap.add_argument("--quiet", action="store_true", help="only print the summary line")
+    ap.add_argument("--progress", default=None, help="file to rewrite every ~5 s with the running test and how long it has run")
     a = ap.parse_args()
 
     url = a.url or f"http://localhost:{a.port}/tests/run.html"
@@ -207,7 +208,33 @@ def main():
         last_seen = ""
         cpu = [1]
         inp = {"touch_emu": False, "touch_down": False, "mouse_down": False}   # the real-input channel's state across requests (queue 924)
+        # WHERE THE TIME GOES, WHILE IT GOES (30 Sep, v17.18). A timeout used to read lastTest ONCE, at the end — and when the
+        # page had stopped answering by then it printed `"lastTest": ""`, which says nothing about an hour of suite. So the
+        # running test is sampled every ~5 s: the timeout names the last test the page reported and how long it sat on it,
+        # and says whether the page was still answering. `--progress FILE` writes the same thing live, so a slow run can be
+        # watched instead of waited out.
+        track = {"name": "", "since": time.time(), "last_ok": time.time(), "n": 0, "polls": 0}
         while time.time() < deadline:
+            track["polls"] += 1
+            if track["polls"] % 20 == 1:
+                try:
+                    cur = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                                   "return w?JSON.stringify([w.__fmLastTest||'', (w.__fmResultsSoFar||0)]):null;})()")
+                    track["last_ok"] = time.time()
+                    if cur:
+                        nm = json.loads(cur)[0]
+                        if nm != track["name"]:
+                            track["name"], track["since"], track["n"] = nm, time.time(), track["n"] + 1
+                except Exception:
+                    pass
+                if a.progress:
+                    try:
+                        with open(a.progress, "w") as pf:
+                            pf.write(json.dumps({"test": track["name"], "on_it_s": round(time.time() - track["since"]),
+                                                 "tests_seen": track["n"], "page_silent_s": round(time.time() - track["last_ok"]),
+                                                 "elapsed_s": round(time.time() - (deadline - a.timeout))}) + "\n")
+                    except Exception:
+                        pass
             # A TEST MAY ASK FOR A CPU THROTTLE, AND ONLY THIS DRIVER CAN GIVE ONE (queue 921 S8). The page cannot
             # slow itself down — `Emulation.setCPUThrottlingRate` is a DevTools call — and a performance budget
             # measured on a fast Mac says nothing about a phone. So a test writes `window.__fmWantCpu =
@@ -382,8 +409,12 @@ def main():
                 pass
             # the eight slowest tests so far (ms, name): on 2 Sep the suite silently doubled in length and this
             # was the only way to say which tests had grown
+            if not last_seen and track["name"]:
+                last_seen = track["name"]
             print(json.dumps({"ok": False, "error": "suite did not finish within %ds" % a.timeout,
-                              "lastTest": last_seen, "slowest": slow}))
+                              "lastTest": last_seen, "onItSeconds": round(time.time() - track["since"]),
+                              "testsSeen": track["n"], "pageSilentSeconds": round(time.time() - track["last_ok"]),
+                              "slowest": slow}))
             return 2
 
         data = json.loads(payload)

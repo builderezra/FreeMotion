@@ -114227,4 +114227,62 @@
     }
   });
 
+  test('992 on the PC the New project + stays on top of the project cards - with enough projects to reach it, a real click on the + opens New project, not the card under it', { item: '992', budgetMs: 150000 }, async function () {
+    /* Found as a late-suite flake in #991's PC test (a Home card under the pointer at the +). The cause was z-order, not a
+       leak: v15.09 raised the PC project list to z-index 1 and the + had none, so once the cards reach the bottom of Home a
+       card covers the +. The tests had simply made enough projects by then; he has more than that. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const dlg = document.getElementById('hm-dialog');
+    const path = function (hit) {
+      const out = [];
+      for (let n = hit; n && n !== document.documentElement && out.length < 5; n = n.parentElement) {
+        const cls = n.className && n.className.baseVal !== undefined ? n.className.baseVal : n.className;
+        out.push(n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (cls ? '.' + String(cls).trim().split(/\s+/).join('.') : ''));
+      }
+      return out.join(' in ') || 'nothing';
+    };
+    try {
+      await onScreen924(async function () {
+        await atWideWidth(async function () {
+          const nb = document.getElementById('hm-new');
+          const centre = function () { const q = nb.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2, w: q.width }; };
+          const cardUnder = function () {
+            const c = centre();
+            return [].slice.call(document.querySelectorAll('#home-screen .hm-card')).filter(function (k) { const r = k.getBoundingClientRect(); return c.x >= r.left && c.x <= r.right && c.y >= r.top && c.y <= r.bottom; })[0] || null;
+          };
+          const showHome = async function () {
+            if (FM.home.isOpen()) FM.home.close();
+            await sleep(150);
+            FM.home.open(); await sleep(900);
+            const tab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+            if (tab && !tab.classList.contains('active')) { tab.click(); await sleep(300); }
+            const sc = document.querySelector('#home-screen .hm-scroll'); if (sc) sc.scrollTop = 0;
+            await sleep(100);
+          };
+          await showHome();
+          /* His Home with many projects: add them until a card lies under the + (a control — without one this proves nothing). */
+          for (let round = 0; round < 6 && !cardUnder(); round++) {
+            for (let i = 0; i < 8; i++) { const id = await FM.projects.create({ name: '992 filler ' + round + '.' + i, width: 1080, height: 1920 }); if (id) made.push(id); }
+            await showHome();
+          }
+          const card = cardUnder();
+          if (!card) throw new Error('CONTROL: ' + made.length + ' extra projects and still no card reaches the + at ' + Math.round(centre().x) + ',' + Math.round(centre().y) + ' (window ' + innerWidth + 'x' + innerHeight + ') - nothing here can cover it');
+          if (!(centre().w > 0) || getComputedStyle(nb).visibility === 'hidden') throw new Error('setup: the + is not showing on Home');
+          const c = centre(), hit = document.elementFromPoint(c.x, c.y);
+          if (!hit || !(hit === nb || nb.contains(hit))) throw new Error('with ' + FM.projects.list().length + ' projects on a 1280-wide Home, the New project + is covered by ' + path(hit) + ' - a click on the + lands on that card');
+          /* …and a real click on it opens New project, not the card under it. */
+          const before = FM.projects.currentId();
+          await hcMouse(nb, 'a real click on the + with a card behind it');
+          await hcUntil('the New project dialog', function () { return !dlg.classList.contains('hidden'); }, 4000);
+          if (FM.projects.currentId() !== before || !FM.home.isOpen()) throw new Error('the click on the + opened a project instead of New project');
+          document.getElementById('hm-cancel').click();
+          await hcUntil('the New project dialog to close', function () { return dlg.classList.contains('hidden'); }, 4000);
+        }, 1280);
+      });
+    } finally {
+      try { if (!dlg.classList.contains('hidden')) document.getElementById('hm-cancel').click(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();

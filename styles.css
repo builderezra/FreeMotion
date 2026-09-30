@@ -5575,6 +5575,13 @@ body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
    of its own; border-radius:50% keeps the sheen (theme-glass.css) clipped to the rim instead of a
    square; and the SVG glyph is hidden, not removed, so the accessible name survives. */
 #hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 50%; border: none; padding: 0; color: #eef8ff; cursor: pointer; -webkit-tap-highlight-color: transparent; }   /* centred like AM's +; the ambient glow is a box-shadow so it can't reach the + cut-out */
+/* ABOVE THE CARDS, ALWAYS (queue 992). v15.09 gave the PC project list `.hm-grid { position: relative; z-index: 1 }` for the
+   cursor wash, and the + — fixed, but with no z-index of its own — then painted UNDER the grid: with enough projects to reach
+   the bottom of Home (25 at 1280x800, measured), a card sat on top of the +, it showed only as a faint glow behind that card,
+   and a click on it opened the project instead of New project. Found as a flake late in the full suite, which is simply the
+   point in a run where the tests have made that many projects. 2 clears the grid and the light theme's grain (both 1) and
+   stays under the top bar's glint (3); the selection bar and the dialogs are 210+. */
+#hm-new { z-index: 2; }
 /* A BIGGER HIT BOX, NOT A BIGGER BUTTON (queue 213). His words: "Make it so the button on the bottom
    of the screen has a larger hit box, don't make it bigger but larger hit box cos I keep accidentally
    opening projects." Measured at 375x812 before touching it: the button is 58x58 and its hit reach was

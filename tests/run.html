@@ -39,8 +39,63 @@
   <iframe id="app" src="../index.html"></iframe>
   <script>
     var frame = document.getElementById('app');
+    /* ⚠️ THE APP FRAME MUST NOT RELOAD MID-RUN — AND IF IT DOES, SAY SO BY NAME (30 Sep, found while chasing v17.18's timeouts).
+       `load` fires on EVERY load of the frame, so a test that made the app reload (a force-update tap, a stray Enter on the
+       wrong control, a real navigation) would re-inject tests.js into the fresh page and START THE WHOLE SUITE AGAIN —
+       reaching the same test, reloading again, and looping until the driver's cap, which reports "RAN OUT OF TIME" with a
+       different lastTest each time and reads exactly like a loaded Mac. (v17.18's two timeouts turned out NOT to be this —
+       the suite had simply outgrown ship.sh's cap — but nothing stopped this from happening, so it is closed anyway.) Now
+       the second load ends the run at once, naming the test, its last __fmStep marker and the last real input. */
+    var started = false, leaving = null;
+    /* …AND THE SAME FOR THE TEST PAGE ITSELF: a navigation of THIS page wipes the flags above with it, and the suite would
+       simply begin again. sessionStorage outlives a navigation of this tab (the driver makes a fresh profile per run, so
+       nothing leaks between runs); a run that started and never finished, followed by a load of this page that is not a
+       person pressing reload, is that navigation — reported by name, and the suite is not started again. Both halves are
+       proven by throwaway tests that reload the frame and navigate the top page: each run stops in ~4 s with the name. */
+    var RUN_KEY = 'fm.run.started', LEAVE_KEY = 'fm.run.leaving';
+    var navType = ''; try { navType = (performance.getEntriesByType('navigation')[0] || {}).type || ''; } catch (e) {}
+    var pageRenavigated = false;
+    try {
+      if (sessionStorage.getItem(RUN_KEY) === '1' && navType !== 'reload') pageRenavigated = true;
+      else { sessionStorage.removeItem(RUN_KEY); sessionStorage.removeItem(LEAVE_KEY); }
+    } catch (e) {}
+    function stopWith(msg) {
+      var sum = document.getElementById('sum');
+      sum.textContent = '';
+      var pill = document.createElement('span'); pill.className = 'pill red'; pill.textContent = 'Error'; sum.appendChild(pill);
+      sum.appendChild(document.createTextNode(msg));
+    }
+    function describeLeaving(g) {
+      g = g || {};
+      return (g.test ? 'during: ' + g.test : 'no test name recorded') + (g.step ? ' (last step: ' + g.step + ')' : '') +
+        (g.input ? ' — last real input: ' + g.input : '') + (g.href ? ' — the app was at ' + g.href : '');
+    }
+    function say(n) {
+      if (!n || !n.tagName) return String(n || '');
+      var cls = n.className && n.className.baseVal !== undefined ? n.className.baseVal : n.className;
+      return n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (cls ? '.' + String(cls).trim().split(/\s+/).join('.') : '');
+    }
     frame.addEventListener('load', function () {
       var w = frame.contentWindow;
+      if (pageRenavigated) {
+        var prev = null; try { prev = JSON.parse(sessionStorage.getItem(LEAVE_KEY) || 'null'); } catch (e) {}
+        stopWith('THE TEST PAGE ITSELF WAS NAVIGATED DURING A TEST (a ' + (navType || 'navigation') + ', not a reload) — ' + describeLeaving(prev) + '. The run stops here instead of starting the suite again.');
+        return;
+      }
+      if (started) {
+        stopWith('THE APP FRAME RELOADED DURING A TEST — ' + describeLeaving(leaving) + '. The run stops here instead of starting the suite again.');
+        return;
+      }
+      try {
+        var lastIn = '';
+        ['pointerdown', 'click', 'keydown', 'submit'].forEach(function (k) {
+          w.addEventListener(k, function (e) { if (e.isTrusted) lastIn = k + (e.key ? ' ' + e.key : '') + ' on ' + say(e.target); }, true);
+        });
+        w.addEventListener('pagehide', function () {
+          leaving = { test: w.__fmLastTest || '', step: w.__fmStep || '', input: lastIn, href: String(w.location.href) };
+          try { sessionStorage.setItem(LEAVE_KEY, JSON.stringify(leaving)); } catch (e) {}
+        });
+      } catch (e) {}
       // no-store, not a plain fetch: the browser was serving tests.js from cache, so the runner
       // could report green against a version of the suite that no longer exists on disk. A test
       // harness that silently tests stale code is worse than no harness.
@@ -61,10 +116,13 @@
           missing.join(', ') + '. Every failure below would be misattributed to whichever test touched ' +
           'it first. This is usually a dropped script request under load: re-run, and if it repeats, ' +
           'check for stale headless Chrome processes (see tests/_cdp.py).');
+        started = true;
+        try { sessionStorage.setItem(RUN_KEY, '1'); } catch (e) {}
         var s = w.document.createElement('script'); s.textContent = src; w.document.body.appendChild(s);
         if (!w.FMTests) throw new Error('FMTests did not load (is FM initialised?)');
         return w.FMTests.run();
       }).then(function (res) {
+        try { sessionStorage.removeItem(RUN_KEY); sessionStorage.removeItem(LEAVE_KEY); } catch (e) {}
         /* The FULL pass/fail list, not just the reds. #115 has now cost three attempts partly because
          * a failing run only ever showed its three failures, and the three reds were almost certainly
          * downstream of something earlier that still "passed". Diffing two complete runs finds the
@@ -81,6 +139,7 @@
             (r.error ? ' <span class="err">— ' + r.error + '</span>' : '') + '</span></div>';
         }).join('');
       }).catch(function (e) {
+        try { sessionStorage.removeItem(RUN_KEY); } catch (x) {}
         document.getElementById('sum').innerHTML = '<span class="pill red">Error</span>' + (e && e.message || e);
       });
     });
