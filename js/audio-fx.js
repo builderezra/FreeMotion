@@ -259,10 +259,12 @@ window.FM = window.FM || {};
 
   // One UI key → several AudioParams (ping-pong's two delay lines, chorus' three LFOs, a wet/dry pair).
   // Every target is a real AudioParam, so the key still schedules smoothly; it just can't be handed out
-  // through param(). Each entry is [param, factor] where factor is a number, a fn(v), or null (= v).
+  // through param(). Each entry is [param, factor] where factor is a number, a fn(v), or null (= v) —
+  // or a whole setter fn(v, when, ramp) that schedules its own params (a bypass pair's switch, below).
   function multi(list) {
     return function (v, when, ramp) {
       for (let i = 0; i < list.length; i++) {
+        if (typeof list[i] === 'function') { list[i](v, when, ramp); continue; }
         const ap = list[i][0], f = list[i][1];
         const x = typeof f === 'function' ? f(v) : v * (f == null ? 1 : f);
         if (ramp) ap.linearRampToValueAtTime(x, when); else ap.setValueAtTime(x, when);
@@ -278,8 +280,8 @@ window.FM = window.FM || {};
    * So the node is ALWAYS built, and it is wired  from → [node … → gOn] + [gOff] → out.  At the default
    * gOn is 0 and gOff is 1, and x·1 + y·0 = x is exact in IEEE floats in every engine — so the default renders
    * the very samples it did before the control existed, on any browser, whatever the node does to its copy.
-   * Leaving the default flips the pair (one setValueAtTime each; a keyframe ramps it, a 33 ms crossfade), and
-   * the value itself rides the node's own AudioParam, so a slider drag never rebuilds anything.
+   * Leaving the default flips the pair (a live move fades it over 20 ms, see pairTargets; a keyframe ramps it, a
+   * 33 ms crossfade), and the value itself rides the node's own AudioParam, so a slider drag never rebuilds anything.
    * `nodeIn`/`nodeOut` may be one node (a filter) or the two ends of a little graph (Width's mid/side). */
   function bypassPair(s, from, nodeIn, nodeOut, on) {
     const gOn = s.gain(on ? 1 : 0), gOff = s.gain(on ? 0 : 1), sum = s.gain(1);
@@ -287,9 +289,37 @@ window.FM = window.FM || {};
     from.connect(gOff); gOff.connect(sum);
     return { out: sum, gOn: gOn, gOff: gOff };
   }
-  // The pair's two gains as `multi` targets, switched by one test of the control's value.
+  /* The pair's switch as a `multi` target, flipped by one test of the control's value.
+   * A LIVE FLIP FADES (482 batch 3 review). The preview drives every key through set() once a frame, and a
+   * set that stepped the pair switched the output in ONE SAMPLE from x to the filtered copy — a 25 Hz highpass
+   * shifts the bass's phase, so Low cut 20 → 25 on the Echo jumped ~0.03–0.10 in a sample (measured), 250–500×
+   * an ordinary notch. That is a click, and the export never made it: a keyframe ramps the pair over its 33 ms
+   * step. So a set that CHANGES the state fades the pair over PAIR_FADE from wherever it is, and the next
+   * frames' sets leave that fade alone until it lands (a fresh setValueAtTime inside a running ramp would cut it
+   * short — the ramp would restart from the new event and step there).
+   * The FIRST set a chain gets is its starting state, not a move — the export's set at ctx time 0 and the
+   * preview's applyAt straight after a build — so it still steps, before any sound has gone through the pair,
+   * and every default and every export renders the very samples it did. ramp (the export's keyframes) is
+   * untouched. */
+  const PAIR_FADE = 0.02;
   function pairTargets(pair, isOn) {
-    return [[pair.gOn.gain, v => (isOn(v) ? 1 : 0)], [pair.gOff.gain, v => (isOn(v) ? 0 : 1)]];
+    const on = pair.gOn.gain, off = pair.gOff.gain;
+    let target = null, from = 0, t0 = 0, t1 = 0;   // gOn's schedule: from at t0 → target at t1 (gOff = 1 − it)
+    return [function (v, when, ramp) {
+      const x = isOn(v) ? 1 : 0;
+      if (ramp || target === null || (x === target && when >= t1)) {
+        if (ramp) { on.linearRampToValueAtTime(x, when); off.linearRampToValueAtTime(1 - x, when); }
+        else { on.setValueAtTime(x, when); off.setValueAtTime(1 - x, when); }
+        target = from = x; t0 = t1 = when;
+        return;
+      }
+      if (x === target) return;                     // still fading towards x: let it land
+      const cur = when >= t1 ? target : from + (target - from) * (when - t0) / (t1 - t0);
+      on.cancelScheduledValues(when); off.cancelScheduledValues(when);
+      on.setValueAtTime(cur, when); off.setValueAtTime(1 - cur, when);
+      on.linearRampToValueAtTime(x, when + PAIR_FADE); off.linearRampToValueAtTime(1 - x, when + PAIR_FADE);
+      from = cur; target = x; t0 = when; t1 = when + PAIR_FADE;
+    }];
   }
   /* A lowpass/highpass with no peak: Q −3.01 dB is Butterworth (the spec reads a lowpass/highpass Q as dB of
      resonance), so the response never rises above 1 anywhere. That matters inside an echo's feedback loop: a
@@ -699,7 +729,7 @@ window.FM = window.FM || {};
           time: multi([[d.delayTime, null], [dw.delayTime, null]]),
           tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
           lowcut: multi([[hp.frequency, null]].concat(pairTargets(low, v => v > 20))),
-          wobble: multi([[wAmp.gain, 0.002], [wOn.gain, v => (v > 0 ? 1 : 0)], [wOff.gain, v => (v > 0 ? 0 : 1)]]),
+          wobble: multi([[wAmp.gain, 0.002]].concat(pairTargets({ gOn: wOn, gOff: wOff }, v => v > 0))),
           mix: wd.set,
         },
       });

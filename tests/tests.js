@@ -116141,4 +116141,58 @@
     }
   });
 
+  /* #482 batch 3 review: a live move across a bypass pair's default must fade, not click. The preview drives every key
+     through applyAt once a frame; an OfflineAudioContext replays that with suspend() (applyAt every 16 ms), the move lands on
+     one of those frames, and the same render left alone is the reference. The click is the largest one-sample change of
+     (moved - still) around the move; the positive control is the difference the move ends up making, so a control that
+     does nothing (v17.19 has no Low cut) cannot pass. On a bass tone (80 Hz + 1.2 kHz) at four moments in the echo. */
+  async function liveMove482c(type, key, from, to, t0) {
+    const n = Math.round(SR482C * (t0 + 0.2)), step = 6 * 128 / SR482C, tq = Math.round(t0 / step) * step;
+    const render = async move => {
+      const oac = new OfflineAudioContext(2, n, SR482C), b = oac.createBuffer(1, n, SR482C), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) { const t = i / SR482C; d[i] = 0.4 * Math.sin(2 * Math.PI * 80 * t) + 0.2 * Math.sin(2 * Math.PI * 1200 * t); }
+      const src = oac.createBufferSource(); src.buffer = b;
+      const layer = { audioFx: [{ type: type, enabled: true, params: FM.audioFxRegistry.makeInstance(type).params }] };
+      layer.audioFx[0].params[key] = from;
+      const chain = FM.buildAudioFxChain(oac, layer, 0);
+      chain.applyAt(0);
+      for (let f = step; f < n / SR482C - 0.01; f += step) {
+        const hit = Math.abs(f - tq) < 1e-9;
+        oac.suspend(f).then(() => { if (move && hit) layer.audioFx[0].params[key] = to; chain.applyAt(oac.currentTime); oac.resume(); });
+      }
+      src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+      const r = await oac.startRendering(); try { chain.dispose(); } catch (e) {}
+      return r.getChannelData(0);
+    };
+    const a = await render(false), b = await render(true);
+    let jump = 0, after = 0;
+    for (let i = Math.round((tq - 0.005) * SR482C) + 1; i < Math.round((tq + 0.05) * SR482C); i++) jump = Math.max(jump, Math.abs((b[i] - a[i]) - (b[i - 1] - a[i - 1])));
+    for (let i = Math.round((tq + 0.05) * SR482C); i < Math.round((tq + 0.15) * SR482C); i++) after = Math.max(after, Math.abs(b[i] - a[i]));
+    return { jump: jump, after: after };
+  }
+
+  test('482 3.5 Echo and Reverb - moving Low cut off 20 Hz or back while the preview plays fades the filter in instead of clicking, and so do Tone and Tape wobble, as the export does', { item: '482', budgetMs: 120000 }, async function () {
+    /* [effect, control, from, to, largest one-sample jump allowed, smallest difference the move must make]. Measured at
+       these four moments: on the build before this fix the flip stepped the pair in one sample - Echo Low cut 20->25 jumped
+       0.012-0.051 and 25->20 0.012-0.063, Reverb Low cut 0.0098 and 0.0126 at worst, Echo Tone 0.0025, Tape wobble 0.0117;
+       with the 20 ms fade they jump 0.0010, 0.0010, 0.00026, 0.00026, 0.00033 and 0.0016 - what is left is the slope of the
+       difference itself (an ordinary Low cut notch 25->30 jumps 0.0002). The differences they settle to: 0.064, 0.064,
+       0.0185, 0.0185, 0.0024, 0.006. */
+    const CASES = [
+      ['delay', 'lowcut', 20, 25, 0.005, 0.03], ['delay', 'lowcut', 25, 20, 0.005, 0.03],
+      ['reverb', 'lowcut', 20, 25, 0.002, 0.009], ['reverb', 'lowcut', 25, 20, 0.002, 0.009],
+      ['delay', 'tone', 20000, 19950, 0.0012, 0.0012], ['delay', 'wobble', 0, 0.01, 0.005, 0.003],
+    ];
+    const NAME = { delay: 'Echo', reverb: 'Reverb' }, LABEL = { lowcut: 'Low cut', tone: 'Tone', wobble: 'Tape wobble' };
+    const bad = [];
+    for (const [type, key, from, to, maxJump, minAfter] of CASES) {
+      let jump = 0, after = Infinity;
+      for (const t0 of [0.4, 0.45, 0.5, 0.55]) { const r = await liveMove482c(type, key, from, to, t0); jump = Math.max(jump, r.jump); after = Math.min(after, r.after); }
+      const what = NAME[type] + ' ' + LABEL[key] + ' ' + from + ' -> ' + to;
+      if (!(after >= minAfter)) { bad.push('CONTROL: moving ' + what + ' in the preview changes the sound by only ' + after.toFixed(4) + ' (want at least ' + minAfter + ') - the move is not heard, so its click cannot be measured'); continue; }
+      if (!(jump <= maxJump)) bad.push('moving ' + what + ' in the preview jumps ' + jump.toFixed(4) + ' in one sample (allowed ' + maxJump + ') - the switch clicks instead of fading');
+    }
+    if (bad.length) throw new Error(bad.join('; '));
+  });
+
 })();
