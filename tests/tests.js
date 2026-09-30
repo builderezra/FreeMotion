@@ -100133,7 +100133,16 @@
   }
   function hitIs927(x, y, el, what) {
     const hit = document.elementFromPoint(x, y);
-    if (!hit || !(hit === el || el.contains(hit))) throw new Error(what + ' is covered at ' + Math.round(x) + ',' + Math.round(y) + ' by ' + (hit ? (hit.className && hit.className.baseVal !== undefined ? hit.tagName : (hit.className || hit.tagName)) : 'nothing') + ' — a real press there would not reach it');
+    if (!hit || !(hit === el || el.contains(hit))) {
+      /* WHAT covers it, as a path (#992: a late-suite cover that never reproduced alone was reported as a bare "svg"). The
+         runner cuts a FAIL line at a less-than sign, so the path is joined with " in " and never prints a tag bracket. */
+      const path = [];
+      for (let n = hit; n && n !== document.documentElement && path.length < 6; n = n.parentElement) {
+        const cls = n.className && n.className.baseVal !== undefined ? n.className.baseVal : n.className;
+        path.push(n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (cls ? '.' + String(cls).trim().split(/\s+/).join('.') : ''));
+      }
+      throw new Error(what + ' is covered at ' + Math.round(x) + ',' + Math.round(y) + ' by ' + (hit ? path.join(' in ') : 'nothing') + ' — a real press there would not reach it');
+    }
   }
 
   test('927 PC — a real mouse on the Notes corner: resize cursor, a short pull springs back, a pull OUT snaps BIG and centred (the same big however far), and the corner or the edge dragged back IN returns it to exactly where it was', { item: '927', budgetMs: 120000 }, async function () {
@@ -114138,6 +114147,84 @@
     let d = 0; for (let i = 0; i < outs[14].length; i++) d = Math.max(d, Math.abs(outs[14][i] - outs[16][i]));
     if (!(d > 1e-5)) bad.push('14 bits and 16 bits render ' + (d === 0 ? 'byte-identical' : 'within ' + d.toExponential(1)));
     if (bad.length) throw new Error('the top of the Bits slider does not crush: ' + bad.join('; '));
+  });
+
+  test('995 Gradient Overlay fades stronger and weaker in the sheet preview, never lands mid-fade, and holds still under reduced motion', { item: '995' }, async function () {
+    /* His words, answering how strong Gradient Overlay should start: "in the preview just made it fade stronger and
+     * weaker". Three halves: while it is picked in the sheet, the previewed Amount really moves across its range (sampled
+     * over one full three-second wave); with Keep preview values ON, what lands is the resting value and not whatever the
+     * wave was passing when he tapped Add; and a reduced-motion device gets a still preview at the value that will land. */
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test owns its viewport and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const layers0 = FM.scene.layers.slice();
+    const keep0 = FM._fxKeepValues ? FM._fxKeepValues() : false;
+    const mm0 = window.matchMedia;
+    try {
+      frame.style.width = '390px'; frame.style.height = '844px';
+      window.dispatchEvent(new Event('resize'));
+      await sleep(260);
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: Math.round(P.width * 0.3), y: Math.round(P.height * 0.3), shapeW: Math.round(Math.min(P.width, P.height) * 0.3), shapeH: Math.round(Math.min(P.width, P.height) * 0.3), fill: '#ee3333' });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(200);
+      const def = FM.fxRegistry.makeInstance('gradientoverlay').params.amount;
+      const pick = async function () {
+        const live = FM.layerById(FM.scene, L.id);
+        live.effects.length = 0;
+        FM.fxBrowser.open(live);
+        await sleep(320);
+        const root = document.getElementById('fx-browser');
+        const sb = root.querySelector('.fxb-search-btn'); if (!sb) throw new Error('setup: the sheet has no search button');
+        sb.click(); await sleep(200);
+        const si = root.querySelector('.fxb-search-input'); if (!si) throw new Error('setup: no search field');
+        si.value = 'gradient overlay'; si.dispatchEvent(new Event('input', { bubbles: true })); await sleep(500);
+        const tile = root.querySelector('.fxb-search-grid .fxb-tile[data-fxid="gradientoverlay"]');
+        if (!tile) throw new Error('setup: searching gradient overlay did not find the Gradient Overlay tile');
+        tile.click(); await sleep(150);
+        const inst = FM._fxPreview && (FM._fxPreview.list || []).find(function (i) { return i && i.type === 'gradientoverlay'; });
+        if (!inst) throw new Error('setup: picking Gradient Overlay did not preview it');
+        return { root: root, inst: inst, live: live };
+      };
+
+      /* 1. It fades — one full wave, sampled every 250ms. */
+      const a = await pick();
+      const seen = [];
+      for (let i = 0; i < 13; i++) { seen.push(a.inst.params.amount); await sleep(250); }
+      const lo = Math.min.apply(null, seen), hi = Math.max.apply(null, seen);
+      if (hi - lo < 0.5) throw new Error('over three seconds in the sheet the previewed Amount only ranged ' + lo + ' to ' + hi + ' (samples ' + seen.join(', ') + ') — it does not fade stronger and weaker');
+      if (lo < 0.2 - 1e-9 || hi > 1 + 1e-9) throw new Error('the fade left the range it is meant to show: ' + lo + ' to ' + hi);
+      if (FM.layerById(FM.scene, L.id).effects.length) throw new Error('the preview wrote an effect onto the layer before Add');
+
+      /* 2. Keep preview values ON, Add tapped mid-fade: it lands at rest. */
+      const kb = a.root.querySelector('.fxb-commit-keep'); if (!kb) throw new Error('setup: no Keep preview values toggle');
+      if (!FM._fxKeepValues()) { kb.click(); await sleep(80); }
+      if (!FM._fxKeepValues()) throw new Error('setup: the Keep toggle did not turn on');
+      for (let i = 0; i < 40 && Math.abs(a.inst.params.amount - def) < 0.15; i++) await sleep(50);
+      const atTap = a.inst.params.amount;
+      a.root.querySelector('.fxb-commit-go').click();
+      await sleep(280);
+      const got = (FM.layerById(FM.scene, L.id).effects || []).find(function (e) { return e.type === 'gradientoverlay'; });
+      if (!got) throw new Error('Add landed no Gradient Overlay');
+      if (Math.abs(got.params.amount - def) > 1e-9) throw new Error('with Keep preview values on, Add tapped while the preview read ' + atTap + ' landed Amount ' + got.params.amount + ' instead of its resting ' + def + ' — a mid-fade number became his setting');
+
+      /* 3. Reduced motion: nothing moves, and what he sees is what lands. */
+      window.matchMedia = function (q) { return /prefers-reduced-motion:\s*reduce/.test(String(q)) ? { matches: true, media: q, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} } : mm0.call(window, q); };
+      const b = await pick();
+      const still = [];
+      for (let i = 0; i < 6; i++) { still.push(b.inst.params.amount); await sleep(200); }
+      if (still.some(function (v) { return Math.abs(v - def) > 1e-9; })) throw new Error('under reduced motion the preview still moved: ' + still.join(', ') + ' (resting ' + def + ')');
+    } finally {
+      window.matchMedia = mm0;
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      try { localStorage.setItem('fm.fx.keepPreviewValues', keep0 ? '1' : '0'); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll();
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await sleep(220);
+    }
   });
 
 })();

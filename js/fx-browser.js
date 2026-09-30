@@ -418,6 +418,37 @@ window.FM = window.FM || {};
        are skipped rather than crashing makeInstance. */
     return _picked.map(id => (PSEUDO[id] ? null : FM.fxRegistry.makeInstance(id))).filter(Boolean);
   }
+  /* A PREVIEW THAT SHOWS THE WHOLE RANGE (queue 995). His words, answering "how strong should Gradient Overlay start":
+     "in the preview just made it fade stronger and weaker". So while it is picked in the sheet, the previewed copy's
+     Amount breathes from 0.2 to 1 and back every three seconds (a cosine, so it eases at both ends), and he sees every
+     strength it has before he adds it, instead of one fixed guess at the right one.
+     It stays VIEW-ONLY like the rest of this preview: the wave writes to the previewed instance, never the layer, and
+     settleFades() puts the resting value back before anything lands — with "Keep preview values" on, the seed is that
+     instance, and a mid-fade 0.47 would otherwise become his effect's Amount. Under reduced motion nothing moves and the
+     preview shows the value that will land. One table, so another strength-led effect is one line if he wants it. */
+  const PREVIEW_FADE = { gradientoverlay: { key: 'amount', lo: 0.2, hi: 1, period: 3 } };
+  const _fadeRest = new WeakMap();      // previewed instance -> the value it had before the wave touched it
+  function fadeAt(f, ms) {
+    const ph = ((ms / 1000) % f.period) / f.period;
+    return Math.round((f.lo + (f.hi - f.lo) * (0.5 - 0.5 * Math.cos(ph * 2 * Math.PI))) * 1000) / 1000;
+  }
+  function fadePreview(ms) {
+    const list = FM._fxPreview && FM._fxPreview.list;
+    if (!list || reducedMotion()) return;
+    list.forEach(inst => {
+      const f = inst && PREVIEW_FADE[inst.type];
+      if (!f || !inst.params) return;
+      if (!_fadeRest.has(inst)) _fadeRest.set(inst, inst.params[f.key]);
+      inst.params[f.key] = fadeAt(f, ms);
+    });
+  }
+  function settleFades(list) {
+    (list || []).forEach(inst => {
+      const f = inst && PREVIEW_FADE[inst.type];
+      if (f && inst.params && _fadeRest.has(inst)) inst.params[f.key] = _fadeRest.get(inst);
+    });
+  }
+  FM._fxPreviewFade = PREVIEW_FADE;   // for the suite
   function restartPreview() {
     if (!sheetMode()) return;
     const layer = (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
@@ -440,8 +471,10 @@ window.FM = window.FM || {};
     _loopFrom = Date.now();
     if (FM.setTime) FM.setTime(st);                    // "take you back to the start of that layer"
     if (_loopTimer) clearInterval(_loopTimer);
+    fadePreview(0);                                    // queue 995: the first frame is already on the wave, at its weakest
     _loopTimer = setInterval(() => {
       if (!sheetMode() || !FM.setTime) return;
+      fadePreview(Date.now() - _loopFrom);             // …before the repaint, so the frame drawn is the value set
       FM.setTime(st + (((Date.now() - _loopFrom) / 1000) % du));
     }, 1000 / 24);
   }
@@ -479,6 +512,7 @@ window.FM = window.FM || {};
     /* Snapshot the previewed instances BEFORE stopPreview clears them — that is the whole point of the
        toggle, and reading them afterwards would hand back an empty list. */
     const shown = (FM._fxPreview && FM._fxPreview.list) ? FM._fxPreview.list.slice() : [];
+    settleFades(shown);     // queue 995: a fading preview lands at rest, never at whatever strength the wave was passing
     const keep = keepValues();
     _picked = [];
     stopPreview();          // the previewed copies go before the real ones land, or the layer gets both
