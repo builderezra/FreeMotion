@@ -113468,6 +113468,15 @@
       const robot = names(await search('robot voice'));
       if (robot.length !== 1) bad.push('robot voice lists ' + robot.join(', ') + ' - one word of a phrase pulled in effects that have nothing to do with it');
       if (bad.length) throw new Error('audio-effect search misses the words people use: ' + bad.join('; '));
+      /* A typed tag matches from the START of one of its words, not from the middle of one (review of batch 2, measured
+       * at 3f5a972b in this box: low listed Distortion from blOWN out, the listed Reverb from caTHEdral, on listed Bass &
+       * Treble, 3-Band EQ and Stereo Width from tONe and mONo, no listed Stereo Width from mONO). CONTROL: low still
+       * finds Low-Pass (its label) and Pitch Shift (the word lower begins with it). */
+      const low = names(await search('low'));
+      if (low.indexOf('Low-Pass') < 0 || low.indexOf('Pitch Shift') < 0) throw new Error('CONTROL: low lists ' + (low.join(', ') || 'nothing') + ' - it must still find Low-Pass (label) and Pitch Shift (lower)');
+      const stray = [['low', ['Distortion']], ['the', ['Reverb']], ['on', ['Bass & Treble', '3-Band EQ', 'Stereo Width']], ['no', ['Stereo Width']]];
+      for (const [q, never] of stray) { const got = names(await search(q)); const hit = never.filter(n => got.indexOf(n) >= 0); if (hit.length) bad.push(q + ' lists ' + hit.join(', ') + ' (all: ' + got.join(', ') + ') - a tag matched in the middle of a word'); }
+      if (bad.length) throw new Error('audio-effect search matches a tag from the middle of a word: ' + bad.join('; '));
       const tile =(await search('karaoke')).filter(t => (t.querySelector('.fxb-tile-name') || {}).textContent === 'Vocal Remove')[0];
       const r = tile.getBoundingClientRect();
       if (!(r.width > 0 && r.height > 0 && r.left >= -1 && r.right <= window.innerWidth + 1 && r.top >= -1 && r.bottom <= window.innerHeight + 1)) throw new Error('the Vocal Remove tile that karaoke finds is at ' + Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' in a ' + window.innerWidth + 'x' + window.innerHeight + ' window - not on screen');

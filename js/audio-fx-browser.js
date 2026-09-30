@@ -274,12 +274,14 @@ window.FM = window.FM || {};
     /* Match the label, the type id, OR the category name — so "eq", "space" or "delay" surface the whole family,
        not just effects carrying the word in their title — AND the names people give the sound (queue 986, hunt
        C13: the registry's `tags`). A tag matches while it is being typed ("karao") and when it is one of the
-       words typed ("robot voice", "make it underwater"), compared on words so "8-bit" and "8 bit" are one thing. */
+       words typed ("robot voice", "make it underwater"), compared on words so "8-bit" and "8 bit" are one thing.
+       "While it is being typed" means from the START of one of its words: matching anywhere inside one listed
+       Distortion for "low" (blOWn out), Reverb for "the" (caTHEdral) and Stereo Width for "no" (mONO). */
     const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
     const qw = words(q), qTrim = qw.trim();
     const tagHit = r => !!qTrim && (r.tags || []).some(tag => {
       const tw = words(tag);
-      return tw.indexOf(qTrim) >= 0 || qw.indexOf(tw) >= 0;
+      return tw.indexOf(' ' + qTrim) >= 0 || qw.indexOf(tw) >= 0;
     });
     FM.audioFxRegistry.all().filter(r =>
       r.label.toLowerCase().indexOf(needle) >= 0 ||
