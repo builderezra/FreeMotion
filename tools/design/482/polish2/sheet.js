@@ -95,20 +95,27 @@ return (async function () {
       var row = function (params, times, caps) { var l = layer(mid, PW, PH, PW / 2, PH / 2, fx('flashdark', params)); tiles(times.map(function (t, i) { return { c: render(l, t), cap: caps ? caps[i] : t.toFixed(2) + ' s' }; })); };
       var beats = []; for (var b = 0; b <= 8; b++) beats.push(b * 0.25);
       if (SHEET === 'flashdark-rhythm') {
-        title('Flash (darken) — new: Rhythm', 'Speed 4 (a beat every 0.25 s), Depth 0.6. Pictures are frames ON the beat; the yellow line is how bright the picture is over 2 seconds (grey ticks = the beats).');
-        rowHead('Today — Random', 'the only rhythm until now: some beats hit, some barely do');
-        row({ speed: 4, amount: 0.6 }, [0, 0.25, 0.5, 0.75]);
-        trace(bright({ speed: 4, amount: 0.6 }, 2), 2, beats, 'brightness, 0 → 2 s');
-        rowHead('Steady', 'every beat is a full hit, starting when the clip starts', true);
-        row({ speed: 4, amount: 0.6, rhythm: 1 }, [0, 0.25, 0.5, 0.75]);
-        trace(bright({ speed: 4, amount: 0.6, rhythm: 1 }, 2), 2, beats, 'brightness, 0 → 2 s');
-        rowHead('Double hit', 'two quick hits 80 ms apart on every beat', true);
-        row({ speed: 4, amount: 0.6, rhythm: 2 }, [0, 0.05, 0.08, 0.18], ['hit 0.00 s', 'gap 0.05 s', 'hit 0.08 s', 'rest 0.18 s']);
-        trace(bright({ speed: 4, amount: 0.6, rhythm: 2 }, 2), 2, beats, 'brightness, 0 → 2 s');
-        rowHead('Build-up', 'Speed 2: the hits get faster across the clip, into the drop', true);
-        var bu = [0, 1, 3, 6].map(function (k) { return 2 * Math.log(1 + k * Math.log(4) / 4) / Math.log(4) + 0.01; });   // 10 ms after each hit lands
-        row({ speed: 2, amount: 0.6, rhythm: 3 }, bu, bu.map(function (t, i) { return 'hit ' + [1, 2, 4, 7][i] + ' · ' + t.toFixed(2) + ' s'; }));
-        trace(bright({ speed: 2, amount: 0.6, rhythm: 3 }, 2), 2, [], 'brightness, 0 → 2 s (a 2 s clip)');
+        /* AT THE DEFAULT SPEED, FRAME BY FRAME (review of the first build): the first sheet used Speed 2–4, where every rhythm
+           looks right, and hid what a 30 fps export does at the Speed he actually starts on — a Double hit that was Steady at 20
+           and a Build-up that stalled. Every tile here is a real 30 fps frame and the trace is every frame's brightness. */
+        var fr = function (params, t1) { var v = [], l = layer(mid, PW, PH, PW / 2, PH / 2, fx('flashdark', params)); for (var i = 0; i < t1 * 30; i++) v.push(luma(render(l, i / 30, 96, 54))); var hi = luma(render(layer(mid, PW, PH, PW / 2, PH / 2, null), 0, 96, 54)); return v.map(function (x) { return Math.max(0, Math.min(1, x / hi)); }); };
+        var tenths = []; for (var tt = 0; tt <= 20; tt++) tenths.push(tt / 10);
+        var fcap = function (ns, words) { return ns.map(function (n, i) { return (words ? words[i] + ' · ' : '') + 'frame ' + (n + 1); }); };
+        title('Flash (darken) — new: Rhythm', 'At the default Speed 10, Depth 0.6, in a 30 fps project. Pictures are real frames of the export; the yellow line is every frame’s brightness over 2 s (grey ticks every 0.1 s).');
+        rowHead('Today — Random', 'the only rhythm until now: hits land anywhere');
+        row({ amount: 0.6 }, [0, 1, 2, 3].map(function (n) { return n / 30; }), fcap([0, 1, 2, 3]));
+        trace(fr({ amount: 0.6 }, 2), 2, tenths, 'brightness of every frame, 0 → 2 s');
+        rowHead('Steady', 'a full hit every 0.1 s, the first one on the clip’s start', true);
+        row({ amount: 0.6, rhythm: 1 }, [0, 1, 2, 3].map(function (n) { return n / 30; }), fcap([0, 1, 2, 3], ['hit', 'going', 'gone', 'hit']));
+        trace(fr({ amount: 0.6, rhythm: 1 }, 2), 2, tenths, 'brightness of every frame, 0 → 2 s');
+        rowHead('Double hit', 'hit, gap, hit, then a rest — 5 pairs a second, the most 30 fps can show', true);
+        row({ amount: 0.6, rhythm: 2 }, [0, 1, 2, 4].map(function (n) { return n / 30; }), fcap([0, 1, 2, 4], ['hit', 'gap', 'hit', 'rest']));
+        trace(fr({ amount: 0.6, rhythm: 2 }, 2), 2, tenths, 'brightness of every frame, 0 → 2 s');
+        rowHead('Build-up', 'starts at a quarter of the Speed and speeds up to it by the clip’s end, into the drop', true);
+        /* Hit k of a 2 s clip at Speed 10 lands where 10·2/ln4·(4^(t/2 − 1) − 1/4) = k; the frame it lands on. */
+        var bk = [0, 3, 7, 10], bn = bk.map(function (k) { return Math.ceil(30 * 2 * (1 + Math.log(0.25 + k * Math.log(4) / 20) / Math.log(4)) - 1e-6); });
+        row({ amount: 0.6, rhythm: 3 }, bn.map(function (n) { return n / 30; }), bn.map(function (n, i) { return 'hit ' + (bk[i] + 1) + ' · ' + (n / 30).toFixed(2) + ' s'; }));
+        trace(fr({ amount: 0.6, rhythm: 3 }, 2), 2, tenths, 'brightness of every frame, 0 → 2 s (a 2 s clip)');
       } else {
         title('Flash (darken) — new: Hold dark', 'Rhythm Steady, Speed 4, Depth 0.6. Frames across one beat (0 → 0.25 s); the yellow line is brightness over 1 second.');
         rowHead('Default — Hold dark 0', 'a quick flash: dark for about half the beat, then back');
@@ -146,6 +153,21 @@ return (async function () {
           trace(xtrace(run.xs), 1, ticks, 'where the car is, 0 → 1 s');
         });
       }
+    }
+    /* THE FIRST FRAMES OF A CLIP AT SHUTTER PHASE −100 (review of the first build). Rendered twice by render.py — against a
+       server of the first build ('-before') and of the fix ('-after') — and stacked. Each caption is how much of the car is on
+       screen, the frame's brightness against the same frame with no blur. */
+    if (SHEET.indexOf('objectblur-edges') === 0) {
+      var car3 = await media('mclaren', 160, 106), before = /-before$/.test(SHEET);
+      var mv3 = [[0, 90], [1, 330]];   // moving from its very first frame, 240 px a second
+      if (before) title('Motion Blur (Object) — Shutter phase −100 at the start of a clip', 'Shutter 6, a car that moves from its very first frame. Frames 1–4 of the clip; under each, how much of the car is on screen.');
+      rowHead(before ? 'Before this fix' : 'After', before ? 'frame 1 pops in sharp, then the car nearly vanishes and fades back' : 'the car is whole from frame 1 and the streak grows behind it', !before);
+      var e3 = fx('objectblur', { shutter: 6, samples: 48, phase: -100 });
+      var inkOf = function (c) { var d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height).data, s = 0; for (var i = 0; i < d.length; i += 4) s += Math.abs(d[i] - 0x15) + Math.abs(d[i + 1] - 0x17) + Math.abs(d[i + 2] - 0x1c); return s; };
+      tiles([0, 1, 2, 3].map(function (n) {
+        var c = render(layer(car3, 160, 106, 90, PH / 2, e3, mv3), n / 30), ref = render(layer(car3, 160, 106, 90, PH / 2, null, mv3), n / 30);
+        return { c: c, cap: 'frame ' + (n + 1) + ' · ' + Math.round(100 * inkOf(c) / inkOf(ref)) + '%' };
+      }));
     }
     if (SHEET === 'objectblur-shutterphase') {
       var car2 = await media('mclaren', 100, 66);

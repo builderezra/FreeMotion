@@ -1244,6 +1244,11 @@ window.FM = window.FM || {};
         return String(v);
       }).join(' or ');
       why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + lbl;
+      /* EVERY OPTION BUT ONE (#482 2.3 review): "Only used when Rhythm is Steady or Double hit or Build-up" was a 382 px
+         pill that cannot wrap, cut off at '…OR BUIL' on the phone and '…OR DOU' on the PC — in the DEFAULT state of every
+         Flash (darken). Three or more live options with one that ignores the row: name that one instead. */
+      const deadOpts = opts.map((o, oi) => Array.isArray(o) ? o : [oi, o]).filter(o => lives.every(v => Number(o[0]) !== Number(v)));
+      if (lives.length >= 3 && deadOpts.length === 1) why = 'Not used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + deadOpts[0][1];
     } else {
       active = vals.every(v => !!v);
       why = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);

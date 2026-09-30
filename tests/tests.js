@@ -114386,14 +114386,15 @@
     /* ON THE CLIP'S CLOCK: the same strobe on a clip that starts at 1.37 s hits at 1.37 s. */
     const late = { start: 1.37, duration: 2 };
     near(onsets({ speed: 4, rhythm: 1 }, 1.37, 2.369, late), [1.37, 1.62, 1.87, 2.12], 0.002, 'Steady at 4 Hz on a clip starting at 1.37 s');
-    /* DOUBLE HIT: two hits 80 ms apart every period; at 20 Hz the period is too short for 80 ms, so they close up to half of it. */
+    /* DOUBLE HIT: two hits 80 ms apart every period, then a rest. At 20 Hz the pair once filled the whole period (it was
+       Steady at 40); now it is held to what the kernel's default 30 fps can show — 5 pairs a second, hits 1/15 s apart. */
     near(onsets({ speed: 2, rhythm: 2 }, 0, 1.999, clip), [0, 0.08, 0.5, 0.58, 1, 1.08, 1.5, 1.58], 0.002, 'Double hit at 2 Hz');
-    near(onsets({ speed: 20, rhythm: 2 }, 0, 0.099, clip), [0, 0.025, 0.05, 0.075], 0.002, 'Double hit at 20 Hz');
-    /* BUILD-UP at 2 Hz over the 2 s clip: the period shrinks geometrically from 1/2 s to 1/8 s — hit k lands where
-       2·2/ln4·(4^(t/2) − 1) = k — so every gap is shorter than the one before. */
-    const bu = onsets({ speed: 2, rhythm: 3 }, 0, 1.999, clip), buWant = [];
-    for (let k = 0; ; k++) { const tk = 2 * Math.log(1 + k * Math.log(4) / 4) / Math.log(4); if (tk >= 1.999) break; buWant.push(tk); }
-    near(bu, buWant, 0.003, 'Build-up at 2 Hz on a 2 s clip');
+    near(onsets({ speed: 20, rhythm: 2 }, 0, 0.399, clip), [0, 1 / 15, 0.2, 0.2 + 1 / 15], 0.002, 'Double hit at 20 Hz (held to 5 pairs a second at 30 fps)');
+    /* BUILD-UP at 8 Hz over the 2 s clip: the rate climbs geometrically from 8/4 = 2 Hz to 8 Hz — hit k lands where
+       8·2/ln4·(4^(t/2 − 1) − 1/4) = k — so every gap is shorter than the one before. */
+    const bu = onsets({ speed: 8, rhythm: 3 }, 0, 1.999, clip), buWant = [];
+    for (let k = 0; ; k++) { const tk = 2 * (1 + Math.log(0.25 + k * Math.log(4) / 16) / Math.log(4)); if (tk >= 1.999) break; buWant.push(tk); }
+    near(bu, buWant, 0.003, 'Build-up at 8 Hz on a 2 s clip');
     const gaps = bu.slice(1).map((v, i) => v - bu[i]);
     if (!(gaps.every((g, i) => i === 0 || g < gaps[i - 1]) && gaps[0] > 0.38 && gaps[gaps.length - 1] < 0.16)) throw new Error('Build-up does not speed up from about 1/2 s to about 1/8 s between hits: gaps ' + gaps.map(g => g.toFixed(3)).join(', '));
     /* HOLD DARK: Steady 4 Hz at Softness 0 is fully dark for half of each period at Hold 0, and for 0.6 + 0.4/2 = 80% at 0.6. */
@@ -114550,8 +114551,28 @@
       FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
       await sleep(200);
     };
+    /* EVERY "Only used when…" PILL SITS INSIDE ITS ROW (#482 2.3 review): in the DEFAULT state Hold dark's pill was 382 px
+       and could not wrap — cut off at '…OR BUIL' on the phone and '…OR DOU' on the PC — while this test only measured the
+       labels and the option buttons. */
+    const pillsFit = async (where, set) => {
+      const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+      const tags = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-ovr-tag'));
+      for (const tag of tags) {
+        const row = tag.closest('.fx-scrub-row, .fx-seg-row');
+        row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+        const tb = tag.getBoundingClientRect(), rb = row.getBoundingClientRect();
+        if (tb.left < rb.left - 1 || tb.right > rb.right + 1 || tb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1)
+          throw new Error(where + ' with ' + JSON.stringify(set || {}) + ': the ' + type + ' pill ' + JSON.stringify(tag.textContent) + ' spans ' + Math.round(tb.left) + '-' + Math.round(tb.right) + ' px in a row at ' + Math.round(rb.left) + '-' + Math.round(rb.right) + ' (panel ends at ' + Math.round(panel.right) + ') - it runs off the edge');
+        /* …and it says it in one line. A pill may wrap rather than run off (styles.css), but that is the safety net: these rows'
+           pills are short enough not to need it ("Not used when Rhythm is Random", not a list of the other three). */
+        const rg = document.createRange(); rg.selectNodeContents(tag);
+        const lines = new Set([].map.call(rg.getClientRects(), r => Math.round(r.top))).size;
+        if (lines > 1) throw new Error(where + ' with ' + JSON.stringify(set || {}) + ': the ' + type + ' pill ' + JSON.stringify(tag.textContent) + ' wraps onto ' + lines + ' lines - say it shorter');
+      }
+    };
     const check = async where => {
       await show();
+      await pillsFit(where);
       const panel = document.getElementById('inspector-panel').getBoundingClientRect();
       for (const label of labels) {
         const r = rowOf(label);
@@ -114567,6 +114588,7 @@
       }
       for (const [set, dead, live] of gated) {
         await show(set);
+        await pillsFit(where, set);
         dead.forEach(l => { const r = rowOf(l); if (!r) throw new Error(where + ': no ' + l + ' row'); if (!r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + type + ' ' + l + ' looks live with ' + JSON.stringify(set) + ', where it does nothing'); });
         live.forEach(l => { const r = rowOf(l); if (!r) throw new Error(where + ': no ' + l + ' row'); if (r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + type + ' ' + l + ' is greyed out with ' + JSON.stringify(set) + ', where it is the control that matters'); });
       }
@@ -114589,6 +114611,251 @@
     await panel482b('objectblur', ['Shutter phase'], []);
     const reg = (FM.fxRegistry.paramsOf('objectblur') || []).filter(p => p.key === 'phase')[0];
     if (!reg || !/behind/.test(reg.note || '') || !/ahead/.test(reg.note || '')) throw new Error('Shutter phase carries no note saying which way is behind and which ahead (' + JSON.stringify(reg && reg.note) + ')');
+  });
+
+  /* ═══ #482 BATCH 2 (rhythm) — THE REVIEW'S FINDINGS ══════════════════════════════════════════════════════════════════════
+   * A review of the first build measured eight faults the build's own tests could not see, because every one of them lived
+   * at a setting the tests and the pictures never used: the DEFAULT Speed, a 30 fps export, a keyframed Speed, a split, a
+   * group, the first frame of a clip, a layer leaving the frame, the default state of the panel. Each test below drives
+   * exactly that setting. The flash probes read a grey pixel (200) through the kernel with the scene as its 9th argument,
+   * as the renderer passes it; a full hit at the default Depth 0.45 reads 110, and anything under 150 is a dark frame. */
+  const K482r = () => { const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.flashdark) throw new Error('the Flash (darken) kernel is not reachable'); return K.flashdark; };
+  const lv482r = (over, t, clip, fps) => {
+    const d = new Uint8ClampedArray([200, 200, 200, 255]);
+    K482r()(d, 1, 1, Object.assign({}, FM.fxRegistry.makeInstance('flashdark').params, over), t, 1, null, clip, fps ? { project: { fps: fps }, layers: [] } : undefined);
+    return d[0];
+  };
+  /* A run of frames as the export plays it, and the hits in it: a dark frame after a light one starts a hit. */
+  const frames482r = (over, fps, secs, clip) => { const o = []; for (let n = 0; n < Math.round(fps * (secs || 2)); n++) o.push(lv482r(over, n / fps, clip || { start: 0, duration: 2 }, fps)); return o; };
+  const hits482r = seq => { const o = []; for (let n = 0; n < seq.length; n++) if (seq[n] < 150 && (n === 0 || seq[n - 1] >= 150)) o.push(n); return o; };
+  const darkRun482r = seq => { let best = 0, cur = 0; seq.forEach(v => { cur = v < 150 ? cur + 1 : 0; if (cur > best) best = cur; }); return best; };
+
+  test('482 2.3 Flash (darken) - at the default Speed a Double hit is two hits and a rest in a 30 fps export, not Steady at twice the Speed', { item: '482', budgetMs: 60000 }, function () {
+    /* At Speed 10 the pair used to fill the whole period with no rest: byte for byte Steady at 20 (2000 of 2000 samples), and
+       at 30 fps the same two-dark-one-light strobe as Steady at 10. The pair only showed at 6 Hz or below — the pictures and
+       the tests used 2 and 4. CONTROL first: at 1 ms, Double hit at the default Speed is not Steady at 20. */
+    const clip = { start: 0, duration: 2 };
+    let same = 0; for (let i = 0; i < 2000; i++) if (lv482r({ rhythm: 2 }, i / 1000, clip, 30) === lv482r({ rhythm: 1, speed: 20 }, i / 1000, clip, 30)) same++;
+    if (same === 2000) throw new Error('Double hit at the default Speed is Steady at twice the Speed on all 2000 samples of 2 s - there is no pair and no rest');
+    [30, 60, 24].forEach(fps => {
+      const dbl = frames482r({ rhythm: 2 }, fps), st2 = frames482r({ rhythm: 1, speed: 20 }, fps);
+      const h = hits482r(dbl);
+      if (dbl[0] > 113) throw new Error('at ' + fps + ' fps a Double hit does not start with a full hit on the clip start (reads ' + dbl[0] + ')');
+      if (h.length < 6) throw new Error('at ' + fps + ' fps a Double hit at the default Speed lands only ' + h.length + ' hits in 2 s (frames ' + dbl.join(',') + ')');
+      /* A PAIR: the light frames after the first hit of each pair are fewer than after the second — a gap, then a rest. */
+      const lights = h.slice(1).map((n, i) => { let k = 0; for (let j = h[i]; j < n; j++) if (dbl[j] >= 150) k++; return k; });
+      for (let i = 0; i + 1 < lights.length; i += 2) {
+        if (!(lights[i] >= 1 && lights[i + 1] > lights[i])) throw new Error('at ' + fps + ' fps a Double hit at the default Speed does not read as pairs with a rest: light frames between hits ' + lights.join(',') + ' (frames ' + dbl.slice(0, 24).join(',') + ')');
+      }
+      if (dbl.join() === st2.join()) throw new Error('at ' + fps + ' fps a Double hit at the default Speed is frame for frame Steady at 20');
+    });
+    /* THROUGH THE APP: a grey clip, Double hit at the default Speed, frames 0-11 of a 30 fps project — the export (240 wide),
+       the half-size preview and his phone's 0.28 read the same dark and light frames, and they are the pair and the rest. */
+    const read = (w, t) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 240, shapeH: 180, fill: '#c8c8c8', start: 0, duration: 2 });
+      L.start = 0; L.duration = 2; const e = FM.fxRegistry.makeInstance('flashdark'); e.params.rhythm = 2; L.effects = [e];
+      const h = Math.round(w * 3 / 4), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 2, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return x.getImageData(w >> 1, h >> 1, 1, 1).data[0] < 160 ? 'D' : 'L';
+    };
+    const ex = [], pv = [], ph = [];
+    for (let n = 0; n < 12; n++) { ex.push(read(240, n / 30)); pv.push(read(120, n / 30)); ph.push(read(68, n / 30)); }
+    if (pv.join('') !== ex.join('') || ph.join('') !== ex.join('')) throw new Error('a Double hit reads ' + ex.join('') + ' in the export, ' + pv.join('') + ' on the half-size preview and ' + ph.join('') + ' on the phone');
+    if (!/^DLDLL+DLDL/.test(ex.join(''))) throw new Error('a Double hit at the default Speed exports as ' + ex.join('') + ' at 30 fps - not hit, gap, hit, rest');
+  });
+
+  test('482 2.3 Flash (darken) - no rhythm runs faster than the frame rate can show: Build-up speeds up to its Speed without stalling into dark frames, and Steady 30 still flashes', { item: '482', budgetMs: 60000 }, function () {
+    /* Build-up at the default Speed used to end at 40 Hz. No 30 fps export can show that, so the second half of the clip SLOWED
+       DOWN (gaps 3,3,2,2,… then 4, 7, 12 frames) and froze into eight dark frames just where it should have been fastest; and
+       Steady 30 in a 30 fps project landed every frame on a hit and never flashed at all. */
+    [30, 60].forEach(fps => {
+      const bu = frames482r({ rhythm: 3 }, fps), h = hits482r(bu), gaps = h.slice(1).map((n, i) => n - h[i]);
+      /* Hit gaps shrink: a frame of rounding either way, never a real slow-down. */
+      let least = Infinity;
+      gaps.forEach((g, i) => { if (g > least + 1) throw new Error('at ' + fps + ' fps Build-up at the default Speed slows down: the gap after hit ' + (i + 1) + ' is ' + g + ' frames after one of ' + least + ' (gaps ' + gaps.join(',') + ')'); if (g < least) least = g; });
+      if (!(gaps.length >= 8 && gaps[0] >= 2 * gaps[gaps.length - 1])) throw new Error('at ' + fps + ' fps Build-up at the default Speed does not build (gaps ' + gaps.join(',') + ')');
+      /* In its last half second it runs at about its Speed (10 a second), so a hit is dark for about half of fps/10 frames — never
+         the long dark stall of a rate the frame rate cannot show. */
+      const tail = bu.slice(Math.round(fps * 1.5));
+      if (darkRun482r(tail) > fps / 20 + 1) throw new Error('at ' + fps + ' fps Build-up at the default Speed holds ' + darkRun482r(tail) + ' dark frames in a row in its last half second, where it is fastest (frames ' + tail.join(',') + ')');
+      /* …and it arrives at its Speed: the last second has more hits than the first. */
+      const firstSec = h.filter(n => n < fps).length, lastSec = h.filter(n => n >= fps).length;
+      if (!(lastSec > firstSec)) throw new Error('at ' + fps + ' fps Build-up lands ' + firstSec + ' hits in its first second and ' + lastSec + ' in its last');
+    });
+    /* Build-up at Speed 30 in a 30 fps project climbs to the fastest the frame rate can show and holds it — never a stall. */
+    const b30 = frames482r({ rhythm: 3, speed: 30 }, 30), h30 = hits482r(b30);
+    if (darkRun482r(b30) > 2 || h30.length < 20) throw new Error('Build-up at Speed 30 in a 30 fps project: ' + h30.length + ' hits in 2 s and ' + darkRun482r(b30) + ' dark frames in a row (frames ' + b30.join(',') + ')');
+    /* STEADY 30: at 30 fps a hit on alternate frames (15 a second, the most 30 fps can show); at 60 fps the full 30. */
+    const s30 = frames482r({ rhythm: 1, speed: 30 }, 30, 1), s60 = frames482r({ rhythm: 1, speed: 30 }, 60, 1);
+    if (hits482r(s30).length !== 15 || darkRun482r(s30) !== 1) throw new Error('Steady at Speed 30 in a 30 fps project flashes ' + hits482r(s30).length + ' times in a second (frames ' + s30.join(',') + ') - it should hit on alternate frames');
+    if (hits482r(s60).length !== 30) throw new Error('Steady at Speed 30 in a 60 fps project flashes ' + hits482r(s60).length + ' times in a second, not 30');
+    /* CONTROL: under the cap nothing changes — Steady 10 at 30 fps is still a hit every third frame. */
+    const s10 = frames482r({ rhythm: 1 }, 30, 1);
+    if (hits482r(s10).join() !== '0,3,6,9,12,15,18,21,24,27') throw new Error('CONTROL: Steady at the default Speed hits at frames ' + hits482r(s10).join(',') + ', not every third frame');
+    /* THROUGH THE APP, preview = export: Steady 30 alternates frame by frame in a 30 fps project AND in a 60 fps one (where 30 a
+       second is the most it can show, and a kernel that never heard the project's rate would cap it at 15: DDLL), in the export
+       and on the half-size preview, on the cropped read-back and on the full plate — both carry the scene to the kernel. */
+    const read = (w, t, fps, full) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 240, shapeH: 180, fill: '#c8c8c8', start: 0, duration: 2 });
+      L.start = 0; L.duration = 2; const e = FM.fxRegistry.makeInstance('flashdark'); Object.assign(e.params, { rhythm: 1, speed: 30 }); L.effects = [e];
+      const h = Math.round(w * 3 / 4), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      const cm = FM._cropMode;
+      try { if (full) FM._cropMode = -1; FM.renderScene(x, { project: { width: 240, height: 180, fps: fps, duration: 2, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t); } finally { FM._cropMode = cm; }
+      return x.getImageData(w >> 1, h >> 1, 1, 1).data[0] < 160 ? 'D' : 'L';
+    };
+    [30, 60].forEach(fps => [false, true].forEach(full => {
+      const ex = [], pv = []; for (let n = 0; n < 8; n++) { ex.push(read(240, n / fps, fps, full)); pv.push(read(120, n / fps, fps, full)); }
+      if (ex.join('') !== 'DLDLDLDL' || pv.join('') !== ex.join('')) throw new Error('Steady at Speed 30 in a ' + fps + ' fps project reads ' + ex.join('') + ' in the export and ' + pv.join('') + ' on the preview ' + (full ? 'on the full plate' : 'on the cropped read-back') + ' - not a hit on alternate frames');
+    }));
+  });
+
+  test('482 2.3 Flash (darken) - a keyframed Speed is integrated, so easing it down slows the strobe instead of running it backwards', { item: '482', budgetMs: 60000 }, function () {
+    /* rate(now) x elapsed re-timed the whole strobe on every frame: Speed keyframed 10 -> 2 over 2 s hit at 0, .105, .22, .349,
+       .5, .691, 1.0 s and then stopped, the phase running BACKWARDS for the rest of the clip. Integrated (queue 913's rule), the
+       phase at t is 10t - 2t², so hit k lands at (10 - sqrt(100 - 8k)) / 4: twelve hits, each gap longer than the last. */
+    const clip = { start: 0, duration: 2 }, sp = { kf: [{ t: 0, v: 10, ease: 'linear' }, { t: 2, v: 2, ease: 'linear' }] };
+    const onsets = over => { const o = []; let prev = 255; for (let i = 0; i < 2000; i++) { const v = lv482r(over, i / 1000, clip); if (v <= 113 && prev > 150) o.push(i / 1000); prev = v; } return o; };
+    const got = onsets({ rhythm: 1, speed: sp }), want = [];
+    for (let k = 0; k < 12; k++) want.push((10 - Math.sqrt(100 - 8 * k)) / 4);
+    if (got.length !== want.length || got.some((v, i) => Math.abs(v - want[i]) > 0.003)) throw new Error('Steady with Speed keyframed 10 -> 2 hits at ' + got.map(v => v.toFixed(3)).join(', ') + ' s, not ' + want.map(v => v.toFixed(3)).join(', '));
+    /* A keyframed Speed on the clip's clock: the same ramp on a clip starting at 0.5 s (keyframes at 0.5 and 2.5) hits 0.5 s later. */
+    const late = { start: 0.5, duration: 2 }, spl = { kf: [{ t: 0.5, v: 10, ease: 'linear' }, { t: 2.5, v: 2, ease: 'linear' }] };
+    const got2 = []; let prev = 255; for (let i = 500; i < 2500; i++) { const v = lv482r({ rhythm: 1, speed: spl }, i / 1000, late); if (v <= 113 && prev > 150) got2.push(i / 1000 - 0.5); prev = v; }
+    if (got2.length !== want.length || got2.some((v, i) => Math.abs(v - want[i]) > 0.003)) throw new Error('the same ramp on a clip starting at 0.5 s hits at ' + got2.map(v => v.toFixed(3)).join(', ') + ' s into it');
+    /* Double hit and Build-up never run backwards either: their hits under the same ramp keep moving forward in time and keep coming. */
+    [2, 3].forEach(r => {
+      const o = onsets({ rhythm: r, speed: sp });
+      if (!(o.length >= 6 && o[o.length - 1] > 1.5)) throw new Error('rhythm ' + r + ' under Speed keyframed 10 -> 2 stops hitting at ' + (o[o.length - 1] || 0).toFixed(3) + ' s (' + o.length + ' hits)');
+    });
+    /* CONTROL: an unanimated Speed keeps the closed form — Steady 10 hits every 0.1 s. */
+    const c = onsets({ rhythm: 1 });
+    if (c.length !== 20 || c.some((v, i) => Math.abs(v - i / 10) > 0.002)) throw new Error('CONTROL: Steady at a plain Speed 10 hits at ' + c.join(', '));
+  });
+
+  test('482 2.3 Flash (darken) - Build-up ramps over the whole clip: split in two, trimmed at the start or on a group, its hits land where they did', { item: '482', budgetMs: 90000 }, async function () {
+    /* The ramp's length was layer.duration while its clock carried fxTimeOffset: a 4 s clip split at 2 s went from 9 hits to 13
+       (the tail half starting past its own end, at the fastest rate throughout), a left trim reached full speed 2 s early, and a
+       group ramped over its proxy's synthetic 2 s whatever its real length. Rendered through the app at 60 steps a second. */
+    const P = { width: 240, height: 180, fps: 30, duration: 5, background: '#000000' };
+    const grey = () => FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 240, shapeH: 180, fill: '#c8c8c8' });
+    const fx = () => { const e = FM.fxRegistry.makeInstance('flashdark'); Object.assign(e.params, { rhythm: 3, speed: 4, soft: 0 }); return e; };
+    const run = (layers, t0, t1) => {
+      const o = [];
+      for (let i = Math.round(t0 * 60); i < Math.round(t1 * 60); i++) {
+        const cv = offscreen(48, 36), x = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(x, { project: P, layers: layers, selectedId: null, selectedIds: [] }, i / 60);
+        o.push(x.getImageData(24, 18, 1, 1).data[0] < 160 ? 'D' : 'L');
+      }
+      return o.join('');
+    };
+    const onsets = str => { const o = []; for (let i = 0; i < str.length; i++) if (str[i] === 'D' && (i === 0 || str[i - 1] === 'L')) o.push(i); return o; };
+    const W = grey(); W.start = 0; W.duration = 4; W.effects = [fx()];
+    const whole = run([W], 0, 4), wo = onsets(whole), wg = wo.slice(1).map((n, i) => n - wo[i]);
+    /* CONTROL: the whole clip builds — its first gap is at least twice its last. */
+    if (!(wo.length >= 6 && wg[0] >= 2 * wg[wg.length - 1])) throw new Error('CONTROL: a 4 s Build-up at Speed 4 hits at steps ' + wo.join(',') + ' of 1/60 s - it does not build');
+    /* SPLIT at 2 s by FM.splitLayer itself, both halves in the scene. */
+    const layers0 = FM.scene.layers.slice(), t00 = FM.time, sel0 = FM.scene.selectedId;
+    let split;
+    try {
+      FM.scene.layers.length = 0;
+      const S = grey(); S.start = 0; S.duration = 4; S.effects = [fx()];
+      FM.scene.layers.push(S); FM.time = 2;
+      await FM.splitLayer(S.id);
+      if (FM.scene.layers.length !== 2) throw new Error('fixture: the clip did not split (' + FM.scene.layers.length + ' layers)');
+      split = run(FM.scene.layers.slice(), 0, 4);
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.time = t00; FM.scene.selectedId = sel0;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+    if (split !== whole) throw new Error('split at 2 s, the Build-up hits at steps ' + onsets(split).join(',') + ' where the whole clip hit at ' + wo.join(','));
+    /* LEFT TRIM by a second: start 1, 3 s long, its effect clock carried on by fxTimeOffset 1, as a trim sets it. */
+    const T = grey(); T.start = 1; T.duration = 3; T.fxTimeOffset = 1; T.effects = [fx()];
+    const trimmed = run([T], 1, 4);
+    if (trimmed !== whole.slice(60)) throw new Error('trimmed a second at the start, the Build-up hits at steps ' + onsets(trimmed).map(n => n + 60).join(',') + ' where the whole clip hit at ' + wo.filter(n => n >= 60).join(','));
+    /* A 4 s GROUP carrying the effect, around the same grey card. */
+    const G = FM.makeLayer('group', { name: 'g482r', x: 0, y: 0 }); G.start = 0; G.duration = 4; G.effects = [fx()];
+    const C = grey(); C.start = 0; C.duration = 4; C.parent = G.id;
+    const grouped = run([G, C], 0, 4);
+    if (grouped !== whole) throw new Error('on a 4 s group the Build-up hits at steps ' + onsets(grouped).join(',') + ' where the same clip hit at ' + wo.join(','));
+  });
+
+  test('482 2.6 Motion Blur (Object) - Shutter phase keeps a layer that moves from its first frame to its last whole on both, with no pop', { item: '482', budgetMs: 60000 }, function () {
+    /* At -100 the whole shutter window of the first frame lies before the clip starts, so no slice was drawn and the frame fell
+       back to the sharp, fully opaque layer; the next frame had one slice in six and nearly vanished — measured ink 1600, 320,
+       527, 791… A phased window now holds the layer at its first (and last) moment, the way a clip holds its first frame. A white
+       40 px box (ink 1600) crossing a black frame for the whole of its 2 s clip, Shutter 6, 48 samples. */
+    const P = { width: 240, height: 120, fps: 30, duration: 2, background: '#000000' };
+    const ink = (phase, n, w) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 2 });
+      L.start = 0; L.duration = 2; L.transform.x = { kf: [{ t: 0, v: 40, ease: 'linear' }, { t: 2, v: 200, ease: 'linear' }] };
+      if (phase != null) { const e = FM.fxRegistry.makeInstance('objectblur'); Object.assign(e.params, { shutter: 6, samples: 48, phase: phase }); L.effects = [e]; }
+      const k = (w || 240) / 240, cv = offscreen(w || 240, Math.round(120 * k)), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: P, layers: [L], selectedId: null, selectedIds: [] }, n / 30);
+      const d = x.getImageData(0, 0, cv.width, cv.height).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i];
+      return s / 255 / (k * k);
+    };
+    const sharp = ink(null, 10);
+    if (Math.abs(sharp - 1600) > 20) throw new Error('setup: the unblurred box inks ' + Math.round(sharp) + ', not 1600');
+    /* CONTROL: centred (phase 0, the old window) the first frame is the old partial coverage — the fixture does reach the edge. */
+    if (!(ink(0, 0) < 0.7 * sharp)) throw new Error('CONTROL: at phase 0 the first frame inks ' + Math.round(ink(0, 0)) + ' - the fixture does not reach the clip edge, so it proves nothing');
+    [[-100, [0, 1, 2, 3, 4, 5, 6, 7], 'first'], [-60, [0, 1, 2, 3], 'first'], [100, [52, 53, 54, 55, 56, 57, 58, 59], 'last'], [60, [56, 57, 58, 59], 'last']].forEach(([ph, ns, which]) => {
+      [240, 120].forEach(w => {
+        const got = ns.map(n => ink(ph, n, w));
+        if (got.some(v => v < 0.95 * sharp || v > 1.05 * sharp)) throw new Error('Shutter phase ' + ph + ' inks the ' + which + ' frames ' + ns[0] + '-' + ns[ns.length - 1] + ' at ' + got.map(Math.round).join(', ') + (w === 240 ? ' in the export' : ' on the half-size preview') + ' (the box alone is ' + Math.round(sharp) + ') - the layer pops or fades at the clip edge');
+      });
+    });
+  });
+
+  test('482 2.6 Motion Blur (Object) - at Shutter phase -100 a fast layer leaving the frame keeps its whole trail', { item: '482', budgetMs: 60000 }, function () {
+    /* The plate margin was capped at a quarter of the frame, enough for a centred window, which pushes the plate at most half
+       its travel. A phased one pushes it the whole travel, so the comic-book streak was cut off at half the speed: a 40 px box at
+       600 px/s, Shutter 12 (0.4 s, 240 px), vanished at 0.9 s with its trail still in frame. The trail of a box whose centre is at
+       100 + 600t runs from its left edge at t - 0.4 to its right edge at t. */
+    const P = { width: 480, height: 120, fps: 30, duration: 2, background: '#000000' };
+    const span = (t, w, phase) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 2 });
+      L.start = 0; L.duration = 2; L.transform.x = { kf: [{ t: 0, v: 100, ease: 'linear' }, { t: 2, v: 1300, ease: 'linear' }] };
+      const e = FM.fxRegistry.makeInstance('objectblur'); Object.assign(e.params, { shutter: 12, samples: 48, phase: phase }); L.effects = [e];
+      const k = w / 480, h = Math.round(120 * k), cv = offscreen(w, h), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: P, layers: [L], selectedId: null, selectedIds: [] }, t);
+      const row = x.getImageData(0, h >> 1, w, 1).data; let lo = -1, hi = -1; for (let i = 0; i < w; i++) if (row[i * 4] > 2) { if (lo < 0) lo = i; hi = i; }
+      return { lo: lo < 0 ? -1 : lo / k, hi: hi < 0 ? -1 : (hi + 1) / k };
+    };
+    /* First, with the box still well inside the frame (0.6 s), the trail runs behind it from 200 to its front at 480 — the
+       picture the cut-off ones below are measured against. */
+    const c = span(0.6, 480, -100);
+    if (Math.abs(c.lo - (600 * 0.2 + 80)) > 6 || Math.abs(c.hi - (600 * 0.6 + 120)) > 6) throw new Error('at 0.6 s the trail spans ' + c.lo + '-' + c.hi + ', not ' + (600 * 0.2 + 80) + '-' + (600 * 0.6 + 120) + ' - Shutter phase -100 is not trailing behind');
+    [0.8, 0.85, 0.9, 0.95].forEach(t => {
+      const want = 600 * (t - 0.4) + 80;
+      [480, 240].forEach(w => {
+        const s = span(t, w, -100);
+        if (Math.abs(s.lo - want) > 6 || s.hi < 478) throw new Error('at ' + t + ' s the trail of a box leaving the frame spans ' + s.lo + '-' + s.hi + (w === 480 ? ' in the export' : ' on the half-size preview') + ', not ' + want + '-480 - it is cut off');
+      });
+    });
+  });
+
+  test('482 2.6 Motion Blur (Object) - a moving group keeps blurring after its first 2 seconds', { item: '482', budgetMs: 60000 }, function () {
+    /* The flattened group's proxy carries a synthetic 2 s duration, and the shutter window ended at start + duration: a moving
+       group stopped smearing 2 s into itself (a 100 px square sharp at 2.5 s and 4 s). It now reads the group's real length.
+       A 100 px square at 70 px/s, Shutter 12 (0.4 s, 28 px of smear), on a plain layer and in a group, at 1, 2.5 and 3.5 s. */
+    const P = { width: 400, height: 400, fps: 30, duration: 5 };
+    const width = (layers, t) => {
+      const c = offscreen(400, 400), g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: P, layers: layers, selectedId: null, selectedIds: [] }, t);
+      const d = g.getImageData(0, 200, 400, 1).data; let lo = -1, hi = -1;
+      for (let x = 0; x < 400; x++) if (d[x * 4 + 3] > 20) { if (lo < 0) lo = x; hi = x; }
+      return hi < 0 ? 0 : hi - lo + 1;
+    };
+    const OB = () => [{ type: 'objectblur', enabled: true, params: { shutter: 12, samples: 24 } }];
+    const moving = () => ({ kf: [{ t: 0, v: 60, ease: 'linear' }, { t: 4, v: 340, ease: 'linear' }] });
+    const sq = x => { const s = FM.makeLayer('shape', { name: 'sq', shape: 'rect', x: x, y: 200, shapeW: 100, shapeH: 100 }); s.start = 0; s.duration = 4; return s; };
+    const plain = fx => { const s = sq(200); s.transform.x = moving(); s.effects = fx ? OB() : []; return [s]; };
+    const grouped = fx => { const G = FM.makeLayer('group', { name: 'g', x: 0, y: 0 }); G.start = 0; G.duration = 4; G.transform.x = moving(); G.effects = fx ? OB() : []; const s = sq(0); s.parent = G.id; return [G, s]; };
+    [1, 2.5, 3.5].forEach(t => {
+      const pOff = width(plain(false), t), pOn = width(plain(true), t), gOff = width(grouped(false), t), gOn = width(grouped(true), t);
+      if (pOff !== 100 || pOn - pOff < 20) throw new Error('CONTROL at ' + t + ' s: the plain square measures ' + pOff + ' px sharp and ' + pOn + ' px blurred - the harness, not the feature');
+      if (Math.abs((gOn - gOff) - (pOn - pOff)) > 6) throw new Error('at ' + t + ' s a moving 4 s group smears by ' + (gOn - gOff) + ' px where the same plain layer smears by ' + (pOn - pOff) + ' px');
+    });
   });
 
 })();

@@ -1,6 +1,8 @@
 """#482 polish batch 2 (rhythm) — render the before/after sheets at phone size (390 CSS px wide, 2x), through the real app.
 Usage: python3 tools/design/482/polish2/render.py [PORT] [SHEET ...]      (PORT = a running tools/serve.sh; default 9111)
-Writes tools/design/482/polish2/<sheet>.jpg. The tiles are drawn by sheet.js inside the app with FM.renderScene."""
+Writes tools/design/482/polish2/<sheet>.jpg. The tiles are drawn by sheet.js inside the app with FM.renderScene.
+objectblur-edges-before / objectblur-edges-after are one strip drawn twice — against a server of the older tree and of the
+fixed one — and stacked into objectblur-shutterphase-edges.jpg (the panel-flashdark-default pair the same way, side by side)."""
 import os, sys, time, base64, json, tempfile, shutil
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..', '..', '..', '..', 'tests'))

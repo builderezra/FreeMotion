@@ -3363,7 +3363,10 @@ window.FM = window.FM || {};
     // move cannot allocate the world.
     // No margin on the mover path: nothing is re-projected there, so nothing is pushed past the comp
     // edge and there is no smear to clip. Each slice is rendered complete instead.
-    const m = _hasMoverFx ? 0 : Math.min(Math.ceil((_travel == null ? 0 : _travel)) + 2, PW * 0.25);
+    /* A PHASED WINDOW PUSHES FURTHER (#482 2.6 review). Centred, the slices push the plate at most half the travel from t;
+       at ±100 they push it the WHOLE travel, so the old quarter-frame cap cut a fast streak off at half the speed — a layer
+       leaving the frame lost its trail while the trail was still in frame. The cap grows with the phase; 0 keeps PW·0.25. */
+    const m = _hasMoverFx ? 0 : Math.min(Math.ceil((_travel == null ? 0 : _travel)) + 2, PW * 0.25 * (1 + Math.abs(_ph)));
     /* INSIDE A CAMERA PLATE THAT REACHES PAST THE FRAME (queue 690, fifth hunt) the plates cover what that plate covers,
        not the frame, so a blurred layer is not cut off at the frame edge as the camera pans. The blur has no geometry
        of its own — it moves the layer's own picture — so it can; the plate is marked, so what is nested in it keeps the
@@ -3404,11 +3407,21 @@ window.FM = window.FM || {};
       // between consecutive frames. _clipStart matters because start/duration are SYNTHETIC on a
       // flattened-group proxy.
       const cs = (layer._clipStart != null) ? layer._clipStart : (layer.start || 0);
-      const lo = cs, hi = cs + (layer.duration || 0);
+      /* _clipDuration: a flattened group's proxy carries a SYNTHETIC 2 s duration, so a moving group stopped blurring 2 s
+         into itself (#482 2.6 review; the proxy now carries the group's real length beside its real start). */
+      const lo = cs, hi = cs + ((layer._clipDuration != null ? layer._clipDuration : layer.duration) || 0);
       let drawn = 0;
       for (let k = 0; k < N; k++) {
-        const tau = tc + ((k + 0.5) / N - 0.5) * dt;   // tc: the phased window's centre (t itself at phase 0)
-        if (tau < lo || tau >= hi) continue;    // outside the clip's life — partial shutter coverage is real, so it simply contributes less
+        let tau = tc + ((k + 0.5) / N - 0.5) * dt;   // tc: the phased window's centre (t itself at phase 0)
+        if (tau < lo || tau >= hi) {
+          /* Centred (phase 0, the old window, byte for byte): outside the clip's life — partial shutter coverage is real, so
+             it simply contributes less. PHASED, a window that opens before the clip starts (−100) or closes after it ends
+             (+100) would leave the first frame with NO slice inside — handed back to the sharp, fully opaque draw — and the
+             next with one in six: a layer that moves from its first frame POPPED on and nearly vanished. Phased, the layer
+             is held at its first (or last) moment instead, the way a clip holds its first frame, so every frame is whole. */
+          if (!_ph || !(hi > lo)) continue;
+          tau = tau < lo ? lo : Math.max(lo, hi - 1e-6);
+        }
         /* TWO WAYS TO MAKE A SUB-FRAME (queue 382).
          * RE-PROJECTION (default): one plate at `t`, pushed through D = M(tau)·M(t)⁻¹. Enormously
          * cheaper, and useless for a mover — the mover's displacement sits inside that one plate and is
@@ -4179,7 +4192,7 @@ window.FM = window.FM || {};
           const sub = actx.getImageData(rect.x, rect.y, rect.w, rect.h);
           // a bounded kernel gets its box measured on the cropped buffer — the same scan, 1/50th of the pixels
           const bb2 = bounded ? fxBounds(sub.data, rect.w, rect.h) : null;
-          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2, layer);   // layer: the few kernels on the clip's own clock (Flash (darken)'s rhythms, #482 2.3)
+          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2, layer, scene);   // layer, scene: the few kernels on the clip's own clock and the project's frame rate (Flash (darken)'s rhythms, #482 2.3)
           bctx.putImageData(sub, rect.x, rect.y);
         }
         ctx.save();
@@ -4204,7 +4217,7 @@ window.FM = window.FM || {};
        * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
        * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
       // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
-      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -6908,14 +6921,26 @@ window.FM = window.FM || {};
        three are HITS on the LAYER's own clock, so the first hit lands the moment the clip starts — put a clip on a beat and
        its strobe is on the beat:
          Steady (1)     one hit every 1/Speed.
-         Double hit (2) two hits 80 ms apart every 1/Speed (closer when the period is too short to fit them).
-         Build-up (3)   the period shrinks from 1/Speed to 1/(4·Speed) across the clip — geometric, so each stretch of the
-                        clip speeds up by the same ratio, the way a drum build doubles its subdivisions. Past the clip's end
-                        (or with no clip to measure) it holds the fastest rate.
+         Double hit (2) two hits 80 ms apart every 1/Speed, then a REST: the pair takes at most two thirds of the period.
+         Build-up (3)   the rate climbs from Speed/4 at the clip's start to Speed at its end — geometric, so each stretch of
+                        the clip speeds up by the same ratio, the way a drum build doubles its subdivisions — and Speed is
+                        where it arrives, the drop. Past the clip's end (or with no clip to measure) it holds Speed.
+       NO FASTER THAN THE FRAME RATE CAN SHOW (review of the first build). A strobe past half the project's fps is not a
+       faster strobe in the export, it is a slower one or none: Steady 30 in a 30 fps project landed every frame on a hit
+       and was dark throughout, and a Build-up that ended at 40 Hz visibly SLOWED DOWN and froze into eight dark frames just
+       where it should have been fastest. So a hit rate is held at fps/2 (one dark frame, one light), and a Double hit at
+       fps/6 — hit, gap, hit, gap, rest, rest is the fewest frames that still reads as a pair; at the default Speed 10 the
+       pair once filled the whole period and was byte for byte Steady at 20. The scene's fps arrives as the kernel's 9th
+       argument (`scene`), so the preview and the export hold the same rate; with no scene it assumes 30.
+       A KEYFRAMED Speed is INTEGRATED (queue 913's rule — Boil, Twinkle, Light Leak): rate(now) × elapsed re-timed the
+       whole strobe on every frame and ran it BACKWARDS while Speed eased down. An unanimated Speed keeps the closed form.
+       BUILD-UP'S LENGTH is the clip's on the effect clock: fxTimeOffset + length, so a split's tail half and a left trim
+       keep the original ramp (the clock and its length measured the same way), the longest half of a split lineage, so
+       the head half keeps it too, and a flattened group's REAL length (`_clipDuration` — its proxy's own is a synthetic 2 s).
        A hit is the same shape everywhere: fully dark for the first Hold dark of its window, then it lets go — Softness 0
        lets go at half-way (a hard strobe), 1 as a smooth fall, the SAME lerp between a hard and a smooth value the Random
        rhythm has always used. Stateless in t (floor and frac of an explicit phase), so preview, export and scrub agree. */
-    flashdark: function (d, W, H, p, t, ps, bb, layer) {
+    flashdark: function (d, W, H, p, t, ps, bb, layer, scene) {
       var fdN = function (i) {
         var h = (i ^ 0x9e3779b9) >>> 0;
         h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
@@ -6930,22 +6955,50 @@ window.FM = window.FM || {};
       var fdV;
       if (fdR >= 1 && fdR <= 3) {
         var fdHo = p.hold == null ? 0 : FM.evalProp(p.hold, t); if (!(fdHo >= 0)) fdHo = 0; if (fdHo > 1) fdHo = 1;
+        /* fdEps: a frame that lands ON a beat, or on the middle of a hit, to within float error is on it (the later side). At
+           the fastest rate the frames sit exactly on those boundaries, and 0.49999999999999994 would keep every frame dark. */
+        var fdEps = 1e-9;
+        var fdWin = function (x) { var k = Math.floor(x + fdEps), f = x - k; return [k, f > 0 ? f : 0]; };   // [which window, how far into it]
         var fdHit = function (u) {   // u: where in its window this moment sits, 0..1 → 1 = full hit, 0 = none
           if (u < fdHo) return 1;
-          var r = (u - fdHo) / (1 - fdHo), hard = r < 0.5 ? 1 : 0;
+          var r = (u - fdHo) / (1 - fdHo), hard = r < 0.5 - fdEps ? 1 : 0;
           return hard + ((0.5 + 0.5 * Math.cos(Math.PI * r)) - hard) * fdSo;
         };
+        var fdFps = scene && scene.project && +scene.project.fps > 0 ? +scene.project.fps : 30;
+        var fdCap = fdR === 2 ? fdFps / 6 : fdFps / 2;   // hits (pairs, for a Double hit) a second this frame rate can show
         var fdTl = layer ? FM.fxLocalTime(layer, t) : t; if (!(fdTl > 0)) fdTl = 0;
+        var fdE = 0;   // Build-up: the clip's end on the effect clock — its ramp runs from 0 to here
+        if (fdR === 3 && layer) {
+          var fdOff = function (l) { var o = l.fxTimeOffset, n = (typeof o === 'number') ? o : parseFloat(o); return isFinite(n) ? n : 0; };
+          var fdLen = function (l) { var n = l._clipDuration != null ? +l._clipDuration : +l.duration; return n > 0 ? n : 0; };
+          if (fdLen(layer) > 0) fdE = fdOff(layer) + fdLen(layer);
+          if (layer.splitOf && scene && scene.layers) {
+            for (var fdi = 0; fdi < scene.layers.length; fdi++) {
+              var fdl = scene.layers[fdi];
+              if (fdl && fdl.splitOf === layer.splitOf && fdLen(fdl) > 0 && fdOff(fdl) + fdLen(fdl) > fdE) fdE = fdOff(fdl) + fdLen(fdl);
+            }
+          }
+        }
+        var fdL4 = Math.log(4), fdTop = fdS < fdCap ? fdS : fdCap;
         var fdPh;
-        if (fdR === 3) {
-          var fdD = layer && layer.duration > 0 ? +layer.duration : 0, fdL4 = Math.log(4);
-          if (fdD > 0 && fdTl < fdD) fdPh = fdS * fdD / fdL4 * (Math.pow(4, fdTl / fdD) - 1);
-          else fdPh = (fdD > 0 ? fdS * fdD / fdL4 * 3 : 0) + 4 * fdS * (fdTl - fdD);
-        } else fdPh = fdTl * fdS;
-        var fdU = fdPh - Math.floor(fdPh);
+        if (FM.isAnimated(p.speed)) {
+          var fdT0 = t - fdTl;   // the comp moment this clip's effect clock reads 0 — Speed's keyframes are on the comp clock
+          fdPh = FM.integrateProp(p.speed, fdT0, t, function (u) {
+            var k = FM.evalProp(p.speed, u); if (k == null || isNaN(k)) k = 10; if (k < 1) k = 1; if (k > 30) k = 30;
+            if (fdR === 3 && fdE > 0) k *= Math.pow(4, Math.min(u - fdT0, fdE) / fdE - 1);
+            return k < fdCap ? k : fdCap;
+          });
+        } else if (fdR === 3 && fdE > 0) {
+          /* ∫ min(S·4^(τ/E − 1), cap) dτ: the geometric climb until it meets the cap at τc (the end, when Speed is under
+             it), then flat at the top rate. */
+          var fdTc = fdS > fdCap ? fdE * (1 + Math.log(fdCap / fdS) / fdL4) : fdE; if (fdTc < 0) fdTc = 0;
+          fdPh = fdS * fdE / fdL4 * (Math.pow(4, Math.min(fdTl, fdTc) / fdE - 1) - 0.25) + fdTop * Math.max(0, fdTl - fdTc);
+        } else fdPh = fdTl * fdTop;
+        var fdU = fdWin(fdPh)[1];
         if (fdR === 2) {
-          var fdP = 1 / fdS, fdG = Math.min(0.08, fdP / 2), fdIn = fdU * fdP;   // seconds into this period
-          fdV = fdIn < fdG ? fdHit(fdIn / fdG) : (fdIn < 2 * fdG ? fdHit((fdIn - fdG) / fdG) : 0);
+          /* The pair and its rest: two hit windows of fdG, at most a third of the period each, so a third is always rest. */
+          var fdP = 1 / fdTop, fdG = Math.min(Math.max(0.08, 2 / fdFps), fdP / 3), fdIn = fdWin(fdU * fdP / fdG);   // [hit window, into it]
+          fdV = fdIn[0] <= 1 ? fdHit(fdIn[1]) : 0;
         } else fdV = fdHit(fdU);
       } else {
         var fdT = (t < 0) ? 0 : t;
@@ -17106,6 +17159,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (R) { tmp._canvasX = RX; tmp._canvasY = RY; }   // …and where that box starts, when it is not the frame
     tmp.start = t - 1; tmp.duration = 2;   // always inside its window at time t
     tmp._clipStart = g.start || 0;   // real clip start for effect clocks — tl from tmp.start would be a CONSTANT 1, freezing every time-driven effect (spin/wiggle/particles…) on a group
+    if (+g.duration > 0) tmp._clipDuration = +g.duration;   // …and its real length: Motion Blur's clip window and Flash (darken)'s Build-up read it (#482 2.6/2.3 review)
     tmp.effects = g.effects || [];
     // group BORDER = the existing alpha-outline 'stroke' effect run on the flattened unit
     const gbw = (g.stroke && g.stroke.enabled) ? (FM.evalProp(g.stroke.width, t) || 0) : 0;
