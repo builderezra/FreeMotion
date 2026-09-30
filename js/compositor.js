@@ -1279,7 +1279,7 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Style', def: 0, options: [[0, 'Radial'], [1, 'Parallel']] },
       { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'mode', liveWhen: 1 },
       { key: 'inner', label: 'Clear zone', min: 0, max: 80, step: 1, def: 26, unit: '%' },
-      { key: 'aspect', label: 'Clear zone shape', min: 25, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'aspect', label: 'Clear zone shape', min: 25, max: 400, step: 5, def: 100, unit: '%', overriddenBy: 'inner', liveAbove: 0 },   // no clear zone, nothing to shape (review of polish 2.5)
       { key: 'length', label: 'Length', min: 5, max: 100, step: 1, def: 55, unit: '%' },
       { key: 'width', label: 'Weight', min: 1, max: 60, step: 1, def: 12, unit: 'px' },
       { key: 'jitter', label: 'Scatter', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -5895,10 +5895,16 @@ window.FM = window.FM || {};
       const jitRaw = p.jitter == null ? 0 : FM.evalProp(p.jitter, t);
       const jit = jitRaw > 0 ? Math.min(1, jitRaw / 100) : 0;
       const edgeMode = p.wrap == null ? 0 : (Math.round(FM.evalProp(p.wrap, t)) | 0);
-      const edgeAt = function (b) {                                   // an inner slice edge, moved by Uneven slices
-        if (b <= 0) return 0; if (b >= bands) return H;
+      /* A slice edge, moved by Uneven slices. It BLENDS from the even grid (b × bandH, the old slices, whose leftover bottom
+         rows are never torn) towards the uneven one ((b + r) slices of the whole height) by the amount, so leaving 0 moves
+         each edge by a fraction of a row rather than snapping the whole grid on the first frame a keyframe leaves 0 (review
+         of polish 2.7: 0 → 1 % moved 1248 of 1920 rows at 90 slices, 1 → 2 % moved 9). At 100 % it is the uneven grid. */
+      const edgeAt = function (b) {
+        if (b <= 0) return 0;
+        const g = Math.min(bands, b) * bandH;
+        if (b >= bands) return Math.max(0, Math.min(H, Math.round(g + jit * (H - g))));
         const r = (ghash((b * 1597334677 + frame * 3812015801) | 0) & 1023) / 1023 - 0.5;
-        return Math.max(0, Math.min(H, Math.round((b + r * jit) * H / bands)));
+        return Math.max(0, Math.min(H, Math.round(g + jit * ((b + r) * H / bands - g))));
       };
       const slip = function (y, shift) {                              // one row slipped by `shift`, per the Edges setting
         const row = y * W * 4;
@@ -5930,7 +5936,8 @@ window.FM = window.FM || {};
         /* BLOCK DAMAGE: up to 24 rectangles a re-roll, each 4–34 % of the width and 2–10 % of the height (shares of the plate,
            so the preview and the export break in the same places), lifted from where the slices left the picture, slipped
            sideways by up to Amount × a quarter of the width and drawn back with its colour channels swapped round. */
-        const sb = d.slice(), n = Math.round(blk * 24);
+        // at least one block above 0: round(0.02 × 24) is 0, so the slider's first notch drew nothing (review of polish 2.7)
+        const sb = d.slice(), n = Math.max(1, Math.round(blk * 24));
         const PERM = [[1, 2, 0], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 0, 2]];
         for (let k = 0; k < n; k++) {
           const q = (j) => (ghash((k * 747796405 + j * 2891336453 + frame * 1181783497 + 0x2545f491) | 0) & 65535) / 65535;

@@ -114604,4 +114604,96 @@
     }
   });
 
+  /* ═══ REVIEW OF POLISH 2.5 / 2.7 — three things a reviewer measured on the build ═══════════════════════════════════════ */
+
+  /* UNEVEN SLICES LEAVES 0 SMOOTHLY. At 0 the slices sit on the old grid (a whole number of rows each, the leftover bottom
+     rows never torn); the build put any value above 0 on a grid of fractional slices, so a keyframed Uneven slices on a held
+     tear (Re-roll 0) snapped the whole slice grid on the first frame it left 0. MEASURED on the build, rows that change
+     from 0 to 1 %: 1248 of 1920 at 1080x1920 with 90 slices (Datamosh's count), 503 of 538 on the phone's 302x538 plate,
+     44 at 14 slices there, 16 at 1080x1920 with 14 — against 9, 1, 1 and 7 from 1 % to 2 %. Now 0, 39, 0 and 4, with 1 % to
+     2 % at 17, 35, 0 and 5. At 1 % every edge moves by less than a row's width, so at most one row per edge can change. */
+  test('482 2.7 Glitch - Uneven slices leaves 0 a row at a time, so a keyframe coming off 0 does not jump the whole tear', { item: '482', budgetMs: 90000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.glitch;
+    if (!K) throw new Error('the Glitch kernel is not reachable');
+    const img = (W, H) => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = (x * 7 + y * 31) & 255; d[i + 1] = (x * 3 + (y >> 8) * 17 + y) & 255; d[i + 2] = (y * 5 + x) & 255; d[i + 3] = 255; } return d; };
+    const run = (W, H, bands, jitter, t) => { const d = img(W, H); K(d, W, H, Object.assign({}, FM.fxRegistry.makeInstance('glitch').params, { amount: 0.7, split: 0, speed: 0, bands: bands, jitter: jitter }), t == null ? 0.5 : t); return d; };
+    const rows = (a, b, W, H) => { let n = 0; for (let y = 0; y < H; y++) { const r = y * W * 4; for (let x = 0; x < W * 4; x++) if (a[r + x] !== b[r + x]) { n++; break; } } return n; };
+    const kf = { kf: [{ t: 0, v: 0 }, { t: 3, v: 100 }] };
+    [[1080, 1920, 90], [302, 538, 90], [302, 538, 14], [1080, 1920, 14]].forEach(([W, H, bands]) => {
+      const at = W + 'x' + H + ' with ' + bands + ' slices';
+      const j0 = run(W, H, bands, 0), j1 = run(W, H, bands, 1), j2 = run(W, H, bands, 2);
+      if (!rows(j0, run(W, H, bands, 50), W, H)) throw new Error('CONTROL: Uneven slices 50% tears exactly like 0 at ' + at + ' - the control does nothing, so a smooth start means nothing');
+      const n01 = rows(j0, j1, W, H), n12 = rows(j1, j2, W, H);
+      if (n01 > bands) throw new Error('Uneven slices 0% to 1% changes ' + n01 + ' of ' + H + ' rows at ' + at + ' (1% to 2% changes ' + n12 + ') - leaving 0 snaps the whole slice grid instead of nudging each edge');
+      // …and his case: a keyframe rising from 0, one frame (1/30 s) in
+      const k0 = run(W, H, bands, kf, 0), k1 = run(W, H, bands, kf, 1 / 30), nk = rows(k0, k1, W, H);
+      if (nk > bands) throw new Error('Uneven slices keyframed up from 0 changes ' + nk + ' of ' + H + ' rows between its first two frames at ' + at + ' on a held tear - the tear jumps as the keyframe leaves 0');
+    });
+  });
+
+  /* CLEAR ZONE SHAPE HAS NOTHING TO SHAPE AT CLEAR ZONE 0. The line tips sit at the focus and the punch is skipped, so any
+     shape draws the same picture (MEASURED on the build: 25, 100 and 300 % byte-identical at Clear zone 0, Radial and
+     Parallel) — yet the row stayed live. The app's rule for a control another one switches off is to grey it and say why. */
+  test('482 2.5 Speed Lines - Clear zone shape is greyed out while Clear zone is 0, where it has nothing to shape', { item: '482', budgetMs: 90000 }, async function () {
+    const pd = (FM.fxRegistry.paramsOf('speedlines') || []).filter(q => q && q.key === 'aspect')[0];
+    if (!pd) throw new Error('Speed Lines has no Clear zone shape control');
+    if (pd.overriddenBy !== 'inner' || Number(pd.liveAbove) !== 0) throw new Error('Clear zone shape does not say Clear zone switches it off (overriddenBy ' + JSON.stringify(pd.overriddenBy) + ', liveAbove ' + pd.liveAbove + ') - its row stays live at Clear zone 0, where it does nothing');
+    /* the premise, measured through the app: at Clear zone 0 the shape changes nothing; at the default it does */
+    const rs = over => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 240, y: 180, shapeW: 480, shapeH: 360, fill: '#d8d0c0', start: 0, duration: 4 }); L.start = 0; L.duration = 4;
+      const e = FM.fxRegistry.makeInstance('speedlines'); Object.assign(e.params, over); L.effects = [e];
+      const cv = offscreen(480, 360), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 480, height: 360, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+      return x.getImageData(0, 0, 480, 360).data;
+    };
+    const same = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+    if (same(rs({ aspect: 300 }), rs({}))) throw new Error('CONTROL: Clear zone shape 300% draws the default picture at Clear zone 26% - the shape does nothing anywhere');
+    [0, 1].forEach(mode => { if (!same(rs({ inner: 0, aspect: 300, mode: mode }), rs({ inner: 0, mode: mode }))) throw new Error('Clear zone shape 300% changes the ' + (mode ? 'Parallel' : 'Radial') + ' picture at Clear zone 0 - so greying it out there would be wrong'); });
+    /* the panel, at his phone's 390 px and a 1280 px PC window */
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const lab = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label')).filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? lab.closest('.fx-scrub-row, .fx-seg-row') : null;
+    };
+    const show = async inner => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S4822r', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance('speedlines'); inst._expanded = true; inst.params.inner = inner;
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+      const row = rowOf('Clear zone shape');
+      if (!row) throw new Error('the open Speed Lines shows no Clear zone shape row');
+      return row;
+    };
+    const check = async where => {
+      if (!(await show(0)).classList.contains('fx-overridden')) throw new Error(where + ': Clear zone shape looks live at Clear zone 0, where it has nothing to shape');
+      if ((await show(26)).classList.contains('fx-overridden')) throw new Error(where + ': CONTROL - Clear zone shape is greyed out at Clear zone 26%, where it shapes the clear zone');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* BLOCK DAMAGE'S FIRST NOTCH DRAWS A BLOCK. The count was round(Block damage x 24), and round(0.02 x 24) is 0, so the
+     slider's first step drew exactly what 0 draws (MEASURED on the build at 0.43 s, Amount 0.7, 240x180: 0.02 identical to
+     0; 0.04 and 0.06 break 16 rows). Every value above 0 now draws at least one block; 0 and the rest are unchanged. */
+  test('482 2.7 Glitch - Block damage at its first notch draws a block', { item: '482' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.glitch;
+    if (!K) throw new Error('the Glitch kernel is not reachable');
+    const pd = (FM.fxRegistry.paramsOf('glitch') || []).filter(q => q && q.key === 'blocks')[0];
+    if (!pd) throw new Error('Glitch has no Block damage control');
+    const step = Number(pd.step), first = Number(pd.min) + step;
+    const run = v => { const d = new Uint8ClampedArray(240 * 180 * 4); for (let i = 0; i < d.length; i++) d[i] = (i * 13) & 255; K(d, 240, 180, Object.assign({}, FM.fxRegistry.makeInstance('glitch').params, { amount: 0.7, blocks: v }), 0.43); return d; };
+    const same = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+    const none = run(0);
+    if (same(run(0.5), none)) throw new Error('CONTROL: Block damage 0.5 draws what 0 draws - the control does nothing at all');
+    if (same(run(first), none)) throw new Error('Block damage ' + first + ' (the slider\'s first notch above 0) draws exactly what 0 draws - the first step does nothing');
+  });
+
 })();
