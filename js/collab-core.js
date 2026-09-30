@@ -28,8 +28,9 @@ window.FM = window.FM || {};
      difference in.
      Bumped to 3 by #482 polish batch 1: Film Grain, Light Leak, Glow, Letterbox, Faded Film, Colour Temperature and Colour
      Balance gained controls, so an older build's sanitiser would drop keys this one keeps — the two would normalise the
-     same project differently, which is exactly what the gate below refuses. */
-  C.SCHEMA_REV = 3;
+     same project differently, which is exactly what the gate below refuses.
+     Bumped to 4 by #482 polish batch 2: Wiggle, Shake, Swing, Pulse, Orbit and Drift gained controls — the same reason. */
+  C.SCHEMA_REV = 4;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -220,7 +221,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 2363691439221026;   // #482 polish batch 1 (SCHEMA_REV 3): seven effects gained controls
+  C.SCHEMA_FP = 7256880535665372;   // #482 polish batch 2 (SCHEMA_REV 4): six movers gained controls
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *

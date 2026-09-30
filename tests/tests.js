@@ -114285,4 +114285,369 @@
     }
   });
 
+  /* ═══ #482 / #966 POLISH BATCH 2 — "Shake, wiggle and loops" (his Tuff edits live here) ═══════════════════════════════
+   * His words (#966): "you can polish other effects just giving them more features … more choices always better … this is
+   * the complex version we want as much choice as possible". Batch 2 of the idle backlog (tools/design/plans/2026-09-29-idle-
+   * backlog/backlog.md §A): new controls on Wiggle and Shake (2.1, which also fixes C28 — every wiggle and shake was
+   * unseeded, so two layers moved in lockstep) and on Pulse, Swing, Orbit and Drift (2.2). C27 (the expanded plate for
+   * Shake, Swing, Spin and Pulse) already shipped in #986 and is held by '986 C27 …'. Same rule as batch 1 (§0.3): every new
+   * key's default draws the old motion, so a saved project and a new add move exactly as before.
+   * The pictures are pinned against hashes captured on v17.18 (5803cf55) BEFORE the first edit, with batch 1's fixture (a
+   * textured 200x150 clip in a 240x180 project — it reaches the frame edge, so every mover's edge path runs), a small
+   * ellipse inside the frame, and the same clip half off the left edge: the export (t 0.7), a half-size preview (t 1.3) and
+   * a 0.3 phone plate (t 2.2). An OLD instance carries only the keys it had before this batch, so the render-time fill of
+   * the new keys (queue 784) is what it is judged on. */
+  const OLD482B = {
+    wiggle: { amount: 25, speed: 3 },
+    shake: { amount: 30, speed: 9, twist: 12, zoom: 20, jitter: 0.5, smear: 0.8, smearlen: 2, direction: 1 },
+    swing: { angle: 25, speed: 1.3, pivotx: 20, pivoty: 80, phase: 40 },
+    spin: { speed: 45, offset: 10, pivotx: 30, pivoty: 60 },
+    pulse: { amount: 0.35, speed: 2, phase: 90 },
+    drift: { x: -150, y: 60 },
+    orbit: { radius: 50, speed: -0.7, phase: 30 },
+  };
+  const NEW482B = {
+    wiggle: { amounty: 'follows amount', rotate: 0, scale: 0, octaves: 1, seed: 0 },
+    shake: { overscan: 0, seed: 0 },
+    swing: { damping: 0 },
+    pulse: { wave: 0, stretch: 0, pivotx: 50, pivoty: 50 },
+    orbit: { ry: 100, depth: 0, face: 0 },
+    drift: { wrap: 0 },
+  };
+  function shots482b(L) {
+    return [[240, 0.7], [120, 1.3], [72, 2.2]].map(([w, t]) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  /* Every case as [name, make(tex, ids) → layer]; an image layer's id is pushed to `ids` so the caller can free its media. */
+  function cases482b() {
+    const out = [];
+    const clip = (tex, ids, x) => { const L = FM.makeLayer('image', { name: '482b clip', x: x == null ? 120 : x, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    const old = (type, params) => ({ type: type, enabled: true, params: JSON.parse(JSON.stringify(params)) });
+    Object.keys(OLD482B).forEach(type => {
+      out.push([type + ' new clip', (tex, ids) => { const L = clip(tex, ids); L.effects = [FM.fxRegistry.makeInstance(type)]; return L; }]);
+      out.push([type + ' new shape', () => { const L = shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; return L; }]);
+      out.push([type + ' old clip', (tex, ids) => { const L = clip(tex, ids); L.effects = [old(type, OLD482B[type])]; return L; }]);
+      out.push([type + ' old edge', (tex, ids) => { const L = clip(tex, ids, 40); L.effects = [old(type, OLD482B[type])]; return L; }]);
+    });
+    out.push(['drift slow edge', (tex, ids) => { const L = clip(tex, ids, 40); L.effects = [old('drift', { x: 22, y: -14 })]; return L; }]);
+    out.push(['shake three-key clip', (tex, ids) => { const L = clip(tex, ids); L.effects = [old('shake', { amount: 15, speed: 10, twist: 3 })]; return L; }]);
+    (FM.EFFECT_PRESETS || []).filter(p => p.fx === 'shake').forEach(pr => {
+      out.push(['shake preset ' + pr.id, (tex, ids) => { const L = clip(tex, ids); L.effects = [old('shake', pr.params)]; return L; }]);
+    });
+    return out;
+  }
+  /* Where the ink is on a transparent render (alpha > 128): centroid, box, count and the principal-axis angle in degrees. */
+  function ink482b(r) {
+    let n = 0, sx = 0, sy = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+    for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) if (r.d[(y * r.w + x) * 4 + 3] > 128) { n++; sx += x; sy += y; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (!n) return { n: 0 };
+    const cx = sx / n, cy = sy / n; let a = 0, b = 0, c = 0;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (r.d[(y * r.w + x) * 4 + 3] > 128) { const dx = x - cx, dy = y - cy; a += dx * dx; b += dy * dy; c += dx * dy; }
+    return { n: n, cx: cx, cy: cy, x0: x0, x1: x1, y0: y0, y1: y1, w: x1 - x0 + 1, h: y1 - y0 + 1, ang: 0.5 * Math.atan2(2 * c, a - b) * 180 / Math.PI };
+  }
+  const box482b = (fx, o) => { const L = FM.makeLayer('shape', Object.assign({ shape: 'rect', x: 100, y: 75, shapeW: 40, shapeH: 30, fill: '#ffffff' }, o || {})); L.start = 0; L.duration = 8; L.effects = fx; return L; };
+  /* A layer measured in PROJECT px whatever the plate: rs 0.5 is the half-size preview, and its numbers are divided back. */
+  const at482b = (layers, t, rs, W, H) => {
+    const k = rs || 1, r = ink482b(_986shot(layers, t, W || 200, H || 150, rs, null));
+    if (!r.n) return r;
+    return { n: r.n / (k * k), cx: (r.cx + 0.5) / k, cy: (r.cy + 0.5) / k, x0: r.x0 / k, x1: (r.x1 + 1) / k, y0: r.y0 / k, y1: (r.y1 + 1) / k, w: r.w / k, h: r.h / k, ang: r.ang };
+  };
+
+  test('482 2.0 Motion - every new Wiggle, Shake, Pulse, Swing, Orbit and Drift control is in the catalogue at a default that moves the old way, and saved and new movers render byte for byte as on v17.18', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old motion, and the
+       render-time fill (queue 784) agrees with that default. Vertical amount is the one that must stay ABSENT: it follows
+       Amount, so a new wiggle keeps moving the same distance both ways when he changes Amount. */
+    Object.keys(NEW482B).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW482B[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW482B[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (k === 'amounty') {
+          if (pd.follows !== 'amount') throw new Error('Wiggle Vertical amount does not follow Amount (follows ' + JSON.stringify(pd.follows) + ')');
+          if ('amounty' in inst.params) throw new Error('a new Wiggle carries its own Vertical amount ' + inst.params.amounty + ' - it would stop moving with Amount the moment he changed Amount');
+          if (pd.unit !== 'px') throw new Error('Wiggle Vertical amount is not in px (unit ' + JSON.stringify(pd.unit) + ')');
+          return;
+        }
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that moves the old way');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    /* …and a saved value survives the load sanitiser, at a non-default value for each key. */
+    const SET = { wiggle: { amounty: 90, rotate: 12, scale: 20, octaves: 3, seed: 7 }, shake: { overscan: 1, seed: 5 }, swing: { damping: 1.5 },
+      pulse: { wave: 1, stretch: 0.5, pivotx: 20, pivoty: 100 }, orbit: { ry: 40, depth: 60, face: 1 }, drift: { wrap: 1 } };
+    const lay = [{ id: 'l482b', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.18: all seven movers (Spin too, which shares their code), new and saved, on a clip that
+       reaches the frame edge, on a shape inside it, on a clip half off the frame, the three-key Shake of the oldest projects
+       and the five shipped Shake presets. */
+    const HEAD = { 'wiggle new clip': '9ab1153b/4c8cdbf3/e1752b5c', 'wiggle new shape': '154c5216/a1350ba5/b8ae71fd', 'wiggle old clip': '99064f3c/9dbbfebf/2b026d75', 'wiggle old edge': '44af2d04/3ab1cd39/a4180688',
+      'shake new clip': '2b5fe0fc/bd9aba9a/93381561', 'shake new shape': 'e72ff41b/1a63b315/c1287650', 'shake old clip': '0c982690/20fbe4a4/0eff5c4c', 'shake old edge': '6f66cdcd/fd78b8fe/b2368af3',
+      'swing new clip': 'e51ec192/c0360142/9c540ff4', 'swing new shape': 'c2b50197/696eaf2f/8951ef9a', 'swing old clip': 'f59e428c/4cf35f8d/a1d5b873', 'swing old edge': '8cd05a48/ef8ef461/59884a7d',
+      'spin new clip': 'bafcf302/549bc62b/9d9a3249', 'spin new shape': 'e14ae77f/dbdb3474/07e027ab', 'spin old clip': '28a7b965/9d72f6a0/e6191b61', 'spin old edge': '9191cad9/2ef9def4/cb3bc2ec',
+      'pulse new clip': '0a9183d7/f2d3194b/78629c16', 'pulse new shape': 'c144901a/cc578761/72df0020', 'pulse old clip': '2ea83940/161bd396/aacb54c2', 'pulse old edge': 'a9d8860c/ff0219f1/7ee4c83e',
+      'drift new clip': '4c33c3f5/84fa1b85/6934e945', 'drift new shape': 'fa82ad37/2e2e59c6/6934e945', 'drift old clip': 'ad0c0733/496f948b/6934e945', 'drift old edge': '1892655e/8bade145/6934e945',
+      'orbit new clip': '23e741c4/613be371/d4fb404e', 'orbit new shape': '065277de/015a95a5/4fa195e4', 'orbit old clip': '4a1fa6cb/1a055354/5e62476d', 'orbit old edge': '4b89e9f1/f9bf764d/b8861eaf',
+      'drift slow edge': '56eb56ef/2256674d/ad30d756', 'shake three-key clip': 'dd7339f6/356e7ee8/5d479e6e',
+      'shake preset s-beatslam': '191f45ff/bd6db1eb/3f8f16c7', 'shake preset s-quake': 'f2e1d3e7/500eacf9/fcf5c91d', 'shake preset s-handheld': 'd90f95a0/a4c25752/e702c2c8', 'shake preset s-hypex': '20773597/e8cf7e99/1792c06b', 'shake preset s-rumble': '511178dc/57d58892/9eee6b24' };
+    const tex = fix482(), ids = [], moved = [], cases = cases482b();
+    if (cases.length !== Object.keys(HEAD).length) throw new Error('setup: ' + cases.length + ' cases against ' + Object.keys(HEAD).length + ' hashes captured on v17.18 - re-capture them on the build before the change');
+    try {
+      cases.forEach(([name, make]) => { const got = shots482b(make(tex, ids)); if (got !== HEAD[name]) moved.push(name + ' ' + HEAD[name] + ' -> ' + got); });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    if (moved.length) throw new Error(moved.length + ' movers draw differently from v17.18 at the new defaults - a new control changed a motion he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+  /* 2.1 WIGGLE — Pattern, Vertical amount, Rotation wiggle, Scale wiggle, Roughness. A 40x30 box in a 200x150 frame, moved
+     by the real renderer; everything is measured in project px, and the half-size preview must agree with the export. */
+  test('482 2.1 Wiggle - Pattern gives two layers their own wiggle, Vertical amount follows Amount until it is set, Rotation and Scale wiggle turn and grow the layer, Roughness is rougher but no bigger', { item: '482', budgetMs: 60000 }, function () {
+    const wig = o => [_986fx('wiggle', Object.assign({ amount: 30, speed: 2 }, o || {}))];
+    const pos = (o, t, rs) => { const r = at482b([box482b(wig(o))], t, rs); if (!r.n) throw new Error('setup: the wiggled box drew nothing at ' + t + ' s'); return r; };
+    const dist = (a, b) => Math.hypot(a.cx - b.cx, a.cy - b.cy);
+    const rest = at482b([box482b([])], 1);
+    const a1 = pos({}, 1.3);
+    if (dist(pos({}, 0.2), a1) < 3) throw new Error('CONTROL: a default Wiggle is in the same place at 0.2 s and 1.3 s - the probe cannot see it move');
+    /* PATTERN (C28): 0 is the old wiggle; any other number is its own path, and the same path every time it is drawn. */
+    if (dist(pos({ seed: 0 }, 1.3), a1) > 0.01) throw new Error('Pattern 0 is not where the old wiggle is at 1.3 s');
+    let apart = 0; [0.4, 1.3, 2.1, 2.9].forEach(t => { apart = Math.max(apart, dist(pos({ seed: 7 }, t), pos({}, t))); });
+    if (apart < 4) throw new Error('two identical wiggling layers, one on Pattern 7, are never more than ' + apart.toFixed(2) + ' px apart - they still move in lockstep');
+    if (dist(pos({ seed: 7 }, 1.3), pos({ seed: 7 }, 1.3)) !== 0) throw new Error('Pattern 7 is in a different place each time 1.3 s is drawn - it must be a function of time and pattern only');
+    /* VERTICAL AMOUNT: 0 keeps it on one line while it still wiggles sideways; absent it is Amount; 60 is twice Amount's reach. */
+    const flat = [0.3, 0.9, 1.7, 2.6].map(t => pos({ amounty: 0 }, t));
+    const ySpread = Math.max(...flat.map(q => q.cy)) - Math.min(...flat.map(q => q.cy)), xSpread = Math.max(...flat.map(q => q.cx)) - Math.min(...flat.map(q => q.cx));
+    if (!(xSpread > 5)) throw new Error('CONTROL: at Vertical amount 0 the box does not wiggle sideways either (' + xSpread.toFixed(1) + ' px)');
+    if (ySpread > 0.6) throw new Error('at Vertical amount 0 the box still moves ' + ySpread.toFixed(1) + ' px up and down');
+    if (dist(pos({ amounty: 30 }, 1.7), pos({}, 1.7)) > 0.01) throw new Error('a Vertical amount equal to Amount is not the wiggle with no Vertical amount set - absent must mean the same as Amount');
+    const one = pos({}, 1.7), two = pos({ amounty: 60 }, 1.7);
+    if (Math.abs((two.cy - rest.cy) - 2 * (one.cy - rest.cy)) > 1.5 || Math.abs(two.cx - one.cx) > 0.3) throw new Error('Vertical amount 60 on Amount 30 moves the box ' + (two.cy - rest.cy).toFixed(1) + ' px down against ' + (one.cy - rest.cy).toFixed(1) + ' for Amount alone - not twice, or it moved sideways too');
+    /* ROTATION WIGGLE turns the box about its middle; SCALE WIGGLE grows and shrinks it. Neither moves its centre. */
+    const turned = [0.4, 1.1, 1.9, 2.7].map(t => pos({ rotate: 25 }, t));
+    if (!turned.some(q => Math.abs(q.ang) > 4)) throw new Error('Rotation wiggle 25 never turns the box more than 4 degrees (' + turned.map(q => q.ang.toFixed(1)).join(', ') + ')');
+    turned.forEach((q, i) => { const p0 = pos({}, [0.4, 1.1, 1.9, 2.7][i]); if (dist(q, p0) > 1) throw new Error('Rotation wiggle moved the centre of the box ' + dist(q, p0).toFixed(1) + ' px - it should turn about its middle'); });
+    const sizes = [0.3, 0.8, 1.4, 2.0, 2.6, 3.1].map(t => pos({ scale: 50 }, t).n), plain = [0.3, 2.6].map(t => pos({}, t).n);
+    if (Math.abs(plain[0] - plain[1]) > 20) throw new Error('CONTROL: a plain wiggle changes the box area (' + plain.join(' vs ') + ')');
+    if (!(Math.max(...sizes) > Math.min(...sizes) * 1.3)) throw new Error('Scale wiggle 50 keeps the box between ' + Math.min(...sizes) + ' and ' + Math.max(...sizes) + ' px of area - it does not grow and shrink');
+    /* ROUGHNESS: three octaves change direction far more often than one — the frame-to-frame change of speed (the second
+       difference, summed over 60 frames) is well over half as much again — but never reach past Amount. At a slow 0.5 Hz, the
+       floating wiggle it is for: at the default 2 Hz the smooth curve already turns about as fast as 30 frames a second show. */
+    const path = o => { const xs = []; for (let i = 0; i < 60; i++) xs.push(pos(Object.assign({ speed: 0.5 }, o), 0.2 + i / 30).cx - rest.cx); return xs; };
+    const smooth = path({}), rough = path({ octaves: 3 });
+    const jag = xs => xs.reduce((s, v, i) => i && i < xs.length - 1 ? s + Math.abs(xs[i - 1] - 2 * v + xs[i + 1]) : s, 0);
+    if (!(jag(rough) > jag(smooth) * 1.6)) throw new Error('Roughness 3 changes speed by ' + jag(rough).toFixed(1) + ' px over 60 frames against ' + jag(smooth).toFixed(1) + ' at 1 - it is not rougher');
+    const reach = Math.max(...rough.map(Math.abs)), calm = Math.max(...smooth.map(Math.abs));
+    if (reach > 31) throw new Error('Roughness 3 reaches ' + reach.toFixed(1) + ' px from rest on Amount 30 - rougher must not mean bigger');
+    if (reach < calm * 0.75) throw new Error('Roughness 3 reaches only ' + reach.toFixed(1) + ' px from rest where the smooth wiggle reaches ' + calm.toFixed(1) + ' - rougher must not shrink the float either');
+    /* EXPORT PARITY: the half-size preview draws the same wiggle as the export, every new control on — on a 60x20 bar, long
+       enough that its angle can be read on the half-size plate (a 40x30 box is too near square to read to a few degrees there). */
+    const all = { seed: 7, amounty: 45, rotate: 20, scale: 30, octaves: 2 };
+    const barAt = (t, rs) => { const r = at482b([box482b(wig(all), { shapeW: 60, shapeH: 20 })], t, rs); if (!r.n) throw new Error('setup: the wiggled bar drew nothing at ' + t + ' s'); return r; };
+    [0.6, 1.8].forEach(t => {
+      const e = barAt(t), h = barAt(t, 0.5);
+      if (dist(e, h) > 1.2 || Math.abs(e.ang - h.ang) > 3) throw new Error('at ' + t + ' s the half-size preview puts the wiggled box ' + dist(e, h).toFixed(1) + ' px and ' + Math.abs(e.ang - h.ang).toFixed(1) + ' degrees from where the export does');
+    });
+  });
+
+  /* 2.1 SHAKE — Pattern and Hide edges. Hide edges is judged the way he uses it: a clip that fills the frame, shaken hard,
+     must never show the empty frame behind it, at the export and on the phone plate. */
+  test('482 2.1 Shake - Pattern gives a layer its own shake, and Hide edges keeps a frame-filling clip over the whole frame through a big twisting shake', { item: '482', budgetMs: 90000 }, function () {
+    const W = 200, H = 150, bad = [];
+    const sh = o => [_986fx('shake', Object.assign({ amount: 20, speed: 6 }, o || {}))];
+    const pos = (o, t) => { const r = at482b([box482b(sh(o))], t); if (!r.n) throw new Error('setup: the shaken box drew nothing at ' + t + ' s'); return r; };
+    const dist = (a, b) => Math.hypot(a.cx - b.cx, a.cy - b.cy);
+    if (dist(pos({ seed: 0 }, 1.3), pos({}, 1.3)) > 0.01) throw new Error('Pattern 0 is not where the old shake is at 1.3 s');
+    let apart = 0; [0.4, 1.3, 2.1].forEach(t => { apart = Math.max(apart, dist(pos({ seed: 7 }, t), pos({}, t))); });
+    if (apart < 4) throw new Error('two identical shaken layers, one on Pattern 7, are never more than ' + apart.toFixed(2) + ' px apart - they still shake in lockstep');
+    if (dist(pos({ seed: 7, jitter: 1 }, 1.3), pos({ jitter: 1 }, 1.3)) < 1) throw new Error('Pattern 7 does not change a hard (Hardness 1) shake');
+    if (dist(pos({ seed: 7 }, 1.3), pos({ seed: 7 }, 1.3)) !== 0) throw new Error('Pattern 7 shakes to a different place each time 1.3 s is drawn');
+    /* HIDE EDGES */
+    const full = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 75, shapeW: 200, shapeH: 150, fill: '#40c080' }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const holes = r => { let n = 0; for (let i = 3; i < r.d.length; i += 4) if (r.d[i] < 250) n++; return n; };
+    const slam = (FM.EFFECT_PRESETS || []).filter(p => p.id === 's-beatslam')[0];
+    if (!slam) throw new Error('setup: the Beat Slam preset is gone');
+    const CASES = { 'a new Shake': {}, 'a hard twisting Shake': { amount: 40, twist: 15, jitter: 1, zoom: 0, smear: 0.6 }, 'a Horizontal Shake': { amount: 50, direction: 1, twist: 3 },
+      'a Beat Slam (keyframed Amount)': JSON.parse(JSON.stringify(slam.params)) };
+    const TIMES = [0.1, 0.25, 0.7, 1.1, 1.6, 2.2];
+    if (holes(_986shot([full([])], 0.5, W, H, null, null)) !== 0) throw new Error('CONTROL: the frame-filling rectangle does not cover the frame on its own');
+    for (const name in CASES) {
+      let off = 0; TIMES.forEach(t => { off = Math.max(off, holes(_986shot([full(sh(CASES[name]))], t, W, H, null, null))); });
+      if (!(off > 50)) throw new Error('CONTROL: ' + name + ' without Hide edges never shows the frame behind it (' + off + ' px) - there is nothing for Hide edges to hide');
+      for (const rs of [1, 0.4]) {
+        let worst = 0; TIMES.forEach(t => { worst = Math.max(worst, holes(_986shot([full(sh(Object.assign({ overscan: 1 }, CASES[name])))], t, W, H, rs, null))); });
+        if (worst) bad.push(name + ' with Hide edges still shows ' + worst + ' px of empty frame at scale ' + rs);
+      }
+    }
+    /* A Beat Slam's zoom is sized once, for its biggest hit: the same layer drawn with the shake at rest (Amount keyframes all
+       at 0 from this moment on) must be as big as at the hit, or Hide edges would breathe in and out with the shake. */
+    /* …and the zoom is sized once, for the biggest shake: a 40x30 box whose Amount rises to 10 at 1 s and dies to 0 at 2 s (no
+       twist, no zoom punch, so only Hide edges can change its size) is 1 + 2x10/30 = 1.67x wider at 3 s, when it is still, as it
+       is at the height of the shake. Sized from the Amount of the moment it would breathe in and out with the shake. */
+    const swell = { amount: { kf: [{ t: 0, v: 0 }, { t: 1, v: 10 }, { t: 2, v: 0 }] }, twist: 0, zoom: 0, smear: 0, jitter: 0, overscan: 1 };
+    const hit = at482b([box482b(sh(swell))], 1), still = at482b([box482b(sh(swell))], 3);
+    if (!(still.n > 0) || Math.abs(still.w - 40 * (1 + 20 / 30)) > 1.5 || Math.abs(still.w - hit.w) > 1.01) bad.push('Hide edges on a shake whose Amount swells to 10 and dies draws the 40 px box ' + hit.w + ' px wide at the height of it and ' + still.w + ' px once it is still - it should hold one zoom, sized for the biggest shake (about 67 px)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 2.2 PULSE — Wave, Squash & stretch, Pivot. A 40x30 box at the middle of a 200x150 frame, speed 1 so the time is the
+     phase: the sine peaks at 0.25 s and is lowest at 0.75 s. */
+  test('482 2.2 Pulse - Heartbeat only grows, Square snaps between two sizes, Triangle and Bounce keep their own shapes, Squash & stretch trades height for width, and a bottom pivot grows up off the floor', { item: '482', budgetMs: 60000 }, function () {
+    const pul = o => [_986fx('pulse', Object.assign({ amount: 0.3, speed: 1 }, o || {}))];
+    const at = (o, t, rs) => { const r = at482b([box482b(pul(o))], t, rs); if (!r.n) throw new Error('setup: the pulsing box drew nothing at ' + t + ' s'); return r; };
+    const T = []; for (let i = 0; i < 20; i++) T.push(i / 20);
+    const widths = o => T.map(t => at(o, t).w);
+    const sine = widths({});
+    if (!(Math.min(...sine) < 32 && Math.max(...sine) > 48)) throw new Error('CONTROL: a sine Pulse at 0.3 keeps the 40 px box between ' + Math.min(...sine) + ' and ' + Math.max(...sine) + ' px wide');
+    const heart = widths({ wave: 1 });
+    if (Math.min(...heart) < 39.5) throw new Error('a Heartbeat Pulse shrinks the box to ' + Math.min(...heart) + ' px - a heartbeat only grows');
+    if (!(Math.max(...heart) > 48)) throw new Error('a Heartbeat Pulse never beats (widest ' + Math.max(...heart) + ' px)');
+    const sq = widths({ wave: 3 }), kinds = [];
+    sq.forEach(w => { if (!kinds.some(k => Math.abs(k - w) <= 1.01)) kinds.push(w); });
+    if (kinds.length !== 2) throw new Error('a Square Pulse draws the box at ' + kinds.length + ' different widths (' + kinds.join(', ') + ') - a square wave snaps between two');
+    const big = { amount: 0.8 };
+    if (Math.abs(at(Object.assign({ wave: 4 }, big), 0.125).w - at(big, 0.125).w) < 4) throw new Error('a Triangle Pulse is the sine at 0.125 s (' + at(Object.assign({ wave: 4 }, big), 0.125).w + ' px) - it has no shape of its own');
+    if (Math.abs(at(Object.assign({ wave: 4 }, big), 0.25).w - at(big, 0.25).w) > 1.01) throw new Error('a Triangle Pulse does not peak with the sine at 0.25 s');
+    if (Math.abs(at(Object.assign({ wave: 2 }, big), 0).w - at(big, 0).w) < 6) throw new Error('a Bounce Pulse is the sine at 0 s - it has no shape of its own');
+    /* SQUASH & STRETCH at the sine's peak (0.25 s, 1.3x): 1 = wider and flatter, −1 = narrower and taller, 0 = the old pulse. */
+    const peak = at({}, 0.25), wide = at({ stretch: 1 }, 0.25), tall = at({ stretch: -1 }, 0.25);
+    if (!(peak.h > 36)) throw new Error('CONTROL: at the sine peak the box is only ' + peak.h + ' px tall');
+    if (!(Math.abs(wide.w - peak.w) <= 1.01 && wide.h < 25)) throw new Error('Squash & stretch 1 at the peak draws the box ' + wide.w + 'x' + wide.h + ' against ' + peak.w + 'x' + peak.h + ' - it should keep the width and flatten (about 23 px tall)');
+    if (!(Math.abs(tall.h - peak.h) <= 1.01 && tall.w < 33)) throw new Error('Squash & stretch -1 at the peak draws the box ' + tall.w + 'x' + tall.h + ' - it should keep the height and narrow (about 31 px wide)');
+    /* PIVOT Y 100: the bottom edge stays on the floor while it grows and shrinks; the centre pivot moves it (control). */
+    const floor = at482b([box482b([])], 0).y1;
+    const cBot = [at({}, 0.25).y1, at({}, 0.75).y1], pBot = [at({ pivoty: 100 }, 0.25).y1, at({ pivoty: 100 }, 0.75).y1];
+    if (!(Math.abs(cBot[0] - cBot[1]) > 4)) throw new Error('CONTROL: the centre-pivot Pulse does not move the bottom edge (' + cBot.join(', ') + ')');
+    if (pBot.some(b => Math.abs(b - floor) > 1.01)) throw new Error('a Pulse with Pivot Y 100 moves the bottom edge to ' + pBot.join(' and ') + ' (it rests at ' + floor + ') - it should grow up off the floor');
+    /* EXPORT PARITY with every new control on. */
+    const all = { wave: 1, stretch: 0.6, pivotx: 20, pivoty: 90 };
+    [0.1, 0.3].forEach(t => { const e = at(all, t), h = at(all, t, 0.5); if (Math.abs(e.w - h.w) > 2.1 || Math.abs(e.h - h.h) > 2.1 || Math.hypot(e.cx - h.cx, e.cy - h.cy) > 1.2) throw new Error('at ' + t + ' s the half-size preview draws the pulsing box ' + h.w + 'x' + h.h + ' at ' + h.cx.toFixed(1) + ',' + h.cy.toFixed(1) + ' against the export ' + e.w + 'x' + e.h + ' at ' + e.cx.toFixed(1) + ',' + e.cy.toFixed(1)); });
+  });
+
+  /* 2.2 SWING — Damping. A 120x16 bar swinging about its middle, 30 degrees at 1 Hz: the swing is at a peak at 0.25 s and
+     again at 3.25 s. Undamped it reaches 30 degrees at both; at Damping 2 the second is e^(−6.5) of the first. */
+  test('482 2.2 Swing - Damping lets a swing settle: at 3.25 s it turns less than 5 percent of what it turned at 0.25 s, and 0 swings for ever', { item: '482' }, function () {
+    const bar = o => box482b([_986fx('swing', Object.assign({ angle: 30, speed: 1, pivotx: 50, pivoty: 50 }, o || {}))], { shapeW: 120, shapeH: 16 });
+    const ang = (o, t, rs) => { const r = at482b([bar(o)], t, rs); if (!r.n) throw new Error('setup: the swinging bar drew nothing'); return r.ang; };
+    const u1 = ang({}, 0.25), u2 = ang({}, 3.25);
+    if (!(Math.abs(u1) > 25 && Math.abs(u2) > 25)) throw new Error('CONTROL: an undamped Swing turns the bar ' + u1.toFixed(1) + ' and ' + u2.toFixed(1) + ' degrees at its peaks - the probe cannot read the angle');
+    if (Math.abs(ang({ damping: 0 }, 3.25) - u2) > 0.01) throw new Error('Damping 0 does not swing for ever like the old Swing');
+    const d1 = ang({ damping: 2 }, 0.25), d2 = ang({ damping: 2 }, 3.25);
+    if (!(Math.abs(d1) > 8)) throw new Error('a Swing at Damping 2 has already stopped by 0.25 s (' + d1.toFixed(1) + ' degrees)');
+    if (!(Math.abs(d2) < 0.05 * Math.abs(d1))) throw new Error('a Swing at Damping 2 still turns ' + d2.toFixed(2) + ' degrees at 3.25 s against ' + d1.toFixed(2) + ' at 0.25 s - it does not settle');
+    const m = ang({ damping: 0.5 }, 1.25), e = ang({ damping: 0.5 }, 1.25, 0.5);
+    if (Math.abs(m - e) > 1.5) throw new Error('at Damping 0.5 the half-size preview turns the bar ' + e.toFixed(1) + ' degrees at 1.25 s and the export ' + m.toFixed(1));
+  });
+
+  /* 2.2 ORBIT — Ellipse, Depth, Face direction of travel. A small box orbiting the middle of a 200x150 frame at radius 40,
+     a quarter turn a second, so 0 s is the right of the path, 1 s the bottom, 2 s the left, 3 s the top. */
+  test('482 2.2 Orbit - Ellipse squashes the path, Depth shrinks the layer on the far side, and Face direction of travel turns it along the path', { item: '482', budgetMs: 60000 }, function () {
+    const orb = (o, shp) => box482b([_986fx('orbit', Object.assign({ radius: 40, speed: 0.25 }, o || {}))], shp || { shapeW: 20, shapeH: 20 });
+    const at = (o, t, shp, rs) => { const r = at482b([orb(o, shp)], t, rs); if (!r.n) throw new Error('setup: the orbiting box drew nothing at ' + t + ' s'); return r; };
+    const span = o => { const q = [0, 1, 2, 3].map(t => at(o, t)); return { x: Math.max(...q.map(r => r.cx)) - Math.min(...q.map(r => r.cx)), y: Math.max(...q.map(r => r.cy)) - Math.min(...q.map(r => r.cy)) }; };
+    const circle = span({}), ell = span({ ry: 50 }), tall = span({ ry: 150 });
+    if (Math.abs(circle.x - 80) > 1.5 || Math.abs(circle.y - 80) > 1.5) throw new Error('CONTROL: a radius-40 orbit spans ' + circle.x.toFixed(1) + ' x ' + circle.y.toFixed(1) + ' px, not 80 x 80');
+    if (Math.abs(ell.x - 80) > 1.5 || Math.abs(ell.y - 40) > 1.5) throw new Error('Ellipse 50 spans ' + ell.x.toFixed(1) + ' x ' + ell.y.toFixed(1) + ' px - it should be as wide (80) and half as tall (40)');
+    if (Math.abs(tall.y - 120) > 1.5) throw new Error('Ellipse 150 spans ' + tall.y.toFixed(1) + ' px tall, not 120');
+    /* DEPTH 100: 0.3 of its size at the top (3 s), its own size at the bottom (1 s), about 0.65 at the sides. */
+    const top = at({ depth: 100 }, 3), bottom = at({ depth: 100 }, 1), side = at({ depth: 100 }, 0);
+    if (Math.abs(at({}, 3).w - at({}, 1).w) > 1.01) throw new Error('CONTROL: without Depth the box is not one size all the way round');
+    if (Math.abs(bottom.w - 20) > 1.01) throw new Error('with Depth 100 the box is ' + bottom.w + ' px wide at the bottom of its orbit - the near side is its own size (20)');
+    if (Math.abs(top.w - 6) > 1.51) throw new Error('with Depth 100 the box is ' + top.w + ' px wide at the top of its orbit - the far side should be 0.3 of its size (6)');
+    if (!(side.w > top.w + 3 && side.w < bottom.w - 3)) throw new Error('with Depth 100 the box at the side (' + side.w + ' px) is not between the far (' + top.w + ') and near (' + bottom.w + ') sizes');
+    /* FACE DIRECTION OF TRAVEL, on a 40x20 bar: at 0 s it is moving straight down, so it stands upright; at 1 s it is moving
+       left, so it lies flat again. Without it the bar never turns. */
+    const bar = { shapeW: 40, shapeH: 20 };   // 20 tall: on the half-size preview a 5 px bar never reaches a canvas effect at all (the loose alpha scan steps over it — a separate, older fault)
+    if (Math.abs(at({}, 0, bar).ang) > 1) throw new Error('CONTROL: without Face direction the bar is turned ' + at({}, 0, bar).ang.toFixed(1) + ' degrees');
+    const f0 = at({ face: 1 }, 0, bar), f1 = at({ face: 1 }, 1, bar), f05 = at({ face: 1 }, 0.5, bar);
+    if (Math.abs(Math.abs(f0.ang) - 90) > 2) throw new Error('with Face direction of travel the bar at the right of its orbit (moving down) is at ' + f0.ang.toFixed(1) + ' degrees - it should stand upright (90)');
+    if (Math.abs(f1.ang) > 2) throw new Error('with Face direction of travel the bar at the bottom (moving left) is at ' + f1.ang.toFixed(1) + ' degrees - it should lie flat');
+    if (Math.abs(Math.abs(f05.ang) - 45) > 3) throw new Error('with Face direction of travel the bar half way between is at ' + f05.ang.toFixed(1) + ' degrees - it should be at 45');
+    /* EXPORT PARITY, everything on. */
+    const all = { ry: 60, depth: 70, face: 1 };
+    [0.4, 2.6].forEach(t => { const e = at(all, t, bar), h = at(all, t, bar, 0.5); if (Math.hypot(e.cx - h.cx, e.cy - h.cy) > 1.2 || Math.abs(e.ang - h.ang) > 3 || Math.abs(e.n - h.n) > e.n * 0.15) throw new Error('at ' + t + ' s the half-size preview draws the orbiting bar at ' + h.cx.toFixed(1) + ',' + h.cy.toFixed(1) + ' (' + h.ang.toFixed(1) + ' deg, ' + Math.round(h.n) + ' px) against the export at ' + e.cx.toFixed(1) + ',' + e.cy.toFixed(1) + ' (' + e.ang.toFixed(1) + ' deg, ' + Math.round(e.n) + ' px)'); });
+  });
+
+  /* 2.2 DRIFT — Wrap around frame. A 30x20 box starting at x 85..115 in a 200-wide frame, drifting right at 120 px/s: it has
+     wholly left the right edge by 0.96 s. Wrapped, it comes straight back in at the left — never gone, never doubled. */
+  test('482 2.2 Drift - Wrap around frame brings the layer back in at the far edge, like a ticker, and a ticker wider than the frame scrolls all of itself', { item: '482', budgetMs: 60000 }, function () {
+    const dr = (o, shp) => box482b([_986fx('drift', Object.assign({ x: 120, y: 0 }, o || {}))], Object.assign({ shapeW: 30, shapeH: 20 }, shp || {}));
+    const at = (o, t, shp, rs) => at482b([dr(o, shp)], t, rs);
+    if (at({}, 1.2).n) throw new Error('CONTROL: an unwrapped Drift is still on screen at 1.2 s - it should have drifted off the right edge');
+    const w = at({ wrap: 1 }, 1.2);
+    if (!w.n || !(w.x0 < 20)) throw new Error('with Wrap around frame the box is ' + (w.n ? 'at x ' + w.x0.toFixed(0) + '..' + w.x1.toFixed(0) : 'nowhere') + ' at 1.2 s - it should be back in at the left edge');
+    if (Math.abs(w.w - 30) > 1.01 && w.x0 > 0.5) throw new Error('the wrapped box came back ' + w.w + ' px wide');
+    const part = at({ wrap: 1 }, 0.8);
+    if (!part.n || part.x0 < 150) throw new Error('with Wrap around frame, as the box is leaving the right edge at 0.8 s it is also drawn at x ' + (part.n ? part.x0.toFixed(0) : '-') + ' - a wrap must not double it');
+    let gone = []; for (let i = 0; i <= 120; i++) { const t = i / 30; if (!at({ wrap: 1 }, t).n) gone.push(t.toFixed(2)); }
+    if (gone.length > 1) throw new Error('with Wrap around frame the box is missing at ' + gone.length + ' of 121 frames (' + gone.slice(0, 6).join(', ') + ' s) - a ticker is never gone');
+    /* Up at 90 px/s the 20 px box (y 65..85) has left the top by 0.94 s, came straight back in at the bottom, and by 1.5 s has
+       climbed to y 100..120. */
+    const up = at({ wrap: 1, x: 0, y: -90 }, 1.5);
+    if (at({ x: 0, y: -90 }, 1.5).n) throw new Error('CONTROL: an unwrapped Drift upward is still on screen at 1.5 s');
+    if (!up.n || Math.abs(up.y0 - 100) > 1.01 || Math.abs(up.y1 - 120) > 1.01) throw new Error('drifting up with Wrap around frame, the box is ' + (up.n ? 'at y ' + up.y0.toFixed(0) + '..' + up.y1.toFixed(0) : 'nowhere') + ' at 1.5 s - it should have come back in at the bottom and climbed to y 100..120');
+    /* The preview and the export agree. */
+    [0.5, 1.2, 2.9].forEach(t => { const e = at({ wrap: 1, y: 35 }, t), h = at({ wrap: 1, y: 35 }, t, null, 0.5); if (!e.n !== !h.n || (e.n && Math.hypot(e.cx - h.cx, e.cy - h.cy) > 1.5)) throw new Error('at ' + t + ' s the half-size preview puts the wrapped box at ' + (h.n ? h.cx.toFixed(1) + ',' + h.cy.toFixed(1) : 'nowhere') + ' and the export at ' + (e.n ? e.cx.toFixed(1) + ',' + e.cy.toFixed(1) : 'nowhere')); });
+    /* A TICKER WIDER THAN THE FRAME: a 300 px bar across the whole 200 px frame (x −50..250), drifting left at 100 px/s. At 4 s
+       its left end has come round to x 50 — and the 50 px that started past the left edge must be there, not empty. */
+    const tick = at({ wrap: 1, x: -100 }, 4, { shapeW: 300, shapeH: 20 });
+    if (!tick.n || Math.abs(tick.x0 - 50) > 1.01 || tick.x1 < 199) throw new Error('a 300 px ticker drifting left is at x ' + (tick.n ? tick.x0.toFixed(0) + '..' + tick.x1.toFixed(0) : 'nowhere') + ' at 4 s - it should reach from 50 to the right edge');
+    if (tick.n < 150 * 20 * 0.97) throw new Error('a 300 px ticker at 4 s covers only ' + Math.round(tick.n) + ' px of the ' + (150 * 20) + ' between x 50 and the edge - the part that started past the frame is missing');
+  });
+
+  /* THE PANEL: every new control shows and fits at his phone width and on PC, and Vertical amount shows the Amount it follows —
+     then keeps showing it when Amount changes, until he sets a vertical of his own. */
+  test('482 2.0 Motion panel - the new controls fit the effect panel at 390 and 1280 px, and Vertical amount shows and follows Amount until it is set', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { wiggle: ['Vertical amount', 'Rotation wiggle', 'Scale wiggle', 'Roughness', 'Pattern'], shake: ['Hide edges', 'Pattern'], swing: ['Damping'],
+      pulse: ['Wave', 'Squash & stretch', 'Pivot X', 'Pivot Y'], orbit: ['Ellipse', 'Depth', 'Face direction of travel'], drift: ['Wrap around frame'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const valOf = row => { const v = row && row.querySelector('.fx-scrub-val'); return v ? parseFloat(v.value) : NaN; };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await open482r(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const row = row482r(label) || [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-seg-row')).filter(r => { const l = r.querySelector('.fx-scrub-label'); return l && l.textContent.trim() === label; })[0];
+          if (!row) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = row.getBoundingClientRect(), lab = row.querySelector('.fx-scrub-label');
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (lab && lab.scrollWidth > lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + lab.scrollWidth + ' px of text in ' + lab.clientWidth + ')');
+          [].slice.call(row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+        }
+      }
+      /* VERTICAL AMOUNT FOLLOWS AMOUNT: it shows Amount's value while it has none of its own, re-reads the moment Amount is
+         typed, never gets a value of its own from that, and once it has one keeps it. */
+      let inst = await open482r('wiggle', p => { p.amount = 55; });
+      if (valOf(row482r('Vertical amount')) !== 55) throw new Error(where + ': with Amount 55 and no vertical of its own, Vertical amount shows ' + valOf(row482r('Vertical amount')) + ' - it should show the 55 it follows');
+      const amtBox = row482r('Amount').querySelector('.fx-scrub-val');
+      amtBox.value = '80'; amtBox.dispatchEvent(new Event('change', { bubbles: true }));
+      if (inst.params.amount !== 80) throw new Error('setup: typing 80 into Amount set it to ' + inst.params.amount);
+      if (valOf(row482r('Vertical amount')) !== 80) throw new Error(where + ': after typing 80 into Amount, Vertical amount still shows ' + valOf(row482r('Vertical amount')) + ' - the wiggle moves 80 up and down and the row says otherwise');
+      if ('amounty' in inst.params) throw new Error(where + ': changing Amount gave Vertical amount a value of its own (' + inst.params.amounty + ') - it would stop following');
+      inst = await open482r('wiggle', p => { p.amount = 55; p.amounty = 12; });
+      const amtBox2 = row482r('Amount').querySelector('.fx-scrub-val');
+      amtBox2.value = '90'; amtBox2.dispatchEvent(new Event('change', { bubbles: true }));
+      if (valOf(row482r('Vertical amount')) !== 12 || inst.params.amounty !== 12) throw new Error(where + ': CONTROL - a Vertical amount set to 12 shows ' + valOf(row482r('Vertical amount')) + ' (' + inst.params.amounty + ') after Amount changed - a vertical of its own must not follow');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 })();

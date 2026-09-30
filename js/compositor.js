@@ -936,7 +936,20 @@ window.FM = window.FM || {};
     ] },
     { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
-    { type: 'wiggle', label: 'Wiggle', params: [{ key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px' }, { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' }] },
+    /* #482 polish 2.1 (his #966: "as much choice as possible"). Wiggle moved one way only: the same distance both ways, never
+       turned, never grew, one smooth curve, and every wiggling layer on the same curve (C28: two layers added together moved
+       in lockstep). Every new control's default is the old wiggle exactly. VERTICAL AMOUNT follows Amount while it has no
+       value of its own (`follows`, the Light Leak edge-colour rule on a slider): a saved wiggle and a new one keep wiggling
+       the same distance both ways, and moving Amount still moves both until he sets a vertical of his own. */
+    { type: 'wiggle', label: 'Wiggle', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px' },
+      { key: 'speed', label: 'Speed', min: 0.1, max: 20, step: 0.1, def: 2, unit: 'Hz' },
+      { key: 'amounty', label: 'Vertical amount', min: 0, max: 2400, step: 1, def: 40, unit: 'px', follows: 'amount' },
+      { key: 'rotate', label: 'Rotation wiggle', min: 0, max: 180, step: 0.5, def: 0, unit: '°' },
+      { key: 'scale', label: 'Scale wiggle', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'octaves', label: 'Roughness', min: 1, max: 4, step: 1, def: 1 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+    ] },
     // Shake is a headline tool for beat-drop edits, so it runs HOT: violent ranges, a zoom punch, a
     // hardness blend (smooth noise → stepped jitter), axis lock for slam shakes, and a velocity smear so
     // big displacements read as motion instead of teleporting. NOTE the render fn's fparam fallbacks stay
@@ -954,17 +967,39 @@ window.FM = window.FM || {};
       { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3, legacy: 0 },
       { key: 'smearlen', label: 'Smear length', min: 1, max: 6, step: 0.5, def: 1, unit: '×', overriddenBy: 'smear', liveAbove: 0 },   // queue 904: the smear was 3 fixed ghosts over one frame of motion
       { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
+      /* #482 polish 2.1. HIDE EDGES zooms the layer just enough that the shake can never show past its edges — the 110% he
+         used to set by hand, worked out from the biggest shake and twist the effect will ever reach. PATTERN (C28) gives a
+         layer its own shake, so two shaken layers stop moving in lockstep. Off and 0 are the old shake exactly. */
+      { key: 'overscan', label: 'Hide edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
-    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 0, unit: '%' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase
+    { type: 'swing', label: 'Swing', params: [{ key: 'angle', label: 'Angle', min: 0, max: 180, step: 1, def: 15, unit: '°' }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 0, unit: '%' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'damping', label: 'Damping', min: 0, max: 5, step: 0.1, def: 0, unit: '/s' }] },   // queue 904: Phase. #482 polish 2.2: Damping lets a swing settle (the angle × e^(−damping × time)); 0 swings for ever, as before
     { type: 'spin', label: 'Spin', params: [
       { key: 'speed', label: 'Speed', min: -720, max: 720, step: 5, def: 90, unit: '°/s' },
       { key: 'offset', label: 'Start angle', min: -360, max: 360, step: 5, def: 0, unit: '°' },
       { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
-    { type: 'pulse', label: 'Pulse', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.2 }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase
-    { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -1200, max: 1200, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -1200, max: 1200, step: 5, def: 0, unit: 'px/s' }] },
-    { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 1200, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }, { key: 'phase', label: 'Start angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Start angle
+    /* #482 polish 2.2. Pulse was a sine about the middle of the layer, the same amount both ways. WAVE picks the shape of each
+       beat, SQUASH & STRETCH trades width for height as it grows (1 = wider as it grows, −1 = taller), and the PIVOT puts the
+       growth anywhere on the layer (a bottom pivot grows up off the floor). Sine, 0 and 50/50 are the old pulse exactly. */
+    { type: 'pulse', label: 'Pulse', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.2 }, { key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' },   // queue 904: Phase
+      { key: 'wave', label: 'Wave', def: 0, options: [[0, 'Sine'], [1, 'Heartbeat'], [2, 'Bounce'], [3, 'Square'], [4, 'Triangle']] },
+      { key: 'stretch', label: 'Squash & stretch', min: -1, max: 1, step: 0.05, def: 0 },
+      { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }] },
+    /* #482 polish 2.2: WRAP AROUND FRAME turns Drift into a ticker — what leaves one edge comes back in at the other, for ever,
+       instead of drifting away and never being seen again. Off is the old drift exactly. */
+    { type: 'drift', label: 'Drift', params: [{ key: 'x', label: 'Speed X', min: -1200, max: 1200, step: 5, def: 120, unit: 'px/s' }, { key: 'y', label: 'Speed Y', min: -1200, max: 1200, step: 5, def: 0, unit: 'px/s' },
+      { key: 'wrap', label: 'Wrap around frame', def: 0, options: [[0, 'Off'], [1, 'On']] }] },
+    /* #482 polish 2.2: Orbit only went round a circle, upright. ELLIPSE squashes (or stretches) the circle's height, DEPTH
+       shrinks the layer on the far side (the top) as if the orbit were tilted away from you, and FACE DIRECTION OF TRAVEL
+       turns the layer to point along its path (a car driving round, not sliding round). 100/0/Off are the old orbit exactly. */
+    { type: 'orbit', label: 'Orbit', params: [{ key: 'radius', label: 'Radius', min: 0, max: 1200, step: 5, def: 80, unit: 'px' }, { key: 'speed', label: 'Speed', min: -4, max: 4, step: 0.1, def: 0.5, unit: 'rev/s' }, { key: 'phase', label: 'Start angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },   // queue 904: Start angle
+      { key: 'ry', label: 'Ellipse', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'face', label: 'Face direction of travel', def: 0, options: [[0, 'Off'], [1, 'On']] }] },
     // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
     { type: 'squeeze', label: 'Squeeze', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -2571,6 +2606,30 @@ window.FM = window.FM || {};
   // Smooth deterministic pseudo-noise in ~[-1,1] (sum of incommensurate sines) — same at a given
   // time every render, so wiggle is flicker-free and exports identically.
   function wnoise(u) { return Math.sin(u * 6.283) * 0.5 + Math.sin(u * 14.77 + 1.3) * 0.3 + Math.sin(u * 28.6 + 2.7) * 0.2; }
+  /* ROUGHNESS (#482 polish 2.1): the smooth wiggle at full size, plus up to three finer octaves of the same noise, each ~twice
+     as fast and half as strong — then a SOFT CEILING, x / (1 + |x|^p)^(1/p): all but identical below 0.8, never past 1. So the
+     slow float keeps the size it has today and a rougher wiggle is rougher, not bigger. (Dividing by the octaves' total weight
+     was tried first and measured: at Roughness 4 the float shrank to about half its reach — his layer would have stopped
+     wandering the moment he asked for it to be rougher.) A fractional value — a keyframed Roughness between whole steps —
+     fades its last octave in, and the ceiling tightens with it (p is huge just above 1), so nothing jumps. Wiggle calls
+     wnoise itself at Roughness 1. */
+  function roughNoise(u, oct) {
+    let sum = wnoise(u), a = 0.5, f = 2.13;
+    for (let k = 1; k < 4 && k < oct; k++) { const w = Math.min(1, oct - k); sum += a * w * wnoise(u * f + k * 17.31); a *= 0.5; f *= 2.13; }
+    const pw = Math.min(400, 8 / Math.max(0.02, Math.min(1, oct - 1)));
+    return sum / Math.pow(1 + Math.pow(Math.abs(sum), pw), 1 / pw);
+  }
+  /* PULSE WAVES (#482 polish 2.2): one beat's shape, f in cycles (the whole part ignored), in −1..1 like the sine it replaces
+     and in step with it (each is at its biggest at f = 0.25, where the sine peaks) — except Heartbeat, which only ever grows
+     (0..1: a strong beat, a softer second one, then rest — lub-dub). Bounce has round tops and a hard landing at f = 0.75. */
+  function pulseWave(w, f) {
+    f -= Math.floor(f);
+    if (w === 1) { const b = function (c, wd) { const z = (f - c) / wd; return Math.exp(-z * z); }; return Math.min(1, b(0.12, 0.045) + 0.6 * b(0.3, 0.05)); }
+    if (w === 2) return 2 * Math.abs(Math.sin(Math.PI * (f + 0.25))) - 1;
+    if (w === 3) return f < 0.5 ? 1 : -1;
+    if (w === 4) { const g = (f + 0.25) % 1; return 1 - 4 * Math.abs(g - 0.5); }
+    return Math.sin(2 * Math.PI * f);
+  }
   FM.wiggleOffset = function (layer, t) {
     const w = layer.wiggle;
     if (!w || !w.enabled || !w.amp) return null;
@@ -11433,6 +11492,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { cv: ex.cv, x: (-ex.mx - (A.__fmOX || 0)) * ex.ps, y: (-ex.my - (A.__fmOY || 0)) * ex.ps };
   }
   FM._moverSource = moverSource;   // suite seam (#986)
+  /* The layer's EXACT alpha box inside the loose one a canvas effect is handed (the 4x-downsampled scan pads it by up to ~20
+     px). For the controls that put something ON an edge — a Pulse pivot, Shake's Hide edges (#482 polish 2.2 / 2.1) — at the
+     cost of reading back only that box. The loose box itself whenever the plate cannot be read. */
+  function exactBoxOf(A, bb) {
+    if (!bb || !(bb.w > 0) || !(bb.h > 0)) return bb;
+    let e = null; try { e = alphaBBoxWithin(_fx2d(A), bb); } catch (err) { e = null; }
+    return e && e.w > 0 && e.h > 0 ? e : bb;
+  }
   const CANVAS_FX = {
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
      * There were two. A video or photo drew an inline black radial gradient over its clip rect inside the media draw:
@@ -12773,13 +12840,37 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.drawImage(A, 0, 0);
     },
     // ---- Move / Transform (motion about the layer's rendered bounds) ----
-    wiggle: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    /* #482 polish 2.1 — PATTERN, VERTICAL AMOUNT, ROTATION WIGGLE, SCALE WIGGLE, ROUGHNESS. Pattern moves the noise to its own
+       stretch of the curve (C28: every wiggle was `wnoise(tl*spd)`, so two layers moved in lockstep); Roughness adds finer
+       octaves on top of the smooth curve under a soft ceiling, so it never reaches past Amount; Rotation and Scale wiggle turn and grow the
+       layer about its middle on their own channels of the same noise. At the defaults u is tl*spd exactly, the noise is
+       wnoise itself and the old translate-only lines below run untouched — byte for byte the old wiggle. */
+    wiggle: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const S = ps || 1;
       const amt = fparam(p, 'amount', 40, t) * S, spd = fparam(p, 'speed', 2, t);
-      const dx = amt * wnoise(tl * spd), dy = amt * wnoise(tl * spd + 100);
-      const near = !!bb && (bb.x < amt || bb.y < amt || bb.x + bb.w > W - amt || bb.y + bb.h > H - amt);
+      const ay = p.amounty == null ? amt : Math.max(0, FM.evalProp(p.amounty, t)) * S;   // Vertical amount: absent = Amount (it follows)
+      const sd = Math.round(fparam(p, 'seed', 0, t)), u = sd ? tl * spd + sd * 61.8034 : tl * spd;
+      const oct = Math.max(1, Math.min(4, fparam(p, 'octaves', 1, t)));
+      const wn = oct <= 1 ? wnoise : function (v) { return roughNoise(v, oct); };
+      const rdeg = Math.max(0, Math.min(180, fparam(p, 'rotate', 0, t))), scw = Math.max(0, Math.min(100, fparam(p, 'scale', 0, t)));
+      const dx = amt * wn(u), dy = ay * wn(u + 100);
+      if (rdeg > 0 || scw > 0) {
+        const rot = rdeg * wn(u + 200), sc = 1 + (scw / 100) * wn(u + 300);
+        if (!(sc > 0.001)) return;   // a scale wiggle of 100% touches zero: nothing to draw at that instant
+        /* About the layer's EXACT middle: the box handed in is the fast scan's, padded by a different number of project px on
+           each plate, so turning about its centre would put the layer somewhere else on the phone than in the export. */
+        const eb = exactBoxOf(A, bb);
+        const cx = eb ? eb.x + eb.w / 2 : W / 2, cy = eb ? eb.y + eb.h / 2 : H / 2;
+        const m = new DOMMatrix().translateSelf(cx + dx, cy + dy).rotateSelf(rot).scaleSelf(sc, sc).translateSelf(-cx, -cy);
+        const src = moverSource(A, W, H, ps, expand, layer, t, scene, [m]);
+        B.save(); B.translate(cx + dx, cy + dy); B.rotate(rot * Math.PI / 180); B.scale(sc, sc); B.translate(-cx, -cy);
+        B.drawImage(src.cv, src.x, src.y); B.restore();
+        return;
+      }
+      const reach = ay > amt ? ay : amt;   // the old margin whenever the vertical is not the bigger of the two
+      const near = !!bb && (bb.x < reach || bb.y < reach || bb.x + bb.w > W - reach || bb.y + bb.h > H - reach);
       if (near && expand) {
-        const ex = expand(Math.ceil(amt / S) + 2);
+        const ex = expand(Math.ceil(reach / S) + 2);
         FM._wigTried = (FM._wigTried || 0) + 1;
         if (ex && ex.cv) {
           FM._wigUsed = (FM._wigUsed || 0) + 1;
@@ -12809,11 +12900,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         : function (u, off) { return (1 - jit) * wnoise(u + off) + jit * ihash((Math.floor(u * 2) + ((off * 131) | 0)) | 0); };   // ×2: a step per half-cycle keeps perceived speed
       const dampX = dir === 2 ? 0.12 : 1, dampY = dir === 1 ? 0.12 : 1;   // axis lock leaves a whisper of cross-shake so it doesn't read robotic
       const disp = function (u) { return [amt * noise(u, 0) * dampX, amt * noise(u, 55) * dampY]; };
-      const u0 = tl * spd;
+      /* PATTERN (#482 polish 2.1, C28): a seed moves this layer's shake to its own stretch of the noise — every shake used to be
+         `tl*spd`, so two layers shaken together moved as one. 0 adds nothing: u0 is the old expression, untouched. */
+      const sd = Math.round(fparam(p, 'seed', 0, t)), su = sd ? sd * 61.8034 : 0;
+      const u0 = su ? tl * spd + su : tl * spd;
       const d0 = disp(u0);
-      const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
+      let px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;   // `let`: Hide edges re-centres on the exact box below
       const rot = tw * noise(u0, 200) * Math.PI / 180;
       const s = zoom > 0 ? 1 + (zoom / 100) * Math.abs(noise(u0, 313)) : 1;   // |n| → always punches IN (impact), never breathes out
+      /* HIDE EDGES (#482 polish 2.1): the zoom a clip needs so that no shake, at its biggest, shows past the layer's edges — what
+         he did by hand by scaling the clip to 110%. Worked out from the PEAK Amount and Twist (the largest keyframe when they
+         are animated, so a Beat Slam that dies away holds one zoom instead of breathing with it) and the direction lock: the
+         layer's box, turned by the twist and pushed by the shake either way, must still cover where the box was — so the scale
+         is the larger of ((w + 2·ax)·cos θ + (h + 2·ay)·sin θ) / w and ((w + 2·ax)·sin θ + (h + 2·ay)·cos θ) / h. With no
+         twist that is 1 + 2·amount / min(w, h). The noise never leaves ±1, so the bound holds on every frame. Off = 1. */
+      let so = 1;
+      if (Math.round(fparam(p, 'overscan', 0, t)) === 1 && bb.w > 0 && bb.h > 0) {
+        /* On the layer's EXACT box (the fast scan's is up to ~20 px loose), and about ITS middle: a loose box both over-zooms and
+           puts the centre off the layer's own, which on a clip smaller than the frame lets one edge show. */
+        const eb = exactBoxOf(A, bb);
+        px = eb.x + eb.w / 2; py = eb.y + eb.h / 2;
+        const peak = function (k, d) { const v = p[k]; if (v == null) return d; if (FM.isAnimated(v)) return (v.kf || []).reduce(function (m, q) { return Math.max(m, Math.abs(+q.v || 0)); }, 0); return Math.abs(FM.evalProp(v, t) || 0); };
+        const pa = peak('amount', 20) * (ps || 1), th = Math.min(89, peak('twist', 4)) * Math.PI / 180;
+        const ax = pa * dampX, ay = pa * dampY, c = Math.cos(th), sn = Math.sin(th);
+        so = Math.max(1, ((eb.w + 2 * ax) * c + (eb.h + 2 * ay) * sn) / eb.w, ((eb.w + 2 * ax) * sn + (eb.h + 2 * ay) * c) / eb.h);
+      }
+      const sz = so === 1 ? s : s * so;
       /* #986 C27: every stamp is queued first, so the expanded plate is asked for once, with the margin the furthest
          stamp needs; then they are drawn exactly as before, from that plate when the layer reaches past the frame. */
       const stamps = [];
@@ -12822,7 +12934,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const src = moverSource(A, W, H, ps, expand, layer, t, scene, stamps.map(q => {
           const m = new DOMMatrix().translateSelf(px + q[0], py + q[1]);
           if (rot) m.rotateSelf(rot * 180 / Math.PI);
-          if (s !== 1) m.scaleSelf(s, s);
+          if (sz !== 1) m.scaleSelf(sz, sz);
           return m.translateSelf(-px, -py);
         }));
         for (const q of stamps) {
@@ -12830,7 +12942,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           B.globalAlpha = q[2];
           B.translate(px + q[0], py + q[1]);
           if (rot) B.rotate(rot);
-          if (s !== 1) B.scale(s, s);
+          if (sz !== 1) B.scale(sz, sz);
           B.translate(-px, -py);
           B.drawImage(src.cv, src.x, src.y);
           B.restore();
@@ -12841,7 +12953,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // displacement is recomputed from the same noise, no cross-frame state.
       if (smear > 0) {
         const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
-        const d1 = disp((tl - 1 / fps) * spd);
+        const d1 = disp(su ? (tl - 1 / fps) * spd + su : (tl - 1 / fps) * spd);   // the same pattern one frame ago
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
           /* SMEAR LENGTH (queue 904): how many frames of motion the trail reaches back, with ghosts added in proportion so a long smear
@@ -12863,7 +12975,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 0 ? bb.y : bb.y + bb.h * (fy / 100);
       const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old swing exactly
-      const ang = amp * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180;
+      /* DAMPING (#482 polish 2.2): the swing dies away — the angle × e^(−damping × time since the clip began), a door that
+         settles or a sign that stops rocking. 0 is the old expression below, never touched. */
+      const damp = Math.max(0, fparam(p, 'damping', 0, t));
+      const ang = damp > 0 ? amp * Math.exp(-damp * Math.max(0, tl)) * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180
+        : amp * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180;
       const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
@@ -12892,11 +13008,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     pulse: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const amt = fparam(p, 'amount', 0.2, t), spd = fparam(p, 'speed', 1.5, t);
       const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old pulse exactly
-      const s = 1 + amt * Math.sin(2 * Math.PI * spd * tl + ph);
-      const px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;
-      const src = s > 0 ? moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).scaleSelf(s, s).translateSelf(-px, -py)]) : { cv: A, x: 0, y: 0 };   // #986 C27 (a shrink pulls in what was past the edge)
+      /* WAVE, SQUASH & STRETCH, PIVOT (#482 polish 2.2). Sine is the old line; every other wave is a shape through one beat
+         (pulseWave), on the same clock and phase. Squash & stretch k scales one axis by s and the other by s^(1−2|k|) — at 1 the
+         height shrinks exactly as the width grows (s^−1, the area held), at 0.5 only the width pulses, at −1 the other way
+         round. The pivot is Spin's, in the same units; 50/50 takes the old centre expression. All at their defaults: the old
+         pulse, byte for byte. */
+      const wave = Math.round(fparam(p, 'wave', 0, t));
+      const s = wave >= 1 && wave <= 4 ? 1 + amt * pulseWave(wave, spd * tl + ph / (2 * Math.PI)) : 1 + amt * Math.sin(2 * Math.PI * spd * tl + ph);
+      const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t), fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
+      /* An off-centre pivot is measured on the layer's EXACT edges: the box handed in is the fast scan's, up to ~20 px loose,
+         and a pivot on its bottom edge would sit below the floor it is meant to grow from — and the looseness is a different
+         number of project px on each plate, so the phone would pulse about a different point from the export. So is any new
+         wave or a squash. The old sine about the centre keeps the box it always had (byte for byte). */
+      const k = Math.max(-1, Math.min(1, fparam(p, 'stretch', 0, t)));
+      const pb = (fx !== 50 || fy !== 50 || k !== 0 || (wave >= 1 && wave <= 4)) ? exactBoxOf(A, bb) : bb;
+      const px = fx === 50 ? pb.x + pb.w / 2 : pb.x + pb.w * (fx / 100);
+      const py = fy === 50 ? pb.y + pb.h / 2 : pb.y + pb.h * (fy / 100);
+      let sx = s, sy = s;
+      if (k !== 0 && s > 0) { const b = Math.max(0.05, s); if (k > 0) sy = Math.pow(b, 1 - 2 * k); else sx = Math.pow(b, 1 + 2 * k); }
+      const src = s > 0 ? moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).scaleSelf(sx, sy).translateSelf(-px, -py)]) : { cv: A, x: 0, y: 0 };   // #986 C27 (a shrink pulls in what was past the edge)
       B.save();
-      B.translate(px, py); B.scale(s, s); B.translate(-px, -py);
+      B.translate(px, py); B.scale(sx, sy); B.translate(-px, -py);
       B.drawImage(src.cv, src.x, src.y); B.restore();
     },
     /* DRIFT AND ORBIT GET WIGGLE'S EXPANDED PLATE (queue 228) — they are the same three lines wiggle
@@ -12914,10 +13046,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * than allocating an ever-larger canvas.
      * The `near` test keeps the cost off every other frame: a layer nowhere near an edge cannot lose
      * anything, so it takes the cheap path exactly as before. */
-    drift: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    drift: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const k = ps || 1;   // the plate is in its own pixels — a distance in project px must ride the scale
       const vx = fparam(p, 'x', 120, t) * k, vy = fparam(p, 'y', 0, t) * k;
       const dx = vx * tl, dy = vy * tl;
+      /* WRAP AROUND FRAME (#482 polish 2.2) — a ticker. The layer's leading box runs round a loop one frame plus one layer long,
+         so the instant it has wholly left one edge it starts coming in at the other: never gone, never doubled. Measured on the
+         layer's WHOLE box (its own size under its transform, not the part on screen), and drawn from the expanded plate when
+         the layer reaches past the frame, so a ticker wider than the frame scrolls all of itself. Stateless in time like the
+         rest of Drift, so the preview, a scrub and the export agree. Off leaves the lines below untouched. */
+      if (Math.round(fparam(p, 'wrap', 0, t)) === 1) {
+        let x0 = bb.x, y0 = bb.y, bw = bb.w, bh = bb.h;
+        const box = layer && scene ? layerAABB(layer, t, scene) : null;
+        if (box && isFinite(box.x0) && isFinite(box.x1) && box.x1 > box.x0 && box.y1 > box.y0) {
+          const oX = A.__fmOX || 0, oY = A.__fmOY || 0;
+          x0 = (box.x0 - oX) * k; y0 = (box.y0 - oY) * k; bw = (box.x1 - box.x0) * k; bh = (box.y1 - box.y0) * k;
+        }
+        const loop = function (at, d, size, span) { const P = span + size; return (((at + d + size) % P) + P) % P - size - at; };
+        const wx = bw > 0 && dx !== 0 ? loop(x0, dx, bw, W) : dx, wy = bh > 0 && dy !== 0 ? loop(y0, dy, bh, H) : dy;
+        const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(wx, wy)]);
+        B.save(); B.translate(wx, wy); B.drawImage(src.cv, src.x, src.y); B.restore();
+        return;
+      }
       const need = Math.max(Math.abs(dx), Math.abs(dy));
       const near = !!bb && need > 0.5 && (bb.x < need || bb.y < need || bb.x + bb.w > W - need || bb.y + bb.h > H - need);
       if (near && expand) {
@@ -12926,16 +13076,41 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
     },
-    orbit: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    orbit: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const k = ps || 1;
       const r = fparam(p, 'radius', 80, t) * k, spd = fparam(p, 'speed', 0.5, t);
       const a = 2 * Math.PI * spd * tl + (p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180);   // START ANGLE (queue 904); 0 = the old orbit exactly
-      const dx = r * Math.cos(a), dy = r * Math.sin(a);
+      /* ELLIPSE, DEPTH, FACE DIRECTION OF TRAVEL (#482 polish 2.2). Ellipse scales the orbit's height (100 = the circle, 0 = a
+         straight side-to-side pass, 200 = twice as tall); Depth shrinks the layer toward the TOP of its path, the far side of an
+         orbit tilted away from you (at 100 it is 0.3 of its size there, full size at the bottom); Face direction of travel turns
+         it to point along the path — its right-hand side leads, the way a car image drives round. 100/0/Off take the old lines. */
+      const ey = Math.max(0, Math.min(200, fparam(p, 'ry', 100, t))) / 100;
+      const dx = r * Math.cos(a), dy = ey === 1 ? r * Math.sin(a) : r * ey * Math.sin(a);
+      const face = Math.round(fparam(p, 'face', 0, t)) === 1, depth = Math.max(0, Math.min(100, fparam(p, 'depth', 0, t))) / 100;
+      if (face || depth > 0) {
+        const eb = exactBoxOf(A, bb);   // the layer's exact middle, as Wiggle's turn: the loose box's centre moves with the plate
+        const cx = eb ? eb.x + eb.w / 2 : W / 2, cy = eb ? eb.y + eb.h / 2 : H / 2;
+        let rot = 0;
+        if (face) {   // the tangent of (cos a, ey·sin a), the way the orbit is turning
+          const dir = spd < 0 ? -1 : 1, tx = -Math.sin(a) * dir, ty = ey * Math.cos(a) * dir;
+          rot = Math.abs(tx) + Math.abs(ty) > 1e-9 ? Math.atan2(ty, tx) : 0;
+        }
+        const sc = depth > 0 ? 1 - 0.7 * depth * (1 - Math.sin(a)) / 2 : 1;
+        const m = new DOMMatrix().translateSelf(cx + dx, cy + dy);
+        if (rot) m.rotateSelf(rot * 180 / Math.PI);
+        if (sc !== 1) m.scaleSelf(sc, sc);
+        m.translateSelf(-cx, -cy);
+        const src = moverSource(A, W, H, ps, expand, layer, t, scene, [m]);
+        B.save(); B.translate(cx + dx, cy + dy); if (rot) B.rotate(rot); if (sc !== 1) B.scale(sc, sc); B.translate(-cx, -cy);
+        B.drawImage(src.cv, src.x, src.y); B.restore();
+        return;
+      }
       // The RADIUS bounds how far it can ever reach, so the margin is the same all the way round and
-      // the plate is built once rather than re-sized every frame of the orbit.
-      const near = !!bb && r > 0.5 && (bb.x < r || bb.y < r || bb.x + bb.w > W - r || bb.y + bb.h > H - r);
+      // the plate is built once rather than re-sized every frame of the orbit. (A taller ellipse reaches further up and down.)
+      const reach = ey > 1 ? r * ey : r;
+      const near = !!bb && reach > 0.5 && (bb.x < reach || bb.y < reach || bb.x + bb.w > W - reach || bb.y + bb.h > H - reach);
       if (near && expand) {
-        const ex = expand(Math.ceil(r / k) + 2);
+        const ex = expand(Math.ceil(reach / k) + 2);
         if (ex && ex.cv) { B.drawImage(ex.cv, ex.mx * ex.ps - dx, ex.my * ex.ps - dy, W, H, 0, 0, W, H); return; }
       }
       B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();

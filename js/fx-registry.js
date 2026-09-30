@@ -234,7 +234,10 @@ window.FM = window.FM || {};
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
         // Radius as 8 on an instance the kernel is drawing at 3.
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '' });   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '' });   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904
+        /* `follows` on a SLIDER (#482 polish 2.1, Wiggle's Vertical amount) is the colour rule of polish 1.2: ABSENT, the value
+           is the slider it names. makeInstance and the render-time fill both skip it, and the inspector shows the followed
+           value until he moves this one — this copy is a whitelist, so a field not named here would simply not exist. */
         /* `q` is the ruler's NOTCH, and it has to survive this copy for exactly the reason `liveWhen`
            does — see the warning immediately below, which was written when an option added at the
            declaration was silently dropped here. It forces how far a drag moves the value: the strip
@@ -628,7 +631,7 @@ window.FM = window.FM || {};
     makeInstance: function (id) {
       const e = REG[id]; if (!e) return null;
       const params = {};
-      e.params.forEach(p => { if (!p.follows) params[p.key] = p.default; });   // a following colour stays absent (#482 polish 1.2)
+      e.params.forEach(p => { if (!p.follows) params[p.key] = p.default; });   // a following colour (#482 polish 1.2) or slider (polish 2.1) stays absent
       return { type: e.type, enabled: true, params: params };
     },
     /* Does a FILTER apply to this layer? Not answerable by supportsLayer, which is asked about a TYPE:
