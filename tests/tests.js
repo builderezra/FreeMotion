@@ -114489,12 +114489,14 @@
     }
     /* A Beat Slam's zoom is sized once, for its biggest hit: the same layer drawn with the shake at rest (Amount keyframes all
        at 0 from this moment on) must be as big as at the hit, or Hide edges would breathe in and out with the shake. */
-    /* …and the zoom is sized once, for the biggest shake: a 40x30 box whose Amount rises to 10 at 1 s and dies to 0 at 2 s (no
-       twist, no zoom punch, so only Hide edges can change its size) is 1 + 2x10/30 = 1.67x wider at 3 s, when it is still, as it
-       is at the height of the shake. Sized from the Amount of the moment it would breathe in and out with the shake. */
+    /* …and the zoom is sized once, for the biggest shake: a 200x30 bar right across the 200 px frame whose Amount rises to 10 at
+       1 s and dies to 0 at 2 s (no twist, no zoom punch, so only Hide edges can change its size) is zoomed to keep the frame's
+       sides covered, 1 + 10/100 = 1.1x, so it is 33 px tall at 3 s, when it is still, as it is at the height of the shake.
+       Sized from the Amount of the moment it would breathe in and out with the shake. (It spans the frame sideways only, so
+       it is sized on that axis: the review's fix — a layer that does not fill the frame has no edges to hide.) */
     const swell = { amount: { kf: [{ t: 0, v: 0 }, { t: 1, v: 10 }, { t: 2, v: 0 }] }, twist: 0, zoom: 0, smear: 0, jitter: 0, overscan: 1 };
-    const hit = at482b([box482b(sh(swell))], 1), still = at482b([box482b(sh(swell))], 3);
-    if (!(still.n > 0) || Math.abs(still.w - 40 * (1 + 20 / 30)) > 1.5 || Math.abs(still.w - hit.w) > 1.01) bad.push('Hide edges on a shake whose Amount swells to 10 and dies draws the 40 px box ' + hit.w + ' px wide at the height of it and ' + still.w + ' px once it is still - it should hold one zoom, sized for the biggest shake (about 67 px)');
+    const hit = at482b([box482b(sh(swell), { shapeW: 200 })], 1), still = at482b([box482b(sh(swell), { shapeW: 200 })], 3);
+    if (!(still.n > 0) || Math.abs(still.h - 30 * 1.1) > 1.5 || Math.abs(still.h - hit.h) > 1.01) bad.push('Hide edges on a shake whose Amount swells to 10 and dies draws the frame-wide 30 px bar ' + hit.h + ' px tall at the height of it and ' + still.h + ' px once it is still - it should hold one zoom, sized for the biggest shake (about 33 px)');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -114640,6 +114642,164 @@
       const amtBox2 = row482r('Amount').querySelector('.fx-scrub-val');
       amtBox2.value = '90'; amtBox2.dispatchEvent(new Event('change', { bubbles: true }));
       if (valOf(row482r('Vertical amount')) !== 12 || inst.params.amounty !== 12) throw new Error(where + ': CONTROL - a Vertical amount set to 12 shows ' + valOf(row482r('Vertical amount')) + ' (' + inst.params.amounty + ') after Amount changed - a vertical of its own must not follow');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* ═══ #482 BATCH 2 (MOTION) — THE REVIEW'S FIVE FINDINGS ═══════════════════════════════════════════════════════════════
+   * A review of the batch-2 build (f6f0db39) measured five faults through FM.renderScene and the real inspector. Each test
+   * below reproduces one: it fails on that build and on v17.18 (5803cf55), and passes with its fix. */
+
+  /* HIDE EDGES WAS SIZED FROM THE PART OF THE LAYER THE PLATE COULD SEE. The build took its zoom from the layer's alpha box
+     on the plate, which the frame edge cuts and which is whole plate pixels: a 600x120 caption in a 1080x1920 project, new
+     Shake with Hide edges on, drew 7.3x its area; a frame-filling clip sliding in was zoomed 3.33x with 20 px showing, 1.43x
+     with 100 px and 1.25x centred; and a small bar drew 12% smaller on the 0.3 phone plate than in the export. Now it is
+     sized from the layer's WHOLE box and the frame: a caption has no edges to hide and keeps its size (the most any layer
+     could be zoomed is the frame's own figure, 1 + 2x120/1080 = 1.22x with no twist, 1.55x with the default 10 degrees);
+     a frame-sized clip gets one zoom wherever it is (1 + 2x20/180 = 1.222: its 10 px stripes draw 12.22 px); and the
+     phone plate draws what the export does. */
+  test('482 2.1 Shake - Hide edges is sized from the frame and the layer whole box: a caption keeps its size, a frame-filling clip gets one zoom sliding in or centred, and the phone plate matches the export', { item: '482', budgetMs: 90000 }, function () {
+    const bad = [];
+    const area = r => { let n = 0; for (let i = 3; i < r.d.length; i += 4) if (r.d[i] > 128) n++; return n; };
+    /* 1. THE CAPTION, new Shake at its defaults (Amount 120, Twist 10, zoom punch and smear on), Hide edges off and on. */
+    const cap = on => { const L = FM.makeLayer('shape', { shape: 'rect', x: 458, y: 1536, shapeW: 600, shapeH: 120, fill: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = [_986fx('shake', on ? { overscan: 1 } : {})]; return L; };
+    [0.2, 0.9, 1.7].forEach(t => {
+      const off = area(_986shot([cap(false)], t, 1080, 1920, 0.25, null)), on = area(_986shot([cap(true)], t, 1080, 1920, 0.25, null));
+      if (!(off > 3000)) throw new Error('setup: the shaken caption drew only ' + off + ' px at ' + t + ' s on the quarter plate');
+      if (on > off * 1.05) bad.push('at ' + t + ' s Hide edges draws the caption ' + (on / off).toFixed(2) + 'x its area (' + on + ' px against ' + off + ') - a caption has no edges to hide, and even a clip filling the frame is zoomed at most 1.55x (2.4x the area)');
+    });
+    /* 2. A FRAME-SIZED CLIP OF 10 px STRIPES, centred and sliding in off the right edge (100 and 30 px of it showing at rest).
+       The stripe width along the middle row is its zoom: 12.22 px everywhere. And where it covers the frame's top and bottom
+       edges at rest, it still covers them. */
+    const tex = document.createElement('canvas'); tex.width = 240; tex.height = 180;
+    const tg = tex.getContext('2d'); for (let x = 0; x < 240; x += 10) { tg.fillStyle = (x / 10) % 2 ? '#000000' : '#ffffff'; tg.fillRect(x, 0, 10, 180); }
+    const ids = [];
+    const clip = (x, o) => { const L = FM.makeLayer('image', { name: '482r stripes', x: x, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 240, height: 180 }); ids.push(L.id); L.effects = [_986fx('shake', Object.assign({ amount: 20, speed: 6, twist: 0, zoom: 0, smear: 0, jitter: 0, overscan: 1 }, o || {}))]; return L; };
+    const stripe = r => {   // mean distance between the white/black crossings along the middle row, sub-pixel
+      const y = r.h >> 1, xs = []; let prev = null;
+      for (let x = 0; x < r.w; x++) {
+        const i = (y * r.w + x) * 4;
+        if (r.d[i + 3] < 250) { prev = null; continue; }
+        const L = r.d[i];
+        if (prev != null && (prev - 128) * (L - 128) < 0) xs.push(x - 1 + (128 - prev) / (L - prev));
+        prev = L;
+      }
+      return xs.length >= 3 ? (xs[xs.length - 1] - xs[0]) / (xs.length - 1) : NaN;
+    };
+    try {
+      const plain = stripe(_986shot([clip(120, { overscan: 0 })], 0.5, 240, 180, null, null));
+      if (Math.abs(plain - 10) > 0.2) throw new Error('CONTROL: without Hide edges the stripes are ' + plain.toFixed(2) + ' px wide, not 10 - the probe cannot read the zoom');
+      [[120, 'centred'], [260, 'with 100 px showing'], [330, 'with 30 px showing']].forEach(([x, how]) => {
+        const got = [0.5, 1.3, 2.1].map(t => stripe(_986shot([clip(x)], t, 240, 180, null, null))).filter(isFinite);
+        if (!got.length) { bad.push('the frame-sized clip ' + how + ' never shows three stripe edges - Hide edges zoomed its 10 px stripes past the part of it on screen'); return; }
+        got.forEach(s => { if (Math.abs(s - 10 * (1 + 40 / 180)) > 0.35) bad.push('a frame-sized clip ' + how + ' is zoomed ' + (s / 10).toFixed(2) + 'x by Hide edges - it should be 1.22x wherever it is, sized from its whole box and the frame, not the part on screen'); });
+      });
+      [0.5, 1.3, 2.1].forEach(t => {
+        const r = _986shot([clip(260)], t, 240, 180, null, null);
+        for (const y of [0, 179]) for (let x = 170; x < 240; x++) if (r.d[(y * 240 + x) * 4 + 3] < 250) { bad.push('at ' + t + ' s the clip sliding in shows the empty frame at ' + x + ',' + y + ' - where it covers the frame edge at rest Hide edges must keep it covered'); return; }
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    /* 3. THE PHONE PLATE DRAWS WHAT THE EXPORT DOES: a small bar (no edges to hide) and a bar right across the frame (zoomed
+       1 + 20/100 = 1.2x), Hide edges on, at the export and the 0.3 phone plate, by area in project px. */
+    const sbar = (o, shp) => box482b([_986fx('shake', Object.assign({ amount: 20, speed: 6, twist: 0, zoom: 0, smear: 0, jitter: 0, overscan: 1 }, o || {}))], shp);
+    [[{ x: 100.4, y: 77.3, shapeW: 61, shapeH: 13 }, 'a small bar', 0.06], [{ x: 100, y: 70.3, shapeW: 200, shapeH: 37 }, 'a bar across the frame', 0.04]].forEach(([shp, what, tol]) => {
+      [0.7, 1.9].forEach(t => {
+        const e = at482b([sbar({}, shp)], t), ph = at482b([sbar({}, shp)], t, 0.3);
+        if (!e.n || !ph.n) throw new Error('setup: ' + what + ' drew nothing at ' + t + ' s');
+        if (Math.abs(ph.n - e.n) > e.n * tol) bad.push('at ' + t + ' s ' + what + ' with Hide edges covers ' + Math.round(ph.n) + ' px on the phone plate against ' + Math.round(e.n) + ' in the export (' + (100 * (ph.n / e.n - 1)).toFixed(1) + '%)');
+      });
+    });
+    const across = at482b([sbar({}, { x: 100, y: 70.3, shapeW: 200, shapeH: 37 })], 0.7);
+    if (Math.abs(across.h - 37 * 1.2) > 1.5) bad.push('a bar right across the frame with Hide edges is ' + across.h + ' px tall - it should be zoomed 1.2x (about 44 px) to keep the frame sides covered');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* A TICKER LONGER THAN ABOUT 2.2 FRAMES LOST ITS ENDS. Wrap drew from the expanded plate, which stops 0.6 of the frame past
+     each edge (its cost ceiling), so a 600 px bar in a 200 px frame had 80 px missing at each end: at 3 s it covered x 0..20
+     where it should cover 0..100, at 6 s 80..200 instead of the whole frame, and a gap scrolled through it. The loop is one
+     frame plus one bar long (800 px); the bar rests at x -200..400 and drifts left at 100 px/s. */
+  test('482 2.2 Drift - Wrap around frame scrolls a ticker longer than two frames whole, with no gap at its ends, on the export and the half-size preview', { item: '482', budgetMs: 60000 }, function () {
+    const at = (t, rs) => at482b([box482b([_986fx('drift', { x: -100, y: 0, wrap: 1 })], { shapeW: 600, shapeH: 20 })], t, rs);
+    const WANT = [[3, 0, 100], [4.5, 150, 200], [5, 100, 200], [6, 0, 200]];
+    WANT.forEach(([t, a, b]) => [1, 0.5].forEach(rs => {
+      const r = at(t, rs);
+      const tol = rs === 1 ? 1.01 : 2.01;   // a plate pixel of the half-size preview is 2 project px (and its 20 px rows land on half pixels, so its area is read at the export only)
+      if (!r.n || Math.abs(r.x0 - a) > tol || Math.abs(r.x1 - b) > tol || (rs === 1 && Math.abs(r.n - (b - a) * 20) > (b - a) * 20 * 0.03)) throw new Error('at ' + t + ' s (' + (rs === 1 ? 'export' : 'half-size preview') + ') the wrapped 600 px ticker covers ' + (r.n ? 'x ' + r.x0.toFixed(0) + '..' + r.x1.toFixed(0) + ', ' + Math.round(r.n) + ' px' : 'nothing') + ' - it should cover x ' + a + '..' + b + ' (' + ((b - a) * 20) + ' px): the part more than 0.6 of a frame past the edge is missing');
+    }));
+  });
+
+  /* A TICKER PARKED OFF THE FRAME NEVER CAME IN. A layer with no alpha on the plate never reached the kernel, so Wrap could
+     not bring it back: a 60x20 bar parked at x 270..330, past the right edge of a 200 px frame, drifting left at 90 px/s,
+     drew 0 px at every moment. Now it scrolls in from the edge it was parked past (it arrives at 0.78 s), then loops like any
+     ticker; parked there and drifting AWAY, it loops from the start — Wrap means it is never gone. */
+  test('482 2.2 Drift - Wrap around frame brings in a ticker parked off the frame: it scrolls in from its own edge and then loops', { item: '482', budgetMs: 60000 }, function () {
+    const at = (vx, t, rs) => at482b([box482b([_986fx('drift', { x: vx, y: 0, wrap: 1 })], { x: 300, shapeW: 60, shapeH: 20 })], t, rs);
+    const where = r => r.n ? 'x ' + r.x0.toFixed(0) + '..' + r.x1.toFixed(0) : 'nowhere';
+    if (at(-90, 0.5).n) throw new Error('at 0.5 s the parked ticker is drawn at ' + where(at(-90, 0.5)) + ' - it is still on its way in from past the right edge, and must not appear at the left');
+    [[1, 180, 200], [1.5, 135, 195], [4, 170, 200]].forEach(([t, a, b]) => [1, 0.5].forEach(rs => {
+      const r = at(-90, t, rs);
+      const tol = rs === 1 ? 1.01 : 2.01;   // a plate pixel of the half-size preview is 2 project px
+      if (!r.n || Math.abs(r.x0 - a) > tol || Math.abs(r.x1 - b) > tol) throw new Error('at ' + t + ' s (' + (rs === 1 ? 'export' : 'half-size preview') + ') the ticker parked past the right edge is ' + where(r) + ' - it should be at x ' + a + '..' + b + ' (in from the right at 0.78 s, round again by 4 s)');
+    }));
+    const gone = [0, 0.5, 1, 2].filter(t => !at(90, t).n);
+    if (gone.length) throw new Error('parked past the right edge and drifting away from the frame, the wrapped ticker is missing at ' + gone.join(', ') + ' s - a wrapped layer is never gone');
+  });
+
+  /* PATTERN DID NOT GIVE EVERY VALUE ITS OWN MOTION. A Pattern was a time offset (pattern x 61.8034) and wnoise's main wave
+     repeats every ~1.0 of it, so Patterns 25 apart moved at 0.96 correlation (8.6 px apart on a 31 px reach), in a Wiggle and
+     in a smooth Shake alike; and Rotation wiggle rode the same noise 200 later, turning with the sideways move at 0.73 on
+     every Pattern. Measured the way he sees it: the centre and the angle of a 50x14 bar over 8 s, 15 frames a second, at
+     1 Hz. Patterns now draw their own waves, so across four pairs 25 apart the paths share almost nothing on average (the
+     build: 0.96 every time), and across eight Patterns the turn is not tied to the sideways move (the build: 0.73 every time). */
+  test('482 2.1 Wiggle - Pattern gives every value its own motion: Patterns 25 apart do not move together, and Rotation wiggle turns on its own rather than with the sideways move', { item: '482', budgetMs: 90000 }, function () {
+    const corr = (a, b) => { const n = a.length, ma = a.reduce((s, v) => s + v, 0) / n, mb = b.reduce((s, v) => s + v, 0) / n; let sab = 0, saa = 0, sbb = 0; for (let i = 0; i < n; i++) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) * (a[i] - ma); sbb += (b[i] - mb) * (b[i] - mb); } return sab / Math.sqrt(saa * sbb); };
+    const path = (type, o) => {
+      const xs = [], ys = [], as = [];
+      for (let i = 0; i < 120; i++) { const r = at482b([box482b([_986fx(type, o)], { shapeW: 50, shapeH: 14 })], i / 15); if (!r.n) throw new Error('setup: the ' + type + ' bar drew nothing at ' + (i / 15).toFixed(2) + ' s'); xs.push(r.cx); ys.push(r.cy); as.push(r.ang); }
+      return { xs: xs, ys: ys, as: as };
+    };
+    const W = {}; [0, 1, 2, 3, 25, 26, 27, 28].forEach(s => { W[s] = path('wiggle', { amount: 40, speed: 1, rotate: 25, seed: s }); });
+    const differs = W[0].xs.some((v, i) => Math.abs(v - W[25].xs[i]) > 0.5);
+    if (!differs) throw new Error('Pattern 25 traces the path of Pattern 0 frame for frame - Pattern changes nothing');
+    const pairs = [[0, 25], [1, 26], [2, 27], [3, 28]], cs = [];
+    pairs.forEach(([a, b]) => { cs.push(corr(W[a].xs, W[b].xs), corr(W[a].ys, W[b].ys)); });
+    const mean = cs.reduce((s, v) => s + v, 0) / cs.length;
+    if (mean > 0.5) throw new Error('Wiggle Patterns 25 apart move together: their paths correlate ' + mean.toFixed(2) + ' on average (' + cs.map(v => v.toFixed(2)).join(', ') + ') - two layers on Patterns 0 and 25 wiggle as one');
+    pairs.forEach(([a, b], i) => { if (cs[2 * i] > 0.8 && cs[2 * i + 1] > 0.8) throw new Error('Wiggle Patterns ' + a + ' and ' + b + ' move in lockstep both ways (' + cs[2 * i].toFixed(2) + ', ' + cs[2 * i + 1].toFixed(2) + ')'); });
+    const rx = [0, 1, 2, 3, 25, 26, 27, 28].map(s => corr(W[s].xs, W[s].as));
+    if (!W[0].as.some(a => Math.abs(a) > 8)) throw new Error('CONTROL: Rotation wiggle 25 never turns the bar more than 8 degrees');
+    const rMean = rx.reduce((s, v) => s + v, 0) / rx.length, rAbs = rx.reduce((s, v) => s + Math.abs(v), 0) / rx.length;
+    if (Math.abs(rMean) > 0.3 || rAbs > 0.6) throw new Error('Rotation wiggle turns with the sideways move: the turn and the sideways path correlate ' + rx.map(v => v.toFixed(2)).join(', ') + ' across eight Patterns (mean ' + rMean.toFixed(2) + ') - it rides the same wave, not a channel of its own');
+    /* …and a smooth Shake (Hardness 0 — every Shake saved before Hardness, and the Handheld preset) the same way. */
+    const S = {}; [0, 25, 1, 26].forEach(s => { S[s] = path('shake', { amount: 20, speed: 1, twist: 0, zoom: 0, jitter: 0, smear: 0, seed: s }); });
+    const sc = [corr(S[0].xs, S[25].xs), corr(S[0].ys, S[25].ys), corr(S[1].xs, S[26].xs), corr(S[1].ys, S[26].ys)], sMean = sc.reduce((s, v) => s + v, 0) / sc.length;
+    if (sMean > 0.5) throw new Error('smooth Shake Patterns 25 apart move together: ' + sc.map(v => v.toFixed(2)).join(', ') + ' (mean ' + sMean.toFixed(2) + ')');
+  });
+
+  /* VERTICAL AMOUNT'S NAME SAT 10 px LEFT OF EVERY OTHER. While it follows Amount it has no value, so it is not in the keyframe
+     scope, so its name got no pill — and with the pill went the pill's inset: its text started at 96 CSS px where every other
+     name in the open Wiggle starts at 106 (at 390; the same at 1280). It keeps the inset now, and still no pill and no value. */
+  test('482 2.1 Wiggle panel - Vertical amount lines up with the other control names while it follows Amount, at 390 and 1280 px', { item: '482', budgetMs: 60000 }, async function () {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const textLeft = (label, where) => {
+      const row = row482r(label), lab = row && row.querySelector('.fx-scrub-label');
+      if (!lab) throw new Error(where + ': the open Wiggle shows no ' + label + ' row');
+      const rg = document.createRange(); rg.selectNodeContents(lab); return rg.getBoundingClientRect().left;
+    };
+    const check = async where => {
+      const inst = await open482r('wiggle');
+      if ('amounty' in inst.params) throw new Error('setup: a new Wiggle carries a Vertical amount of its own');
+      const a = textLeft('Amount', where), s = textLeft('Speed', where), v = textLeft('Vertical amount', where);
+      if (Math.abs(s - a) > 1) throw new Error(where + ': CONTROL - Amount and Speed start at ' + a.toFixed(1) + ' and ' + s.toFixed(1) + ' px');
+      if (Math.abs(v - a) > 1) throw new Error(where + ': the name Vertical amount starts at ' + v.toFixed(1) + ' px and every other name at ' + a.toFixed(1) + ' - it lost the inset with the pill');
+      const lab = row482r('Vertical amount').querySelector('.fx-scrub-label');
+      if (lab.classList.contains('kf-selectable')) throw new Error(where + ': Vertical amount offers itself as a keyframe row while it has no value of its own');
     };
     try {
       await atPhoneWidth(() => check('at 390 px'), 390);

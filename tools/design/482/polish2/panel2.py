@@ -1,6 +1,7 @@
 """#482 polish batch 2 — screenshot the effect panel with each mover open, at his phone size (390x844 CSS px, 2x), so he
 sees where the new rows sit. Usage: python3 tools/design/482/polish2/panel2.py PORT
-Writes tools/design/482/polish2/panel-<effect>-390.jpg. The real app, the real inspector — nothing mocked."""
+Writes tools/design/482/polish2/panel-<effect>-390.jpg. The real app, the real inspector — nothing mocked.
+Name effects after the port (python3 panel2.py PORT wiggle) to redraw only those."""
 import os, sys, time, base64, json, tempfile, shutil, io
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..', '..', '..', '..', 'tests'))
@@ -52,7 +53,7 @@ try:
     except Exception:
         pass
     time.sleep(0.5)
-    for fx in ['wiggle', 'shake', 'swing', 'pulse', 'orbit', 'drift']:
+    for fx in (sys.argv[2:] or ['wiggle', 'shake', 'swing', 'pulse', 'orbit', 'drift']):
         box = cdp.eval('(%s)(%s)' % (OPEN, json.dumps(fx)), await_promise=True) or {}
         top, bot = int(box.get('top', 0)), int(box.get('bottom', H))
         d = cdp.send('Page.captureScreenshot', format='png', clip={'x': 0, 'y': top, 'width': W, 'height': max(40, bot - top), 'scale': 1})['data']

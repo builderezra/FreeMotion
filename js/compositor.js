@@ -967,8 +967,9 @@ window.FM = window.FM || {};
       { key: 'smear', label: 'Smear', min: 0, max: 1, step: 0.02, def: 0.3, legacy: 0 },
       { key: 'smearlen', label: 'Smear length', min: 1, max: 6, step: 0.5, def: 1, unit: '×', overriddenBy: 'smear', liveAbove: 0 },   // queue 904: the smear was 3 fixed ghosts over one frame of motion
       { key: 'direction', label: 'Direction', options: ['Omni', 'Horizontal', 'Vertical'], def: 0 },
-      /* #482 polish 2.1. HIDE EDGES zooms the layer just enough that the shake can never show past its edges — the 110% he
-         used to set by hand, worked out from the biggest shake and twist the effect will ever reach. PATTERN (C28) gives a
+      /* #482 polish 2.1. HIDE EDGES zooms a layer that fills the frame just enough that the shake can never show the empty
+         frame behind it — the 110% he used to set by hand, worked out from the biggest shake and twist the effect will ever
+         reach, one zoom wherever the clip is; a caption, which fills nothing, keeps its size (review). PATTERN (C28) gives a
          layer its own shake, so two shaken layers stop moving in lockstep. Off and 0 are the old shake exactly. */
       { key: 'overscan', label: 'Hide edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
@@ -2606,6 +2607,25 @@ window.FM = window.FM || {};
   // Smooth deterministic pseudo-noise in ~[-1,1] (sum of incommensurate sines) — same at a given
   // time every render, so wiggle is flicker-free and exports identically.
   function wnoise(u) { return Math.sin(u * 6.283) * 0.5 + Math.sin(u * 14.77 + 1.3) * 0.3 + Math.sin(u * 28.6 + 2.7) * 0.2; }
+  /* PATTERN — EACH ONE ITS OWN WAVES (#482 polish 2 review, C28). A Pattern was first a TIME OFFSET (pattern × 61.8034), and
+     wnoise's main wave repeats every 1.0003 of u (6.283 is 2π to four figures), so only the offset's fraction mattered: in the
+     app Patterns 25 apart moved at 0.96 correlation, 8.6 px apart on a 31 px reach, and 141 of the 999 correlated past 0.6
+     with Pattern 0. Rotation and Scale wiggle rode the same noise at u + 200 / u + 300 — whole periods again — so the layer
+     turned WITH its sideways move (0.73). A random phase per wave is not enough on its own (measured offline: 127 of 399
+     past 0.6, because the main wave dominates and cos of a random angle crowds ±1). So each (pattern, channel) draws its own
+     three waves from a hash: each its own phase AND its own pace within a tenth of the Speed, so two patterns drift apart
+     instead of repeating each other a beat later — 21 of 399 past 0.6 over 8 s at 1 Hz, none past 0.8. Returns
+     [phase, pace] for each of wnoise's three waves. Pattern 0's sideways and up-down never come here: they are the old
+     wnoise, byte for byte. */
+  function noiseWaves(seed, ch) {
+    const h = function (k) {
+      let n = Math.imul(seed | 0, 0x9E3779B1) ^ Math.imul((ch | 0) + 1, 0x85EBCA77) ^ Math.imul(k, 0xC2B2AE3D);
+      n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+    };
+    return [h(1) * 2 * Math.PI, 0.9 + 0.2 * h(11), h(2) * 2 * Math.PI, 0.9 + 0.2 * h(12), h(3) * 2 * Math.PI, 0.9 + 0.2 * h(13)];
+  }
+  function wnoiseP(u, w) { return Math.sin(u * 6.283 * w[1] + w[0]) * 0.5 + Math.sin(u * 14.77 * w[3] + 1.3 + w[2]) * 0.3 + Math.sin(u * 28.6 * w[5] + 2.7 + w[4]) * 0.2; }
   /* ROUGHNESS (#482 polish 2.1): the smooth wiggle at full size, plus up to three finer octaves of the same noise, each ~twice
      as fast and half as strong — then a SOFT CEILING, x / (1 + |x|^p)^(1/p): all but identical below 0.8, never past 1. So the
      slow float keeps the size it has today and a rougher wiggle is rougher, not bigger. (Dividing by the octaves' total weight
@@ -2613,9 +2633,10 @@ window.FM = window.FM || {};
      wandering the moment he asked for it to be rougher.) A fractional value — a keyframed Roughness between whole steps —
      fades its last octave in, and the ceiling tightens with it (p is huge just above 1), so nothing jumps. Wiggle calls
      wnoise itself at Roughness 1. */
-  function roughNoise(u, oct) {
-    let sum = wnoise(u), a = 0.5, f = 2.13;
-    for (let k = 1; k < 4 && k < oct; k++) { const w = Math.min(1, oct - k); sum += a * w * wnoise(u * f + k * 17.31); a *= 0.5; f *= 2.13; }
+  function roughNoise(u, oct, waves) {
+    const n = waves ? function (v) { return wnoiseP(v, waves); } : wnoise;   // a Pattern's own waves (noiseWaves), else the old noise
+    let sum = n(u), a = 0.5, f = 2.13;
+    for (let k = 1; k < 4 && k < oct; k++) { const w = Math.min(1, oct - k); sum += a * w * n(u * f + k * 17.31); a *= 0.5; f *= 2.13; }
     const pw = Math.min(400, 8 / Math.max(0.02, Math.min(1, oct - 1)));
     return sum / Math.pow(1 + Math.pow(Math.abs(sum), pw), 1 / pw);
   }
@@ -10840,6 +10861,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     try { drawLayer(ec, tmp, t, scene); } finally { _expDepth--; }
     return { cv: _expC, mx: mx, my: my, ps: ps };
   }
+  /* THE CLEAN LAYER ON A PLATE WHOSE ORIGIN IS MOVED (#482 polish 2.2 review) — a plate the size of the effect's own, W x H,
+     whose pixel (0, 0) is project (ox, oy): the layer drawn as though the frame stood somewhere else. Drift's Wrap draws a
+     ticker at its wrapped place from this. The expanded plate above stops 0.6 of the frame past the edge (its cost ceiling),
+     so a ticker longer than about 2.2 frames lost its ends; this costs one plate whatever the ticker's length. Same pool
+     and depth as the expanded plate, for the same re-entry reason. */
+  function renderShiftedPlate(layer, fx, t, scene, ps, W, H, ox, oy) {
+    FM._fxStats.plates++;
+    const _e = _expDepth;
+    if (!_expPool[_e]) _expPool[_e] = document.createElement('canvas');
+    const cv = _expPool[_e];
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    cv.__fmRS = ps; cv.__fmOX = ox; cv.__fmOY = oy;
+    const ec = _fx2d(cv);
+    ec.setTransform(1, 0, 0, 1, 0, 0); ec.clearRect(0, 0, W, H);
+    baseT(ec);
+    ec.globalAlpha = 1; ec.globalCompositeOperation = 'source-over'; ec.filter = 'none';
+    const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
+    _expDepth++;
+    try { drawLayer(ec, tmp, t, scene); } finally { _expDepth--; }
+    return cv;
+  }
 
   /* Test seam: the read-back hint above is invisible in the picture, so nothing else would notice if
    * a future edit created one of these contexts without it. Reports what the pools actually hold. */
@@ -10895,6 +10937,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const _srcIdx = Array.isArray(_src) ? _src[0] : (_src == null ? 1 : _src);   // options land as an index, sometimes [idx,label]
       if (_srcIdx !== 0) bbox = { x: 0, y: 0, w: W, h: H };                        // 0 = "On screen", which SHOULD stay empty
     }
+    /* …and Drift with Wrap around frame (#482 polish 2.2 review): a ticker parked past the edge has no alpha on this plate,
+       so the call below never happened and the wrap never brought it in — 0 px at every moment. The kernel places it from
+       the layer's own box and draws it from a plate of its own, so the full plate stands in here exactly as for tiles. */
+    if (fx.type === 'drift' && (!bbox || bbox.w <= 2 || bbox.h <= 2) && fx.params && Math.round(fparam(fx.params, 'wrap', 0, t)) === 1) bbox = { x: 0, y: 0, w: W, h: H };
     // Guard the resize (assigning width even to the same value frees+reallocs the ~8MB buffer every
     // frame — the exact churn the guard above avoids for A); the clearRect does the reset either way.
     const bctx = _cfB.getContext('2d');
@@ -10905,6 +10951,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // comp-sized plate has already thrown away. Handed over as a callback so the plate machinery
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
+    expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
@@ -11493,7 +11540,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   FM._moverSource = moverSource;   // suite seam (#986)
   /* The layer's EXACT alpha box inside the loose one a canvas effect is handed (the 4x-downsampled scan pads it by up to ~20
-     px). For the controls that put something ON an edge — a Pulse pivot, Shake's Hide edges (#482 polish 2.2 / 2.1) — at the
+     px). For the controls that put something ON an edge — a Pulse pivot (#482 polish 2.2), and Shake's Hide edges only when the
+     layer has no box of its own to be had (it sizes from layerAABB: the plate's box is cut by the frame edge — review) — at the
      cost of reading back only that box. The loose box itself whenever the plate cannot be read. */
   function exactBoxOf(A, bb) {
     if (!bb || !(bb.w > 0) || !(bb.h > 0)) return bb;
@@ -12840,22 +12888,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.drawImage(A, 0, 0);
     },
     // ---- Move / Transform (motion about the layer's rendered bounds) ----
-    /* #482 polish 2.1 — PATTERN, VERTICAL AMOUNT, ROTATION WIGGLE, SCALE WIGGLE, ROUGHNESS. Pattern moves the noise to its own
-       stretch of the curve (C28: every wiggle was `wnoise(tl*spd)`, so two layers moved in lockstep); Roughness adds finer
+    /* #482 polish 2.1 — PATTERN, VERTICAL AMOUNT, ROTATION WIGGLE, SCALE WIGGLE, ROUGHNESS. Pattern gives the layer its own
+       waves (C28: every wiggle was `wnoise(tl*spd)`, so two layers moved in lockstep); Roughness adds finer
        octaves on top of the smooth curve under a soft ceiling, so it never reaches past Amount; Rotation and Scale wiggle turn and grow the
-       layer about its middle on their own channels of the same noise. At the defaults u is tl*spd exactly, the noise is
+       layer about its middle on channels of their own. At the defaults u is tl*spd exactly, the noise is
        wnoise itself and the old translate-only lines below run untouched — byte for byte the old wiggle. */
     wiggle: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const S = ps || 1;
       const amt = fparam(p, 'amount', 40, t) * S, spd = fparam(p, 'speed', 2, t);
       const ay = p.amounty == null ? amt : Math.max(0, FM.evalProp(p.amounty, t)) * S;   // Vertical amount: absent = Amount (it follows)
-      const sd = Math.round(fparam(p, 'seed', 0, t)), u = sd ? tl * spd + sd * 61.8034 : tl * spd;
+      const sd = Math.round(fparam(p, 'seed', 0, t)), u = tl * spd;
       const oct = Math.max(1, Math.min(4, fparam(p, 'octaves', 1, t)));
-      const wn = oct <= 1 ? wnoise : function (v) { return roughNoise(v, oct); };
+      /* One noise per channel: 0 sideways, 1 up and down, 2 rotation, 3 scale. Pattern 0's sideways and up-down are the old
+         wiggle's own lines — wnoise at u and u + 100 — and every other channel, and every channel of any other Pattern, draws
+         its own waves (noiseWaves), so no two of them move as one (#482 polish 2 review). */
+      const chan = function (ch) {
+        if (!sd && ch < 2) { const v = ch ? u + 100 : u; return oct <= 1 ? wnoise(v) : roughNoise(v, oct); }
+        const w = noiseWaves(sd, ch);
+        return oct <= 1 ? wnoiseP(u, w) : roughNoise(u, oct, w);
+      };
       const rdeg = Math.max(0, Math.min(180, fparam(p, 'rotate', 0, t))), scw = Math.max(0, Math.min(100, fparam(p, 'scale', 0, t)));
-      const dx = amt * wn(u), dy = ay * wn(u + 100);
+      const dx = amt * chan(0), dy = ay * chan(1);
       if (rdeg > 0 || scw > 0) {
-        const rot = rdeg * wn(u + 200), sc = 1 + (scw / 100) * wn(u + 300);
+        const rot = rdeg * chan(2), sc = 1 + (scw / 100) * chan(3);
         if (!(sc > 0.001)) return;   // a scale wiggle of 100% touches zero: nothing to draw at that instant
         /* About the layer's EXACT middle: the box handed in is the fast scan's, padded by a different number of project px on
            each plate, so turning about its centre would put the layer somewhere else on the phone than in the export. */
@@ -12895,35 +12950,59 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
         return (((n ^ (n >>> 16)) >>> 0) / 4294967296) * 2 - 1;
       };
+      /* PATTERN (#482 polish 2.1, C28; review): a Pattern gives each channel of this layer's shake its own waves (noiseWaves —
+         every shake used to be `wnoise(tl*spd + off)`, so two layers shaken together moved as one), and its own run of hard
+         steps (the pattern moves the step hash thousands of steps along). 0 takes the old lines, untouched. */
+      const sd = Math.round(fparam(p, 'seed', 0, t)), waves = {};
+      const smooth = sd ? function (u, off) { return wnoiseP(u, waves[off] || (waves[off] = noiseWaves(sd, off))); } : null;
       const noise = jit <= 0
-        ? function (u, off) { return wnoise(u + off); }   // exact legacy path
-        : function (u, off) { return (1 - jit) * wnoise(u + off) + jit * ihash((Math.floor(u * 2) + ((off * 131) | 0)) | 0); };   // ×2: a step per half-cycle keeps perceived speed
+        ? (smooth || function (u, off) { return wnoise(u + off); })   // exact legacy path at Pattern 0
+        : function (u, off) { return (1 - jit) * (smooth ? smooth(u, off) : wnoise(u + off)) + jit * ihash((Math.floor(u * 2) + ((off * 131) | 0) + Math.imul(sd, 7919)) | 0); };   // ×2: a step per half-cycle keeps perceived speed
       const dampX = dir === 2 ? 0.12 : 1, dampY = dir === 1 ? 0.12 : 1;   // axis lock leaves a whisper of cross-shake so it doesn't read robotic
       const disp = function (u) { return [amt * noise(u, 0) * dampX, amt * noise(u, 55) * dampY]; };
-      /* PATTERN (#482 polish 2.1, C28): a seed moves this layer's shake to its own stretch of the noise — every shake used to be
-         `tl*spd`, so two layers shaken together moved as one. 0 adds nothing: u0 is the old expression, untouched. */
-      const sd = Math.round(fparam(p, 'seed', 0, t)), su = sd ? sd * 61.8034 : 0;
-      const u0 = su ? tl * spd + su : tl * spd;
+      const u0 = tl * spd;
       const d0 = disp(u0);
-      let px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;   // `let`: Hide edges re-centres on the exact box below
+      let px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;   // `let`: Hide edges re-centres on the layer's own middle below
       const rot = tw * noise(u0, 200) * Math.PI / 180;
       const s = zoom > 0 ? 1 + (zoom / 100) * Math.abs(noise(u0, 313)) : 1;   // |n| → always punches IN (impact), never breathes out
-      /* HIDE EDGES (#482 polish 2.1): the zoom a clip needs so that no shake, at its biggest, shows past the layer's edges — what
-         he did by hand by scaling the clip to 110%. Worked out from the PEAK Amount and Twist (the largest keyframe when they
-         are animated, so a Beat Slam that dies away holds one zoom instead of breathing with it) and the direction lock: the
-         layer's box, turned by the twist and pushed by the shake either way, must still cover where the box was — so the scale
-         is the larger of ((w + 2·ax)·cos θ + (h + 2·ay)·sin θ) / w and ((w + 2·ax)·sin θ + (h + 2·ay)·cos θ) / h. With no
-         twist that is 1 + 2·amount / min(w, h). The noise never leaves ±1, so the bound holds on every frame. Off = 1. */
+      /* HIDE EDGES (#482 polish 2.1; sized again by the review): the zoom a clip that FILLS THE FRAME needs so that no shake, at
+         its biggest, shows the empty frame behind it — what he did by hand by scaling the clip to 110%. From the PEAK Amount
+         and Twist (the largest keyframe when they are animated, so a Beat Slam that dies away holds one zoom instead of
+         breathing with it) and the direction lock.
+         It is sized on the layer's WHOLE box (its size under its transform, layerAABB) and the frame, in project px — never on
+         the part of it the plate can see. The first build used the plate's alpha box, which the frame edge cuts: a clip
+         sliding in with 20 px showing was zoomed 3.3x, 1.43x with 100 px, and 1.25x once centred, and a small layer drew 12%
+         smaller on the phone plate than in the export (whole plate pixels). The region to keep covered is the part of the
+         frame the layer covers at rest, T; each side of T, pushed out by the shake and turned by the twist about the layer's
+         middle, must stay inside the zoomed layer — so on each axis the zoom is (e·cos θ + e'·sin θ) / half the layer, e
+         and e' the far side of T from the middle plus the shake. A frame-filling clip centred gets
+         1 + 2·amount / min(W, H) with no twist (the backlog's figure), and the same wherever it slides: the side of it
+         inside the frame is its own edge, as far from its middle as the frame's edge was.
+         ONLY A LAYER THAT SPANS THE FRAME ON AN AXIS IS ZOOMED ON IT: a caption's edges are meant to be seen — there is
+         nothing to hide, and hiding them would take it to 3x (the build drew a 600x120 caption 7.3x the area). The weight
+         rises from 0 at three quarters of the frame to 1 at all of it, so a layer grown across that line by a scale
+         keyframe zooms in smoothly instead of jumping. The noise never leaves ±1, so the bound holds on every frame. Off = 1. */
       let so = 1;
       if (Math.round(fparam(p, 'overscan', 0, t)) === 1 && bb.w > 0 && bb.h > 0) {
-        /* On the layer's EXACT box (the fast scan's is up to ~20 px loose), and about ITS middle: a loose box both over-zooms and
-           puts the centre off the layer's own, which on a clip smaller than the frame lets one edge show. */
-        const eb = exactBoxOf(A, bb);
-        px = eb.x + eb.w / 2; py = eb.y + eb.h / 2;
+        const kp = ps || 1, oX = A.__fmOX || 0, oY = A.__fmOY || 0, P = scene && scene.project;
+        const FW = P && P.width > 0 ? P.width : W / kp, FH = P && P.height > 0 ? P.height : H / kp;
+        let box = layer && scene ? layerAABB(layer, t, scene) : null;
+        if (!(box && isFinite(box.x0) && isFinite(box.x1) && isFinite(box.y0) && isFinite(box.y1) && box.x1 > box.x0 && box.y1 > box.y0)) {
+          const eb = exactBoxOf(A, bb);   // no box of its own to be had: the exact alpha box, in project px
+          box = { x0: eb.x / kp + oX, y0: eb.y / kp + oY, x1: (eb.x + eb.w) / kp + oX, y1: (eb.y + eb.h) / kp + oY };
+        }
+        const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2, hw = (box.x1 - box.x0) / 2, hh = (box.y1 - box.y0) / 2;
+        px = (cx - oX) * kp; py = (cy - oY) * kp;
         const peak = function (k, d) { const v = p[k]; if (v == null) return d; if (FM.isAnimated(v)) return (v.kf || []).reduce(function (m, q) { return Math.max(m, Math.abs(+q.v || 0)); }, 0); return Math.abs(FM.evalProp(v, t) || 0); };
-        const pa = peak('amount', 20) * (ps || 1), th = Math.min(89, peak('twist', 4)) * Math.PI / 180;
-        const ax = pa * dampX, ay = pa * dampY, c = Math.cos(th), sn = Math.sin(th);
-        so = Math.max(1, ((eb.w + 2 * ax) * c + (eb.h + 2 * ay) * sn) / eb.w, ((eb.w + 2 * ax) * sn + (eb.h + 2 * ay) * c) / eb.h);
+        const pa = peak('amount', 20), th = Math.min(89, peak('twist', 4)) * Math.PI / 180;   // project px, like the box
+        const c = Math.cos(th), sn = Math.sin(th);
+        // T = the frame the layer covers at rest; e = the far side of T from the layer's middle, plus the shake
+        const ex = Math.max(cx - Math.max(box.x0, 0), Math.min(box.x1, FW) - cx) + pa * dampX;
+        const ey = Math.max(cy - Math.max(box.y0, 0), Math.min(box.y1, FH) - cy) + pa * dampY;
+        const span = function (r) { return Math.max(0, Math.min(1, (r - 0.75) / 0.25)); };
+        const kx = span(2 * hw / FW), ky = span(2 * hh / FH);
+        if (kx > 0 && ex > 0) so = Math.max(so, 1 + kx * ((ex * c + ey * sn) / hw - 1));
+        if (ky > 0 && ey > 0) so = Math.max(so, 1 + ky * ((ex * sn + ey * c) / hh - 1));
       }
       const sz = so === 1 ? s : s * so;
       /* #986 C27: every stamp is queued first, so the expanded plate is asked for once, with the margin the furthest
@@ -12953,7 +13032,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // displacement is recomputed from the same noise, no cross-frame state.
       if (smear > 0) {
         const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
-        const d1 = disp(su ? (tl - 1 / fps) * spd + su : (tl - 1 / fps) * spd);   // the same pattern one frame ago
+        const d1 = disp((tl - 1 / fps) * spd);   // the same pattern (it lives in `noise`) one frame ago
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
           /* SMEAR LENGTH (queue 904): how many frames of motion the trail reaches back, with ghosts added in proportion so a long smear
@@ -13052,20 +13131,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const dx = vx * tl, dy = vy * tl;
       /* WRAP AROUND FRAME (#482 polish 2.2) — a ticker. The layer's leading box runs round a loop one frame plus one layer long,
          so the instant it has wholly left one edge it starts coming in at the other: never gone, never doubled. Measured on the
-         layer's WHOLE box (its own size under its transform, not the part on screen), and drawn from the expanded plate when
-         the layer reaches past the frame, so a ticker wider than the frame scrolls all of itself. Stateless in time like the
+         layer's WHOLE box (its own size under its transform, not the part on screen), and drawn again at its wrapped place when
+         the layer reaches past the frame, so a ticker of any length scrolls all of itself. Stateless in time like the
          rest of Drift, so the preview, a scrub and the export agree. Off leaves the lines below untouched. */
       if (Math.round(fparam(p, 'wrap', 0, t)) === 1) {
         let x0 = bb.x, y0 = bb.y, bw = bb.w, bh = bb.h;
+        const oX = A.__fmOX || 0, oY = A.__fmOY || 0;
         const box = layer && scene ? layerAABB(layer, t, scene) : null;
-        if (box && isFinite(box.x0) && isFinite(box.x1) && box.x1 > box.x0 && box.y1 > box.y0) {
-          const oX = A.__fmOX || 0, oY = A.__fmOY || 0;
-          x0 = (box.x0 - oX) * k; y0 = (box.y0 - oY) * k; bw = (box.x1 - box.x0) * k; bh = (box.y1 - box.y0) * k;
-        }
-        const loop = function (at, d, size, span) { const P = span + size; return (((at + d + size) % P) + P) % P - size - at; };
-        const wx = bw > 0 && dx !== 0 ? loop(x0, dx, bw, W) : dx, wy = bh > 0 && dy !== 0 ? loop(y0, dy, bh, H) : dy;
-        const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(wx, wy)]);
-        B.save(); B.translate(wx, wy); B.drawImage(src.cv, src.x, src.y); B.restore();
+        const whole = !!(box && isFinite(box.x0) && isFinite(box.x1) && isFinite(box.y0) && isFinite(box.y1) && box.x1 > box.x0 && box.y1 > box.y0);
+        if (whole) { x0 = (box.x0 - oX) * k; y0 = (box.y0 - oY) * k; bw = (box.x1 - box.x0) * k; bh = (box.y1 - box.y0) * k; }
+        /* A layer PARKED past an edge and drifting toward the frame (a ticker placed off the right so it scrolls in — review) is
+           drawn where it really is until it first arrives, so it comes in from that edge; from then on it loops. Moving away
+           from the frame, or resting on it, it loops from the start — never gone. The switch is where the two agree (the
+           loop leaves a layer on the frame where it is), so nothing jumps. */
+        const loop = function (at, d, v, size, span) {
+          if (v < 0 && at >= span && at + d >= span) return d;
+          if (v > 0 && at + size <= 0 && at + d + size <= 0) return d;
+          const P = span + size; return (((at + d + size) % P) + P) % P - size - at;
+        };
+        const wx = bw > 0 && vx !== 0 ? loop(x0, dx, vx, bw, W) : dx, wy = bh > 0 && vy !== 0 ? loop(y0, dy, vy, bh, H) : dy;
+        /* The layer at its wrapped place. Wholly on this plate, the plate itself moved is exact. Past it, the clean layer is drawn
+           again with the plate's origin moved by the wrap (review): the expanded plate this used first stops 0.6 of the frame past
+           the edge, so a ticker longer than ~2.2 frames lost its ends and a gap scrolled through it. */
+        const onPlate = whole && box.x0 >= oX - 0.5 && box.y0 >= oY - 0.5 && box.x1 <= oX + W / k + 0.5 && box.y1 <= oY + H / k + 0.5;
+        const moved = !onPlate && expand && expand.shifted ? expand.shifted(wx, wy) : null;
+        if (moved) { B.drawImage(moved, 0, 0); return; }
+        B.save(); B.translate(wx, wy); B.drawImage(A, 0, 0); B.restore();
         return;
       }
       const need = Math.max(Math.abs(dx), Math.abs(dy));

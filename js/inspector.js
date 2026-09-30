@@ -1154,7 +1154,13 @@ window.FM = window.FM || {};
     // The NAME selects the row (AM): tap it and this parameter's keyframes become the live ones on
     // the timeline. Only offered where it can mean something — kfScope covers the OPEN effect of the
     // Effects panel, so audio-effect rows (which share this builder) render a plain label.
-    row.appendChild(paramName('fx-scrub-label', p.label, layer, 'fx:' + p.key));
+    const nameEl = paramName('fx-scrub-label', p.label, layer, 'fx:' + p.key);
+    /* A control with NO VALUE of its own yet — Wiggle's Vertical amount while it follows Amount, or a control added after this
+       effect was saved — is not in the keyframe scope (kfScope lists the keys the effect holds), so its name got no pill and
+       sat 10 px left of every other name in the open effect (#482 polish 2 review; measured 96 vs 106 px at 390). It keeps
+       the pill's INSET, not the pill: there is nothing to select until it has a value. Only where its neighbours are pills. */
+    if (!nameEl.classList.contains('kf-selectable') && fx.params && fx.params[p.key] == null && layer && Object.keys(fx.params).some(k => kfInScope(layer, 'fx:' + k))) nameEl.classList.add('kf-inset');
+    row.appendChild(nameEl);
     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
     function apply(v, commit) {
       v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));

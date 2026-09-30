@@ -7387,6 +7387,9 @@ body.fm-pushing #toast { z-index: 213; }
    It applies selected or not, so selecting never shifts the row. min-width (72px, inherited) keeps a
    short name like "Angle" a comfortable target rather than a nub. */
 .fx-scrub-row > .fx-scrub-label.kf-selectable { flex: 0 1 auto; margin-right: auto; align-self: center; }
+/* A name beside the pills with no value of its own yet (a following slider, a control newer than the saved effect) lines up
+   with them: the pill's inset and sizing, no pill (#482 polish 2 review — it sat 10 px left of every other name). */
+.fx-scrub-row > .fx-scrub-label.kf-inset { padding: 5px 10px; flex: 0 1 auto; margin-right: auto; align-self: center; }
 
 /* ---- Liquid Glass controls — the shared material (v6.09) --------------------------------------
    One rule for the four controls that used to wear the logo's crystal renders. See the --lg-* token

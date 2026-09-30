@@ -31,7 +31,18 @@ return (async function () {
   })();
   var CAR = card('huracan', 170, 110, '_482b_car'), CAR2 = card('mclaren', 170, 110, '_482b_car2'), DOG = card('dog', 130, 130, '_482b_dog');
   var BAR = card('tesla', 260, 70, '_482b_bar');
-  var FULL = card('bay', R, R, '_482b_full');
+  var FULL = card('bay', R, R, '_482b_full'), BACK = card('bay', R, R, '_482b_back');
+  /* A ticker three frames long (the review's long-ticker fix): a red band with START and END at its two ends and numbered
+     marks between, so a missing end or a gap in the middle is plain to see. */
+  var TICK = (function () {
+    var w = 3 * R, h = 64, c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d');
+    g.fillStyle = '#c0392b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
+    g.fillStyle = '#ffffff'; g.font = '800 30px -apple-system, system-ui, sans-serif'; g.textBaseline = 'middle';
+    g.textAlign = 'left'; g.fillText('START ▸', 16, h / 2); g.textAlign = 'right'; g.fillText('◂ END', w - 16, h / 2);
+    g.textAlign = 'center'; for (var k = 1; k <= 8; k++) g.fillText('· ' + k + ' ·', k * w / 9, h / 2);
+    FM.media.set('_482b_tick', { kind: 'image', el: c, width: w, height: h, duration: 0 }); if (FM.media.pin) FM.media.pin('_482b_tick');
+    return '_482b_tick';
+  })();
   function img(id, x, y, fx, sc) { var l = FM.makeLayer('image', { x: x, y: y, start: 0, duration: 8 }); l.id = id; l.start = 0; l.duration = 8; if (sc) l.transform.scale = sc; l.effects = fx || []; return l; }
   function grid() { return img(gridId, R / 2, R / 2, []); }
   function fx(type, params) { var e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, params || {}); return e; }
@@ -95,9 +106,11 @@ return (async function () {
     'shake-pattern': { title: 'Shake · Pattern', sub: 'Two cards with the same Shake. Today they shake as one. Give one its own Pattern and each has its own hits.', times: [0.2, 0.45, 0.7, 0.95], rows: [
       { label: 'Today — both on the same shake', make: function () { var p = { amount: 40, speed: 3, twist: 6, zoom: 0, smear: 0 }; var a = img(CAR, 150, 270, [fx('shake', p)]), b = img(CAR2, 390, 270, [fx('shake', p)]); return { layers: [a, b, grid()], paths: [[a, C1], [b, C2]] }; } },
       { label: 'New — right card on Pattern 5', make: function () { var p = { amount: 40, speed: 3, twist: 6, zoom: 0, smear: 0 }; var a = img(CAR, 150, 270, [fx('shake', p)]), b = img(CAR2, 390, 270, [fx('shake', Object.assign({ seed: 5 }, p))]); return { layers: [a, b, grid()], paths: [[a, C1], [b, C2]] }; } } ] },
-    'shake-hide-edges': { title: 'Shake · Hide edges', sub: 'A full-screen clip shaken hard shows the empty frame behind it. Hide edges zooms in just enough that it never does.', times: [0.15, 0.4, 0.65, 0.9], bg: '#000000', rows: [
+    'shake-hide-edges': { title: 'Shake · Hide edges', sub: 'A full-screen clip shaken hard shows the empty frame behind it. Hide edges zooms in just enough that it never does — the same zoom wherever the clip is, and only on a layer that fills the frame.', times: [0.15, 0.4, 0.65, 0.9], bg: '#000000', rows: [
       { label: 'Today — black edges show', make: function () { var a = img(FULL, R / 2, R / 2, [fx('shake', { amount: 45, speed: 5, twist: 6 })]); return { layers: [a], bg: '#000000' }; } },
-      { label: 'New — Hide edges On', make: function () { var a = img(FULL, R / 2, R / 2, [fx('shake', { amount: 45, speed: 5, twist: 6, overscan: 1 })]); return { layers: [a], bg: '#000000' }; } } ] },
+      { label: 'New — Hide edges On', make: function () { var a = img(FULL, R / 2, R / 2, [fx('shake', { amount: 45, speed: 5, twist: 6, overscan: 1 })]); return { layers: [a], bg: '#000000' }; } },
+      { label: 'New — Hide edges On, sliding in: one zoom all the way', make: function () { var a = img(FULL, R / 2, R / 2, [fx('shake', { amount: 45, speed: 5, twist: 6, overscan: 1 })]); a.transform.x = { kf: [{ t: 0, v: 740, e: 'linear' }, { t: 1, v: 270, e: 'linear' }] }; return { layers: [a], bg: '#000000' }; } },
+      { label: 'New — Hide edges On, a caption: nothing to hide, it keeps its size', make: function () { var a = img(BAR, 270, 430, [fx('shake', { amount: 45, speed: 5, twist: 6, overscan: 1 })]); return { layers: [a, img(BACK, R / 2, R / 2, [])], bg: '#000000', rest: [270, 430, 260, 70] }; } } ] },
     'pulse-wave': { title: 'Pulse · Wave', sub: 'The shape of each beat. Frames across one beat; the dashed box is the card at rest.', times: [0.06, 0.13, 0.3, 0.62], rows: [
       { label: 'Today — Sine (grows, then shrinks as much)', make: function () { return { layers: [img(DOG, 270, 270, [fx('pulse', { amount: 0.35, speed: 1 })]), grid()], rest: [270, 270, 130, 130] }; } },
       { label: 'New — Heartbeat (two beats, then rest; never shrinks)', make: function () { return { layers: [img(DOG, 270, 270, [fx('pulse', { amount: 0.35, speed: 1, wave: 1 })]), grid()], rest: [270, 270, 130, 130] }; } },
@@ -122,7 +135,9 @@ return (async function () {
       { label: 'New — Face direction of travel On', make: function () { var a = img(CAR, 270, 270, [fx('orbit', { radius: 150, speed: 0.5, face: 1 })], 0.7); return { layers: [a, grid()], paths: [[a, C1]], cross: [270, 270] }; } } ] },
     'drift-wrap': { title: 'Drift · Wrap around frame', sub: 'A ticker: what drifts off one edge comes straight back in at the other, for ever.', times: [0.4, 1.4, 2.4, 3.4], rows: [
       { label: 'Today — drifts off and is gone', make: function () { return { layers: [img(CAR, 200, 270, [fx('drift', { x: 220, y: 0 })]), grid()] }; } },
-      { label: 'New — Wrap around frame On', make: function () { return { layers: [img(CAR, 200, 270, [fx('drift', { x: 220, y: 0, wrap: 1 })]), grid()] }; } } ] },
+      { label: 'New — Wrap around frame On', make: function () { return { layers: [img(CAR, 200, 270, [fx('drift', { x: 220, y: 0, wrap: 1 })]), grid()] }; } },
+      { label: 'New — a ticker 3 frames long scrolls all of itself, then START comes round', make: function () { return { layers: [img(TICK, 270, 270, [fx('drift', { x: -400, y: 0, wrap: 1 })]), grid()] }; } },
+      { label: 'New — parked past the right edge: it scrolls in from there, then loops', make: function () { return { layers: [img(CAR, 700, 270, [fx('drift', { x: -300, y: 0, wrap: 1 })]), grid()] }; } } ] },
   };
   window.__482b = function (id) {
     var sp = SPECS[id]; if (!sp) throw new Error('no picture ' + id);
