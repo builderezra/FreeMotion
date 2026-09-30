@@ -1808,6 +1808,7 @@ window.FM = window.FM || {};
     drawBlurredNoFilter(dc, _nbS, r, 0, 0, W, H);
     dc.restore();
   }
+  FM._drawBlurredDrawNoFilter = drawBlurredDrawNoFilter;   // the pen-mask feather in masks.js takes the same path (#986 batch 2 review)
   /* CAN THIS DEVICE SPACE TEXT AT ALL — MEASURED, NOT ASKED (#686). Six sites guarded letter- and
    * word-spacing with `'letterSpacing' in ctx`, which asks whether the PROPERTY EXISTS. That is not
    * the same question as whether setting it does anything, and #645 is the entry that exists because
@@ -4568,12 +4569,21 @@ window.FM = window.FM || {};
    * Here the stars are the export's own cells in PROJECT pixels (same hash, same size, same brightness and twinkle),
    * each laid onto the plate by how much of every plate pixel it covers — the export's picture averaged down, which is
    * what a reduced preview of anything else shows. Density's candidates (a cell whose hash is under 0.03, the most the
-   * slider reaches) are found once per star size and frame size and cached, so a frame costs the stars, not the
-   * 2 million cells of a 1080x1920 field. Only reached below ps 1: the export keeps its own loop, byte for byte.
-   * The brightness arithmetic mirrors the kernel's, line for line; the suite compares the two pictures. */
-  const _sfCand = [];
-  function sfCandidates(sz, cols, rows) {
-    for (let i = 0; i < _sfCand.length; i++) { const c = _sfCand[i]; if (c.sz === sz && c.cols === cols && c.rows === rows) return c; }
+   * slider reaches) are found once and cached, so a frame costs the stars, not the 2 million cells of a 1080x1920 field.
+   * Only reached below ps 1: the export keeps its own loop, byte for byte.
+   * The brightness arithmetic mirrors the kernel's, line for line; the suite compares the two pictures.
+   * ⚠️ ONE LIST FOR EVERY STAR SIZE (#986 batch 2 review). The hash reads the cell's (cx, cy) and nothing else, so a
+   * bigger star size is simply fewer, larger cells: its candidates are the ones inside its smaller grid. The first
+   * version cached per (size, cols, rows), three deep, and a fourth Starfield of another size evicted one every frame —
+   * MEASURED at 1080x1920 on the 0.28 plate: 3.5–4 ms a frame with three sizes, 10 ms with four (5 ms now). The scan runs for
+   * the biggest grid seen and each layer reads its own corner of it (rows ascend, so the row test ends the loop). */
+  let _sfCand = null;
+  FM._sfStats = { scans: 0 };                              // suite seam: how often the cell scan runs
+  function sfCandidates(cols, rows) {
+    const had = _sfCand;
+    if (had && cols <= had.cols && rows <= had.rows) return had;
+    if (had) { cols = Math.max(cols, had.cols); rows = Math.max(rows, had.rows); }
+    FM._sfStats.scans++;
     let cap = Math.ceil(cols * rows * 0.035) + 64, n = 0;
     let X = new Int32Array(cap), Y = new Int32Array(cap), R = new Float64Array(cap);
     for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
@@ -4583,21 +4593,48 @@ window.FM = window.FM || {};
       if (n >= cap) { cap *= 2; const x2 = new Int32Array(cap), y2 = new Int32Array(cap), r2 = new Float64Array(cap); x2.set(X); y2.set(Y); r2.set(R); X = x2; Y = y2; R = r2; }
       X[n] = cx; Y[n] = cy; R[n] = r; n++;
     }
-    const c = { sz: sz, cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
-    _sfCand.unshift(c); if (_sfCand.length > 3) _sfCand.length = 3;
-    return c;
+    _sfCand = { cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
+    return _sfCand;
+  }
+  /* ═══ HOW MUCH OF A REDUCED PLATE PIXEL THE EXPORT'S LINE FILLS (#986 batch 2 review) ═══════════════════════════════
+   * Find Edges and Emboss on a reduced plate (see Find Edges). `R` holds every plate pixel's raw reading in slot `c` of
+   * each 4; `v` is this pixel's, (ux, uy) is the direction across the line with its larger component 1. A reading that
+   * carries on at its own strength on BOTH sides is a ramp — the export's response fills the pixel (1); one that has
+   * stopped on either side is a step — the export's 2-pixel line fills ps of it (0 here, and the caller maps 0..1 to
+   * ps..1). Each side is read two AND three plate pixels out, the stronger counting: two, not one, because a step the
+   * plate splits across pixels reads a half-strength neighbour one out; three as well, because two out from a ramp's
+   * turn (a ridge, a valley) lands on the turn itself, where the reading dips, and the ramp carries on past it.
+   * Sizes, not signs: Emboss's relief flips sign over a ridge and the slope past it is still a slope. */
+  function reducedLineFill(R, W, H, x, y, ux, uy, v, c) {
+    c = c || 0;
+    const av = Math.abs(v);
+    const at = (k) => {
+      const xa = x + Math.round(k * ux), ya = y + Math.round(k * uy);
+      return xa >= 1 && xa < W - 1 && ya >= 1 && ya < H - 1 ? Math.abs(R[(ya * W + xa) * 4 + c]) / av : 0;
+    };
+    const r = Math.min(Math.max(at(-2), at(-3)), Math.max(at(2), at(3)));
+    return r > 1 ? 1 : (r > 0 ? r : 0);
+  }
+  let _lnRaw = null;
+  function lineScratch(n) {                                // zeroed: the plate's border stays "no reading"
+    if (!_lnRaw || _lnRaw.length < n) _lnRaw = new Float32Array(n);
+    _lnRaw.fill(0, 0, n);
+    return _lnRaw;
   }
   let _sfCov = null, _sfAcc = null;
   function starfieldReduced(d, W, H, ps, t, thr, sz, col, plain, vari, tw, twPh, tws) {
     const cols = Math.ceil(W / ps / sz), rows = Math.ceil(H / ps / sz);
-    const C = sfCandidates(sz, cols, rows), N = W * H;
+    const C = sfCandidates(cols, rows), N = W * H;
     if (!_sfCov || _sfCov.length < N) { _sfCov = new Float32Array(N); _sfAcc = new Float32Array(N); }
     const cov = _sfCov, acc = _sfAcc;
     cov.fill(0, 0, N); acc.fill(0, 0, N);
     const cell = sz * ps;                                   // one star's side, in plate pixels
     for (let k = 0; k < C.n; k++) {
+      const cy = C.Y[k];
+      if (cy >= rows) break;                               // the list ascends by row: the rest are below this grid
+      const cx = C.X[k];
+      if (cx >= cols) continue;
       if (!(C.R[k] < thr)) continue;                       // the kernel's own test, on the very same float
-      const cx = C.X[k], cy = C.Y[k];
       let b = 1;
       if (!plain) {
         if (vari > 0) { let hv = ((cx * 83492791) ^ (cy * 2654435761)) >>> 0; hv = (hv ^ (hv >>> 15)) >>> 0; b *= 1 - vari * ((hv >>> 8) / 16777216) * 0.9; }
@@ -5627,7 +5664,20 @@ window.FM = window.FM || {};
      * The strength is taken as the export would read it — clamped (and thresholded) per pixel first, then shrunk —
      * because the export clamps its own pixels before anything averages them; every other control reads the shrunk
      * value unchanged, so Polarity, Mix and Ink sit on it exactly as they sit on the export's. ps 1 (every export,
-     * every full-size preview) never enters the new line. */
+     * every full-size preview) never enters the new line.
+     * ⚠️ …BUT ONLY A STEP IS A THIN LINE (#986 batch 2 review). Clamp-then-shrink is right when the export's response
+     * is narrow (a hard edge: 2 project px at 255). Across a RAMP or a soft gradient the export's response fills the
+     * whole plate pixel at reading × ps, and clamp-then-shrink capped it at 255 × ps — 72 on his phone's plate:
+     * MEASURED against the export shrunk, Find Edges Amount 6 on a 6.7-level/px ramp came out 125 / 70 at 0.5 / 0.28
+     * where the export shows 248, and Emboss Amount 3 on it missed by 55 / 79 levels. So each plate pixel asks how
+     * much of it the export's line fills (reducedLineFill below): a reading that carries on two plate pixels further
+     * out on BOTH sides is a ramp (fills it all), one that stops is a step (fills ps of it), and in between is in
+     * between. The export's own reading is then that fill's share of the plate's, clamped and thresholded as the
+     * export clamps and thresholds, and shrunk back by the fill. A step reads exactly what it read before.
+     * NOT COVERED, AND CANNOT BE FROM HERE: grain finer than a plate pixel. The plate is drawn already averaged, so
+     * the grain is gone before this runs — MEASURED, Amount 6 over ±16 per-pixel grain is 127 / 140 levels off the
+     * export at 0.5 / 0.28 (the export is nearly all white; 768c83d0, which did not shrink at all, was 77 / 62). Mild
+     * grain (±4) is 14 / 19 at Amount 1, better than either before. */
     edge: function (d, W, H, p, t, ps) {
       const k = FM.evalProp(p.amount, t) || 1, s = fxSrc(d), w4 = W * 4;
       const shrink = ps > 0 && ps < 1 ? ps : 1;
@@ -5637,8 +5687,12 @@ window.FM = window.FM || {};
       const mixP = p.mix == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.mix, t)));
       const mix = mixP / 100, full = mixP === 100;
       const ink = (p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0)) === 1;   // queue 813
-      for (let y = 1; y < H - 1; y++) {
-        for (let x = 1; x < W - 1; x++) {
+      /* A reduced plate reads every pixel's Sobel FIRST — [raw reading, gx, gy] — because the fill test (#986 batch 2
+         review) looks at the readings two plate pixels out. ps 1 never builds it and runs the loop below as it was. */
+      let RAW = null;
+      if (shrink !== 1) {
+        RAW = lineScratch(W * H * 4);
+        for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
           const tl = s[i - w4 - 4] * 0.299 + s[i - w4 - 3] * 0.587 + s[i - w4 - 2] * 0.114;
           const tc = s[i - w4] * 0.299 + s[i - w4 + 1] * 0.587 + s[i - w4 + 2] * 0.114;
@@ -5649,11 +5703,39 @@ window.FM = window.FM || {};
           const bc = s[i + w4] * 0.299 + s[i + w4 + 1] * 0.587 + s[i + w4 + 2] * 0.114;
           const br = s[i + w4 + 4] * 0.299 + s[i + w4 + 5] * 0.587 + s[i + w4 + 6] * 0.114;
           const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl), gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
-          let mag = Math.min(255, Math.hypot(gx, gy) * k);
+          RAW[i] = Math.hypot(gx, gy) * k; RAW[i + 1] = gx; RAW[i + 2] = gy;
+        }
+      }
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+          const i = (y * W + x) * 4;
+          let mag;
+          if (RAW) {
+            // #986 C60 + batch 2 review: the export's line, shrunk to this plate — `fill` of the pixel at its own reading
+            const R = RAW[i];
+            if (!(R > 0)) mag = 0;
+            else {
+              const gx = RAW[i + 1], gy = RAW[i + 2], m = Math.max(Math.abs(gx), Math.abs(gy));
+              const fill = shrink + (1 - shrink) * reducedLineFill(RAW, W, H, x, y, gx / m, gy / m, R);
+              let pk = Math.min(255, R * shrink / fill);   // the export's own reading on its line
+              if (thr > 0 && pk < thr) pk = 0;
+              mag = pk * fill;
+            }
+          } else {
+          const tl = s[i - w4 - 4] * 0.299 + s[i - w4 - 3] * 0.587 + s[i - w4 - 2] * 0.114;
+          const tc = s[i - w4] * 0.299 + s[i - w4 + 1] * 0.587 + s[i - w4 + 2] * 0.114;
+          const tr = s[i - w4 + 4] * 0.299 + s[i - w4 + 5] * 0.587 + s[i - w4 + 6] * 0.114;
+          const ml = s[i - 4] * 0.299 + s[i - 3] * 0.587 + s[i - 2] * 0.114;
+          const mr = s[i + 4] * 0.299 + s[i + 5] * 0.587 + s[i + 6] * 0.114;
+          const bl = s[i + w4 - 4] * 0.299 + s[i + w4 - 3] * 0.587 + s[i + w4 - 2] * 0.114;
+          const bc = s[i + w4] * 0.299 + s[i + w4 + 1] * 0.587 + s[i + w4 + 2] * 0.114;
+          const br = s[i + w4 + 4] * 0.299 + s[i + w4 + 5] * 0.587 + s[i + w4 + 6] * 0.114;
+          const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl), gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
+          mag = Math.min(255, Math.hypot(gx, gy) * k);
           // THRESHOLD kills the grey mush: a Sobel over a smooth area still returns a small reading,
           // so every gentle gradient came back faintly lit with no way to say "that is not an edge".
           if (thr > 0 && mag < thr) mag = 0;
-          if (shrink !== 1) mag *= shrink;   // #986 C60: the export's line, shrunk to this plate
+          }
           // POLARITY: the effect could only ever draw glowing white lines on black. Ink on paper — the
           // way line art is actually drawn — was simply unreachable.
           if (inv) mag = 255 - mag;
@@ -5671,7 +5753,6 @@ window.FM = window.FM || {};
     emboss: function (d, W, H, p, t, ps) {   // ps: #986 C60, see Find Edges above
       const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = fxSrc(d), w4 = W * 4;
       const shrink = ps > 0 && ps < 1 ? ps : 1;
-      const sh = (v) => 128 + ((v < 0 ? 0 : (v > 255 ? 255 : v)) - 128) * shrink;   // the export's relief, clamped as it clamps, shrunk
       // THE KERNEL GENERALISES EXACTLY, which is worth stating because it is why this is a real angle
       // control and not a second effect wearing the same name. The legacy weights are
       //     -2 -1  0        and the weight of the neighbour at offset (dx,dy) is precisely dx*1 + dy*1:
@@ -5687,31 +5768,60 @@ window.FM = window.FM || {};
       const blP = p.blend == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.blend, t)));
       const bl = blP / 100, allIn = blP === 100;
       const plain = def135 && !mono && allIn;
+      /* A reduced plate reads every pixel's relief FIRST, per channel (#986 batch 2 review — see Find Edges): the fill
+         test looks two plate pixels out along the light, and a step's relief reads exactly what `sh` gave it. */
+      let RAW = null, eox = 0, eoy = 0;
+      if (shrink !== 1) {
+        RAW = lineScratch(W * H * 4);
+        const lx = def135 ? 1 : Lx, ly = def135 ? 1 : Ly, mm = Math.max(Math.abs(lx), Math.abs(ly)) || 1;
+        eox = lx / mm; eoy = ly / mm;
+        const lumA = (j) => s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114;
+        for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+          const i = (y * W + x) * 4;
+          if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; RAW[j] = s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2; } continue; }
+          for (let c = 0; c < (mono ? 1 : 3); c++) {
+            let acc = 0;
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+              const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
+              if (w !== 0) acc += (mono ? lumA(i + dy * w4 + dx * 4) : s[i + c + dy * w4 + dx * 4]) * w;
+            }
+            RAW[i + c] = acc;
+          }
+        }
+      }
+      // the export's relief on this plate pixel, shrunk: `fill` of the pixel at the export's own (clamped) relief
+      const red = (x, y, c) => {
+        const A = RAW[(y * W + x) * 4 + c];
+        if (A === 0) return 128;
+        const fill = shrink + (1 - shrink) * reducedLineFill(RAW, W, H, x, y, eox, eoy, A, c);
+        const e = A * k * shrink / fill;
+        return 128 + (e < -128 ? -128 : (e > 127 ? 127 : e)) * fill;
+      };
       for (let y = 1; y < H - 1; y++) {
         for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
-          if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; const v = 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; d[j] = shrink === 1 ? v : sh(v); } continue; }
+          if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; d[j] = RAW ? red(x, y, c) : 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; } continue; }
           // MONO runs the kernel over LUMINANCE once instead of per channel. Per channel is what puts
           // colour fringing on the relief; a clean grey metal stamp was unreachable.
           if (mono) {
             const lum = (j) => s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114;
             let acc = 0;
-            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            if (!RAW) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
               const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
               if (w !== 0) acc += lum(i + dy * w4 + dx * 4) * w;
             }
-            const v = shrink === 1 ? 128 + acc * k : sh(128 + acc * k);
+            const v = RAW ? red(x, y, 0) : 128 + acc * k;
             if (allIn) { d[i] = v; d[i + 1] = v; d[i + 2] = v; }
             else { d[i] = s[i] + (v - s[i]) * bl; d[i + 1] = s[i + 1] + (v - s[i + 1]) * bl; d[i + 2] = s[i + 2] + (v - s[i + 2]) * bl; }
             continue;
           }
           for (let c = 0; c < 3; c++) {
             const j = i + c; let acc = 0;
-            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            if (!RAW) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
               const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
               if (w !== 0) acc += s[j + dy * w4 + dx * 4] * w;
             }
-            const v = shrink === 1 ? 128 + acc * k : sh(128 + acc * k);
+            const v = RAW ? red(x, y, c) : 128 + acc * k;
             d[j] = allIn ? v : s[j] + (v - s[j]) * bl;
           }
         }
@@ -8327,7 +8437,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (ops.matrix.length) {
       const o = FM.glColor.apply(cur, W, H, ops.matrix);
       if (!o) return null;
-      if (ops.blurs.length) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
+      /* ⚠️ A GLOW READS THE GPU'S CANVAS TOO (#986 batch 2 review): its halo is FM.glColor.blur(cur), rendered into the
+         very canvas `o` is, so with no blur between them the halo overwrote the graded picture and the layer drew as
+         the frame blurred under its own glow — Saturation + Glow measured at 6x the look's own size. Copy out whenever
+         ANY pass follows. */
+      if (ops.blurs.length || ops.glows.length) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
     }
     for (let bi = 0; bi < ops.blurs.length; bi++) {
       // the radius is in PROJECT px and the plate is at `ps` — the same conversion effectFilter does
@@ -13128,8 +13242,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H);
       a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
       baseT(a);
+      /* shadow: null — the layer's own drop shadow is cast at the blit below, by the BLURRED layer, under it: what
+         ctx.filter + shadow draws (the filter runs first, the shadow is taken from its result). Cast on the plate
+         and blurred with the layer it came out lighter — MEASURED 0.25–0.36 of the look off the real filter, where the
+         same layer without a shadow sits at 0.03 (#986 batch 2 review). */
       drawLayer(a, Object.assign({}, layer, {
-        __fmNoDfc: 1, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer),
+        __fmNoDfc: 1, blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), shadow: null,
         transform: Object.assign({}, layer.transform, { opacity: 1 }),
       }), t, scene);
       ctx.save();
@@ -13137,6 +13255,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
+      applyShadow(ctx, layer, t, renderScale(ctx));
       drawBlurredNoFilter(ctx, P, r, 0, 0, W, H);
       ctx.restore();
       return true;
