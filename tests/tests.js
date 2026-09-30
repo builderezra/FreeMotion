@@ -115798,4 +115798,347 @@
     });
   });
 
+  /* ═══ #482 polish 3.3 / 3.4 — ECHO AND REVERB (sound, under his #966 steer) ═══════════════════════════════════════════
+   * Everything is measured on the app's own chain (FM.buildAudioFxChain — the builder the export's schedule() and the
+   * preview's applyAt() both use), rendered in a two-channel OfflineAudioContext at 48 kHz. Audio has no `legacy`: a
+   * saved Echo or Reverb gets every new key at its def, so the defaults are pinned against v17.19 sample for sample. */
+  const SR482C = 48000;
+  function rng482c(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), 1 | t); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 * 2 - 1; }; }
+  const SIG482C = {
+    noise: (n, ch) => { const r = rng482c(7 + ch * 90), a = new Float32Array(n); for (let i = 0; i < n; i++) a[i] = 0.5 * r(); return a; },
+    sweep: (n, ch) => { const a = new Float32Array(n), T = n / SR482C; let ph = 0; for (let i = 0; i < n; i++) { ph += 2 * Math.PI * 20 * Math.pow(1000, (i / SR482C) / T) / SR482C; a[i] = (ch ? 0.4 : 0.7) * Math.sin(ph + ch); } return a; },
+    impulse: (n, ch) => { const a = new Float32Array(n); a[100 + ch * 37] = 1; return a; },
+  };
+  /* sig: a SIG482C name, or fn(t, i, ch). opts.chans = source channels (1 = a mono clip), opts.live = the preview's per-frame
+     path (applyAt) instead of the export's schedule(), opts.anchor = the scene time the render starts at, opts.M = the module. */
+  function afx482c(fx, sig, secs, opts) {
+    opts = opts || {};
+    const M = opts.M || FM, n = Math.round(SR482C * secs), at = opts.anchor || 0, chans = opts.chans || 1;
+    const oac = new OfflineAudioContext(2, n, SR482C);
+    const b = oac.createBuffer(chans, n, SR482C);
+    for (let c = 0; c < chans; c++) {
+      if (typeof sig === 'string') b.getChannelData(c).set(SIG482C[sig](n, c));
+      else { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = sig(i / SR482C, i, c); }
+    }
+    const src = oac.createBufferSource(); src.buffer = b;
+    const chain = M.buildAudioFxChain(oac, { audioFx: JSON.parse(JSON.stringify(fx)) }, at);
+    if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(fx));
+    if (opts.live) chain.applyAt(at); else chain.schedule(at, at + secs);
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    return oac.startRendering().then(r => { try { chain.dispose(); } catch (e) {} return [r.getChannelData(0), r.getChannelData(1)]; });
+  }
+  // FNV-1a over the float BITS of both channels: equal hashes = the same samples, not merely close ones.
+  function hash482c(chs) {
+    return chs.map(d => { const u = new Uint32Array(d.buffer, d.byteOffset, d.length); let h = 2166136261; for (let i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 16777619); } return (h >>> 0).toString(16).padStart(8, '0'); }).join('/');
+  }
+  function rms482c(d, a, b) { let s = 0, n = 0; for (let i = Math.floor(a * SR482C); i < Math.min(d.length, Math.floor(b * SR482C)); i++) { s += d[i] * d[i]; n++; } return Math.sqrt(s / Math.max(1, n)); }
+  function fft482c(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let j = 0; j < len / 2; j++) {
+          const k = i + j + len / 2, br = re[k] * cr - im[k] * ci, bi = re[k] * ci + im[k] * cr;
+          re[k] = re[i + j] - br; im[k] = im[i + j] - bi; re[i + j] += br; im[i + j] += bi;
+          const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+        }
+      }
+    }
+  }
+  // Energy (dB) of d[from … from+N) between f0 and f1 Hz. N a power of two.
+  function band482c(d, from, N, f0, f1) {
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = d[from + i] || 0;
+    fft482c(re, im);
+    let e = 0; for (let k = 0; k <= N / 2; k++) { const f = k * SR482C / N; if (f >= f0 && f < f1) e += re[k] * re[k] + im[k] * im[k]; }
+    return 10 * Math.log10(Math.max(1e-30, e));
+  }
+  const kf482c = (a, b, t0, t1) => ({ kf: [{ t: t0 || 0, v: a }, { t: t1 == null ? 1.2 : t1, v: b }] });
+  /* The default cases, as he has them: a NEW effect (every key at its def), one SAVED before these controls existed, a
+     tuned one, a keyframed one, and both in one stack. The animated-room Reverb (its bank) is checked separately below:
+     it is not bit-reproducible even on v17.19 against itself (measured: two renders of the same project differ by up to
+     6e-8 at ~400 samples), so it is pinned by level instead. */
+  function cases482c() {
+    const reg = FM.audioFxRegistry;
+    return {
+      'echo new': [{ type: 'delay', enabled: true, params: reg.makeInstance('delay').params }],
+      'echo saved': [{ type: 'delay', enabled: true, params: { time: 0.35, feedback: 0.35, mix: 0.35 } }],
+      'echo tuned': [{ type: 'delay', enabled: true, params: { time: 0.12, feedback: 0.85, mix: 0.6 } }],
+      'echo keyframed': [{ type: 'delay', enabled: true, params: { time: kf482c(0.1, 0.5), feedback: kf482c(0.2, 0.8), mix: 0.5 } }],
+      'reverb new': [{ type: 'reverb', enabled: true, params: reg.makeInstance('reverb').params }],
+      'reverb saved': [{ type: 'reverb', enabled: true, params: { size: 0.5, decay: 2, mix: 0.3 } }],
+      'reverb tuned': [{ type: 'reverb', enabled: true, params: { size: 0.9, decay: 3.5, mix: 0.7 } }],
+      'reverb then echo': [{ type: 'reverb', enabled: true, params: {} }, { type: 'delay', enabled: true, params: {} }],
+    };
+  }
+  const RENDERS482C = [['noise', 1], ['noise', 2], ['sweep', 2], ['impulse', 1]];
+  async function hashes482c(M) {
+    const out = {}, cs = cases482c();
+    for (const name of Object.keys(cs)) {
+      const hs = [];
+      for (const [sig, ch] of RENDERS482C) hs.push(hash482c(await afx482c(cs[name], sig, 2.5, { chans: ch, M: M })));
+      out[name] = hs.join(' ');
+    }
+    return out;
+  }
+  const ROOM482C = () => [{ type: 'reverb', enabled: true, params: { size: kf482c(0.2, 0.9, 0, 2), decay: kf482c(0.5, 2.5, 0, 2), mix: 0.6 } }];
+  async function roomLevels482c(M) {
+    const out = [];
+    for (const [sig, ch] of RENDERS482C) { const r = await afx482c(ROOM482C(), sig, 2.5, { chans: ch, M: M }); out.push(rms482c(r[0], 0, 2.5), rms482c(r[1], 0, 2.5)); }
+    return out;
+  }
+
+  test('482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at defaults that are the old sound, and saved and new Echoes and Reverbs render sample for sample as on v17.19', { item: '482', budgetMs: 120000 }, async function () {
+    const reg = FM.audioFxRegistry;
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), keyframable, at a default that is the old
+       sound: [label, min, max, def]. */
+    const WANT = {
+      delay: { tone: ['Tone', 500, 20000, 20000], lowcut: ['Low cut', 20, 1000, 20], wobble: ['Tape wobble', 0, 1, 0] },
+      reverb: { predelay: ['Pre-delay', 0, 0.25, 0], highcut: ['Tone', 1000, 20000, 20000], lowcut: ['Low cut', 20, 1000, 20], width: ['Width', 0, 1, 1] },
+    };
+    const NAME = { delay: 'Echo', reverb: 'Reverb' };
+    Object.keys(WANT).forEach(type => {
+      const ps = reg.paramsOf(type), inst = reg.makeInstance(type);
+      Object.keys(WANT[type]).forEach(k => {
+        const w = WANT[type][k], pd = ps.filter(p => p.key === k)[0];
+        if (!pd) throw new Error(NAME[type] + ' has no ' + w[0] + ' control (' + k + ') - it has ' + ps.map(p => p.key).join(', '));
+        if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3]) throw new Error(NAME[type] + ' ' + k + ' is ' + JSON.stringify([pd.label, pd.min, pd.max, pd.def]) + ', not ' + JSON.stringify(w));
+        if (!pd.keyframable) throw new Error(NAME[type] + ' ' + w[0] + ' cannot be keyframed');
+        if (inst.params[k] !== w[3]) throw new Error('a new ' + NAME[type] + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + w[3]);
+      });
+    });
+    /* …and the load sanitiser: a project saved before these controls opens with each at its def, and a saved value — plain
+       or keyframed — is kept. */
+    const old = [{ type: 'video', audioFx: [{ type: 'delay', enabled: true, params: { time: 0.35, feedback: 0.35, mix: 0.35 } }, { type: 'reverb', enabled: true, params: { size: 0.5, decay: 2, mix: 0.3 } }] }];
+    FM.storage._sanitizeLayers(old);
+    old[0].audioFx.forEach(f => Object.keys(WANT[f.type]).forEach(k => { if (f.params[k] !== WANT[f.type][k][3]) throw new Error('a ' + NAME[f.type] + ' saved before ' + k + ' existed opens with ' + k + ' ' + JSON.stringify(f.params[k]) + ', not ' + WANT[f.type][k][3]); }));
+    const SET = { delay: { tone: 2500, lowcut: 180, wobble: kf482c(0, 0.6) }, reverb: { predelay: 0.04, highcut: 6000, lowcut: 120, width: kf482c(1, 0.4) } };
+    const kept = [{ type: 'video', audioFx: [{ type: 'delay', enabled: true, params: Object.assign({}, SET.delay) }, { type: 'reverb', enabled: true, params: Object.assign({}, SET.reverb) }] }];
+    FM.storage._sanitizeLayers(kept);
+    const tv = v => JSON.stringify(v && v.kf ? v.kf.map(x => [x.t, x.v]) : v);   // the sanitiser writes each keyframe's ease in too
+    kept[0].audioFx.forEach(f => Object.keys(SET[f.type]).forEach(k => {
+      if (tv(f.params[k]) !== tv(SET[f.type][k])) throw new Error('a saved ' + NAME[f.type] + ' ' + k + ' of ' + JSON.stringify(SET[f.type][k]) + ' comes back from the load sanitiser as ' + JSON.stringify(f.params[k]));
+    }));
+    /* 2. THE SOUND, against v17.19 (7bbeb5bc): FNV hashes of the float bits of both output channels, per case, for a mono
+       noise, a stereo noise, a stereo sine sweep and a click — captured on v17.19 with this very helper. Equal hashes mean
+       the same samples, not close ones. */
+    const HEAD = {
+      'echo new': '0fc3bd79/0fc3bd79 0fc3bd79/ea728fe9 d7d3557e/79c69d5c 1ee902a3/1ee902a3',
+      'echo saved': '0fc3bd79/0fc3bd79 0fc3bd79/ea728fe9 d7d3557e/79c69d5c 1ee902a3/1ee902a3',
+      'echo tuned': '903f7c13/903f7c13 903f7c13/d2cc06ac a1c177b0/458ac611 d151ecd8/d151ecd8',
+      'echo keyframed': '427fe6ce/427fe6ce 427fe6ce/95332bd5 35d2f042/aadfd521 eb6c0fe0/eb6c0fe0',
+      'reverb new': '2955416a/58d0b688 2955416a/c4567675 dc5038ec/ac819a27 e8c1e391/16bfd8e5',
+      'reverb saved': '2955416a/58d0b688 2955416a/c4567675 dc5038ec/ac819a27 e8c1e391/16bfd8e5',
+      'reverb tuned': 'c9ac4629/8a56625c c9ac4629/1b85beb1 936510f4/bd251ee7 fc6d4255/e2dea649',
+      'reverb then echo': '4aac71a9/3cf1589f 4aac71a9/73f934f4 f52ca11d/cb2d298a a75a23cd/bd135f25',
+    };
+    const got = await hashes482c(FM), moved = [];
+    if (Object.keys(got).length !== Object.keys(HEAD).length) throw new Error('setup: ' + Object.keys(got).length + ' cases against ' + Object.keys(HEAD).length + ' hashes captured on v17.19 - re-capture them on the build before the change');
+    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' Echo / Reverb cases sound different from v17.19 at the new defaults - a new control changed a sound he already has (if Chrome itself was just updated, re-capture these on v17.19 first): ' + moved.join('; '));
+    // …and the preview's per-frame path renders those very samples.
+    const cs = cases482c();
+    for (const k of ['echo new', 'reverb new']) {
+      const ex = hash482c(await afx482c(cs[k], 'noise', 2.5, { chans: 2 })), pv = hash482c(await afx482c(cs[k], 'noise', 2.5, { chans: 2, live: true }));
+      if (ex !== pv) throw new Error('at the defaults the ' + k + ' preview (applyAt) renders ' + pv + ' and the export ' + ex);
+    }
+    /* 3. THE ANIMATED ROOM (a keyframed Size and Decay builds a bank of rooms). v17.19 does not render it bit for bit the same
+       twice (measured: two renders of one project differ by up to 6e-8), so it is pinned by the level of every render,
+       captured on v17.19: the jitter there is 3e-12, and a changed room moves it by far more than 1e-9. */
+    const ROOM = [0.128755291962931, 0.1291481156041802, 0.1287552919646793, 0.12918241600039032, 0.22005921217016017, 0.1266366244347596, 0.0012326715398602254, 0.0012319410957585227];
+    const b0 = FM._irBanksBuilt || 0;
+    const lv = await roomLevels482c(FM);
+    if ((FM._irBanksBuilt || 0) - b0 < RENDERS482C.length) throw new Error('setup: the animated room built ' + ((FM._irBanksBuilt || 0) - b0) + ' banks in ' + RENDERS482C.length + ' renders - this checks the still-room path only');
+    const worst = Math.max.apply(null, lv.map((v, i) => Math.abs(v - ROOM[i])));
+    if (!(worst <= 1e-9)) throw new Error('an animated-room Reverb renders at levels ' + lv.map(v => v.toFixed(9)).join(', ') + ' where v17.19 renders ' + ROOM.map(v => v.toFixed(9)).join(', ') + ' (off by up to ' + worst.toExponential(2) + ')');
+  });
+
+  test('482 3.3 Echo - Tone darkens every repeat more than the one before and Low cut thins them, from the first repeat, keyframed too, and the preview is the export', { item: '482', budgetMs: 90000 }, async function () {
+    const click = (t, i) => (i === 0 ? 1 : 0);
+    const echo = p => [{ type: 'delay', enabled: true, params: Object.assign({ time: 0.35, feedback: 0.6, mix: 1 }, p) }];
+    /* Each repeat of the click, 2048 samples from just before it lands: its top (5-24 kHz) and its bottom (20-200 Hz), in dB
+       against its own middle (1-4 kHz) — so a repeat's balance is measured, not merely its level. */
+    const repeats = async p => {
+      const L = (await afx482c(echo(p), click, 1.3))[0];
+      return [1, 2, 3].map(k => { const at = Math.round(0.35 * k * SR482C) - 64, mid = band482c(L, at, 2048, 1000, 4000); return { top: band482c(L, at, 2048, 5000, 24000) - mid, bottom: band482c(L, at, 2048, 20, 200) - mid }; });
+    };
+    const f = x => x.toFixed(1);
+    const plain = await repeats({}), dark = await repeats({ tone: 2000 }), thin = await repeats({ lowcut: 500 });
+    // CONTROL: at the defaults every repeat is a perfect copy, so all three have the click's own balance (measured +8.0 / -12.0 dB)
+    if (Math.abs(plain[2].top - plain[0].top) > 0.5 || Math.abs(plain[2].bottom - plain[0].bottom) > 0.5) throw new Error('CONTROL: with Tone and Low cut at their defaults the 3rd repeat has top ' + f(plain[2].top) + ' / bottom ' + f(plain[2].bottom) + ' dB where the 1st has ' + f(plain[0].top) + ' / ' + f(plain[0].bottom) + ' - the measure is broken');
+    const bad = [];
+    // measured: at Tone 2000 the 1st repeat's top is -15.7 dB (+8.0 at the default), the 3rd's -50.4
+    if (!(dark[0].top < plain[0].top - 12)) bad.push('at Tone 2000 the FIRST repeat keeps its top (' + f(dark[0].top) + ' dB against ' + f(plain[0].top) + ' at the default) - a drag of Tone is not heard until the echo has gone round');
+    if (!(dark[2].top < dark[0].top - 12)) bad.push('at Tone 2000 and Feedback 0.6 the 3rd repeat has a top of ' + f(dark[2].top) + ' dB and the 1st ' + f(dark[0].top) + ' - the repeats do not get darker as they go round');
+    // measured: Low cut 500 takes the bottom to -34.8 on the 1st repeat and -71.4 on the 3rd (-12.0 at the default)
+    if (!(thin[0].bottom < plain[0].bottom - 12)) bad.push('at Low cut 500 the first repeat keeps its bottom (' + f(thin[0].bottom) + ' dB against ' + f(plain[0].bottom) + ')');
+    if (!(thin[2].bottom < thin[0].bottom - 12)) bad.push('at Low cut 500 the 3rd repeat has a bottom of ' + f(thin[2].bottom) + ' dB and the 1st ' + f(thin[0].bottom) + ' - the repeats do not thin as they go round');
+    if (Math.abs(thin[0].top - plain[0].top) > 1) bad.push('Low cut 500 moved the top of the 1st repeat from ' + f(plain[0].top) + ' to ' + f(thin[0].top) + ' dB - it should leave the treble alone');
+    // KEYFRAMED: Tone 20000 -> 2000 and Low cut 20 -> 500 over the first 0.3 s; every repeat after that is the static 2000 / 500 one
+    const kfd = await afx482c(echo({ tone: kf482c(20000, 2000, 0, 0.3), lowcut: kf482c(20, 500, 0, 0.3) }), click, 1.3), st = await afx482c(echo({ tone: 2000, lowcut: 500 }), click, 1.3);
+    let worst = 0; for (let i = Math.round(0.34 * SR482C); i < kfd[0].length; i++) worst = Math.max(worst, Math.abs(kfd[0][i] - st[0][i]));
+    if (!(worst <= 1e-4)) bad.push('a Tone and Low cut keyframed to 2000 / 500 Hz render up to ' + worst.toExponential(2) + ' away from a static 2000 / 500 - they do not animate');
+    // PREVIEW = EXPORT: the preview's per-frame path (applyAt) against the export's schedule(), on a stereo noise
+    const p = { tone: 2500, lowcut: 300 }, ex = await afx482c(echo(p), 'noise', 1.5, { chans: 2 }), pv = await afx482c(echo(p), 'noise', 1.5, { chans: 2, live: true });
+    let pw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) pw = Math.max(pw, Math.abs(ex[c][i] - pv[c][i]));
+    if (!(pw <= 1e-6)) bad.push('with Tone 2500 and Low cut 300 the preview renders up to ' + pw.toExponential(2) + ' away from the export');
+    if (bad.length) throw new Error('Echo Tone / Low cut: ' + bad.join('; '));
+  });
+
+  test('482 3.3 Echo - Tape wobble swings each echo up to 2 ms early and late at 0.7 Hz on scene time, so an export from the middle wobbles where the whole one does, the preview is the export, and 0 lands every echo on time', { item: '482', budgetMs: 90000 }, async function () {
+    const T0 = [0.05, 0.3, 0.55, 0.8, 1.05, 1.3, 1.55, 1.8, 2.05, 2.3];   // clicks, in scene seconds
+    const at0 = T0.map(c => Math.round(c * SR482C));
+    const clicks = off => { const o = Math.round(off * SR482C); return (t, i) => (at0.indexOf(i + o) >= 0 ? 1 : 0); };
+    const echo = p => [{ type: 'delay', enabled: true, params: Object.assign({ time: 0.35, feedback: 0, mix: 1 }, p) }];
+    /* Where each click's echo lands, in ms against 0.35 s after it: the centre of the echo within +-5 ms. A delay line reads
+       between two samples by linear interpolation, so the centre of those two IS the delay, to a fraction of a sample. */
+    const shifts = (L, off) => T0.filter(c => c >= off - 1e-9).map(c => {
+      const want = (c - off + 0.35) * SR482C; let s = 0, m = 0;
+      for (let i = Math.floor(want - 240); i <= Math.ceil(want + 240); i++) { const v = L[i] || 0; s += v; m += v * i; }
+      return s > 0.5 ? (m / s - want) / SR482C * 1000 : NaN;
+    });
+    const run = async (p, opts) => { const off = (opts && opts.anchor) || 0; return shifts((await afx482c(echo(p), clicks(off), 3 - off, opts))[0], off); };
+    const f = x => x.toFixed(3);
+    const none = await run({}), full = await run({ wobble: 1 }), half = await run({ wobble: 0.5 });
+    if (none.some(s => !(Math.abs(s) <= 0.005))) throw new Error('CONTROL: at Tape wobble 0 the echoes land ' + none.map(f).join(', ') + ' ms off their time - they must all land exactly 0.35 s after the click');
+    const bad = [];
+    // the design: a 0.7 Hz sine of +-2 ms x Tape wobble on the delay time, its phase set by scene time (0 at scene 0)
+    const model = (c, w) => 2 * w * Math.sin(2 * Math.PI * 0.7 * (c + 0.35));
+    full.forEach((s, i) => { if (!(Math.abs(s - model(T0[i], 1)) <= 0.1)) bad.push('at Tape wobble 1 the echo of the click at ' + T0[i] + ' s lands ' + f(s) + ' ms off, not ' + f(model(T0[i], 1))); });
+    const mx = Math.max.apply(null, full), mn = Math.min.apply(null, full);
+    if (!(mx > 1.5 && mn < -1.5)) bad.push('at Tape wobble 1 the echoes land between ' + f(mn) + ' and ' + f(mx) + ' ms of their time - they should swing about 2 ms late and 2 ms early');
+    const hmax = Math.max.apply(null, half.map(Math.abs));
+    if (!(hmax > 0.75 && hmax < 1.25)) bad.push('at Tape wobble 0.5 the echoes swing up to ' + f(hmax) + ' ms - it should be about 1 ms');
+    // SCENE TIME: an export that starts at 0.8 s hears the same swing on the same clicks as the whole render
+    const part = await run({ wobble: 1 }, { anchor: 0.8 }), tail = full.slice(T0.indexOf(0.8));
+    part.forEach((s, i) => { if (!(Math.abs(s - tail[i]) <= 0.02)) bad.push('an export from 0.8 s lands the echo of the click at ' + T0[T0.indexOf(0.8) + i] + ' s ' + f(s) + ' ms off where the whole render lands it ' + f(tail[i])); });
+    // PREVIEW = EXPORT
+    const live = await run({ wobble: 1 }, { live: true });
+    live.forEach((s, i) => { if (!(Math.abs(s - full[i]) <= 0.02)) bad.push('the preview lands the echo of the click at ' + T0[i] + ' s ' + f(s) + ' ms off, the export ' + f(full[i])); });
+    // KEYFRAMED: 0 until 1.2 s, 1 from 1.5 s - echoes before sit on time, echoes after swing as at a static 1
+    const kfd = await run({ wobble: kf482c(0, 1, 1.2, 1.5) });
+    kfd.forEach((s, i) => {
+      const arr = T0[i] + 0.35;
+      if (arr < 1.2 && !(Math.abs(s) <= 0.005)) bad.push('a Tape wobble keyframed from 0 already moves the echo at ' + arr.toFixed(2) + ' s by ' + f(s) + ' ms');
+      if (arr > 1.6 && !(Math.abs(s - full[i]) <= 0.05)) bad.push('a Tape wobble keyframed up to 1 lands the echo at ' + arr.toFixed(2) + ' s ' + f(s) + ' ms off, where a static 1 lands it ' + f(full[i]));
+    });
+    if (bad.length) throw new Error('Echo Tape wobble: ' + bad.join('; '));
+  });
+
+  test('482 3.4 Reverb - Pre-delay holds the room back by its time, Tone and Low cut shape only the reverb, Width folds it to the middle, each keyframed too, and the preview is the export', { item: '482', budgetMs: 120000 }, async function () {
+    const click = (t, i) => (i === 0 ? 1 : 0);
+    const rev = p => [{ type: 'reverb', enabled: true, params: Object.assign({ size: 0.5, decay: 1, mix: 1 }, p) }];
+    const firstSound = (L, from) => { for (let i = from || 0; i < L.length; i++) if (Math.abs(L[i]) > 1e-9) return i; return -1; };
+    const bad = [];
+    /* PRE-DELAY. Mix 1, so the output is the room alone. Measured: the room answers a click 3 samples after it by default,
+       4803 samples after it at Pre-delay 0.1 and 12003 at 0.25. */
+    const d0 = firstSound((await afx482c(rev({}), click, 1.5))[0]);
+    if (!(d0 >= 0 && d0 < 100)) throw new Error('CONTROL: with no Pre-delay the room first sounds at sample ' + d0 + ' - it should answer at once');
+    for (const pd of [0.1, 0.25]) {
+      const d = firstSound((await afx482c(rev({ predelay: pd }), click, 1.5))[0]);
+      if (!(d >= pd * SR482C && d <= pd * SR482C + 200)) bad.push('at Pre-delay ' + pd + ' s the room first sounds at sample ' + d + ', not ' + (pd * SR482C) + ' (' + (d / SR482C).toFixed(3) + ' s after the click)');
+    }
+    // keyframed 0 -> 0.2 s over the first second: a click at 0.9 s leaves the line when t - 0.2 = 0.9, at 1.1 s (the pre-delay has reached 0.2 by then)
+    const late = (t, i) => (i === Math.round(0.9 * SR482C) ? 1 : 0);
+    const dk = firstSound((await afx482c(rev({ predelay: kf482c(0, 0.2, 0, 1) }), late, 1.8))[0]) / SR482C;
+    if (!(dk > 1.08 && dk < 1.17)) bad.push('with Pre-delay keyframed 0 -> 0.2 s, a click at 0.9 s is answered at ' + dk.toFixed(3) + ' s, not about 1.1');
+    /* TONE AND LOW CUT, on a noise: the tail from 1.0 s, in dB. Measured: Tone 2000 takes 27.7 dB off the top (5-24 kHz),
+       Low cut 500 takes 30 dB off the bottom (20-100 Hz); neither moves the other end. */
+    const tail = async p => { const L = (await afx482c(rev(p), 'noise', 2))[0]; return { top: band482c(L, 48000, 16384, 5000, 24000), bottom: band482c(L, 48000, 16384, 20, 100) }; };
+    const P = await tail({}), HC = await tail({ highcut: 2000 }), LC = await tail({ lowcut: 500 });
+    const f = x => x.toFixed(1);
+    if (!(P.top - HC.top >= 20)) bad.push('Tone 2000 takes only ' + f(P.top - HC.top) + ' dB off the top of the reverb');
+    if (Math.abs(P.bottom - HC.bottom) > 0.5) bad.push('Tone 2000 moved the bottom of the reverb by ' + f(HC.bottom - P.bottom) + ' dB');
+    if (!(P.bottom - LC.bottom >= 20)) bad.push('Low cut 500 takes only ' + f(P.bottom - LC.bottom) + ' dB off the bottom of the reverb');
+    if (Math.abs(P.top - LC.top) > 0.5) bad.push('Low cut 500 moved the top of the reverb by ' + f(LC.top - P.top) + ' dB');
+    // THE DRY SOUND IS NEVER TOUCHED: at Mix 0.5 with Pre-delay 0.1, the first 0.1 s is the clip at half level, exactly, whatever Tone, Low cut and Width say
+    const src = SIG482C.noise(Math.round(SR482C * 0.5), 0);
+    const dry = await afx482c(rev({ mix: 0.5, predelay: 0.1, highcut: 2000, lowcut: 500, width: 0 }), 'noise', 0.5);
+    let dw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < 4800; i++) dw = Math.max(dw, Math.abs(dry[c][i] - src[i] * 0.5));
+    if (dw !== 0) bad.push('the first 0.1 s at Mix 0.5 (before a 0.1 s pre-delay lets the room in) is up to ' + dw.toExponential(2) + ' away from the clip at half level - the new controls reached the dry sound');
+    /* WIDTH folds the room's two sides together: side against middle, in dB, over the tail. Measured -0.06 at Width 1 (the
+       room really is wide), -6.02 lower at 0.5, and at 0 the two channels are the same samples. */
+    const sideVsMid = async p => { const r = await afx482c(rev(p), 'noise', 1.5); let s = 0, m = 0, x = 0; for (let i = 24000; i < r[0].length; i++) { const a = r[0][i], b = r[1][i]; s += (a - b) * (a - b); m += (a + b) * (a + b); x = Math.max(x, Math.abs(a - b)); } return { db: 10 * Math.log10(Math.max(1e-30, s) / m), max: x }; };
+    const W1 = await sideVsMid({}), W5 = await sideVsMid({ width: 0.5 }), W0 = await sideVsMid({ width: 0 });
+    if (!(Math.abs(W1.db) < 1)) throw new Error('CONTROL: at Width 1 the reverb side sits ' + f(W1.db) + ' dB against its middle - the room is not wide to begin with, so this cannot judge Width');
+    if (!(Math.abs(W5.db - W1.db + 6.02) < 0.6)) bad.push('Width 0.5 puts the side ' + f(W5.db - W1.db) + ' dB against Width 1, not -6');
+    if (W0.max !== 0) bad.push('at Width 0 the left and right reverb still differ by up to ' + W0.max.toExponential(2));
+    const Wk = await afx482c(rev({ width: kf482c(1, 0, 0, 1) }), 'noise', 1.5);
+    let wk = 0; for (let i = Math.round(1.1 * SR482C); i < Wk[0].length; i++) wk = Math.max(wk, Math.abs(Wk[0][i] - Wk[1][i]));
+    if (wk !== 0) bad.push('a Width keyframed from 1 to 0 by 1 s still leaves left and right up to ' + wk.toExponential(2) + ' apart after it');
+    // PREVIEW = EXPORT, all four at once on a stereo noise
+    const p4 = { predelay: 0.08, highcut: 3000, lowcut: 300, width: 0.3 }, ex = await afx482c(rev(p4), 'noise', 1.5, { chans: 2 }), pv = await afx482c(rev(p4), 'noise', 1.5, { chans: 2, live: true });
+    let pw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) pw = Math.max(pw, Math.abs(ex[c][i] - pv[c][i]));
+    if (!(pw <= 1e-6)) bad.push('with Pre-delay, Tone, Low cut and Width set the preview renders up to ' + pw.toExponential(2) + ' away from the export');
+    if (bad.length) throw new Error('Reverb: ' + bad.join('; '));
+  });
+
+  test('482 3.4 Reverb - an animated room goes through the same Pre-delay, Tone, Low cut and Width as a still one', { item: '482', budgetMs: 90000 }, async function () {
+    /* A keyframed Size and Decay builds a bank of rooms and cross-fades them (the per-effect-slider entry). Every room in it
+       must be fed from the pre-delay and drain into the same Tone, Low cut and Width, or a moving room would skip them. */
+    const room = p => [{ type: 'reverb', enabled: true, params: Object.assign({ size: kf482c(0.2, 0.9), decay: kf482c(0.5, 1.5), mix: 1 }, p) }];
+    const banked = async (p, sig, secs, opts) => {
+      const b0 = FM._irBanksBuilt || 0, r = await afx482c(room(p), sig, secs, opts);
+      if ((FM._irBanksBuilt || 0) === b0) throw new Error('setup: the animated room built no bank - this would test the still room only');
+      return r;
+    };
+    const click = (t, i) => (i === 0 ? 1 : 0);
+    const firstSound = L => { for (let i = 0; i < L.length; i++) if (Math.abs(L[i]) > 1e-9) return i; return -1; };
+    const bad = [];
+    const a0 = firstSound((await banked({}, click, 1.5))[0]), a1 = firstSound((await banked({ predelay: 0.1 }, click, 1.5))[0]);
+    if (!(a0 >= 0 && a0 < 100)) throw new Error('CONTROL: the animated room without Pre-delay first sounds at sample ' + a0);
+    if (!(a1 >= 4800 && a1 < 5000)) bad.push('with Pre-delay 0.1 s the animated room first sounds at sample ' + a1 + ' - its rooms are not behind the pre-delay');
+    const top = r => band482c(r[0], 48000, 16384, 5000, 24000), bottom = r => band482c(r[0], 48000, 16384, 20, 100);
+    const P = await banked({}, 'noise', 1.5), HC = await banked({ highcut: 2000 }, 'noise', 1.5), LC = await banked({ lowcut: 500 }, 'noise', 1.5);
+    if (!(top(P) - top(HC) >= 20)) bad.push('Tone 2000 takes only ' + (top(P) - top(HC)).toFixed(1) + ' dB off the top of the animated room (measured 27.8)');
+    if (!(bottom(P) - bottom(LC) >= 20)) bad.push('Low cut 500 takes only ' + (bottom(P) - bottom(LC)).toFixed(1) + ' dB off the bottom of the animated room');
+    const lr = r => { let x = 0; for (let i = 0; i < r[0].length; i++) x = Math.max(x, Math.abs(r[0][i] - r[1][i])); return x; };
+    if (!(lr(P) > 0.01)) throw new Error('CONTROL: the animated room at Width 1 has left and right within ' + lr(P).toExponential(2) + ' - not wide to begin with');
+    const W0 = await banked({ width: 0 }, 'noise', 1.5);
+    if (lr(W0) !== 0) bad.push('at Width 0 the animated room left and right still differ by up to ' + lr(W0).toExponential(2));
+    if (bad.length) throw new Error('Reverb, animated room: ' + bad.join('; '));
+  });
+
+  test('482 3.3 and 3.4 Echo and Reverb panels - Tone, Low cut, Tape wobble, Pre-delay and Width fit the open effect at 390 and 1280 px and read their defaults', { item: '482', budgetMs: 90000 }, async function () {
+    const WANT = {
+      delay: [['Time'], ['Feedback'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Tape wobble', '0.00'], ['Mix']],
+      reverb: [['Size'], ['Decay'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Mix']],
+    };
+    const NAME = { delay: 'Echo', reverb: 'Reverb' };
+    const saved = FM.scene;
+    try {
+      const song = await hbAudScene([], 4);
+      const check = async where => {
+        for (const type of Object.keys(WANT)) {
+          const inst = FM.audioFxRegistry.makeInstance(type); inst._expanded = true;
+          FM.layerById(FM.scene, song.id).audioFx = [inst];
+          FM.refreshAll(); FM.selectLayer(song.id); await sleep(150);
+          FM.inspector.openCategory('audiofx'); await sleep(350);
+          const labels = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label'));
+          const names = labels.map(l => l.textContent.trim());
+          if (names.join('|') !== WANT[type].map(w => w[0]).join('|')) throw new Error(where + ': the open ' + NAME[type] + ' shows ' + (names.join(', ') || 'no sliders') + ', not ' + WANT[type].map(w => w[0]).join(', '));
+          const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+          for (const w of WANT[type]) {
+            if (!w[1]) continue;
+            const lab = labels.filter(l => l.textContent.trim() === w[0])[0], row = lab.closest('.fx-scrub-row');
+            row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+            const rr = row.getBoundingClientRect();
+            if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': the ' + NAME[type] + ' ' + w[0] + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+            if (lab.scrollWidth > lab.clientWidth + 1) throw new Error(where + ': the ' + NAME[type] + ' label ' + w[0] + ' is cut off (' + lab.scrollWidth + ' px of text in ' + lab.clientWidth + ')');
+            const val = row.querySelector('.fx-scrub-val');
+            if (!val || val.value !== w[1]) throw new Error(where + ': a new ' + NAME[type] + ' ' + w[0] + ' reads ' + (val && val.value) + ', not ' + w[1]);
+            const vr = val.getBoundingClientRect();
+            if (vr.right > panel.right + 1 || val.scrollWidth > val.clientWidth + 1) throw new Error(where + ': the ' + NAME[type] + ' ' + w[0] + ' value ' + val.value + ' does not fit its box');
+          }
+        }
+      };
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 })();

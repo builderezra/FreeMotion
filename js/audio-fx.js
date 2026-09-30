@@ -270,6 +270,33 @@ window.FM = window.FM || {};
     };
   }
 
+  /* ═══ THE BYPASS PAIR (#482 polish 3 — the idle backlog's §0.3 rule for every new audio control) ═══════════
+   * Audio has no `legacy`: storage.js's sanitiser fills a key a saved project lacks with its `def`, so a new
+   * control's default has to BE today's sound, sample for sample — not close, identical. And a node may not be
+   * put in only once a value leaves its default, because that is a structural change and the live preview
+   * would have to rebuild the chain in the middle of a drag.
+   * So the node is ALWAYS built, and it is wired  from → [node … → gOn] + [gOff] → out.  At the default
+   * gOn is 0 and gOff is 1, and x·1 + y·0 = x is exact in IEEE floats in every engine — so the default renders
+   * the very samples it did before the control existed, on any browser, whatever the node does to its copy.
+   * Leaving the default flips the pair (one setValueAtTime each; a keyframe ramps it, a 33 ms crossfade), and
+   * the value itself rides the node's own AudioParam, so a slider drag never rebuilds anything.
+   * `nodeIn`/`nodeOut` may be one node (a filter) or the two ends of a little graph (Width's mid/side). */
+  function bypassPair(s, from, nodeIn, nodeOut, on) {
+    const gOn = s.gain(on ? 1 : 0), gOff = s.gain(on ? 0 : 1), sum = s.gain(1);
+    from.connect(nodeIn); nodeOut.connect(gOn); gOn.connect(sum);
+    from.connect(gOff); gOff.connect(sum);
+    return { out: sum, gOn: gOn, gOff: gOff };
+  }
+  // The pair's two gains as `multi` targets, switched by one test of the control's value.
+  function pairTargets(pair, isOn) {
+    return [[pair.gOn.gain, v => (isOn(v) ? 1 : 0)], [pair.gOff.gain, v => (isOn(v) ? 0 : 1)]];
+  }
+  /* A lowpass/highpass with no peak: Q −3.01 dB is Butterworth (the spec reads a lowpass/highpass Q as dB of
+     resonance), so the response never rises above 1 anywhere. That matters inside an echo's feedback loop: a
+     filter with a +1.25 dB bump (the node's own default Q of 1) at Feedback 0.9 is a loop gain of 1.04 at the
+     bump, and the repeats would grow into a howl instead of dying away. */
+  const BUTTERWORTH_DB = 20 * Math.log10(Math.SQRT1_2);
+
   /* A FEEDBACK LOOP, UNROLLED (queue 986, hunts C16/C17). A loop's k-th time round is weighted fb^(k−1); these
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
      Phaser for what the rest of the tail is worth). */
@@ -425,7 +452,20 @@ window.FM = window.FM || {};
   /* ---- Space & Stereo ---- */
   DEFS.push({
     type: 'reverb', label: 'Reverb', category: 'space',
-    params: [P('size', 'Size', 0, 1, 0.01, 0.5, '', true), P('decay', 'Decay', 0.1, 8, 0.1, 2, 's', true), MIX(0.3)],
+    params: [
+      P('size', 'Size', 0, 1, 0.01, 0.5, '', true), P('decay', 'Decay', 0.1, 8, 0.1, 2, 's', true),
+      /* #482 polish 3.4, his #966 steer. The room could only be bigger or longer. Pre-delay holds the reverb back
+         after the sound (a big hall answers late, and a voice stays clear in front of its own room); Tone takes
+         the top off the reverb alone, Low cut its boom, and Width folds it from full stereo towards the middle.
+         All four work on the WET path only — the dry sound is never touched — and each sits in a bypass pair at
+         a default that is today's reverb, sample for sample. The animated-room bank (below) is fed from the
+         same pre-delay and drains into the same Tone / Low cut / Width, so a moving room is shaped the same. */
+      P('predelay', 'Pre-delay', 0, 0.25, 0.001, 0, 's', true),
+      P('highcut', 'Tone', 1000, 20000, 10, 20000, 'Hz', true),
+      P('lowcut', 'Low cut', 20, 1000, 1, 20, 'Hz', true),
+      P('width', 'Width', 0, 1, 0.01, 1, '', true),
+      MIX(0.3),
+    ],
     /* THE WARNING EZRA ASKED FOR LIVES ON THESE TWO, and only on these two. His answer on the six audio
        sliders that could not be keyframed: *"if audio key frames break the project and lag too much just
        put a warning next to it before use"*. The other four turned out not to need one — Distortion, Bit
@@ -443,7 +483,35 @@ window.FM = window.FM || {};
       const convG = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.3);
       input.connect(wd.dry).connect(out);
-      input.connect(conv); conv.connect(convG); convG.connect(wd.wet); wd.wet.connect(out);
+      /* THE WET CHAIN (#482 polish 3.4): input → Pre-delay → every room → wetBus → Tone → Low cut → Width → wet.
+         Each stage is a bypass pair (bypassPair above), so at its default it passes the room through ×1 exactly. */
+      const pd0 = initNum(inst, 'predelay', 0, 0, 0.25), hc0 = initNum(inst, 'highcut', 20000, 1000, 20000);
+      const lc0 = initNum(inst, 'lowcut', 20, 20, 1000), w0 = initNum(inst, 'width', 1, 0, 1);
+      const pd = s.delay(0.3); pd.delayTime.value = pd0;
+      const pre = bypassPair(s, input, pd, pd, pd0 > 0);
+      const wetBus = s.gain(1);             // where the static room and every banked room meet
+      const lp = s.biquad('lowpass', hc0, BUTTERWORTH_DB);
+      const hc = bypassPair(s, wetBus, lp, lp, hc0 < 20000);
+      const hp = s.biquad('highpass', lc0, BUTTERWORTH_DB);
+      const lc = bypassPair(s, hc.out, hp, hp, lc0 > 20);
+      /* Width is mid/side on the wet: L = M + w·S, R = M − w·S. The M/S sum is NOT exact at w = 1 in floats
+         ((L+R)/2 + (L−R)/2 can land an ulp off L), which is exactly why it too is switched in by a pair. The
+         splitter is discrete, so the wet is up-mixed to two channels first, as the Stereo Width effect does. */
+      const msIn = s.gain(1);
+      msIn.channelCount = 2; msIn.channelCountMode = 'explicit'; msIn.channelInterpretation = 'speakers';
+      const split = s.splitter(2), merge = s.merger(2);
+      const mid = s.gain(0.5);
+      split.connect(mid, 0); split.connect(mid, 1);
+      const sP = s.gain(0.5), sN = s.gain(-0.5), side = s.gain(1);
+      split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
+      const wG = s.gain(w0), wN = s.gain(-1);
+      side.connect(wG); wG.connect(wN);
+      mid.connect(merge, 0, 0); wG.connect(merge, 0, 0);
+      mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);
+      msIn.connect(split);
+      const wp = bypassPair(s, lc.out, msIn, merge, w0 < 1);
+      pre.out.connect(conv); conv.connect(convG); convG.connect(wetBus);
+      wp.out.connect(wd.wet); wd.wet.connect(out);
       let size = initNum(inst, 'size', 0.5, 0, 1), decay = initNum(inst, 'decay', 2, 0.1, 8);
       conv.buffer = impulse(ctx, size, decay);
 
@@ -529,7 +597,9 @@ window.FM = window.FM || {};
           const c = s.convolver();
           c.buffer = impulse(ctx, r.sz, r.dc);
           const g = s.gain(0);
-          input.connect(c); c.connect(g); g.connect(wd.wet);
+          // From the pre-delay and into the wet bus, like the static room (#482 polish 3.4): a moving room is
+          // held back, filtered and narrowed exactly as a still one is.
+          pre.out.connect(c); c.connect(g); g.connect(wetBus);
           const curve = new Float32Array(N);
           for (let n = 0; n < N; n++) {
             const x = n / (N - 1);
@@ -572,24 +642,67 @@ window.FM = window.FM || {};
             if (isAnim()) v = q(v, qDecay());
             if (v !== decay) { decay = v; conv.buffer = impulse(ctx, size, decay); }
           },
+          predelay: multi([[pd.delayTime, null]].concat(pairTargets(pre, v => v > 0))),
+          highcut: multi([[lp.frequency, null]].concat(pairTargets(hc, v => v < 20000))),
+          lowcut: multi([[hp.frequency, null]].concat(pairTargets(lc, v => v > 20))),
+          width: multi([[wG.gain, null]].concat(pairTargets(wp, v => v < 1))),
           mix: wd.set,
         },
       });
     },
   }, {
     type: 'delay', label: 'Echo / Delay', category: 'space',
-    params: [P('time', 'Time', 0.01, 2, 0.01, 0.35, 's', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.35, '', true), MIX(0.35)],
+    params: [
+      P('time', 'Time', 0.01, 2, 0.01, 0.35, 's', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.35, '', true),
+      /* #482 polish 3.3, his #966 steer (*"this is the complex version we want as much choice as possible"*). Every
+         repeat used to be a perfect copy of the one before, so a long Feedback piled up into a bright metallic smear.
+         Tone and Low cut sit INSIDE the loop, so each trip round loses a little more top (or bottom) — the way a
+         tape or bucket-brigade echo darkens as it fades — and they sit before the wet tap as well, so the first
+         repeat already changes and a drag is heard even at Feedback 0. Tape wobble swings the delay time by up to
+         ±2 ms at 0.7 Hz: the pitch of each repeat drifts, like a worn tape echo. Its LFO is pinned to SCENE time like
+         every other LFO here, so the export wobbles where the preview did. All three default to off, in a bypass
+         pair, so a saved echo renders exactly as it did. */
+      P('tone', 'Tone', 500, 20000, 10, 20000, 'Hz', true),
+      P('lowcut', 'Low cut', 20, 1000, 1, 20, 'Hz', true),
+      P('wobble', 'Tape wobble', 0, 1, 0.01, 0, '', true),
+      MIX(0.35),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const d = s.delay(2.2); d.delayTime.value = 0.35;
+      /* TAPE WOBBLE RIDES A TWIN OF THE LINE, never the line itself. Driving the one delay's time from an LFO
+         at depth 0 does render the same samples in the suite's Chrome (measured), but only because that engine's
+         swept and steady delay paths happen to round alike — nothing promises the iPhone's does. A second line
+         fed the same signal, switched in by the bypass pair, keeps the default exact by arithmetic instead. */
+      const dw = s.delay(2.2); dw.delayTime.value = 0.35;
       const fb = s.gain(0.35);
       const wd = wetDry(s, inst, 'mix', 0.35);
       input.connect(wd.dry).connect(out);
-      input.connect(d);
-      d.connect(fb).connect(d);
-      d.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { time: d.delayTime, feedback: fb.gain }, custom: { mix: wd.set } });
+      input.connect(d); input.connect(dw);
+      const wob0 = initNum(inst, 'wobble', 0, 0, 1), tone0 = initNum(inst, 'tone', 20000, 500, 20000), low0 = initNum(inst, 'lowcut', 20, 20, 1000);
+      const wOn = s.gain(wob0 > 0 ? 1 : 0), wOff = s.gain(wob0 > 0 ? 0 : 1), line = s.gain(1);
+      d.connect(wOff); wOff.connect(line); dw.connect(wOn); wOn.connect(line);
+      const lfo = s.lfo(0.7);
+      const wAmp = s.gain(wob0 * 0.002);   // ±2 ms at Tape wobble 1
+      lfo.connect(wAmp); wAmp.connect(dw.delayTime);
+      const lp = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
+      const tone = bypassPair(s, line, lp, lp, tone0 < 20000);
+      const hp = s.biquad('highpass', low0, BUTTERWORTH_DB);
+      const low = bypassPair(s, tone.out, hp, hp, low0 > 20);
+      const tap = low.out;                  // every repeat, darkened and thinned: it goes round again and out
+      tap.connect(fb); fb.connect(d); fb.connect(dw);
+      tap.connect(wd.wet); wd.wet.connect(out);
+      return unit({
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { feedback: fb.gain },
+        custom: {
+          time: multi([[d.delayTime, null], [dw.delayTime, null]]),
+          tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
+          lowcut: multi([[hp.frequency, null]].concat(pairTargets(low, v => v > 20))),
+          wobble: multi([[wAmp.gain, 0.002], [wOn.gain, v => (v > 0 ? 1 : 0)], [wOff.gain, v => (v > 0 ? 0 : 1)]]),
+          mix: wd.set,
+        },
+      });
     },
   }, {
     type: 'pingpong', label: 'Ping-Pong Delay', category: 'space',

@@ -30,8 +30,10 @@ window.FM = window.FM || {};
      Balance gained controls, so an older build's sanitiser would drop keys this one keeps — the two would normalise the
      same project differently, which is exactly what the gate below refuses.
      Bumped to 4 by #482 polish batch 2 for the same reason: Wiggle, Shake, Pulse, Swing, Orbit, Drift, Flash (darken), Frame
-     Stutter, Motion Blur (Object), Speed Lines and Glitch gained controls. */
-  C.SCHEMA_REV = 4;
+     Stutter, Motion Blur (Object), Speed Lines and Glitch gained controls.
+     Bumped to 5 by #482 polish batch 3 (sound): Echo / Delay gained Tone, Low cut and Tape wobble, and Reverb gained
+     Pre-delay, Tone, Low cut and Width — an older build's audio sanitiser would drop them. */
+  C.SCHEMA_REV = 5;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -222,7 +224,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 2718858111987276;   // #482 polish batch 2 (SCHEMA_REV 4): eleven movers/rhythm/pixel effects gained controls
+  C.SCHEMA_FP = 8565972886966827;   // #482 polish batch 3 (SCHEMA_REV 5): Echo / Delay and Reverb gained controls
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *
