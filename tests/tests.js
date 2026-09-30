@@ -115924,15 +115924,17 @@
   });
 
   /* 3.7 — MIX (parallel compression). The untouched copy has to wait for the squashed one: a DynamicsCompressorNode's output
-     is its input floor(0.006 x rate) samples late (MEASURED: 288 at 48 kHz, 264 at 44.1), and a blend against an undelayed copy
-     is a comb filter. MEASURED at 7bbeb5bc: `mix` is ignored - Mix 0 renders the fully compressed sound. Built: Mix 0 is the
-     input, 288 samples late, to 3e-8; the squashed path correlates with the input at the same 288. */
+     is its input floor(0.006 x rate) samples late, capped at 1023 (MEASURED: 288 at 48 kHz, 264 at 44.1, 1023 at 192), and a
+     blend against a copy late by a different amount is a comb filter. MEASURED at 7bbeb5bc: `mix` is ignored - Mix 0 renders the
+     fully compressed sound. Built: Mix 0 is the input, 288 samples late, to 3e-8; the squashed path correlates with the input at
+     the same 288. The #482 batch 3 review found the first build delayed the untouched copy 1152 samples at 192 kHz against the
+     node's 1023 (a notch every 1.5 kHz in a preview on a 192 kHz interface), so 192 kHz is in the loop. */
   test('482 3.7 Compressor - Mix blends the untouched sound back in, lined up with the squashed sound so it does not go hollow', { item: '482', budgetMs: 90000 }, async function () {
     const reg = FM.audioFxRegistry;
     const cmp = p => [{ type: 'compressor', enabled: true, params: Object.assign(reg.makeInstance('compressor').params, p) }];
     const bad = [];
-    for (const sr of [48000, 44100]) {
-      const noise = b3Noise(7), L = Math.floor(0.006 * sr), n = sr;
+    for (const sr of [48000, 44100, 192000]) {
+      const noise = b3Noise(7), L = Math.min(1023, Math.floor(0.006 * sr)), n = sr;   // 1023: the engine's pre-delay buffer, 1024 frames less one
       for (const live of [false, true]) {
         const dry = await b3Render(cmp({ threshold: -40, ratio: 12, mix: 0 }), noise, 1, { live: live, sr: sr });
         let worst = 0; for (let i = L; i < n; i++) worst = Math.max(worst, Math.abs(dry[i] - noise(0, i - L)));
@@ -115941,7 +115943,7 @@
       // The squashed path runs L samples late too (ratio 1: nothing squashed, so the input is recognisable) - the two line up.
       const wet = await b3Render(cmp({ ratio: 1, threshold: 0 }), noise, 1, { sr: sr });
       let best = -Infinity, lag = -1;
-      for (let k = 0; k < 600; k++) { let s = 0; for (let i = 2000; i < 30000; i++) s += wet[i + k] * noise(0, i); if (s > best) { best = s; lag = k; } }
+      for (let k = 0; k < 1300; k++) { let s = 0; for (let i = 2000; i < 30000; i++) s += wet[i + k] * noise(0, i); if (s > best) { best = s; lag = k; } }
       if (lag !== L) bad.push('at ' + sr + ' Hz the squashed sound is ' + lag + ' samples late and the untouched one ' + L + ' - blended, they comb-filter');
     }
     // A blend is the two, weighted: Mix 0.3 = 0.7 x Mix 0 + 0.3 x Mix 1.
@@ -116008,9 +116010,11 @@
   });
 
   /* 3.8 — LIMITER: INPUT GAIN AND RELEASE. MEASURED at 7bbeb5bc: both keys ignored - a -20 dBFS sine leaves at -20.00 with
-     input 12, and release 1 s recovers from a burst exactly as fast as 0.05. Built: input 12 → -8.00 dBFS; input 24 → -0.61
-     (held at the -1 ceiling), and -5.18 into a -6 ceiling (10 dB over a 20:1 knee lands 0.5 over, plus the detector); 60 ms
-     after a burst stops, release 0.05 has let go (-20.0) and release 1 s still holds -28.6. */
+     input 12, and release 1 s recovers from a burst exactly as fast as 0.05. Built: input 12 → -8.00 dBFS; input 24 → -1.78
+     (held just under the -1 ceiling: since the #482 batch 3 review the drive moves the knee down by 24/19 dB, so a sound pushed
+     4 dB over full scale lands where a 20:1 line puts it, 1 dB under a full-scale one — the first build let it out at -0.61, and
+     louder sounds over full scale), and -6.33 into a -6 ceiling; 60 ms after a burst stops, release 0.05 has let go (-20.0) and
+     release 1 s still holds -28.6. */
   test('482 3.8 Limiter - Input gain pushes the sound into the ceiling, Release sets how fast it lets go, and a saved Limiter sounds exactly as it did', { item: '482', budgetMs: 90000 }, async function () {
     const reg = FM.audioFxRegistry, inst = reg.makeInstance('limiter');
     if (!inst || inst.params.input !== 0 || inst.params.release !== 0.05) throw new Error('a new Limiter has params ' + JSON.stringify(inst && inst.params) + ' - no Input gain 0 dB and Release 0.05 s');
@@ -116030,7 +116034,7 @@
       const i0 = await at({}), i12 = await at({ input: 12 }), i24 = await at({ input: 24 }), i24c = await at({ input: 24, ceiling: -6 });
       if (Math.abs(i0 + 20) > 0.1) bad.push('CONTROL: a -20 dBFS sine leaves at ' + i0.toFixed(2) + ' dBFS with no Input gain (' + path + ')');
       if (Math.abs(i12 + 8) > 0.2) bad.push('Input gain 12 dB brings a -20 dBFS sine out at ' + i12.toFixed(2) + ' dBFS, not -8 (' + path + ')');
-      if (!(i24 <= -0.3 && i24 >= -1.6)) bad.push('Input gain 24 dB pushes a -20 dBFS sine to ' + i24.toFixed(2) + ' dBFS - not held at the -1 dB ceiling (' + path + ')');
+      if (!(i24 <= -1.0 && i24 >= -2.3)) bad.push('Input gain 24 dB pushes a -20 dBFS sine to ' + i24.toFixed(2) + ' dBFS - not held at or just under the -1 dB ceiling (' + path + ')');
       if (!(i24c <= -4.6 && i24c >= -6.6)) bad.push('Input gain 24 dB into a -6 dB ceiling peaks at ' + i24c.toFixed(2) + ' dBFS (' + path + ')');
     }
     // Release: full scale for 0.5 s, then -20 dBFS, under a -12 ceiling. 60-80 ms after the drop a short release has let go.
@@ -116103,5 +116107,106 @@
       await sleep(150);
     }
   });
+
+  /* ═══ #482 BATCH 3 — REVIEW FIXES (dynamics) ═════════════════════════════════════════════════════════════════════════════
+   * 3.8 INPUT GAIN MUST NOT LIFT THE CEILING. The node's ratio stops at 20:1, so a plain gain in front of it (the first build,
+   * b95bb9cc) lifted the ceiling with the drive. MEASURED there at the -1 dB ceiling with Input gain 24: a full-scale sine
+   * +0.74 dBFS, noise +1.71, a kick +1.58 — over full scale, which a phone plays as crackle — and a kick 3.2 dB over a -6
+   * ceiling. At 7bbeb5bc there is no Input gain at all (a -30 dBFS sine stays at -30). Built: the drive moves the knee down by
+   * G/19 (so what reached the ceiling with no drive comes out no louder with it), and while Input gain is above 0 a hard clip
+   * sits 1 dB above the ceiling's 20:1 line, never above 0 dBFS: every driven peak lands at or under it — exactly 0 dBFS at the
+   * -1 ceiling, -4.70 under -6, -10.40 under -12 — and a steady tone passes the clip untouched (it only catches overshoot). */
+  test('482 3.8 Limiter - Input gain never pushes the peaks past the ceiling or over full scale', { item: '482', budgetMs: 120000 }, async function () {
+    const reg = FM.audioFxRegistry, dbl = d => Math.pow(10, d / 20);
+    const lim = p => [{ type: 'limiter', enabled: true, params: Object.assign(reg.makeInstance('limiter').params, p) }];
+    const kick = amp => t => { const b = t % 0.5; return amp * Math.exp(-b * 8) * Math.sin(2 * Math.PI * (50 * b + (100 / 30) * (1 - Math.exp(-b * 30)))); };
+    const SIGS = { 'full-scale noise': b3Noise(31), 'a full-scale kick': kick(1), 'a quiet kick (-12 dBFS)': kick(dbl(-12)), 'a full-scale sine': b3Sine(1) };
+    // Today's Limiter graph with the drive in front — the first build — and the knee-moved graph without its clip, both by hand.
+    const byHand = (C, G, moved) => oac => {
+      const pre = oac.createGain(), c = oac.createDynamicsCompressor(), t = oac.createGain(), post = oac.createGain();
+      pre.gain.value = dbl(moved ? G * 20 / 19 : G); post.gain.value = moved ? dbl(-G / 19) : 1;
+      c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05; c.threshold.value = C;
+      t.gain.value = FM._hardKneeMakeupCancel(C, 20);
+      pre.connect(c); c.connect(t); t.connect(post); return { input: pre, output: post };
+    };
+    const bad = [];
+    // CONTROL 1: the drive is real — a -30 dBFS sine is lifted the full 24 dB (the moved knee is at -2.26 dB, above it).
+    for (const live of [false, true]) {
+      const q = b3Db(b3Peak(await b3Render(lim({ input: 24 }), b3Sine(dbl(-30)), 1, { live: live }), 0.3, 1));
+      if (Math.abs(q + 6) > 0.1) bad.push('CONTROL: Input gain 24 brings a -30 dBFS sine out at ' + q.toFixed(2) + ' dBFS, not -6 (' + (live ? 'preview' : 'export') + ')');
+    }
+    // CONTROL 2: these sounds really do break a plain gain in front of the Limiter, so a pass below is not an easy signal.
+    for (const k of ['full-scale noise', 'a full-scale kick']) {
+      const p = b3Db(b3Peak(await b3Render(byHand(-1, 24, false), SIGS[k], 1), 0.05, 1));
+      if (!(p > 0.3)) bad.push('CONTROL: ' + k + ' through a plain +24 dB in front of a -1 dB Limiter peaks at ' + p.toFixed(2) + ' dBFS - it never went over, so it proves nothing');
+    }
+    if (bad.length) throw new Error(bad.join('; '));
+    for (const [C, G] of [[-1, 24], [-1, 12], [-6, 24], [-12, 24]]) {
+      const hold = Math.min(0, 0.95 * C + 1), cap = dbl(hold) * (1 + 1e-6);
+      for (const k of Object.keys(SIGS)) {
+        for (const live of [false, true]) {
+          const out = await b3Render(lim({ ceiling: C, input: G }), SIGS[k], 1, { live: live });
+          const pk = b3Peak(out, 0, 1);
+          let over = 0; for (let i = 0; i < out.length; i++) if (Math.abs(out[i]) > 1) over++;
+          if (pk > cap || over) bad.push(k + ' through Input gain ' + G + ' at a ' + C + ' dB ceiling peaks at ' + b3Db(pk).toFixed(2) + ' dBFS (' + over + ' samples over full scale), above ' + hold.toFixed(2) + ' (' + (live ? 'preview' : 'export') + ')');
+        }
+      }
+    }
+    // Keyframed: Input gain 0 → 24 over the first second on the kick, at the -1 ceiling — never over full scale on the way.
+    const kf = await b3Render(lim({ input: { kf: [{ t: 0, v: 0 }, { t: 1, v: 24 }, { t: 2, v: 24 }] } }), SIGS['a full-scale kick'], 2);
+    if (b3Peak(kf, 0, 2) > 1) bad.push('Input gain keyframed from 0 to 24 dB lets the kick out at ' + b3Db(b3Peak(kf, 0, 2)).toFixed(2) + ' dBFS');
+    // The clip only catches overshoot: a steady tone at full drive is the knee-moved graph sample for sample (to float noise).
+    for (const f of [1000, 100]) {
+      const sig = t => Math.sin(2 * Math.PI * f * t);
+      const a = await b3Render(lim({ ceiling: -6, input: 24 }), sig, 1), b = await b3Render(byHand(-6, 24, true), sig, 1);
+      let w = 0; for (let i = 0; i < a.length; i++) w = Math.max(w, Math.abs(a[i] - b[i]));
+      if (w > 1e-5) bad.push('a steady ' + f + ' Hz tone at Input gain 24 under a -6 ceiling is clipped (up to ' + w.toExponential(2) + ' away from the unclipped limiter) - the clip distorts a sound it should leave alone');
+    }
+    if (bad.length) throw new Error('the Limiter lets Input gain push past its ceiling: ' + bad.join('; '));
+  });
+
+  /* 3.7 THE TURNING DOWN BAR SHOWS WHAT IS HEARD. With Mix below 1 the untouched sound is blended back in, but the first build's
+     bar read the squashed half alone. MEASURED on b95bb9cc through Hear at Mix 0 (threshold -30): the bar read -3.6 dB, 15 percent
+     filled, while the sound came out untouched. At 7bbeb5bc there is no bar. Built: the node's reduction weighted by the blend the
+     chain is playing — 0.0 dB at Mix 0 while the node is still squashing, and the full reduction again at Mix 1. */
+  test('482 3.7 Compressor - the Turning down bar shows what you hear, so at Mix 0 it reads nothing', { item: '482', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const reg = FM.audioFxRegistry, saved = FM.scene;
+    try {
+      const c = reg.makeInstance('compressor'); c.params.threshold = -40;
+      const song = await b3OpenAudioFx([c], 0);
+      const meter = () => document.querySelector('#inspector-panel .fx-row.fx-open .afx-gr-row');
+      if (!meter()) throw new Error('the open Compressor row has no Turning down bar');
+      attached(document.querySelector('#inspector-panel .fx-row.fx-open .fx-hear'), 'the Hear button of the open Compressor').click();
+      const nodeDb = () => { const m = FM.media.get(song.id), mt = m && m._afxChain && m._afxChain.meterOf ? m._afxChain.meterOf(c) : null; const n = mt && (mt.node || mt); return n && typeof n.reduction === 'number' ? n.reduction : null; };   // the first build handed out the node itself
+      const shown = () => { const m = meter(); return m && !m.classList.contains('idle') ? parseFloat(m.dataset.db) : null; };
+      // CONTROL: at Mix 1 the bar reads the squash (the song is 0.8 for its first 2 s, 38 dB over the threshold).
+      let full = null;
+      for (let i = 0; i < 40 && full == null; i++) { await sleep(80); const s = shown(); if (s != null && s < -3) full = s; }
+      if (!FM.audioFxLive.auditioning()) throw new Error('setup: Hear did not start an audition, so nothing below is measured');
+      if (full == null) throw new Error('CONTROL: 3 s after Hear at Mix 1 the bar reads ' + shown() + ' dB (the node says ' + nodeDb() + ') - nothing to compare Mix 0 with');
+      // Mix 0: the heard sound is the untouched copy, so the bar must read 0 while the node itself is still squashing.
+      c.params.mix = 0;
+      let seen = null;
+      for (let i = 0; i < 40 && seen == null; i++) {
+        await sleep(80);
+        const n = nodeDb(), s = shown();
+        if (typeof n === 'number' && n < -3 && s != null && i > 3) seen = { n: n, s: s };
+      }
+      if (!seen) throw new Error('setup: at Mix 0 the Compressor node never reported squashing (it says ' + nodeDb() + ' dB) - nothing measured');
+      if (Math.abs(seen.s) > 0.2) throw new Error('at Mix 0 you hear the sound untouched, but the bar reads ' + seen.s + ' dB (the squashed half alone is at ' + seen.n.toFixed(1) + ' dB) - it shows a turning down you cannot hear');
+      const fill = parseFloat(meter().querySelector('.afx-gr-fill').style.width);
+      if (!(fill < 1)) throw new Error('at Mix 0 the bar is filled ' + fill + ' percent');
+      // …and back to the full squash at Mix 1: the bar follows the blend live.
+      c.params.mix = 1;
+      let back = null;
+      for (let i = 0; i < 40 && back == null; i++) { await sleep(80); const s = shown(); if (s != null && s < -3) back = s; }
+      if (back == null) throw new Error('back at Mix 1 the bar reads ' + shown() + ' dB, not the squash it showed before (' + full + ')');
+    } finally {
+      try { FM.audioFxLive.stopAudition(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} await sleep(50);
+    }
+  });
+
 
 })();

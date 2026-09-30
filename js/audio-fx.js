@@ -68,6 +68,12 @@ window.FM = window.FM || {};
     return dbToLin(0.6 * (1 - 1 / r) * Math.min(0, thresholdDb));
   }
   FM._hardKneeMakeupCancel = hardKneeMakeupCancel;   // one definition: the boost limiter (audio-fx-live.js) uses it too
+  /* The level of the Limiter's safety clip under a ceiling of `ceilingDb`, as a linear gain (#482 batch 3 review; the
+     reasons are at the Limiter). 1 dB above where its 20:1 line puts a full-scale sound (0.95·C), and never above full
+     scale: exactly 0 dBFS at the default -1 dB ceiling. */
+  function limHoldLin(ceilingDb) { return dbToLin(Math.min(0, (1 - 1 / 20) * Math.min(0, ceilingDb) + 1)); }
+  // A WaveShaper that is the identity inside ±1 and holds ±1 outside it: a hard clip, no oversampling, no delay.
+  const HARD_CLIP = new Float32Array([-1, 1]);
 
   /* ---- curves ---- */
   // A WaveShaper curve sampled over its input domain [-1, 1]. Shared between instances (never mutated).
@@ -223,8 +229,10 @@ window.FM = window.FM || {};
        * build every room it will need, and cross-fade between them with gains — and this is the hook
        * that hands it the window. Null for all thirty-odd other effects. */
       window: o.window || null,
-      /* The node a live meter reads (#482 polish 3.7: the Compressor's gain-reduction bar), or null. Read only by
-         the preview (buildAudioFxChain's meterOf); an export never looks at it. */
+      /* What a live meter reads (#482 polish 3.7: the Compressor's gain-reduction bar), or null: { node } — the
+         DynamicsCompressorNode — plus, when the effect blends its result with the untouched sound, the { dry, wet }
+         gain params of that blend, so the meter can show what is HEARD (audioFxLive.reductionOf). Read only by the
+         preview (buildAudioFxChain's meterOf); an export never looks at it. */
       meter: o.meter || null,
       // Non-null ONLY when set(key, v) is exactly param(key).setValueAtTime(v) — a caller that schedules
       // onto a returned param must not be able to desync a pair (mix) or skip a conversion (gain's dB).
@@ -700,17 +708,21 @@ window.FM = window.FM || {};
       const input = s.gain(1), out = s.gain(1);
       const c = s.comp();
       /* THE UNTOUCHED PATH WAITS FOR THE SQUASHED ONE. A DynamicsCompressorNode looks ahead: its output is its
-         input floor(0.006 × rate) samples late (MEASURED in the suite's Chrome by cross-correlation: 132 frames
-         at 22.05 kHz, 264 at 44.1, 288 at 48, 576 at 96 — the spec engine's fixed 6 ms pre-delay, the same code
-         in WebKit). Blended against an un-delayed copy, every Mix between 0 and 1 would be a comb filter — a
-         hollow, phasey sound with a notch every 167 Hz (1 / 6 ms). So the untouched copy is delayed by the same frames,
-         and the two line up. */
+         input floor(0.006 × rate) samples late — but never more than 1023, the engine's pre-delay buffer (1024
+         frames, minus one). MEASURED in the suite's Chrome by cross-correlation: 132 frames at 22.05 kHz, 264 at
+         44.1, 288 at 48, 529 at 88.2, 576 at 96, and 1023 at BOTH 176.4 and 192 kHz, where 6 ms would be 1058
+         and 1152 (the spec engine's fixed 6 ms pre-delay, the same code in WebKit). Blended against a copy
+         that is late by a different amount, every Mix between 0 and 1 is a comb filter — a hollow, phasey
+         sound with a notch every 1 / (the difference): every 167 Hz against an un-delayed copy, every 1.5 kHz
+         at 192 kHz before the cap was counted (#482 batch 3 review; the live preview runs at the hardware's
+         rate, so a Mac on a 192 kHz interface heard it). So the untouched copy is delayed by the same frames,
+         cap included, and the two line up at every rate. */
       const lag = s.delay(0.05);
-      lag.delayTime.value = Math.floor(0.006 * ctx.sampleRate) / ctx.sampleRate;
+      lag.delayTime.value = Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate;
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(c); c.connect(wd.wet); wd.wet.connect(out);
       input.connect(lag); lag.connect(wd.dry); wd.dry.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: c,
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
         params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee, output: out.gain },
         xf: { output: dbToLin }, custom: { mix: wd.set } });
     },
@@ -718,10 +730,9 @@ window.FM = window.FM || {};
     type: 'limiter', label: 'Limiter', category: 'dyn',
     params: [
       P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true),
-      /* #482 polish 3.8. Input gain pushes the sound INTO the ceiling (louder, with the peaks pinned at it);
+      /* #482 polish 3.8. Input gain pushes the sound INTO the ceiling (louder, with the peaks held at it);
          Release is how fast the limiter lets go after a peak (short = loud and pumping, long = smooth). Both
-         defs are today's graph: 0 dB is a gain of 1 in front of the node, and 0.05 s is the release it has
-         always had — so a saved Limiter renders sample for sample as before. */
+         defs are today's graph (see build) — so a saved Limiter renders sample for sample as before. */
       P('input', 'Input gain', 0, 24, 0.5, 0, 'dB', true),
       P('release', 'Release', 0.01, 1, 0.01, 0.05, 's', true),
     ],
@@ -735,10 +746,51 @@ window.FM = window.FM || {};
       // drives the threshold AND this gain from one key, so a keyframed ceiling stays compensated at
       // every step: both are real AudioParams scheduled together.
       const trim = s.gain(hardKneeMakeupCancel(-1, 20));
-      pre.connect(c); c.connect(trim);
-      return unit({ input: pre, output: trim, nodes: s.nodes, oscs: s.oscs,
-        params: { input: pre.gain, release: c.release }, xf: { input: dbToLin },
-        custom: { ceiling: multi([[c.threshold, null], [trim.gain, v => hardKneeMakeupCancel(v, 20)]]) } });
+      /* ═══ INPUT GAIN MUST NOT LIFT THE CEILING (#482 batch 3 review) ═══════════════════════════════════════
+       * The node's ratio stops at 20:1, so it lets 1 dB through for every 20 dB it is pushed over. A plain
+       * gain in front (the first build) therefore lifted the ceiling with the drive: MEASURED at the -1 dB
+       * ceiling, a full-scale sine came out at +0.74 dBFS with Input gain 24, noise at +1.71 and a kick at
+       * +1.58 — over full scale, which a phone plays as crackle — and 3 dB over a -6 ceiling.
+       * Two parts, both exactly today's graph at Input gain 0:
+       * 1) THE DRIVE MOVES THE KNEE DOWN BY G/19. With the knee at C − G/19 a 20:1 line lands a sound x dB
+       *    below full scale at 0.95·C + x/20 however hard it is pushed: the drive cancels out, so nothing
+       *    that reached the ceiling with no Input gain comes out any louder with it, and everything under
+       *    the ceiling is lifted by the full G. It is done as gains, not by moving the node's threshold:
+       *    the node sees the sound G + G/19 louder against the SAME threshold (so its makeup, which depends
+       *    only on the threshold, stays cancelled by `trim`), and `post` takes the G/19 back off. The same
+       *    curve as a moved threshold, and each gain follows ONE key, so a keyframed Input gain and a
+       *    keyframed Ceiling schedule independently and still agree at every step. At G = 0 both are 1.
+       * 2) A CLIP CATCHES WHAT THE DETECTOR MISSES. The node reacts in 1 ms, so the first moments of a hit
+       *    still get through: with part 1 alone, noise and a kick at +24 still peaked at +0.54 and +0.47 dBFS.
+       *    So while Input gain is above 0, the sound passes a hard clip (limHoldLin) 1 dB above where the
+       *    20:1 line puts a full-scale sound, and never above 0 dBFS — exactly 0 dBFS at the default -1
+       *    ceiling, -4.7 under -6, -10.4 under -12. Why not AT the line: the node's own gain ripples on a
+       *    steady tone (MEASURED up to +0.57 dB over the line, a full-scale 1 kHz sine under -24 at +24), so
+       *    a clip there cut the top off 20 % of every loud tone's samples (-32 dB of distortion, audible). At
+       *    +1 dB it touches no steady tone at all (identical to the unclipped graph to 1e-7) and only the
+       *    overshoot of hits: 0.5–2 % of noise samples, 2–11 % of a hard-driven kick's. The one exception is
+       *    a ceiling above -1 dB: there the clip is capped at full scale, and the ripple over it IS clipped
+       *    (at 0 dB and +24, the tops of a loud tone) — the alternative is the device clipping it. Everything driven
+       *    then peaks within about 0.6 dB of what the same Limiter already let through with no Input gain
+       *    (MEASURED: -0.63 → 0.00 dBFS at -1, -5.12 → -4.70 at -6, -10.54 → -10.40 at -12).
+       *    Bypass pair (backlog §0.3): the clip is always built, and at Input gain 0 its gain is 0 and the
+       *    straight path's is 1 — float-exact, so a saved Limiter is sample for sample what it was, and it
+       *    never shaves the default's own transients. */
+      const post = s.gain(1), out = s.gain(1);
+      const clipIn = s.gain(1 / limHoldLin(-1)), clipOut = s.gain(limHoldLin(-1));
+      const clip = s.shaper(HARD_CLIP);
+      const gOn = s.gain(0), gOff = s.gain(1);
+      pre.connect(c); c.connect(trim); trim.connect(post);
+      post.connect(clipIn); clipIn.connect(clip); clip.connect(clipOut); clipOut.connect(gOn); gOn.connect(out);
+      post.connect(gOff); gOff.connect(out);
+      return unit({ input: pre, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { release: c.release },
+        custom: {
+          ceiling: multi([[c.threshold, null], [trim.gain, v => hardKneeMakeupCancel(v, 20)],
+            [clipIn.gain, v => 1 / limHoldLin(v)], [clipOut.gain, limHoldLin]]),
+          input: multi([[pre.gain, v => dbToLin(v * 20 / 19)], [post.gain, v => dbToLin(-v / 19)],
+            [gOn.gain, v => (v > 0 ? 1 : 0)], [gOff.gain, v => (v > 0 ? 0 : 1)]]),
+        } });
     },
   }, {
     type: 'tremolo', label: 'Tremolo', category: 'dyn',
@@ -1300,7 +1352,7 @@ window.FM = window.FM || {};
           }
         }
       },
-      /* The meter node the effect instance `inst` built in THIS chain (#482 polish 3.7), or null — matched by
+      /* The meter (unit.meter) the effect instance `inst` built in THIS chain (#482 polish 3.7), or null — matched by
          identity, the same way the live chain is tied to its instances (audio-fx-live.js chainIsCurrent). */
       meterOf: function (inst) {
         for (let i = 0; i < built.length; i++) if (built[i].inst === inst) return built[i].u.meter || null;

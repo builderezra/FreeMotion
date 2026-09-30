@@ -42,14 +42,20 @@ return (async function () {
       const y0 = mid - Math.min(1.05, hi) * amp, y1 = mid - Math.max(-1.05, lo) * amp;
       g.fillRect(px / dpr, y0, 1 / dpr, Math.max(0.5, y1 - y0));
     }
-    (opts.lines || []).forEach(([v, label]) => {
-      g.setLineDash([4, 3]); g.strokeStyle = '#ffce4a'; g.lineWidth = 1.2;
+    // [value, label, colour, 'left' | 'right' (default), dashed (default true)] — two lines close together put their labels
+    // at opposite ends so they cannot overlap.
+    (opts.lines || []).forEach(([v, label, colour, side, dashed]) => {
+      const col = colour || '#ffce4a';
+      g.setLineDash(dashed === false ? [] : [4, 3]); g.strokeStyle = col; g.lineWidth = 1.2;
       [mid - v * amp, mid + v * amp].forEach(y => { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); });
-      g.setLineDash([]); g.fillStyle = '#ffce4a'; g.font = '600 10px -apple-system,system-ui,sans-serif';
-      const ly = mid - v * amp; g.fillText(label, W - g.measureText(label).width - 6, ly - 4 < 12 ? ly + 13 : ly - 4);
+      g.setLineDash([]); g.fillStyle = col; g.font = '600 10px -apple-system,system-ui,sans-serif';
+      if (!label) return;   // unlabelled: the sheet gives a legend instead
+      const ly = mid - v * amp, lx = side === 'left' ? 6 : W - g.measureText(label).width - 6;
+      g.fillText(label, lx, ly - 4 < 12 ? ly + 13 : ly - 4);
     });
     return c;
   }
+  function rmsOf(d, a, b) { let s = 0, n = 0; for (let i = Math.floor(a * SR); i < Math.floor(b * SR); i++) { s += d[i] * d[i]; n++; } return Math.sqrt(s / Math.max(1, n)); }
   function peakDb(d, a, b) { let p = 0; for (let i = Math.floor(a * SR); i < Math.floor(b * SR); i++) p = Math.max(p, Math.abs(d[i])); return 20 * Math.log10(Math.max(1e-9, p)); }
 
   function sheet(title, sub, blocks, foot) {
@@ -109,22 +115,45 @@ return (async function () {
       ], 'Drawn by the app’s own sound engine (the same one that exports). The untouched half is delayed by the few thousandths of a second the Compressor takes to look ahead, so the two line up — otherwise a blend sounds hollow. Mix starts at 1: a saved project sounds exactly as it did.');
     },
     'limiter-inputgain': async () => {
-      const T = 3, quietSong = t => 0.35 * phrase(t) / 0.75;   // a clip mastered quiet: its loudest bit reaches about a third of full
-      const today = await render(inst('limiter'), quietSong, T), push = await render(inst('limiter', { input: 12 }), quietSong, T);
-      const ceil = Math.pow(10, -1 / 20);
-      return sheet('Limiter · Input gain', 'Pushes the sound INTO the ceiling: everything gets louder, and the peaks are pinned at the line instead of clipping. The way to make a quiet clip loud without it crackling.', [
-        { head: 'Today — Input gain fixed at 0 dB', note: 'A quiet clip stays quiet; the limiter never touches it.', canvas: wave(today, T, DIM, { lines: [[ceil, 'Ceiling −1 dB']] }), under: secsUnder(T) },
-        { head: 'New — Input gain +12 dB', note: 'Turned up 12 dB (the wave four times as tall), and the loud parts are pinned at the ceiling line: the very tips reach ' + peakDb(push, 0.2, 0.9).toFixed(1).replace('-', '−') + ' dB, still short of full volume (0 dB), so nothing crackles.', canvas: wave(push, T, ACC, { lines: [[ceil, 'Ceiling −1 dB']] }), isNew: true, under: secsUnder(T) },
+      /* #482 batch 3 review: the first version of this sheet said "the peaks are pinned at the line", and the Limiter did the
+         opposite — Input gain lifted the ceiling (a kick at +24 came out at +1.6 dB, over full scale). Redrawn from the fixed
+         chain, on a quiet clip WITH drum hits, because hits are what used to get through; every number printed is measured
+         from the wave drawn beside it. */
+      const T = 3;
+      const quietClip = t => {   // mastered quiet: a sung-ish phrase with a drum hit every half second, loudest bit about -8 dB
+        const beat = t % 0.5;
+        return 0.16 * phrase(t) / 0.75 + 0.22 * Math.exp(-beat * 18) * Math.sin(2 * Math.PI * 80 * beat);
+      };
+      const today = await render(inst('limiter'), quietClip, T), p12 = await render(inst('limiter', { input: 12 }), quietClip, T), p24 = await render(inst('limiter', { input: 24 }), quietClip, T);
+      const ceil = Math.pow(10, -1 / 20), dB = x => (Math.round(x * 10) / 10).toFixed(1).replace('-', '−');
+      const over = d => { let n = 0; for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 1) n++; return n; };
+      const quietRise = (d) => 20 * Math.log10(rmsOf(d, 1.2, 1.8) / rmsOf(today, 1.2, 1.8));
+      const k0 = peakDb(today, 0, T), k12 = peakDb(p12, 0, T), k24 = peakDb(p24, 0, T);
+      if (over(p12) || over(p24)) throw new Error('the Limiter went over full scale - this sheet would lie');
+      // The two lines sit 1 dB apart, too close to label inside the wave: a legend under the caption names them instead.
+      const lines = [[ceil, '', '#ffce4a'], [1, '', '#ff6b6b', null, false]];
+      const legend = '<div style="margin-top:8px;display:flex;flex-direction:column;gap:3px;font-size:12px">' +
+        '<span><span style="display:inline-block;width:22px;border-top:2px dashed #ffce4a;vertical-align:middle;margin-right:7px"></span><b style="color:#ffce4a">Ceiling −1 dB</b> — the Limiter’s setting</span>' +
+        '<span><span style="display:inline-block;width:22px;border-top:2px solid #ff6b6b;vertical-align:middle;margin-right:7px"></span><b style="color:#ff6b6b">Full volume (0 dB)</b> — past it, a phone crackles</span></div>';
+      return sheet('Limiter · Input gain', 'Turns the sound up on its way into the limiter. Everything under the ceiling gets louder by the full amount; the loud parts stop at the ceiling instead of going over. The very tips can land just past the ceiling line, but never past full volume — so it never crackles.' + legend, [
+        { head: 'Today — Input gain fixed at 0 dB', note: 'A quiet clip stays quiet (loudest tip ' + dB(k0) + ' dB); the limiter never touches it.', canvas: wave(today, T, DIM, { lines: lines, h: 116 }), under: secsUnder(T) },
+        { head: 'New — Input gain +12 dB', note: 'The quiet middle comes up ' + dB(quietRise(p12)) + ' dB; the loud parts and the drum hits stop at the ceiling. Loudest tip: ' + dB(k12) + ' dB.', canvas: wave(p12, T, ACC, { lines: lines, h: 116 }), isNew: true, under: secsUnder(T) },
+        { head: 'New — Input gain +24 dB', note: 'The quiet middle comes up ' + dB(quietRise(p24)) + ' dB, and everything else is held at the line. Loudest tip: ' + dB(k24) + ' dB — never past full volume.', canvas: wave(p24, T, ACC, { lines: lines, h: 116 }), isNew: true, under: secsUnder(T) },
       ]);
     },
     'limiter-release': async () => {
-      const T = 2, burst = t => (t < 0.6 ? 1 : 0.35) * Math.sin(2 * Math.PI * 330 * t);
+      /* #482 batch 3 review: the first version started the loud note at the very first sample, so its "Release 1 s" wave began
+         far under the ceiling and swelled up — a start-up effect of the limiter, not what Release does to a loud note. Now
+         there is half a second of silence first, so the only thing that differs between the two waves is Release. */
+      const T = 3, burst = t => (t < 0.5 ? 0 : (t < 1.1 ? 1 : 0.35)) * Math.sin(2 * Math.PI * 330 * t);
       const today = await render(inst('limiter', { ceiling: -6 }), burst, T), slow = await render(inst('limiter', { ceiling: -6, release: 1 }), burst, T);
-      const ceil = Math.pow(10, -6 / 20);
-      return sheet('Limiter · Release', 'How quickly the limiter lets go after something loud. Short: the quiet part comes straight back. Long: it creeps back up over a second — smoother, less “pumping”. A loud note, then a quieter one, under a −6 dB ceiling:', [
-        { head: 'Today — always 0.05 s', note: 'The quieter note is back to its own level almost at once.', canvas: wave(today, T, DIM, { lines: [[ceil, 'Ceiling −6 dB']], h: 110 }), under: secsUnder(T) },
-        { head: 'New — Release 1 s', note: 'The quieter note starts held down and fades back up over the next second.', canvas: wave(slow, T, ACC, { lines: [[ceil, 'Ceiling −6 dB']], h: 110 }), isNew: true, under: secsUnder(T) },
-      ]);
+      const ceil = Math.pow(10, -6 / 20), own = 20 * Math.log10(0.35);
+      const heldBy = d => own - peakDb(d, 1.13, 1.17), backBy = d => { for (let t = 1.13; t < T - 0.05; t += 0.05) if (own - peakDb(d, t, t + 0.04) < 0.5) return t - 1.1; return null; };
+      const hs = heldBy(slow), bs = backBy(slow), ht = heldBy(today);
+      return sheet('Limiter · Release', 'How quickly the limiter lets go after something loud. Short: the quieter sound after it comes straight back. Long: it comes back up gradually — smoother, less “pumping”. Half a second of silence, a loud note, then a quieter one, under a −6 dB ceiling:', [
+        { head: 'Today — always 0.05 s', note: 'The loud note is held at the ceiling, and the quieter note is back at its own level at once (' + (ht < 0.5 ? 'within half a dB' : ht.toFixed(1) + ' dB down') + ').', canvas: wave(today, T, DIM, { lines: [[ceil, 'Ceiling −6 dB']], h: 110 }), under: secsUnder(T) },
+        { head: 'New — Release 1 s', note: 'The loud note is held just the same. The quieter note starts ' + hs.toFixed(0) + ' dB held down and comes back up to its own level over ' + (bs == null ? 'more than a second' : 'about ' + bs.toFixed(1) + ' s') + '.', canvas: wave(slow, T, ACC, { lines: [[ceil, 'Ceiling −6 dB']], h: 110 }), isNew: true, under: secsUnder(T) },
+      ], 'Drawn by the app’s own sound engine (the same one that exports). The default is today’s sound exactly. Worth knowing: the limiter starts out holding the sound down, and a long Release also slows how fast it lets go of that. So a clip that is already loud at the very moment the sound starts — the start of an export, or pressing play right after adding the Limiter — comes in quieter and swells up: at Release 1 s about 12 dB down at first and settled in under a second; at the 0.05 s default you cannot hear it. Anything quieter first, as here, and it does not happen.');
     },
   };
   window.__482c = async function (id) { return SHEETS[id] ? SHEETS[id]() : null; };

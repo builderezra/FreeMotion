@@ -474,15 +474,24 @@ window.FM = window.FM || {};
      * `.reduction`, in dB (0, or below 0 while it is turning the sound down). Live only — it is read from the
      * graph that is actually playing (the forward clip's chain here, a reversed clip's in audio-play.js), and
      * null when no such graph exists for that effect: not playing, not being heard, or switched off. An export
-     * has nothing to show it on, so it never asks. */
+     * has nothing to show it on, so it never asks.
+     * WHAT IS HEARD, NOT WHAT THE NODE DOES (#482 batch 3 review). With Mix below 1 the untouched sound is blended
+     * back in, and the node's own number overstated it: at Mix 0 the bar read -3.6 dB while he heard the sound
+     * untouched. So the node's gain g is weighted by the blend the chain is playing right now — its own dry and
+     * wet gain params, read as they stand: dry + wet × g, which is g at Mix 1 and exactly 1 (0 dB) at Mix 0. */
     reductionOf(layer, inst) {
       const m = layer && FM.media.get(layer.id);
-      let node = (m && m._afxChain && m._afxChain.meterOf) ? m._afxChain.meterOf(inst) : null;
-      if (!node && FM.audioPlay && FM.audioPlay.meterOf) node = FM.audioPlay.meterOf(inst);
+      let mt = (m && m._afxChain && m._afxChain.meterOf) ? m._afxChain.meterOf(inst) : null;
+      if (!mt && FM.audioPlay && FM.audioPlay.meterOf) mt = FM.audioPlay.meterOf(inst);
+      const node = mt && mt.node;
       if (!node) return null;
       const r = node.reduction;
       const v = typeof r === 'number' ? r : (r && typeof r.value === 'number' ? r.value : NaN);   // an older WebKit made it an AudioParam
-      return isFinite(v) ? Math.min(0, v) : null;
+      if (!isFinite(v)) return null;
+      const g = Math.pow(10, Math.min(0, v) / 20);
+      const dry = mt.dry ? mt.dry.value : 0, wet = mt.wet ? mt.wet.value : 1;
+      const heard = (isFinite(dry) ? dry : 0) + (isFinite(wet) ? wet : 1) * g;
+      return heard > 0 ? Math.min(0, 20 * Math.log10(heard)) : Math.min(0, v);
     },
 
     // Exposed so the suite can assert the routing decision without standing up a real graph.
