@@ -2412,6 +2412,53 @@ window.FM = window.FM || {};
     ]));
   }
 
+  /* ═══ THE COMPRESSOR'S "TURNING DOWN" BAR (#482 polish 3.7) ═══════════════════════════════════════════════
+   * A compressor is the one effect you cannot hear working by dragging a slider — it only acts on the loud
+   * parts, so Threshold and Ratio feel like nothing until you see how much it is actually taking off. This row
+   * shows that: while the clip plays or is heard (Hear), a bar grows with how far the Compressor is turning
+   * the sound down at this moment, with the number beside it. Read from the live chain's own node
+   * (FM.audioFxLive.reductionOf → DynamicsCompressorNode.reduction), so it is the sound you are hearing, not a
+   * model of it. Idle (nothing playing) it stays in place, empty and dimmed: a row that appeared and vanished
+   * would shove every slider under it up and down under the finger while he drags them.
+   * One loop per row, and it ends with the row: the next frame after a refresh or a close finds it detached.
+   * Every animation frame while something plays; four times a second otherwise (it only has to notice a start). */
+  const AFX_GR_RANGE = 24;   // dB across the full bar
+  function reductionMeter(layer, fx) {
+    const row = el('div', 'afx-gr-row idle');
+    row.title = 'How much the Compressor is turning the sound down right now. It moves while the clip plays or while you Hear it.';
+    const label = el('span', 'fx-scrub-label afx-gr-label', 'Turning down');
+    const track = el('div', 'afx-gr-track');
+    const fill = el('div', 'afx-gr-fill');
+    track.appendChild(fill);
+    track.setAttribute('role', 'meter');
+    track.setAttribute('aria-label', 'Compressor turning the sound down, in dB');
+    track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', String(AFX_GR_RANGE));
+    const val = el('span', 'afx-gr-val', '–');
+    row.appendChild(el('span', 'fx-kf-spacer')); row.appendChild(el('span', 'afx-gr-pad'));   // lines the name up with the slider names below
+    row.appendChild(label); row.appendChild(track); row.appendChild(val);
+    let shown = undefined, seen = false, waits = 0;
+    const tick = () => {
+      // Built but not yet in the panel: wait a moment for it. Detached after that — or never attached — the loop ends.
+      if (!row.isConnected) { if (seen || ++waits > 8) return; }
+      else seen = true;
+      const live = FM.audioFxLive && ((FM.audioFxLive.auditioning && FM.audioFxLive.auditioning(layer)) || FM.playing);
+      const db = (live && FM.audioFxLive.reductionOf) ? FM.audioFxLive.reductionOf(layer, fx) : null;
+      const on = typeof db === 'number';
+      const down = on ? Math.round(-db * 10) / 10 : null;   // 0.1 dB steps: finer than that only flickers
+      if (down !== shown) {
+        shown = down;
+        row.classList.toggle('idle', !on);
+        row.dataset.db = on ? String(-down) : '';
+        fill.style.width = on ? (Math.min(1, down / AFX_GR_RANGE) * 100).toFixed(1) + '%' : '0%';
+        val.textContent = on ? (down > 0 ? '-' + down.toFixed(1) : '0.0') + 'dB' : '–';   // '-' as the slider boxes write it (-30.0dB)
+        track.setAttribute('aria-valuenow', on ? String(down) : '0');
+      }
+      if (on) requestAnimationFrame(tick); else setTimeout(tick, 250);
+    };
+    requestAnimationFrame(tick);
+    return row;
+  }
+
   function audioFxRow(layer, fx, idx) {
     const reg = FM.audioFxRegistry.get(fx.type) || { label: fx.type, params: [] };
     const expanded = !!fx._expanded, off = fx.enabled === false;
@@ -2485,6 +2532,7 @@ window.FM = window.FM || {};
     if (expanded) {
       const body = el('div', 'fx-ed-body');
       if (AFX_MONO_HINT[fx.type] && layerIsMono(layer)) body.appendChild(el('div', 'insp-hint', AFX_MONO_HINT[fx.type]));
+      if (reg.meter === 'reduction') body.appendChild(reductionMeter(layer, fx));
       reg.params.forEach(p => {
         body.appendChild(fxScrubber(fx, afxParam(p), layer, idx));
         const w = afxWarnFor(reg, fx, p);

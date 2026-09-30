@@ -247,5 +247,11 @@ window.FM = window.FM || {};
     applyAt(sceneTime) {
       for (let i = 0; i < chains.length; i++) chains[i].applyAt(sceneTime);
     },
+    // The meter node an effect instance built in a reversed clip's chain, while it plays (#482 polish 3.7: the
+    // Compressor's gain-reduction bar reads it through FM.audioFxLive.reductionOf), or null.
+    meterOf(inst) {
+      for (let i = 0; i < chains.length; i++) { const n = chains[i].meterOf ? chains[i].meterOf(inst) : null; if (n) return n; }
+      return null;
+    },
   };
 })(window.FM);

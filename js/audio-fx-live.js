@@ -469,6 +469,22 @@ window.FM = window.FM || {};
 
     auditioning(layer) { return !!_aud && (!layer || _aud.layer === layer); },
 
+    /* ═══ HOW FAR THE COMPRESSOR IS TURNING IT DOWN, RIGHT NOW (#482 polish 3.7) ═══════════════════════════
+     * The number behind the bar in the open Compressor row: the live chain's own DynamicsCompressorNode
+     * `.reduction`, in dB (0, or below 0 while it is turning the sound down). Live only — it is read from the
+     * graph that is actually playing (the forward clip's chain here, a reversed clip's in audio-play.js), and
+     * null when no such graph exists for that effect: not playing, not being heard, or switched off. An export
+     * has nothing to show it on, so it never asks. */
+    reductionOf(layer, inst) {
+      const m = layer && FM.media.get(layer.id);
+      let node = (m && m._afxChain && m._afxChain.meterOf) ? m._afxChain.meterOf(inst) : null;
+      if (!node && FM.audioPlay && FM.audioPlay.meterOf) node = FM.audioPlay.meterOf(inst);
+      if (!node) return null;
+      const r = node.reduction;
+      const v = typeof r === 'number' ? r : (r && typeof r.value === 'number' ? r.value : NaN);   // an older WebKit made it an AudioParam
+      return isFinite(v) ? Math.min(0, v) : null;
+    },
+
     // Exposed so the suite can assert the routing decision without standing up a real graph.
     needsBoost(layer) { return needsBoost(layer); },
     volumeLocked(m) { return volumeLocked(m); },            // queue 690: an iPhone element whose el.volume is read-only

@@ -115798,4 +115798,310 @@
     });
   });
 
+  /* ═══ #482 POLISH BATCH 3 — DYNAMICS (his #966: "this is the complex version we want as much choice as possible") ═══════
+   * 3.7 Compressor: Output, Mix (parallel compression) and a "Turning down" bar in the open row while it is heard.
+   * 3.8 Limiter: Input gain and Release.  3.1 Sound effects: the playing row's ▶ becomes ■.
+   * ALREADY DONE by #986 and only verified here (their own '986 …' tests hold them): the Compressor's Knee (C14), the
+   * Limiter's ceiling compensation and the boost limiter (C2), the sound-effect ▶ playing what Add adds and the old row
+   * unlighting at once (C10, C12), audio-effect search by what people call it (C13).
+   * AUDIO HAS NO `legacy`: the sanitiser fills a missing key with its def, so every new def must be TODAY'S SOUND, sample
+   * for sample. Each sound test below therefore carries a CONTROL that renders the default through FM.buildAudioFxChain
+   * and through a hand-built copy of today's graph (the same DynamicsCompressorNode, the same numbers) and demands ===
+   * on every sample, on noise, a sweep and an impulse train, in stereo, on the export path (schedule) and the preview
+   * path (applyAt). The build's own before/after proof against the base commit's code is
+   * tools/design/482/polish3/dyn/exact-defaults.py. */
+  const B3 = { SR: 48000 };
+  function b3Render(fx, sig, secs, opts) {
+    opts = opts || {};
+    const SR = opts.sr || B3.SR, n = Math.round(SR * secs), ch = opts.chans || 1;
+    const oac = new OfflineAudioContext(ch, n, SR);
+    const b = oac.createBuffer(ch, n, SR);
+    for (let c = 0; c < ch; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = sig(i / SR, i, c); }
+    const src = oac.createBufferSource(); src.buffer = b;
+    let chain = null, input, output;
+    if (typeof fx === 'function') { const g = fx(oac); input = g.input; output = g.output; }
+    else {
+      chain = FM.buildAudioFxChain(oac, { audioFx: fx }, 0);
+      if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(fx));
+      if (opts.live) chain.applyAt(0); else chain.schedule(0, secs);
+      input = chain.input; output = chain.output;
+    }
+    src.connect(input); output.connect(oac.destination); src.start(0);
+    return oac.startRendering().then(r => { if (chain) { try { chain.dispose(); } catch (e) {} } const out = []; for (let c = 0; c < ch; c++) out.push(r.getChannelData(c)); return ch === 1 ? out[0] : out; });
+  }
+  function b3Rms(d, a, b, sr) { sr = sr || B3.SR; let s = 0, n = 0; for (let i = Math.floor(a * sr); i < Math.min(d.length, Math.floor(b * sr)); i++) { s += d[i] * d[i]; n++; } return Math.sqrt(s / Math.max(1, n)); }
+  function b3Peak(d, a, b, sr) { sr = sr || B3.SR; let p = 0; for (let i = Math.floor(a * sr); i < Math.min(d.length, Math.floor(b * sr)); i++) p = Math.max(p, Math.abs(d[i])); return p; }
+  function b3Db(x) { return 20 * Math.log10(Math.max(1e-12, x)); }
+  const b3Sine = (amp, f) => t => amp * Math.sin(2 * Math.PI * (f || 1000) * t);
+  function b3Noise(seed) { const N = 4 * B3.SR, a = new Float32Array(N); let s = seed >>> 0; for (let i = 0; i < N; i++) { s = (Math.imul(s, 1103515245) + 12345) >>> 0; a[i] = 0.9 * (s / 4294967296 * 2 - 1); } return (t, i) => a[i % N]; }
+  // The three signals every default is proven on: noise, a 20 Hz → 8 kHz sweep near full scale, and an impulse train.
+  const B3_SIGNALS = {
+    noise: b3Noise(99),
+    sweep: t => 0.95 * Math.sin(2 * Math.PI * (20 * t + 2660 * t * t)),
+    impulses: (t, i) => (i % 4800 === 0 ? 1 : (i % 9600 === 2400 ? -0.6 : 0)),
+  };
+  // Sample-exact: the FreeMotion chain against a hand-built copy of today's graph, stereo (the right channel is the left,
+  // quieter and shifted, so a channel mix-up shows), export and preview. Returns the failures as sentences.
+  async function b3SameAsToday(fx, todayGraph, what) {
+    const bad = [];
+    for (const k of Object.keys(B3_SIGNALS)) {
+      const sig = (t, i, c) => c ? 0.6 * B3_SIGNALS[k]((i + 777) / B3.SR, i + 777) : B3_SIGNALS[k](t, i);
+      const ref = await b3Render(todayGraph, sig, 1, { chans: 2 });
+      for (const live of [false, true]) {
+        const got = await b3Render(fx, sig, 1, { chans: 2, live: live });
+        let diff = 0, worst = 0;
+        for (let c = 0; c < 2; c++) for (let i = 0; i < ref[c].length; i++) if (ref[c][i] !== got[c][i]) { diff++; worst = Math.max(worst, Math.abs(ref[c][i] - got[c][i])); }
+        if (diff) bad.push(what + ' on ' + k + ' (' + (live ? 'preview' : 'export') + '): ' + diff + ' samples differ from today, up to ' + worst.toExponential(2));
+      }
+    }
+    return bad;
+  }
+  // The open effect row in the Audio effects panel of a fresh song (hbAudScene), with `insts` on it and `openIdx` open.
+  async function b3OpenAudioFx(insts, openIdx) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const song = await hbAudScene([], 6);
+    insts.forEach((f, i) => { f._expanded = i === openIdx; });
+    FM.layerById(FM.scene, song.id).audioFx = insts;
+    FM.refreshAll(); FM.selectLayer(song.id); await sleep(200);
+    FM.inspector.openCategory('audiofx'); await sleep(500);
+    return song;
+  }
+  function b3RowsOfOpen() {
+    const out = {};
+    [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-row')).forEach(r => {
+      const l = r.querySelector('.fx-scrub-label'), v = r.querySelector('.fx-scrub-val');
+      if (l) out[l.textContent.trim()] = { row: r, val: v ? v.value : null };
+    });
+    return out;
+  }
+  function b3InsidePanel(row, what) {
+    const r = row.getBoundingClientRect(), pr = document.getElementById('inspector-panel').getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0) || r.left < pr.left - 1 || r.right > pr.right + 1) throw new Error('the ' + what + ' row is at ' + Math.round(r.left) + '-' + Math.round(r.right) + ' px in a panel at ' + Math.round(pr.left) + '-' + Math.round(pr.right) + ' px (window ' + window.innerWidth + ')');
+  }
+
+  /* 3.7 — OUTPUT. A trailing gain after everything (and after the Mix blend). MEASURED at 7bbeb5bc: an `output` key is
+     ignored — a 0.05 sine comes out at the same level with output -6 as without it. Built: -6.000 dB in both paths. */
+  test('482 3.7 Compressor - Output turns the whole sound up or down, and a saved Compressor sounds exactly as it did', { item: '482', budgetMs: 90000 }, async function () {
+    const reg = FM.audioFxRegistry, inst = reg.makeInstance('compressor');
+    if (!inst || inst.params.output !== 0 || inst.params.mix !== 1) throw new Error('a new Compressor has params ' + JSON.stringify(inst && inst.params) + ' - no Output 0 dB and Mix 1');
+    const old = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { threshold: -30, ratio: 6, attack: 0.005, release: 0.2, knee: 12 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.output !== 0 || op.mix !== 1) throw new Error('a Compressor saved before Output and Mix existed opens with output ' + op.output + ' and mix ' + op.mix + ' - it would change how a saved project sounds');
+    const kept = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { output: -7.5, mix: 0.4 } }] }];
+    FM.storage._sanitizeLayers(kept);
+    if (kept[0].audioFx[0].params.output !== -7.5 || kept[0].audioFx[0].params.mix !== 0.4) throw new Error('a saved Output -7.5 / Mix 0.4 reads back as ' + JSON.stringify(kept[0].audioFx[0].params));
+    // CONTROL: the default IS today's Compressor, sample for sample (one DynamicsCompressorNode with the same five numbers).
+    const P = { threshold: -30, ratio: 6, attack: 0.005, release: 0.2, knee: 12 };
+    const today = oac => { const c = oac.createDynamicsCompressor(); Object.keys(P).forEach(k => c[k].setValueAtTime(P[k], 0)); return { input: c, output: c }; };
+    const same = await b3SameAsToday([{ type: 'compressor', enabled: true, params: op }], today, 'a saved Compressor');
+    if (same.length) throw new Error('CONTROL: a Compressor at Output 0 dB and Mix 1 is not today’s sound - ' + same.join('; '));
+    const cmp = p => [{ type: 'compressor', enabled: true, params: Object.assign(reg.makeInstance('compressor').params, p) }];
+    const quiet = b3Sine(0.05), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const base = b3Rms(await b3Render(cmp({}), quiet, 1, { live: live }), 0.5, 1);
+      for (const o of [-6, 6, -24]) {
+        const d = b3Db(b3Rms(await b3Render(cmp({ output: o }), quiet, 1, { live: live }), 0.5, 1) / base);
+        if (Math.abs(d - o) > 0.2) bad.push('Output ' + o + ' dB moves a quiet sine by ' + d.toFixed(2) + ' dB in the ' + path);
+      }
+    }
+    // Keyframed: 0 → -12 dB over the first second, then held.
+    const kf = await b3Render(cmp({ output: { kf: [{ t: 0, v: 0 }, { t: 1, v: -12 }, { t: 2, v: -12 }] } }), quiet, 2);
+    const flat = await b3Render(cmp({}), quiet, 2);
+    const end = b3Db(b3Rms(kf, 1.4, 1.9) / b3Rms(flat, 1.4, 1.9)), start = b3Db(b3Rms(kf, 0.05, 0.15) / b3Rms(flat, 0.05, 0.15));
+    if (Math.abs(end + 12) > 0.3 || start < -2.5) bad.push('Output keyframed from 0 to -12 dB reads ' + start.toFixed(2) + ' dB at the start and ' + end.toFixed(2) + ' dB at the end');
+    if (bad.length) throw new Error('the Compressor has no working Output: ' + bad.join('; '));
+    // ON SCREEN: Output and Mix rows in the open Compressor, inside the panel, at 0.0dB and 1.00.
+    const saved = FM.scene, sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      await b3OpenAudioFx([reg.makeInstance('compressor')], 0);
+      const rows = b3RowsOfOpen();
+      if (!rows.Output || !rows.Mix) throw new Error('the open Compressor shows ' + Object.keys(rows).join(', ') + ' - no Output or no Mix');
+      b3InsidePanel(rows.Output.row, 'Output'); b3InsidePanel(rows.Mix.row, 'Mix');
+      if (rows.Output.val !== '0.0dB' || rows.Mix.val !== '1.00') throw new Error('Output reads ' + rows.Output.val + ' and Mix ' + rows.Mix.val + ', not 0.0dB and 1.00');
+    } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} await sleep(50); }
+  });
+
+  /* 3.7 — MIX (parallel compression). The untouched copy has to wait for the squashed one: a DynamicsCompressorNode's output
+     is its input floor(0.006 x rate) samples late (MEASURED: 288 at 48 kHz, 264 at 44.1), and a blend against an undelayed copy
+     is a comb filter. MEASURED at 7bbeb5bc: `mix` is ignored - Mix 0 renders the fully compressed sound. Built: Mix 0 is the
+     input, 288 samples late, to 3e-8; the squashed path correlates with the input at the same 288. */
+  test('482 3.7 Compressor - Mix blends the untouched sound back in, lined up with the squashed sound so it does not go hollow', { item: '482', budgetMs: 90000 }, async function () {
+    const reg = FM.audioFxRegistry;
+    const cmp = p => [{ type: 'compressor', enabled: true, params: Object.assign(reg.makeInstance('compressor').params, p) }];
+    const bad = [];
+    for (const sr of [48000, 44100]) {
+      const noise = b3Noise(7), L = Math.floor(0.006 * sr), n = sr;
+      for (const live of [false, true]) {
+        const dry = await b3Render(cmp({ threshold: -40, ratio: 12, mix: 0 }), noise, 1, { live: live, sr: sr });
+        let worst = 0; for (let i = L; i < n; i++) worst = Math.max(worst, Math.abs(dry[i] - noise(0, i - L)));
+        if (worst > 1e-5) bad.push('at ' + sr + ' Hz Mix 0 (' + (live ? 'preview' : 'export') + ') is up to ' + worst.toFixed(4) + ' away from the untouched sound ' + L + ' samples late - it is not the untouched sound');
+      }
+      // The squashed path runs L samples late too (ratio 1: nothing squashed, so the input is recognisable) - the two line up.
+      const wet = await b3Render(cmp({ ratio: 1, threshold: 0 }), noise, 1, { sr: sr });
+      let best = -Infinity, lag = -1;
+      for (let k = 0; k < 600; k++) { let s = 0; for (let i = 2000; i < 30000; i++) s += wet[i + k] * noise(0, i); if (s > best) { best = s; lag = k; } }
+      if (lag !== L) bad.push('at ' + sr + ' Hz the squashed sound is ' + lag + ' samples late and the untouched one ' + L + ' - blended, they comb-filter');
+    }
+    // A blend is the two, weighted: Mix 0.3 = 0.7 x Mix 0 + 0.3 x Mix 1.
+    const song = t => (t < 0.5 ? 0.9 : 0.05) * Math.sin(2 * Math.PI * 330 * t);
+    const P = { threshold: -40, ratio: 12, knee: 0 };
+    const m0 = await b3Render(cmp(Object.assign({ mix: 0 }, P)), song, 1), m1 = await b3Render(cmp(Object.assign({ mix: 1 }, P)), song, 1), m3 = await b3Render(cmp(Object.assign({ mix: 0.3 }, P)), song, 1);
+    let w3 = 0; for (let i = 0; i < m3.length; i++) w3 = Math.max(w3, Math.abs(m3[i] - (0.7 * m0[i] + 0.3 * m1[i])));
+    if (w3 > 1e-5) bad.push('Mix 0.3 is up to ' + w3.toFixed(4) + ' away from 70 percent untouched plus 30 percent squashed');
+    // CONTROL: the squash is real, so the blend is between two different sounds (a loud 0.9 sine held down by 12:1 at -40 dB,
+    // hard knee: MEASURED -3.93 dB untouched, -16.91 squashed).
+    const loud0 = b3Db(b3Rms(m0, 0.2, 0.45)), loud1 = b3Db(b3Rms(m1, 0.2, 0.45));
+    if (!(loud0 - loud1 > 10)) bad.push('CONTROL: Mix 1 and Mix 0 read ' + loud1.toFixed(1) + ' and ' + loud0.toFixed(1) + ' dB on the loud part - nothing was squashed, the blend proves nothing');
+    // Keyframed 1 → 0 over the first half second: the end is the untouched sound.
+    const kf = await b3Render(cmp(Object.assign({ mix: { kf: [{ t: 0, v: 1 }, { t: 0.5, v: 0 }, { t: 1, v: 0 }] } }, P)), song, 1);
+    let wk = 0; for (let i = Math.floor(0.6 * B3.SR); i < kf.length; i++) wk = Math.max(wk, Math.abs(kf[i] - m0[i]));
+    if (wk > 1e-4) bad.push('Mix keyframed from 1 to 0 is up to ' + wk.toFixed(4) + ' away from Mix 0 after the key');
+    if (bad.length) throw new Error('the Compressor has no working Mix: ' + bad.join('; '));
+  });
+
+  /* 3.7 — THE "TURNING DOWN" BAR. Live only: read from the playing chain's own DynamicsCompressorNode (.reduction). MEASURED
+     at 7bbeb5bc: the open Compressor row has no meter at all. Driven through the real Hear button on a song that is loud (0.8)
+     for its first 2 s, with the threshold at -40 dB. CONTROL: idle before Hear (nothing is playing, so nothing to show), and a
+     Gain row open instead has no bar. */
+  test('482 3.7 Compressor - the open row shows how far it is turning the sound down while you hear it', { item: '482', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const reg = FM.audioFxRegistry, saved = FM.scene;
+    try {
+      const c = reg.makeInstance('compressor'); c.params.threshold = -40;
+      const song = await b3OpenAudioFx([reg.makeInstance('gain'), c], 1);
+      const meter = () => document.querySelector('#inspector-panel .fx-row.fx-open .afx-gr-row');
+      let m = meter();
+      if (!m) throw new Error('the open Compressor row has no Turning down bar (rows: ' + Object.keys(b3RowsOfOpen()).join(', ') + ')');
+      b3InsidePanel(m, 'Turning down');
+      const lab = m.querySelector('.afx-gr-label'), firstSlider = b3RowsOfOpen().Threshold;
+      if (!lab || lab.textContent.trim() !== 'Turning down') throw new Error('the bar is labelled ' + JSON.stringify(lab && lab.textContent));
+      if (firstSlider && Math.abs(lab.getBoundingClientRect().left - firstSlider.row.querySelector('.fx-scrub-label').getBoundingClientRect().left) > 2) throw new Error('the bar’s name sits at ' + Math.round(lab.getBoundingClientRect().left) + ' px and the slider names at ' + Math.round(firstSlider.row.querySelector('.fx-scrub-label').getBoundingClientRect().left) + ' px');
+      if (!m.classList.contains('idle')) throw new Error('CONTROL: the bar is live before anything plays (data-db ' + m.dataset.db + ')');
+      const h0 = m.getBoundingClientRect().height;
+      attached(document.querySelector('#inspector-panel .fx-row.fx-open .fx-hear'), 'the Hear button of the open Compressor').click();
+      let db = null, fill = 0, shownDb = null;
+      for (let i = 0; i < 40; i++) {
+        await sleep(80);
+        m = meter();
+        if (m && !m.classList.contains('idle') && parseFloat(m.dataset.db) < -3) { shownDb = parseFloat(m.dataset.db); fill = parseFloat(m.querySelector('.afx-gr-fill').style.width); db = FM.audioFxLive.reductionOf(song, c); break; }
+      }
+      if (!FM.audioFxLive.auditioning()) throw new Error('setup: Hear did not start an audition, so nothing below is measured');
+      if (shownDb == null) throw new Error('3 s after Hear on a song far over a -40 dB threshold the bar still reads ' + (m ? (m.classList.contains('idle') ? 'idle' : m.dataset.db + ' dB') : 'nothing') + ' (the node says ' + FM.audioFxLive.reductionOf(song, c) + ' dB)');
+      if (!(db < -1) || Math.abs(shownDb - db) > 6) throw new Error('the bar reads ' + shownDb + ' dB while the Compressor node reports ' + db + ' dB');
+      if (!(fill > 10)) throw new Error('the bar is filled ' + fill + ' percent while it reads ' + shownDb + ' dB');
+      if (Math.abs(m.getBoundingClientRect().height - h0) > 1) throw new Error('the bar row changed height from ' + h0 + ' to ' + m.getBoundingClientRect().height + ' px when the sound started - every slider under it moved');
+      attached(document.querySelector('#inspector-panel .fx-row.fx-open .fx-hear'), 'the Stop button of the open Compressor').click();
+      await sleep(700);
+      m = meter();
+      if (!m || !m.classList.contains('idle')) throw new Error('0.7 s after Stop the bar still reads ' + (m && m.dataset.db) + ' dB');
+      // CONTROL: the Gain row, opened instead, has no bar.
+      FM.layerById(FM.scene, song.id).audioFx.forEach((f, i) => { f._expanded = i === 0; });
+      FM.inspector.refresh(); await sleep(300);
+      if (!document.querySelector('#inspector-panel .fx-row.fx-open')) throw new Error('setup: the Gain row did not open');
+      if (meter()) throw new Error('an open Gain effect shows a Turning down bar');
+    } finally {
+      try { FM.audioFxLive.stopAudition(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} await sleep(50);
+    }
+  });
+
+  /* 3.8 — LIMITER: INPUT GAIN AND RELEASE. MEASURED at 7bbeb5bc: both keys ignored - a -20 dBFS sine leaves at -20.00 with
+     input 12, and release 1 s recovers from a burst exactly as fast as 0.05. Built: input 12 → -8.00 dBFS; input 24 → -0.61
+     (held at the -1 ceiling), and -5.18 into a -6 ceiling (10 dB over a 20:1 knee lands 0.5 over, plus the detector); 60 ms
+     after a burst stops, release 0.05 has let go (-20.0) and release 1 s still holds -28.6. */
+  test('482 3.8 Limiter - Input gain pushes the sound into the ceiling, Release sets how fast it lets go, and a saved Limiter sounds exactly as it did', { item: '482', budgetMs: 90000 }, async function () {
+    const reg = FM.audioFxRegistry, inst = reg.makeInstance('limiter');
+    if (!inst || inst.params.input !== 0 || inst.params.release !== 0.05) throw new Error('a new Limiter has params ' + JSON.stringify(inst && inst.params) + ' - no Input gain 0 dB and Release 0.05 s');
+    const old = [{ type: 'video', audioFx: [{ type: 'limiter', enabled: true, params: { ceiling: -9 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.input !== 0 || op.release !== 0.05) throw new Error('a Limiter saved before Input gain and Release existed opens with ' + JSON.stringify(op));
+    // CONTROL: the default IS today's Limiter, sample for sample (20:1 hard knee, 1 ms / 50 ms, and the makeup cancelled).
+    const today = oac => { const c = oac.createDynamicsCompressor(); c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05; c.threshold.value = -9; const g = oac.createGain(); g.gain.value = FM._hardKneeMakeupCancel(-9, 20); c.connect(g); return { input: c, output: g }; };
+    const same = await b3SameAsToday([{ type: 'limiter', enabled: true, params: op }], today, 'a saved Limiter');
+    if (same.length) throw new Error('CONTROL: a Limiter at Input gain 0 and Release 0.05 is not today’s sound - ' + same.join('; '));
+    const lim = p => [{ type: 'limiter', enabled: true, params: Object.assign(reg.makeInstance('limiter').params, p) }];
+    const q = b3Sine(Math.pow(10, -20 / 20)), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const at = async p => b3Db(b3Peak(await b3Render(lim(p), q, 1, { live: live }), 0.5, 1));
+      const i0 = await at({}), i12 = await at({ input: 12 }), i24 = await at({ input: 24 }), i24c = await at({ input: 24, ceiling: -6 });
+      if (Math.abs(i0 + 20) > 0.1) bad.push('CONTROL: a -20 dBFS sine leaves at ' + i0.toFixed(2) + ' dBFS with no Input gain (' + path + ')');
+      if (Math.abs(i12 + 8) > 0.2) bad.push('Input gain 12 dB brings a -20 dBFS sine out at ' + i12.toFixed(2) + ' dBFS, not -8 (' + path + ')');
+      if (!(i24 <= -0.3 && i24 >= -1.6)) bad.push('Input gain 24 dB pushes a -20 dBFS sine to ' + i24.toFixed(2) + ' dBFS - not held at the -1 dB ceiling (' + path + ')');
+      if (!(i24c <= -4.6 && i24c >= -6.6)) bad.push('Input gain 24 dB into a -6 dB ceiling peaks at ' + i24c.toFixed(2) + ' dBFS (' + path + ')');
+    }
+    // Release: full scale for 0.5 s, then -20 dBFS, under a -12 ceiling. 60-80 ms after the drop a short release has let go.
+    const burst = t => (t < 0.5 ? 1 : Math.pow(10, -20 / 20)) * Math.sin(2 * Math.PI * 1000 * t);
+    const after = async (rel, live) => b3Db(b3Peak(await b3Render(lim({ ceiling: -12, release: rel }), burst, 1.2, { live: live }), 0.56, 0.58));
+    for (const live of [false, true]) {
+      const fast = await after(0.05, live), slow = await after(1, live);
+      if (!(fast - slow > 5)) bad.push('60 ms after a burst the quiet part reads ' + fast.toFixed(2) + ' dBFS at Release 0.05 s and ' + slow.toFixed(2) + ' at 1 s (' + (live ? 'preview' : 'export') + ') - Release changes nothing');
+    }
+    const kf = await b3Render(lim({ input: { kf: [{ t: 0, v: 0 }, { t: 1, v: 12 }, { t: 2, v: 12 }] } }), q, 2);
+    const kEnd = b3Db(b3Peak(kf, 1.5, 1.9)), kStart = b3Db(b3Peak(kf, 0.02, 0.1));
+    if (Math.abs(kEnd + 8) > 0.3 || Math.abs(kStart + 20) > 1.5) bad.push('Input gain keyframed from 0 to 12 dB reads ' + kStart.toFixed(2) + ' dBFS at the start and ' + kEnd.toFixed(2) + ' at the end');
+    if (bad.length) throw new Error('the Limiter has no working Input gain / Release: ' + bad.join('; '));
+    const saved = FM.scene, sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      await b3OpenAudioFx([reg.makeInstance('limiter')], 0);
+      const rows = b3RowsOfOpen();
+      if (!rows['Input gain'] || !rows.Release || !rows.Ceiling) throw new Error('the open Limiter shows ' + Object.keys(rows).join(', ') + ' - no Input gain or no Release');
+      b3InsidePanel(rows['Input gain'].row, 'Input gain'); b3InsidePanel(rows.Release.row, 'Release');
+      if (rows['Input gain'].val !== '0.0dB' || rows.Release.val !== '0.05s') throw new Error('Input gain reads ' + rows['Input gain'].val + ' and Release ' + rows.Release.val + ', not 0.0dB and 0.05s');
+    } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} await sleep(50); }
+  });
+
+  /* 3.1 — THE ▶ OF A PLAYING SOUND BECOMES ■. Since #986 a tap on the playing row stops it, but its button still drew ▶ (only
+     the spoken label said Stop). MEASURED at 7bbeb5bc: the playing row's glyph is the 11 x 14 triangle, unchanged. Built:
+     an 11 x 11 square while it plays, on every copy of that sound (a starred sound sits in two rows) and on a row rebuilt
+     while it plays; the triangle again the moment it stops or another sound starts. */
+  test('482 3.1 Sound effects - the playing row shows a stop square, and goes back to a play triangle', { item: '482', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const favKey = 'fm.sfx.fav', savedFav = localStorage.getItem(favKey);
+    FM.sfx.open(); await sleep(400);
+    try {
+      const secs = r => parseFloat((r.querySelector('.sfx-dur') || {}).textContent);
+      const idOf = r => ((r.querySelector('.sfx-star') || {}).dataset || {}).sfxid;
+      const favs = FM.sfx.favs();
+      const long = [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => secs(r) >= 1.5 && idOf(r) && favs.indexOf(idOf(r)) < 0);
+      if (long.length < 2) throw new Error('setup: need two unstarred sounds of 1.5 s or more');
+      const A = long[0], B = long[1], idA = idOf(A);
+      const shape = r => {
+        const g = r.querySelector('.sfx-play svg > *');
+        if (!g) return 'none';
+        const bb = g.getBBox();
+        if (Math.abs(bb.width - bb.height) < 0.5) return 'square';
+        if (bb.height - bb.width > 2) return 'triangle';
+        return 'other ' + bb.width.toFixed(1) + 'x' + bb.height.toFixed(1);
+      };
+      const tap = r => attached(r.querySelector('.sfx-play'), 'the play button of a sound row').click();
+      if (shape(A) !== 'triangle' || shape(B) !== 'triangle') throw new Error('CONTROL: before anything plays the buttons draw ' + shape(A) + ' and ' + shape(B) + ', not the play triangle');
+      tap(A); await sleep(120);
+      if (!A.classList.contains('playing')) throw new Error('CONTROL: tapping the play button did not light its row - nothing below is measured');
+      if (shape(A) !== 'square') throw new Error('the playing row still draws a ' + shape(A) + ' - the one button that stops the sound shows play');
+      if (shape(B) !== 'triangle') throw new Error('a row that is not playing draws a ' + shape(B));
+      tap(B); await sleep(120);
+      if (shape(A) !== 'triangle' || shape(B) !== 'square') throw new Error('after starting a second sound the first row draws a ' + shape(A) + ' and the second a ' + shape(B));
+      // Star B while it plays: the list is rebuilt and B sits in two rows (Favourites and its category) - both show the square.
+      attached(B.querySelector('.sfx-star'), 'the star of the playing row').click(); await sleep(150);
+      const idB = idOf(B), copies = [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => idOf(r) === idB);
+      if (copies.length !== 2) throw new Error('setup: after starring, the sound should appear twice - found ' + copies.length);
+      if (!copies.every(r => shape(r) === 'square')) throw new Error('rebuilt while it plays, the two rows of the playing sound draw ' + copies.map(shape).join(' and '));
+      tap(copies[0]); await sleep(120);
+      const after = [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => idOf(r) === idB);
+      if (FM.sfx.previewing() !== null) throw new Error('setup: the stop tap did not stop the sound');
+      if (!after.every(r => shape(r) === 'triangle')) throw new Error('after the sound was stopped its rows draw ' + after.map(shape).join(' and '));
+      const rowA = [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => idOf(r) === idA)[0];
+      if (shape(rowA) !== 'triangle') throw new Error('the first sound’s row draws a ' + shape(rowA) + ' after everything stopped');
+    } finally {
+      try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
+      try { if (savedFav === null) localStorage.removeItem(favKey); else localStorage.setItem(favKey, savedFav); } catch (e) {}
+      await sleep(150);
+    }
+  });
+
 })();

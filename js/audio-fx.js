@@ -223,6 +223,9 @@ window.FM = window.FM || {};
        * build every room it will need, and cross-fade between them with gains — and this is the hook
        * that hands it the window. Null for all thirty-odd other effects. */
       window: o.window || null,
+      /* The node a live meter reads (#482 polish 3.7: the Compressor's gain-reduction bar), or null. Read only by
+         the preview (buildAudioFxChain's meterOf); an export never looks at it. */
+      meter: o.meter || null,
       // Non-null ONLY when set(key, v) is exactly param(key).setValueAtTime(v) — a caller that schedules
       // onto a returned param must not be able to desync a pair (mix) or skip a conversion (gain's dB).
       param: function (key) { return (aps[key] && !xf[key]) ? aps[key] : null; },
@@ -681,17 +684,50 @@ window.FM = window.FM || {};
          IS the node's default, so every saved Compressor (which the sanitiser fills with def) sounds
          exactly as it always has. */
       P('knee', 'Knee', 0, 40, 0.5, 30, 'dB', true),
+      /* #482 polish 3.7 (his #966: "as much choice as possible"). Output is a plain gain at the very end, after
+         the blend; Mix blends the untouched sound back in under the squashed one (parallel compression: the
+         loud parts stay tamed, the quiet detail keeps its life). Both defs are exactly today's graph — Output
+         0 dB is a gain of 1 and Mix 1 puts the untouched path at 0, and x·1 + y·0 = x in floating point — so a
+         saved Compressor (the sanitiser fills a missing key with def) renders sample for sample as before. */
+      P('output', 'Output', -24, 24, 0.5, 0, 'dB', true),
+      MIX(1),
     ],
-    build: function (ctx) {
+    /* A live meter: the Compressor row in the Audio effects panel draws how far this node is turning the sound
+       down while the clip plays or is heard (inspector.js reductionMeter, read through audioFxLive.reductionOf). */
+    meter: 'reduction',
+    build: function (ctx, inst) {
       const s = shop(ctx);
+      const input = s.gain(1), out = s.gain(1);
       const c = s.comp();
-      return unit({ input: c, output: c, nodes: s.nodes, oscs: s.oscs, params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee } });
+      /* THE UNTOUCHED PATH WAITS FOR THE SQUASHED ONE. A DynamicsCompressorNode looks ahead: its output is its
+         input floor(0.006 × rate) samples late (MEASURED in the suite's Chrome by cross-correlation: 132 frames
+         at 22.05 kHz, 264 at 44.1, 288 at 48, 576 at 96 — the spec engine's fixed 6 ms pre-delay, the same code
+         in WebKit). Blended against an un-delayed copy, every Mix between 0 and 1 would be a comb filter — a
+         hollow, phasey sound with a notch every 167 Hz (1 / 6 ms). So the untouched copy is delayed by the same frames,
+         and the two line up. */
+      const lag = s.delay(0.05);
+      lag.delayTime.value = Math.floor(0.006 * ctx.sampleRate) / ctx.sampleRate;
+      const wd = wetDry(s, inst, 'mix', 1);
+      input.connect(c); c.connect(wd.wet); wd.wet.connect(out);
+      input.connect(lag); lag.connect(wd.dry); wd.dry.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: c,
+        params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee, output: out.gain },
+        xf: { output: dbToLin }, custom: { mix: wd.set } });
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
-    params: [P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true)],
+    params: [
+      P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true),
+      /* #482 polish 3.8. Input gain pushes the sound INTO the ceiling (louder, with the peaks pinned at it);
+         Release is how fast the limiter lets go after a peak (short = loud and pumping, long = smooth). Both
+         defs are today's graph: 0 dB is a gain of 1 in front of the node, and 0.05 s is the release it has
+         always had — so a saved Limiter renders sample for sample as before. */
+      P('input', 'Input gain', 0, 24, 0.5, 0, 'dB', true),
+      P('release', 'Release', 0.01, 1, 0.01, 0.05, 's', true),
+    ],
     build: function (ctx) {
       const s = shop(ctx);
+      const pre = s.gain(1);
       const c = s.comp();
       c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05;
       c.threshold.value = -1;
@@ -699,8 +735,9 @@ window.FM = window.FM || {};
       // drives the threshold AND this gain from one key, so a keyframed ceiling stays compensated at
       // every step: both are real AudioParams scheduled together.
       const trim = s.gain(hardKneeMakeupCancel(-1, 20));
-      c.connect(trim);
-      return unit({ input: c, output: trim, nodes: s.nodes, oscs: s.oscs,
+      pre.connect(c); c.connect(trim);
+      return unit({ input: pre, output: trim, nodes: s.nodes, oscs: s.oscs,
+        params: { input: pre.gain, release: c.release }, xf: { input: dbToLin },
         custom: { ceiling: multi([[c.threshold, null], [trim.gain, v => hardKneeMakeupCancel(v, 20)]]) } });
     },
   }, {
@@ -1262,6 +1299,12 @@ window.FM = window.FM || {};
             }
           }
         }
+      },
+      /* The meter node the effect instance `inst` built in THIS chain (#482 polish 3.7), or null — matched by
+         identity, the same way the live chain is tied to its instances (audio-fx-live.js chainIsCurrent). */
+      meterOf: function (inst) {
+        for (let i = 0; i < built.length; i++) if (built[i].inst === inst) return built[i].u.meter || null;
+        return null;
       },
       dispose: function () {
         built.forEach(b => { try { b.u.dispose(); } catch (e) {} });
