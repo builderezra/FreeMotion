@@ -34,8 +34,12 @@ window.FM = window.FM || {};
      Bumped to 5 by #482 polish batch 3 (sound): Echo / Delay gained Tone, Low cut and Tape wobble, Reverb gained Pre-delay,
      Tone, Low cut and Width, Pitch Shift gained Fine tune and Semitones now reaches ±24, and Bass & Treble and 3-Band EQ
      gained their corner controls — the first AUDIO keys, which the fingerprint now also hashes (an older build's audio
-     sanitiser would drop them). */
-  C.SCHEMA_REV = 5;
+     sanitiser would drop them).
+     Bumped to 6 by #482 polish batch 5 (grading depth): Highlights & Shadows gained Whites, Blacks, Tonal width, Local
+     radius and Colour correction; Teal & Orange gained Splits by, Protect skin, Balance and Keep brightness; Tint gained
+     Method and Range width; Duotone gained Blend; Gradient Map gained three colours, Reverse and Blend; Cross Process gained
+     a variant; Exposure gained Gamma and Work in. */
+  C.SCHEMA_REV = 6;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -234,7 +238,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 7632953804049090;   // #482 polish batch 3 (SCHEMA_REV 5): Echo, Reverb, Pitch Shift and the two EQs gained audio keys, and the audio registry is hashed now
+  C.SCHEMA_FP = 836365476955739;   // #482 polish batch 5 (SCHEMA_REV 6): eight grading effects gained controls
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *

@@ -89,6 +89,7 @@ window.FM = window.FM || {};
     ctx.strokeRect(mx, my, w - 2 * mx, h - 2 * my);   // title-safe 90%
     ctx.restore();
   }
+  let _frameSig = '';   // FM.adjNeedsFrame's answer at the last render ('' = nothing needs the whole frame)
   function render() {
     if (!ctx) return;
     /* THE PREVIEW ONLY (queue 549). Ezra: "when you go to the end of a layer you can't see it anymore…
@@ -110,6 +111,14 @@ window.FM = window.FM || {};
        while the keyboard is up — every other caption, and this one the moment he presses play, animates exactly as
        it exports. `_typingCue` lives for this one call: the exporter, thumbnails and the onion skin never see it. */
     FM._typingCue = (!FM.playing && FM.textEdit && FM.textEdit.typingCue) ? FM.textEdit.typingCue() : null;
+    /* THE CROP DEPENDS ON THE SCENE TOO (#482 5.1 review): previewCrop / previewScale ask FM.adjNeedsFrame, and nothing
+       re-measures the canvas when an effect changes — only a zoom, a pan or a resize did. So giving an adjustment layer a
+       Local radius while zoomed in would have kept the slice until he next panned. When the answer changes, re-measure
+       (debounced, and a no-op when the canvas box comes out the same). */
+    if (FM.adjNeedsFrame && FM.refreshPreviewScale) {
+      const fr = FM.adjNeedsFrame(FM.scene), sig = fr ? 'f' + fr.maxScale : '';
+      if (sig !== _frameSig) { _frameSig = sig; FM.refreshPreviewScale(); }
+    }
     try { FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
     finally { FM._typingCue = null; }
     if (FM.onionSkin && !FM.playing) drawOnionSkin();
@@ -558,6 +567,9 @@ window.FM = window.FM || {};
     s = Math.max(floor, Math.min(4, s));                     // never above 4x
     const budget = Math.sqrt(MAX_PREVIEW_PX / (P.width * P.height));
     if (s > budget) s = Math.max(floor, budget);
+    // An adjustment layer's Local radius is exact only up to a scale (compositor FM.adjNeedsFrame, #482 5.1 review)
+    const fr = FM.adjNeedsFrame ? FM.adjNeedsFrame(FM.scene) : null;
+    if (fr && s > fr.maxScale) s = fr.maxScale;
     // While playing, the adaptive tier may take it BELOW project resolution — that's the trade, and
     // it's what keeps the playhead moving evenly on a phone.
     const q = playQualityFactor();
@@ -578,6 +590,9 @@ window.FM = window.FM || {};
     const stage = document.getElementById('stage');
     const zoom = (FM.viewport && FM.viewport.scale) || 1;
     if (!wrap || !stage || zoom < 1.35) return null;          // at low zoom the whole comp fits — no point
+    /* …and never while a shown adjustment layer carries Local radius or Dither (#482 5.1 review): graded on a slice, they
+       read surroundings the slice does not have and differ from the export (compositor FM.adjNeedsFrame says why). */
+    if (FM.adjNeedsFrame && FM.adjNeedsFrame(FM.scene)) return null;
     const wr = wrap.getBoundingClientRect(), sr = stage.getBoundingClientRect();
     if (!(wr.width > 0 && wr.height > 0 && sr.width > 0 && sr.height > 0)) return null;   // not laid out — never guess
     // getBoundingClientRect already includes the wrap's zoom/pan transform, so the visible slice is

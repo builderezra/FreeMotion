@@ -115493,7 +115493,10 @@
 
   /* THE NEW CONTROLS FIT THE PANEL at a phone's 390 px and at a 1280 px PC window — every new row on screen inside the
      inspector, its name whole, each option whole — and the rows another control switches off say so. */
-  async function panel482b(type, labels, gated) {
+  async function panel482b(type, labels, gated, opts) {
+    /* opts.boxOnLine (#482 5.2 review): each row's number box sits on its label's line, right of it. A label too long for
+       the 307-px PC inspector does not clip — it pushes the box onto a line of its own under the keyframe diamond and the
+       row grows from 76 to 109 px, which the checks below never saw. Opt-in: callers from before it are unchanged. */
     const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
     const rowOf = label => {
       const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label'));
@@ -115516,7 +115519,7 @@
       const panel = document.getElementById('inspector-panel').getBoundingClientRect();
       const tags = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-ovr-tag'));
       for (const tag of tags) {
-        const row = tag.closest('.fx-scrub-row, .fx-seg-row');
+        const row = tag.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row');   // a colour row can carry one too since #482 5.6 (Gradient Map's Midtones)
         row.scrollIntoView({ block: 'nearest' }); await sleep(20);
         const tb = tag.getBoundingClientRect(), rb = row.getBoundingClientRect();
         if (tb.left < rb.left - 1 || tb.right > rb.right + 1 || tb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1)
@@ -115539,6 +115542,12 @@
         const rr = r.row.getBoundingClientRect();
         if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
         if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+        if (opts && opts.boxOnLine) {
+          const box = r.row.querySelector('.fx-scrub-val');
+          if (!box) throw new Error(where + ': the ' + type + ' ' + label + ' row has no number box');
+          const bb = box.getBoundingClientRect(), lb = r.lab.getBoundingClientRect();
+          if (bb.top >= lb.bottom - 1 || bb.left < lb.right - 1) throw new Error(where + ': the ' + type + ' ' + label + ' number box sits at ' + Math.round(bb.left - rr.left) + ',' + Math.round(bb.top - rr.top) + ' in its row, off the label\'s line (label ' + Math.round(lb.left - rr.left) + '-' + Math.round(lb.right - rr.left) + ' wide, row ' + Math.round(rr.height) + ' px tall) - the name is too long for the panel');
+        }
         [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
           const br = b.getBoundingClientRect();
           if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
@@ -117115,5 +117124,994 @@
     if (!(C.SCHEMA_REV >= 5)) bad.push('SCHEMA_REV is ' + C.SCHEMA_REV + ' - the build that added the audio keys must not share a revision with the one before');
     if (bad.length) throw new Error(bad.join(' · ') + ' - two builds that disagree about these normalise the same project differently, and would be let into one session');
   });
+
+
+
+  /* ═══ #482 / #966 POLISH BATCH 5 — GRADING DEPTH ═══════════════════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 5
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md): 5.1 twenty colour effects on adjustment layers (building on #986
+   * C1), 5.2 Highlights & Shadows' Whites, Blacks, Tonal width, Local radius and Colour boost (answers C47: +Shadows
+   * lifted pure black to milky grey). Every hash below was captured on v17.20 (1403309a) BEFORE the first edit, with the
+   * polish-1 fixture (fix482) at three sizes: the export (240 wide, t 0.7), a half-size preview (120, t 1.3) and a
+   * phone-sized plate (67, t 0.5). Pictures: tools/design/482/polish5. */
+  function shots4825(layers) {
+    return [[240, 0.7], [120, 1.3], [67, 0.5]].map(([w, t]) => {
+      const cv = offscreen(w, Math.round(w * 3 / 4)), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  const ADJ4825 = ['exposure', 'gamma', 'temperature', 'vibrance', 'colorbalance', 'highlightsshadows', 'hslbands', 'channelremap', 'bleachbypass', 'tealorange',
+    'crossprocess', 'faded', 'gradientmap', 'colorize', 'thermal', 'spectralmap', 'palettemap', 'replacecolor', 'spotcolor', 'solarize'];
+  const HS4825 = { whites: 0, blacks: 0, width: 100, radius: 0, sat: 0 };
+
+  /* 5.1 — on v17.20 an adjustment layer refused all twenty ("Adjustment layers only do colour, blur & pixel grades"), and a
+     library filter landed on one with these ingredients dropped (#986 C52: Teal & Orange kept 2 of its 4). They are point
+     ops in PIXEL_FX, so the adjustment path hands its snapshot to the very kernel the clip runs: over a clip that fills the
+     frame the two pictures must be the SAME BYTES, at the export and on a half-size preview. MEASURED after the change: 0
+     bytes differ for all twenty at both sizes, and every one moves at least 4,800 channel values off the ungraded frame. */
+  test('482 5.1 Adjustment layer - Teal & Orange, Exposure and 18 more colour effects grade everything below it exactly as they grade the clip itself, on the export and a half-size preview, and the frame-shaped effects stay off', { item: '482', budgetMs: 120000 }, function () {
+    const A0 = FM.makeLayer('adjustment', { name: 'probe' });
+    const refused = ADJ4825.filter(ty => !FM.fxRegistry.supportsLayer(ty, A0));
+    if (refused.length) throw new Error('an adjustment layer still refuses ' + refused.length + ' colour effects: ' + refused.join(', ') + ' - he picks Teal & Orange for an adjustment layer and is told it only does colour grades');
+    const PA = FM._FX_TABLES && FM._FX_TABLES.PIXEL_ADJ;
+    const unrun = ADJ4825.filter(ty => !(PA && PA[ty]));
+    if (unrun.length) throw new Error('the adjustment path does not run ' + unrun.join(', ') + ' (not in PIXEL_ADJ) - added, and then nothing happens');
+    /* The seven drawn from WHERE a pixel sits stay off until they are handed the frame's geometry (queue 690). */
+    const STAY = ['vignette', 'gradientoverlay', 'lightleak', 'filmgrain', 'nightvision', 'dither', 'fourcolor'];
+    const leaked = STAY.filter(ty => FM.fxRegistry.supportsLayer(ty, A0) || (PA && PA[ty]));
+    if (leaked.length) throw new Error(leaked.join(', ') + ' became adjustment-layer effects - they are drawn from where a pixel sits, and a zoomed preview hands an adjustment layer only the slice on screen');
+    const PW = 240, PH = 180, tex = offscreen(PW, PH), tc = tex.getContext('2d'), ti = tc.createImageData(PW, PH);
+    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) { const i = (y * PW + x) * 4; ti.data[i] = (x * 255 / (PW - 1)) | 0; ti.data[i + 1] = (y * 255 / (PH - 1)) | 0; ti.data[i + 2] = (x * 7 + y * 13) % 256; ti.data[i + 3] = 255; }
+    tc.putImageData(ti, 0, 0);
+    const had = FM.media.get('_4825adj');
+    FM.media.set('_4825adj', { kind: 'image', el: tex, width: PW, height: PH, duration: 0 });
+    const clip = fx => { const L = FM.makeLayer('image', { x: PW / 2, y: PH / 2, start: 0, duration: 4 }); L.id = '_4825adj'; L.start = 0; L.duration = 4; L.transform.scale = 1.1; L.effects = fx ? [fx] : []; return L; };   // 1.1: every pixel of the frame is the clip's
+    const adjOf = effs => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = effs; return A; };
+    const shot = (layers, rs) => {
+      const c = offscreen(Math.round(PW * rs), Math.round(PH * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, 0.5);
+      return g.getImageData(0, 0, c.width, c.height).data;
+    };
+    const vs = (a, b) => { let mx = 0, n = 0; for (let i = 0; i < a.length; i++) { if ((i & 3) === 3) continue; const d = Math.abs(a[i] - b[i]); if (d) n++; if (d > mx) mx = d; } return { mx: mx, n: n }; };
+    const moved = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if ((i & 3) !== 3 && Math.abs(a[i] - b[i]) > 3) n++; return n; };
+    const bad = [];
+    try {
+      const cases = ADJ4825.map(ty => [ty, () => FM.fxRegistry.makeInstance(ty)]);
+      // …and a neighbourhood grade: Highlights & Shadows with Local radius and every new control, which reads around each pixel
+      cases.push(['highlightsshadows with Local radius 30', () => { const e = FM.fxRegistry.makeInstance('highlightsshadows'); Object.assign(e.params, { shadows: 70, radius: 30, width: 70, whites: -40, blacks: 30, sat: 40 }); return e; }]);
+      for (const rs of [1, 0.5]) {
+        const none = shot([clip()], rs);
+        for (const [name, mk] of cases) {
+          const own = shot([clip(mk())], rs), adj = shot([adjOf([mk()]), clip()], rs);
+          const mv = moved(own, none);
+          if (mv < 1000) throw new Error('CONTROL at scale ' + rs + ': ' + name + ' on the clip itself moves only ' + mv + ' channel values - this fixture cannot tell a grade from none');
+          const d = vs(adj, own);
+          if (d.n) bad.push(name + ' at scale ' + rs + ': on an adjustment layer it differs from the same effect on the clip in ' + d.n + ' channel values (by up to ' + d.mx + ')' + (moved(adj, none) === 0 ? ' - it graded nothing at all' : ''));
+        }
+      }
+      /* …inside a filter on the adjustment layer (#986 C1's path), and through the Filters tab's own fitting (C52). */
+      const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); box.effects = [FM.fxRegistry.makeInstance('tealorange')];
+      const inBox = shot([adjOf([box]), clip()], 1), direct = shot([adjOf([FM.fxRegistry.makeInstance('tealorange')]), clip()], 1);
+      const db = vs(inBox, direct);
+      if (db.n) bad.push('Teal & Orange inside a filter on an adjustment layer differs from Teal & Orange placed directly in ' + db.n + ' channel values');
+      const fitted = FM.fxRegistry.fitToLayer(FM.filters.makeInstance('tealorange'), A0);
+      const kept = ((fitted && fitted.effects) || []).map(k => k.type);
+      if (kept.indexOf('tealorange') < 0) bad.push('the Teal & Orange filter lands on an adjustment layer as [' + kept.join(', ') + '] - its own Teal & Orange is still dropped');
+    } finally { if (had) FM.media.set('_4825adj', had); else FM.media.remove('_4825adj'); }
+    /* What an adjustment layer could already do draws exactly as on v17.20. */
+    const HEAD_ADJ = { posterize: '6cdee479/c797f115/14278b23', tint: '88a82fbb/9517c0d0/03a55847', threshold: '6f2d2214/3df5b1d5/276281bd', duotone: '33379941/20cd2e5c/507aa416',
+      rgbsplit: '4e4dc449/e8deba7e/2c3c158c', levels: 'ea9b97e7/aecfa9ae/b9a7e733', pixelate: '9266b085/6fa13505/59e0a8ee', brightness: '331e1eb1/4820da1b/ce038b1c',
+      saturate: 'aa6e175c/864297b9/82cee017', grayscale: 'ea4c0ca3/46e66bbc/299ab456' };
+    const tex2 = fix482(), ids = [];
+    try {
+      Object.keys(HEAD_ADJ).forEach(ty => {
+        const L = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex2, width: 200, height: 150 }); ids.push(L.id);
+        const got = shots4825([adjOf([FM.fxRegistry.makeInstance(ty)]), L]);
+        if (got !== HEAD_ADJ[ty]) bad.push('an adjustment layer carrying ' + ty + ' draws ' + got + ', not v17.20\'s ' + HEAD_ADJ[ty]);
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  /* 5.2 — THE DEFAULTS ARE THE OLD CURVE. 17 library filters carry Highlights & Shadows and every one gets the new keys from
+     makeInstance, so a default that moved a pixel would restyle all of them (and queue 675's distance test). Pinned against
+     v17.20 at three sizes: new and saved instances on a clip and a shape, a keyframed Shadows, the kernel itself on a buffer
+     with transparent, half-transparent and opaque rows, and the 17 filters. */
+  test('482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour boost are in the catalogue at defaults that draw the old curve byte for byte as on v17.20, and the 17 library filters built on it do not move', { item: '482', budgetMs: 120000 }, function () {
+    const ps = FM.fxRegistry.paramsOf('highlightsshadows') || [], inst = FM.fxRegistry.makeInstance('highlightsshadows');
+    const LABEL = { whites: 'Whites', blacks: 'Blacks', width: 'Tonal width', radius: 'Local radius', sat: 'Colour boost' };
+    Object.keys(HS4825).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = HS4825[k];
+      if (!pd) throw new Error('Highlights & Shadows has no ' + LABEL[k] + ' (' + k + ') control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.label !== LABEL[k]) throw new Error('the ' + k + ' control is labelled ' + JSON.stringify(pd.label) + ', not ' + LABEL[k]);
+      if (pd.default !== want) throw new Error('Highlights & Shadows ' + LABEL[k] + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old curve');
+      if (inst.params[k] !== want) throw new Error('a new Highlights & Shadows gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue('highlightsshadows', k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved Highlights & Shadows would change the first time it drew');
+    });
+    if ((FM._pxParamKeys('highlightsshadows') || []).indexOf('radius') < 0) throw new Error('Local radius is not a px control, so a reduced preview would judge each area over 3.5x the export\'s reach');
+    /* a saved value survives the load sanitiser */
+    const SET = { highlights: -10, shadows: 30, whites: -35, blacks: 20, width: 40, radius: 60, sat: 45 };
+    const lay = [{ id: 'l4825', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'highlightsshadows', enabled: true, params: Object.assign({}, SET) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === 'highlightsshadows')[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole Highlights & Shadows');
+    Object.keys(SET).forEach(k => { if (got.params[k] !== SET[k]) throw new Error('a saved Highlights & Shadows ' + k + ' of ' + SET[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    /* THE PICTURES, against v17.20. */
+    const HEAD = { 'new/image': 'fe509255/bd92cb80/e307f9f7', 'saved-25-45/image': '7c05cead/1d2da996/02c04141', 'empty/image': 'fe509255/bd92cb80/e307f9f7', 'kf/image': '36fd608c/d33765cf/b7a51eb1',
+      'new/shape': 'c1dcf9ef/b99d1828/227036ab', 'saved-25-45/shape': 'bff54164/491fd283/9abfab2d', 'empty/shape': 'c1dcf9ef/b99d1828/227036ab', 'kf/shape': '906a659a/c51b1033/272d6e20' };
+    const KERN = { '-40/50': 'ed110990', '-25/-45': '560fb8a6', '30/-30': 'b4ef388a', '100/100': 'f406986c', '-100/-100': '194984b4', '0/0': '97df3dc5', '-8/14': 'de520e6f' };
+    const FLT = { blackout: '47650b5d/85d01e92/25d2b458', bloodline: 'a37b429d/b263bf4f/c41bf6f5', copperplate: 'e615f9ed/dad40cf8/f68cbe73', desert: 'd3ae8c56/4be4b22e/713fe7de',
+      fog: 'a782a9c4/9d1a16e7/26c6bf92', infrared: 'f130bcec/fbfe26ed/01d6988c', ink: '33db7275/294ba8d1/bf7c7bef', lowkey: 'df424918/5e2981c7/19044a35', matte: 'badc4502/b215d215/dc3862c0',
+      midnight: '91d88f6d/33e67930/15606c13', noir: '8f65ef53/bb24bfcb/ed9c6f3a', platinum: 'aff4ae77/33607f4f/fdae3e52', poppy: 'e816a502/03770590/c05970c3', silver: 'dacb5546/7d6000f3/849201e5',
+      technicolor: 'bb3ee832/a1d09dff/0cb1eda6', tropic: '63da082f/7f7f98aa/b170001a', whiteout: '6556ce3e/5a6bebdb/0a38b46d' };
+    const withHS = FM.filters.all().filter(f => { const b = FM.filters.makeInstance(f.id); return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();
+    if (withHS.join(',') !== Object.keys(FLT).sort().join(',')) throw new Error('setup: the library filters carrying Highlights & Shadows are now ' + withHS.join(', ') + ' - re-capture the hashes on the build before the change');
+    const tex = fix482(), ids = [], moved = [];
+    const L = (kind, eff) => {
+      let l;
+      if (kind === 'image') { l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(l.id); }
+      else l = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 });
+      l.start = 0; l.duration = 4; l.effects = eff ? [eff] : []; return l;
+    };
+    const raw = params => ({ type: 'highlightsshadows', enabled: true, params: params });
+    try {
+      ['image', 'shape'].forEach(kind => {
+        [['new', () => FM.fxRegistry.makeInstance('highlightsshadows')], ['saved-25-45', () => raw({ highlights: -25, shadows: -45 })], ['empty', () => raw({})],
+         ['kf', () => raw({ highlights: 30, shadows: { kf: [{ t: 0, v: -60 }, { t: 2, v: 80 }] } })]].forEach(([n, mk]) => {
+          const h = shots4825([L(kind, mk())]);
+          if (h !== HEAD[n + '/' + kind]) moved.push('a ' + n + ' Highlights & Shadows on a ' + kind + ' ' + HEAD[n + '/' + kind] + ' -> ' + h);
+        });
+      });
+      Object.keys(FLT).forEach(id => { const h = shots4825([L('image', FM.filters.makeInstance(id))]); if (h !== FLT[id]) moved.push('the ' + id + ' filter ' + FLT[id] + ' -> ' + h); });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    const K = FM._FX_TABLES.PIXEL_FX.highlightsshadows, W = 256, H = 40;
+    Object.keys(KERN).forEach(key => {
+      const [h, s] = key.split('/').map(Number), a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; a[i] = x; a[i + 1] = (x * 3 + y * 7) & 255; a[i + 2] = 255 - x; a[i + 3] = y < 4 ? 0 : (y < 8 ? 128 : 255); }
+      K(a, W, H, { highlights: h, shadows: s }, 0.5);
+      let hh = 0x811c9dc5 >>> 0; for (let i = 0; i < a.length; i++) { hh ^= a[i]; hh = Math.imul(hh, 16777619) >>> 0; }
+      const hx = ('00000000' + hh.toString(16)).slice(-8);
+      if (hx !== KERN[key]) moved.push('the kernel at Highlights ' + h + ' / Shadows ' + s + ' ' + KERN[key] + ' -> ' + hx);
+    });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  /* 5.2 — WHAT THE NEW CONTROLS DO. MEASURED on v17.20: Shadows +50 lifts pure black to 60/60/60 (C47), and no key but
+     Highlights and Shadows is read. After: with Local radius 40, black stays 0 while a dark grey of 40 opens to 61. */
+  test('482 5.2 Highlights & Shadows - Local radius keeps pure black black under +50 Shadows and still opens a dark grey up, Tonal width spares the mid-tones without reversing a ramp, Whites and Blacks move only their own ends, Colour boost puts back the colour a lift washed out, and the preview matches the export', { item: '482', budgetMs: 120000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.highlightsshadows;
+    if (!K) throw new Error('the Highlights & Shadows kernel is not reachable');
+    const base = Object.assign({}, FM.fxRegistry.makeInstance('highlightsshadows').params, { highlights: 0 });
+    const bad = [];
+    /* 1. C47. A frame a third pure black, a third dark grey (40) and a third light (160). */
+    const W = 300, H = 100;
+    const strip = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = x < 100 ? 0 : (x < 200 ? 40 : 160); a[i] = a[i + 1] = a[i + 2] = v; a[i + 3] = 255; } return a; };
+    const lv = (over) => { const a = strip(); K(a, W, H, Object.assign({}, base, over), 0); return { black: a[(50 * W + 50) * 4], dark: a[(50 * W + 150) * 4] }; };
+    const glob = lv({ shadows: 50 }), loc = lv({ shadows: 50, radius: 40 });
+    if (!(glob.black >= 55)) throw new Error('CONTROL: the whole-picture curve lifts pure black to ' + glob.black + ', not about 60 - the fixture does not show C47');
+    if (loc.black > 5) bad.push('Shadows +50 with Local radius 40 lifts pure black to ' + loc.black + ' (the whole-picture curve: ' + glob.black + ') - the blacks still go milky');
+    if (!(loc.dark >= 55)) bad.push('Shadows +50 with Local radius 40 leaves a dark grey of 40 at ' + loc.dark + ' - it no longer opens the shadows up');
+    /* 2. TONAL WIDTH, on a 0..255 ramp. */
+    const ramp = over => { const a = new Uint8ClampedArray(256 * 4); for (let v = 0; v < 256; v++) { a[v * 4] = a[v * 4 + 1] = a[v * 4 + 2] = v; a[v * 4 + 3] = 255; } K(a, 256, 1, Object.assign({}, base, over), 0); return v => a[v * 4]; };
+    const wide = ramp({ shadows: 80 }), narrow = ramp({ shadows: 80, width: 30 });
+    if (!(wide(128) >= 133)) throw new Error('CONTROL: Shadows +80 at 100% moves a mid-grey 128 only to ' + wide(128));
+    if (Math.abs(narrow(128) - 128) > 1) bad.push('Shadows +80 at Tonal width 30% moves a mid-grey 128 to ' + narrow(128) + ' (at 100%: ' + wide(128) + ') - a narrow width should leave the mid-tones alone');
+    if (!(narrow(10) >= 25)) bad.push('Shadows +80 at Tonal width 30% lifts a deep shadow of 10 only to ' + narrow(10));
+    const rev = [];
+    [10, 30, 60, 100].forEach(wd => [-100, 100].forEach(sh => [-100, 100].forEach(hi => [[-100, 100], [100, -100], [0, 0]].forEach(([wt, bk]) => [0, 20].forEach(r => {
+      const f = ramp({ width: wd, shadows: sh, highlights: hi, whites: wt, blacks: bk, radius: r });
+      for (let v = 1; v < 256; v++) if (f(v) < f(v - 1)) { rev.push('width ' + wd + ' shadows ' + sh + ' highlights ' + hi + ' whites ' + wt + ' blacks ' + bk + ' radius ' + r + ': ' + (v - 1) + '->' + f(v - 1) + ' but ' + v + '->' + f(v)); break; }
+    })))));
+    if (rev.length) bad.push(rev.length + ' settings turn a darker grey brighter than a lighter one (the curve folds back): ' + rev.slice(0, 3).join('; '));
+    /* 3. WHITES AND BLACKS, each at its own end only. */
+    const wDn = ramp({ shadows: 0, whites: -100 }), wUp = ramp({ shadows: 0, whites: 100 }), bDn = ramp({ shadows: 0, blacks: -100 }), bUp = ramp({ shadows: 0, blacks: 100 });
+    if (!(wDn(255) <= 185)) bad.push('Whites -100 leaves white at ' + wDn(255));
+    if (!(wUp(200) >= 230)) bad.push('Whites +100 lifts 200 only to ' + wUp(200));
+    if (Math.abs(wDn(40) - 40) > 1 || Math.abs(wUp(40) - 40) > 1) bad.push('Whites moves a dark grey of 40 (to ' + wDn(40) + ' / ' + wUp(40) + ') - it should only touch the top end');
+    if (!(bDn(30) <= 5)) bad.push('Blacks -100 leaves 30 at ' + bDn(30));
+    if (!(bUp(0) >= 70)) bad.push('Blacks +100 lifts black only to ' + bUp(0));
+    if (Math.abs(bDn(220) - 220) > 1 || Math.abs(bUp(220) - 220) > 1) bad.push('Blacks moves a light grey of 220 (to ' + bDn(220) + ' / ' + bUp(220) + ') - it should only touch the bottom end');
+    /* 4. COLOUR CORRECTION — a dark red lifted by Shadows +80, and a light orange outside a 40% tonal width that must not move. */
+    const px = (rgb, over) => { const a = new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]); K(a, 1, 1, Object.assign({}, base, over), 0); return [a[0], a[1], a[2]]; };
+    const satOf = c => { const mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]); return mx ? (mx - mn) / mx : 0; };
+    const red = [90, 25, 20], s0 = satOf(px(red, { shadows: 80 })), sUp = satOf(px(red, { shadows: 80, sat: 100 })), sDn = satOf(px(red, { shadows: 80, sat: -100 }));
+    if (!(s0 < satOf(red) - 0.2)) throw new Error('CONTROL: Shadows +80 washes a dark red only from ' + satOf(red).toFixed(2) + ' to ' + s0.toFixed(2));
+    if (!(sUp >= s0 + 0.15)) bad.push('Colour boost +100 gives the lifted dark red a saturation of ' + sUp.toFixed(2) + ' against ' + s0.toFixed(2) + ' at 0 - the colour the lift washed out is not put back');
+    if (!(sDn <= 0.03)) bad.push('Colour boost -100 leaves the lifted dark red at a saturation of ' + sDn.toFixed(2) + ', not grey');
+    const orange = [250, 200, 60], o0 = px(orange, { shadows: 80, width: 40 }), oUp = px(orange, { shadows: 80, width: 40, sat: 100 });
+    if (o0.some((v, i) => Math.abs(v - orange[i]) > 1) || oUp.some((v, i) => Math.abs(v - o0[i]) > 1)) bad.push('Colour boost moves a light orange outside a 40% Shadows range (' + orange + ' -> ' + oUp + ') - it should touch only what Shadows and Highlights moved');
+    /* 5. THE CROPPED READBACK (#692) draws the full plate's picture to the byte with Local radius on: a 180x150 subject in a
+       1080x1920 plate, every control off its default. */
+    const PW = 1080, PH = 1920, big = new Uint8ClampedArray(PW * PH * 4);
+    for (let y = 900; y < 1050; y++) for (let x = 450; x < 630; x++) { const i = (y * PW + x) * 4; big[i] = (x * 3) & 255; big[i + 1] = (y * 5) & 255; big[i + 2] = ((x + y) * 2) & 255; big[i + 3] = (x < 452 || y < 902) ? 140 : 255; }
+    const ci = FM._cropIdentity('highlightsshadows', big, PW, PH, Object.assign({}, base, { radius: 30, shadows: 70, whites: -40, blacks: 30, sat: 50, width: 60 }), 0.3, 1);
+    if (!ci || ci.same !== true) bad.push('with Local radius 30 the cropped readback differs from the full plate in ' + (ci ? ci.diff : '?') + ' bytes - a layer would change as it moved');
+    else if (!(ci.area < ci.plate * 0.25)) bad.push('with Local radius 30 the crop covered ' + Math.round(ci.area * 100 / ci.plate) + '% of the plate');
+    /* 6. PREVIEW = EXPORT, through the renderer: a picture with a pure black block, a grey ramp and colour patches. */
+    const art = offscreen(320, 240), ax = art.getContext('2d'), gr = ax.createLinearGradient(0, 0, 320, 0);
+    gr.addColorStop(0, '#050505'); gr.addColorStop(0.5, '#404040'); gr.addColorStop(1, '#f0e0d0'); ax.fillStyle = gr; ax.fillRect(0, 0, 320, 240);
+    ax.fillStyle = '#000000'; ax.fillRect(40, 60, 60, 120); ax.fillStyle = '#c03020'; ax.fillRect(200, 40, 70, 70); ax.fillStyle = '#203060'; ax.fillRect(130, 140, 60, 80);
+    const had = FM.media.get('_4825hs');
+    FM.media.set('_4825hs', { kind: 'image', el: art, width: 320, height: 240, duration: 0 });
+    const shot = (rs, over, t) => {
+      const l = FM.makeLayer('image', { x: 160, y: 120, start: 0, duration: 4 }); l.id = '_4825hs'; l.start = 0; l.duration = 4;
+      const e = FM.fxRegistry.makeInstance('highlightsshadows'); Object.assign(e.params, over); l.effects = [e];
+      const c = offscreen(Math.round(320 * rs), Math.round(240 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      FM.renderScene(c.getContext('2d', { willReadFrequently: true }), { project: { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: [l], selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+      return c;
+    };
+    const pxAt = (c, x, y) => c.getContext('2d').getImageData(Math.round(x * c.width / 320), Math.round(y * c.height / 240), 1, 1).data;
+    try {
+      const LOC = { shadows: 70, highlights: -30, radius: 40 };
+      const ex = shot(1, LOC);
+      [0.5, 0.28].forEach(rs => {
+        const pv = shot(rs, LOC), s = offscreen(pv.width, pv.height), sg = s.getContext('2d', { willReadFrequently: true });
+        sg.imageSmoothingQuality = 'high'; sg.drawImage(ex, 0, 0, s.width, s.height);
+        const a = sg.getImageData(0, 0, s.width, s.height).data, b = pv.getContext('2d').getImageData(0, 0, s.width, s.height).data;
+        let sum = 0, n = 0; for (let i = 0; i < a.length; i += 4) for (let k = 0; k < 3; k++) { sum += Math.abs(a[i + k] - b[i + k]); n++; }
+        if (sum / n > (rs === 0.5 ? 2 : 3)) bad.push('with Local radius 40 the ' + rs + ' preview is ' + (sum / n).toFixed(2) + ' levels off the export on average - the preview judges a different area');
+        const blk = pxAt(pv, 70, 120)[0];
+        if (blk > 5) bad.push('on the ' + rs + ' preview, Local radius 40 lifts the black block to ' + blk);
+      });
+      if (pxAt(ex, 70, 120)[0] > 5) bad.push('in the export, Local radius 40 lifts the black block to ' + pxAt(ex, 70, 120)[0]);
+      /* stateless: the same moment twice is the same picture, and a keyframed radius is read at its moment */
+      const h1 = hash482(shot(1, LOC).getContext('2d'), ex), h2 = hash482(ex.getContext('2d'), ex);
+      if (h1 !== h2) bad.push('the same frame rendered twice with Local radius 40 differs (' + h1 + ' / ' + h2 + ')');
+      const kf = { shadows: 70, highlights: 0, radius: { kf: [{ t: 0, v: 0 }, { t: 2, v: 40 }] } };
+      const k0 = pxAt(shot(1, kf, 0), 70, 120)[0], k2 = pxAt(shot(1, kf, 2), 70, 120)[0];
+      if (!(k0 >= 50 && k2 <= 5)) bad.push('a Local radius keyframed from 0 to 40 reads the black block as ' + k0 + ' at 0 s and ' + k2 + ' at 2 s - not the whole-picture lift and then black');
+    } finally { if (had) FM.media.set('_4825hs', had); else FM.media.remove('_4825hs'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour boost fit the effect panel at 390 and 1280 px, each number box on its label line, and Local radius says what 0 means', { item: '482', budgetMs: 60000 }, async function () {
+    await panel482b('highlightsshadows', ['Highlights', 'Shadows', 'Whites', 'Blacks', 'Tonal width', 'Local radius', 'Colour boost'], [], { boxOnLine: true });
+    const reg = (FM.fxRegistry.paramsOf('highlightsshadows') || []).filter(p => p.key === 'radius')[0];
+    if (!reg || !/0 = whole picture/.test(reg.note || '') || !/black stays black/.test(reg.note || '')) throw new Error('Local radius carries no note saying 0 is the whole-picture curve and that above 0 black stays black (' + JSON.stringify(reg && reg.note) + ')');
+  });
+
+  /* ═══ #482 BATCH 5 — THE REVIEW'S FINDINGS (adjust) ═══════════════════════════════════════════════════════════════════
+   * 5.1 review, major: on a clip the CSS effects (Contrast, Saturation, Brightness…) are drawn into the layer BEFORE any
+   * pixel effect, whatever their row; on an adjustment layer the CSS half was the filter on the final blit, so it ran AFTER.
+   * MEASURED on the build, two photos: [Contrast 1.5, Exposure +1] 31 levels off the same stack on the clip (the grade is
+   * 49), [Saturation 2.2, Colour Balance] 20, [Brightness 1.3, Highlights & Shadows] 21; Infrared fitted to an adjustment
+   * layer 44-52 off its own ingredients on the clip. After: 0 bytes for every one, both photos. */
+  test('482 5.1 Adjustment layer - stacked with Contrast, Saturation or Brightness, a colour grade runs after them as on the clip, so the adjustment layer and the clip give the same bytes, and the Infrared filter fitted to one matches its ingredients on the clip', { item: '482', budgetMs: 120000 }, function () {
+    const PW = 240, PH = 180, tex = offscreen(PW, PH), tc = tex.getContext('2d'), ti = tc.createImageData(PW, PH);
+    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {   // smooth, photo-like: every channel moving, nothing clipped
+      const i = (y * PW + x) * 4;
+      ti.data[i] = 128 + 110 * Math.sin(x / 23 + y / 41); ti.data[i + 1] = 120 + 100 * Math.cos(y / 19 - x / 53); ti.data[i + 2] = 30 + 190 * (x + y) / (PW + PH); ti.data[i + 3] = 255;
+    }
+    tc.putImageData(ti, 0, 0);
+    const had = FM.media.get('_4825ord');
+    FM.media.set('_4825ord', { kind: 'image', el: tex, width: PW, height: PH, duration: 0 });
+    const fx = (ty, set) => { const e = FM.fxRegistry.makeInstance(ty); Object.assign(e.params, set || {}); return e; };
+    const clip = effs => { const L = FM.makeLayer('image', { x: PW / 2, y: PH / 2, start: 0, duration: 4 }); L.id = '_4825ord'; L.start = 0; L.duration = 4; L.effects = effs || []; return L; };   // the frame's own size: every pixel is the clip's
+    const adjOf = effs => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = effs; return A; };
+    const shot = (layers, rs) => {
+      const c = offscreen(Math.round(PW * rs), Math.round(PH * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, 0.5);
+      return g.getImageData(0, 0, c.width, c.height).data;
+    };
+    const vs = (a, b) => { let n = 0, mx = 0, s = 0, k = 0; for (let i = 0; i < a.length; i++) { if ((i & 3) === 3) continue; const d = Math.abs(a[i] - b[i]); k++; s += d; if (d) n++; if (d > mx) mx = d; } return { n: n, mx: mx, mean: s / k }; };
+    const PA = FM._FX_TABLES.PIXEL_ADJ;
+    const STACKS = [
+      ['Contrast 1.5 then Exposure +1', () => [fx('contrast', { amount: 1.5 }), fx('exposure', { stops: 1 })]],
+      ['Exposure +1 then Contrast 1.5', () => [fx('exposure', { stops: 1 }), fx('contrast', { amount: 1.5 })]],
+      ['Saturation 2.2 then Colour Balance red +70', () => [fx('saturate', { amount: 2.2 }), fx('colorbalance', { red: 70, green: 0, blue: 0 })]],
+      ['Brightness 1.3 then Highlights & Shadows', () => [fx('brightness', { amount: 1.3 }), fx('highlightsshadows')]],
+      ['Teal & Orange then Saturation 2', () => [fx('tealorange'), fx('saturate', { amount: 2 })]],
+    ];
+    const bad = [];
+    try {
+      /* ctx.filter, and the shader path a phone without it takes (#986 batch 2) — the export and a half-size preview */
+      for (const gpu of [false, true]) for (const rs of [1, 0.5]) {
+        FM._forceNoCtxFilter = gpu;
+        const where = (gpu ? 'without ctx.filter' : 'with ctx.filter') + ' at scale ' + rs;
+        const none = shot([clip()], rs);
+        for (const [name, mk] of STACKS) {
+          const own = shot([clip(mk())], rs), adj = shot([adjOf(mk()), clip()], rs);
+          const s = mk(), old = shot([adjOf(s.filter(e => !PA[e.type])), adjOf(s.filter(e => PA[e.type])), clip()], rs);   // the build's order: the pixel grade first, the CSS one on top
+          const g = vs(own, none), o = vs(old, own);
+          if (g.n < 1000) throw new Error('CONTROL ' + where + ': ' + name + ' on the clip moves only ' + g.n + ' channel values - this fixture cannot tell a grade from none');
+          if (o.mean < 2) throw new Error('CONTROL ' + where + ': ' + name + ' in the two orders differs by only ' + o.mean.toFixed(2) + ' levels - this fixture cannot tell the orders apart');
+          const d = vs(adj, own);
+          if (d.n) bad.push(name + ' ' + where + ': on an adjustment layer it differs from the same stack on the clip in ' + d.n + ' channel values (mean ' + d.mean.toFixed(2) + ', up to ' + d.mx + '; the other order is ' + o.mean.toFixed(2) + ' off)');
+        }
+        /* …and a stack of only the six an adjustment layer always had keeps ITS order, so a saved project does not move */
+        for (const [name, mk] of [['Posterize then Contrast 1.5', () => [fx('posterize'), fx('contrast', { amount: 1.5 })]], ['Levels then Saturation 2', () => [fx('levels', { inblack: 30, inwhite: 220 }), fx('saturate', { amount: 2 })]]]) {
+          const s = mk(), adj = shot([adjOf(mk()), clip()], rs), old = shot([adjOf(s.filter(e => !PA[e.type])), adjOf(s.filter(e => PA[e.type])), clip()], rs);
+          const d = vs(adj, old);
+          if (d.n) bad.push(name + ' ' + where + ': an adjustment layer with only the old six no longer draws as it did (' + d.n + ' channel values differ, up to ' + d.mx + ')');
+        }
+      }
+      FM._forceNoCtxFilter = false;
+      /* THE FILTER HE SEES: Infrared fitted to an adjustment layer keeps Contrast, Saturation, Colour Balance and
+         Highlights & Shadows; graded below, they must be the same bytes as those ingredients on the clip. */
+      const A0 = FM.makeLayer('adjustment', { name: 'probe' });
+      const fitted = FM.fxRegistry.fitToLayer(FM.filters.makeInstance('infrared'), A0);
+      const kept = ((fitted && fitted.effects) || []).map(k => k.type);
+      if (kept.indexOf('colorbalance') < 0 || kept.indexOf('highlightsshadows') < 0) bad.push('Infrared fitted to an adjustment layer keeps [' + kept.join(', ') + '] - its Colour Balance and Highlights & Shadows are dropped');
+      else {
+        const onClip = shot([clip([JSON.parse(JSON.stringify(fitted))])], 1), onAdj = shot([adjOf([fitted]), clip()], 1), none = shot([clip()], 1);
+        if (vs(onClip, none).n < 1000) throw new Error('CONTROL: the fitted Infrared on the clip barely moves the picture');
+        const d = vs(onAdj, onClip);
+        if (d.n) bad.push('Infrared fitted to an adjustment layer is ' + d.mean.toFixed(2) + ' levels off its own ingredients on the clip (' + d.n + ' channel values, up to ' + d.mx + ') - the hot magenta wash');
+      }
+    } finally {
+      FM._forceNoCtxFilter = false;
+      if (had) FM.media.set('_4825ord', had); else FM.media.remove('_4825ord');
+    }
+    if (bad.length) throw new Error(bad.slice(0, 6).join(' · '));
+  });
+
+  /* 5.1 review, major: ZOOMED IN, an adjustment layer grades only the slice on screen plus 18% (app.js previewCrop). Local
+     radius reads up to 1.2 x the radius around each pixel, past that margin, and Gradient Map's Dither laid its pattern
+     from the slice's corner. MEASURED on the build at 2.5x in a 1280 window (640x480 photo, Shadows +90 / Highlights -40):
+     the preview's grade was 1.55 levels off the export at radius 100 and 4.89 at radius 200 (radius 0: 0.45), Dither 3.31.
+     After — the whole comp is rendered while such a layer is shown — 0.61, 0.55 and 0.55. */
+  test('482 5.1 Adjustment layer - zoomed in, Highlights & Shadows with Local radius and Gradient Map Dither on an adjustment layer are graded on the whole frame, so the zoomed preview matches the export and does not change as he pans', { item: '482', budgetMs: 90000 }, async function () {
+    if (!FM.viewport || !FM.previewCropInfo || !FM.requestRender) throw new Error('seams missing: viewport / previewCropInfo / requestRender');
+    const saved = FM.scene, savedSel = FM.scene.selectedId, hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const vp0 = { x: FM.viewport.x, y: FM.viewport.y, scale: FM.viewport.scale };
+    const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const PW = 640, PH = 480, art = offscreen(PW, PH), ax = art.getContext('2d'), gr = ax.createLinearGradient(0, 0, PW, PH);
+    gr.addColorStop(0, '#0a0a10'); gr.addColorStop(0.45, '#3a3430'); gr.addColorStop(1, '#f2e6d0'); ax.fillStyle = gr; ax.fillRect(0, 0, PW, PH);
+    ax.fillStyle = '#050505'; ax.fillRect(150, 120, 140, 240); ax.fillStyle = '#e8e0d0'; ax.fillRect(330, 90, 120, 120);
+    ax.fillStyle = '#b03020'; ax.fillRect(360, 280, 110, 90); ax.fillStyle = '#203868'; ax.fillRect(60, 300, 70, 120);
+    const cv = document.getElementById('preview');
+    const grab = c => c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height).data;
+    const bad = [];
+    let mid = null;
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('image', { x: PW / 2, y: PH / 2, start: 0, duration: 4 }); L.start = 0; L.duration = 4; mid = L.id;
+      FM.media.set(L.id, { kind: 'image', el: art, width: PW, height: PH, duration: 0 });
+      const A = FM.makeLayer('adjustment', { name: 'g4825' }); A.start = 0; A.duration = 4;
+      const hs = FM.fxRegistry.makeInstance('highlightsshadows'); Object.assign(hs.params, { shadows: 90, highlights: -40, radius: 0 });
+      A.effects = [hs];
+      FM.scene = scene([A, L], { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#000000' } });
+      FM.setTime(0.5); FM.refreshAll(); FM.viewport.reset(); await sleep(250);
+      const zoomTo = async x => { FM.viewport.scale = 2.5; FM.viewport.x = x; FM.viewport.y = 0; FM.viewport.apply(); await sleep(600); FM.requestRender(); await raf2(); };
+      const settle = async () => { FM.requestRender(); await raf2(); await sleep(500); FM.requestRender(); await raf2(); };
+      /* the preview's grade against the export's, over what is on screen: (with - without) on both sides */
+      const gradeOff = () => {
+        const rs = cv.__fmRS || 1, ox = cv.__fmOX || 0, oy = cv.__fmOY || 0, W = cv.width, H = cv.height;
+        const twin = layers => { const c = offscreen(W, H); c.__fmCrop = cv.__fmCrop; c.__fmRS = rs; c.__fmOX = ox; c.__fmOY = oy; FM.renderScene(c.getContext('2d', { willReadFrequently: true }), Object.assign({}, FM.scene, { layers: layers }), FM.time); return grab(c); };
+        const ex = layers => { const c = offscreen(PW, PH); FM.renderScene(c.getContext('2d'), Object.assign({}, FM.scene, { layers: layers }), FM.time); const s = offscreen(W, H), g = s.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high'; g.drawImage(c, ox, oy, W / rs, H / rs, 0, 0, W, H); return g.getImageData(0, 0, W, H).data; };
+        const pW = grab(cv), pN = twin([L]), eW = ex([A, L]), eN = ex([L]);
+        const r = cv.getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect();
+        const x0 = Math.max(0, Math.round((st.left - r.left) / r.width * W)), x1 = Math.min(W, Math.round((st.right - r.left) / r.width * W));
+        const y0 = Math.max(0, Math.round((st.top - r.top) / r.height * H)), y1 = Math.min(H, Math.round((st.bottom - r.top) / r.height * H));
+        let s = 0, n = 0;
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * W + x) * 4; for (let k = 0; k < 3; k++) { s += Math.abs((pW[i + k] - pN[i + k]) - (eW[i + k] - eN[i + k])); n++; } }
+        return n ? s / n : NaN;
+      };
+      /* CONTROL: at radius 0 this zoom DOES crop the preview, so the cases below are about the effect, not the zoom */
+      await zoomTo(0);
+      if (!FM.previewCropInfo() || !cv.__fmCrop) throw new Error('CONTROL: at 2.5x with Local radius 0 the preview is not cropped (' + cv.width + 'x' + cv.height + ') - this zoom cannot show the bug');
+      const base = gradeOff();
+      if (!(base < 1.2)) throw new Error('CONTROL: at radius 0 the cropped preview is already ' + base.toFixed(2) + ' levels off the export - the comparison is broken');
+      /* Local radius 100, set while zoomed in — no zoom, pan or resize follows, so the canvas must notice by itself */
+      hs.params.radius = 100; await settle();
+      if (FM.previewCropInfo() || cv.__fmCrop) bad.push('with Local radius 100 on an adjustment layer the zoomed preview is still a slice (' + cv.width + 'x' + cv.height + ') - it grades without the surroundings the export has');
+      else {
+        const off = gradeOff();
+        if (!(off <= base + 0.5)) bad.push('with Local radius 100 the zoomed preview grade is ' + off.toFixed(2) + ' levels off the export (radius 0: ' + base.toFixed(2) + ')');
+        /* panning moves only the view: the canvas is the whole frame, so its pixels do not change */
+        const p0 = grab(cv).slice(); await zoomTo(60); const p1 = grab(cv);
+        let dn = p0.length === p1.length ? 0 : -1; if (dn === 0) for (let i = 0; i < p0.length; i++) if (p0[i] !== p1[i]) dn++;
+        if (dn !== 0) bad.push('panning 60 px with Local radius 100 changes ' + (dn < 0 ? 'the canvas size' : dn + ' channel values') + ' of the zoomed preview - the grade crawls as he pans');
+        if (FM.previewCropInfo() || cv.__fmCrop) bad.push('after a pan the preview went back to a slice with Local radius 100 on');
+      }
+      /* radius 200: still the whole frame, and a scale at which the 300-px box still reaches 1.2 x the radius */
+      hs.params.radius = 200; await zoomTo(0); await settle();
+      if (FM.previewCropInfo() || cv.__fmCrop) bad.push('with Local radius 200 the zoomed preview is a slice');
+      else if (0.6 * 200 * (cv.__fmRS || 1) > 300 + 1e-9) bad.push('with Local radius 200 the preview renders at scale ' + cv.__fmRS + ', where the blur box is capped at 300 px and reaches less than the export');
+      else { const off = gradeOff(); if (!(off <= base + 0.5)) bad.push('with Local radius 200 the zoomed preview grade is ' + off.toFixed(2) + ' levels off the export (radius 0: ' + base.toFixed(2) + ')'); }
+      /* back to 0: the slice comes back on its own (sharpness is not given up for nothing) */
+      hs.params.radius = 0; await settle();
+      if (!FM.previewCropInfo() || !cv.__fmCrop) bad.push('with Local radius back at 0 the zoomed preview stays the whole comp - it should crop again');
+      /* Gradient Map Dither on the adjustment layer: whole frame too, and its grade matches the export's */
+      const gm = FM.fxRegistry.makeInstance('gradientmap'); gm.params.dither = 100; A.effects = [gm]; await settle();
+      if (FM.previewCropInfo() || cv.__fmCrop) bad.push('with Gradient Map Dither 100 on an adjustment layer the zoomed preview is a slice - the dither starts at the slice corner and crawls as he pans');
+      else { const off = gradeOff(); if (!(off <= base + 0.6)) bad.push('with Gradient Map Dither 100 the zoomed preview grade is ' + off.toFixed(2) + ' levels off the export (radius 0: ' + base.toFixed(2) + ') - the dither cells are not the export\'s'); }
+      /* a hidden adjustment layer needs nothing */
+      A.visible = false; await settle();
+      if (!FM.previewCropInfo()) bad.push('with the adjustment layer hidden the zoomed preview is still the whole comp');
+    } finally {
+      FM.viewport.x = vp0.x; FM.viewport.y = vp0.y; FM.viewport.scale = vp0.scale; try { FM.viewport.apply(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      if (mid) FM.media.remove(mid);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(250);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 5.2 review, minor: Local radius took its weights from a plain blur of the luma, which does not know where an edge is.
+     MEASURED on the build, a 30|200 step at Shadows +100, radius 40: the bright side 203 away from the edge and 249 beside
+     it (a band ~48 px wide), the dark side 78 and 38; at Shadows +70 / Highlights -40, bright 172 and 223; and a black dot
+     in a 230 field came out 54 under Shadows +50 / Highlights +60 - against the note "black stays black". After (the
+     surroundings held within 0.1 of the pixel): 203/209, 78/58, 172/184, and the dot 1. */
+  test('482 5.2 Highlights & Shadows - Local radius does not ring an edge - bright ground beside a dark subject is not lifted as shadow, the subject rim is lifted with its middle, and a black dot in a bright field stays black under Highlights', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.highlightsshadows;
+    if (!K) throw new Error('the Highlights & Shadows kernel is not reachable');
+    const base = Object.assign({}, FM.fxRegistry.makeInstance('highlightsshadows').params);
+    const W = 400, H = 60, bad = [];
+    const edge = over => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = x < 200 ? 30 : 200; a[i] = a[i + 1] = a[i + 2] = v; a[i + 3] = 255; }
+      K(a, W, H, Object.assign({}, base, over), 0);
+      const row = x => a[(30 * W + x) * 4];
+      let bMax = 0, dMin = 255; for (let x = 200; x < W; x++) bMax = Math.max(bMax, row(x)); for (let x = 0; x < 200; x++) dMin = Math.min(dMin, row(x));
+      return { darkFar: row(5), darkMin: dMin, brightFar: row(W - 5), brightMax: bMax };
+    };
+    [[{ shadows: 100, highlights: 0, radius: 40 }, 12, 25], [{ shadows: 70, highlights: -40, radius: 40 }, 15, 20], [{ shadows: 70, highlights: 0, radius: 120 }, 10, 20]].forEach(([over, bLim, dLim]) => {
+      const e = edge(over), name = 'Shadows ' + over.shadows + ' / Highlights ' + over.highlights + ' / radius ' + over.radius;
+      if (!(e.darkFar >= 45)) throw new Error('CONTROL ' + name + ': the dark side far from the edge is ' + e.darkFar + ' - the shadows are not lifted, so a halo could not show');
+      if (e.brightMax - e.brightFar > bLim) bad.push(name + ': bright ground beside the dark side reads ' + e.brightMax + ' against ' + e.brightFar + ' away from it - a light halo ' + (e.brightMax - e.brightFar) + ' levels strong');
+      if (e.darkFar - e.darkMin > dLim) bad.push(name + ': the dark side rim reads ' + e.darkMin + ' against ' + e.darkFar + ' in its middle - the rim is not lifted with the rest');
+    });
+    /* a 10x10 black dot in a 230 field */
+    const D = 200, a = new Uint8ClampedArray(D * D * 4);
+    for (let y = 0; y < D; y++) for (let x = 0; x < D; x++) { const i = (y * D + x) * 4, v = (x >= 95 && x < 105 && y >= 95 && y < 105) ? 0 : 230; a[i] = a[i + 1] = a[i + 2] = v; a[i + 3] = 255; }
+    K(a, D, D, Object.assign({}, base, { shadows: 50, highlights: 60, radius: 40 }), 0);
+    if (a[(100 * D + 100) * 4] > 5) bad.push('a black dot in a bright field comes out ' + a[(100 * D + 100) * 4] + ' under Shadows +50 / Highlights +60 with Local radius 40 - the note says black stays black');
+    /* still LOCAL: a dark grey band between black and a light grey opens up as a whole (C47's half that must not be lost) */
+    const S = 300, b = new Uint8ClampedArray(S * 100 * 4);
+    for (let y = 0; y < 100; y++) for (let x = 0; x < S; x++) { const i = (y * S + x) * 4, v = x < 100 ? 0 : (x < 200 ? 40 : 160); b[i] = b[i + 1] = b[i + 2] = v; b[i + 3] = 255; }
+    K(b, S, 100, Object.assign({}, base, { shadows: 50, highlights: 0, radius: 40 }), 0);
+    if (b[(50 * S + 50) * 4] > 5 || b[(50 * S + 150) * 4] < 55) bad.push('Local radius 40 no longer keeps black black (' + b[(50 * S + 50) * 4] + ') while opening a dark grey of 40 (' + b[(50 * S + 150) * 4] + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+
+
+  /* ═══ #482 POLISH BATCH 5 (grading depth) — 5.3 Teal & Orange, 5.4 Tint, 5.5 Duotone ══════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 5
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 5.3 answers C48: Teal & Orange read brightness only, so a face
+   * in shade went teal with everything else dark. The rule that makes it safe (§0.3): every new key's default is the old
+   * look, because a filter recipe gets every key it does not set from makeInstance. The first test pins that against hashes
+   * captured on v17.20 (1403309a) BEFORE the first edit, with polish 1's fixture (a textured 200x150 clip in a 240x180
+   * project, the export at t 0.7 and a half-size preview at t 1.3) — the per-layer path and the adjustment-layer path. */
+  function shots5(layers) {
+    return [[240, 0.7], [120, 1.3]].map(([w, t]) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  /* The centre pixel of a flat colour rect carrying `fx` (or under an adjustment layer carrying it), rendered as the export
+     (240 wide) and as a half-size preview (120 wide). A grade is a point operation, so all three must be the kernel's own
+     answer for that colour: the preview is the export. */
+  function centre5(hex, fx, onAdj) {
+    const R = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 200, shapeH: 150, fill: hex, start: 0, duration: 4 }); R.start = 0; R.duration = 4;
+    let layers = [R];
+    if (onAdj) { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = [fx]; layers = [A, R]; } else R.effects = [fx];
+    return [240, 120].map(w => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, 0.5);
+      const d = x.getImageData(w / 2, w * 3 / 8, 1, 1).data; return [d[0], d[1], d[2]];
+    });
+  }
+  function kpx5(rgb, type, params) {
+    const d = new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]);
+    FM._applyPixelFx(d, { type: type, params: params }, 0.5, 1, 1, 1);
+    return [d[0], d[1], d[2]];
+  }
+  const NEW5 = { tealorange: { mode: 0, skin: 0, balance: 0, keep: 0 }, tint: { mode: 0, soft: 100 }, duotone: { blend: 0 } };
+
+  test('482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone - every new control is in the catalogue at a default that draws the old look, and the 56 library filters, saved and new grades and the adjustment-layer Tint and Duotone render byte for byte as on v17.20', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
+       render-time fill (queue 784) agrees with that default. */
+    Object.keys(NEW5).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW5[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW5[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    const rw = (FM.fxRegistry.paramsOf('tint') || []).filter(q => q.key === 'soft')[0];
+    if (!rw || rw.overriddenBy !== 'range' || JSON.stringify(rw.liveWhen) !== '[1,2,3]') throw new Error('Tint Range width does not say it is switched off under Range All (overriddenBy ' + (rw && rw.overriddenBy) + ', liveWhen ' + JSON.stringify(rw && rw.liveWhen) + ')');
+    /* …and a saved value survives the load sanitiser, at a non-default value for each key. */
+    const SET = { tealorange: { mode: 1, skin: 60, balance: -40, keep: 50 }, tint: { mode: 1, soft: 160 }, duotone: { blend: 3 } };
+    const lay = [{ id: 'l4825', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.20. A new instance (every new key spelled out at its default), saved instances with only the
+       old keys (the fast loops and the slow ones: Tint under a Range with Keep brightness, a curved Duotone, a moved Split
+       point), and Tint and Duotone on an adjustment layer — a new one there must be the saved default to the byte. */
+    const HEAD = { 'tealorange/new/image': '6557cd64/057560f0', 'tealorange/new/shape': 'd9017533/a41411f2', 'tealorange/saved0': '6557cd64/057560f0', 'tealorange/saved1': '64b5af31/8465cbc8',
+      'tint/new/image': '5756b47b/bab79518', 'tint/new/shape': 'c8af3b80/1b6b8316', 'tint/saved0': '5756b47b/bab79518', 'tint/saved1': 'beeab85a/f4994eba', 'tint/saved2': 'bfdb9ce3/53fb1c0e',
+      'tint/adj0': '88a82fbb/9517c0d0', 'tint/adj1': 'e9a3fe9a/cfd57f9a', 'tint/adj2': 'cdeaa823/171bb34e', 'tint/adjnew': '88a82fbb/9517c0d0',
+      'duotone/new/image': 'eb248c41/c7a74304', 'duotone/new/shape': 'b34fa899/e8eb1c75', 'duotone/saved0': 'eb248c41/c7a74304', 'duotone/saved1': '53ee2f7d/e65b77c5',
+      'duotone/adj0': '33379941/20cd2e5c', 'duotone/adj1': '47da023d/9451c545', 'duotone/adjnew': '33379941/20cd2e5c' };
+    const SAVED = {
+      tealorange: [{ amount: 0.6 }, { amount: 0.8, pivot: 35, spread: 60 }],
+      tint: [{ amount: 1, color: '#ff3366' }, { amount: 0.7, color: '#3080ff', range: 2, preserve: 1 }, { amount: 0.5, color: '#20c080', range: 1 }],
+      duotone: [{ amount: 1, color: '#241a52', color2: '#ff9e5e' }, { amount: 0.8, color: '#102040', color2: '#ffd080', balance: 30, contrast: 140 }],
+    };
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    const all = FM.filters.all();
+    if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
+    const tex = fix482(), ids = [], moved = [];
+    const clip = () => { const L = FM.makeLayer('image', { name: '4825 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    const adj = fx => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = [fx]; return A; };
+    const got = {};
+    try {
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots5([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      Object.keys(SAVED).forEach(type => {
+        ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots5([L]); });
+        SAVED[type].forEach((p, i) => { const L = clip(); L.effects = [{ type: type, enabled: true, params: Object.assign({}, p) }]; got[type + '/saved' + i] = shots5([L]); });
+        if (type === 'tealorange') return;
+        SAVED[type].forEach((p, i) => { got[type + '/adj' + i] = shots5([adj({ type: type, enabled: true, params: Object.assign({}, p) }), clip()]); });
+        got[type + '/adjnew'] = shots5([adj(FM.fxRegistry.makeInstance(type)), clip()]);
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+  /* 5.3 TEAL & ORANGE (C48). The grade pushed +42 R / +8 G / −42 B by BRIGHTNESS alone, so a shadowed face (#6b4a3a, a brown in
+     shade) went bluer with everything else dark. Measured at the kernel through the adjustment-layer seam's PIXEL_FX call. */
+  test('482 5.3 Teal & Orange - Splits by Hue keeps a shadowed skin pixel warm instead of teal, Protect skin holds skin back, Balance trades teal for orange, Keep brightness holds the luma, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.tealorange) throw new Error('the Teal & Orange kernel is not reachable');
+    const run = (rgb, over) => { const d = new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]); K.tealorange(d, 1, 1, Object.assign({ amount: 0.6 }, over), 0.5, 1); return [d[0], d[1], d[2]]; };
+    const skin = [0x6b, 0x4a, 0x3a], sky = [60, 120, 180], dark = [50, 50, 50], light = [200, 200, 200];
+    const s0 = run(skin, {}), sH = run(skin, { mode: 1 });
+    if (!(s0[2] > skin[2] + 3)) throw new Error('CONTROL: by brightness the shadowed skin pixel #6b4a3a did not go bluer (' + s0 + ') - the fixture does not show C48');
+    if (!(sH[2] < skin[2] - 5 && sH[0] > skin[0] + 5)) throw new Error('Splits by Hue still sends the shadowed skin pixel #6b4a3a toward teal: ' + skin + ' -> ' + sH + ' (by brightness ' + s0 + ') - a face in shade goes blue');
+    const kH = run(sky, { mode: 1 }), k0 = run(sky, {});
+    if (!(kH[2] - kH[0] > (sky[2] - sky[0]) + 10)) throw new Error('Splits by Hue did not send a blue sky toward teal: ' + sky + ' -> ' + kH);
+    if (!(kH[2] - kH[0] > k0[2] - k0[0])) throw new Error('a mid-bright blue sky is no cooler by Hue (' + kH + ') than by brightness (' + k0 + ')');
+    if (run(dark, { mode: 1 }).join() !== run(dark, {}).join() || run(light, { mode: 1 }).join() !== run(light, {}).join()) throw new Error('Splits by Hue moved a grey differently from by brightness - a grey has no hue, so Split point still decides it');
+    const sP = run(skin, { skin: 100 });
+    if (Math.max(Math.abs(sP[0] - skin[0]), Math.abs(sP[1] - skin[1]), Math.abs(sP[2] - skin[2])) > 3) throw new Error('Protect skin 100 still moved the skin pixel #6b4a3a from ' + skin + ' to ' + sP + ' (unprotected ' + s0 + ')');
+    /* …and across real skin, not just the one brown at the window's centre: deep brown (#8d5524, HSV S 0.74), reddish (#a1665e
+       and #592f2a, hue 6-7°), rosy (#d1a3a4 at 359°, #503335 at 356°) and light (#f1c27d, 36°), by Brightness and by Hue. The
+       first window — a raised cosine peaking at 25°, full only to S 0.65 — left #8d5524 12 of its 25 levels, #a1665e 16 and
+       #d1a3a4 23 at Protect skin 100 (review of 5.3). The same 3-level bar as #6b4a3a; the control is the grade unprotected. */
+    const mv5 = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+    ['#8d5524', '#a1665e', '#592f2a', '#f1c27d', '#d1a3a4', '#503335'].forEach(h => {
+      const c = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+      [0, 1].forEach(m => {
+        const by = m ? 'Hue' : 'Brightness', du = mv5(run(c, { mode: m }), c), dp = mv5(run(c, { mode: m, skin: 100 }), c);
+        if (m === 1 && !(du > 6)) throw new Error('CONTROL: by Hue the grade moved the skin tone ' + h + ' only ' + du + ' levels unprotected - the fixture shows nothing to hold back');
+        if (dp > 3) throw new Error('Protect skin 100 still moves the skin tone ' + h + ' ' + dp + ' levels by ' + by + ' (' + du + ' unprotected) - a darker, redder or lighter face keeps the grade');
+      });
+    });
+    if (run(sky, { skin: 100 }).join() !== k0.join()) throw new Error('Protect skin 100 changed a blue sky (' + run(sky, { skin: 100 }) + ' against ' + k0 + ') - it must only hold back skin colours');
+    if (run(dark, { balance: 100 }).join() !== dark.join()) throw new Error('Balance +100 still pushed a dark grey toward teal: ' + run(dark, { balance: 100 }));
+    const l0 = run(light, {}), lB = run(light, { balance: 100 });
+    if (!(lB[0] - lB[2] > (l0[0] - l0[2]) + 20)) throw new Error('Balance +100 did not push a light grey further toward orange: ' + lB + ' against ' + l0);
+    if (run(light, { balance: -100 }).join() !== light.join()) throw new Error('Balance −100 still warmed a light grey: ' + run(light, { balance: -100 }));
+    const d0 = run(dark, {}), dB = run(dark, { balance: -100 });
+    if (!(dB[2] - dB[0] > (d0[2] - d0[0]) + 10)) throw new Error('Balance −100 did not push a dark grey further toward teal: ' + dB + ' against ' + d0);
+    /* KEEP BRIGHTNESS: a grey ramp at Amount 1 stays at its own luma within a level, and keeps its colour. */
+    const n = 256, ramp = over => { const d = new Uint8ClampedArray(n * 4); for (let i = 0; i < n; i++) { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = i; d[i * 4 + 3] = 255; } K.tealorange(d, n, 1, Object.assign({ amount: 1 }, over), 0.5, 1); return d; };
+    const off = (d, i) => 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2] - i;
+    const rOff = ramp({}), rOn = ramp({ keep: 100 });
+    let worstOff = 0, worstOn = 0; for (let i = 0; i < n; i++) { worstOff = Math.max(worstOff, Math.abs(off(rOff, i))); worstOn = Math.max(worstOn, Math.abs(off(rOn, i))); }
+    if (!(worstOff > 5)) throw new Error('CONTROL: without Keep brightness the grade moved a grey ramp only ' + worstOff.toFixed(2) + ' levels off its luma');
+    if (!(worstOn <= 1)) throw new Error('Keep brightness 100 left a grey ramp up to ' + worstOn.toFixed(2) + ' levels off its own luma (' + worstOff.toFixed(2) + ' without it)');
+    if (!(rOn[220 * 4] - rOn[220 * 4 + 2] > 30)) throw new Error('Keep brightness took the colour away too - light grey 220 is ' + [rOn[880], rOn[881], rOn[882]].join(','));
+    /* THE PREVIEW IS THE EXPORT, each control, per layer: the centre of a flat skin-brown rect, export and half-size preview,
+       is the kernel's own answer. */
+    [{ mode: 1 }, { skin: 100 }, { balance: 60 }, { keep: 100 }, { mode: 1, skin: 50, balance: -30, keep: 40 }].forEach(over => {
+      const fx = FM.fxRegistry.makeInstance('tealorange'); Object.assign(fx.params, over);
+      const want = run(skin, Object.assign({}, fx.params)), c = centre5('#6b4a3a', fx);
+      c.forEach((g, i) => { if (Math.max(Math.abs(g[0] - want[0]), Math.abs(g[1] - want[1]), Math.abs(g[2] - want[2])) > 1) throw new Error(JSON.stringify(over) + ': the ' + (i ? 'half-size preview' : 'export') + ' draws ' + g + ' where the grade gives ' + want); });
+    });
+  });
+
+  /* 5.4 TINT. Colourise replaces the pixel with brightness × colour, so under a blue Tint a red jacket comes out the same blue as
+     a grey wall. Tint over soft-lights the colour in: the jacket stays red, the wall takes the cast. Range width is the exponent
+     on the Range weight (100 = the old weights). Through FM._applyPixelFx — the one kernel both paths use — and then rendered
+     on a layer and on an adjustment layer, export and preview. */
+  test('482 5.4 Tint - Tint over keeps a red jacket red under a blue Tint where Colourise turns it blue, Range width widens and narrows the range, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const red = [220, 40, 40], blue = '#2060ff';
+    const sat = c => { const mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]); return mx ? (mx - mn) / mx : 0; };
+    const col = kpx5(red, 'tint', { amount: 1, color: blue }), ovr = kpx5(red, 'tint', { amount: 1, color: blue, mode: 1 });
+    if (!(col[2] > col[0])) throw new Error('CONTROL: Colourise under a blue Tint left the red ' + col + ' - it should be blue, which is the complaint');
+    if (!(ovr[0] > ovr[2] + 40 && ovr[0] > ovr[1] + 40)) throw new Error('Tint over still turns a red jacket blue under a blue Tint: ' + red + ' -> ' + ovr + ' (Colourise ' + col + ')');
+    if (!(sat(ovr) > 0.5)) throw new Error('Tint over left the red at saturation ' + sat(ovr).toFixed(2) + ' (' + ovr + ') - it must keep the colour, above 0.5');
+    const grey = kpx5([128, 128, 128], 'tint', { amount: 1, color: blue, mode: 1 });
+    if (!(grey[2] > grey[0] + 30)) throw new Error('Tint over gave a grey wall no blue cast: ' + grey);
+    if (kpx5([128, 128, 128], 'tint', { amount: 0, color: blue, mode: 1 }).join() !== '128,128,128') throw new Error('Tint over at Amount 0 still moved the grey');
+    const kb = kpx5(red, 'tint', { amount: 1, color: blue, mode: 1, preserve: 1 }), lum = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    if (Math.abs(lum(kb) - lum(red)) > 1.5) throw new Error('Tint over with Keep brightness moved the red off its own brightness: ' + lum(red).toFixed(1) + ' -> ' + lum(kb).toFixed(1));
+    /* RANGE WIDTH under Range Shadows: a light-mid grey (160) is barely in the shadows at 100, more at 200, out of them at 10. */
+    const mv = s => { const c = kpx5([160, 160, 160], 'tint', Object.assign({ amount: 1, color: blue, range: 1 }, s == null ? {} : { soft: s })); return c[2] - c[0]; };
+    const n100 = mv(100), wide = mv(200), narrow = mv(10);
+    if (!(wide > n100 + 5 && narrow < n100 - 5)) throw new Error('under Range Shadows a light-mid grey took a cast of ' + narrow + ' / ' + n100 + ' / ' + wide + ' at Range width 10 / 100 / 200 - the width does not change the range');
+    if (mv(100) !== mv(null)) throw new Error('Range width 100 is not the old weights');
+    if (kpx5([160, 160, 160], 'tint', { amount: 1, color: blue, soft: 30 }).join() !== kpx5([160, 160, 160], 'tint', { amount: 1, color: blue }).join()) throw new Error('Range width moved a Tint under Range All, where there is no range to widen');
+    /* THE PREVIEW IS THE EXPORT, on a layer (drawTint) and on an adjustment layer (applyPixelFx). */
+    [{ mode: 1 }, { mode: 1, range: 3, soft: 160 }, { range: 1, soft: 40 }].forEach(over => {
+      const fx = FM.fxRegistry.makeInstance('tint'); Object.assign(fx.params, { color: blue }, over);
+      const want = kpx5(red, 'tint', Object.assign({}, fx.params));
+      [false, true].forEach(onAdj => centre5('#dc2828', fx, onAdj).forEach((g, i) => {
+        if (Math.max(Math.abs(g[0] - want[0]), Math.abs(g[1] - want[1]), Math.abs(g[2] - want[2])) > 1) throw new Error(JSON.stringify(over) + (onAdj ? ' on an adjustment layer' : '') + ': the ' + (i ? 'half-size preview' : 'export') + ' draws ' + g + ' where the Tint gives ' + want);
+      }));
+    });
+  });
+
+  /* 5.5 DUOTONE. The two colours always replaced the picture. Colour takes their hue and saturation and keeps every pixel's
+     own brightness; Soft light and Overlay lay them over the picture as a cast. Replace is the old duotone. */
+  test('482 5.5 Duotone - Colour keeps a grey ramp at its own brightness within one level, Soft light and Overlay lay the colours over the picture, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const base = { amount: 1, color: '#241a52', color2: '#ff9e5e' };
+    const n = 256, ramp = over => { const d = new Uint8ClampedArray(n * 4); for (let i = 0; i < n; i++) { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = i; d[i * 4 + 3] = 255; } FM._applyPixelFx(d, { type: 'duotone', params: Object.assign({}, base, over) }, 0.5, n, 1, 1); return d; };
+    const worst = d => { let w = 0; for (let i = 0; i < n; i++) w = Math.max(w, Math.abs(0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2] - i)); return w; };
+    const rep = ramp({}), colr = ramp({ blend: 3 });
+    if (!(worst(rep) > 20)) throw new Error('CONTROL: Replace moved a grey ramp only ' + worst(rep).toFixed(1) + ' levels off its brightness');
+    if (!(worst(colr) <= 1)) throw new Error('Blend Colour left a grey ramp up to ' + worst(colr).toFixed(2) + ' levels off its own brightness (Replace ' + worst(rep).toFixed(1) + ')');
+    if (!(colr[128 * 4] - colr[128 * 4 + 2] > 20)) throw new Error('Blend Colour did not take the duotone colour at mid-grey: ' + [colr[512], colr[513], colr[514]].join(','));
+    if (!(colr[40 * 4 + 2] > colr[40 * 4] + 5)) throw new Error('Blend Colour did not take the shadow colour in the darks: ' + [colr[160], colr[161], colr[162]].join(','));
+    if (!(worst(ramp({ blend: 3, amount: 0.5 })) <= 1)) throw new Error('Blend Colour at Amount 0.5 left the ramp off its own brightness');
+    [[1, 'Soft light'], [2, 'Overlay']].forEach(([b, name]) => {
+      const r = ramp({ blend: b });
+      if ([r[0], r[1], r[2]].join() !== '0,0,0' || [r[1020], r[1021], r[1022]].join() !== '255,255,255') throw new Error(name + ' moved black or white (' + [r[0], r[1], r[2]] + ' / ' + [r[1020], r[1021], r[1022]] + ') - a cast laid over the picture keeps its ends');
+      if (!(r[160 * 4] - r[160 * 4 + 2] > 15)) throw new Error(name + ' gave a light-mid grey no warm cast from the highlight colour: ' + [r[640], r[641], r[642]].join(','));
+      if (r.join() === rep.join()) throw new Error(name + ' draws exactly the Replace duotone');
+    });
+    if (ramp({ blend: 1 }).join() === ramp({ blend: 2 }).join()) throw new Error('Soft light and Overlay draw the same picture');
+    /* THE PREVIEW IS THE EXPORT, on a layer and on an adjustment layer: the centre of a flat grey rect. */
+    [1, 2, 3].forEach(b => {
+      const fx = FM.fxRegistry.makeInstance('duotone'); fx.params.blend = b;
+      const want = kpx5([150, 150, 150], 'duotone', Object.assign({}, fx.params));
+      [false, true].forEach(onAdj => centre5('#969696', fx, onAdj).forEach((g, i) => {
+        if (Math.max(Math.abs(g[0] - want[0]), Math.abs(g[1] - want[1]), Math.abs(g[2] - want[2])) > 1) throw new Error('Blend ' + b + (onAdj ? ' on an adjustment layer' : '') + ': the ' + (i ? 'half-size preview' : 'export') + ' draws ' + g + ' where the Duotone gives ' + want);
+      }));
+    });
+  });
+
+  /* THE NEW ROWS FIT THE PANEL, at a phone's 390 px and at a 1280 px PC window: every new row is on screen inside the
+     inspector, its name is not cut off, and each option button shows its whole label. Tint's Range width is greyed out under
+     Range All, where there is no range to widen, and wakes under Shadows. */
+  test('482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone panels - the new rows fit the effect panel at 390 and 1280 px, and Range width is greyed out under Range All', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { tealorange: ['Splits by', 'Protect skin', 'Balance', 'Keep brightness'], tint: ['Method', 'Range width'], duotone: ['Blend'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label, #inspector-panel .fx-row.fx-open .kf-color-row > label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row') } : null;
+    };
+    const show = async (type, set) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S4825', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await show(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const r = rowOf(label);
+          if (!r) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = r.row.getBoundingClientRect();
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+          [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+        }
+      }
+      await show('tint');
+      if (!rowOf('Range width').row.classList.contains('fx-overridden')) throw new Error(where + ': Tint Range width looks live under Range All, where there is no range to widen');
+      if (rowOf('Method').row.classList.contains('fx-overridden')) throw new Error(where + ': CONTROL - Tint Method is greyed out, and nothing switches it off');
+      await show('tint', p => { p.range = 1; });
+      if (rowOf('Range width').row.classList.contains('fx-overridden')) throw new Error(where + ': Tint Range width is greyed out under Range Shadows');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
+
+  /* ═══ #482 / #966 POLISH BATCH 5 — "Grading depth": Gradient Map (5.6), Cross Process (5.7), Exposure (5.8) ═════════════
+   * His words (#966): "you can polish other effects just giving them more features … more choices always better … this is
+   * the complex version we want as much choice as possible". The backlog's batch 5 (tools/design/plans/2026-09-29-idle-
+   * backlog/backlog.md §A): Gradient Map gains Colours (Two / Three, with a Midtones colour at the Midpoint), Reverse and a
+   * Blend that includes the two non-separable modes Colour and Luminosity (fxBlendRGB, modes 8 and 9); Cross Process gains
+   * Film (Slide / Negative — the pastel, blue-green way round); Exposure gains Gamma and Work in (sRGB / Linear light).
+   * Same rule as every batch (§0.3): each new key's default draws the old picture, because a filter recipe takes every key
+   * it does not set from makeInstance. Pinned against hashes captured on v17.20 (1403309a) BEFORE the first edit, with batch
+   * 1's fixture and batch 2's three shots (the export, a half-size preview, a 0.3 phone plate), plus the kernels driven
+   * straight on a 256-level plate. */
+  const OLD4825 = {
+    gradientmap: [{ amount: 1, midpoint: 50, dither: 0, color: '#241a52', color2: '#ffb86c' }, { amount: 0.7, midpoint: 30, dither: 40, color: '#0a3050', color2: '#f0e0a0' }],
+    crossprocess: [{ amount: 0.6 }, { amount: 0.9, lift: 200, gain: 40 }],
+    exposure: [{ stops: 0.8 }, { stops: -1.2, offset: 30, rolloff: 50 }, { stops: 1.5, offset: -20 }],
+  };
+  const NEW4825 = {
+    gradientmap: { stops: 2, reverse: 0, blend: 0, color3: '#b0507a' },
+    crossprocess: { variant: 0 },
+    exposure: { gamma: 1, space: 0 },
+  };
+  /* One kernel, straight: each [r,g,b] in `px` through PIXEL_FX[type] with a NEW instance's params plus `over`. */
+  const k4825 = (type, over, px, t) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || typeof K[type] !== 'function') throw new Error('the ' + type + ' kernel is not reachable');
+    const d = new Uint8ClampedArray(px.length * 4);
+    px.forEach((c, i) => { d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255; });
+    K[type](d, px.length, 1, Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {}), t == null ? 0.5 : t, 1);
+    const out = []; for (let i = 0; i < px.length; i++) out.push([d[i * 4], d[i * 4 + 1], d[i * 4 + 2]]);
+    return out;
+  };
+  const ramp4825 = () => { const o = []; for (let v = 0; v < 256; v++) o.push([v, v, v]); return o; };
+  const sd4825 = a => { const m = a.reduce((s, v) => s + v, 0) / a.length; return Math.sqrt(a.reduce((s, v) => s + (v - m) * (v - m), 0) / a.length); };
+  /* PREVIEW = EXPORT: four flat swatches filling a 200x150 frame, each carrying the effect, rendered at the export plate and
+     at a half-size preview plate; the centre of each swatch must agree between the two and with the kernel itself. */
+  function parity4825(type, over, where) {
+    const SW = [['#e8443f', 50, 37], ['#3a7bd5', 150, 37], ['#20b070', 50, 112], ['#c8c0b0', 150, 112]];
+    const mk = () => SW.map(([fill, x, y]) => { const L = FM.makeLayer('shape', { shape: 'rect', x: x, y: y, shapeW: 100, shapeH: 75, fill: fill }); L.start = 0; L.duration = 4; L.effects = [_986fx(type, over)]; return L; });
+    const at = (r, rs, x, y) => { const i = (Math.floor(y * rs) * r.w + Math.floor(x * rs)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]]; };
+    const ex = _986shot(mk(), 0.5, 200, 150, null), pv = _986shot(mk(), 0.5, 200, 150, 0.5);
+    SW.forEach(([fill, x, y]) => {
+      const e = at(ex, 1, x, y), p = at(pv, 0.5, x, y);
+      const h = fill.slice(1), src = [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+      const k = k4825(type, over, [src])[0];
+      for (let c = 0; c < 3; c++) {
+        if (Math.abs(e[c] - p[c]) > 1) throw new Error(where + ': the half-size preview draws ' + fill + ' as ' + p + ' where the export draws ' + e + ' - the preview is not the export');
+        if (Math.abs(e[c] - k[c]) > 1) throw new Error(where + ': the export draws ' + fill + ' as ' + e + ' where the effect makes ' + k + ' - the setting does not reach the render');
+      }
+    });
+    return at(ex, 1, 50, 37);
+  }
+
+  test('482 5.0 Grading depth - every new Gradient Map, Cross Process and Exposure control is in the catalogue at a default that draws the old look, and saved and new ones render byte for byte as on v17.20', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
+       render-time fill (queue 784) agrees with that default. */
+    Object.keys(NEW4825).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW4825[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW4825[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    const gb = (FM.fxRegistry.paramsOf('gradientmap') || []).filter(q => q.key === 'blend')[0];
+    const gbv = gb && gb.options.map(o => o[0]).join(',');
+    if (gbv !== '0,1,2,3,4,8,9') throw new Error('Gradient Map Blend offers modes ' + gbv + ', not Normal, Multiply, Screen, Overlay, Soft light, Colour (8) and Luminosity (9)');
+    /* …and a saved value survives the load sanitiser, at a non-default value for each key. */
+    const SET = { gradientmap: { stops: 3, reverse: 1, blend: 9, color3: '#20c0a0' }, crossprocess: { variant: 1 }, exposure: { gamma: 2.2, space: 1 } };
+    const lay = [{ id: 'l4825', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.20: new and saved instances on batch 1's textured clip and on a shape, Cross Process's
+       library filter, and each kernel on a plate that holds every byte value — as saved (old keys only) and with every new
+       key written at its default, as a new instance carries them. */
+    const HEAD = { 'gradientmap new clip': '5ed9f58e/9bf2c507/5829f284', 'gradientmap new shape': '40bfe52a/98cd3076/9cfa180d', 'gradientmap old0 clip': '5ed9f58e/9bf2c507/5829f284', 'gradientmap old1 clip': '64860ad0/4dd159c6/831dd646',
+      'crossprocess new clip': 'd8346020/7ad099e6/ca5fe90f', 'crossprocess new shape': '30f454ec/9b295c3a/d6b49903', 'crossprocess old0 clip': 'd8346020/7ad099e6/ca5fe90f', 'crossprocess old1 clip': 'db0cc63e/03df253c/80808e26',
+      'exposure new clip': 'd02da0e6/a9f518be/02e177ee', 'exposure new shape': 'c2432315/2ac97931/7be82666', 'exposure old0 clip': 'd02da0e6/a9f518be/02e177ee', 'exposure old1 clip': '49281b4b/f823faf9/8ee0cc35', 'exposure old2 clip': '8e01107a/e6c3e5e2/8d42772c',
+      'filter crossproc': 'acf0a29a/9d14facb/dc96297e',
+      'kernel gradientmap 0': 'c1074855', 'kernel gradientmap 1': '17b9210d', 'kernel crossprocess 0': 'e18802ca', 'kernel crossprocess 1': '2d373472', 'kernel crossprocess 2': '1b1a9586', 'kernel crossprocess 3': '75cba76c',
+      'kernel exposure 0': '41233134', 'kernel exposure 1': 'cfcfaed0', 'kernel exposure 2': '4f41ceb8', 'kernel exposure 3': 'f5f5182c', 'kernel exposure 4': '46a3a8d8', 'kernel exposure 5': '60c9d63c' };
+    const got = {}, tex = fix482(), ids = [];
+    const clip = () => { const L = FM.makeLayer('image', { name: '482b5 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    try {
+      Object.keys(OLD4825).forEach(type => {
+        let L = clip(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + ' new clip'] = shots482b(L);
+        L = shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + ' new shape'] = shots482b(L);
+        OLD4825[type].forEach((pp, i) => { const L2 = clip(); L2.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(pp)) }]; got[type + ' old' + i + ' clip'] = shots482b(L2); });
+      });
+      const LF = clip(); LF.effects = [FM.filters.makeInstance('crossproc')]; got['filter crossproc'] = shots482b(LF);
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    const P = FM._FX_TABLES.PIXEL_FX, W = 256, H = 48;
+    const plate = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; a[i] = x; a[i + 1] = (x * 7 + y * 13) & 255; a[i + 2] = (255 - x + y * 5) & 255; a[i + 3] = (x + y) % 61 === 0 ? 0 : 255; } return a; };
+    const hk = (a) => { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < a.length; i++) { h ^= a[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); };
+    const KP = { gradientmap: OLD4825.gradientmap, crossprocess: OLD4825.crossprocess.concat([{ amount: 1, lift: 100, gain: 100 }, { amount: 0.35, lift: 0, gain: 300 }]), exposure: OLD4825.exposure.concat([{ stops: 0 }, { stops: -5, offset: -150, rolloff: 100 }, { stops: 5, offset: 150, rolloff: 0 }]) };
+    Object.keys(KP).forEach(type => KP[type].forEach((pp, i) => { const a = plate(); P[type](a, W, H, JSON.parse(JSON.stringify(pp)), 0.5, 1); got['kernel ' + type + ' ' + i] = hk(a); }));
+    Object.keys(KP).forEach(type => KP[type].forEach((pp, i) => { const a = plate(); P[type](a, W, H, Object.assign(JSON.parse(JSON.stringify(pp)), NEW4825[type]), 0.5, 1); got['kernel ' + type + ' ' + i + ' +new'] = hk(a); }));
+    const moved = [];
+    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    Object.keys(got).filter(k => / \+new$/.test(k)).forEach(k => { const base = k.replace(/ \+new$/, ''); if (got[k] !== HEAD[base]) moved.push(k + ' (new keys at their defaults) ' + HEAD[base] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+  /* 5.6 GRADIENT MAP — Reverse, Colours (Three, with Midtones at the Midpoint), Blend (Colour and Luminosity among them), and a
+     keyframed Midtones colour drawing at its time. Driven straight through the kernel at Amount 1, then through the renderer. */
+  test('482 5.6 Gradient Map - Reverse maps black to the Highlights colour, Three colours put Midtones at the Midpoint, Colour keeps the picture brightness and Luminosity its colour, a keyframed Midtones colour draws at its time, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const SH = [36, 26, 82], HI = [255, 184, 108], MT = [176, 80, 122];
+    const near = (a, b, tol) => Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol;
+    // CONTROL: the default map sends black to Shadows and white to Highlights.
+    let o = k4825('gradientmap', {}, [[0, 0, 0], [255, 255, 255]]);
+    if (!near(o[0], SH, 1) || !near(o[1], HI, 1)) throw new Error('CONTROL: the default map sends black to ' + o[0] + ' and white to ' + o[1] + ', not Shadows ' + SH + ' and Highlights ' + HI);
+    // REVERSE
+    o = k4825('gradientmap', { reverse: 1 }, [[0, 0, 0], [255, 255, 255]]);
+    if (!near(o[0], HI, 1)) throw new Error('Reverse On sends black to ' + o[0] + ', not the Highlights colour ' + HI);
+    if (!near(o[1], SH, 1)) throw new Error('Reverse On sends white to ' + o[1] + ', not the Shadows colour ' + SH);
+    // THREE COLOURS: Midtones sits AT the Midpoint, the ends stay the ends; Two at the same grey is the 50/50 mix.
+    const g50 = [128, 128, 128];   // luma 0.502
+    o = k4825('gradientmap', { stops: 3 }, [[0, 0, 0], g50, [255, 255, 255]]);
+    if (!near(o[0], SH, 1) || !near(o[2], HI, 1)) throw new Error('Three colours moved the ends: black ' + o[0] + ', white ' + o[2]);
+    if (!near(o[1], MT, 2)) throw new Error('Three colours sends the Midpoint grey to ' + o[1] + ', not the Midtones colour ' + MT);
+    const two = k4825('gradientmap', { stops: 2 }, [g50])[0];
+    if (near(two, MT, 20)) throw new Error('CONTROL: Two colours already sends the Midpoint grey to Midtones (' + two + ')');
+    const g30 = [77, 77, 77];       // luma 0.302
+    o = k4825('gradientmap', { stops: 3, midpoint: 30 }, [g30, [166, 166, 166]]);
+    if (!near(o[0], MT, 2)) throw new Error('Three colours with Midpoint 30% sends the 30% grey to ' + o[0] + ', not Midtones ' + MT + ' - Midtones does not sit at the Midpoint');
+    const half = [Math.round((MT[0] + HI[0]) / 2), Math.round((MT[1] + HI[1]) / 2), Math.round((MT[2] + HI[2]) / 2)];
+    if (!near(o[1], half, 3)) throw new Error('Three colours with Midpoint 30%: the 65% grey (half way from Midtones to white) is ' + o[1] + ', not ' + half);
+    o = k4825('gradientmap', { stops: 3, reverse: 1 }, [[0, 0, 0], g50]);
+    if (!near(o[0], HI, 1) || !near(o[1], MT, 2)) throw new Error('Three colours reversed: black ' + o[0] + ' should be Highlights and the Midpoint grey ' + o[1] + ' should stay Midtones');
+    // BLEND 8 COLOUR: the picture's brightness (W3C luma), the map's colour.
+    const lum = c => 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+    const PX = [[0, 0, 0], [40, 40, 40], [128, 128, 128], [200, 200, 200], [255, 255, 255], [220, 40, 30], [30, 90, 220], [60, 160, 70], [250, 230, 40]];
+    o = k4825('gradientmap', { blend: 8 }, PX);
+    PX.forEach((c, i) => { if (Math.abs(lum(o[i]) - lum(c)) > 1.5) throw new Error('Blend Colour moved the brightness of ' + c + ' to ' + o[i] + ' (luma ' + lum(c).toFixed(1) + ' -> ' + lum(o[i]).toFixed(1) + ') - Colour must keep the picture brightness'); });
+    if (Math.max.apply(null, o[2]) - Math.min.apply(null, o[2]) < 30) throw new Error('Blend Colour left mid-grey grey (' + o[2] + ') - it does not take the map colour');
+    // BLEND 9 LUMINOSITY: the picture's colour, the map's brightness.
+    const red = [220, 40, 30], map = k4825('gradientmap', {}, [red])[0];
+    o = k4825('gradientmap', { blend: 9 }, [red])[0];
+    if (Math.abs(lum(o) - lum(map)) > 1.5) throw new Error('Blend Luminosity gives red ' + o + ' the brightness ' + lum(o).toFixed(1) + ', not the map’s ' + lum(map).toFixed(1));
+    if (!(o[0] > o[1] + 60 && o[0] > o[2] + 60)) throw new Error('Blend Luminosity turned a red pixel ' + o + ' - it must keep the picture colour');
+    // BLEND 1 MULTIPLY (an fxBlendPx mode, for the separable half): white x map = map, black stays black.
+    o = k4825('gradientmap', { blend: 1 }, [[255, 255, 255], [0, 0, 0]]);
+    if (!near(o[0], HI, 1) || !near(o[1], [0, 0, 0], 0)) throw new Error('Blend Multiply gives white ' + o[0] + ' and black ' + o[1]);
+    // KEYFRAMED COLOURS, through the RENDERER (export, and a half-size preview). resolveFxColors (queue 555) turns every
+    // animated color* into its value at t before any pixel kernel runs, so the kernel never sees a {kf} object. The Shadows
+    // line is a GUARD, not a fix - it passes on v17.20 too (measured: (128,0,128) at 1 s there as well). Midtones is new.
+    const kfAt = (fill, over, t) => {
+      const mk = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 40, shapeW: 100, shapeH: 80, fill: fill }); L.start = 0; L.duration = 4; L.effects = [_986fx('gradientmap', over)]; return L; };
+      const ex = _986shot([mk()], t, 100, 80), pv = _986shot([mk()], t, 100, 80, 0.5);
+      const i = (40 * ex.w + 50) * 4, j = (20 * pv.w + 25) * 4;
+      return { ex: [ex.d[i], ex.d[i + 1], ex.d[i + 2]], pv: [pv.d[j], pv.d[j + 1], pv.d[j + 2]] };
+    };
+    const MTKF = { stops: 3, color3: { kf: [{ t: 0, v: '#000000' }, { t: 2, v: '#00ff00' }] } };
+    [[1, [1, 128, 0]], [2, [1, 255, 0]]].forEach(([tt, want]) => {
+      const r = kfAt('#808080', MTKF, tt);
+      if (!near(r.ex, want, 2) || !near(r.pv, want, 2)) throw new Error('a Midtones colour keyframed black to green over 2 s draws the Midpoint grey at ' + tt + ' s as ' + r.ex + ' (export) and ' + r.pv + ' (preview), not ' + want);
+    });
+    const shkf = kfAt('#000000', { color: { kf: [{ t: 0, v: '#ff0000' }, { t: 2, v: '#0000ff' }] } }, 1);
+    if (!near(shkf.ex, [128, 0, 128], 2) || !near(shkf.pv, [128, 0, 128], 2)) throw new Error('GUARD: a Shadows colour keyframed red to blue draws black at 1 s as ' + shkf.ex + ' (export) and ' + shkf.pv + ' (preview), not (128,0,128)');
+    // PREVIEW = EXPORT, and the setting reaches the render (CONTROL: it differs from the default).
+    const def = parity4825('gradientmap', {}, 'default');
+    const all = parity4825('gradientmap', { stops: 3, reverse: 1, blend: 8, midpoint: 40 }, 'Three, reversed, Colour');
+    parity4825('gradientmap', { blend: 9 }, 'Luminosity');
+    if (near(def, all, 3)) throw new Error('CONTROL: Three colours, reversed, Colour blend draws the red swatch as ' + all + ', the same as the default ' + def);
+  });
+
+  /* 5.7 CROSS PROCESS — Film: Negative (pastel). Driven through the kernel on a grey ramp at the default Amount 0.6. */
+  test('482 5.7 Cross Process - Negative (pastel) flattens a ramp by at least 15 percent against Slide, lifts black blue-green, Colour cast 0 is a neutral flat grade, Curve 0 leaves only the cast, Curve 300 never inverts, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const R = ramp4825();
+    const slide = k4825('crossprocess', { variant: 0 }, R), neg = k4825('crossprocess', { variant: 1 }, R);
+    for (let c = 0; c < 3; c++) {
+      const a = sd4825(slide.map(p => p[c])), b = sd4825(neg.map(p => p[c]));
+      if (!(b <= a * 0.85)) throw new Error('Negative (pastel) spreads channel ' + 'RGB'[c] + ' of a grey ramp by ' + b.toFixed(1) + ' against Slide’s ' + a.toFixed(1) + ' - not at least 15 percent flatter (' + ((1 - b / a) * 100).toFixed(1) + ' percent)');
+    }
+    const blk = k4825('crossprocess', { variant: 1, amount: 1 }, [[0, 0, 0]])[0];
+    if (!(blk[2] - blk[0] >= 15 && blk[1] - blk[0] >= 8)) throw new Error('Negative (pastel) at Amount 1 lifts black to ' + blk + ' - not blue-green (blue and green above red)');
+    if (!(blk[0] + blk[1] + blk[2] >= 90)) throw new Error('Negative (pastel) at Amount 1 leaves black at ' + blk + ' - not lifted, so not pastel');
+    const sk = k4825('crossprocess', { variant: 0, amount: 1 }, [[0, 0, 0]])[0];
+    if (sk[0] + sk[1] + sk[2] > 6) throw new Error('CONTROL: Slide at Amount 1 already lifts black (' + sk + ')');
+    // COLOUR CAST 0: a neutral flat grade — grey stays grey, and it is still flatter than the ramp.
+    const nc = k4825('crossprocess', { variant: 1, amount: 1, lift: 0 }, R);
+    nc.forEach((p, v) => { if (Math.abs(p[0] - p[1]) > 1 || Math.abs(p[1] - p[2]) > 1) throw new Error('Negative (pastel) with Colour cast 0 tints grey ' + v + ' to ' + p + ' - 0 must be no cast'); });
+    if (!(sd4825(nc.map(p => p[1])) < sd4825(R.map(p => p[1])) * 0.75)) throw new Error('Negative (pastel) with Colour cast 0 is not flat');
+    // CURVE 0: only the cast — no flattening.
+    const ncv = k4825('crossprocess', { variant: 1, amount: 1, gain: 0 }, R);
+    if (Math.abs(sd4825(ncv.map(p => p[1])) - sd4825(R.map(p => p[1]))) > sd4825(R.map(p => p[1])) * 0.06) throw new Error('Negative (pastel) with Curve 0 still flattens the ramp (spread ' + sd4825(ncv.map(p => p[1])).toFixed(1) + ' against ' + sd4825(R.map(p => p[1])).toFixed(1) + ')');
+    if (!(ncv[128][2] > ncv[128][0] + 4)) throw new Error('Negative (pastel) with Curve 0 lost its cast: mid-grey is ' + ncv[128]);
+    // CURVE 300: very flat, and still in order — a brighter input is never a darker output.
+    const ext = k4825('crossprocess', { variant: 1, amount: 1, gain: 300, lift: 300 }, R);
+    for (let v = 1; v < 256; v++) for (let c = 0; c < 3; c++) if (ext[v][c] < ext[v - 1][c] - 1) throw new Error('Negative (pastel) at Curve 300 and Colour cast 300 turns the ramp over: channel ' + 'RGB'[c] + ' at ' + v + ' is ' + ext[v][c] + ' after ' + ext[v - 1][c] + ' at ' + (v - 1));
+    // PREVIEW = EXPORT, and the setting reaches the render.
+    const a = parity4825('crossprocess', {}, 'Slide'), b = parity4825('crossprocess', { variant: 1 }, 'Negative (pastel)');
+    if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 15) throw new Error('CONTROL: Negative (pastel) draws the red swatch as ' + b + ', the same as Slide ' + a);
+  });
+
+  /* 5.8 EXPOSURE — Work in Linear light, Gamma. Driven through the kernel on a grey ramp. */
+  test('482 5.8 Exposure - Linear light sends mid-grey 128 to 176 at +1 stop where sRGB sends it to 255, 0 stops is no change, Gamma reshapes the mids, Black point lifts black to the same grey in both, Highlight rolloff bends the light, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const R = ramp4825();
+    const s1 = k4825('exposure', { stops: 1 }, [[128, 128, 128]])[0];
+    if (s1[0] !== 255) throw new Error('CONTROL: sRGB at +1 stop sends 128 to ' + s1[0] + ', not the old 255');
+    const l1 = k4825('exposure', { stops: 1, space: 1 }, [[128, 128, 128], [0, 0, 0], [255, 255, 255]]);
+    if (Math.abs(l1[0][0] - 175) > 3) throw new Error('Linear light at +1 stop sends 128 to ' + l1[0][0] + ', not 175 ±3 (light doubled, then encoded)');
+    if (l1[1][0] !== 0 || l1[2][0] !== 255) throw new Error('Linear light at +1 stop moves black to ' + l1[1][0] + ' or white to ' + l1[2][0]);
+    const dn = k4825('exposure', { stops: -1, space: 1 }, [[128, 128, 128]])[0];
+    if (Math.abs(dn[0] - 94) > 3) throw new Error('Linear light at -1 stop sends 128 to ' + dn[0] + ', not 94 ±3 (light halved)');
+    // 0 stops in Linear light is no change: decode then encode returns every byte.
+    const z = k4825('exposure', { stops: 0, space: 1 }, R);
+    z.forEach((p, v) => { if (Math.abs(p[0] - v) > 1) throw new Error('Linear light at 0 stops moves ' + v + ' to ' + p[0]); });
+    // GAMMA: out = in^(1/gamma) — 2 brightens the mids, 0.5 darkens them, the ends stay put.
+    const g2 = k4825('exposure', { stops: 0, gamma: 2 }, [[128, 128, 128], [0, 0, 0], [255, 255, 255]]);
+    if (Math.abs(g2[0][0] - 181) > 1 || g2[1][0] !== 0 || g2[2][0] !== 255) throw new Error('Gamma 2 at 0 stops sends 128/0/255 to ' + g2.map(p => p[0]) + ', not 181/0/255');
+    const gh = k4825('exposure', { stops: 0, gamma: 0.5 }, [[128, 128, 128]])[0];
+    if (Math.abs(gh[0] - 64) > 1) throw new Error('Gamma 0.5 sends 128 to ' + gh[0] + ', not 64');
+    // BLACK POINT lifts black to the same visible grey in both.
+    const bs = k4825('exposure', { stops: 0, offset: 40 }, [[0, 0, 0]])[0], bl = k4825('exposure', { stops: 0, offset: 40, space: 1 }, [[0, 0, 0]])[0];
+    if (Math.abs(bs[0] - 40) > 1 || Math.abs(bl[0] - 40) > 1) throw new Error('Black point 40 lifts black to ' + bs[0] + ' in sRGB and ' + bl[0] + ' in Linear light - not the same grey 40');
+    // HIGHLIGHT ROLLOFF in Linear light: +3 stops does not flatten the top into white.
+    const hr = k4825('exposure', { stops: 3, rolloff: 100, space: 1 }, R).map(p => p[0]);
+    for (let v = 1; v < 256; v++) if (hr[v] < hr[v - 1]) throw new Error('Linear light +3 stops with rolloff 100 turns over at ' + v);
+    if (hr[255] >= 255 || hr[255] - hr[128] < 8) throw new Error('Linear light +3 stops with rolloff 100 clips the highlights flat (128 -> ' + hr[128] + ', 255 -> ' + hr[255] + ')');
+    // PREVIEW = EXPORT, and the setting reaches the render.
+    const a = parity4825('exposure', { stops: 1 }, 'sRGB +1'), b = parity4825('exposure', { stops: 1, space: 1, gamma: 1.4 }, 'Linear light +1, Gamma 1.4');
+    if (Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 10) throw new Error('CONTROL: Linear light with Gamma 1.4 draws the red swatch as ' + b + ', the same as sRGB ' + a);
+  });
+
+  /* THE NEW ROWS FIT THE PANEL at 390 and 1280 px; Midtones sits between Shadows and Highlights and greys out while Colours is
+     Two, saying why, and wakes under Three. */
+  test('482 5.6 to 5.8 panels - Colours, Reverse, Blend, Film, Gamma and Work in fit the effect panel at 390 and 1280 px, and Midtones sits between Shadows and Highlights, greyed out while Colours is Two', { item: '482', budgetMs: 120000 }, async function () {
+    await panel482b('gradientmap', ['Colours', 'Midpoint', 'Reverse', 'Blend', 'Dither'], []);
+    await panel482b('crossprocess', ['Film', 'Colour cast', 'Curve'], []);
+    await panel482b('exposure', ['Gamma', 'Work in'], []);
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const show = async set => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'P4825', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance('gradientmap'); inst._expanded = true; if (set) Object.assign(inst.params, set);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const rows = () => [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .kf-color-row')).map(r => ({ row: r, name: ((r.querySelector('label') || {}).textContent || '').trim() }));
+    const check = async where => {
+      await show();
+      const names = rows().map(r => r.name).join(', ');
+      if (names !== 'Shadows, Midtones, Highlights') throw new Error(where + ': the colour rows read ' + JSON.stringify(names) + ', not Shadows, Midtones, Highlights');
+      const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+      const mid = rows().filter(r => r.name === 'Midtones')[0].row;
+      if (!mid.classList.contains('fx-overridden')) throw new Error(where + ': Midtones looks live while Colours is Two, where it does nothing');
+      const tag = mid.querySelector('.fx-ovr-tag');
+      if (!tag || !/Colours is Three/.test(tag.textContent)) throw new Error(where + ': greyed Midtones does not say why (' + JSON.stringify(tag && tag.textContent) + ')');
+      mid.scrollIntoView({ block: 'nearest' }); await sleep(20);
+      const tb = tag.getBoundingClientRect(), rb = mid.getBoundingClientRect();
+      if (tb.left < rb.left - 1 || tb.right > rb.right + 1 || rb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1) throw new Error(where + ': the Midtones pill spans ' + Math.round(tb.left) + '-' + Math.round(tb.right) + ' in a row at ' + Math.round(rb.left) + '-' + Math.round(rb.right) + ' (panel ends ' + Math.round(panel.right) + ')');
+      [].slice.call(mid.querySelectorAll('input, button')).forEach(el => { const sb = el.getBoundingClientRect(); if (sb.width && sb.right > panel.right + 1) throw new Error(where + ': a greyed Midtones control runs to ' + Math.round(sb.right) + ' px, past the panel at ' + Math.round(panel.right)); });
+      await show({ stops: 3 });
+      const mid3 = rows().filter(r => r.name === 'Midtones')[0];
+      if (!mid3 || mid3.row.classList.contains('fx-overridden')) throw new Error(where + ': Midtones is greyed out with Colours Three, where it is the colour that matters');
+      // CONTROL: the other two colour rows are never greyed.
+      rows().filter(r => r.name !== 'Midtones').forEach(r => { if (r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + r.name + ' is greyed out'); });
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 
 })();

@@ -103,6 +103,14 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'range', label: 'Range', def: 0, options: [[0, 'All'], [1, 'Shadows'], [2, 'Midtones'], [3, 'Highlights']] },
       { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      /* #482 polish 5.4. Tint REPLACED every pixel with its brightness times the colour, so a red jacket under a blue Tint
+         came out the same blue as a grey wall — the clip's own colours were gone. Tint over soft-lights the colour in
+         instead: the clip keeps its own contrast and much of its colour, its hues leaning toward the tint colour (under
+         blue an orange-red car stays red but goes pinker, and a pale warm tone like skin loses most of its warmth), while
+         the whole shot takes a cast. Range width is an exponent on the Range
+         weight, as on Colour Balance (100 = the old weights; nothing to widen under All). Defaults run the old loops. */
+      { key: 'mode', label: 'Method', def: 0, options: [[0, 'Colourise'], [1, 'Tint over']] },
+      { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
     ] },
     { type: 'threshold', label: 'Threshold', color: true, defColor: '#000000', colorLabel: 'Below', color2: true, defColor2: '#ffffff', color2Label: 'Above', params: [
       { key: 'level', label: 'Level', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -112,6 +120,10 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
       { key: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      /* #482 polish 5.5. The two colours always REPLACED the picture. Soft light and Overlay lay them over it as a cast (the
+         clip's own colours show through), and Colour takes their hue and saturation but keeps every pixel's own brightness,
+         so the detail stays. Replace is the old duotone, byte for byte. (Tritone lives on Gradient Map, not here.) */
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Replace'], [1, 'Soft light'], [2, 'Overlay'], [3, 'Colour']] },
     ] },
     // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
     { type: 'solarize', label: 'Solarize', params: [
@@ -235,10 +247,15 @@ window.FM = window.FM || {};
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Grey']] },
       { key: 'blend', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    /* #482 5.8 — GAMMA and WORK IN. Exposure multiplied the sRGB bytes, so +1 stop sent mid-grey 128 to 255 — a camera sends
+       it to 176, because light doubles in LINEAR terms. Linear light decodes, multiplies and encodes again; sRGB (the default)
+       is the old maths untouched, and Gamma 1 leaves it so. */
     { type: 'exposure', label: 'Exposure', params: [
       { key: 'stops', label: 'Stops', min: -5, max: 5, step: 0.05, def: 0.8, unit: ' EV' },
       { key: 'offset', label: 'Black point', min: -150, max: 150, step: 1, def: 0 },
       { key: 'rolloff', label: 'Highlight rolloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.01, def: 1 },
+      { key: 'space', label: 'Work in', def: 0, options: [[0, 'sRGB'], [1, 'Linear light']] },
     ] },
     { type: 'fisheye', label: 'Fisheye', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -310,9 +327,18 @@ window.FM = window.FM || {};
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'samples', label: 'Quality', min: 3, max: 33, step: 1, def: 9, unit: ' taps' },
     ] },
-    { type: 'gradientmap', label: 'Gradient Map', color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ffb86c', color2Label: 'Highlights', params: [
+    /* #482 5.6 — COLOURS (Two / Three, with a Midtones colour at the Midpoint), REVERSE and BLEND. Two, Off and Normal are
+       the old map exactly (the kernel runs its old loop untouched there), so a saved map and the defaults every new one gets
+       draw as they always did. Midtones sits BETWEEN Shadows and Highlights in the panel (`color3After`) and is greyed while
+       the map has two colours (`color3Gate`), where it does nothing. Blend's values are fxBlendPx's mode numbers, so
+       Colour and Luminosity are 8 and 9 — the two non-separable modes, which fxBlendRGB adds. */
+    { type: 'gradientmap', label: 'Gradient Map', color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ffb86c', color2Label: 'Highlights',
+      color3: true, defColor3: '#b0507a', color3Label: 'Midtones', color3After: 'color', color3Gate: { by: 'stops', when: 3 }, params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'stops', label: 'Colours', def: 2, options: [[2, 'Two'], [3, 'Three']] },
       { key: 'midpoint', label: 'Midpoint', min: 5, max: 95, step: 1, def: 50, unit: '%' },
+      { key: 'reverse', label: 'Reverse', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft light'], [8, 'Colour'], [9, 'Luminosity']] },
       { key: 'dither', label: 'Dither', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'colorize', label: 'Colourize', color: true, defColor: '#3aa0ff', colorLabel: 'Colour', params: [
@@ -555,7 +581,20 @@ window.FM = window.FM || {};
          range weight (100 = the old weights). Both defaults run the old loops. */
       { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] }] },
-    { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 }] },
+    { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 },
+      /* #482 polish 5.2 (answers C47): it was one whole-picture curve that ADDS the same amount to every channel, so +Shadows
+         lifted true black to grey (milky blacks) and could not tell a dark shirt from a dark corner. Whites and Blacks move the
+         two ends; Tonal width narrows what counts as a shadow or a highlight; Local radius judges each area by its
+         surroundings and lifts it like a local exposure, so black stays black; Colour boost puts back (or takes out) the
+         colour a lift washes out. Every default runs the old loop byte for byte — 17 library filters are built on it.
+         (Colour boost was "Colour correction" in the build: at a 1280 px window that name was too long for the 307 px
+         inspector, so its number box dropped under the keyframe diamond and the row grew to 109 px against 76 — #482 5.2
+         review. The key stays `sat`.) */
+      { key: 'whites', label: 'Whites', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'blacks', label: 'Blacks', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
+      { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
     // ---- batch 12 ----
     { type: 'dropshadow', label: 'Drop Shadow', params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 18, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' }, { key: 'softness', label: 'Softness', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: Opacity — every shadow was full strength
@@ -850,9 +889,22 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'pivot', label: 'Split point', min: 5, max: 95, step: 1, def: 50, unit: '%' },
       { key: 'spread', label: 'Crossover', min: 10, max: 200, step: 5, def: 100, unit: '%' },
+      /* #482 polish 5.3 (answers the backlog's C48, #858 "the whole frame goes blue"). The split read BRIGHTNESS only, so a
+         face in shade went teal with everything else dark. Splits by Hue sends warm colours (reds, oranges, yellows, skin)
+         to orange and cool ones to teal whatever their brightness; a grey has no hue, so it still splits by brightness at
+         Split point. Protect skin holds skin-coloured pixels back from the grade; Balance trades teal for orange; Keep
+         brightness puts every pixel back at its own luma so the grade is a colour move only. Every default runs the old loop. */
+      { key: 'mode', label: 'Splits by', def: 0, options: [[0, 'Brightness'], [1, 'Hue']] },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0, note: '−100 teal only · +100 orange only' },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
+    /* #482 5.7 — FILM. Today's look is slide film developed as a negative (punchy, warm highlights, blue-black shadows); the
+       other way round — negative film developed as a slide — is flat, pastel and blue-green. Colour cast and Curve keep
+       their meaning in both: how strong the cast, how far the curve departs from none. */
     { type: 'crossprocess', label: 'Cross Process', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'variant', label: 'Film', def: 0, options: [[0, 'Slide (punchy)'], [1, 'Negative (pastel)']] },
       { key: 'lift', label: 'Colour cast', min: 0, max: 300, step: 5, def: 100, unit: '%' },
       { key: 'gain', label: 'Curve', min: 0, max: 300, step: 5, def: 100, unit: '%' },
     ] },
@@ -4523,11 +4575,68 @@ window.FM = window.FM || {};
       case 5: r = s <= 0.5 ? (2 * s * dv) : (1 - 2 * (1 - s) * (1 - dv)); break;    // Hard Light
       case 6: r = s + dv; break;                                            // Add
       case 7: r = Math.abs(s - dv); break;                                  // Difference
+      // 8 Colour and 9 Luminosity (#482 5.6) are NON-SEPARABLE — they need all three channels at once — so one channel
+      // cannot answer them. They live in fxBlendRGB below; a per-channel caller reaching here gets Normal.
       default: r = s;                                                       // Normal
     }
     r *= 255;
     return r < 0 ? 0 : (r > 255 ? 255 : r);
   }
+  /* THE THREE-CHANNEL DOOR TO EVERY MODE (#482 5.6, Gradient Map's Blend). Modes 0–7 are fxBlendPx channel by channel, so a
+     caller can use this for all of them; 8 COLOUR and 9 LUMINOSITY are the W3C compositing spec's non-separable pair:
+       Colour     = SetLum(source, Lum(backdrop))  — the effect's hue and saturation at the picture's brightness
+       Luminosity = SetLum(backdrop, Lum(source))  — the picture's hue and saturation at the effect's brightness
+     with Lum = 0.3R + 0.59G + 0.11B and the spec's ClipColor pulling an out-of-range result back along its own grey line
+     (so the brightness it was given survives the clip). Worked on the 0–255 scale; returns ONE shared array, which the
+     caller reads before its next call — a fresh array per pixel is 1.4 million allocations a 1080x1350 frame. */
+  const _fxBlendOut = new Float64Array(3);
+  function fxBlendRGB(mode, s0, s1, s2, d0, d1, d2) {
+    const o = _fxBlendOut;
+    if (mode !== 8 && mode !== 9) { o[0] = fxBlendPx(mode, s0, d0); o[1] = fxBlendPx(mode, s1, d1); o[2] = fxBlendPx(mode, s2, d2); return o; }
+    let r, g, b, l;
+    if (mode === 8) { r = s0; g = s1; b = s2; l = 0.3 * d0 + 0.59 * d1 + 0.11 * d2; }
+    else { r = d0; g = d1; b = d2; l = 0.3 * s0 + 0.59 * s1 + 0.11 * s2; }
+    const dl = l - (0.3 * r + 0.59 * g + 0.11 * b);
+    r += dl; g += dl; b += dl;
+    const L = 0.3 * r + 0.59 * g + 0.11 * b, n = Math.min(r, g, b), x = Math.max(r, g, b);
+    if (n < 0 && L - n > 1e-9) { const k = L / (L - n); r = L + (r - L) * k; g = L + (g - L) * k; b = L + (b - L) * k; }
+    if (x > 255 && x - L > 1e-9) { const k = (255 - L) / (x - L); r = L + (r - L) * k; g = L + (g - L) * k; b = L + (b - L) * k; }
+    o[0] = r < 0 ? 0 : (r > 255 ? 255 : r); o[1] = g < 0 ? 0 : (g > 255 ? 255 : g); o[2] = b < 0 ? 0 : (b > 255 ? 255 : b);
+    return o;
+  }
+  FM._fxBlendRGB = fxBlendRGB;   // suite seam
+
+  /* EXPOSURE'S TABLE (#482 5.8). sRGB <-> linear light by the IEC 61966-2-1 curve. The decode table is built once (every
+     input is a byte); the encode runs 256 times per frame, inside the table, never per pixel. */
+  const SRGB_DEC = (function () { const a = new Float64Array(256); for (let v = 0; v < 256; v++) { const c = v / 255; a[v] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); } return a; })();
+  function srgbDecode(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function srgbEncode(x) { return x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055; }
+  function exposureLUT(m, off, roll, lin, gam) {
+    const out = new Float64Array(256);
+    let g = +gam; if (!isFinite(g)) g = 1; if (g < 0.1) g = 0.1; if (g > 4) g = 4;
+    const ig = 1 / g;
+    if (lin) {
+      const oc = Math.min(255, Math.abs(off)) / 255, offL = off >= 0 ? srgbDecode(oc) : -srgbDecode(oc);
+      const knee = 1 - roll * 0.6, head = 1 - knee;
+      for (let v = 0; v < 256; v++) {
+        let x = SRGB_DEC[v] * m + offL;
+        if (roll > 0 && x > knee) { const u = (x - knee) / (head <= 0 ? 1 : head); x = knee + head * (u / (1 + u)); }
+        let y = x <= 0 ? 0 : (x >= 1 ? 255 : srgbEncode(x) * 255);
+        if (g !== 1) y = y <= 0 ? 0 : 255 * Math.pow(y / 255, ig);
+        out[v] = y;
+      }
+      return out;
+    }
+    const knee = 255 * (1 - roll * 0.6), head = 255 - knee;
+    for (let v = 0; v < 256; v++) {
+      let y = v * m + off;
+      if (roll > 0 && y > knee) { const u = (y - knee) / (head <= 0 ? 1 : head); y = knee + head * (u / (1 + u)); }
+      if (g !== 1) y = y <= 0 ? 0 : 255 * Math.pow(y / 255, ig);
+      out[v] = y;
+    }
+    return out;
+  }
+  FM._exposureLUT = exposureLUT;   // suite seam
 
   /* HOW STRONG ONE ROUND FILM GRAIN IS, PER PIXEL, AT A CELL SIZE OF `s` PIXELS (queue 986) — the RMS of the weight the
      filmgrain kernel gives each pixel (q·1.35 inside the inscribed disc, nothing outside), sampled at the kernel's own
@@ -4798,6 +4907,124 @@ window.FM = window.FM || {};
       d[i + 1] = (col[1] * s + d[i + 1] * keep) / A;
       d[i + 2] = (col[2] * s + d[i + 2] * keep) / A;
       d[i + 3] = A * 255;
+    }
+  }
+
+  /* ═══ HIGHLIGHTS & SHADOWS: THE CONTROLS A REAL ONE HAS (#482 polish 5.2, answers C47) ══════════════════════════════
+   * The old kernel adds sh·(1−L)² + hi·L² levels to every channel — one curve for the whole picture, and an ADD, so at
+   * +50 Shadows pure black came out 60/60/60: the milky blacks of C47. 17 library filters are built on it, so at the
+   * defaults the kernel still runs its own loop, untouched; everything new runs here.
+   *  · Tonal width (10–100 %): how far up from black a shadow reaches, and down from white a highlight. The weights become
+   *    (1 − L/w)² and (1 − (1−L)/w)², which at 100 % are the old (1−L)² and L², float for float. On the whole-picture add
+   *    the lift is scaled by w as well: unscaled, a narrow width at +80 lifted pure black PAST its slightly brighter
+   *    neighbours (measured on a car photo at 35 %: the dark road went flat and reversed), and × w keeps every curve rising
+   *    — its steepest fall is 2·120 levels, under the 255 the picture itself rises by.
+   *  · Local radius (px): above 0 the weights come from the brightness AROUND each pixel (a tent blur of the luma), and the
+   *    Shadows lift is a local EXPOSURE — every channel × 2^(2·Shadows·ws) stops — so a dark area opens up as a whole,
+   *    texture and all, and black × anything is still black. Highlights stays the add it was, from the surroundings'
+   *    weight: as a gain (× 2^(Highlights·L²)) −100 pulled pure white below the grey just under it — over an even sky the
+   *    curve peaks near 0.85 and falls. The gain's weight is (1 − L/w)³, not ², because a squared tail
+   *    reaching into the brights flattened the curve there while Highlights pulled down: measured on a 0–255 ramp at
+   *    Shadows +100 / Highlights −100, the squared version folded back in 15 places between 140 and 230 (a lighter grey came
+   *    out darker); the cube in none, and the suite walks a ramp through every extreme. At 0 it is the whole-picture add.
+   *    THE SURROUNDINGS ARE HELD WITHIN 0.1 OF THE PIXEL'S OWN BRIGHTNESS (HS_EDGE, #482 5.2 review). A plain blur does
+   *    not know where an edge is, so beside a dark subject the bright ground "saw" a dark neighbourhood and was lifted as
+   *    if it were shadow, and the subject's rim saw a bright one and was lifted less than its middle — a light halo on the
+   *    sand round his dog. Measured on a 30|200 step at Shadows +100, radius 40: the bright side read 203 away from the
+   *    edge and 249 beside it, the dark side 78 and 38; and a black dot in a bright field went to 54 under Highlights +60.
+   *    With the surroundings clamped to ±0.1 (25 levels) of the pixel: 203 / 209, 78 / 58, and the dot 1. Texture within
+   *    25 levels of its area is still judged by the area — what Local radius is for — and a hard edge can only lean on
+   *    it that far. The clamp is per pixel, after the blur, so the exact-integer blur below is untouched.
+   *  · Whites / Blacks: the two ends, on the result's own brightness — ±80 levels × L³ at the top and × (1−L)³ at the
+   *    bottom (crush or lift the black point, pull down or push the white point). Cubed, not squared, so they stay off the
+   *    ground Highlights and Shadows already cover; 80 because 3·80 = 240 is under 255, so even both at full stretch
+   *    never fold the curve back on itself. (A fourth power reached too little: measured on a cloud photo whose brightest
+   *    areas sit near 0.7, Whites −90 moved them 10–13 levels.)
+   *  · Colour boost: an equal add is a step toward grey, so a lift washes colour out. This scales each pixel's colour
+   *    by 1 + 2·cc × how much of the correction it got (never below grey), so it touches only what Shadows and Highlights
+   *    moved: +100 on a fully lifted pixel triples its colour, −100 turns it grey.
+   * THE BLUR IS EXACT INTEGER ARITHMETIC, so it is the same wherever the buffer starts. The luma is a whole number 0–255
+   * (× alpha where the plate has any transparency), each box pass is an unnormalised running sum, and a Float64 holds such
+   * sums exactly below 2^53 — the reason the box is capped at 300 px a side. So the cropped readback (#692 route 2) draws
+   * the very picture the full plate does, and preview = export = scrub. Transparent pixels weigh nothing and nothing lies
+   * past the edge, so neither a layer's own outline nor the frame's edge darkens the brightness around it. */
+  function hsNum(v, lo, hi, dflt) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : dflt; }
+  const HS_SH_STOPS = 2, HS_ENDS = 80, HS_BOX_MAX = 300, HS_EDGE = 0.1;
+  let _hsA = null, _hsB = null, _hsLn = null;
+  function hsBox(a, W, H, b, alongRows, line) {   // one box pass of half-width b, zero past the ends, unnormalised
+    const n = alongRows ? W : H, m = alongRows ? H : W, step = alongRows ? 1 : W, top = b < n - 1 ? b : n - 1;
+    for (let q = 0; q < m; q++) {
+      const o = alongRows ? q * W : q;
+      for (let k = 0, i = o; k < n; k++, i += step) line[k] = a[i];
+      let acc = 0;
+      for (let k = 0; k <= top; k++) acc += line[k];
+      for (let k = 0, i = o; k < n; k++, i += step) {
+        a[i] = acc;
+        const ki = k + b + 1, ko = k - b;
+        if (ki < n) acc += line[ki];
+        if (ko >= 0) acc -= line[ko];
+      }
+    }
+  }
+  function hsTent(a, W, H, b, line) { hsBox(a, W, H, b, true, line); hsBox(a, W, H, b, true, line); hsBox(a, W, H, b, false, line); hsBox(a, W, H, b, false, line); }
+  function hsGrade(d, W, H, sh, hi, rad, wd, wt, bk, cc) {
+    const N = W * H, SA = sh / 100 * 120, HA = hi / 100 * 120, w = wd / 100;
+    const local = rad > 0, b = local ? Math.min(HS_BOX_MAX, Math.round(rad * 0.6)) : 0;
+    let A = null, B = null, cx = null, cy = null;
+    if (b > 0) {
+      if (!_hsA || _hsA.length < N) _hsA = new Float64Array(N);
+      A = _hsA;
+      let opaque = true;
+      for (let i = 3; i < N * 4; i += 4) if (d[i] !== 255) { opaque = false; break; }
+      if (opaque) for (let j = 0, i = 0; j < N; j++, i += 4) A[j] = ((299 * d[i] + 587 * d[i + 1] + 114 * d[i + 2] + 500) / 1000) | 0;
+      else {
+        if (!_hsB || _hsB.length < N) _hsB = new Float64Array(N);
+        B = _hsB;
+        for (let j = 0, i = 0; j < N; j++, i += 4) { const al = d[i + 3]; A[j] = al ? (((299 * d[i] + 587 * d[i + 1] + 114 * d[i + 2] + 500) / 1000) | 0) * al : 0; B[j] = al; }
+      }
+      const LN = Math.max(W, H);
+      if (!_hsLn || _hsLn.length < LN) _hsLn = new Float64Array(LN);
+      hsTent(A, W, H, b, _hsLn);
+      if (B) hsTent(B, W, H, b, _hsLn);
+      else {                                       // all opaque: the weight under the tent is just how many pixels it covers
+        cx = new Float64Array(W).fill(1); cy = new Float64Array(H).fill(1);
+        hsBox(cx, W, 1, b, true, _hsLn); hsBox(cx, W, 1, b, true, _hsLn); hsBox(cy, H, 1, b, true, _hsLn); hsBox(cy, H, 1, b, true, _hsLn);
+      }
+    }
+    const WT = wt / 100 * HS_ENDS, BK = bk / 100 * HS_ENDS, CC = cc / 100, eS = sh / 100 * HS_SH_STOPS * Math.LN2;
+    const aS = (sh < 0 ? -sh : sh) / 100, aH = (hi < 0 ? -hi : hi) / 100;
+    for (let y = 0, j = 0; y < H; y++) for (let x = 0; x < W; x++, j++) {
+      const i = j * 4;
+      if (d[i + 3] <= 0) continue;
+      let r = d[i], g = d[i + 1], u = d[i + 2];
+      let L = (0.299 * r + 0.587 * g + 0.114 * u) / 255; if (L < 0) L = 0; else if (L > 1) L = 1;
+      if (A) {
+        const den = B ? B[j] : cx[x] * cy[y];
+        if (den > 0) { let Lb = A[j] / den / 255; if (Lb > 1) Lb = 1; const dl = Lb - L; L += dl > HS_EDGE ? HS_EDGE : (dl < -HS_EDGE ? -HS_EDGE : dl); }   // the surroundings, never more than HS_EDGE from the pixel's own (see Local radius above)
+      }
+      let s0, h0;
+      if (w === 1) { s0 = 1 - L; h0 = L; }
+      else { s0 = 1 - L / w; h0 = 1 - (1 - L) / w; if (s0 < 0) s0 = 0; if (h0 < 0) h0 = 0; }
+      let ws = s0 * s0;
+      const wh = h0 * h0;
+      if (local) {
+        ws *= s0;                                  // the gain's weight is CUBED: see Local radius above
+        const k = Math.exp(eS * ws), add = w === 1 ? HA * wh : HA * wh * w;
+        r = r * k + add; g = g * k + add; u = u * k + add;
+      } else { const add = w === 1 ? SA * ws + HA * wh : (SA * ws + HA * wh) * w; r += add; g += add; u += add; }
+      if (WT !== 0 || BK !== 0) {
+        let Lp = (0.299 * r + 0.587 * g + 0.114 * u) / 255; if (Lp < 0) Lp = 0; else if (Lp > 1) Lp = 1;
+        const ip = 1 - Lp, off = WT * Lp * Lp * Lp + BK * ip * ip * ip;
+        r += off; g += off; u += off;
+      }
+      if (CC !== 0) {
+        r = r < 0 ? 0 : (r > 255 ? 255 : r); g = g < 0 ? 0 : (g > 255 ? 255 : g); u = u < 0 ? 0 : (u > 255 ? 255 : u);
+        let m = w === 1 ? aS * ws + aH * wh : (local ? aS * ws + aH * wh * w : (aS * ws + aH * wh) * w); if (m > 1) m = 1;
+        let k = 1 + 2 * CC * m; if (k < 0) k = 0;
+        const Y = 0.299 * r + 0.587 * g + 0.114 * u;
+        r = Y + (r - Y) * k; g = Y + (g - Y) * k; u = Y + (u - Y) * k;
+      }
+      d[i] = r < 0 ? 0 : (r > 255 ? 255 : r); d[i + 1] = g < 0 ? 0 : (g > 255 ? 255 : g); d[i + 2] = u < 0 ? 0 : (u > 255 ? 255 : u);
     }
   }
 
@@ -5964,6 +6191,20 @@ window.FM = window.FM || {};
       // up compresses the highlights instead of smashing them into flat white. Both 0 = old loop.
       const off = p.offset == null ? 0 : FM.evalProp(p.offset, t);
       const roll = (p.rolloff == null ? 0 : FM.evalProp(p.rolloff, t)) / 100;
+      /* #482 5.8 — GAMMA and WORK IN. Either one off its default goes through ONE 256-entry table (the whole grade is a
+         function of the byte, the same for all three channels), built from the shared sRGB decode table; at sRGB and Gamma
+         1 the two loops below run exactly as they always did, so every saved Exposure is the old picture byte for byte.
+         · LINEAR LIGHT decodes each byte to light, multiplies by 2^stops there, and encodes again — +1 stop sends mid-grey
+           128 to 176, where sRGB sends it to 255. Black point lifts black to the SAME visible level in both modes (its
+           value is decoded too, so +40 is the grey 40 either way), and Highlight rolloff bends the top of the LIGHT scale.
+         · GAMMA reshapes the result's mids last, the way the Gamma effect does (out = in^(1/gamma): above 1 brightens). */
+      const gam = p.gamma == null ? 1 : FM.evalProp(p.gamma, t);
+      const lin = (p.space == null ? 0 : (Math.round(FM.evalProp(p.space, t)) | 0)) === 1;
+      if (lin || gam !== 1) {
+        const LUT = exposureLUT(m, off, roll, lin, gam);
+        for (let i = 0; i < d.length; i += 4) { d[i] = LUT[d[i]]; d[i + 1] = LUT[d[i + 1]]; d[i + 2] = LUT[d[i + 2]]; }
+        return;
+      }
       if (off === 0 && roll === 0) {
         for (let i = 0; i < d.length; i += 4) { d[i] *= m; d[i + 1] *= m; d[i + 2] *= m; }
         return;
@@ -6214,7 +6455,48 @@ window.FM = window.FM || {};
         sbX0=Math.max(0,Math.floor(sbMnx)-2); sbX1=Math.min(W-1,Math.ceil(sbMxx)+2); sbY0=Math.max(0,Math.floor(sbMny)-2); sbY1=Math.min(H-1,Math.ceil(sbMxy)+2);
       }
       for(var sby=sbY0;sby<=sbY1;sby++){ var sbDy=sby-sbCy; for(var sbx=sbX0;sbx<=sbX1;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
-    gradientmap: function(d,W,H,p,t){ var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
+    /* Dither's 8x8 cells are one PROJECT pixel (#482 5.1 review). On a clip the plate is never above scale 1, so a cell
+       was always one plate pixel and nothing there changes. An adjustment layer grades the canvas itself, which a
+       supersampled or zoomed preview holds at 2-6x — there the cells shrank to a device pixel and the dither became a
+       finer texture than the export's. `S` above 1 now reads the pattern at (x, y) / S, blended between its four nearest
+       cells the way the export's frame is when it is drawn up to that size; at 1 and below it is the old index, byte for
+       byte. */
+    /* #482 5.6 — COLOURS, REVERSE and BLEND. Two colours, Reverse Off and Blend Normal run the OLD
+       loop below byte for byte (it is the line this kernel was), so a saved map and every new one draw exactly as before.
+       · REVERSE swaps the end colours and leaves Midpoint where it is on the brightness scale — "the middle colour sits at
+         30%" still means 30% — so black takes the Highlights colour.
+       · THREE COLOURS put Midtones AT the Midpoint: Shadows -> Midtones over the darks below it, Midtones -> Highlights over
+         the lights above it. With two colours the Midpoint is where the 50/50 mix lands, as it always was.
+       · BLEND paints the mapped colour onto the picture through fxBlendRGB (Colour keeps the picture's brightness and takes
+         the map's colour; Luminosity keeps the picture's colour and takes the map's brightness), then Amount mixes as before.
+       · A KEYFRAMED colour (Midtones included) needs nothing here: resolveFxColors (queue 555) turns every animated
+         color* into its value at t before any pixel kernel runs, on every path that draws one. */
+    gradientmap: function(d,W,H,p,t,S){ var gmCs=(S>1&&isFinite(S))?S:1;
+      function gmBay(x,y){ if(gmCs===1) return BAYER8[(y&7)*8+(x&7)]; var u=(x+0.5)/gmCs-0.5, v=(y+0.5)/gmCs-0.5, x0=Math.floor(u), y0=Math.floor(v), fu=u-x0, fv=v-y0, r0=(y0&7)*8, r1=((y0+1)&7)*8, c0=x0&7, c1=(x0+1)&7; return (BAYER8[r0+c0]*(1-fu)+BAYER8[r0+c1]*fu)*(1-fv)+(BAYER8[r1+c0]*(1-fu)+BAYER8[r1+c1]*fu)*fv; }   // the dither cell, one PROJECT pixel at any plate scale (#482 5.1 review); at 1 the old index exactly
+      var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1;
+      var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108];
+      var gmStops=p.stops==null?2:(Math.round(FM.evalProp(p.stops,t))|0), gm3=gmStops===3;
+      var gmRev=(p.reverse==null?0:(Math.round(FM.evalProp(p.reverse,t))|0))===1;
+      var gmBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0);
+      if(gmRev){ var gmSw=gmSh; gmSh=gmHi; gmHi=gmSw; }
+      var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0;
+      if(!gm3&&!gmBl){ for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(gmBay(gmX,gmY)-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } return; }
+      var gmMt=gm3?hexToRGB(p.color3==null?'#b0507a':p.color3):null;   // absent = the catalogue Midtones (hexToRGB reads a missing colour as black, never null)
+      for(var gnI=0;gnI<d.length;gnI+=4){
+        var gnR=d[gnI], gnG=d[gnI+1], gnB=d[gnI+2];
+        var gnL=(0.299*gnR+0.587*gnG+0.114*gnB)/255;
+        if(gmDith>0){ var gnP=gnI>>2, gnX=gnP%gmW, gnY=(gnP/gmW)|0; gnL+=(gmBay(gnX,gnY)-0.5)*gmDith*24; if(gnL<0)gnL=0; else if(gnL>1)gnL=1; }
+        var gn0, gn1, gn2, gnU;
+        if(gm3){
+          if(gnL<=gmMid){ gnU=gmMid<=0?1:gnL/gmMid; gn0=gmS0+(gmMt[0]-gmS0)*gnU; gn1=gmS1+(gmMt[1]-gmS1)*gnU; gn2=gmS2+(gmMt[2]-gmS2)*gnU; }
+          else { gnU=gmMid>=1?0:(gnL-gmMid)/(1-gmMid); gn0=gmMt[0]+(gmHi[0]-gmMt[0])*gnU; gn1=gmMt[1]+(gmHi[1]-gmMt[1])*gnU; gn2=gmMt[2]+(gmHi[2]-gmMt[2])*gnU; }
+        } else {
+          if(!gmPlain){ gnL = gnL<=gmMid ? (gmMid<=0?1:0.5*gnL/gmMid) : (gmMid>=1?0:0.5+0.5*(gnL-gmMid)/(1-gmMid)); }
+          gn0=gmS0+gmD0*gnL; gn1=gmS1+gmD1*gnL; gn2=gmS2+gmD2*gnL;
+        }
+        if(gmBl){ var gnO=fxBlendRGB(gmBl, gn0, gn1, gn2, gnR, gnG, gnB); gn0=gnO[0]; gn1=gnO[1]; gn2=gnO[2]; }
+        d[gnI]=gnR+(gn0-gnR)*gmAmt; d[gnI+1]=gnG+(gn1-gnG)*gmAmt; d[gnI+2]=gnB+(gn2-gnB)*gmAmt;
+      } },
     colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t,ps){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); chkSz=Math.max(1,Math.round(chkSz*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2];
       // MIX was welded at a 50/50 blend, so neither a solid checker nor a barely-there one existed.
@@ -6909,7 +7191,12 @@ window.FM = window.FM || {};
         return; }
       if(cbRg>0){ for(var cbJ=0;cbJ<cbN;cbJ+=4){ if(d[cbJ+3]<=0)continue; var cbL=(0.299*d[cbJ]+0.587*d[cbJ+1]+0.114*d[cbJ+2])/255, cbW=cbRg===1?(1-cbL)*(1-cbL):cbRg===3?cbL*cbL:1-(2*cbL-1)*(2*cbL-1);
           var cbQ=d[cbJ]+cbAddR*cbW; d[cbJ]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+1]+cbAddG*cbW; d[cbJ+1]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+2]+cbAddB*cbW; d[cbJ+2]=cbQ<0?0:(cbQ>255?255:cbQ); } return; } for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
-    highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4; for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
+    highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4;
+      /* #482 polish 5.2 — Whites, Blacks, Tonal width, Local radius, Colour boost (hsGrade, above PIXEL_FX). At their
+         defaults none of them is read past this line: the old loop below runs exactly as it always has. */
+      var hsRd = hsNum(fparam(p, 'radius', 0, t), 0, 2000, 0), hsWd = hsNum(fparam(p, 'width', 100, t), 10, 100, 100), hsWt = hsNum(fparam(p, 'whites', 0, t), -100, 100, 0), hsBk = hsNum(fparam(p, 'blacks', 0, t), -100, 100, 0), hsCc = hsNum(fparam(p, 'sat', 0, t), -100, 100, 0);
+      if (hsRd > 0 || hsWd !== 100 || hsWt !== 0 || hsBk !== 0 || hsCc !== 0) { hsGrade(d, W, H, hsSh, hsHi, hsRd, hsWd, hsWt, hsBk, hsCc); return; }
+      for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
     /* TILT SHIFT WAS THE MOST EXPENSIVE EFFECT IN THE APP BY A FACTOR OF FIVE (queue 474, v11.74).
        Measured at 1080x1350 — the exact size of Ezra's own slow reading — against all 179 effects:
        median 14.85ms, and tiltshift **775.75ms**. The next worst was 320ms. He asked for the mobile lag
@@ -7845,16 +8132,67 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         var tr=ov(dr,l), tg=ov(dg,l), tb=ov(db,l);
         if(bbC!==1){ tr=dr+(tr-dr)*bbC; tg=dg+(tg-dg)*bbC; tb=db+(tb-db)*bbC; }
         d[i]=r+(tr-r)*a; d[i+1]=g+(tg-g)*a; d[i+2]=b+(tb-b)*a; } },
-    tealorange: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
+    tealorange: (function(){
+      /* #482 polish 5.3 — two tables, one entry per degree of hue (read with a linear blend between entries), so Splits by Hue
+         and Protect skin cost two table reads a pixel instead of a Math.cos. TOH is the hue's warmth: +1 at the warm hues (reds
+         through yellows, peak 35°), −1 at the cool ones (cyan-blue, 215°), (cos(h − 35°) − 0.2) × 1.6 before Crossover and the
+         clamp. TOS is the skin window: FLAT, full from 0° to 40°, easing (half a cosine) to nothing by −20° and 60°.
+         The first one was a raised cosine peaking at 25°, gone by −5° and 55° — so only a face sitting right on 25° was held:
+         reddish and rosy skin (hue 0–10°, and 356–359° for the pinkest) and light skin at 35° kept most of the grade at 100%
+         (review of 5.3: #a1665e moved 16 of its 25 levels, #d1a3a4 23 of 24). Skin runs from about 0° to 45°, so the top is flat. */
+      var TOH = new Float32Array(362), TOS = new Float32Array(362), toOut = [0, 0, 0];
+      for (var hh = 0; hh < 362; hh++) {
+        TOH[hh] = (Math.cos((hh - 35) * Math.PI / 180) - 0.2) * 1.6;
+        var sx = ((hh % 360) + 180) % 360 - 180;   // −180..180, so 350° reads as −10°
+        TOS[hh] = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
+      }
+      return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The split between warm and cool sat permanently at mid-grey, so whether FACES land in the
       // orange half was decided by how the shot happened to be exposed rather than by any choice.
       // PIVOT moves that dividing line; SPREAD is how sharply it crosses over (a small spread pushes
       // almost everything fully warm or fully cool, a large one keeps a wide neutral middle).
       var toPv=p.pivot==null?50:FM.evalProp(p.pivot,t); if(toPv<5)toPv=5; if(toPv>95)toPv=95;
       var toSpP=p.spread==null?100:FM.evalProp(p.spread,t); if(toSpP<10)toSpP=10; if(toSpP>200)toSpP=200;
-      var toPiv=toPv===50?0.5:toPv/100, toSp=toSpP===100?1:100/toSpP; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=toPiv===0.5&&toSp===1?(l-0.5)*2:(l-toPiv)*2*toSp;
+      var toPiv=toPv===50?0.5:toPv/100, toSp=toSpP===100?1:100/toSpP;
+      /* SPLITS BY, PROTECT SKIN, BALANCE, KEEP BRIGHTNESS (#482 polish 5.3, the backlog's C48). Read once a frame; all four at
+         their defaults run the old loop below, untouched, so every saved grade and the two library filters built on it draw
+         byte for byte as they did. */
+      var toMd=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0);
+      var toSk=p.skin==null?0:FM.evalProp(p.skin,t); if(!(toSk>0))toSk=0; if(toSk>100)toSk=100;
+      var toBa=p.balance==null?0:FM.evalProp(p.balance,t); if(toBa!==toBa)toBa=0; if(toBa<-100)toBa=-100; if(toBa>100)toBa=100;
+      var toKp=p.keep==null?0:FM.evalProp(p.keep,t); if(!(toKp>0))toKp=0; if(toKp>100)toKp=100;
+      if(toMd!==1&&toSk===0&&toBa===0&&toKp===0){
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=toPiv===0.5&&toSp===1?(l-0.5)*2:(l-toPiv)*2*toSp;
         if(w<-1)w=-1; else if(w>1)w=1;
-        var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); } },
+        var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); }
+        return; }
+      /* The extended loop. HUE: a coloured pixel's warmth comes from its hue (TOH, scaled by Crossover), blended in by how much
+         colour it has (full from a chroma of 48 levels), so a grey — which has no hue — still splits by brightness at Split
+         point and the step from grey to colour is smooth. PROTECT SKIN scales the grade down on skin-coloured pixels: skin
+         hue (TOS) × a saturation window (HSV S 0.2–0.8 full, nothing under 0.08 or over 0.9 — deep brown skin such as
+         #8d5524 sits at 0.74, and the first window, full only to 0.65, let it keep half the grade) × not near-black (V from 0.2).
+         BALANCE scales the warm side by 1 + b and the cool side by 1 − b. KEEP BRIGHTNESS moves the result toward the pixel
+         at its own luma (setLum255, as Colour Balance's Keep brightness), so 100 is a pure colour move. */
+      var toBf=toBa/100, toKk=toKp/100, toSf=toSk/100;
+      for(var j=0;j<d.length;j+=4){ if(d[j+3]===0)continue; var r2=d[j],g2=d[j+1],b2=d[j+2]; var l2=(r2*0.299+g2*0.587+b2*0.114)/255; var w2=toPiv===0.5&&toSp===1?(l2-0.5)*2:(l2-toPiv)*2*toSp;
+        if(w2<-1)w2=-1; else if(w2>1)w2=1;
+        var a2=a;
+        if(toMd===1||toSf>0){
+          var mx=r2>g2?(r2>b2?r2:b2):(g2>b2?g2:b2), mn=r2<g2?(r2<b2?r2:b2):(g2<b2?g2:b2), ch=mx-mn;
+          if(ch>0){
+            var hu=mx===r2?(g2-b2)/ch:(mx===g2?(b2-r2)/ch+2:(r2-g2)/ch+4); if(hu<0)hu+=6; hu*=60;
+            var hi=hu|0, hf=hu-hi;
+            if(toMd===1){ var wh=(TOH[hi]+(TOH[hi+1]-TOH[hi])*hf)*toSp; if(wh<-1)wh=-1; else if(wh>1)wh=1; w2+=(wh-w2)*(ch>=48?1:ch/48); }
+            if(toSf>0){ var sS=ch/mx, sV=mx/255;
+              var mS=sS<0.08?0:(sS<0.2?(sS-0.08)/0.12:(sS<=0.8?1:(sS<0.9?(0.9-sS)/0.1:0)));
+              var mV=sV<0.08?0:(sV<0.2?(sV-0.08)/0.12:1);
+              var mk=(TOS[hi]+(TOS[hi+1]-TOS[hi])*hf)*mS*mV; if(mk>0)a2=a*(1-toSf*mk); }
+          }
+        }
+        if(toBf!==0)w2*=w2>0?1+toBf:1-toBf;
+        var r3=r2+w2*42*a2, g3=g2+w2*8*a2, b3=b2-w2*42*a2;
+        if(toKk>0){ setLum255(r3,g3,b3,r2*0.299+g2*0.587+b2*0.114,toOut); r3+=(toOut[0]-r3)*toKk; g3+=(toOut[1]-g3)*toKk; b3+=(toOut[2]-b3)*toKk; }
+        d[j]=r3<0?0:(r3>255?255:r3); d[j+1]=g3<0?0:(g3>255?255:g3); d[j+2]=b3<0?0:(b3>255?255:b3); } }; })(),
     crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The whole look lived in six hardcoded constants, so Amount could only crossfade between the
       // footage and that ONE fixed C-41 curve. LIFT scales the per-channel S-bend (0 = none, so the
@@ -7866,6 +8204,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var lk=cpL===100?1:cpL/100, gk=cpG===100?1:cpG/100;
       var l1=cpL===100?0.10:0.10*lk, l2=cpL===100?0.06:0.06*lk, l3=cpL===100?-0.12:-0.12*lk;
       var g1=cpG===100?0.90:1+(0.90-1)*gk, g2=cpG===100?0.95:1+(0.95-1)*gk, g3=cpG===100?1.10:1+(1.10-1)*gk;
+      /* #482 5.7 — FILM: NEGATIVE (PASTEL), negative film developed as a slide. Flat (black lifts to ~19%, white drops to
+         ~85%), a blue-green cast that is strongest in the shadows (red sits lowest there, blue highest), and a quarter of the
+         colour drained toward grey after the curves, which is what makes it pastel rather than just washed out.
+         CURVE (gain) is how flat: 0 = no flattening and no drain, so only the cast is left; above 100% it flattens on at
+         0.6 the rate, so 300% is very flat and never turns the picture inside out. COLOUR CAST (lift) scales every
+         channel's departure from grey — its own black and white, its gamma and its mid bump — so 0 is a neutral flat grade.
+         Absent (every saved Cross Process) or Slide (punchy): the old curves below, untouched. Still one table per channel. */
+      if((p.variant==null?0:(Math.round(FM.evalProp(p.variant,t))|0))===1){
+        var npK=lk, npF=gk<=1?gk:1+(gk-1)*0.6, npLo=0.19*npF, npHi=1-0.15*npF;
+        var npDL=[-0.06,0,0.04], npDH=[-0.03,0.02,0.01], npGa=[1.06,0.97,0.94], npBu=[-0.02,0.03,0.02], npT=[];
+        for(var npC=0;npC<3;npC++){ var npA=new Float64Array(256), npL0=npLo+npDL[npC]*npK, npH0=npHi+npDH[npC]*npK, npG0=1+(npGa[npC]-1)*npK, npB0=npBu[npC]*npK;
+          for(var npV=0;npV<256;npV++){ var npX=npV/255, npY=npL0+(npH0-npL0)*Math.pow(npX,npG0)+npB0*Math.sin(npX*Math.PI); npA[npV]=(npY<0?0:npY)*255; }
+          npT.push(npA); }
+        var npR=npT[0], npG=npT[1], npB=npT[2], npDs=0.25*npF; if(npDs>1)npDs=1;
+        for(var npI=0;npI<d.length;npI+=4){ if(d[npI+3]===0)continue; var npr=d[npI],npg=d[npI+1],npb=d[npI+2]; var nmr=npR[npr], nmg=npG[npg], nmb=npB[npb];
+          if(npDs>0){ var nml=0.299*nmr+0.587*nmg+0.114*nmb; nmr+=(nml-nmr)*npDs; nmg+=(nml-nmg)*npDs; nmb+=(nml-nmb)*npDs; }
+          d[npI]=npr+(nmr-npr)*a; d[npI+1]=npg+(nmg-npg)*a; d[npI+2]=npb+(nmb-npb)*a; }
+        return;
+      }
       /* ONE CURVE PER CHANNEL, NOT ONE PER PIXEL (queue 474). `cv` does a Math.sin AND a Math.pow, and
          it was called three times a pixel — 4.4 MILLION transcendental calls a frame at 1080x1350 to
          produce, at most, 768 distinct answers: it depends only on `v`, which is an integer 0-255 out
@@ -13910,10 +14267,35 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     (l) => 1 - Math.abs(2 * l - 1),         // Midtones
     (l) => l * l,                           // Highlights
   ];
+  /* METHOD and RANGE WIDTH (#482 polish 5.4). Colourise is the old replace: brightness × colour, so a red jacket under a blue
+     Tint came out the same blue as a grey wall. TINT OVER soft-lights the colour onto the pixel instead (fxBlendPx's W3C soft
+     light, the colour as the source), so the clip keeps its own contrast and much of its colour, its hues leaning toward the
+     tint colour — under blue a red stays red but goes pinker, and a pale warm tone like skin loses most of its warmth; Range, Amount
+     and Keep brightness work on it exactly as on Colourise. RANGE WIDTH is an exponent on the Range weight, 100/width, as on
+     Colour Balance — 100 is the old weights and All has no range to widen. Colourise + 100 run the old loops below. */
   function tintPixels(d, am, C, p, t) {
     const rng = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
     const pres = p.preserve == null ? 0 : (Math.round(FM.evalProp(p.preserve, t)) | 0);
     const wf = TINT_W[rng > 0 && rng < TINT_W.length ? rng : 0];
+    const over = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+    let so = p.soft == null ? 100 : FM.evalProp(p.soft, t); if (!(so >= 10)) so = 10; if (so > 200) so = 200;
+    const ex = wf && so !== 100 ? 100 / so : 1;
+    if (over || ex !== 1) {
+      for (let i = 0; i < d.length; i += 4) {
+        const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+        const l = (r0 * 0.299 + g0 * 0.587 + b0 * 0.114) / 255;
+        let wv = wf ? wf(l) : 1; if (ex !== 1) wv = wv > 0 ? Math.pow(wv, ex) : 0;
+        const k = am * wv;
+        const tr = over ? fxBlendPx(4, C[0], r0) : l * C[0], tg = over ? fxBlendPx(4, C[1], g0) : l * C[1], tb = over ? fxBlendPx(4, C[2], b0) : l * C[2];
+        let nr = r0 + (tr - r0) * k, ng = g0 + (tg - g0) * k, nb = b0 + (tb - b0) * k;
+        if (pres) {
+          const l1 = 0.299 * nr + 0.587 * ng + 0.114 * nb;
+          if (l1 > 0.0001) { const s = (l * 255) / l1; nr *= s; ng *= s; nb *= s; }
+        }
+        d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+      }
+      return;
+    }
     if (!wf && !pres) {
       for (let i = 0; i < d.length; i += 4) {
         const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
@@ -13974,11 +14356,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // BALANCE bends the luma curve so the handover between shadow and highlight colour can move
   // (every duotone used to land in exactly the same place); CONTRAST widens or flattens the ramp.
   // 0 / 100 short-circuits to the original straight line — 0.5 + (x - 0.5) is NOT exactly x.
+  /* BLEND (#482 polish 5.5). The two colours always REPLACED the picture. Soft light and Overlay lay the mapped colour over the
+     pixel through fxBlendPx (the mapped colour as the source), and Colour puts the mapped colour at the pixel's OWN luma
+     (setLum255), so the picture keeps every bit of its brightness detail and takes only the two colours' hue and saturation.
+     Amount fades each toward the untouched pixel, as before. Replace runs the old loop below, byte for byte. */
+  const _duOut = [0, 0, 0];
   function duotonePixels(d, am, A, B, p, t) {
     const bal = p.balance == null ? 0 : FM.evalProp(p.balance, t);
     const con = p.contrast == null ? 100 : FM.evalProp(p.contrast, t);
     const plain = (bal === 0 && con === 100);
     const g = plain ? 1 : Math.pow(2, -bal / 100), k = con / 100;
+    const bl = p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0);
+    if (bl >= 1 && bl <= 3) {
+      for (let i = 0; i < d.length; i += 4) {
+        const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2], l0 = r0 * 0.299 + g0 * 0.587 + b0 * 0.114;
+        let l = l0 / 255;
+        if (!plain) { l = Math.pow(l, g); l = 0.5 + (l - 0.5) * k; l = l < 0 ? 0 : (l > 1 ? 1 : l); }
+        const m0 = A[0] + (B[0] - A[0]) * l, m1 = A[1] + (B[1] - A[1]) * l, m2 = A[2] + (B[2] - A[2]) * l;
+        let t0, t1, t2;
+        if (bl === 3) { setLum255(m0, m1, m2, l0, _duOut); t0 = _duOut[0]; t1 = _duOut[1]; t2 = _duOut[2]; }
+        else { const md = bl === 1 ? 4 : 3; t0 = fxBlendPx(md, m0, r0); t1 = fxBlendPx(md, m1, g0); t2 = fxBlendPx(md, m2, b0); }
+        d[i] = r0 + (t0 - r0) * am; d[i + 1] = g0 + (t1 - g0) * am; d[i + 2] = b0 + (t2 - b0) * am;
+      }
+      return;
+    }
     for (let i = 0; i < d.length; i += 4) {
       let l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;   // luma 0..1
       if (!plain) { l = Math.pow(l, g); l = 0.5 + (l - 0.5) * k; l = l < 0 ? 0 : (l > 1 ? 1 : l); }
@@ -16887,7 +17288,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Per-pixel post-fx that an adjustment layer can also apply to everything beneath it (matching
   // the layer-level draw* math exactly). Geometric post-fx (pixelate/mirror/rgbsplit) aren't done
   // here — they need a geometry pass, so they only apply per-layer for now.
-  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1 };
+  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1,
+    /* #482 polish 5.1 — the PIXEL_FX colour grades that are point ops (fx-registry ADJ_OK says which and why the rest wait).
+       applyPixelFx hands each straight to its PIXEL_FX kernel over the snapshot, the very function the clip itself runs. */
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
+    bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
+    palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1 };
   // Own keys only — see POSTFX. Missed with TEXT_FX when the others were cut off. Milder than that one
   // (the filter below only TESTS the hit), but a junk type still passes, so applyAdjustment believes it
   // has pixel work to do and pays for a full comp-sized getImageData/putImageData round trip that
@@ -16948,8 +17354,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const p = resolveFxColors(fx.params || {}, t);
     // Levels is the one grade people reach for on an adjustment layer — "set the black point for
     // everything below" — and its pixel pass is already byte-in/byte-out, so the adjustment path can
-    // call it directly instead of carrying a second copy. (No overlap: none of the other PIXEL_ADJ
-    // types live in PIXEL_FX; they have their own draw* functions.)
+    // call it directly instead of carrying a second copy. (No overlap: posterize, tint, threshold,
+    // duotone and rgbsplit are not in PIXEL_FX — they have their own draw* functions; the twenty colour
+    // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
     if (fx.type === 'rgbsplit') {
       const dd = Math.round((FM.evalProp(p.amount, t) || 0) * S);   // project px → plate px (#691)
@@ -17125,6 +17532,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     g.globalCompositeOperation = 'copy'; g.drawImage(r, 0, 0); g.globalCompositeOperation = 'source-over';
     return _adjCssOut;
   }
+  /* ═══ TWO ADJUSTMENT-LAYER GRADES THAT A ZOOMED SLICE CANNOT DRAW (#482 5.1 review) ═══════════════════════════════════
+   * Zoomed past 1.35x the preview canvas holds only the slice on screen plus 18% (app.js previewCrop), and an adjustment
+   * layer grades that slice — the layers below it were never drawn anywhere else, so it has no frame-sized plate to read the
+   * way a clip has (913.5). Every point grade is the same on a slice, and Pixelate / RGB Split are told where the frame is
+   * (queue 690). Two are not:
+   *   · Highlights & Shadows with Local radius judges each pixel by the brightness up to 1.2 x the radius around it, past
+   *     the 18% margin — measured zoomed in on a photo, radius 100 was 11.8 levels off the export on average (max 64),
+   *     radius 200 27-30, and panning 40 px changed the same pixels by 4.6, where the clip is exact.
+   *   · Gradient Map's Dither lays its 8x8 pattern from the buffer's own corner, so on a slice it started at the slice's
+   *     corner and crawled as he panned.
+   * So while a shown adjustment layer carries either (any keyframe, so the decision does not flip mid-play), the preview
+   * renders the whole comp — app.js asks this before cropping. `maxScale` is the other half: Local radius's blur is exact
+   * integer arithmetic only up to a 300-px box (hsGrade), i.e. 0.6 x radius x scale <= 300, and an adjustment layer's
+   * plate is the canvas itself, at the canvas's scale — so a supersampled preview is held under 500 / radius, or the
+   * reach would shrink against the export's. Returns null when nothing needs it. */
+  function adjPeak(v) {                           // the most a param reaches: a number, or its largest keyframe
+    if (typeof v === 'number') return v === v ? v : 0;
+    if (v && Array.isArray(v.kf)) { let m = 0; for (const k of v.kf) if (k && typeof k.v === 'number' && k.v > m) m = k.v; return m; }
+    return 0;
+  }
+  FM.adjNeedsFrame = function (scene) {
+    const ls = (scene && scene.layers) || [];
+    let need = false, maxScale = Infinity;
+    const walk = (effs) => {
+      for (const e of effs || []) {
+        if (!e || e.enabled === false) continue;
+        if (FM.isFxContainer && FM.isFxContainer(e)) { walk(e.effects); continue; }
+        const p = e.params || {};
+        if (e.type === 'highlightsshadows') {
+          const r = Math.min(2000, adjPeak(p.radius));
+          if (r > 0) { need = true; maxScale = Math.min(maxScale, HS_BOX_MAX / (0.6 * r)); }
+        } else if (e.type === 'gradientmap' && adjPeak(p.dither) > 0) need = true;
+      }
+    };
+    for (const L of ls) if (L && L.type === 'adjustment' && L.visible) walk(L.effects);
+    return need ? { maxScale: maxScale } : null;
+  };
   function applyAdjustment(ctx, layer, t, scene, effs, into) {
     if (!effs) {
       /* …plus a PREVIEWED stack (#986 C52): picking a filter tile on an adjustment layer set FM._fxPreview and changed
@@ -17160,8 +17604,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _adjCv.__fmRS = rs;
     _adjCv.__fmOX = ctx.canvas.__fmOX || 0; _adjCv.__fmOY = ctx.canvas.__fmOY || 0;
     const a = _adjCv.getContext('2d');
+    /* ═══ WITH ONE OF THE TWENTY COLOUR GRADES IN THE STACK, THE CSS HALF RUNS FIRST — THE CLIP'S ORDER (#482 5.1 review) ═══
+     * On a clip the nine CSS effects (Contrast, Saturation, Brightness…) are drawn into the layer before any pixel effect
+     * runs, whatever their row (postFxOrder). Here the CSS half was the filter on the final blit, so it ran AFTER the
+     * pixel pass — and 5.1's promise, "they grade everything below exactly as they grade the clip", held only for one
+     * effect on its own. Measured on two photos: [Contrast 1.5, Exposure +1] was 31 levels off the same stack on the clip
+     * (the grade itself is 49), [Saturation 2.2, Colour Balance] 20, and the Infrared filter fitted to an adjustment layer
+     * a hot magenta wash 52 levels off its own ingredients on the clip. So with any of them present the CSS half is
+     * applied to the snapshot here (through the shader where ctx.filter does nothing, #986 batch 2), the pixel pass runs
+     * on that, and the blit below carries no filter. A stack of only the six that could always go on an adjustment layer
+     * (Posterize, Tint, Threshold, Duotone, RGB Split, Levels) keeps its old order: saved projects draw as they did.
+     * `levels` is the one PIXEL_FX kernel among the six, which is why it is named. */
+    const cssFirst = hasCss && ppfx.some(e => e.type !== 'levels' && !!PIXEL_FX[e.type]);
     a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch); a.globalAlpha = 1; a.filter = 'none';
-    a.drawImage(ctx.canvas, 0, 0);                 // snapshot current frame (background + layers below), now 1:1
+    if (cssFirst && ctxFilterOK()) { a.filter = filter; a.drawImage(ctx.canvas, 0, 0); a.filter = 'none'; }   // the snapshot, CSS-graded on the way in
+    else {
+      a.drawImage(ctx.canvas, 0, 0);               // snapshot current frame (background + layers below), now 1:1
+      if (cssFirst) {                              // ctx.filter is dead here: the same passes through the shader, copied back
+        const o = adjCssNoFilter(lay, t, cw, ch, renderScale(ctx));
+        if (o) { a.globalCompositeOperation = 'copy'; a.drawImage(o, 0, 0); a.globalCompositeOperation = 'source-over'; }
+      }
+    }
     /* ═══ ZOOMED IN, AN ADJUSTMENT LAYER STILL GRADES THE WHOLE FRAME'S GEOMETRY (queue 690, HUNT-d) ═══════════════════
      * 913.5 made every per-layer effect draw the same in a zoomed slice as in the frame, and v16.90 told him "a zoomed view
      * is exactly the export, just closer". Adjustment layers never got it: this snapshot is the TARGET, and zoomed in the
@@ -17173,7 +17636,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the frame's. `onFrame` is the plate being exactly the frame — the export, every unzoomed preview, every playback
      * tier — and there nothing below changes by a byte. The one thing a slice cannot know is what lies past its own edge,
      * so a block straddling it, or a split sampling past it, reads the nearest pixel it has. The preview renders 18% past
-     * every visible edge (app.js CROP_MARGIN) so that band is off screen. */
+     * every visible edge (app.js CROP_MARGIN) so that band is off screen. Local radius reaches further than that band and
+     * Dither has no geometry to be told, so for those two the preview does not crop at all (FM.adjNeedsFrame, above). */
     const aOX = ctx.canvas.__fmOX || 0, aOY = ctx.canvas.__fmOY || 0;
     const onFrame = Math.abs(aOX * rs) <= 0.5 && Math.abs(aOY * rs) <= 0.5 && Math.abs(cw - W * rs) <= 1 && Math.abs(ch - H * rs) <= 1;
     const frameGeo = onFrame ? null : { cx: (W / 2 - aOX) * rs, cy: (H / 2 - aOY) * rs, maxR: Math.hypot(W / 2, H / 2) * rs };
@@ -17225,8 +17689,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        the frame back ungraded on his class of phone — measured: the whole grade gone. The same passes run here on the
        graded snapshot, radii at the target's own scale (what effectFilter was handed), and the result is drawn with no
        filter. Anything the shader cannot do leaves the old line exactly as it was. */
-    let src = _adjCv, css = hasCss ? filter : 'none';
-    if (hasCss && !ctxFilterOK()) { const o = adjCssNoFilter(lay, t, cw, ch, renderScale(ctx)); if (o) { src = o; css = 'none'; } }
+    let src = _adjCv, css = (hasCss && !cssFirst) ? filter : 'none';   // cssFirst: already in the snapshot (above)
+    if (hasCss && !cssFirst && !ctxFilterOK()) { const o = adjCssNoFilter(lay, t, cw, ch, renderScale(ctx)); if (o) { src = o; css = 'none'; } }
     if (into) {                                     // #986 C1: one side of a filter's cross-fade — baked, not blitted
       const m = into.getContext('2d');
       m.setTransform(1, 0, 0, 1, 0, 0); m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
