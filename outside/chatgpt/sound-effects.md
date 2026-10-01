@@ -8,9 +8,9 @@ The Audio tab in [`js/addmenu.js`](../../js/addmenu.js) offers Import audio, Sou
 
 ## Reading this list
 
-Each source link goes to the individual Freesound sound page or the originating Kenney pack page; for pack entries the exact asset filename is given. The linked [CC0 1.0 legal text](https://creativecommons.org/publicdomain/zero/1.0/) permits commercial use without attribution. Freesound pages below display the CC0 badge and file metadata. Kenney's official pack pages declare CC0; where I could not verify a particular file's duration from a source record, it is explicitly `UNVERIFIED`. Short subjective descriptions paraphrase the source description or filename/category and should be confirmed by audition before selecting a shipped set.
+Each source link goes to the individual Freesound sound page or the originating Kenney pack page; for pack entries the exact asset filename is given. The linked [CC0 1.0 legal text](https://creativecommons.org/publicdomain/zero/1.0/) permits commercial use without attribution. Freesound pages below display the CC0 badge and file metadata. Kenney's official pack pages declare CC0; those pages do not publish per-file duration metadata, so I measured the listed OGG files from temporary copies outside the repo. Short subjective descriptions paraphrase the source description or filename/category and should be confirmed by audition before selecting a shipped set.
 
-`UNVERIFIED` on a Kenney duration means that the pack landing page does not expose per-file durations; it is not a license uncertainty. These durations should be read from the downloaded pack before shipping. The recommendations are candidate sources, not a claim that every long ambience file should be bundled whole.
+The recommendations are candidate sources, not a claim that every long ambience file should be bundled whole. No sound files were added to or downloaded into the repo.
 
 ## 1. Movement / whooshes (existing Movement; proposed Whooshes)
 
@@ -47,14 +47,14 @@ Each source link goes to the individual Freesound sound page or the originating 
 | Sci-Fi Explosion 2 | [Anomaex — Sci-Fi Explosion 2](https://freesound.org/people/Anomaex/sounds/490266/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | WAV | 4.593 s | A crunchy, distorted sci-fi blast. |
 | Light ping hits | [xkeril — Light ping hits](https://freesound.org/people/xkeril/sounds/715597/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | WAV | 6.629 s | A short sequence of bright metallic, bell-like pings. |
 | Deep Cinematic Impact 5 | [zazz.sound.design — DSGNImpt Deep Cinematic Impact 5](https://freesound.org/people/zazz.sound.design/sounds/754424/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | WAV | 6.845 s | A deep, reverberant cinematic hit. |
-| Metal medium 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactMetal_medium_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | UNVERIFIED | A medium metal tap. |
-| Wood light 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactWood_light_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | UNVERIFIED | A light wooden knock. |
-| Wood medium 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactWood_medium_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | UNVERIFIED | A fuller wooden thump. |
-| Punch heavy 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactPunch_heavy_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | UNVERIFIED | A heavy, blunt punch-like hit. |
-| Punch medium 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactPunch_medium_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | UNVERIFIED | A mid-weight body impact. |
-| Glass light 001 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactGlass_light_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | UNVERIFIED | A light, bright glass tap. |
-| Glass medium 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactGlass_medium_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | UNVERIFIED | A short, resonant glass knock. |
-| Plate heavy 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactPlate_heavy_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | UNVERIFIED | A heavy metal-plate slam. |
+| Metal medium 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactMetal_medium_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.272 s | A medium metal tap. |
+| Wood light 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactWood_light_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.266 s | A light wooden knock. |
+| Wood medium 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactWood_medium_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.333 s | A fuller wooden thump. |
+| Punch heavy 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactPunch_heavy_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.649 s | A heavy, blunt punch-like hit. |
+| Punch medium 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactPunch_medium_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.431 s | A mid-weight body impact. |
+| Glass light 001 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactGlass_light_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.210 s | A light, bright glass tap. |
+| Glass medium 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactGlass_medium_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.543 s | A short, resonant glass knock. |
+| Plate heavy 000 | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) — `impactPlate_heavy_000.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.489 s | A heavy metal-plate slam. |
 
 ## 4. Interface / UI clicks and beeps
 
@@ -68,12 +68,12 @@ Each source link goes to the individual Freesound sound page or the originating 
 | Beep Sound | [Entershift — Beep Sound](https://freesound.org/people/Entershift/sounds/704134/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | MP3 | 0.339 s | A brief on/off computer beep. |
 | UI Button Click | [el_boss — UI Button Click](https://freesound.org/people/el_boss/sounds/677861/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | WAV | 0.047 s | A very short, crisp interface click. |
 | UI Button Click | [benzix2 — UI Button Click](https://freesound.org/people/benzix2/sounds/467951/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.123 s | A small mouth-made click/pop suitable for button feedback. |
-| Click 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `click_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.1 s* | A compact, clean button click. |
-| Click 002 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `click_002.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | <0.1 s* | A shorter alternate click. |
-| Tick 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `tick_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | <0.1 s* | A tiny, sharp tick. |
-| Confirmation 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `confirmation_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.3 s* | A quick, pleasant confirmation note. |
-| Drop 002 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `drop_002.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.2 s* | A soft, quick placement/drop cue. |
-| Pluck 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `pluck_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.1 s* | A light, rounded plucked accent. |
+| Click 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `click_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.100 s | A compact, clean button click. |
+| Click 002 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `click_002.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.010 s | A shorter alternate click. |
+| Tick 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `tick_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.023 s | A tiny, sharp tick. |
+| Confirmation 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `confirmation_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.290 s | A quick, pleasant confirmation note. |
+| Drop 002 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `drop_002.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.191 s | A soft, quick placement/drop cue. |
+| Pluck 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `pluck_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.102 s | A light, rounded plucked accent. |
 
 ## 5. Transitions
 
@@ -135,9 +135,9 @@ Each source link goes to the individual Freesound sound page or the originating 
 | Pixel Radio | [MursilProduction — Pixel Radio](https://freesound.org/people/MursilProduction/sounds/846734/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | WAV | 8.400 s | Crunchy, lo-fi digital radio searching for a signal. |
 | Radio static 01 | [wwstudioswastaken — radio_static_01](https://freesound.org/people/wwstudioswastaken/sounds/625095/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | FLAC | 1:24.740 | A recorded untuned radio hiss with a glitchy electronic edge. |
 | Soft Static Noise | [deadrobotmusic — Soft Static Noise](https://freesound.org/people/deadrobotmusic/sounds/555462/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | WAV | 2:24.000 | A soft, even noise bed with fine crackle. |
-| Glitch 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `glitch_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | <0.1 s* | A tiny digital glitch blip. |
+| Glitch 001 | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) — `glitch_001.ogg` | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | OGG | 0.020 s | A tiny digital glitch blip. |
 
-\* Kenney lengths marked with an asterisk are reported in the independent [OverlayMotion sound index](https://overlaymotion.com/docs/sfx-library); check the actual pack file before shipping. Kenney's official [Interface Sounds](https://kenney.nl/assets/interface-sounds) and [Impact Sounds](https://kenney.nl/assets/impact-sounds) pages state CC0 and list the packs, but do not publish per-file duration metadata. The [Kenney UI SFX license text](https://github.com/Calinou/kenney-ui-audio/blob/master/LICENSE.txt) expressly allows commercial use and says credit is optional.
+Kenney's official [Interface Sounds](https://kenney.nl/assets/interface-sounds) and [Impact Sounds](https://kenney.nl/assets/impact-sounds) pages state CC0 and list the packs. I measured OGG duration from the files' Vorbis sample rate and final granule position. The temporary pack copies were outside the repo and have been removed. The [Kenney UI SFX license text](https://github.com/Calinou/kenney-ui-audio/blob/master/LICENSE.txt) expressly allows commercial use and says credit is optional.
 
 ## Excluded during screening
 
@@ -146,4 +146,4 @@ Each source link goes to the individual Freesound sound page or the originating 
 - `Scary_Bell / Chime` by DRFX showed a CC0 badge but also text asking for a share of revenue above a threshold. That conflict makes its terms unclear, so it is excluded.
 - Freesound metadata reflects each uploader's license selection; before bundling, audition the clip and keep the source/license snapshot with the selected asset. This is especially worthwhile for files with a long embedded sequence or references to source recordings.
 
-**Total in the main list: 80 specific sound candidates.** No assets were downloaded.
+**Total in the main list: 80 specific sound candidates.** No sound assets were added to or downloaded into the repo.
