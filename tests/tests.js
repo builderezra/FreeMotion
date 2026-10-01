@@ -117227,8 +117227,8 @@
   });
 
   /* 5.6 GRADIENT MAP — Reverse, Colours (Three, with Midtones at the Midpoint), Blend (Colour and Luminosity among them), and a
-     keyframed colour read at its time. Driven straight through the kernel at Amount 1, then through the renderer. */
-  test('482 5.6 Gradient Map - Reverse maps black to the Highlights colour, Three colours put Midtones at the Midpoint, Colour keeps the picture brightness and Luminosity its colour, keyframed colours are read at their time, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+     keyframed Midtones colour drawing at its time. Driven straight through the kernel at Amount 1, then through the renderer. */
+  test('482 5.6 Gradient Map - Reverse maps black to the Highlights colour, Three colours put Midtones at the Midpoint, Colour keeps the picture brightness and Luminosity its colour, a keyframed Midtones colour draws at its time, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
     const SH = [36, 26, 82], HI = [255, 184, 108], MT = [176, 80, 122];
     const near = (a, b, tol) => Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol;
     // CONTROL: the default map sends black to Shadows and white to Highlights.
@@ -117266,11 +117266,22 @@
     // BLEND 1 MULTIPLY (an fxBlendPx mode, for the separable half): white x map = map, black stays black.
     o = k4825('gradientmap', { blend: 1 }, [[255, 255, 255], [0, 0, 0]]);
     if (!near(o[0], HI, 1) || !near(o[1], [0, 0, 0], 0)) throw new Error('Blend Multiply gives white ' + o[0] + ' and black ' + o[1]);
-    // KEYFRAMED COLOURS are read at their time — they were parsed as '[object Object]'.
-    o = k4825('gradientmap', { stops: 3, color3: { kf: [{ t: 0, v: '#000000' }, { t: 2, v: '#00ff00' }] } }, [g50], 2)[0];
-    if (!near(o, [0, 255, 0], 2)) throw new Error('a keyframed Midtones colour at its 2 s keyframe (#00ff00) draws ' + o);
-    o = k4825('gradientmap', { color: { kf: [{ t: 0, v: '#ff0000' }, { t: 2, v: '#0000ff' }] } }, [[0, 0, 0]], 1)[0];
-    if (!near(o, [128, 0, 128], 2)) throw new Error('a keyframed Shadows colour half way from red to blue draws black as ' + o + ', not (128,0,128)');
+    // KEYFRAMED COLOURS, through the RENDERER (export, and a half-size preview). resolveFxColors (queue 555) turns every
+    // animated color* into its value at t before any pixel kernel runs, so the kernel never sees a {kf} object. The Shadows
+    // line is a GUARD, not a fix - it passes on v17.20 too (measured: (128,0,128) at 1 s there as well). Midtones is new.
+    const kfAt = (fill, over, t) => {
+      const mk = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 40, shapeW: 100, shapeH: 80, fill: fill }); L.start = 0; L.duration = 4; L.effects = [_986fx('gradientmap', over)]; return L; };
+      const ex = _986shot([mk()], t, 100, 80), pv = _986shot([mk()], t, 100, 80, 0.5);
+      const i = (40 * ex.w + 50) * 4, j = (20 * pv.w + 25) * 4;
+      return { ex: [ex.d[i], ex.d[i + 1], ex.d[i + 2]], pv: [pv.d[j], pv.d[j + 1], pv.d[j + 2]] };
+    };
+    const MTKF = { stops: 3, color3: { kf: [{ t: 0, v: '#000000' }, { t: 2, v: '#00ff00' }] } };
+    [[1, [1, 128, 0]], [2, [1, 255, 0]]].forEach(([tt, want]) => {
+      const r = kfAt('#808080', MTKF, tt);
+      if (!near(r.ex, want, 2) || !near(r.pv, want, 2)) throw new Error('a Midtones colour keyframed black to green over 2 s draws the Midpoint grey at ' + tt + ' s as ' + r.ex + ' (export) and ' + r.pv + ' (preview), not ' + want);
+    });
+    const shkf = kfAt('#000000', { color: { kf: [{ t: 0, v: '#ff0000' }, { t: 2, v: '#0000ff' }] } }, 1);
+    if (!near(shkf.ex, [128, 0, 128], 2) || !near(shkf.pv, [128, 0, 128], 2)) throw new Error('GUARD: a Shadows colour keyframed red to blue draws black at 1 s as ' + shkf.ex + ' (export) and ' + shkf.pv + ' (preview), not (128,0,128)');
     // PREVIEW = EXPORT, and the setting reaches the render (CONTROL: it differs from the default).
     const def = parity4825('gradientmap', {}, 'default');
     const all = parity4825('gradientmap', { stops: 3, reverse: 1, blend: 8, midpoint: 40 }, 'Three, reversed, Colour');

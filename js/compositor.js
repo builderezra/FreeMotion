@@ -6303,7 +6303,7 @@ window.FM = window.FM || {};
         sbX0=Math.max(0,Math.floor(sbMnx)-2); sbX1=Math.min(W-1,Math.ceil(sbMxx)+2); sbY0=Math.max(0,Math.floor(sbMny)-2); sbY1=Math.min(H-1,Math.ceil(sbMxy)+2);
       }
       for(var sby=sbY0;sby<=sbY1;sby++){ var sbDy=sby-sbCy; for(var sbx=sbX0;sbx<=sbX1;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
-    /* #482 5.6 — COLOURS, REVERSE, BLEND, and colours that keyframe. Two colours, Reverse Off and Blend Normal run the OLD
+    /* #482 5.6 — COLOURS, REVERSE and BLEND. Two colours, Reverse Off and Blend Normal run the OLD
        loop below byte for byte (it is the line this kernel was), so a saved map and every new one draw exactly as before.
        · REVERSE swaps the end colours and leaves Midpoint where it is on the brightness scale — "the middle colour sits at
          30%" still means 30% — so black takes the Highlights colour.
@@ -6311,18 +6311,17 @@ window.FM = window.FM || {};
          the lights above it. With two colours the Midpoint is where the 50/50 mix lands, as it always was.
        · BLEND paints the mapped colour onto the picture through fxBlendRGB (Colour keeps the picture's brightness and takes
          the map's colour; Luminosity keeps the picture's colour and takes the map's brightness), then Amount mixes as before.
-       · A KEYFRAMED colour is read at t. hexToRGB parsed the {kf} object as '[object Object]' — a muddy near-black — the
-         same defect queue 555 fixed in Light Leak. A plain colour string is passed through untouched. */
+       · A KEYFRAMED colour (Midtones included) needs nothing here: resolveFxColors (queue 555) turns every animated
+         color* into its value at t before any pixel kernel runs, on every path that draws one. */
     gradientmap: function(d,W,H,p,t){ var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1;
-      var gmCol=function(v){ return (FM.isAnimated&&FM.isAnimated(v))?FM.evalProp(v,t):v; };
-      var gmSh=hexToRGB(gmCol(p.color))||[36,26,82], gmHi=hexToRGB(gmCol(p.color2))||[255,184,108];
+      var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108];
       var gmStops=p.stops==null?2:(Math.round(FM.evalProp(p.stops,t))|0), gm3=gmStops===3;
       var gmRev=(p.reverse==null?0:(Math.round(FM.evalProp(p.reverse,t))|0))===1;
       var gmBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0);
       if(gmRev){ var gmSw=gmSh; gmSh=gmHi; gmHi=gmSw; }
       var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0;
       if(!gm3&&!gmBl){ for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } return; }
-      var gmMt=gm3?hexToRGB(p.color3==null?'#b0507a':gmCol(p.color3)):null;   // absent = the catalogue Midtones (hexToRGB reads a missing colour as black, never null)
+      var gmMt=gm3?hexToRGB(p.color3==null?'#b0507a':p.color3):null;   // absent = the catalogue Midtones (hexToRGB reads a missing colour as black, never null)
       for(var gnI=0;gnI<d.length;gnI+=4){
         var gnR=d[gnI], gnG=d[gnI+1], gnB=d[gnI+2];
         var gnL=(0.299*gnR+0.587*gnG+0.114*gnB)/255;
