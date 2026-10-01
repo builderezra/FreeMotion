@@ -11,7 +11,8 @@ import _cdp  # noqa: E402
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9051
 ALL = ['vignette-roundness', 'vignette-feather', 'vignette-centre', 'vignette-mode', 'vignette-protecthighlights',
        'lightglow-thresholdsoftness', 'lightglow-smoothness', 'lightglow-glowpasttheedges', 'lightglow-blend', 'lightglow-colourfrom',
-       'softglow-glowpasttheedges', 'softglow-colourfrom', 'darkglow-glowpasttheedges', 'darkglow-blend']
+       'softglow-thresholdsoftness', 'softglow-smoothness', 'softglow-glowpasttheedges', 'softglow-blend', 'softglow-colourfrom',
+       'darkglow-thresholdsoftness', 'darkglow-smoothness', 'darkglow-glowpasttheedges', 'darkglow-blend']
 WANT = sys.argv[2:] or ALL
 W, H = 390, 1150   # under 3x as tall as wide, so the picture reaches his phone (tools/phonepages.py)
 SHEET = open(os.path.join(HERE, 'sheet6.js')).read()

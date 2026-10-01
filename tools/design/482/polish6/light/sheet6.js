@@ -106,6 +106,51 @@ return (async function () {
         { name: 'Today (Chosen colour, white)', sub: 'a white wash over the sky', set: {} },
         { name: 'Source colour', sub: 'the pink sky blooms pink', set: { from: 1 }, rec: true },
       ] },
+    /* The five below were missing from the first build (review, minor): Soft Glow's softness is its own quadratic knee
+       and its Blend acts on a wide, frame-relative bloom, and Dark Glow's softness and Smoothness darken rather than
+       lighten — so Light Glow's strips do not stand in for them. Settings were picked by rendering candidates through
+       the app on several photos and keeping the one where the change reads at phone size. */
+    'softglow-thresholdsoftness': {
+      title: 'Soft Glow — Threshold softness', photo: 'ramp', fx: 'softglow', base: { amount: 1, radius: 25, threshold: 45 },
+      note: 'Soft Glow never had Light Glow’s hard line — its glow already grew from nothing at the Threshold — but it started with a crease: a faint edge in a smooth sky where the glow kicks in. Threshold softness rounds the crease off so the glow eases in. A small change, so look at the close-up of the sky above the horizon. Amount 1, Radius 25% and Threshold 45 here to make it plain.',
+      cols: 2, zoom: [0.3, 0.2, 0.4, 0.4],
+      tiles: [
+        { name: 'Today (0%)', sub: 'a faint edge where the glow starts', set: {} },
+        { name: 'Threshold softness 100%', sub: 'the glow eases in, no edge', set: { knee: 100 }, rec: true },
+      ] },
+    'softglow-smoothness': {
+      title: 'Soft Glow — Smoothness', photo: 'figures', fx: 'softglow', base: { amount: 1, radius: 300, threshold: 30 },
+      note: 'The bloom was one quick blur, so round the bright sky it made a straight-sided column of haze that washed over the two people. Smoothness 3 blurs it three times: a round bloom that fades out, and the people stay dark against the sky. Amount 1, Radius 300% and Threshold 30 here to make it plain; the close-up is the gap between the trees.',
+      cols: 2, zoom: [0.2, 0.12, 0.6, 0.6],
+      tiles: [
+        { name: 'Today (1)', sub: 'a boxy haze over the people', set: {} },
+        { name: 'Smoothness 3', sub: 'a round bloom, the people stay dark', set: { passes: 3 }, rec: true },
+      ] },
+    'softglow-blend': {
+      title: 'Soft Glow — Blend', photo: 'shore', fx: 'softglow', base: { amount: 1 },
+      note: 'How the soft bloom lands on the picture. Screen is today’s. Add burns hotter and blows the bright sky out to white. Soft light lifts the bright parts but keeps the colour and the dark clouds, so the picture is not washed out. Amount 1 here to make it plain; Radius and Threshold at their defaults.',
+      cols: 3,
+      tiles: [
+        { name: 'Today (Screen)', sub: 'a pale, washed-out haze', set: {} },
+        { name: 'Add', sub: 'hotter, the sky burns white', set: { blend: 1 } },
+        { name: 'Soft light', sub: 'glowing, keeps the colour', set: { blend: 2 }, rec: true },
+      ] },
+    'darkglow-thresholdsoftness': {
+      title: 'Dark Glow — Threshold softness', photo: 'bay', fx: 'darkglow', base: { amount: 1, radius: 4, threshold: 45 },
+      note: 'Dark Glow switched fully on below the Threshold, so where the sky’s brightness crossed it the darkening stopped dead: dark clouds with cut-out edges. Threshold softness fades it in across the threshold instead, so the darkening melts into the sky. Amount 1, Radius 4 and Threshold 45 here to make it plain.',
+      cols: 2,
+      tiles: [
+        { name: 'Today (0%)', sub: 'hard cut-out edges on the clouds', set: {} },
+        { name: 'Threshold softness 100%', sub: 'the dark melts into the sky', set: { knee: 100 }, rec: true },
+      ] },
+    'darkglow-smoothness': {
+      title: 'Dark Glow — Smoothness', photo: 'run', fx: 'darkglow', base: { amount: 1, radius: 30, threshold: 20 },
+      note: 'The dark spread was one quick blur, so round a dark shape on a bright patch it made a square, straight-edged smudge — look at the sky beside the building. Smoothness 3 blurs it three times: a round, soft shadow that fades out. Amount 1, Radius 30 and Threshold 20 here to make it plain; the close-up is the building and the dog.',
+      cols: 2, zoom: [0.25, 0.38, 0.45, 0.45],
+      tiles: [
+        { name: 'Today (1)', sub: 'a square dark smudge in the sky', set: {} },
+        { name: 'Smoothness 3', sub: 'a round, soft shadow', set: { passes: 3 }, rec: true },
+      ] },
     'darkglow-glowpasttheedges': {
       title: 'Dark Glow — Glow past the edges', photo: 'shore', title2: { text: 'DARK', color: '#1a1420' }, fx: 'darkglow', base: { amount: 1, radius: 12 },
       note: 'Dark Glow spreads the dark parts. On a dark title it now spreads past the letters too — a soft dark haze behind them that makes the title read on a bright sky. Amount 1, Radius 12, Smoothness 2.',
