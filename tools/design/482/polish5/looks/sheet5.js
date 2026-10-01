@@ -17,11 +17,11 @@ return (async function () {
       ] },
     'tealorange-protectskin': {
       title: 'Teal & Orange — Protect skin', photo: 'cat', fx: 'tealorange',
-      note: 'Holds skin colours back from the grade so faces keep their own tone while the rest takes the look. The cat’s ginger coat is in the same colour range as skin, so it shows what a face would do. Amount 1 here to make it plain.',
+      note: 'Holds skin colours back from the grade so faces keep their own tone while the rest takes the look. The cat’s ginger coat is in the same colour range as skin, so it shows what a face would do. It covers pale, deep brown and rosy skin alike, so anything else that colour is held back too — here the brown stones in the gravel keep their warmth. Amount 1 here to make it plain.',
       cols: 2, zoom: [0.38, 0.38, 0.4, 0.4],
       tiles: [
         { name: 'Today (Protect skin 0%)', sub: 'the ginger coat goes grey-teal in shadow', set: { amount: 1 } },
-        { name: 'Protect skin 100%', sub: 'the coat keeps its own colour', set: { amount: 1, skin: 100 }, rec: true },
+        { name: 'Protect skin 100%', sub: 'the coat keeps its own colour, and so do the brown stones', set: { amount: 1, skin: 100 }, rec: true },
       ] },
     'tealorange-balance': {
       title: 'Teal & Orange — Balance', photo: 'tesla', fx: 'tealorange',
@@ -42,11 +42,11 @@ return (async function () {
       ] },
     'tint-tintover': {
       title: 'Tint — Method', photo: 'revuelto', fx: 'tint', base: { color: '#2f6bff' },
-      note: 'Today Tint replaces every colour with one colour — under a blue Tint the orange car is the same blue as the road. Tint over lays the colour over the photo instead: the car keeps its colour and the whole shot takes a cool cast.',
+      note: 'Today Tint replaces every colour with one colour — under a blue Tint the orange car is the same blue as the road. Tint over lays the colour over the photo instead: the car stays red rather than turning blue (the blue pulls it a little pinker) and the whole shot takes a cool cast.',
       cols: 2,
       tiles: [
         { name: 'Today (Colourise)', sub: 'blue Tint, Amount 1: one colour', set: {} },
-        { name: 'Tint over', sub: 'blue Tint, Amount 1: a cool cast', set: { mode: 1 }, rec: true },
+        { name: 'Tint over', sub: 'blue Tint, Amount 1: a red-pink car, a cool shot', set: { mode: 1 }, rec: true },
       ] },
     'tint-rangewidth': {
       title: 'Tint — Range width', photo: 'city', fx: 'tint', base: { color: '#2f6bff', range: 1, amount: 0.8 },

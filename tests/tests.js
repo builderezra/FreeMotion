@@ -117227,6 +117227,19 @@
     if (run(dark, { mode: 1 }).join() !== run(dark, {}).join() || run(light, { mode: 1 }).join() !== run(light, {}).join()) throw new Error('Splits by Hue moved a grey differently from by brightness - a grey has no hue, so Split point still decides it');
     const sP = run(skin, { skin: 100 });
     if (Math.max(Math.abs(sP[0] - skin[0]), Math.abs(sP[1] - skin[1]), Math.abs(sP[2] - skin[2])) > 3) throw new Error('Protect skin 100 still moved the skin pixel #6b4a3a from ' + skin + ' to ' + sP + ' (unprotected ' + s0 + ')');
+    /* …and across real skin, not just the one brown at the window's centre: deep brown (#8d5524, HSV S 0.74), reddish (#a1665e
+       and #592f2a, hue 6-7°), rosy (#d1a3a4 at 359°, #503335 at 356°) and light (#f1c27d, 36°), by Brightness and by Hue. The
+       first window — a raised cosine peaking at 25°, full only to S 0.65 — left #8d5524 12 of its 25 levels, #a1665e 16 and
+       #d1a3a4 23 at Protect skin 100 (review of 5.3). The same 3-level bar as #6b4a3a; the control is the grade unprotected. */
+    const mv5 = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+    ['#8d5524', '#a1665e', '#592f2a', '#f1c27d', '#d1a3a4', '#503335'].forEach(h => {
+      const c = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+      [0, 1].forEach(m => {
+        const by = m ? 'Hue' : 'Brightness', du = mv5(run(c, { mode: m }), c), dp = mv5(run(c, { mode: m, skin: 100 }), c);
+        if (m === 1 && !(du > 6)) throw new Error('CONTROL: by Hue the grade moved the skin tone ' + h + ' only ' + du + ' levels unprotected - the fixture shows nothing to hold back');
+        if (dp > 3) throw new Error('Protect skin 100 still moves the skin tone ' + h + ' ' + dp + ' levels by ' + by + ' (' + du + ' unprotected) - a darker, redder or lighter face keeps the grade');
+      });
+    });
     if (run(sky, { skin: 100 }).join() !== k0.join()) throw new Error('Protect skin 100 changed a blue sky (' + run(sky, { skin: 100 }) + ' against ' + k0 + ') - it must only hold back skin colours');
     if (run(dark, { balance: 100 }).join() !== dark.join()) throw new Error('Balance +100 still pushed a dark grey toward teal: ' + run(dark, { balance: 100 }));
     const l0 = run(light, {}), lB = run(light, { balance: 100 });

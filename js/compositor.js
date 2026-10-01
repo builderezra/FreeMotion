@@ -105,7 +105,9 @@ window.FM = window.FM || {};
       { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
       /* #482 polish 5.4. Tint REPLACED every pixel with its brightness times the colour, so a red jacket under a blue Tint
          came out the same blue as a grey wall — the clip's own colours were gone. Tint over soft-lights the colour in
-         instead: the clip keeps its colours and saturation and takes a cast. Range width is an exponent on the Range
+         instead: the clip keeps its own contrast and much of its colour, its hues leaning toward the tint colour (under
+         blue an orange-red car stays red but goes pinker, and a pale warm tone like skin loses most of its warmth), while
+         the whole shot takes a cast. Range width is an exponent on the Range
          weight, as on Colour Balance (100 = the old weights; nothing to widen under All). Defaults run the old loops. */
       { key: 'mode', label: 'Method', def: 0, options: [[0, 'Colourise'], [1, 'Tint over']] },
       { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
@@ -7868,12 +7870,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       /* #482 polish 5.3 — two tables, one entry per degree of hue (read with a linear blend between entries), so Splits by Hue
          and Protect skin cost two table reads a pixel instead of a Math.cos. TOH is the hue's warmth: +1 at the warm hues (reds
          through yellows, peak 35°), −1 at the cool ones (cyan-blue, 215°), (cos(h − 35°) − 0.2) × 1.6 before Crossover and the
-         clamp. TOS is the skin window: a raised cosine, full at 25°, nothing below −5° or above 55°. */
+         clamp. TOS is the skin window: FLAT, full from 0° to 40°, easing (half a cosine) to nothing by −20° and 60°.
+         The first one was a raised cosine peaking at 25°, gone by −5° and 55° — so only a face sitting right on 25° was held:
+         reddish and rosy skin (hue 0–10°, and 356–359° for the pinkest) and light skin at 35° kept most of the grade at 100%
+         (review of 5.3: #a1665e moved 16 of its 25 levels, #d1a3a4 23 of 24). Skin runs from about 0° to 45°, so the top is flat. */
       var TOH = new Float32Array(362), TOS = new Float32Array(362), toOut = [0, 0, 0];
       for (var hh = 0; hh < 362; hh++) {
         TOH[hh] = (Math.cos((hh - 35) * Math.PI / 180) - 0.2) * 1.6;
-        var dh = Math.abs(((hh - 25) % 360 + 540) % 360 - 180);
-        TOS[hh] = dh < 30 ? 0.5 + 0.5 * Math.cos(Math.PI * dh / 30) : 0;
+        var sx = ((hh % 360) + 180) % 360 - 180;   // −180..180, so 350° reads as −10°
+        TOS[hh] = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
       }
       return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The split between warm and cool sat permanently at mid-grey, so whether FACES land in the
@@ -7898,7 +7903,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       /* The extended loop. HUE: a coloured pixel's warmth comes from its hue (TOH, scaled by Crossover), blended in by how much
          colour it has (full from a chroma of 48 levels), so a grey — which has no hue — still splits by brightness at Split
          point and the step from grey to colour is smooth. PROTECT SKIN scales the grade down on skin-coloured pixels: skin
-         hue (TOS) × a saturation window (HSV S 0.2–0.65 full, nothing under 0.08 or over 0.85) × not near-black (V from 0.2).
+         hue (TOS) × a saturation window (HSV S 0.2–0.8 full, nothing under 0.08 or over 0.9 — deep brown skin such as
+         #8d5524 sits at 0.74, and the first window, full only to 0.65, let it keep half the grade) × not near-black (V from 0.2).
          BALANCE scales the warm side by 1 + b and the cool side by 1 − b. KEEP BRIGHTNESS moves the result toward the pixel
          at its own luma (setLum255, as Colour Balance's Keep brightness), so 100 is a pure colour move. */
       var toBf=toBa/100, toKk=toKp/100, toSf=toSk/100;
@@ -7912,7 +7918,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             var hi=hu|0, hf=hu-hi;
             if(toMd===1){ var wh=(TOH[hi]+(TOH[hi+1]-TOH[hi])*hf)*toSp; if(wh<-1)wh=-1; else if(wh>1)wh=1; w2+=(wh-w2)*(ch>=48?1:ch/48); }
             if(toSf>0){ var sS=ch/mx, sV=mx/255;
-              var mS=sS<0.08?0:(sS<0.2?(sS-0.08)/0.12:(sS<=0.65?1:(sS<0.85?(0.85-sS)/0.2:0)));
+              var mS=sS<0.08?0:(sS<0.2?(sS-0.08)/0.12:(sS<=0.8?1:(sS<0.9?(0.9-sS)/0.1:0)));
               var mV=sV<0.08?0:(sV<0.2?(sV-0.08)/0.12:1);
               var mk=(TOS[hi]+(TOS[hi+1]-TOS[hi])*hf)*mS*mV; if(mk>0)a2=a*(1-toSf*mk); }
           }
@@ -13978,7 +13984,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   ];
   /* METHOD and RANGE WIDTH (#482 polish 5.4). Colourise is the old replace: brightness × colour, so a red jacket under a blue
      Tint came out the same blue as a grey wall. TINT OVER soft-lights the colour onto the pixel instead (fxBlendPx's W3C soft
-     light, the colour as the source), so the clip keeps its own colours and saturation and only takes a cast; Range, Amount
+     light, the colour as the source), so the clip keeps its own contrast and much of its colour, its hues leaning toward the
+     tint colour — under blue a red stays red but goes pinker, and a pale warm tone like skin loses most of its warmth; Range, Amount
      and Keep brightness work on it exactly as on Colourise. RANGE WIDTH is an exponent on the Range weight, 100/width, as on
      Colour Balance — 100 is the old weights and All has no range to widen. Colourise + 100 run the old loops below. */
   function tintPixels(d, am, C, p, t) {
