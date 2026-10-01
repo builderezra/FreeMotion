@@ -67,6 +67,20 @@ window.FM = window.FM || {};
     { type: 'vignette', label: 'Vignette', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'size', label: 'Size', min: 0, max: 95, step: 1, def: 35, unit: '%' },
+      /* #482 polish 6.1 (C50). The vignette was always a CIRCLE out to the frame's half-diagonal, so on a 9:16 phone frame it
+         darkened the top and bottom far harder than the sides. Roundness 0 fits an ellipse to the frame (the corners are still
+         where it is darkest, and mid-left and top-centre get the same darkening); 100 is the old circle. Feather widens or
+         narrows the fade about its middle (100 = the old fade from Size to the corner). Centre moves it; Mode lays white or a
+         colour instead of black; Protect highlights spares the brightest parts of the picture (a lamp in a dark corner stays
+         lit). Every one at its default runs the old gradient untouched, so every saved vignette and the filters built on one
+         draw the same pixels. */
+      { key: 'round', label: 'Roundness', min: 0, max: 100, step: 1, def: 100, unit: '%', note: '100 a circle · 0 fits the frame' },
+      { key: 'feather', label: 'Feather', min: 10, max: 300, step: 5, def: 100, unit: '%' },
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'mode', label: 'Mode', def: 0, options: [[0, 'Darken'], [1, 'Lighten'], [2, 'Colour']] },
+      { key: 'color', label: 'Colour', swatch: true, def: '#000000', overriddenBy: 'mode', liveWhen: 2 },
+      { key: 'hilite', label: 'Protect highlights', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'chromakey', label: 'Chroma Key', color: true, defColor: '#00ff00', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0, max: 1, step: 0.02, def: 0.3 },
@@ -393,10 +407,21 @@ window.FM = window.FM || {};
       { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
     // ---- batch 8 ----
-    { type: 'lightglow', label: 'Light Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', params: [   // queue 904: was hardcoded white
+    { type: 'lightglow', label: 'Light Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 60, unit: '%' },
+      /* #482 polish 6.2 (C23, C49). Threshold was a hard on/off step, so a smooth gradient got a contour where it crossed it;
+         Threshold softness fades the glow in across it instead. Smoothness blurs the glow again (1 = the old single box, 3
+         is close to a true Gaussian). Glow past the edges lets the glow spill into the empty space round the layer (a
+         title's halo) where it used to stop at the layer's own pixels. Blend: Screen is the old look, Add burns brighter,
+         Soft light lifts without washing the picture out. Colour from: the Glow colour (the old look) or each bright
+         area's own colour. Every one at its default runs the old kernel untouched. */
+      { key: 'knee', label: 'Threshold softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
+      { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
     ] },
     { type: 'longshadow', label: 'Long Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
     { type: 'halftonelines', label: 'Halftone Lines', params: [
@@ -428,6 +453,13 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      /* #482 polish 6.2 (C23): Threshold softness, Smoothness and Glow past the edges as on Light Glow; the dark glow's own
+         Blend is the mirror of the light ones — Multiply (the old look), Subtract (sinks harder), Soft light (deepens
+         without crushing). Every one at its default runs the old kernel untouched. */
+      { key: 'knee', label: 'Threshold softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Multiply'], [1, 'Subtract'], [2, 'Soft light']] },
     ] },
     { type: 'stroke', label: 'Stroke Colour', color: true, defColor: '#ffffff', colorLabel: 'Stroke', params: [
       { key: 'width', label: 'Width', min: 1, max: 60, step: 1, def: 4, unit: 'px' },
@@ -1147,10 +1179,16 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Shutter phase', min: -100, max: 100, step: 1, def: 0, unit: '%', note: '−100 trails behind only · +100 runs ahead' },
     ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
-    { type: 'softglow', label: 'Soft Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', params: [   // queue 904: was hardcoded white
+    { type: 'softglow', label: 'Soft Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      /* #482 polish 6.2 (C23, C49) — the same five controls as Light Glow; see there. */
+      { key: 'knee', label: 'Threshold softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
+      { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
     ] },
     { type: 'replacecolor', label: 'Replace Colour', color: true, defColor: '#e03131', colorLabel: 'From', color2: true, defColor2: '#3aa0ff', color2Label: 'To', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25 },
@@ -6639,7 +6677,7 @@ window.FM = window.FM || {};
       } } },
     // ---- batch 8 (pixel) ----
     lightglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904): it was hardcoded white. A missing colour is WHITE, not hexToRGB(undefined) — that
-       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
+       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); /* #482 polish 6.2: any new control off its default draws through glow6; at the defaults the old loop below runs untouched */ var lg6=glow6Opts(p,t,true); if(lg6) return glow6(d,W,H,0,lgAmt,(lgThr===60?153:lgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),lgWh?null:lgC,lg6); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
     longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
        shadow is byte-identical; any other angle marches back from each empty pixel along the throw, up to Length steps, and is
        shadowed if it meets the layer — the same rule the walk applies, in any direction. */
@@ -6748,7 +6786,7 @@ window.FM = window.FM || {};
         var stp_v=stp_dir===1?(stp_x-stp_y):(stp_dir===2?stp_y:(stp_dir===3?stp_x:(stp_x+stp_y)));
         var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
     // ---- batch 9 (pixel) ----
-    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
+    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); /* #482 polish 6.2 — see lightglow */ var dg6=glow6Opts(p,t,false); if(dg6) return glow6(d,W,H,2,dgAmt,(dgThr===40?102:dgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),null,dg6); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
     stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>60)st_w=60; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0;
       // POSITION / SHAPE / SOFTNESS. Outside + Square + hard runs the ORIGINAL box dilation below,
       // untouched, so every existing stroke in every project is byte-for-byte what it was. Anything
@@ -8374,7 +8412,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
-    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
+    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; /* #482 polish 6.2 — see lightglow */ var sg6=glow6Opts(p,t,true); if(sg6){ var sgRad6=p.radius==null?100:FM.evalProp(p.radius,t); return glow6(d,W,H,1,sgA,sgThrV,(sgRad6===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad6/100)))),sgWh?null:sgC,sg6); } var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
@@ -12090,6 +12128,118 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let e = null; try { e = alphaBBoxWithin(_fx2d(A), bb); } catch (err) { e = null; }
     return e && e.w > 0 && e.h > 0 ? e : bb;
   }
+  /* #482 polish 6.1 — the vignette's new controls, read once at frame t. NULL when every one is at its default: that is the
+     signal to draw the old gradient exactly as it always was. Keyframed values are read at t like every other control. */
+  function vignette6(p, t) {
+    const num = (k, d, lo, hi) => { let v = p[k] == null ? d : Number(FM.evalProp(p[k], t)); if (!isFinite(v)) v = d; return v < lo ? lo : (v > hi ? hi : v); };
+    const o = { round: num('round', 100, 0, 100), feather: num('feather', 100, 10, 300), x: num('x', 50, 0, 100), y: num('y', 50, 0, 100),
+      mode: Math.round(num('mode', 0, 0, 2)), hilite: num('hilite', 0, 0, 100), color: typeof p.color === 'string' ? p.color : '#000000' };
+    if (o.round === 100 && o.feather === 100 && o.x === 50 && o.y === 50 && o.mode === 0 && o.hilite === 0) return null;
+    return o;
+  }
+  FM._vignette6 = vignette6;   // suite seam
+
+  /* ═══ #482 POLISH 6.2 — LIGHT, SOFT AND DARK GLOW: Threshold softness, Smoothness, Glow past the edges, Blend, Colour from ═══
+   * The three kernels (PIXEL_FX lightglow / softglow / darkglow) were one hard threshold step, ONE box blur, and a write only
+   * where the layer already had alpha — so a glow stopped dead at a title's edge (C23) and a gradient got a contour where it
+   * crossed the threshold (C49). glow6Opts reads the new controls and is NULL when all of them are at their defaults; the
+   * kernels then run their old loops untouched, byte for byte. Otherwise glow6 below draws the glow:
+   *   · THE MASK is each kernel's own (Light: the pixel's brightness above the threshold; Soft: 1.55 × how far above it;
+   *     Dark: 255 − brightness below it). Threshold softness swaps the step for a smooth one, ±64 levels wide at 100 (Soft
+   *     Glow takes the quadratic knee, which joins its ramp without a kink).
+   *   · SMOOTHNESS runs the same box blur 1–3 times (three boxes are within a few percent of a Gaussian).
+   *   · COLOUR FROM Source colour blurs the bright areas' own colours (three masks, each the colour × the mask's share).
+   *   · BLEND Screen / Add / Soft light for the two light glows; Multiply / Subtract / Soft light for Dark Glow.
+   *   · GLOW PAST THE EDGES weighs the mask by alpha (a half-covered edge pixel gives half its light) and writes the glow
+   *     into the empty pixels round the layer as the glow colour at the glow's own strength — under the layer's pixels, so a
+   *     soft edge blends into its halo. Light and Dark Glow run on the cropped readback (CROP_FX): its margin is 3 × Radius
+   *     + 8 plate px, and three passes of a box of radius R reach exactly 3R, so the halo is never cut (tested). */
+  function glow6Opts(p, t, light) {
+    const num = (k, d, lo, hi) => { let v = p[k] == null ? d : Number(FM.evalProp(p[k], t)); if (!isFinite(v)) v = d; return v < lo ? lo : (v > hi ? hi : v); };
+    const o = { knee: num('knee', 0, 0, 100), passes: Math.round(num('passes', 1, 1, 3)), outside: Math.round(num('outside', 0, 0, 1)),
+      blend: Math.round(num('blend', 0, 0, 2)), from: light ? Math.round(num('from', 0, 0, 1)) : 0 };
+    if (o.knee === 0 && o.passes === 1 && o.outside === 0 && o.blend === 0 && o.from === 0) return null;
+    return o;
+  }
+  FM._glow6Opts = glow6Opts;   // suite seam
+  FM._glow6 = function (d, W, H, kind, amt, thrV, R, col, o) { return glow6(d, W, H, kind, amt, thrV, R, col, o); };   // suite seam: the general path at neutral settings must be the old kernel
+  /* The old kernels' box blur, verbatim arithmetic (replicate at the plate edge), in place: src → tmp across, tmp → src down. */
+  function glowBox6(src, tmp, W, H, R) {
+    const div = 2 * R + 1;
+    for (let y = 0; y < H; y++) {
+      const row = y * W; let sum = 0;
+      for (let x = -R; x <= R; x++) sum += src[row + (x < 0 ? 0 : (x >= W ? W - 1 : x))];
+      for (let x = 0; x < W; x++) { tmp[row + x] = sum / div; const ax = x + R + 1, sx = x - R; sum += src[row + (ax >= W ? W - 1 : ax)] - src[row + (sx < 0 ? 0 : sx)]; }
+    }
+    for (let x = 0; x < W; x++) {
+      let sum = 0;
+      for (let y = -R; y <= R; y++) sum += tmp[(y < 0 ? 0 : (y >= H ? H - 1 : y)) * W + x];
+      for (let y = 0; y < H; y++) { src[y * W + x] = sum / div; const ay = y + R + 1, sy = y - R; sum += tmp[(ay >= H ? H - 1 : ay) * W + x] - tmp[(sy < 0 ? 0 : sy) * W + x]; }
+    }
+  }
+  /* kind 0 Light, 1 Soft, 2 Dark. thrV: the threshold in levels, as the old kernel computes it. R: the box radius in plate px.
+     col: the Glow colour [r,g,b], or null for white. */
+  function glow6(d, W, H, kind, amt, thrV, R, col, o) {
+    const N = W * H, out = o.outside === 1, src = o.from === 1 && kind !== 2, nCh = src ? 3 : 1;
+    const kw = o.knee / 100 * 64;
+    const M = []; for (let c = 0; c < nCh; c++) M.push(new Float32Array(N));
+    const tmp = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const i4 = i * 4, a = d[i4 + 3]; if (a === 0) continue;
+      const L = 0.299 * d[i4] + 0.587 * d[i4 + 1] + 0.114 * d[i4 + 2];
+      let m;
+      if (kind === 1) {   // Soft: how far above the threshold, ×1.55; the knee is the quadratic one, so the ramp has no corner
+        let e;
+        if (kw > 0) { if (L <= thrV - kw) e = 0; else if (L >= thrV + kw) e = L - thrV; else { const u = L - thrV + kw; e = u * u / (4 * kw); } }
+        else e = L > thrV ? L - thrV : 0;
+        m = e * 1.55;
+      } else {
+        let w;
+        if (kw > 0) { let q = (L - (thrV - kw)) / (2 * kw); q = q < 0 ? 0 : (q > 1 ? 1 : q); w = q * q * (3 - 2 * q); }
+        else w = L > thrV ? 1 : 0;
+        if (kind === 2) { if (kw <= 0) w = L < thrV ? 0 : 1; m = (255 - L) * (1 - w); }   // Dark: the darks below the threshold
+        else m = L * w;
+      }
+      if (out) m *= a / 255;   // a half-covered edge pixel gives half its light to the halo
+      if (src) { const f = L > 0 ? m / L : 0; M[0][i] = d[i4] * f; M[1][i] = d[i4 + 1] * f; M[2][i] = d[i4 + 2] * f; }
+      else M[0][i] = m;
+    }
+    for (let c = 0; c < nCh; c++) for (let n = 0; n < o.passes; n++) glowBox6(M[c], tmp, W, H, R);
+    const cr = col ? col[0] : 255, cg = col ? col[1] : 255, cb = col ? col[2] : 255;
+    let l0, l1, l2, D = 0;
+    for (let i = 0; i < N; i++) {
+      const i4 = i * 4, a = d[i4 + 3];
+      if (a === 0 && !out) continue;
+      let g;   // the halo's strength, 0..1
+      if (kind === 2) { D = M[0][i] / 255 * amt; if (D > 1) D = 1; if (D <= 0) continue; g = D; }
+      else {
+        if (src) { l0 = M[0][i] * amt; l1 = M[1][i] * amt; l2 = M[2][i] * amt; if (l0 > 255) l0 = 255; if (l1 > 255) l1 = 255; if (l2 > 255) l2 = 255; }
+        else { let G = M[0][i] * amt; if (G > 255) G = 255; l0 = cr * G / 255; l1 = cg * G / 255; l2 = cb * G / 255; }
+        g = Math.max(l0, l1, l2) / 255; if (g <= 0) continue;
+      }
+      let r = 0, gg = 0, b = 0;
+      if (a > 0) {
+        const c0 = d[i4], c1 = d[i4 + 1], c2 = d[i4 + 2];
+        if (kind === 2) {
+          if (o.blend === 1) { r = c0 - 255 * D; gg = c1 - 255 * D; b = c2 - 255 * D; }
+          else if (o.blend === 2) { const s = 127.5 * (1 - D); r = fxBlendPx(4, s, c0); gg = fxBlendPx(4, s, c1); b = fxBlendPx(4, s, c2); }
+          else { r = c0 * (1 - D); gg = c1 * (1 - D); b = c2 * (1 - D); }
+        } else if (o.blend === 1) { r = c0 + l0; gg = c1 + l1; b = c2 + l2; }
+        else if (o.blend === 2) { r = fxBlendPx(4, 127.5 + l0 / 2, c0); gg = fxBlendPx(4, 127.5 + l1 / 2, c1); b = fxBlendPx(4, 127.5 + l2 / 2, c2); }
+        else { r = 255 - (255 - c0) * (255 - l0) / 255; gg = 255 - (255 - c1) * (255 - l1) / 255; b = 255 - (255 - c2) * (255 - l2) / 255; }
+      }
+      if (out && a < 255) {
+        // the halo UNDER the layer's own pixels: premultiplied, the layer's share a, the halo's (1 − a)·g
+        const af = a / 255, oa = af + (1 - af) * g;
+        if (oa <= 0) continue;
+        const hr = kind === 2 ? 0 : l0, hg = kind === 2 ? 0 : l1, hb = kind === 2 ? 0 : l2;
+        r = (af * r + (1 - af) * hr) / oa; gg = (af * gg + (1 - af) * hg) / oa; b = (af * b + (1 - af) * hb) / oa;
+        d[i4 + 3] = oa * 255;
+      }
+      d[i4] = r; d[i4 + 1] = gg; d[i4 + 2] = b;
+    }
+  }
+
   const CANVAS_FX = {
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
      * There were two. A video or photo drew an inline black radial gradient over its clip rect inside the media draw:
@@ -12125,6 +12275,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.setTransform(s, 0, 0, s, -oX * s, -oY * s);            // project units → this plate's pixels
       let cx = proj.width / 2, cy = proj.height / 2, R = Math.hypot(proj.width, proj.height) / 2;
       let cover = [oX, oY, W / s, H / s];                      // the whole plate, in the space the gradient is drawn in
+      let frame = [0, 0, proj.width, proj.height];             // what the shape is fitted to (#482 6.1): the project frame…
       if (M && sz && sz.w > 0 && sz.h > 0) {
         let I = null; try { I = M.inverse(); } catch (e) { I = null; }
         if (I && [I.a, I.b, I.c, I.d, I.e, I.f].every(Number.isFinite)) {
@@ -12136,16 +12287,65 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              darkened it, by the full Amount past the half-diagonal (#986 review, measured: the halo round a clip at
              60% went from a mean of 50.5 to 16.5). source-atop still keeps a PNG's clear corners clear. */
           cover = [-sz.w * anchorX(tr), -sz.h * anchorY(tr), sz.w, sz.h];
+          frame = cover;                                         // …or the clip's own frame on a video or photo
         }
       }
-      if (R > 0) {
+      /* #482 polish 6.1 — Roundness, Feather, Centre, Mode (+ Colour) and Protect highlights. All six at their defaults take
+         the old three lines below untouched (byte-identical: every saved vignette and the filters that carry one). */
+      const v6 = vignette6(p, t);
+      if (R > 0 && !v6) {
         const grad = B.createRadialGradient(cx, cy, R * vgIn, cx, cy, R);
         grad.addColorStop(0, 'rgba(0,0,0,0)');
         grad.addColorStop(1, 'rgba(0,0,0,' + vgA + ')');
         B.fillStyle = grad;
         B.fillRect(cover[0], cover[1], cover[2], cover[3]);
+      } else if (R > 0) {
+        /* THE FRAME the vignette is fitted to, in the space the gradient is drawn in: the clip's own (cropped) frame on a video
+           or photo, the project frame on anything else — the same frame the old circle was centred on and reached the
+           corners of. Roundness 100 is that circle (radius = the half-diagonal); 0 is the ellipse through the four corners
+           with the frame's own proportions (semi-axes W/√2 and H/√2), so the sides and the top darken alike on a 9:16 phone
+           frame. In between, each semi-axis is a straight blend of the two. Centre X/Y moves the shape by a share of the
+           frame; the size stays. */
+        const fr = frame, fw = fr[2], fh = fr[3], Rf = Math.hypot(fw, fh) / 2, k = v6.round / 100;
+        const ex = fw / Math.SQRT2 + (Rf - fw / Math.SQRT2) * k, ey = fh / Math.SQRT2 + (Rf - fh / Math.SQRT2) * k;
+        const ox = fr[0] + fw * v6.x / 100, oy = fr[1] + fh * v6.y / 100;
+        /* FEATHER widens or narrows the fade about its middle: the old fade runs from Size (vgIn) out to the corner (1), so
+           its middle is (vgIn + 1) / 2 and its half-width (1 − vgIn) / 2; Feather scales the half-width. Past 100 the fade
+           starts nearer the middle and is still short of full Amount at the corner; below it is a sharper ring. A fade that
+           would begin before the centre starts AT the centre, at the share of Amount it has reached there. */
+        const mid = (vgIn + 1) / 2, half = Math.max(1e-4, (1 - vgIn) / 2 * v6.feather / 100);
+        let r0 = mid - half; const r1 = mid + half;
+        const a0 = r0 < 0 ? vgA * (-r0) / (r1 - r0) : 0; if (r0 < 0) r0 = 0;
+        const rgb = v6.mode === 1 ? [255, 255, 255] : (v6.mode === 2 ? (hexToRGB(v6.color) || [0, 0, 0]) : [0, 0, 0]);
+        const rgba = a => 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')';
+        const sx = Math.max(ex, 1e-6), sy = Math.max(ey, 1e-6);   // the unit circle, stretched to the shape
+        B.translate(ox, oy); B.scale(sx, sy);
+        const grad = B.createRadialGradient(0, 0, r0, 0, 0, r1);
+        grad.addColorStop(0, rgba(a0));
+        grad.addColorStop(1, rgba(vgA));
+        B.fillStyle = grad;
+        B.fillRect((cover[0] - ox) / sx, (cover[1] - oy) / sy, cover[2] / sx, cover[3] / sy);   // the same cover rect, in that space
       }
       B.restore();
+      /* PROTECT HIGHLIGHTS puts the picture's brightest pixels back toward what they were before the vignette: a lamp or a
+         window in a dark corner stays lit. A smooth ramp on the pixel's own brightness, from 60% (no help below it, so skin and
+         mid-tones still take the vignette) to pure white (fully spared at 100). Per pixel, so it costs a read of the plate —
+         only while the slider is up. */
+      if (v6 && v6.hilite > 0 && R > 0) {
+        let src, dst;
+        try { src = _fx2d(A).getImageData(0, 0, W, H); dst = B.getImageData(0, 0, W, H); } catch (e) { src = null; }
+        if (src) {
+          const s0 = src.data, d0 = dst.data, hk = v6.hilite / 100;
+          for (let i = 0; i < d0.length; i += 4) {
+            if (s0[i + 3] === 0) continue;
+            let q = ((0.299 * s0[i] + 0.587 * s0[i + 1] + 0.114 * s0[i + 2]) / 255 - 0.6) / 0.4;
+            if (q <= 0) continue; if (q > 1) q = 1;
+            const w = hk * q * q * (3 - 2 * q);
+            d0[i] += (s0[i] - d0[i]) * w; d0[i + 1] += (s0[i + 1] - d0[i + 1]) * w; d0[i + 2] += (s0[i + 2] - d0[i + 2]) * w;
+          }
+          B.putImageData(dst, 0, 0);
+        }
+      }
     },
     /* ---- Halation ----------------------------------------------------------------------------
      * Film's highlights bleed warm-red because light punches through the emulsion, scatters off the

@@ -118114,4 +118114,372 @@
   });
 
 
+  /* ═══ #482 / #966 POLISH BATCH 6 (light) — 6.1 Vignette and 6.2 Light, Soft and Dark Glow ════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 6
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 6.1 answers C50: the vignette was a circle out to the frame's
+   * half-diagonal, so on a 9:16 phone frame the top and bottom took about four times the darkening of the sides. 6.2 answers
+   * C23 (a glow stopped dead at the layer's own pixels, so a title could not glow into the space round it) and C49 (a hard
+   * threshold step left a contour where a gradient crossed it). C8 (one vignette renderer) was #986's and is not redone here;
+   * its three tests stay as they are. The rule that makes it safe (§0.3): every new key's default is the old look, because a
+   * filter recipe gets every key it does not set from makeInstance. Pinned against hashes captured on v17.21 (28104a3e) BEFORE
+   * the first edit (tools/design/482/polish6/light/defaults6.js), with polish 1's fixture on three plates: the export (t 0.7),
+   * a half-size preview (t 1.3) and a 0.3 phone plate (t 2.1). */
+  const NEW6L = {
+    vignette: { round: 100, feather: 100, x: 50, y: 50, mode: 0, color: '#000000', hilite: 0 },
+    lightglow: { knee: 0, passes: 1, outside: 0, blend: 0, from: 0 },
+    softglow: { knee: 0, passes: 1, outside: 0, blend: 0, from: 0 },
+    darkglow: { knee: 0, passes: 1, outside: 0, blend: 0 },
+  };
+  function shots6l(layers, PW, PH) {
+    PW = PW || 240; PH = PH || 180;
+    return [[1, 0.7, 0], [0.5, 1.3, 0], [0.3, 2.1, 1]].map(([rs, t, stamp]) => {
+      const cv = offscreen(Math.round(PW * rs), Math.round(PH * rs));
+      if (stamp) { cv.__fmRS = rs; cv.__fmOX = 0; cv.__fmOY = 0; }
+      const x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  const px6l = (r, x, y) => { const i = (y * r.w + x) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2], r.d[i + 3]]; };
+  /* The export against a half-size preview: each 2x2 block of the export averaged, against the preview's pixel. */
+  function parity6l(e, p) {
+    let worst = 0;
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) for (let c = 0; c < 4; c++) {
+      const a = (e.d[((2 * y) * e.w + 2 * x) * 4 + c] + e.d[((2 * y) * e.w + 2 * x + 1) * 4 + c] + e.d[((2 * y + 1) * e.w + 2 * x) * 4 + c] + e.d[((2 * y + 1) * e.w + 2 * x + 1) * 4 + c]) / 4;
+      worst = Math.max(worst, Math.abs(a - p.d[(y * p.w + x) * 4 + c]));
+    }
+    return worst;
+  }
+
+  test('482 6.0 Vignette and the three Glows - every new control is in the catalogue at a default that draws the old look, and the 56 library filters and saved and new vignettes and glows render byte for byte as on v17.21', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
+       render-time fill (queue 784) agrees with that default. */
+    Object.keys(NEW6L).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW6L[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW6L[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    const row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+    const vc = row('vignette', 'color');
+    if (vc.type !== 'color' || vc.overriddenBy !== 'mode' || vc.liveWhen !== 2) throw new Error('the Vignette Colour row does not say it only counts under Mode Colour (type ' + vc.type + ', overriddenBy ' + vc.overriddenBy + ', liveWhen ' + vc.liveWhen + ')');
+    ['lightglow', 'softglow'].forEach(t => { const c = row(t, 'color'); if (c.overriddenBy !== 'from' || c.liveWhen !== 0) throw new Error('the ' + t + ' Glow colour does not say it only counts under Colour from Chosen colour (overriddenBy ' + c.overriddenBy + ', liveWhen ' + c.liveWhen + ')'); });
+    if (row('glow', 'color').overriddenBy || row('faded', 'fadecol').overriddenBy || !row('faded', 'fadecol').key) throw new Error('CONTROL: a colour row on an effect with no gate (Glow, Faded Film) is gated too');
+    if (row('darkglow', 'from').key) throw new Error('Dark Glow has a Colour from control - it has no colour to take');
+    /* …and at the defaults the old code runs: both readers answer null, which is what sends the kernels down their old loops. */
+    if (FM._vignette6(FM.fxRegistry.makeInstance('vignette').params, 0.5) !== null) throw new Error('a new Vignette does not take the old gradient');
+    ['lightglow', 'softglow', 'darkglow'].forEach(t => { if (FM._glow6Opts(FM.fxRegistry.makeInstance(t).params, 0.5, t !== 'darkglow') !== null) throw new Error('a new ' + t + ' does not take the old kernel'); });
+    if (FM._vignette6({}, 0.5) !== null || FM._glow6Opts({}, 0.5, true) !== null) throw new Error('a saved Vignette or Glow with none of the new keys does not take the old code');
+    /* …and a saved value survives the load sanitiser, at a non-default value for each key. */
+    const SET = { vignette: { round: 0, feather: 240, x: 30, y: 70, mode: 2, color: '#3366ff', hilite: 60 }, lightglow: { knee: 40, passes: 3, outside: 1, blend: 2, from: 1 },
+      softglow: { knee: 25, passes: 2, outside: 1, blend: 1, from: 1 }, darkglow: { knee: 70, passes: 2, outside: 1, blend: 1 } };
+    const lay = [{ id: 'l4826l', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.21: new instances (every new key spelled out at its default) on a clip and a shape, saved
+       instances with only the old keys (a keyframed Amount, a coloured glow, Soft Glow at Radius 400), a turned clip, two
+       vignettes, a vignette under a glow, a 9:16 frame — and every library filter, several of which carry a Vignette, a Light
+       Glow or a Soft Glow. (The same capture on text layers matched too; text is left out here because a hash of a glyph
+       depends on the font having loaded.) */
+    const HEAD = { 'vignette/new/image': 'a1b0fcc6/fd97be8a/079558be', 'vignette/new/shape': '0354a2ad/fa237aba/9f058392', 'vignette/saved0': 'a1b0fcc6/fd97be8a/079558be', 'vignette/saved1': '3cdeaea3/7d4c7190/c3fff14e', 'vignette/saved2': '771e086c/3ff9fbb9/a637cc57', 'vignette/saved3': 'a24ebbba/3eefe4e0/cd2e67d4', 'vignette/turned': '635d5076/054f00eb/bdd11f23',
+      'lightglow/new/image': 'de7739a3/50e95599/e9719abe', 'lightglow/new/shape': '3999ea27/7dab0371/bb577e30', 'lightglow/saved0': 'de7739a3/50e95599/e9719abe', 'lightglow/saved1': '4146690d/cea1d27a/469057e6', 'lightglow/saved2': '0f44cc98/d97f473c/9578c33b', 'lightglow/turned': '428f3395/3629582c/3d1b83eb',
+      'softglow/new/image': '2313991c/14f7b616/41e03268', 'softglow/new/shape': 'a794638c/7c58305f/e7ea7e3d', 'softglow/saved0': '2313991c/14f7b616/41e03268', 'softglow/saved1': 'e210f8c6/4a26c52f/15f94880', 'softglow/saved2': '2a178ea9/c1557fd8/cba45f24', 'softglow/turned': 'ff79f67a/23167c56/bdfb3e14',
+      'darkglow/new/image': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/new/shape': '1632b83f/5ee145c1/52fec795', 'darkglow/saved0': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/saved1': '19c1f079/f2b3f244/c2c5b04b', 'darkglow/turned': 'b2bf37bb/8f2959c2/b51e33bf',
+      'vignette/two': 'c980b5eb/48320ab8/5ded4a65', 'vignette+lightglow': 'd384b0a2/c77913cb/3338f54b', 'vignette/916': 'aa743808/6ee64211/92a8396d' };
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170/be58f9d4', bleach: '1977b932/76d5d015/ba6e10b2', crossproc: 'acf0a29a/9d14facb/dc96297e', faded: 'a8e3abe0/a929108a/dc05b899', vhs: 'bdccef7c/0184d197/20969b19', crt: '3feeb8ae/f60a6812/150aac2e', super8: '8b1d335f/ea2c4e6c/17aa5210', oldfilm: 'd0622b4f/6f4a53b3/f89904f8', dreamy: 'eab5ec29/4247011c/29d9bb5d', goldenhour: 'ee5aed2f/4b233a42/da504085', leak: 'c2c748d2/87bb9ddd/ce931043', neonnight: '08607532/7c0377ff/4abf756c', comic: 'bc2fcaa9/51c97a8b/4893b084', poster: '2b7f3ca4/52708d5d/302b3b24', thermal: 'e9f15dba/7a794c09/ecd25db2', nightvis: '7da0c88d/48579343/1451e314', blackout: '47650b5d/85d01e92/aa9a8e22', coldsteel: '1c0c3370/939023f0/b8ed9c8d', bloodline: 'a37b429d/b263bf4f/6d3175e5', static: '3019a5c0/4e2326e2/27291a77', nightdrive: '6380c2e1/b6e2a474/ca429a21', overdrive: '6cf2492b/56809eb8/f9ab38af', whiteout: '6556ce3e/5a6bebdb/73b83b9d', silver: 'dacb5546/7d6000f3/db5b741f', noir: '8f65ef53/bb24bfcb/f1dc70ad', platinum: 'aff4ae77/33607f4f/22c8c41e', ink: '33db7275/294ba8d1/fff6673d', fog: 'a782a9c4/9d1a16e7/20b20252', newsprint: 'd152da6e/ce85482d/5e432742', poppy: 'e816a502/03770590/cff55b40', candy: 'e15bfa73/6d0e4269/9ed50f33', sunbaked: '362d46b3/5f693c48/7b6ae8bc', ash: '6e86014e/270f0a6c/c080a681', midnight: '91d88f6d/33e67930/77296bf8', ultraviolet: '67f9268e/e9fe1dab/6afb1b12', tropic: '63da082f/7f7f98aa/ed762ae9', popsicle: '57df7430/4bf81d13/a5c6edd5', hivis: '138d623f/a6c1fa8c/cc12d3c7', matte: 'badc4502/b215d215/84f073fa', ember: 'd708d744/352f47b8/12001d60', halo: '9f8a302c/19eb5be6/946507eb', moonbeam: '9e67006e/3f091acc/ba90a2f5', copperplate: 'e615f9ed/dad40cf8/9b1ced60', polaroid: '5204851d/aea53a15/34478585', kodachrome: '74022162/90930e37/e93a3f48', technicolor: 'bb3ee832/a1d09dff/32864c22', blueprint: '5e54dee2/56dc9473/2e2b369f', riso: 'ae8c0657/b084d9b9/7a02b349', infrared: 'f130bcec/fbfe26ed/26d342e1', xerox: '0980cf2d/94fba5dd/d0637982', acidwash: 'f0a25738/daca65ad/6e124a82', moonlight: '172c152f/6a125aec/01662260', lowkey: 'df424918/5e2981c7/c302dc1d', arctic: '41b5af55/c53d1c0f/ee82a4cc', desert: 'd3ae8c56/4be4b22e/169980e4', datamosh: 'da587345/ecb2b369/c6e1743b' };
+    const all = FM.filters.all();
+    if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
+    const tex = fix482(), ids = [], moved = [], got = {};
+    const clip = o => { o = o || {}; const L = FM.makeLayer('image', { name: '4826l clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; if (o.scale) L.transform.scale = o.scale; if (o.rot) L.transform.rotation = o.rot; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#e0d0a0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 4, v: b, e: 'linear' }] });
+    const SAVED = {
+      vignette: [{ amount: 0.6, size: 35 }, { amount: 0.9, size: 10 }, { amount: 0.3, size: 60 }, { amount: kf(0.2, 0.9), size: 25 }],
+      lightglow: [{ amount: 0.6, radius: 6, threshold: 60, color: '#ffffff' }, { amount: 0.8, radius: 26, threshold: 45, color: '#ffd080' }, { amount: 0.4, radius: 10, threshold: 30 }],
+      softglow: [{ amount: 0.6, radius: 100, threshold: 35, color: '#ffffff' }, { amount: 0.45, radius: 130, threshold: 40, color: '#80c0ff' }, { amount: 0.9, radius: 400, threshold: 22 }],
+      darkglow: [{ amount: 0.6, radius: 6, threshold: 40 }, { amount: 0.9, radius: 20, threshold: 70 }],
+    };
+    try {
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots6l([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      Object.keys(SAVED).forEach(type => {
+        [['image', clip], ['shape', shape]].forEach(([kind, mk]) => { const L = mk(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots6l([L]); });
+        SAVED[type].forEach((p, i) => { const L = clip(); L.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(p)) }]; got[type + '/saved' + i] = shots6l([L]); });
+        const T = clip({ scale: 0.6, rot: 15 }); T.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/turned'] = shots6l([T]);
+      });
+      { const L = clip(); L.effects = [FM.fxRegistry.makeInstance('vignette'), { type: 'vignette', enabled: true, params: { amount: 0.5, size: 20 } }]; got['vignette/two'] = shots6l([L]); }
+      { const L = clip(); L.effects = [FM.fxRegistry.makeInstance('lightglow'), FM.fxRegistry.makeInstance('vignette')]; got['vignette+lightglow'] = shots6l([L]); }
+      { const S = FM.makeLayer('shape', { shape: 'rect', x: 54, y: 96, shapeW: 108, shapeH: 192, fill: '#c0c0c0' }); S.start = 0; S.duration = 4; S.effects = [FM.fxRegistry.makeInstance('vignette')]; got['vignette/916'] = shots6l([S], 108, 192); }
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+  /* 6.1 VIGNETTE (C50). Measured on v17.21 on a flat 216x384 (9:16) frame at the defaults: the circle darkened top-centre by
+     0.47 and mid-left by 0.12 — the dark bands top and bottom. Roundness 0 is the ellipse through the frame's corners: 0.32
+     and 0.315, the corner unchanged at 0.585. */
+  test('482 6.1 Vignette - Roundness 0 darkens the sides of a 9:16 frame as much as the top, on a shape and on a 9:16 clip in a 16:9 project, Feather widens and sharpens the fade, Centre moves it, Lighten and Colour lay white or a colour, Protect highlights spares a white lamp, and the preview matches the export', { item: '482', budgetMs: 90000 }, function () {
+    const W = 216, H = 384, bad = [];
+    const flat = (fx, fill) => { const s = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: fill || '#c8c8c8' }); s.start = 0; s.duration = 4; s.effects = fx; return s; };
+    const V = p => _986fx('vignette', p);
+    const bare = _986shot([flat([])], 0.5, W, H);
+    const dk = (r, x, y, b) => 1 - px6l(r, x, y)[0] / px6l(b || bare, x, y)[0];
+    /* THE SHAPE, on a shape filling a 9:16 frame */
+    const c = _986shot([flat([V({})])], 0.5, W, H), e = _986shot([flat([V({ round: 0 })])], 0.5, W, H);
+    const cl = dk(c, 2, H / 2), ct = dk(c, W / 2, 2), el = dk(e, 2, H / 2), et = dk(e, W / 2, 2);
+    if (!(ct > cl * 2.5)) throw new Error('CONTROL: the default circle darkens top-centre ' + ct.toFixed(3) + ' and mid-left ' + cl.toFixed(3) + ' - the fixture does not show C50');
+    if (!(Math.abs(el - et) <= 0.1 * Math.max(el, et))) bad.push('Roundness 0 darkens mid-left ' + el.toFixed(3) + ' and top-centre ' + et.toFixed(3) + ' on a 9:16 frame - not within 10 percent of each other (the circle: ' + cl.toFixed(3) + ' and ' + ct.toFixed(3) + ')');
+    if (Math.abs(dk(e, 2, 2) - dk(c, 2, 2)) > 0.03) bad.push('Roundness 0 moved the corner from ' + dk(c, 2, 2).toFixed(3) + ' to ' + dk(e, 2, 2).toFixed(3) + ' - the corners must stay where it is darkest');
+    if (dk(e, W / 2, H / 2) !== 0) bad.push('Roundness 0 darkened the centre');
+    /* …and on a 9:16 CLIP in a 16:9 project: fitted to the clip's own frame, not the project's */
+    const cv = offscreen(90, 160), cg = cv.getContext('2d'); cg.fillStyle = '#c8c8c8'; cg.fillRect(0, 0, 90, 160);
+    const had = FM.media.get('_4826lclip');
+    FM.media.set('_4826lclip', { kind: 'image', el: cv, width: 90, height: 160, duration: 0 });
+    try {
+      const clip = fx => { const l = FM.makeLayer('image', { x: 160, y: 90, start: 0, duration: 4 }); l.id = '_4826lclip'; l.transform.scale = 1; l.effects = fx; return l; };
+      const b0 = _986shot([clip([])], 0.5, 320, 180), c0 = _986shot([clip([V({})])], 0.5, 320, 180), e0 = _986shot([clip([V({ round: 0 })])], 0.5, 320, 180);
+      const ml = [116, 90], tc = [160, 11];
+      const c0l = dk(c0, ml[0], ml[1], b0), c0t = dk(c0, tc[0], tc[1], b0), e0l = dk(e0, ml[0], ml[1], b0), e0t = dk(e0, tc[0], tc[1], b0);
+      if (!(c0t > c0l * 2.5)) throw new Error('CONTROL: on the 9:16 clip the circle darkens its top ' + c0t.toFixed(3) + ' and its side ' + c0l.toFixed(3));
+      if (!(Math.abs(e0l - e0t) <= 0.1 * Math.max(e0l, e0t))) bad.push('on a 9:16 clip in a 16:9 project Roundness 0 darkens the clip side ' + e0l.toFixed(3) + ' and top ' + e0t.toFixed(3) + ' - it is not fitted to the clip frame');
+      if (px6l(e0, 100, 90)[0] !== px6l(b0, 100, 90)[0]) bad.push('the vignette reached past the clip onto the frame beside it');
+    } finally { if (had) FM.media.set('_4826lclip', had); else FM.media.remove('_4826lclip'); }
+    /* FEATHER: 300 starts the fade nearer the middle, 30 is a sharper ring; along the diagonal, a share q of the way out */
+    const diag = (r, q) => dk(r, Math.round(W / 2 + q * W / 2), Math.round(H / 2 + q * H / 2));
+    const f300 = _986shot([flat([V({ feather: 300 })])], 0.5, W, H), f30 = _986shot([flat([V({ feather: 30 })])], 0.5, W, H);
+    if (diag(c, 0.2) !== 0) throw new Error('CONTROL: the default fade already reaches 20 percent of the way out');
+    if (!(diag(f300, 0.2) > 0.1)) bad.push('Feather 300 does not start the fade nearer the middle (' + diag(f300, 0.2).toFixed(3) + ' at 20 percent out)');
+    if (!(diag(f30, 0.8) > 0.58 && diag(c, 0.8) < 0.45)) bad.push('Feather 30 is not a sharper ring: at 80 percent out it darkens ' + diag(f30, 0.8).toFixed(3) + ' against ' + diag(c, 0.8).toFixed(3) + ' by default');
+    if (!(diag(f30, 0.4) < diag(c, 0.4))) bad.push('Feather 30 darkens more inside the ring than the default');
+    /* CENTRE moves the shape: centred left, the right edge is the far one */
+    const cx = _986shot([flat([V({ x: 20 })])], 0.5, W, H), cy = _986shot([flat([V({ y: 80 })])], 0.5, W, H);
+    if (Math.abs(dk(c, 2, H / 2) - dk(c, W - 3, H / 2)) > 0.01) throw new Error('CONTROL: the centred vignette is not even left to right');
+    if (!(dk(cx, W - 3, H / 2) > dk(cx, 2, H / 2) + 0.25)) bad.push('Centre X 20 did not move it left: left edge ' + dk(cx, 2, H / 2).toFixed(3) + ', right edge ' + dk(cx, W - 3, H / 2).toFixed(3));
+    if (!(dk(cy, W / 2, 2) > dk(cy, W / 2, H - 3) + 0.25)) bad.push('Centre Y 80 did not move it down: top ' + dk(cy, W / 2, 2).toFixed(3) + ', bottom ' + dk(cy, W / 2, H - 3).toFixed(3));
+    /* MODE: Lighten lays white, Colour lays the colour; Colour with black is the old Darken */
+    const li = _986shot([flat([V({ mode: 1 })])], 0.5, W, H), co = _986shot([flat([V({ mode: 2, color: '#ff0000' })])], 0.5, W, H), cb = _986shot([flat([V({ mode: 2, color: '#000000' })])], 0.5, W, H);
+    const k0 = px6l(bare, 2, 2), kl = px6l(li, 2, 2), kc = px6l(co, 2, 2);
+    if (!(kl[0] > k0[0] + 25 && kl[0] === kl[2])) bad.push('Lighten did not lift the corner toward white: ' + k0 + ' -> ' + kl);
+    if (px6l(li, W / 2, H / 2)[0] !== k0[0]) bad.push('Lighten changed the centre');
+    if (!(kc[0] > kc[1] + 100 && kc[1] === kc[2])) bad.push('Colour red did not lay red in the corner: ' + kc);
+    if (Math.abs(px6l(cb, 2, 2)[0] - px6l(c, 2, 2)[0]) > 1) bad.push('Colour black differs from Darken at the corner: ' + px6l(cb, 2, 2) + ' against ' + px6l(c, 2, 2));
+    /* PROTECT HIGHLIGHTS: a white lamp in a dark corner keeps its light; the grey beside it still takes the vignette */
+    const lamp = offscreen(W, H), lg = lamp.getContext('2d'); lg.fillStyle = '#808080'; lg.fillRect(0, 0, W, H); lg.fillStyle = '#ffffff'; lg.fillRect(6, 6, 20, 20);
+    const had2 = FM.media.get('_4826llamp');
+    FM.media.set('_4826llamp', { kind: 'image', el: lamp, width: W, height: H, duration: 0 });
+    let p0, p1;
+    try {
+      const lc = fx => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_4826llamp'; l.transform.scale = 1; l.effects = fx; return l; };
+      p0 = _986shot([lc([V({ amount: 0.9, size: 10 })])], 0.5, W, H); p1 = _986shot([lc([V({ amount: 0.9, size: 10, hilite: 100 })])], 0.5, W, H);
+      if (!(px6l(p0, 16, 16)[0] < 150)) throw new Error('CONTROL: the vignette left the white lamp at ' + px6l(p0, 16, 16)[0]);
+      if (!(px6l(p1, 16, 16)[0] >= 250)) bad.push('Protect highlights 100 left the white lamp at ' + px6l(p1, 16, 16)[0] + ' (' + px6l(p0, 16, 16)[0] + ' without it)');
+      if (Math.abs(px6l(p1, 40, 16)[0] - px6l(p0, 40, 16)[0]) > 2) bad.push('Protect highlights spared the mid grey beside the lamp too: ' + px6l(p0, 40, 16)[0] + ' -> ' + px6l(p1, 40, 16)[0]);
+      const pp = _986shot([lc([V({ amount: 0.9, size: 10, hilite: 100 })])], 0.5, W, H, 0.5);
+      const w = parity6l(p1, pp); if (w > 3) bad.push('Protect highlights: the half-size preview differs from the export by up to ' + w.toFixed(1) + ' levels');
+    } finally { if (had2) FM.media.set('_4826llamp', had2); else FM.media.remove('_4826llamp'); }
+    /* THE PREVIEW IS THE EXPORT, for each control */
+    [{ round: 0 }, { feather: 250 }, { feather: 20 }, { x: 25, y: 70 }, { mode: 1 }, { mode: 2, color: '#2040ff' }, { round: 30, feather: 160, x: 60, mode: 2, color: '#ff8000' }].forEach(o => {
+      const w = parity6l(_986shot([flat([V(o)])], 0.5, W, H), _986shot([flat([V(o)])], 0.5, W, H, 0.5));
+      if (w > 3) bad.push(JSON.stringify(o) + ': the half-size preview differs from the export by up to ' + w.toFixed(1) + ' levels');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 6.2 LIGHT, SOFT AND DARK GLOW (C23, C49). Measured on v17.21: a Light Glow on white text wrote nothing outside the glyphs
+     (alpha 0 at 3 px out); on a 256-level ramp the glow jumped 10 levels from one column to the next where the ramp crossed
+     the threshold (Dark Glow the same). With the new controls: alpha 47 at 3 px, and a ramp step of 2. */
+  test('482 6.2 Light, Soft and Dark Glow - Glow past the edges puts a halo 3 px outside white text and a dark haze round dark text, Threshold softness takes the contour out of a ramp, Smoothness reaches further, Add, Soft light, Subtract and Colour from each change the glow, and the preview matches the export', { item: '482', budgetMs: 90000 }, function () {
+    const bad = [];
+    /* THE BACKLOG'S OWN TEST: white text, Light Glow, Glow past the edges — every row of the glyphs' left edges has light 3 px out */
+    const W = 240, H = 120;
+    const txt = (fx, col) => { const L = FM.makeLayer('text', { text: 'HIM', x: 120, y: 60, fontSize: 72, color: col || '#ffffff' }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const edge3 = (type, col) => {
+      const plain = _986shot([txt([], col)], 0.5, W, H, null, null), off = _986shot([txt([_986fx(type)], col)], 0.5, W, H, null, null), on = _986shot([txt([_986fx(type, { outside: 1 })], col)], 0.5, W, H, null, null);
+      let n = 0, lit = 0, litOff = 0;
+      for (let y = 0; y < H; y++) for (let x = 4; x < W; x++) {
+        if (px6l(plain, x, y)[3] > 200 && px6l(plain, x - 1, y)[3] <= 200) {   // a left edge of a glyph
+          if (px6l(plain, x - 3, y)[3] !== 0) continue;
+          n++; if (px6l(on, x - 3, y)[3] > 0) lit++; if (px6l(off, x - 3, y)[3] > 0) litOff++;
+        }
+      }
+      if (!(n > 30)) throw new Error('CONTROL: found only ' + n + ' glyph edges with empty space 3 px out - the text did not draw');
+      if (litOff) throw new Error('CONTROL: with Glow past the edges Off ' + type + ' already wrote ' + litOff + ' pixels 3 px outside the glyphs');
+      if (lit < n * 0.9) bad.push(type + ' with Glow past the edges On lit ' + lit + ' of ' + n + ' pixels 3 px outside the glyphs (alpha > 0) - the glow still stops at the layer');
+      return on;
+    };
+    const onL = edge3('lightglow');
+    edge3('softglow');
+    const onD = edge3('darkglow', '#181818');
+    /* …and the halo is the glow's colour: white round white text, black round dark text */
+    let wl = 0, dkl = 0;
+    for (let i = 0; i < onL.d.length; i += 4) if (onL.d[i + 3] > 0 && onL.d[i + 3] < 120) { if (onL.d[i] < 250) wl++; }
+    for (let i = 0; i < onD.d.length; i += 4) if (onD.d[i + 3] > 0 && onD.d[i + 3] < 120) { if (onD.d[i] > 30) dkl++; }
+    if (wl > 40) bad.push('the Light Glow halo round white text is not white in ' + wl + ' pixels');
+    if (dkl > 40) bad.push('the Dark Glow haze round dark text is not dark in ' + dkl + ' pixels');
+    /* THRESHOLD SOFTNESS (C49): a 256-level ramp, Amount 1, Radius 3 — the biggest step from one column to the next */
+    const ramp = offscreen(256, 40), rg = ramp.getContext('2d'); for (let x = 0; x < 256; x++) { rg.fillStyle = 'rgb(' + x + ',' + x + ',' + x + ')'; rg.fillRect(x, 0, 1, 40); }
+    const ids = ['_4826lramp', '_4826ltwo', '_4826lred', '_4826ldk'], had = ids.map(k => FM.media.get(k));
+    FM.media.set('_4826lramp', { kind: 'image', el: ramp, width: 256, height: 40, duration: 0 });
+    const img = (id, w, h, fx) => { const l = FM.makeLayer('image', { x: w / 2, y: h / 2, start: 0, duration: 4 }); l.id = id; l.transform.scale = 1; l.effects = fx; return l; };
+    const jump = (type, knee) => { const r = _986shot([img('_4826lramp', 256, 40, [_986fx(type, { knee: knee, amount: 1, radius: 3 })])], 0.5, 256, 40); let j = 0; for (let x = 1; x < 256; x++) j = Math.max(j, Math.abs(px6l(r, x, 20)[0] - px6l(r, x - 1, 20)[0])); return j; };
+    try {
+      ['lightglow', 'darkglow'].forEach(type => {
+        const j0 = jump(type, 0), j1 = jump(type, 100);
+        if (!(j0 >= 8)) throw new Error('CONTROL: ' + type + ' at Threshold softness 0 steps only ' + j0 + ' levels along the ramp - the fixture does not show C49');
+        if (!(j1 <= 4)) bad.push(type + ' at Threshold softness 100 still steps ' + j1 + ' levels between two columns of a smooth ramp (' + j0 + ' at 0) - the contour is still there');
+      });
+      /* SMOOTHNESS: three passes reach further than one — 10 px out from a white block with Radius 6 */
+      const blk = (type, o, fill) => { const s = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 60, shapeW: 60, shapeH: 40, fill: fill }); s.start = 0; s.duration = 4; s.effects = [_986fx(type, Object.assign({ outside: 1 }, o))]; return s; };
+      [['lightglow', '#ffffff'], ['darkglow', '#202020']].forEach(([type, fill]) => {
+        const a1 = _986shot([blk(type, {}, fill)], 0.5, 200, 120, null, null), a3 = _986shot([blk(type, { passes: 3 }, fill)], 0.5, 200, 120, null, null);
+        if (px6l(a1, 60, 60)[3] !== 0) throw new Error('CONTROL: ' + type + ' at one pass already reaches 10 px out');
+        if (!(px6l(a3, 60, 60)[3] > 0)) bad.push(type + ' at Smoothness 3 does not reach 10 px out from the block (alpha ' + px6l(a3, 60, 60)[3] + ') - three passes should spread three radii');
+        if (!(px6l(a3, 67, 60)[3] > px6l(a3, 64, 60)[3] && px6l(a3, 64, 60)[3] > px6l(a3, 60, 60)[3])) bad.push(type + ' at Smoothness 3 does not fade away from the block: alpha ' + [67, 64, 60].map(x => px6l(a3, x, 60)[3]).join(', ') + ' at 3, 6 and 10 px out');
+      });
+      /* BLEND: a dark grey (#404040) beside a white patch and a black bar beside it */
+      const two = offscreen(120, 60), tg = two.getContext('2d'); tg.fillStyle = '#404040'; tg.fillRect(0, 0, 120, 60); tg.fillStyle = '#ffffff'; tg.fillRect(50, 20, 20, 20); tg.fillStyle = '#000000'; tg.fillRect(74, 20, 6, 20);
+      FM.media.set('_4826ltwo', { kind: 'image', el: two, width: 120, height: 60, duration: 0 });
+      const bl = b => _986shot([img('_4826ltwo', 120, 60, [_986fx('lightglow', { blend: b, amount: 1, radius: 8 })])], 0.5, 120, 60);
+      const s0 = bl(0), s1 = bl(1), s2 = bl(2), src = _986shot([img('_4826ltwo', 120, 60, [])], 0.5, 120, 60);
+      if (!(px6l(s0, 46, 30)[0] > px6l(src, 46, 30)[0] + 20)) throw new Error('CONTROL: Screen did not lift the grey beside the white patch');
+      if (!(px6l(s1, 46, 30)[0] > px6l(s0, 46, 30)[0] + 10)) bad.push('Add is no brighter than Screen on a dark grey beside the light: ' + px6l(s1, 46, 30)[0] + ' against ' + px6l(s0, 46, 30)[0]);
+      if (!(px6l(s0, 76, 30)[0] > 10 && px6l(s2, 76, 30)[0] === 0)) bad.push('Soft light lifted black (' + px6l(s2, 76, 30)[0] + '; Screen ' + px6l(s0, 76, 30)[0] + ') - it should keep black black');
+      if (!(px6l(s2, 46, 30)[0] > px6l(src, 46, 30)[0] + 5 && px6l(s2, 46, 30)[0] < px6l(s0, 46, 30)[0])) bad.push('Soft light is not a gentler lift than Screen: ' + px6l(s2, 46, 30)[0] + ' against ' + px6l(s0, 46, 30)[0] + ' (source ' + px6l(src, 46, 30)[0] + ')');
+      const dkc = offscreen(120, 60), dg = dkc.getContext('2d'); dg.fillStyle = '#c0c0c0'; dg.fillRect(0, 0, 120, 60); dg.fillStyle = '#000000'; dg.fillRect(50, 20, 20, 20);
+      FM.media.set('_4826ldk', { kind: 'image', el: dkc, width: 120, height: 60, duration: 0 });
+      const db = b => _986shot([img('_4826ldk', 120, 60, [_986fx('darkglow', { blend: b, amount: 1, radius: 8 })])], 0.5, 120, 60);
+      const d0 = db(0), d1 = db(1), d2 = db(2);
+      if (!(px6l(d0, 46, 30)[0] < 180)) throw new Error('CONTROL: Dark Glow did not darken the light grey beside the black patch');
+      if (!(px6l(d1, 46, 30)[0] < px6l(d0, 46, 30)[0] - 10)) bad.push('Subtract is no darker than Multiply: ' + px6l(d1, 46, 30)[0] + ' against ' + px6l(d0, 46, 30)[0]);
+      if (!(px6l(d2, 46, 30)[0] > px6l(d0, 46, 30)[0] && px6l(d2, 46, 30)[0] < 192)) bad.push('Soft light is not a gentler darkening than Multiply: ' + px6l(d2, 46, 30)[0] + ' against ' + px6l(d0, 46, 30)[0]);
+      /* COLOUR FROM: a bright orange patch on grey glows orange onto the grey; the chosen white glow does not */
+      const red = offscreen(120, 60), rd = red.getContext('2d'); rd.fillStyle = '#606060'; rd.fillRect(0, 0, 120, 60); rd.fillStyle = '#ff6020'; rd.fillRect(50, 20, 20, 20);
+      FM.media.set('_4826lred', { kind: 'image', el: red, width: 120, height: 60, duration: 0 });
+      ['lightglow', 'softglow'].forEach(type => {
+        const f = v => _986shot([img('_4826lred', 120, 60, [_986fx(type, { from: v, amount: 1, radius: type === 'softglow' ? 400 : 8, threshold: 30 })])], 0.5, 120, 60);
+        const c0 = px6l(f(0), 47, 30), c1 = px6l(f(1), 47, 30);
+        if (Math.abs(c0[0] - c0[2]) > 2 || !(c0[0] > 0x60 + 10)) throw new Error('CONTROL: the chosen white ' + type + ' does not lift the grey evenly beside the patch: ' + c0);
+        if (!(c1[0] - c1[2] > 15)) bad.push(type + ' Colour from Source colour does not glow orange onto the grey beside an orange patch: ' + c1 + ' (white glow ' + c0 + ')');
+      });
+    } finally { ids.forEach((k, i) => { if (had[i]) FM.media.set(k, had[i]); else FM.media.remove(k); }); }
+    /* THE PREVIEW IS THE EXPORT: every new control on, over a background, export against a half-size preview (480x320, so
+       Soft Glow's radius is not held at its 4 px floor on the small plate) */
+    [['lightglow', '#ffffff', '#000000', { from: 1, blend: 1 }], ['softglow', '#ffffff', '#000000', { from: 1, blend: 2 }], ['darkglow', '#202020', '#e0e0e0', { blend: 1 }]].forEach(([type, fill, bg, extra]) => {
+      const rr = () => { const s = FM.makeLayer('shape', { shape: 'rect', x: 240, y: 160, shapeW: 120, shapeH: 80, fill: fill }); s.start = 0; s.duration = 4; s.effects = [_986fx(type, Object.assign({ outside: 1, passes: 2, knee: 40 }, extra))]; return s; };
+      const w = parity6l(_986shot([rr()], 0.5, 480, 320, null, bg), _986shot([rr()], 0.5, 480, 320, 0.5, bg));
+      if (w > 4) bad.push(type + ': the half-size preview differs from the export by up to ' + w.toFixed(1) + ' levels');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 6.2 on the phone's cropped readback (#692 route 2). Light and Dark Glow read back only the layer's box plus a margin of
+     3 x Radius + 8 plate px; Glow past the edges now writes into that margin, and three passes of a box of radius R reach
+     exactly 3R. So the cropped picture must be the full one, byte for byte, at the largest Radius and Smoothness. */
+  test('482 6.2 Light and Dark Glow - the halo past the edges at Smoothness 3 and the largest Radius is whole on the cropped readback, in the middle and at the edge of the frame, and through the real dispatcher', { item: '482', budgetMs: 90000 }, function () {
+    const PW = 900, PH = 700, bad = [];
+    const mk = (rx, ry, rw, rh, dark) => { const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) { const i = (y * PW + x) * 4, edge = x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2;
+        a[i] = dark ? 20 + (x % 30) : 200 + ((x * 7) % 55); a[i + 1] = dark ? 20 + (y % 25) : 180 + ((y * 11) % 70); a[i + 2] = dark ? 30 : 230; a[i + 3] = edge ? 140 : 255; }
+      return a; };
+    for (const type of ['lightglow', 'darkglow']) {
+      const params = Object.assign({}, FM.fxRegistry.makeInstance(type).params, { outside: 1, passes: 3, radius: 80, knee: 50 });
+      for (const [rx, ry, rw, rh, where] of [[420, 320, 60, 50, 'middle'], [0, 300, 60, 50, 'left edge']]) {
+        const data = mk(rx, ry, rw, rh, type === 'darkglow');
+        // the halo is there at all, 100 px out — past one Radius, so only three passes reach it (the kernel straight, on the whole plate)
+        const full = new Uint8ClampedArray(data); FM._FX_TABLES.PIXEL_FX[type](full, PW, PH, params, 0.3);
+        const probe = ((ry + rh / 2) * PW + rx + rw + 100) * 4 + 3;
+        if (!(full[probe] > 0)) { bad.push(type + ' (' + where + '): no halo 100 px past the block at Radius 80 and Smoothness 3 (alpha ' + full[probe] + ')'); continue; }
+        const r = FM._cropIdentity(type, data, PW, PH, params, 0.3, 1);
+        if (!r || r.same !== true) bad.push(type + ' (' + where + '): the cropped readback differs from the full plate in ' + (r ? r.diff : '?') + ' bytes - the margin cuts the halo');
+        else if (!(r.area < r.plate * 0.8)) bad.push(type + ' (' + where + '): the crop covered ' + Math.round(r.area * 100 / r.plate) + ' percent of the plate - nothing was cropped, so nothing was proved');
+      }
+    }
+    // …and through renderScene, the crop on against the crop off
+    const render = (mode, type) => { const c = offscreen(400, 300); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 150, shapeW: 70, shapeH: 50, fill: type === 'darkglow' ? '#202020' : '#ffe0a0', start: 0, duration: 4 });
+      L.effects = [_986fx(type, { outside: 1, passes: 3, radius: 20, knee: 30 })];
+      const m0 = FM._cropMode; FM._cropMode = mode; const c0 = FM._cropStats.crops;
+      try { FM.renderScene(c.getContext('2d'), { project: { width: 400, height: 300, fps: 30, duration: 4, background: null }, layers: [L], selectedId: null, selectedIds: [] }, 0.5); } finally { FM._cropMode = m0; }
+      return { px: c.getContext('2d').getImageData(0, 0, 400, 300).data, crops: FM._cropStats.crops - c0 }; };
+    for (const type of ['lightglow', 'darkglow']) {
+      const on = render(0, type), off = render(-1, type);
+      let d = 0; for (let i = 0; i < on.px.length; i++) if (on.px[i] !== off.px[i]) d++;
+      if (!(on.crops >= 1)) bad.push(type + ': the crop path did not run');
+      if (d) bad.push(type + ': through the dispatcher the cropped glow differs from the full one in ' + d + ' bytes');
+      if (!(on.px[(150 * 400 + 200 + 35 + 30) * 4 + 3] > 0)) bad.push(type + ': through the dispatcher there is no halo 30 px past the block');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT THE PANEL, at a phone's 390 px and at a 1280 px PC window: every new row is on screen inside the inspector,
+     its name is not cut off, and each option button shows its whole label. The Vignette Colour greys out unless Mode is
+     Colour, and the Glow colour of Light and Soft Glow greys out under Colour from Source colour, where it does nothing. */
+  test('482 6.1 and 6.2 panels - the new Vignette and Glow rows fit the effect panel at 390 and 1280 px, the Vignette Colour is greyed out unless Mode is Colour, and the Glow colour is greyed out under Source colour', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { vignette: ['Roundness', 'Feather', 'Centre X', 'Centre Y', 'Mode', 'Colour', 'Protect highlights'], lightglow: ['Threshold softness', 'Smoothness', 'Glow past the edges', 'Blend', 'Colour from', 'Glow'],
+      softglow: ['Threshold softness', 'Smoothness', 'Glow past the edges', 'Blend', 'Colour from', 'Glow'], darkglow: ['Threshold softness', 'Smoothness', 'Glow past the edges', 'Blend'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label, #inspector-panel .fx-row.fx-open .kf-color-row > label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row') } : null;
+    };
+    const show = async (type, set) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S4826l', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await show(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const r = rowOf(label);
+          if (!r || !r.row) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = r.row.getBoundingClientRect();
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+          [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+          const tag = r.row.querySelector('.fx-ovr-tag');
+          if (tag) { const tb = tag.getBoundingClientRect(); if (tb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1) throw new Error(where + ': the greyed ' + type + ' ' + label + ' pill does not fit: ' + JSON.stringify(tag.textContent)); }
+        }
+      }
+      await show('vignette');
+      if (!rowOf('Colour').row.classList.contains('fx-overridden')) throw new Error(where + ': the Vignette Colour looks live under Mode Darken, where it does nothing');
+      if (rowOf('Roundness').row.classList.contains('fx-overridden')) throw new Error(where + ': CONTROL - Roundness is greyed out, and nothing switches it off');
+      await show('vignette', p => { p.mode = 2; });
+      if (rowOf('Colour').row.classList.contains('fx-overridden')) throw new Error(where + ': the Vignette Colour is greyed out under Mode Colour');
+      for (const type of ['lightglow', 'softglow']) {
+        await show(type);
+        if (rowOf('Glow').row.classList.contains('fx-overridden')) throw new Error(where + ': the ' + type + ' Glow colour is greyed out under Chosen colour, where it is the colour');
+        await show(type, p => { p.from = 1; });
+        if (!rowOf('Glow').row.classList.contains('fx-overridden')) throw new Error(where + ': the ' + type + ' Glow colour looks live under Source colour, where it does nothing');
+      }
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
 })();
