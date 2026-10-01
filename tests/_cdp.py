@@ -136,6 +136,13 @@ def main():
     ap.add_argument("--timeout", type=int, default=600, help="seconds to wait for the suite")
     ap.add_argument("--quiet", action="store_true", help="only print the summary line")
     ap.add_argument("--progress", default=None, help="file to rewrite every ~5 s with the running test and how long it has run")
+    # queue 980 (the "Full unchanged" lock, tools/full-unchanged.sh). Both are OPT-IN and change nothing for the suite:
+    # without them this file behaves exactly as before. --dump writes the TOP page's `window.__fmDump` (JSON) to a file
+    # when the page reports done; --shots answers the top page's `window.__fmWantShot = {seq, name, x, y, w, h}` with a
+    # PNG of that clip written to DIR/<name>.png, and sizes the viewport to exactly --width x --height (headless Chrome
+    # will not make a window narrower than 500 px, so a 380 px screenshot needs the metrics override).
+    ap.add_argument("--dump", default=None, help="write the page's window.__fmDump (JSON) here when it finishes")
+    ap.add_argument("--shots", default=None, help="directory: answer window.__fmWantShot requests with PNG files")
     a = ap.parse_args()
 
     url = a.url or f"http://localhost:{a.port}/tests/run.html"
@@ -210,6 +217,9 @@ def main():
         cdp = CDP(ws_url(dbg))
         cdp.send("Page.enable")
         cdp.send("Runtime.enable")
+        if a.shots:
+            os.makedirs(a.shots, exist_ok=True)
+            cdp.send("Emulation.setDeviceMetricsOverride", width=a.width, height=a.height, deviceScaleFactor=1, mobile=False)
         cdp.send("Page.navigate", url=url)
 
         # The runner replaces #sum's text once FMTests.run() resolves. Poll that rather than a
@@ -388,6 +398,54 @@ def main():
                              "if(w){w.__fmGc=%s;w.__fmGcDone=%s;}})()" % (json.dumps(ans), json.dumps(want_gc)))
             except Exception:
                 pass
+            # THE "FULL UNCHANGED" PROBE'S TWO ASKS (queue 980, tests/full-unchanged.html). Asked by the TOP page, never by
+            # the suite, so a suite run never reaches either branch.
+            #  · `window.__fmWantSetup = {phone, init}` — answered ONCE with `__fmSetupDone` (1, or the error text), and the
+            #    probe waits for it before it loads the app frame, so the app boots already set up:
+            #      phone: a phone is a FINGER, not a narrow mouse — the app asks about the pointer (queue 797;
+            #             tools/shot.py does the same), so touch and (hover: none) go on;
+            #      init:  a script run in every NEW document before any of its own (Page.addScriptToEvaluateOnNewDocument)
+            #             — the probe seeds Math.random in the app frame with it, so a boot-time draw (which drop-hint
+            #             variant, the first shape hue) is the same on two runs of the same build.
+            #  · `window.__fmWantShot = {seq, name, x, y, w, h}`: a PNG of that clip, written to --shots/<name>.png, answered
+            #    with `__fmShotDone = seq` (and `__fmShotErr`). Ignored without --shots, so a page cannot write anywhere.
+            try:
+                want_set = cdp.eval("(function(){var q=window.__fmWantSetup;return (q && !window.__fmSetupDone) ? JSON.stringify(q) : null;})()")
+                if want_set:
+                    q = json.loads(want_set)
+                    perr = ''
+                    try:
+                        if q.get("init"):
+                            cdp.send("Page.addScriptToEvaluateOnNewDocument", source=str(q["init"]))
+                        if q.get("phone"):
+                            cdp.send("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
+                            cdp.send("Emulation.setEmulatedMedia", features=[{"name": "hover", "value": "none"},
+                                                                            {"name": "any-hover", "value": "none"},
+                                                                            {"name": "pointer", "value": "coarse"},
+                                                                            {"name": "any-pointer", "value": "coarse"}])
+                            if not cdp.eval("matchMedia('(hover: none)').matches"):
+                                perr = 'the phone emulation did not take: (hover: none) does not match'
+                    except Exception as ex:
+                        perr = str(ex)[:300]
+                    cdp.eval("window.__fmSetupDone = %s" % json.dumps(perr or 1))
+                want_shot = cdp.eval("(function(){var q=window.__fmWantShot;if(!q||typeof q.seq!=='number'||window.__fmShotDone===q.seq) return null;"
+                                     "return JSON.stringify(q);})()") if a.shots else None
+                if want_shot:
+                    q = json.loads(want_shot)
+                    serr = ''
+                    try:
+                        name = "".join(ch for ch in str(q.get("name", "shot")) if ch.isalnum() or ch in "-_.")[:120] or "shot"
+                        shot = cdp.send("Page.captureScreenshot", format="png",
+                                        clip={"x": float(q.get("x", 0)), "y": float(q.get("y", 0)),
+                                              "width": float(q.get("w", a.width)), "height": float(q.get("h", a.height)), "scale": 1})
+                        import base64
+                        with open(os.path.join(a.shots, name + ".png"), "wb") as fh:
+                            fh.write(base64.b64decode(shot["data"]))
+                    except Exception as ex:
+                        serr = str(ex)[:300]
+                    cdp.eval("window.__fmShotErr=%s;window.__fmShotDone=%s;" % (json.dumps(serr), json.dumps(q["seq"])))
+            except Exception:
+                pass
             try:
                 payload = cdp.eval("(function(){"
                                    "var s=document.getElementById('sum');"
@@ -422,6 +480,13 @@ def main():
             # was the only way to say which tests had grown
             if not last_seen and track["name"]:
                 last_seen = track["name"]
+            if a.dump:
+                # queue 980: how far the probe got, for the timeout message (its own __fmDump.step says where it was)
+                try:
+                    with open(a.dump, "w", encoding="utf-8") as fh:
+                        fh.write(cdp.eval("JSON.stringify({timedOut:true, partial: window.__fmDump || null})") or "null")
+                except Exception:
+                    pass
             print(json.dumps({"ok": False, "error": "suite did not finish within %ds" % a.timeout,
                               "lastTest": last_seen, "onItSeconds": round(time.time() - track["since"]),
                               "testsSeen": track["n"], "pageSilentSeconds": round(time.time() - track["last_ok"]),
@@ -429,6 +494,16 @@ def main():
             return 2
 
         data = json.loads(payload)
+        if a.dump:
+            # queue 980: the probe's records, written whatever the verdict — a probe that died half-way still says how far it got
+            try:
+                dumped = cdp.eval("(function(){try{return JSON.stringify(window.__fmDump===undefined?null:window.__fmDump);}"
+                                  "catch(e){return JSON.stringify({dumpError:String(e)});}})()")
+                with open(a.dump, "w", encoding="utf-8") as fh:
+                    fh.write(dumped or "null")
+            except Exception as ex:
+                with open(a.dump, "w", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"dumpError": str(ex)[:300]}))
         # queue 996: what each test left in the shared scene (tests.js records it; report only)
         try:
             leaks = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
