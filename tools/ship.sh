@@ -624,6 +624,31 @@ if [ -n "$REQ_GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS REQUEST:'; then
   exit 1
 fi
 
+# ─── THE "FULL UNCHANGED" LOCK (queue 980, 1 Oct; DESIGN.md §0.4.5, §21 F10; BUILD-PLAN.md §3.2 point 3) ─────────────
+# His rule, 1 Oct, when he said go on the Simple editor: "i dont want the original editor changing in design and function
+# … dont do that." The Simple editor is built in the same files Full runs, so "Full did not change" cannot be a session's
+# word — it is tools/full-unchanged.sh's measurement against HEAD (every screen, every edit, the wire, the documents, the
+# cog), and this refuses a Simple release whose exact tree it never passed. It FIRES on any of: the newest POLISH-LOG line
+# saying queue 980; the diff touching a Simple-owned file; the diff adding or removing a Simple hook in a shared file (a
+# Simple fix logged as a hunt finding or under a later number must not skip the lock — §21 F10). And a Simple release
+# ships ALONE: another `queue NNN` in that line is refused, so any difference from HEAD is Simple's and a rollback takes it
+# back alone. The rules and their self-test live in tools/_fu_gate.py (one place), and the self-test runs first — a gate
+# that has stopped firing is silent, which is the one failure nobody notices.
+if ! python3 tools/_fu_gate.py selftest >/dev/null 2>&1; then
+  python3 tools/_fu_gate.py selftest
+  echo "❌ THE FULL-UNCHANGED GATE IS BROKEN — not committing, not pushing. Fix tools/_fu_gate.py first."
+  _WHY="the full-unchanged gate's own self-test failed"
+  exit 1
+fi
+_FU_MSG="$(python3 tools/_fu_gate.py check)"; _FU_RC=$?
+if [ "$_FU_RC" != 0 ]; then
+  echo "❌ ${_FU_MSG#REFUSE: }" | fold -s -w 130 | sed '2,$s/^/   /'
+  echo "   Not committing, not pushing."
+  _WHY="a Simple release that full-unchanged.sh has not passed on this tree"
+  exit 1
+fi
+case "$_FU_MSG" in OK:*) echo "→ Full unchanged: ${_FU_MSG#OK: }";; esac
+
 echo "→ proving the release (its changed tests must fail without the fix)…"
 tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
 

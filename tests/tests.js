@@ -61808,7 +61808,9 @@
     });
   });
 
-  window.FMTests = { tests: T, run: run };
+  /* `kit` (queue 980): the suite's own fixture documents, for tests/full-unchanged.html's FU5 ("every fixture project in
+     the suite … loaded, sanitised, saved and loaded again"). Read-only builders; nothing here runs a test. */
+  window.FMTests = { tests: T, run: run, kit: { kitchen921: kitchen921 } };
 
   /* ================= queue 306: the service worker's silent downgrade =============================
    * Ezra, for weeks: *"an older version of our project shows up when you refresh"*, and later *"The
@@ -118113,5 +118115,73 @@
     }
   });
 
+
+  /* ═══ THE "FULL UNCHANGED" LOCK (queue 980 (partial); BUILD-PLAN.md §3.2, DESIGN.md §0.4.5). His rule, 1 Oct: "i dont want
+     the original editor changing in design and function". tools/full-unchanged.sh measures it; these two keep the instrument
+     from going blind QUIETLY as Full grows — the failure a lock never reports about itself. */
+  function fu980Keys(src) {
+    const m = /var KEYS = \[([\s\S]*?)\n  \];/.exec(src);
+    if (!m) return null;
+    const out = [];
+    m[1].replace(/\['([A-Za-z0-9]+)',\s*'(?:[^'\\]|\\.)*'(?:,\s*\{([^}]*)\})?\]/g, function (_, code, mods) { out.push(code + (mods && /meta/.test(mods) ? '+meta' : '')); return _; });
+    return out;
+  }
+  function fu980Handler(app) {
+    const a = app.indexOf("window.addEventListener('keydown', e => {\n      const mod = e.metaKey || e.ctrlKey;");
+    const b = app.indexOf("window.addEventListener('keyup'", a);
+    return a >= 0 && b > a ? app.slice(a, b) : null;
+  }
+  /* What the handler answers, read from its own source: every e.code it names, every ⌘ letter, the arrows, the digits. */
+  function fu980Wanted(h) {
+    const want = new Set();
+    h.replace(/e\.code === '([A-Za-z0-9]+)'/g, function (_, c) { want.add(c); return _; });
+    h.replace(/mod && \(e\.key === '([a-z])'/g, function (_, k) { want.add('Key' + k.toUpperCase() + '+meta'); return _; });
+    if (/e\.code\.indexOf\('Arrow'\) === 0/.test(h)) ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].forEach(function (c) { want.add(c); });
+    if (/\^Digit\[1-9\]\$/.test(h)) want.add('Digit1');
+    if (/e\.key === '\?'/.test(h)) want.add('Slash');
+    if (/e\.code === 'KeyA' \|\| e\.code === 'KeyS' \|\| e\.code === 'KeyD'/.test(h)) ['KeyA', 'KeyS', 'KeyD'].forEach(function (c) { want.add(c); });
+    return want;
+  }
+
+  test('980 FU lock: the Full-unchanged probe presses every key Full’s keydown handler answers (FU3), so a new shortcut cannot slip past the lock', { item: '980' }, async function () {
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!probe) throw new Error('tests/full-unchanged.html is missing — the Full-unchanged lock (queue 980) has no probe, so nothing measures Full against HEAD');
+    const app = await fetch('js/app.js', { cache: 'no-store' }).then(function (r) { return r.text(); });
+    const h = fu980Handler(app);
+    if (!h) throw new Error('could not find Full’s window keydown handler in js/app.js by its first line — update fu980Handler, or this guard is blind');
+    const keys = fu980Keys(probe);
+    if (!keys || keys.length < 20) throw new Error('could not read the probe’s KEYS list (' + (keys ? keys.length : 'none') + ')');
+    const have = new Set(keys);
+    const want = fu980Wanted(h);
+    if (want.size < 25) throw new Error('only ' + want.size + ' keys were read out of the handler — the reader has gone blind, not the probe');
+    const missing = Array.from(want).filter(function (c) { return !have.has(c); });
+    if (missing.length) throw new Error('Full’s keydown handler answers ' + missing.join(', ') + ' and the Full-unchanged probe (FU3) never presses it — add it to KEYS in tests/full-unchanged.html');
+    if (!have.has('KeyE')) throw new Error('FU3 must press E (Full has no E; DESIGN §0.4.2 B14)');
+    /* POSITIVE CONTROL: a key planted in the handler is seen as missing, so "nothing missing" above is a finding. */
+    const planted = fu980Wanted(h.replace("e.code === 'KeyM'", "e.code === 'KeyQ') {} else if (e.code === 'KeyM'"));
+    if (!planted.has('KeyQ') || have.has('KeyQ')) throw new Error('CONTROL: a planted KeyQ in the handler was not read as a key the probe misses');
+  });
+
+  test('980 FU lock: the three self-test plants still land exactly once in Full’s source, so the lock can still prove it sees (the 1 px margin, the toast word, the split floor)', { item: '980' }, async function () {
+    const cmp = await fetch('tools/_fu_compare.py', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!cmp) throw new Error('tools/_fu_compare.py is missing — the Full-unchanged lock (queue 980) has no comparer or self-test');
+    const plants = [];
+    cmp.replace(/'(margin|toast|floor)': \('([^']+)', (None|'((?:[^'\\]|\\.)*)')/g, function (_, kind, file, raw, old) { plants.push({ kind: kind, file: file, old: raw === 'None' ? null : old }); return _; });
+    if (plants.length !== 3) throw new Error('read ' + plants.length + ' self-test plants out of tools/_fu_compare.py, not 3');
+    for (const p of plants) {
+      const src = await fetch(p.file, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+      if (!src) throw new Error('the ' + p.kind + ' plant edits ' + p.file + ', which cannot be read');
+      if (p.old === null) { if (p.kind !== 'margin' || !/#transport\s*\{/.test(src)) throw new Error('the margin plant needs #transport styled in ' + p.file); continue; }
+      const n = src.split(p.old).length - 1;
+      if (n !== 1) throw new Error('the ' + p.kind + ' plant’s anchor appears ' + n + ' times in ' + p.file + ' (want 1): ' + p.old + ' — the lock’s self-test would refuse every run; if Full changed here with his yes, move the plant');
+    }
+    /* …and the two FU2 steps the plants are caught BY are still in the probe. */
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    ['split Clip C 0.05 s from its start', 'split at a clip’s very edge'].forEach(function (s) {
+      if (probe.indexOf(s) < 0 || cmp.indexOf(s) < 0) throw new Error('the step “' + s + '” is gone from the probe or from the comparer’s signatures — a plant can no longer be caught by name');
+    });
+    /* CONTROL: the counter really counts — an anchor written twice reads as 2. */
+    if (('a' + plants[1].old + 'b' + plants[1].old).split(plants[1].old).length - 1 !== 2) throw new Error('CONTROL: the anchor counter does not count');
+  });
 
 })();

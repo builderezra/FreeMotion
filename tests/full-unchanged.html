@@ -1,0 +1,1110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreeMotion — Full unchanged probe</title>
+<!--
+  THE "FULL UNCHANGED" PROBE (queue 980; DESIGN.md §0.4.5, BUILD-PLAN.md §3.2). His rule, 1 Oct: "i dont want the original
+  editor changing in design and function". This page does NOT judge anything. It loads the app in a frame exactly as
+  tests/run.html does, builds one fixed project THROUGH THE APP, drives Full the way he would (FU1–FU7) and writes what it
+  saw: a layout record and a PNG per screen, and a state record after every edit. tools/full-unchanged.sh runs it once on
+  HEAD and once on the tree and compares the two, so the verdict is "the same as the release before", never "looks fine".
+
+  Run it only through tools/full-unchanged.sh (it needs tests/_cdp.py's --dump/--shots and its phone emulation). By hand:
+    python3 tests/_cdp.py --port <p> --width 380 --height 800 --dump out.json --shots shots/ \
+      --url 'http://localhost:<p>/tests/full-unchanged.html?w=380&h=800&phone=1&shots=1'
+
+  What it never does: turn Simple on (except FU6/FU7, which go through the cog when a switch exists), mask anything (the
+  ONE mask list, FU_INVISIBLE, lives in tools/full-unchanged.sh), or compare. Ids are canonicalised here (they carry
+  performance.now() and Math.random(), so two runs of the same build never share them) — by POSITION, so a layer that moved
+  still shows as moved.
+
+  ⚠️ A STEP THAT THROWS ON HEAD IS A BROKEN INSTRUMENT, NOT A PASS. Every step records its error; the tool refuses to say
+  PASS when HEAD itself errored anywhere, because a step that fails the same way on both sides compares equal and proves
+  nothing (memory: "a negative test needs a positive control").
+-->
+<style>
+  html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+  /* Parked off-screen: the screenshot is a clip of the frame at (0,0), and nothing of this page may sit over it. */
+  #sum, #log { position: fixed; left: -10000px; top: 0; width: 600px; color: #fff; font: 12px system-ui; }
+  iframe#app { position: fixed; left: 0; top: 0; border: 0; background: #000; }
+</style>
+</head>
+<body>
+<div id="sum">Loading…</div>
+<div id="log"></div>
+<iframe id="app"></iframe>
+<script>
+(function () {
+  'use strict';
+  var PROBE_VERSION = 1;
+  var Q = new URLSearchParams(location.search);
+  var W = parseInt(Q.get('w'), 10) || 1280, H = parseInt(Q.get('h'), 10) || 800;
+  var PHONE = Q.get('phone') === '1', SHOTS = Q.get('shots') === '1';
+  /* FU1 and FU2 first, in this order: the self-test's plants are measured with a PREFIX of it (FU1 for the margin, FU1+FU2
+     for the toast and the split floor), so whatever one group leaves behind, a plant's run starts FU2 where the full run did. */
+  var ALL = ['FU1', 'FU2', 'FU6', 'FU3', 'FU4', 'FU5', 'FU7'];
+  var GROUPS = (Q.get('groups') || ALL.join(',')).split(',').filter(function (g) { return ALL.indexOf(g) >= 0; });
+  var DUMP = window.__fmDump = { probe: PROBE_VERSION, w: W, h: H, phone: PHONE, groups: GROUPS, step: 'boot', screens: {}, fu2: [], fu3: [], fu4: null, fu5: [], fu6: {}, fu7: null, errors: [], notes: [] };
+  var frame = document.getElementById('app');
+  frame.style.width = W + 'px'; frame.style.height = H + 'px';
+  var w, D, FM;   // the app frame's window, document and FM, once loaded
+  var APP_VERSION = '';
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function step(s) { DUMP.step = s; try { if (w) w.__fmStep = s; } catch (e) {} }
+  function done(ok, msg) {
+    var s = document.getElementById('sum');
+    // tests/_cdp.py waits for "Regression" or "Error" in #sum and calls it green on "✓". Here green means "the probe ran to
+    // the end", NOT "Full is unchanged" — that verdict is tools/full-unchanged.sh's, from the records.
+    s.textContent = ok ? 'Regression 1/1 ✓ probe finished' : 'Error: ' + msg;
+  }
+  async function until(what, fn, ms) {
+    var t0 = Date.now();
+    for (;;) {
+      var v; try { v = fn(); } catch (e) { v = null; }
+      if (v) return v;
+      if (Date.now() - t0 > (ms || 8000)) throw new Error('timed out waiting for ' + what);
+      await sleep(50);
+    }
+  }
+  function raf2() { return new Promise(function (r) { w.requestAnimationFrame(function () { w.requestAnimationFrame(r); }); }); }
+
+  /* ═══ DETERMINISM ═══════════════════════════════════════════════════════════════════════════════════════════════════
+     Two runs of the SAME build must produce the same records, or the comparison measures the clock. Three sources, each
+     handled once here and nowhere else:
+       · Math.random: replaced in the app frame by a seeded generator the moment the app has loaded (before the fixture).
+         Boot-time draws already happened and are not ours to fix (the only one that shows is randomFill's start hue, and
+         the fixture holds no shape that asks for one).
+       · CSS animations: finite ones are finished, infinite ones (Home's glints and grain, a spinner) are paused at 0 for
+         the instant of a measurement and resumed after — the same frame on both sides, and nothing about them is lost.
+       · The text caret: made transparent by a probe-only style (caret-color is not in the record; the PNG would see it). */
+  function seedRandom(seed) {
+    var a = seed >>> 0;
+    w.Math.random = function () {   // mulberry32
+      a = (a + 0x6D2B79F5) >>> 0; var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function finishFinite() {
+    D.getAnimations().forEach(function (a) {
+      try { var t = a.effect.getComputedTiming(); if (isFinite(t.endTime) && a.playState === 'running') a.finish(); } catch (e) {}
+    });
+  }
+  async function settle(ms) {
+    await sleep(ms == null ? 150 : ms);
+    for (var i = 0; i < 4; i++) { finishFinite(); await raf2(); }
+  }
+  /* For the instant of a measurement: every finite animation at its end (one in its delay phase too — a glint that waits
+     before it sweeps), every infinite one paused at 0. Twice, a frame apart: finishing one can start the next. */
+  function freezeInfinite() {
+    var fr = [];
+    D.getAnimations().forEach(function (a) {
+      try {
+        var t = a.effect.getComputedTiming();
+        if (isFinite(t.endTime)) { if (a.playState !== 'finished') a.finish(); }
+        else if (a.playState !== 'paused' || a.currentTime !== 0) { var was = a.playState; a.pause(); a.currentTime = 0; fr.push({ a: a, was: was }); }
+      } catch (e) {}
+    });
+    return fr;
+  }
+  /* …and every canvas on screen has stopped drawing: filmstrips, waveforms and thumbnails arrive asynchronously, and a
+     picture taken while one is half-painted measures the machine's speed. A small signature of each visible canvas is read
+     every ~120 ms until two readings in a row agree (3 s at most; the last state is what is recorded either way). */
+  var sigCanvas = null;
+  function canvasSig() {
+    if (!sigCanvas) { sigCanvas = D.createElement('canvas'); sigCanvas.width = 48; sigCanvas.height = 48; }
+    var g = sigCanvas.getContext('2d'), parts = [];
+    [].slice.call(D.querySelectorAll('canvas')).forEach(function (c) {
+      if (c === sigCanvas || !c.width || !c.height || !c.getClientRects().length) return;
+      try { g.clearRect(0, 0, 48, 48); g.drawImage(c, 0, 0, 48, 48); parts.push(cyrb53(new Uint8Array(g.getImageData(0, 0, 48, 48).data.buffer))); }
+      catch (e) { parts.push('x'); }
+    });
+    return parts.join(',');
+  }
+  async function canvasesQuiet(maxMs) {
+    var last = canvasSig(), t0 = Date.now(), stable = 0;
+    while (Date.now() - t0 < (maxMs || 3000)) {
+      await sleep(120); await raf2();
+      var s = canvasSig();
+      if (s === last) { if (++stable >= 2) return true; } else { stable = 0; last = s; }
+    }
+    return false;
+  }
+  function unfreeze(fr) { fr.forEach(function (f) { try { if (f.was === 'running') f.a.play(); } catch (e) {} }); }
+
+  /* ═══ THE LAYOUT RECORD (DESIGN §0.4.5 "two comparisons per screen", 1) ═════════════════════════════════════════════
+     Every rendered element (a box, not visibility:hidden): its path, rect rounded to 0.5 px, own text (and a form
+     control's value), aria-label, title, and seven computed styles. In document order, so a reorder is a difference. */
+  var STYLES = ['display', 'visibility', 'opacity', 'color', 'background-color', 'font-size', 'transform'];
+  function half(v) { return Math.round(v * 2) / 2; }
+  function nameOf(el) {
+    var cls = el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className;
+    cls = String(cls || '').trim();
+    return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (cls ? '.' + cls.split(/\s+/).sort().join('.') : '');
+  }
+  function pathOf(el, stop) {
+    var parts = [];
+    for (var n = el; n && n.nodeType === 1 && n !== stop; n = n.parentElement) {
+      parts.unshift(nameOf(n));
+      if (n.id) break;           // from the nearest ancestor with an id: short, and stable when an unrelated sibling moves
+    }
+    return parts.join('>');
+  }
+  function ownText(el) {
+    var s = '';
+    for (var c = el.firstChild; c; c = c.nextSibling) if (c.nodeType === 3) s += c.nodeValue;
+    s = s.replace(/\s+/g, ' ').trim();
+    // the version label moves with EVERY release (index.html's .ver): a release's own number, not Full's design
+    if (APP_VERSION && s.indexOf(APP_VERSION) >= 0) s = s.split(APP_VERSION).join('v#');
+    var tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+      s += '«' + (el.type === 'checkbox' || el.type === 'radio' ? (el.checked ? 'on' : 'off') : String(el.value)) + '»';
+    }
+    /* A canvas's backing store: the same box can hold a coarser picture. Not the preview's — that one is ADAPTIVE by design
+       (a quality tier learned from this machine's render speed, FM._perfState), so it is the machine's number. */
+    if (tag === 'CANVAS' && el.id !== 'preview') s += '⧉' + el.width + 'x' + el.height;
+    return s.slice(0, 200);
+  }
+  function layoutRecord(root, skip) {
+    root = root || D.body;
+    var out = [], all = [root].concat([].slice.call(root.querySelectorAll('*')));
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (skip && el.closest && el.closest(skip)) continue;
+      if (!el.getClientRects().length) continue;
+      var r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      var cs = w.getComputedStyle(el);
+      if (cs.visibility === 'hidden') continue;
+      var rec = [pathOf(el), half(r.left), half(r.top), half(r.width), half(r.height), ownText(el),
+        el.getAttribute('aria-label') || '', el.getAttribute('title') || ''];
+      for (var k = 0; k < STYLES.length; k++) rec.push(cs.getPropertyValue(STYLES[k]));
+      out.push(rec);
+    }
+    return out;
+  }
+
+  /* ═══ PICTURES (DESIGN §0.4.5, 2) — the driver clips the frame; the tolerance is the tool's, measured there ═══════ */
+  var shotSeq = 0;
+  async function shot(name) {
+    if (!SHOTS) return null;
+    var seq = ++shotSeq;
+    window.__fmShotErr = '';
+    window.__fmWantShot = { seq: seq, name: name, x: 0, y: 0, w: W, h: H };
+    await until('the driver to take the picture ' + name, function () { return window.__fmShotDone === seq; }, 20000);
+    if (window.__fmShotErr) throw new Error('picture ' + name + ': ' + window.__fmShotErr);
+    return name;
+  }
+  async function capture(name, opts) {
+    opts = opts || {};
+    step('capture ' + name);
+    if (!opts.keepToast && FM.hideToast) FM.hideToast();
+    await settle(opts.wait);
+    /* The preview is drawn on request; one drawn while the stage was still settling (a sheet rising on the phone) keeps
+       that frame's fit until something asks again, so ask once more now that the layout has landed. */
+    /* …at full detail: the preview sheds pixels while things move and learns a quality tier from how fast THIS machine
+       renders (js/app.js FM._perfState). That is the machine's number, not Full's, so it is put back to its start —
+       the same thing opening a project does (FM.projects.open calls it) — before the frame that is measured. */
+    if (FM._resetPlayQuality) FM._resetPlayQuality();
+    if (FM.requestRender) FM.requestRender();
+    var quiet = await canvasesQuiet();
+    var fr = freezeInfinite();
+    try {
+      await raf2();
+      fr = fr.concat(freezeInfinite());
+      await raf2();
+      var rec = layoutRecord(opts.root ? D.querySelector(opts.root) : D.body, opts.skip);
+      var pv = D.getElementById('preview');
+      DUMP.screens[name] = { layout: rec, focus: D.activeElement ? pathOf(D.activeElement) : '', canvasesQuiet: quiet,
+        pv: pv ? { rs: pv.__fmRS, ox: pv.__fmOX, oy: pv.__fmOY, crop: !!pv.__fmCrop, w: pv.width, h: pv.height, perf: FM._perfState ? FM._perfState().tier : null } : null };   // diagnosis only: not compared
+      if (!opts.noShot) await shot(name);
+    } finally { unfreeze(fr); }
+  }
+
+  /* ═══ THE STATE RECORD (FU2–FU5, FU7): what an edit did, read from the app ════════════════════════════════════════ */
+  function docRaw() {
+    return JSON.parse(JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers }, FM.jsonReplacer));
+  }
+  /* Ids carry performance.now() and Math.random() — no two runs share one. Each is replaced by its POSITION: layer ids by
+     their index in the stack (so a moved layer still reads as moved), every other id / uid by first appearance. Strings
+     that CONTAIN an id (an op path) are rewritten too. Nothing else is touched. */
+  function canon(obj, layers) {
+    var map = Object.create(null), n = 0;
+    (layers || []).forEach(function (l, i) { if (l && typeof l.id === 'string' && !map[l.id]) map[l.id] = '@L' + i; });
+    (function walk(v, depth) {
+      if (!v || typeof v !== 'object' || depth > 40) return;
+      if (Array.isArray(v)) { v.forEach(function (x) { walk(x, depth + 1); }); return; }
+      Object.keys(v).forEach(function (k) {
+        if ((k === 'id' || k === 'uid' || k === 'mid') && typeof v[k] === 'string' && v[k].length >= 4 && !map[v[k]]) map[v[k]] = '@' + k + (n++);
+        walk(v[k], depth + 1);
+      });
+    })(obj, 0);
+    var ids = Object.keys(map).sort(function (a, b) { return b.length - a.length; });
+    var re = ids.length ? new RegExp(ids.map(function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|'), 'g') : null;
+    function sub(s) { return re ? s.replace(re, function (m) { return map[m]; }) : s; }
+    return (function copy(v, depth, key, owner) {
+      if (key === 'clipColor' && typeof v === 'string' && PALETTE_SET && PALETTE_SET[v.toLowerCase()] && !(owner && owner.clipColorSet)) return '@clip-colour';
+      if (typeof v === 'string') return sub(v);
+      if (typeof v === 'number') return Math.round(v * 1e6) / 1e6;   // float noise below a micro-unit is the engine's, not Full's
+      if (!v || typeof v !== 'object' || depth > 40) return v;
+      if (Array.isArray(v)) return v.map(function (x) { return copy(x, depth + 1); });
+      var o = {};
+      Object.keys(v).forEach(function (k) { o[sub(k)] = copy(v[k], depth + 1, k, v); });
+      return o;
+    })(obj, 0);
+  }
+  function canonDoc() { var d = docRaw(); return canon(d, d.layers); }
+  /* Every toast text, in order. A PROGRESS toast ("Preparing frames… 14%") is relabelled many times a second and how many
+     of its numbers a MutationObserver happens to see is the machine's speed, not Full's behaviour — so a percentage is
+     written as "#%" and repeats collapse. The words are kept exactly: a changed word is a changed toast. */
+  var toastLog = [];
+  function noteToast(t) {
+    t = t.replace(/\d+(\.\d+)?\s*%/g, '#%');
+    if (toastLog[toastLog.length - 1] !== t) toastLog.push(t);
+  }
+  function takeToasts() { var t = toastLog; toastLog = []; return t; }
+  function histInfo() {
+    var s = FM.history && FM.history._steps ? FM.history._steps() : null;
+    return { canUndo: !!(FM.history && FM.history.canUndo()), canRedo: !!(FM.history && FM.history.canRedo()), len: s ? s.len : null, index: s ? s.index : null };
+  }
+  function selInfo() {
+    var idx = function (id) { return FM.scene.layers.findIndex(function (l) { return l.id === id; }); };
+    return { primary: idx(FM.scene.selectedId), all: (FM.selectionIds ? FM.selectionIds() : []).map(idx) };
+  }
+  function cyrb53(data) {
+    var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (var i = 0; i < data.length; i++) { var ch = data[i]; h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  async function mediaSettled() {
+    var vids = [].slice.call(D.querySelectorAll('video')).concat(FM.media && FM.media.all ? [] : []);
+    try {
+      if (FM.media && typeof FM.media.get === 'function') {
+        FM.scene.layers.forEach(function (l) { var m = FM.media.get(l.id); if (m && m.el && m.el.tagName === 'VIDEO' && vids.indexOf(m.el) < 0) vids.push(m.el); });
+      }
+    } catch (e) {}
+    var t0 = Date.now();
+    while (Date.now() - t0 < 2500) {
+      if (vids.every(function (v) { return !v.seeking && (v.readyState >= 2 || !v.src); })) break;
+      await sleep(40);
+    }
+    await raf2();
+  }
+  /* A rendered frame at three times, through the compositor itself (preview and export draw through FM.renderScene). */
+  var FRAME_TIMES = [0.5, 2.25, 4.0];
+  async function frameHashes(times) {
+    var P = FM.scene.project, t0 = FM.time, out = [];
+    // at the project's own size, the way the suite and the exporter call it (renderScene scales by ctx.canvas itself)
+    var c = D.createElement('canvas'); c.width = P.width; c.height = P.height;
+    var g = c.getContext('2d');
+    try {
+      for (var i = 0; i < (times || FRAME_TIMES).length; i++) {
+        var t = (times || FRAME_TIMES)[i];
+        FM.setTime(t);
+        /* EXACTLY there, the way the export seeks (FM.seekVideosToTime {exact}): the preview's own seek skips any move under
+           half a frame (queue 125), so where a video sat before decides which frame it shows — history, not Full. And not
+           while a frame-cache build owns the element (FM.seekBusy): it ignores seeks until it is done. */
+        await mediaIdle();
+        if (FM.seekVideosToTime) FM.seekVideosToTime({ exact: true });
+        await mediaSettled();
+        g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height);
+        try { FM.renderScene(g, FM.scene, t); } catch (e) { out.push('render threw: ' + (e && e.message)); continue; }
+        out.push(cyrb53(new Uint8Array(g.getImageData(0, 0, c.width, c.height).data.buffer)));
+      }
+    } finally { FM.setTime(t0); if (FM.seekVideosToTime) FM.seekVideosToTime(); }
+    return out;
+  }
+  async function mediaIdle() {
+    var t0 = Date.now();
+    for (;;) {
+      var busy = FM.scene.layers.some(function (l) {
+        if (l.type !== 'video') return false;
+        var m = FM.media && FM.media.get ? FM.media.get(l.id) : null;
+        return !!(m && (m._building || (FM.seekBusy && FM.seekBusy(m))));
+      });
+      if (!busy) return;
+      if (Date.now() - t0 > 90000) throw new Error('a video’s frame cache was still building after 90 s');
+      await sleep(60);
+    }
+  }
+  async function stateRecord(opts) {
+    opts = opts || {};
+    var rec = { doc: canonDoc(), hist: histInfo(), toasts: takeToasts(), sel: selInfo(), time: Math.round(FM.time * 1e6) / 1e6,
+      playing: !!FM.playing, panels: panelsOpen() };
+    if (!opts.noFrames) rec.frames = await frameHashes();
+    return rec;
+  }
+  /* Which of Full's surfaces are up — the part of "what did that key do" that is not in the document. */
+  function panelsOpen() {
+    var up = function (id) { var e = D.getElementById(id); return !!(e && !e.classList.contains('hidden') && e.getClientRects().length); };
+    return {
+      exportDialog: up('export-dialog'), canvasDialog: up('canvas-dialog'), addSheet: !!(D.getElementById('add-sheet') && D.getElementById('add-sheet').classList.contains('open')),
+      shortcuts: !!(FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen()), ctxMenu: !!(FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen()),
+      textEdit: !!(FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()), crop: !!(FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()),
+      optBar: up('opt-bar'), home: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), settings: !!(FM.settings && FM.settings.isOpen && FM.settings.isOpen()),
+      inspectorCat: (D.querySelector('#inspector-panel .insp-cat.open, #inspector-panel [data-cat].open') || {}).textContent ? String(D.querySelector('#inspector-panel .insp-cat.open, #inspector-panel [data-cat].open').textContent).trim().slice(0, 40) : ''
+    };
+  }
+
+  /* ═══ DRIVING FULL: synthetic events on ATTACHED elements only (the suite's rule — re-acquire after a rebuild) ═══ */
+  function el(sel, what) {
+    var e = typeof sel === 'string' ? D.querySelector(sel) : sel;
+    if (!e || !e.isConnected) throw new Error('no ' + (what || sel) + ' on screen');
+    return e;
+  }
+  function firstVisible(ids) {
+    for (var i = 0; i < ids.length; i++) { var e = D.getElementById(ids[i]); if (e && e.getClientRects().length && e.getBoundingClientRect().width > 0) return e; }
+    return null;
+  }
+  function press(sel, what) {
+    var e = typeof sel === 'string' ? (sel.charAt(0) === '#' || sel.charAt(0) === '.' || sel.indexOf(' ') >= 0 ? D.querySelector(sel) : D.getElementById(sel)) : sel;
+    if (!e || !e.isConnected) throw new Error('no ' + (what || sel) + ' to press');
+    e.click();
+    return e;
+  }
+  function key(code, k, mods) {
+    mods = mods || {};
+    var ev = new w.KeyboardEvent('keydown', { bubbles: true, cancelable: true, code: code, key: k, metaKey: !!mods.meta, ctrlKey: !!mods.ctrl, shiftKey: !!mods.shift, altKey: !!mods.alt });
+    (D.activeElement || D.body).dispatchEvent(ev);
+    var up = new w.KeyboardEvent('keyup', { bubbles: true, cancelable: true, code: code, key: k, metaKey: !!mods.meta, ctrlKey: !!mods.ctrl, shiftKey: !!mods.shift, altKey: !!mods.alt });
+    (D.activeElement || D.body).dispatchEvent(up);
+  }
+  function pe(target, type, x, y, buttons, id) {
+    target.dispatchEvent(new w.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id || 41, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: buttons }));
+  }
+  function clipEl(L) {
+    if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+    return el('#tl-tracks .clip[data-id="' + L.id + '"]', 'the timeline clip of ' + L.name);
+  }
+  /* Bring an element to the middle of the timeline before a drag, so no drag starts or ends in the edge zone that
+     auto-scrolls — an auto-scroll's distance is however many frames the machine fitted in, not Full's behaviour. On a
+     phone the timeline scrolls under a centred playhead, so this moves FM.time too; the same on both sides. */
+  async function centerOn(target) {
+    var tl = D.getElementById('timeline');
+    if (!tl) return;
+    var r = target.getBoundingClientRect(), tr = tl.getBoundingClientRect();
+    tl.scrollLeft += Math.round((r.left + r.width / 2) - (tr.left + tr.width / 2));
+    tl.dispatchEvent(new w.Event('scroll'));
+    await settle(150);
+  }
+  async function dragFrom(target, x, y, dx, dy, holdMs) {
+    pe(target, 'pointerdown', x, y, 1);
+    if (holdMs) await sleep(holdMs);
+    for (var k = 1; k <= 6; k++) { var px = x + dx * k / 6, py = y + dy * k / 6; pe(D, 'pointermove', px, py, 1); w.dispatchEvent(new w.PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', isPrimary: true, clientX: px, clientY: py, buttons: 1 })); await sleep(16); }
+    pe(D, 'pointerup', x + dx, y + dy, 0);
+    w.dispatchEvent(new w.PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', isPrimary: true, clientX: x + dx, clientY: y + dy, buttons: 0 }));
+    await settle(120);
+  }
+  function byName(name) { var L = FM.scene.layers.filter(function (l) { return l.name === name; })[0]; if (!L) throw new Error('no layer named ' + name); return L; }
+  function closeTransient() {
+    try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+    try { if (FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen()) FM.contextMenu.hide(); } catch (e) {}
+    try { if (FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen()) FM.shortcuts.hide(); } catch (e) {}
+    try { if (FM.closeCanvasDialog) { var cd = D.getElementById('canvas-dialog'); if (cd && !cd.classList.contains('hidden')) FM.closeCanvasDialog(); } } catch (e) {}
+    try { var xd = D.getElementById('export-dialog'); if (xd && !xd.classList.contains('hidden')) press('#exp-cancel'); } catch (e) {}
+    try { if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+    try { if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop(); } catch (e) {}
+    try { if (FM.pause) FM.pause(); } catch (e) {}
+    // the ⋯ strip stays open until its own button shuts it (and is remembered): a group that opened it must not hand it on
+    try { var ob = D.getElementById('opt-bar'); if (ob && !ob.classList.contains('hidden') && ob.getClientRects().length) { var bo = D.getElementById('btn-opts'); if (bo) bo.click(); } } catch (e) {}
+  }
+
+  /* ═══ THE FU FIXTURE (DESIGN §0.4.5 FU1): 3 clips from in-memory canvases, a text, a song, a caption track with an
+     animated cue effect, a group — imported and edited THROUGH THE APP, then saved as its own project so every group
+     below starts from an identical copy (FM.projects.duplicateFrom: fresh ids, its media copied). ═════════════════ */
+  function pngFile(name, rgb, wd, ht, mark) {
+    var c = D.createElement('canvas'); c.width = wd; c.height = ht;
+    var g = c.getContext('2d');
+    g.fillStyle = rgb; g.fillRect(0, 0, wd, ht);
+    g.fillStyle = '#ffffff'; g.fillRect(wd * 0.2, ht * 0.2, wd * 0.25, ht * 0.12);
+    g.fillStyle = '#111111'; g.fillRect(wd * (0.5 + 0.1 * mark), ht * 0.6, wd * 0.2, ht * 0.2);
+    return new Promise(function (r) { c.toBlob(function (b) { r(new w.File([b], name, { type: 'image/png' })); }, 'image/png'); });
+  }
+  function wavFile(name, secs, hz) {
+    var rate = 22050, n = Math.round(secs * rate), buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    var s = function (o, t) { for (var i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    s(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); s(8, 'WAVE'); s(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); s(36, 'data'); v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.round(Math.sin(i / rate * 2 * Math.PI * hz) * 7000 * (i % rate < rate / 2 ? 1 : 0.5)), true);
+    return new w.File([buf], name, { type: 'audio/wav' });
+  }
+  /* THE FIXTURE VIDEO IS A STILL PICTURE WITH A TONE, made here (WebCodecs + the app's own vendor/mp4-muxer.js): 2 s of
+     one frame, H.264 with a single keyframe, and a 440 Hz AAC track for "extract the audio". STILL ON PURPOSE (measured
+     1 Oct): Full's frame cache — what a REVERSED clip and the export play from — takes each frame with a 500 ms seek cap
+     and accepts a frame within 0.2 s of the one it asked for (js/frames.js seekAndPaint), so on a busy machine a moving
+     clip's reversed frames are whichever the decoder reached in time: HEAD against HEAD differed. With every frame the
+     same picture, "the frame near t" IS the frame at t, and Reverse, extract, crop and the export are all still driven. */
+  var VIDEO_BYTES = null;
+  async function videoFile() {
+    if (!VIDEO_BYTES) {
+      if (!window.Mp4Muxer) await new Promise(function (res, rej) { var s = document.createElement('script'); s.src = '../vendor/mp4-muxer.js'; s.onload = res; s.onerror = function () { rej(new Error('vendor/mp4-muxer.js could not be loaded')); }; document.head.appendChild(s); });
+      var Wd = 360, Ht = 640, FPS = 30, N = 60, SR = 48000, errs = [];
+      var muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: Wd, height: Ht },
+        audio: { codec: 'aac', numberOfChannels: 1, sampleRate: SR }, fastStart: 'in-memory' });
+      var ve = new VideoEncoder({ output: function (c, m) { muxer.addVideoChunk(c, m); }, error: function (e) { errs.push(String(e)); } });
+      ve.configure({ codec: 'avc1.42001f', width: Wd, height: Ht, bitrate: 1000000, framerate: FPS });
+      var cv = new OffscreenCanvas(Wd, Ht), g = cv.getContext('2d');
+      g.fillStyle = '#6a3fa0'; g.fillRect(0, 0, Wd, Ht); g.fillStyle = '#f2d24b'; g.fillRect(60, 120, 160, 160); g.fillStyle = '#ffffff'; g.fillRect(140, 380, 120, 60);
+      for (var i = 0; i < N; i++) { var f = new VideoFrame(cv, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) }); ve.encode(f, { keyFrame: i === 0 }); f.close(); }
+      await ve.flush();
+      var ae = new AudioEncoder({ output: function (c, m) { muxer.addAudioChunk(c, m); }, error: function (e) { errs.push(String(e)); } });
+      ae.configure({ codec: 'mp4a.40.2', sampleRate: SR, numberOfChannels: 1, bitrate: 96000 });
+      for (var s0 = 0; s0 < SR * 2; s0 += 4800) {
+        var n = Math.min(4800, SR * 2 - s0), d = new Float32Array(n);
+        for (var k = 0; k < n; k++) d[k] = Math.sin((s0 + k) / SR * 2 * Math.PI * 440) * 0.3;
+        var ad = new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: 1, timestamp: Math.round(s0 * 1e6 / SR), data: d });
+        ae.encode(ad); ad.close();
+      }
+      await ae.flush();
+      muxer.finalize();
+      if (errs.length) throw new Error('the fixture video could not be encoded: ' + errs[0]);
+      VIDEO_BYTES = muxer.target.buffer;
+    }
+    return new w.File([VIDEO_BYTES.slice(0)], 'Clip V.mp4', { type: 'video/mp4' });
+  }
+  var FIXTURE_ID = null;
+  async function buildFixture() {
+    step('fixture: new project');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    await settle(300);
+    FIXTURE_ID = await FM.projects.create({ name: 'FU fixture' });
+    if (!FIXTURE_ID) throw new Error('FM.projects.create made no project');
+    await settle(200);
+    step('fixture: three clips');
+    FM.setTime(0);
+    await FM._handleFiles([await pngFile('Clip A.png', '#b8433a', 360, 640, 0), await pngFile('Clip B.png', '#2f78b0', 360, 640, 1), await pngFile('Clip C.png', '#2f9a5a', 360, 640, 2)]);
+    await settle(300);
+    var A = byName('Clip A'), B = byName('Clip B'), Cc = byName('Clip C');
+    // end to end, the way he lays them out: through the timeline's own move (FM.moveClipTo), one commit
+    FM.moveClipTo(A, 0); FM.moveClipTo(B, 2); FM.moveClipTo(Cc, 4);
+    A.duration = 2; B.duration = 2; Cc.duration = 2;
+    FM.refreshAll(); FM.history.commit();
+    step('fixture: song');
+    FM.setTime(0);
+    await FM._handleFiles([wavFile('Song.wav', 6, 220)]);
+    await settle(300);
+    step('fixture: text');
+    FM.setTime(1);
+    FM.addTextLayer(); await settle(200);
+    if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+    var T = FM.scene.layers.filter(function (l) { return l.type === 'text' && !l.captions; })[0];
+    T.text = 'Full stays'; T.duration = 3; FM.refreshAll(); FM.history.commit();
+    step('fixture: captions with an animated cue effect');
+    FM.setTime(0);
+    FM.addCaptionLayer(); await settle(200);
+    if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+    var Cap = FM.scene.layers.filter(function (l) { return Array.isArray(l.captions) && l.captions.length; })[0];
+    var fx = FM.fxRegistry.makeInstance('blur');
+    fx.params.radius = { kf: [{ t: 0.2, v: 0, e: 'linear' }, { t: 1.2, v: 6, e: 'linear' }] };
+    Cap.captions[0].effects = [fx];
+    FM.refreshAll(); FM.history.commit();
+    step('fixture: a group');
+    FM.selectLayer(T.id); FM.toggleSelect(Cap.id);
+    FM.groupSelection(); await settle(200);
+    FM.selectLayer(null); FM.setTime(0);
+    // the bar colours by position (see PALETTE above): the counter that chose them is the machine's, not Full's
+    FM.scene.layers.forEach(function (l, i) { l.clipColor = PALETTE[i % PALETTE.length]; });
+    FM.refreshAll();
+    FM.history.commit();
+    await FM.storage.save(); if (FM.storage.settled) await FM.storage.settled();
+    await settle(200);
+  }
+  /* A NEW LAYER'S BAR COLOUR IS NOT DETERMINISTIC IN FULL ITSELF (measured 1 Oct, HEAD against HEAD). It is the next of
+     eight from a counter (js/scene.js CLIP_COLORS / _colorIdx) that EVERY layer object made in the page advances — and the
+     compositor makes one per group on every render (`_flat`), the effect thumbnails make more while a sheet is open — so
+     which of the eight a clip gets is how many frames this machine drew first. So a colour FROM THE PALETTE reads as
+     "@clip-colour" in the records (a colour he chose, clipColorSet, or one outside the palette stays exact), and the
+     palette itself is recorded, so a changed palette is still a difference. The fixture's own colours are set by index,
+     so the FU1 pictures are the same on both sides. Each side reads its OWN palette, from its own source. */
+  var PALETTE = null, PALETTE_SET = null;
+  async function loadPalette() {
+    var src = await (await w.fetch('js/scene.js', { cache: 'no-store' })).text();
+    var m = /CLIP_COLORS\s*=\s*\[([^\]]*)\]/.exec(src);
+    if (!m) throw new Error('could not read CLIP_COLORS from js/scene.js — the clip-colour rule in the probe needs updating');
+    PALETTE = m[1].split(',').map(function (x) { return x.trim().replace(/^['"]|['"]$/g, ''); }).filter(Boolean);
+    PALETTE_SET = Object.create(null); PALETTE.forEach(function (c) { PALETTE_SET[c.toLowerCase()] = 1; });
+    DUMP.palette = PALETTE;
+  }
+  /* A fresh, identical copy of the fixture, open, with an empty history — every group starts here. */
+  async function freshCopy(tag) {
+    step('fresh copy for ' + tag);
+    closeTransient();
+    if (FM.storage.flushSync) FM.storage.flushSync();
+    var doc = JSON.parse(w.localStorage.getItem('fm.proj.' + FIXTURE_ID));
+    var id = await FM.projects.duplicateFrom(doc, { name: 'FU ' + tag, srcIds: [FIXTURE_ID] });
+    if (!id) throw new Error('could not copy the fixture for ' + tag);
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    if (!(await FM.projects.open(id, { confirmed: true }))) throw new Error('could not open the copy for ' + tag);
+    seedRandom(0x980 + tag.length * 7919 + tag.charCodeAt(tag.length - 1));
+    FM.selectLayer(null); FM.setTime(0);
+    await settle(300); await mediaSettled();
+    takeToasts();
+    return id;
+  }
+
+  /* ═══ FU1: Full's chrome, screen by screen (DESIGN §0.4.5 FU1) ═══════════════════════════════════════════════════ */
+  async function screen(name, fn, opts) {
+    try { if (fn) await fn(); await capture(name, opts); }
+    catch (e) { DUMP.screens[name] = { err: String(e && e.message || e) }; }
+    finally { closeTransient(); await settle(120); }
+  }
+  async function FU1() {
+    await freshCopy('FU1');
+    var A = byName('Clip A'), B = byName('Clip B'), Cc = byName('Clip C');
+    await screen('fu1-editor-idle', null);
+    await screen('fu1-one-selected', async function () { FM.selectLayer(A.id); FM.setTime(1); });
+    await screen('fu1-three-selected', async function () { FM.selectLayer(A.id); FM.toggleSelect(B.id); FM.toggleSelect(Cc.id); });
+    await screen('fu1-opts-strip', async function () { FM.selectLayer(null); press('btn-opts', 'the ⋯ button'); });
+    await screen('fu1-add-sheet', async function () {
+      FM.selectLayer(null);
+      var fab = firstVisible(['add-fab']);
+      if (fab) fab.click(); else if (FM.addMenu && FM.addMenu.openTab) FM.addMenu.openTab(FM.addMenu.TAB_KEYS[0]);
+    });
+    await screen('fu1-layer-menu', async function () { FM.selectLayer(A.id); await settle(); press('btn-layermenu', 'the layer menu button'); });
+    await screen('fu1-inspector', async function () { FM.selectLayer(B.id); await settle(); if (FM.inspector && FM.inspector.openCategoryByIndex) FM.inspector.openCategoryByIndex(1); });
+    await screen('fu1-settings', async function () { FM.selectLayer(null); if (!FM.settings || !FM.settings.open) throw new Error('FM.settings.open is missing'); FM.settings.open(); });
+    await screen('fu1-export-sheet', async function () { FM.selectLayer(null); var b = firstVisible(['btn-export', 'm-export']); if (!b) throw new Error('no export button on screen'); b.click(); });
+    await screen('fu1-help-sheet', async function () { var b = firstVisible(['btn-help', 'm-help']); if (!b) throw new Error('no ? button on screen'); b.click(); });
+    await screen('fu1-cog', async function () { FM.selectLayer(null); var b = firstVisible(['btn-settings', 'm-settings']); if (!b) throw new Error('no cog on screen'); b.click(); });
+    /* A PLAYING frame, held still: the transport is really playing (its button, its classes), and FM.clockNow — the one
+       clock the play loop reads — is pinned to 1.25 s for the instant of the measurement, so the readout and the playhead
+       are the same on both sides instead of wherever the wall clock happened to be. */
+    step('FU1 playing');
+    var real = FM.clockNow;
+    try {
+      FM.selectLayer(null); FM.setTime(1);
+      FM.play(); await sleep(200);
+      FM.clockNow = function () { return 1.25; };
+      await sleep(250);
+      await capture('fu1-playing', { wait: 60 });
+      DUMP.screens['fu1-playing'].playing = !!FM.playing;
+    } catch (e) { DUMP.screens['fu1-playing'] = { err: String(e && e.message || e) }; }
+    finally { FM.clockNow = real; closeTransient(); await settle(120); }
+    await screen('fu1-session', sessionScreen, { wait: 400 });
+    await endSession();
+  }
+  /* The live session screen: the people chip, the LIVE pill and a friend's selection ring — on the in-page loopback link,
+     no network (DESIGN §0.4.5 FU1's fake-net screen). The friend is a plain engine guest; its presence names Clip B. */
+  var SESS = null;
+  function plainAdapter(doc, inv) {
+    var A = {
+      doc: function () { return doc; }, view: function () { return { project: doc.project, layers: doc.layers }; },
+      selected: function () { return null; }, selectedIds: function () { return []; }, normalizeDerived: function () {},
+      interacting: function () { return false; }, busy: function () { return false; }, frozen: function () { return false; },
+      afterApply: function () {}, onOffline: function () {}, onOnline: function () {}, invariants: function () { return inv; }
+    };
+    return A;
+  }
+  function clone(v) { return JSON.parse(JSON.stringify(v)); }
+  function startSession(withUi) {
+    var C = FM.collab;
+    if (!C || !C.share || !C.link || !C.Session || !C.bridge) throw new Error('FM.collab is missing pieces (share/link/Session/bridge)');
+    if (withUi) {
+      if (FM.settings && FM.settings.set) FM.settings.set('collabLabs', true);
+      if (C.ui && C.ui.syncLabs) C.ui.syncLabs();
+      if (C.ui && C.ui.setProfile) C.ui.setProfile('Ezra', C.ui.PALETTE ? C.ui.PALETTE[0] : '#a3e635');
+    }
+    C.bridge._quiet();
+    var S = C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' } });
+    var sent = [];
+    var gdoc = clone({ project: S.base.project, layers: S.base.layers });
+    var A = plainAdapter(gdoc, C.bridge.invariants());
+    var loop = C.link.LoopLink({ aTag: 'h', bTag: 'g0', mode: 'manual' });
+    var orig = loop.a.send;
+    loop.a.send = function (ch, msg) { sent.push({ ch: ch, msg: clone(msg) }); return orig.call(loop.a, ch, msg); };
+    var mid = S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+    var G = C.Session({ adapter: A, role: 'editor', mid: mid, base: clone(gdoc), epoch: S.epoch });
+    G.setLink(loop.b);
+    G.bs = S.host.seq;
+    SESS = { C: C, S: S, G: G, loop: loop, mid: mid, sent: sent, gdoc: gdoc };
+    return SESS;
+  }
+  async function endSession() {
+    if (!SESS) return;
+    var C = SESS.C; SESS = null;
+    try { C.end(); } catch (e) {}
+    try { C.detach(); } catch (e) {}
+    try { if (C._undoHandover) C._undoHandover(false); } catch (e) {}
+    try { C.bridge._quiet(); } catch (e) {}
+    try { if (C.ui && C.ui.close) C.ui.close(); } catch (e) {}
+    try { if (C.ui && C.ui.syncBanner) C.ui.syncBanner(); } catch (e) {}
+    await settle(150);
+  }
+  async function sessionScreen() {
+    var B = byName('Clip B');
+    var s = startSession(true);
+    try { s.loop.settle(); } catch (e) {}
+    if (s.C.presence && s.C.presence.onPres) s.C.presence.onPres(s.S, s.mid, { t: 'pr', n: 1, st: 'here', sel: [B.id], pri: B.id, ph: 1 });
+    if (s.C.ui && s.C.ui.syncBanner) s.C.ui.syncBanner();
+    if (s.C.presence && s.C.presence.refresh) s.C.presence.refresh();
+    await settle(300);
+  }
+
+  /* ═══ FU2: Full's common edits, one scripted run (DESIGN §0.4.5 FU2). After every step: the document, history depth,
+     the toasts, the selection, FM.time, which surfaces are up, and three rendered frames. ═══════════════════════════ */
+  function fu2Steps() {
+    var ctx = {};
+    return [
+      ['add text (the Add sheet’s Text)', async function () { FM.setTime(2); FM.addTextLayer(); await settle(200); if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop(); }],
+      ['one multi-file pick: an image, a video and a song', async function () {
+        FM.setTime(1);
+        await FM._handleFiles([await pngFile('Pick D.png', '#8a5bc0', 360, 640, 3), await videoFile(), wavFile('Pick song.wav', 3, 330)]);
+        await settle(400); await mediaSettled();
+      }],
+      ['drag Clip B along the timeline', async function () {
+        var B = byName('Clip B'); FM.selectLayer(null); await settle();
+        await centerOn(clipEl(B));
+        var c = clipEl(B), r = c.getBoundingClientRect();
+        await dragFrom(c, r.left + Math.min(30, r.width / 2), r.top + r.height / 2, 48, 0);
+      }],
+      ['trim Clip C’s right grip in', async function () {
+        var Cc = byName('Clip C'); FM.selectLayer(Cc.id); await settle();
+        await centerOn(el(clipEl(Cc).querySelector('.clip-grip.right'), 'Clip C’s right grip'));
+        var g = el(clipEl(Cc).querySelector('.clip-grip.right'), 'Clip C’s right grip'), r = g.getBoundingClientRect();
+        await dragFrom(g, r.left + r.width / 2, r.top + r.height / 2, -30, 0, PHONE ? 450 : 0);
+      }],
+      ['trim Clip C’s left grip in', async function () {
+        var Cc = byName('Clip C'); FM.selectLayer(Cc.id); await settle();
+        await centerOn(el(clipEl(Cc).querySelector('.clip-grip.left'), 'Clip C’s left grip'));
+        var g = el(clipEl(Cc).querySelector('.clip-grip.left'), 'Clip C’s left grip'), r = g.getBoundingClientRect();
+        await dragFrom(g, r.left + r.width / 2, r.top + r.height / 2, 24, 0, PHONE ? 450 : 0);
+      }],
+      ['A on Clip A at 0.6 s', async function () { var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(0.6); key('KeyA', 'a'); await settle(); }],
+      ['D on Clip A at 1.7 s', async function () { var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(1.7); key('KeyD', 'd'); await settle(); }],
+      ['S (split) mid Clip B', async function () { var B = byName('Clip B'); FM.selectLayer(B.id); FM.setTime(B.start + B.duration / 2); key('KeyS', 's'); await settle(); }],
+      /* The split floor (FM.splitLayer refuses within 0.02 s of an edge). 0.05 s in must split — a floor moved to 0.1 s
+         (the withdrawn step 1.1.5) would refuse it, which is one of the self-test's planted changes. */
+      ['split Clip C 0.05 s from its start (the split button)', async function () {
+        var Cc = byName('Clip C'); FM.selectLayer(Cc.id); FM.setTime(Cc.start + 0.05); await settle();
+        var b = firstVisible(['btn-split']); if (b) b.click(); else await FM.splitLayer(Cc.id);
+        await settle();
+      }],
+      ['split at a clip’s very edge (refused, with its toast)', async function () {
+        var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(A.start + 0.005); await FM.splitLayer(A.id); await settle();
+      }],
+      ['speed 2× on Clip A (inspector route: FM.setClipSpeed or the speed prop)', async function () {
+        var A = byName('Clip A'); FM.selectLayer(A.id); await settle();
+        if (FM.setClipSpeed) FM.setClipSpeed(A, 2); else { FM.setProp(A, 'speed', 2, FM.time); }
+        FM.refreshAll(); FM.history.commit(); await settle();
+      }],
+      ['add an opacity keyframe pair on Clip B and drag the second diamond', async function () {
+        var B = byName('Clip B'); FM.selectLayer(B.id);
+        // the inspector's ◇ (FM.toggleProp) makes the channel animated at the playhead; a change elsewhere adds a key
+        FM.setTime(B.start + 0.2); FM.toggleProp(B.transform, 'opacity', FM.time, 1);
+        FM.setTime(B.start + 0.8); FM.setProp(B.transform, 'opacity', 0.4, FM.time);
+        FM.refreshAll(); FM.history.commit(); await settle();
+        /* A diamond is live (draggable) only while the editor that owns its property is open (timeline.js, v5.42) — so
+           open the inspector's categories in order until opacity's owner is up, the way he would find it. */
+        var dots = [];
+        for (var n = 1; n <= 9 && dots.length < 2; n++) {
+          // the diamonds live in the clip's LANE (timeline.js appends them beside the clip, not inside it)
+          if (FM.inspector && FM.inspector.openCategoryByIndex && FM.inspector.openCategoryByIndex(n)) { await settle(80); dots = [].slice.call(clipEl(B).parentElement.querySelectorAll('.kf-dot.kf-live')); }
+        }
+        if (dots.length < 2) throw new Error('Clip B shows ' + dots.length + ' live diamonds after two keys, with every inspector category tried');
+        await centerOn(dots[dots.length - 1]);
+        dots = [].slice.call(clipEl(B).parentElement.querySelectorAll('.kf-dot.kf-live'));
+        var d = el(dots[dots.length - 1], 'the second diamond'), r = d.getBoundingClientRect();
+        await dragFrom(d, r.left + r.width / 2, r.top + r.height / 2, 14, 0);
+      }],
+      ['⌘Z three times', async function () { key('KeyZ', 'z', { meta: true }); await settle(80); key('KeyZ', 'z', { meta: true }); await settle(80); key('KeyZ', 'z', { meta: true }); await settle(); }],
+      ['⇧⌘Z once', async function () { key('KeyZ', 'Z', { meta: true, shift: true }); await settle(); }],
+      ['⌘D duplicate Clip A', async function () { var A = byName('Clip A'); FM.selectLayer(A.id); key('KeyD', 'd', { meta: true }); await settle(250); }],
+      ['⌘C then ⌘V on the text', async function () { var T = byName('Text'); FM.selectLayer(T.id); key('KeyC', 'c', { meta: true }); await settle(80); key('KeyV', 'v', { meta: true }); await settle(250); }],
+      ['Backspace deletes the selection', async function () { await settle(); key('Backspace', 'Backspace'); await settle(250); }],
+      ['crop Clip B and Done', async function () {
+        var B = byName('Clip B'); FM.selectLayer(B.id); await settle();
+        if (!FM.cropTool || !FM.cropTool.start) throw new Error('FM.cropTool.start is missing');
+        FM.cropTool.start(B.id); await settle(250);
+        var done = D.querySelector('#crop-bar .cb-done, #crop-bar [data-act="done"], #crop-bar button:last-child');
+        if (done) done.click(); else FM.cropTool.stop();
+        await settle(200);
+      }],
+      ['group Clip A and the song (the Group button route)', async function () {
+        var A = byName('Clip A'), S = byName('Song'); FM.selectLayer(A.id); FM.toggleSelect(S.id); await settle();
+        FM.groupSelection(); await settle(200);
+      }],
+      ['masking group of the text and Clip B', async function () {
+        var T = byName('Text'), B = byName('Clip B'); FM.selectLayer(T.id); FM.toggleSelect(B.id); await settle();
+        FM.groupSelection({ mask: true }); await settle(200);
+      }],
+      ['◐ parked mid-stack, then an add lands there', async function () {
+        FM.selectLayer(null);
+        if (FM.clampAddAt) FM.addAt = FM.clampAddAt(2); else FM.addAt = 2;
+        FM.refreshAll(); await settle();
+        FM.setTime(0.5); FM.addTextLayer(); await settle(200); if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop();
+      }],
+      ['Replace Clip C’s picture (FM.replaceMediaWith, the route the picker lands on)', async function () {
+        var Cc = byName('Clip C'); FM.selectLayer(Cc.id);
+        var rec = await FM.loadImageFile(await pngFile('Replacement.png', '#c0a030', 360, 640, 4));
+        await FM.replaceMediaWith(Cc.id, rec); await settle(250);
+      }],
+      ['extract the audio of the video', async function () {
+        var V = FM.scene.layers.filter(function (l) { return l.type === 'video' && /Clip V/.test(l.name); })[0];
+        if (!V) throw new Error('no video layer to extract from');
+        FM.selectLayer(V.id); await FM.extractAudio(V); await settle(300);
+      }],
+      ['Reverse the video (layer menu item)', async function () {
+        var V = FM.scene.layers.filter(function (l) { return l.type === 'video' && /Clip V/.test(l.name) && !l.audioOnly; })[0];
+        FM.selectLayer(V.id); await settle();
+        var items = FM.layerMenuItems ? FM.layerMenuItems(V) : [];
+        var it = (items || []).filter(function (i) { return i && /reverse/i.test(i.label || ''); })[0];
+        if (!it) throw new Error('no Reverse in the layer menu');
+        await it.action();
+        /* Reverse plays from a frame cache built in the background ("Preparing frames… n%"); a frame hashed before it is
+           complete is however far the machine got. Wait for it, as he waits for the toast to go. */
+        await until('the reversed video’s frame cache', function () { var m = FM.media.get(V.id); return !!(m && m.frameCache); }, 90000);
+        await settle(400);
+      }],
+      ['the Assistant’s setProp start on Clip A', async function () {
+        var A = byName('Clip A');
+        if (!FM.aiOps || !FM.aiOps.applyOps) throw new Error('no Assistant op runner (FM.aiOps.applyOps)');
+        // applyOps does not commit or refresh — the orchestrator (js/ai.js) does both after it, so this does too
+        var log = FM.aiOps.applyOps([{ op: 'setProp', ref: A.id, path: 'start', value: 0.3 }], {});
+        FM.refreshAll(); FM.history.commit();
+        ctx.aiLog = log;
+        await settle(250);
+      }],
+      ['move the caption track (its animated cue effect rides along)', async function () {
+        var Cap = FM.scene.layers.filter(function (l) { return Array.isArray(l.captions) && l.captions.length; })[0];
+        FM.moveClipTo(Cap, (Cap.start || 0) + 0.5); FM.refreshAll(); FM.history.commit(); await settle();
+      }],
+      ['delete Pick D with the Delete key', async function () {
+        var D2 = FM.scene.layers.filter(function (l) { return /Pick D/.test(l.name); })[0];
+        FM.selectLayer(D2.id); await settle();
+        key('Delete', 'Delete'); await settle(200);
+      }]
+    ];
+  }
+  async function runFU2(steps, rec, after, before) {
+    for (var i = 0; i < steps.length; i++) {
+      var nm = steps[i][0], err = '';
+      step('FU2 ' + nm);
+      if (before) await before();
+      takeToasts();
+      try { await steps[i][1](); } catch (e) { err = String(e && e.message || e); }
+      await settle(200);
+      var st = await stateRecord({ noFrames: !!rec.noFrames });
+      var entry = { name: nm, err: err, state: st };
+      if (after) entry.extra = await after(nm);
+      rec.push(entry);
+    }
+  }
+  async function FU2() {
+    await freshCopy('FU2');
+    var rec = DUMP.fu2;
+    rec.push({ name: 'start', err: '', state: await stateRecord() });
+    await runFU2(fu2Steps(), rec);
+    /* …and at the end, the export's frames (every quarter second, through the compositor) and its audio mix. */
+    step('FU2 export frames and audio');
+    var P = FM.scene.project, times = [];
+    for (var t = 0; t < Math.min(P.duration, 8); t += 0.25) times.push(Math.round(t * 100) / 100);
+    var ex = { err: '', frames: [], audio: null };
+    try {
+      // the exporter's own first step: full-resolution frame caches for every reversed / frame-blended clip
+      if (FM.exporter && FM.exporter.prepareCaches) await FM.exporter.prepareCaches(FM.scene, FM.scene.project.fps || 30);
+      ex.frames = await frameHashes(times);
+      if (FM.exporter && FM.exporter.buildAudioMix) {
+        var mix = await FM.exporter.buildAudioMix(FM.scene, 0, P.duration);
+        var buf = mix && mix.audioBuffer;
+        if (!buf) ex.audio = { none: true, mix: mix === null ? 'null' : typeof mix };
+        else {
+          /* The mix's SHAPE, every 0.1 s: RMS and peak to 1/1000 per channel, and its length. Not a hash of the samples:
+             measured 1 Oct, two runs of the same build mixed the same project to different 16-bit samples (the hash of
+             the samples differed) while every window's RMS and peak agreed to 1/1000 — and a real change (a volume, a fade,
+             a clip moved by a frame) moves the windows it touches by more than that. */
+          var ch = [], win = Math.round(buf.sampleRate / 10), maxd = 0;
+          for (var c = 0; c < buf.numberOfChannels; c++) {
+            var f = buf.getChannelData(c), shape = [];
+            for (var s0 = 0; s0 < f.length; s0 += win) {
+              var e = Math.min(f.length, s0 + win), sq = 0, pk = 0;
+              for (var k = s0; k < e; k++) { var v = f[k]; sq += v * v; if (Math.abs(v) > pk) pk = Math.abs(v); }
+              shape.push(Math.round(Math.sqrt(sq / Math.max(1, e - s0)) * 1000) + '/' + Math.round(pk * 1000));
+            }
+            ch.push(shape.join(' '));
+          }
+          ex.audio = { len: buf.length, rate: buf.sampleRate, ch: ch };
+        }
+      }
+    } catch (e) { ex.err = String(e && e.message || e); }
+    rec.push({ name: 'export', err: ex.err, state: { exportFrames: ex.frames, exportAudio: ex.audio } });
+  }
+
+  /* ═══ FU3: every key the window keydown handler answers (js/app.js), with nothing selected and with one clip
+     selected (E included — Full has no E; B14). The fixture is restored from the saved copy before every key. ════ */
+  var KEYS = [
+    ['KeyZ', 'z', { meta: true }], ['KeyZ', 'Z', { meta: true, shift: true }], ['KeyY', 'y', { meta: true }], ['KeyD', 'd', { meta: true }],
+    ['KeyC', 'c', { meta: true }], ['KeyV', 'v', { meta: true }], ['KeyA', 'a', { meta: true }], ['KeyS', 's', { meta: true }],
+    ['Space', ' '], ['Slash', '?', { shift: true }], ['ArrowLeft', 'ArrowLeft'], ['ArrowRight', 'ArrowRight'], ['ArrowUp', 'ArrowUp'], ['ArrowDown', 'ArrowDown'],
+    ['ArrowRight', 'ArrowRight', { shift: true }], ['Comma', ','], ['Period', '.'], ['Home', 'Home'], ['End', 'End'], ['Home', 'Home', { shift: true }], ['End', 'End', { shift: true }],
+    ['BracketLeft', '['], ['BracketRight', ']'], ['Backslash', '\\'], ['KeyM', 'm'], ['Tab', 'Tab'], ['Tab', 'Tab', { shift: true }],
+    ['Equal', '='], ['Minus', '-'], ['NumpadAdd', '+'], ['NumpadSubtract', '-'], ['Digit1', '1'], ['Digit3', '3'], ['Digit5', '5'], ['Digit1', '!', { shift: true }],
+    ['Escape', 'Escape'], ['KeyA', 'a'], ['KeyS', 's'], ['KeyD', 'd'], ['Delete', 'Delete'], ['Backspace', 'Backspace'], ['KeyE', 'e'], ['KeyE', 'E', { shift: true }]
+  ];
+  async function FU3() {
+    var base = await freshCopy('FU3');
+    for (var pass = 0; pass < 2; pass++) {
+      for (var i = 0; i < KEYS.length; i++) {
+        var K = KEYS[i], nm = (pass ? 'clip selected · ' : 'nothing selected · ') + (K[2] ? Object.keys(K[2]).join('+') + '+' : '') + K[0], err = '';
+        step('FU3 ' + nm);
+        /* Space really starts playback; the play loop reads FM.clockNow (js/app.js tick), so pinning it to the playhead
+           holds FM.time still while it plays — otherwise the record would hold however far the wall clock got. */
+        var realClock = FM.clockNow, st;
+        try {
+          await restoreFrom(base);
+          if (pass) { FM.selectLayer(byName('Clip B').id); }
+          FM.setTime(2.5);
+          await settle(60); takeToasts();
+          FM.clockNow = function () { return FM.time; };
+          key(K[0], K[1], K[2]);
+          await settle(160);
+        } catch (e) { err = String(e && e.message || e); }
+        try { st = await stateRecord({ noFrames: true }); }
+        finally { FM.clockNow = realClock; }
+        closeTransient();
+        DUMP.fu3.push({ name: nm, err: err, state: st });
+      }
+    }
+  }
+  /* Back to the fixture copy exactly as saved: reopen it from disk (no re-id, its media hydrated). */
+  var BASE_DOC = {};
+  async function restoreFrom(pid) {
+    closeTransient();
+    if (!BASE_DOC[pid]) BASE_DOC[pid] = w.localStorage.getItem('fm.proj.' + pid);
+    w.localStorage.setItem('fm.proj.' + pid, BASE_DOC[pid]);
+    FM.scene.layers = [];
+    await FM.storage.load();
+    FM.history.reset();
+    FM.selectLayer(null);
+    if (FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen()) FM.shortcuts.hide();
+  }
+
+  /* ═══ FU4: Full in a live session (DESIGN §0.4.5 FU4; §21 F9). The app is the host, a plain engine guest is the friend,
+     on the in-page loopback link. FU2's script runs; what goes on the wire is recorded per step — every batch's ops,
+     canonicalised, UNMASKED (the tool masks them with FU_INVISIBLE and nothing else) — and the guest's document at the
+     end. Presence the host sends is recorded too. ═══════════════════════════════════════════════════════════════════ */
+  async function FU4() {
+    await freshCopy('FU4');
+    var s = startSession(false);
+    var out = DUMP.fu4 = { steps: [], guestDoc: null, err: '' };
+    try {
+      var pump = function () { try { s.S.tick('full'); } catch (e) {} try { s.loop.settle(); } catch (e) {} };
+      pump(); s.sent.length = 0;
+      var rec = []; rec.noFrames = true;
+      await runFU2(fu2Steps(), rec, async function () {
+        pump();
+        var msgs = s.sent.splice(0);
+        return msgs.map(function (m) {
+          var msg = m.msg || {};
+          if (m.ch === 'pres' || msg.t === 'pr' || msg.t === 'PR') {
+            var p = clone(msg); ['at', 'n', 'ts', 'now', 'seq'].forEach(function (k) { delete p[k]; });
+            return { ch: m.ch, t: msg.t, pres: canon(p, FM.scene.layers) };
+          }
+          if (msg.t === 'b') return { ch: m.ch, t: 'b', ops: canon(msg.ops || [], FM.scene.layers) };
+          return { ch: m.ch, t: msg.t };
+        });
+      });
+      out.steps = rec.map(function (r) { return { name: r.name, err: r.err, wire: r.extra, toasts: r.state.toasts }; });
+      out.guestDoc = canon(clone({ project: s.gdoc.project, layers: s.gdoc.layers }), s.gdoc.layers);
+    } catch (e) { out.err = String(e && e.message || e); }
+    finally { await endSession(); }
+  }
+
+  /* ═══ FU5: documents. Each fixture document through the sanitiser, then the import door (applyScene), a save and an
+     open (load) — the bytes at each stage. SCHEMA_REV / SCHEMA_FP are recorded under their own names (N1: the tool masks
+     them by name, nothing else). ═══════════════════════════════════════════════════════════════════════════════════ */
+  function kitchenDoc() {
+    var kf = function (a, b) { return { kf: [{ t: a, v: 0, e: 'linear' }, { t: b, v: 1, e: 'easeIn' }] }; };
+    var L = FM.makeLayer('text', { name: 'Kitchen', text: 'Ab', x: 50, y: 50 });
+    L.id = 'kitchen_1'; L.start = 1; L.duration = 6;
+    L.transform.x = kf(1, 2); L.volume = kf(1, 3);
+    L.effects = [{ type: 'blur', enabled: true, params: { radius: kf(2, 3) } }];
+    L.audioFx = [{ type: 'reverb', enabled: true, params: { mix: kf(1, 5) } }];
+    L.masks = [{ id: 'kmask', mode: 'add', path: { kf: [{ t: 1, v: [[0, 0], [8, 0], [8, 8]], e: 'linear' }, { t: 2, v: [[0, 0], [9, 0], [9, 9]], e: 'linear' }] } }];
+    L.captions = [{ start: 0, end: 2, text: 'one', effects: [{ type: 'blur', enabled: true, params: { radius: kf(1.5, 2.5) } }] }, { start: 2, end: 4, text: 'two' }];
+    var S = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#123456' });
+    S.id = 'kitchen_2'; S.parent = 'kitchen_1';
+    return { project: { name: 'Kitchen', width: 320, height: 240, fps: 30, duration: 8, background: '#000000', markers: [{ t: 1 }] }, layers: [L, S] };
+  }
+  async function FU5() {
+    /* tests.js is injected (never run) for the suite's own fixture documents (kitchen921), and only here, last but one,
+       so FU1–FU4 drive an app the suite file has not touched. The same file is used on both sides. */
+    try {
+      var src = await (await fetch('tests.js', { cache: 'no-store' })).text();
+      var sc = D.createElement('script'); sc.textContent = src; D.body.appendChild(sc);
+    } catch (e) { DUMP.notes.push('tests.js not injected: ' + e.message); }
+    var C = FM.collab || {};
+    DUMP.fu5meta = { SCHEMA_REV: C.SCHEMA_REV, SCHEMA_FP: C.SCHEMA_FP };
+    var pid = await freshCopy('FU5');   // first: it aligns the clip colours the documents below are built with
+    var docs = [];
+    try { if (C.SCHEMA_FIXTURE) docs.push(['SCHEMA_FIXTURE', { project: { name: 'fp', width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: C.SCHEMA_FIXTURE() }]); } catch (e) { DUMP.errors.push('FU5 SCHEMA_FIXTURE: ' + e.message); }
+    try { if (C.DERIVED_FIXTURE) docs.push(['DERIVED_FIXTURE', C.DERIVED_FIXTURE()]); } catch (e) { DUMP.errors.push('FU5 DERIVED_FIXTURE: ' + e.message); }
+    try { docs.push(['kitchen', kitchenDoc()]); } catch (e) { DUMP.errors.push('FU5 kitchen: ' + e.message); }
+    try { if (w.FMTests && w.FMTests.kit && w.FMTests.kit.kitchen921) for (var sd = 1; sd <= 6; sd++) docs.push(['kitchen921 seed ' + sd, w.FMTests.kit.kitchen921(sd)]); } catch (e) { DUMP.errors.push('FU5 kitchen921: ' + e.message); }
+    try { docs.push(['the FU fixture', JSON.parse(w.localStorage.getItem('fm.proj.' + FIXTURE_ID))]); } catch (e) { DUMP.errors.push('FU5 fixture: ' + e.message); }
+    for (var i = 0; i < docs.length; i++) {
+      var nm = docs[i][0], d = docs[i][1], r = { name: nm, err: '' };
+      step('FU5 ' + nm);
+      try {
+        var L = clone(d.layers || []);
+        if (FM.storage._sanitizeLayers) { FM.storage._sanitizeLayers(L); r.sanitised = canon(L, L); }
+        await FM.storage.applyScene(clone(d));
+        r.imported = canonDoc();
+        FM.storage.markDirty(); await FM.storage.save(); if (FM.storage.settled) await FM.storage.settled();
+        r.saved = (function () { var s = JSON.parse(w.localStorage.getItem('fm.proj.' + pid)); return canon({ project: s.project, layers: s.layers }, s.layers); })();
+        FM.scene.layers = []; await FM.storage.load();
+        r.reopened = canonDoc();
+      } catch (e) { r.err = String(e && e.message || e); }
+      DUMP.fu5.push(r);
+    }
+  }
+
+  /* ═══ FU6: the cog, his one sanctioned change (DESIGN §0.4.5 FU6; COG-DESIGN §6.4). Every element of #canvas-dialog
+     other than #cv-editor, Canvas open and Friends open, at every size; then what Canvas and Friends DO. ═════════════ */
+  var FU6_SIZES = [[440, 956], [1280, 800], [1366, 650], [1440, 900], [768, 1024], [720, 800], [956, 440], [932, 430], [844, 390], [1024, 600], [380, 800], [380, 667], [375, 553], [320, 568]];
+  async function atSize(wd, ht, fn) {
+    frame.style.width = wd + 'px'; frame.style.height = ht + 'px';
+    w.dispatchEvent(new w.Event('resize')); await settle(250);
+    try { return await fn(); }
+    finally { frame.style.width = W + 'px'; frame.style.height = H + 'px'; w.dispatchEvent(new w.Event('resize')); await settle(200); }
+  }
+  function cogButton() { return firstVisible(['btn-settings', 'm-settings']); }
+  function dlgUp() { var d = D.getElementById('canvas-dialog'); return !!(d && !d.classList.contains('hidden')); }
+  /* Where the cog is, as data: on the phone pass, widening the frame is a phone turned sideways with the app open, and
+     what Full shows then — including no cog at all — is Full's behaviour to record, not the probe's error. */
+  function cogWhere() {
+    return ['btn-settings', 'm-settings'].map(function (id) {
+      var e = D.getElementById(id);
+      if (!e) return id + ': absent';
+      var r = e.getBoundingClientRect();
+      return id + ': ' + (e.parentElement ? pathOf(e.parentElement) : '-') + ' ' + half(r.width) + 'x' + half(r.height) + ' ' + w.getComputedStyle(e).display;
+    });
+  }
+  async function openCog() {
+    if (dlgUp()) { FM.closeCanvasDialog(); await settle(); }
+    var b = cogButton(); if (!b) return false;
+    b.click(); await settle(300);
+    if (!dlgUp()) throw new Error('the cog opened nothing');
+    return true;
+  }
+  async function mustOpenCog() { if (!(await openCog())) throw new Error('no cog on screen at ' + w.innerWidth + '×' + w.innerHeight + ' (' + cogWhere().join('; ') + ')'); }
+  function cogRecord() {
+    var d = D.getElementById('canvas-dialog');
+    return { layout: layoutRecord(d, '#cv-editor'), cls: String(d.className), focus: D.activeElement ? pathOf(D.activeElement) : '',
+      exp: [].slice.call(d.querySelectorAll('[aria-expanded]')).map(function (e) { return pathOf(e) + '=' + e.getAttribute('aria-expanded'); }),
+      hasEditor: !!D.getElementById('cv-editor') };
+  }
+  async function openFriends() {
+    var bar = D.getElementById('cv-fr-exp') || D.getElementById('cv-fr-bar');
+    if (!bar || !bar.getClientRects().length) throw new Error('no Friends bar to open');
+    bar.click(); await settle(350);
+  }
+  async function FU6() {
+    await freshCopy('FU6');
+    try { w.localStorage.removeItem('fm.cvPair'); } catch (e) {}
+    for (var i = 0; i < FU6_SIZES.length; i++) {
+      var sz = FU6_SIZES[i], tag = sz[0] + 'x' + sz[1];
+      step('FU6 ' + tag);
+      var r = DUMP.fu6[tag] = { err: '' };
+      try {
+        await atSize(sz[0], sz[1], async function () {
+          try { w.localStorage.removeItem('fm.cvPair'); } catch (e) {}
+          if (!(await openCog())) { r.noCog = cogWhere(); return; }
+          r.canvas = cogRecord();
+          await openFriends(); r.friends = cogRecord();
+          FM.closeCanvasDialog(); await settle();
+          await mustOpenCog(); r.reopened = cogRecord();     // the cog remembers the last of Canvas / Friends
+          FM.closeCanvasDialog(); await settle();
+        });
+      } catch (e) { r.err = String(e && e.message || e); closeTransient(); }
+    }
+    try { w.localStorage.removeItem('fm.cvPair'); } catch (e) {}
+    /* Function, not only looks (§21): a Canvas Apply (size, fps, background) and a Cancel. */
+    var fn = DUMP.fu6.function = { err: '' };
+    try {
+      step('FU6 Canvas Cancel');
+      await mustOpenCog(); takeToasts();
+      var setSel = function (id, v) { var e = D.getElementById(id); if (!e) throw new Error('no #' + id); e.value = v; e.dispatchEvent(new w.Event('input', { bubbles: true })); e.dispatchEvent(new w.Event('change', { bubbles: true })); };
+      try { setSel('cv-fps', '24'); } catch (e) {}
+      press('#cv-cancel'); await settle(250);
+      fn.cancel = await stateRecord({ noFrames: true });
+      step('FU6 Canvas Apply');
+      await mustOpenCog(); takeToasts();
+      try { setSel('cv-fps', '24'); } catch (e) { fn.fpsErr = e.message; }
+      try { var bg = D.getElementById('cv-bg'); if (bg) { bg.value = '#203040'; bg.dispatchEvent(new w.Event('input', { bubbles: true })); bg.dispatchEvent(new w.Event('change', { bubbles: true })); } } catch (e) { fn.bgErr = e.message; }
+      press('#cv-go'); await settle(300);
+      fn.apply = await stateRecord();
+      step('FU6 the Canvas ↔ Friends swap');
+      await mustOpenCog(); await openFriends(); fn.swapToFriends = cogRecord();
+      var cvBar = D.getElementById('cv-mini-exp') || D.getElementById('cv-mini');
+      if (cvBar && cvBar.getClientRects().length) { cvBar.click(); await settle(350); }
+      fn.swapBack = cogRecord();
+      FM.closeCanvasDialog(); await settle();
+    } catch (e) { fn.err = String(e && e.message || e); closeTransient(); }
+  }
+
+  /* ═══ FU7: a round trip leaves Full as it was (DESIGN §0.4.5 FU7). Only meaningful once a switch exists. Until then
+     the record says so on both sides. When FM.editor (step 1.3) appears, this records `wired: false` — and the tool
+     REFUSES PASS until step 1.3 wires the trip through the cog (it cannot quietly skip the check it exists for). ═══ */
+  async function FU7() {
+    DUMP.fu7 = { hasSwitch: !!(FM.editor) || !!D.getElementById('cv-editor'), wired: false };
+  }
+
+  /* ═══ BOOT ═══════════════════════════════════════════════════════════════════════════════════════════════════════ */
+  async function main() {
+    /* Asked of the driver BEFORE the app frame exists (tests/_cdp.py answers): the phone pass's touch emulation, and a
+       seeded Math.random installed in the app frame before any of the app's own scripts run — so the draws it makes at
+       boot (which drop-hint variant Home shows, the first shape hue) are the same on every run of the same build. */
+    window.__fmWantSetup = {
+      phone: PHONE,
+      init: '(function () { if (window === window.top) return; var a = 0x980; Math.random = function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; ' +
+            't = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();'
+    };
+    var su = await until('the driver to set the page up (run this through tools/full-unchanged.sh)', function () { return window.__fmSetupDone; }, 20000);
+    if (su !== 1) throw new Error('setup: ' + su);
+    try { localStorage.setItem('fm.test.seedProject', '1'); } catch (e) {}   // the same boot tests/run.html gives the app (queue 936)
+    step('loading the app');
+    var loaded = new Promise(function (r) { frame.addEventListener('load', r, { once: true }); });
+    frame.src = '../index.html';
+    await loaded;
+    w = frame.contentWindow; D = w.document; FM = w.FM;
+    var CORE = ['makeLayer', 'renderScene', 'newScene', 'layerById', 'refreshAll', 'scene', 'projects', 'storage', 'history'];
+    var missing = CORE.filter(function (k) { return !FM || FM[k] === undefined; });
+    if (missing.length) throw new Error('THE APP DID NOT LOAD IN THE PROBE FRAME — FM is missing ' + missing.join(', '));
+    w.addEventListener('pagehide', function () { DUMP.errors.push('THE APP FRAME NAVIGATED during: ' + DUMP.step); });
+    await until('the splash to go', function () { return !D.getElementById('splash'); }, 15000);
+    seedRandom(0x980);
+    await loadPalette();
+    var st = D.createElement('style'); st.id = 'fu-probe-caret'; st.textContent = '*, *::before, *::after { caret-color: transparent !important; }';
+    D.head.appendChild(st);
+    var toast = D.getElementById('toast');
+    if (toast) new w.MutationObserver(function () {
+      if (!toast.classList.contains('hidden') && toast.textContent) noteToast(toast.textContent.trim());
+    }).observe(toast, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    APP_VERSION = String((D.querySelector('.ver') || {}).textContent || '').trim();
+    DUMP.app = { version: APP_VERSION, inner: [w.innerWidth, w.innerHeight], hoverNone: w.matchMedia('(hover: none)').matches, phoneMq: w.matchMedia('(max-width: 700px)').matches };
+    if (w.innerWidth !== W || w.innerHeight !== H) throw new Error('the app frame is ' + w.innerWidth + '×' + w.innerHeight + ', not ' + W + '×' + H);
+    if (PHONE && !DUMP.app.hoverNone) throw new Error('the phone pass is not a phone: (hover: none) does not match inside the app frame');
+    await settle(400);
+    step('FU1 home');
+    if (GROUPS.indexOf('FU1') >= 0) await screen('fu1-home', null, { wait: 600 });
+    await buildFixture();
+    var plan = { FU1: FU1, FU2: FU2, FU6: FU6, FU3: FU3, FU4: FU4, FU5: FU5, FU7: FU7 };
+    for (var i = 0; i < GROUPS.length; i++) {
+      try { await plan[GROUPS[i]](); }
+      catch (e) { DUMP.errors.push(GROUPS[i] + ' stopped at "' + DUMP.step + '": ' + (e && e.message || e)); closeTransient(); await endSession(); }
+    }
+    step('done');
+  }
+  main().then(function () { done(true); }, function (e) {
+    DUMP.errors.push('the probe stopped at "' + DUMP.step + '": ' + (e && e.message || e));
+    done(false, (e && e.message) || String(e));
+  });
+})();
+</script>
+</body>
+</html>

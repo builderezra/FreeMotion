@@ -3,6 +3,8 @@ reference/
 .DS_Store
 .claude/
 tools/.mutate-green
+tools/.full-unchanged-pass
+tools/.full-unchanged-report
 .edit-failed
 
 .ship-in-progress
