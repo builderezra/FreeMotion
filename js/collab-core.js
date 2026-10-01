@@ -35,7 +35,7 @@ window.FM = window.FM || {};
      Tone, Low cut and Width, Pitch Shift gained Fine tune and Semitones now reaches ±24, and Bass & Treble and 3-Band EQ
      gained their corner controls — the first AUDIO keys, which the fingerprint now also hashes (an older build's audio
      sanitiser would drop them). */
-  C.SCHEMA_REV = 5;
+  C.SCHEMA_REV = 6;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -234,7 +234,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 7632953804049090;   // #482 polish batch 3 (SCHEMA_REV 5): Echo, Reverb, Pitch Shift and the two EQs gained audio keys, and the audio registry is hashed now
+  C.SCHEMA_FP = 6312012149706466;   // #482 polish batch 5 curves (SCHEMA_REV 6): Gradient Map gained Colours/Midtones/Reverse/Blend, Cross Process Film, Exposure Gamma and Work in. (Batch 3, SCHEMA_REV 5: the audio keys, and the audio registry hashed.) Worktree value — recomputed when the batch 5 builds merge
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *

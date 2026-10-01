@@ -115516,7 +115516,7 @@
       const panel = document.getElementById('inspector-panel').getBoundingClientRect();
       const tags = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-ovr-tag'));
       for (const tag of tags) {
-        const row = tag.closest('.fx-scrub-row, .fx-seg-row');
+        const row = tag.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row');   // a colour row can carry one too since #482 5.6 (Gradient Map's Midtones)
         row.scrollIntoView({ block: 'nearest' }); await sleep(20);
         const tb = tag.getBoundingClientRect(), rb = row.getBoundingClientRect();
         if (tb.left < rb.left - 1 || tb.right > rb.right + 1 || tb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1)
@@ -117115,5 +117115,272 @@
     if (!(C.SCHEMA_REV >= 5)) bad.push('SCHEMA_REV is ' + C.SCHEMA_REV + ' - the build that added the audio keys must not share a revision with the one before');
     if (bad.length) throw new Error(bad.join(' · ') + ' - two builds that disagree about these normalise the same project differently, and would be let into one session');
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 5 — "Grading depth": Gradient Map (5.6), Cross Process (5.7), Exposure (5.8) ═════════════
+   * His words (#966): "you can polish other effects just giving them more features … more choices always better … this is
+   * the complex version we want as much choice as possible". The backlog's batch 5 (tools/design/plans/2026-09-29-idle-
+   * backlog/backlog.md §A): Gradient Map gains Colours (Two / Three, with a Midtones colour at the Midpoint), Reverse and a
+   * Blend that includes the two non-separable modes Colour and Luminosity (fxBlendRGB, modes 8 and 9); Cross Process gains
+   * Film (Slide / Negative — the pastel, blue-green way round); Exposure gains Gamma and Work in (sRGB / Linear light).
+   * Same rule as every batch (§0.3): each new key's default draws the old picture, because a filter recipe takes every key
+   * it does not set from makeInstance. Pinned against hashes captured on v17.20 (1403309a) BEFORE the first edit, with batch
+   * 1's fixture and batch 2's three shots (the export, a half-size preview, a 0.3 phone plate), plus the kernels driven
+   * straight on a 256-level plate. */
+  const OLD4825 = {
+    gradientmap: [{ amount: 1, midpoint: 50, dither: 0, color: '#241a52', color2: '#ffb86c' }, { amount: 0.7, midpoint: 30, dither: 40, color: '#0a3050', color2: '#f0e0a0' }],
+    crossprocess: [{ amount: 0.6 }, { amount: 0.9, lift: 200, gain: 40 }],
+    exposure: [{ stops: 0.8 }, { stops: -1.2, offset: 30, rolloff: 50 }, { stops: 1.5, offset: -20 }],
+  };
+  const NEW4825 = {
+    gradientmap: { stops: 2, reverse: 0, blend: 0, color3: '#b0507a' },
+    crossprocess: { variant: 0 },
+    exposure: { gamma: 1, space: 0 },
+  };
+  /* One kernel, straight: each [r,g,b] in `px` through PIXEL_FX[type] with a NEW instance's params plus `over`. */
+  const k4825 = (type, over, px, t) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || typeof K[type] !== 'function') throw new Error('the ' + type + ' kernel is not reachable');
+    const d = new Uint8ClampedArray(px.length * 4);
+    px.forEach((c, i) => { d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255; });
+    K[type](d, px.length, 1, Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {}), t == null ? 0.5 : t, 1);
+    const out = []; for (let i = 0; i < px.length; i++) out.push([d[i * 4], d[i * 4 + 1], d[i * 4 + 2]]);
+    return out;
+  };
+  const ramp4825 = () => { const o = []; for (let v = 0; v < 256; v++) o.push([v, v, v]); return o; };
+  const sd4825 = a => { const m = a.reduce((s, v) => s + v, 0) / a.length; return Math.sqrt(a.reduce((s, v) => s + (v - m) * (v - m), 0) / a.length); };
+  /* PREVIEW = EXPORT: four flat swatches filling a 200x150 frame, each carrying the effect, rendered at the export plate and
+     at a half-size preview plate; the centre of each swatch must agree between the two and with the kernel itself. */
+  function parity4825(type, over, where) {
+    const SW = [['#e8443f', 50, 37], ['#3a7bd5', 150, 37], ['#20b070', 50, 112], ['#c8c0b0', 150, 112]];
+    const mk = () => SW.map(([fill, x, y]) => { const L = FM.makeLayer('shape', { shape: 'rect', x: x, y: y, shapeW: 100, shapeH: 75, fill: fill }); L.start = 0; L.duration = 4; L.effects = [_986fx(type, over)]; return L; });
+    const at = (r, rs, x, y) => { const i = (Math.floor(y * rs) * r.w + Math.floor(x * rs)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]]; };
+    const ex = _986shot(mk(), 0.5, 200, 150, null), pv = _986shot(mk(), 0.5, 200, 150, 0.5);
+    SW.forEach(([fill, x, y]) => {
+      const e = at(ex, 1, x, y), p = at(pv, 0.5, x, y);
+      const h = fill.slice(1), src = [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+      const k = k4825(type, over, [src])[0];
+      for (let c = 0; c < 3; c++) {
+        if (Math.abs(e[c] - p[c]) > 1) throw new Error(where + ': the half-size preview draws ' + fill + ' as ' + p + ' where the export draws ' + e + ' - the preview is not the export');
+        if (Math.abs(e[c] - k[c]) > 1) throw new Error(where + ': the export draws ' + fill + ' as ' + e + ' where the effect makes ' + k + ' - the setting does not reach the render');
+      }
+    });
+    return at(ex, 1, 50, 37);
+  }
+
+  test('482 5.0 Grading depth - every new Gradient Map, Cross Process and Exposure control is in the catalogue at a default that draws the old look, and saved and new ones render byte for byte as on v17.20', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
+       render-time fill (queue 784) agrees with that default. */
+    Object.keys(NEW4825).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW4825[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW4825[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    const gb = (FM.fxRegistry.paramsOf('gradientmap') || []).filter(q => q.key === 'blend')[0];
+    const gbv = gb && gb.options.map(o => o[0]).join(',');
+    if (gbv !== '0,1,2,3,4,8,9') throw new Error('Gradient Map Blend offers modes ' + gbv + ', not Normal, Multiply, Screen, Overlay, Soft light, Colour (8) and Luminosity (9)');
+    /* …and a saved value survives the load sanitiser, at a non-default value for each key. */
+    const SET = { gradientmap: { stops: 3, reverse: 1, blend: 9, color3: '#20c0a0' }, crossprocess: { variant: 1 }, exposure: { gamma: 2.2, space: 1 } };
+    const lay = [{ id: 'l4825', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.20: new and saved instances on batch 1's textured clip and on a shape, Cross Process's
+       library filter, and each kernel on a plate that holds every byte value — as saved (old keys only) and with every new
+       key written at its default, as a new instance carries them. */
+    const HEAD = { 'gradientmap new clip': '5ed9f58e/9bf2c507/5829f284', 'gradientmap new shape': '40bfe52a/98cd3076/9cfa180d', 'gradientmap old0 clip': '5ed9f58e/9bf2c507/5829f284', 'gradientmap old1 clip': '64860ad0/4dd159c6/831dd646',
+      'crossprocess new clip': 'd8346020/7ad099e6/ca5fe90f', 'crossprocess new shape': '30f454ec/9b295c3a/d6b49903', 'crossprocess old0 clip': 'd8346020/7ad099e6/ca5fe90f', 'crossprocess old1 clip': 'db0cc63e/03df253c/80808e26',
+      'exposure new clip': 'd02da0e6/a9f518be/02e177ee', 'exposure new shape': 'c2432315/2ac97931/7be82666', 'exposure old0 clip': 'd02da0e6/a9f518be/02e177ee', 'exposure old1 clip': '49281b4b/f823faf9/8ee0cc35', 'exposure old2 clip': '8e01107a/e6c3e5e2/8d42772c',
+      'filter crossproc': 'acf0a29a/9d14facb/dc96297e',
+      'kernel gradientmap 0': 'c1074855', 'kernel gradientmap 1': '17b9210d', 'kernel crossprocess 0': 'e18802ca', 'kernel crossprocess 1': '2d373472', 'kernel crossprocess 2': '1b1a9586', 'kernel crossprocess 3': '75cba76c',
+      'kernel exposure 0': '41233134', 'kernel exposure 1': 'cfcfaed0', 'kernel exposure 2': '4f41ceb8', 'kernel exposure 3': 'f5f5182c', 'kernel exposure 4': '46a3a8d8', 'kernel exposure 5': '60c9d63c' };
+    const got = {}, tex = fix482(), ids = [];
+    const clip = () => { const L = FM.makeLayer('image', { name: '482b5 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    try {
+      Object.keys(OLD4825).forEach(type => {
+        let L = clip(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + ' new clip'] = shots482b(L);
+        L = shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + ' new shape'] = shots482b(L);
+        OLD4825[type].forEach((pp, i) => { const L2 = clip(); L2.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(pp)) }]; got[type + ' old' + i + ' clip'] = shots482b(L2); });
+      });
+      const LF = clip(); LF.effects = [FM.filters.makeInstance('crossproc')]; got['filter crossproc'] = shots482b(LF);
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    const P = FM._FX_TABLES.PIXEL_FX, W = 256, H = 48;
+    const plate = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; a[i] = x; a[i + 1] = (x * 7 + y * 13) & 255; a[i + 2] = (255 - x + y * 5) & 255; a[i + 3] = (x + y) % 61 === 0 ? 0 : 255; } return a; };
+    const hk = (a) => { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < a.length; i++) { h ^= a[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); };
+    const KP = { gradientmap: OLD4825.gradientmap, crossprocess: OLD4825.crossprocess.concat([{ amount: 1, lift: 100, gain: 100 }, { amount: 0.35, lift: 0, gain: 300 }]), exposure: OLD4825.exposure.concat([{ stops: 0 }, { stops: -5, offset: -150, rolloff: 100 }, { stops: 5, offset: 150, rolloff: 0 }]) };
+    Object.keys(KP).forEach(type => KP[type].forEach((pp, i) => { const a = plate(); P[type](a, W, H, JSON.parse(JSON.stringify(pp)), 0.5, 1); got['kernel ' + type + ' ' + i] = hk(a); }));
+    Object.keys(KP).forEach(type => KP[type].forEach((pp, i) => { const a = plate(); P[type](a, W, H, Object.assign(JSON.parse(JSON.stringify(pp)), NEW4825[type]), 0.5, 1); got['kernel ' + type + ' ' + i + ' +new'] = hk(a); }));
+    const moved = [];
+    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    Object.keys(got).filter(k => / \+new$/.test(k)).forEach(k => { const base = k.replace(/ \+new$/, ''); if (got[k] !== HEAD[base]) moved.push(k + ' (new keys at their defaults) ' + HEAD[base] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+  /* 5.6 GRADIENT MAP — Reverse, Colours (Three, with Midtones at the Midpoint), Blend (Colour and Luminosity among them), and a
+     keyframed colour read at its time. Driven straight through the kernel at Amount 1, then through the renderer. */
+  test('482 5.6 Gradient Map - Reverse maps black to the Highlights colour, Three colours put Midtones at the Midpoint, Colour keeps the picture brightness and Luminosity its colour, keyframed colours are read at their time, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const SH = [36, 26, 82], HI = [255, 184, 108], MT = [176, 80, 122];
+    const near = (a, b, tol) => Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol;
+    // CONTROL: the default map sends black to Shadows and white to Highlights.
+    let o = k4825('gradientmap', {}, [[0, 0, 0], [255, 255, 255]]);
+    if (!near(o[0], SH, 1) || !near(o[1], HI, 1)) throw new Error('CONTROL: the default map sends black to ' + o[0] + ' and white to ' + o[1] + ', not Shadows ' + SH + ' and Highlights ' + HI);
+    // REVERSE
+    o = k4825('gradientmap', { reverse: 1 }, [[0, 0, 0], [255, 255, 255]]);
+    if (!near(o[0], HI, 1)) throw new Error('Reverse On sends black to ' + o[0] + ', not the Highlights colour ' + HI);
+    if (!near(o[1], SH, 1)) throw new Error('Reverse On sends white to ' + o[1] + ', not the Shadows colour ' + SH);
+    // THREE COLOURS: Midtones sits AT the Midpoint, the ends stay the ends; Two at the same grey is the 50/50 mix.
+    const g50 = [128, 128, 128];   // luma 0.502
+    o = k4825('gradientmap', { stops: 3 }, [[0, 0, 0], g50, [255, 255, 255]]);
+    if (!near(o[0], SH, 1) || !near(o[2], HI, 1)) throw new Error('Three colours moved the ends: black ' + o[0] + ', white ' + o[2]);
+    if (!near(o[1], MT, 2)) throw new Error('Three colours sends the Midpoint grey to ' + o[1] + ', not the Midtones colour ' + MT);
+    const two = k4825('gradientmap', { stops: 2 }, [g50])[0];
+    if (near(two, MT, 20)) throw new Error('CONTROL: Two colours already sends the Midpoint grey to Midtones (' + two + ')');
+    const g30 = [77, 77, 77];       // luma 0.302
+    o = k4825('gradientmap', { stops: 3, midpoint: 30 }, [g30, [166, 166, 166]]);
+    if (!near(o[0], MT, 2)) throw new Error('Three colours with Midpoint 30% sends the 30% grey to ' + o[0] + ', not Midtones ' + MT + ' - Midtones does not sit at the Midpoint');
+    const half = [Math.round((MT[0] + HI[0]) / 2), Math.round((MT[1] + HI[1]) / 2), Math.round((MT[2] + HI[2]) / 2)];
+    if (!near(o[1], half, 3)) throw new Error('Three colours with Midpoint 30%: the 65% grey (half way from Midtones to white) is ' + o[1] + ', not ' + half);
+    o = k4825('gradientmap', { stops: 3, reverse: 1 }, [[0, 0, 0], g50]);
+    if (!near(o[0], HI, 1) || !near(o[1], MT, 2)) throw new Error('Three colours reversed: black ' + o[0] + ' should be Highlights and the Midpoint grey ' + o[1] + ' should stay Midtones');
+    // BLEND 8 COLOUR: the picture's brightness (W3C luma), the map's colour.
+    const lum = c => 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+    const PX = [[0, 0, 0], [40, 40, 40], [128, 128, 128], [200, 200, 200], [255, 255, 255], [220, 40, 30], [30, 90, 220], [60, 160, 70], [250, 230, 40]];
+    o = k4825('gradientmap', { blend: 8 }, PX);
+    PX.forEach((c, i) => { if (Math.abs(lum(o[i]) - lum(c)) > 1.5) throw new Error('Blend Colour moved the brightness of ' + c + ' to ' + o[i] + ' (luma ' + lum(c).toFixed(1) + ' -> ' + lum(o[i]).toFixed(1) + ') - Colour must keep the picture brightness'); });
+    if (Math.max.apply(null, o[2]) - Math.min.apply(null, o[2]) < 30) throw new Error('Blend Colour left mid-grey grey (' + o[2] + ') - it does not take the map colour');
+    // BLEND 9 LUMINOSITY: the picture's colour, the map's brightness.
+    const red = [220, 40, 30], map = k4825('gradientmap', {}, [red])[0];
+    o = k4825('gradientmap', { blend: 9 }, [red])[0];
+    if (Math.abs(lum(o) - lum(map)) > 1.5) throw new Error('Blend Luminosity gives red ' + o + ' the brightness ' + lum(o).toFixed(1) + ', not the map’s ' + lum(map).toFixed(1));
+    if (!(o[0] > o[1] + 60 && o[0] > o[2] + 60)) throw new Error('Blend Luminosity turned a red pixel ' + o + ' - it must keep the picture colour');
+    // BLEND 1 MULTIPLY (an fxBlendPx mode, for the separable half): white x map = map, black stays black.
+    o = k4825('gradientmap', { blend: 1 }, [[255, 255, 255], [0, 0, 0]]);
+    if (!near(o[0], HI, 1) || !near(o[1], [0, 0, 0], 0)) throw new Error('Blend Multiply gives white ' + o[0] + ' and black ' + o[1]);
+    // KEYFRAMED COLOURS are read at their time — they were parsed as '[object Object]'.
+    o = k4825('gradientmap', { stops: 3, color3: { kf: [{ t: 0, v: '#000000' }, { t: 2, v: '#00ff00' }] } }, [g50], 2)[0];
+    if (!near(o, [0, 255, 0], 2)) throw new Error('a keyframed Midtones colour at its 2 s keyframe (#00ff00) draws ' + o);
+    o = k4825('gradientmap', { color: { kf: [{ t: 0, v: '#ff0000' }, { t: 2, v: '#0000ff' }] } }, [[0, 0, 0]], 1)[0];
+    if (!near(o, [128, 0, 128], 2)) throw new Error('a keyframed Shadows colour half way from red to blue draws black as ' + o + ', not (128,0,128)');
+    // PREVIEW = EXPORT, and the setting reaches the render (CONTROL: it differs from the default).
+    const def = parity4825('gradientmap', {}, 'default');
+    const all = parity4825('gradientmap', { stops: 3, reverse: 1, blend: 8, midpoint: 40 }, 'Three, reversed, Colour');
+    parity4825('gradientmap', { blend: 9 }, 'Luminosity');
+    if (near(def, all, 3)) throw new Error('CONTROL: Three colours, reversed, Colour blend draws the red swatch as ' + all + ', the same as the default ' + def);
+  });
+
+  /* 5.7 CROSS PROCESS — Film: Negative (pastel). Driven through the kernel on a grey ramp at the default Amount 0.6. */
+  test('482 5.7 Cross Process - Negative (pastel) flattens a ramp by at least 15 percent against Slide, lifts black blue-green, Colour cast 0 is a neutral flat grade, Curve 0 leaves only the cast, Curve 300 never inverts, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const R = ramp4825();
+    const slide = k4825('crossprocess', { variant: 0 }, R), neg = k4825('crossprocess', { variant: 1 }, R);
+    for (let c = 0; c < 3; c++) {
+      const a = sd4825(slide.map(p => p[c])), b = sd4825(neg.map(p => p[c]));
+      if (!(b <= a * 0.85)) throw new Error('Negative (pastel) spreads channel ' + 'RGB'[c] + ' of a grey ramp by ' + b.toFixed(1) + ' against Slide’s ' + a.toFixed(1) + ' - not at least 15 percent flatter (' + ((1 - b / a) * 100).toFixed(1) + ' percent)');
+    }
+    const blk = k4825('crossprocess', { variant: 1, amount: 1 }, [[0, 0, 0]])[0];
+    if (!(blk[2] - blk[0] >= 15 && blk[1] - blk[0] >= 8)) throw new Error('Negative (pastel) at Amount 1 lifts black to ' + blk + ' - not blue-green (blue and green above red)');
+    if (!(blk[0] + blk[1] + blk[2] >= 90)) throw new Error('Negative (pastel) at Amount 1 leaves black at ' + blk + ' - not lifted, so not pastel');
+    const sk = k4825('crossprocess', { variant: 0, amount: 1 }, [[0, 0, 0]])[0];
+    if (sk[0] + sk[1] + sk[2] > 6) throw new Error('CONTROL: Slide at Amount 1 already lifts black (' + sk + ')');
+    // COLOUR CAST 0: a neutral flat grade — grey stays grey, and it is still flatter than the ramp.
+    const nc = k4825('crossprocess', { variant: 1, amount: 1, lift: 0 }, R);
+    nc.forEach((p, v) => { if (Math.abs(p[0] - p[1]) > 1 || Math.abs(p[1] - p[2]) > 1) throw new Error('Negative (pastel) with Colour cast 0 tints grey ' + v + ' to ' + p + ' - 0 must be no cast'); });
+    if (!(sd4825(nc.map(p => p[1])) < sd4825(R.map(p => p[1])) * 0.75)) throw new Error('Negative (pastel) with Colour cast 0 is not flat');
+    // CURVE 0: only the cast — no flattening.
+    const ncv = k4825('crossprocess', { variant: 1, amount: 1, gain: 0 }, R);
+    if (Math.abs(sd4825(ncv.map(p => p[1])) - sd4825(R.map(p => p[1]))) > sd4825(R.map(p => p[1])) * 0.06) throw new Error('Negative (pastel) with Curve 0 still flattens the ramp (spread ' + sd4825(ncv.map(p => p[1])).toFixed(1) + ' against ' + sd4825(R.map(p => p[1])).toFixed(1) + ')');
+    if (!(ncv[128][2] > ncv[128][0] + 4)) throw new Error('Negative (pastel) with Curve 0 lost its cast: mid-grey is ' + ncv[128]);
+    // CURVE 300: very flat, and still in order — a brighter input is never a darker output.
+    const ext = k4825('crossprocess', { variant: 1, amount: 1, gain: 300, lift: 300 }, R);
+    for (let v = 1; v < 256; v++) for (let c = 0; c < 3; c++) if (ext[v][c] < ext[v - 1][c] - 1) throw new Error('Negative (pastel) at Curve 300 and Colour cast 300 turns the ramp over: channel ' + 'RGB'[c] + ' at ' + v + ' is ' + ext[v][c] + ' after ' + ext[v - 1][c] + ' at ' + (v - 1));
+    // PREVIEW = EXPORT, and the setting reaches the render.
+    const a = parity4825('crossprocess', {}, 'Slide'), b = parity4825('crossprocess', { variant: 1 }, 'Negative (pastel)');
+    if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 15) throw new Error('CONTROL: Negative (pastel) draws the red swatch as ' + b + ', the same as Slide ' + a);
+  });
+
+  /* 5.8 EXPOSURE — Work in Linear light, Gamma. Driven through the kernel on a grey ramp. */
+  test('482 5.8 Exposure - Linear light sends mid-grey 128 to 176 at +1 stop where sRGB sends it to 255, 0 stops is no change, Gamma reshapes the mids, Black point lifts black to the same grey in both, Highlight rolloff bends the light, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const R = ramp4825();
+    const s1 = k4825('exposure', { stops: 1 }, [[128, 128, 128]])[0];
+    if (s1[0] !== 255) throw new Error('CONTROL: sRGB at +1 stop sends 128 to ' + s1[0] + ', not the old 255');
+    const l1 = k4825('exposure', { stops: 1, space: 1 }, [[128, 128, 128], [0, 0, 0], [255, 255, 255]]);
+    if (Math.abs(l1[0][0] - 175) > 3) throw new Error('Linear light at +1 stop sends 128 to ' + l1[0][0] + ', not 175 ±3 (light doubled, then encoded)');
+    if (l1[1][0] !== 0 || l1[2][0] !== 255) throw new Error('Linear light at +1 stop moves black to ' + l1[1][0] + ' or white to ' + l1[2][0]);
+    const dn = k4825('exposure', { stops: -1, space: 1 }, [[128, 128, 128]])[0];
+    if (Math.abs(dn[0] - 94) > 3) throw new Error('Linear light at -1 stop sends 128 to ' + dn[0] + ', not 94 ±3 (light halved)');
+    // 0 stops in Linear light is no change: decode then encode returns every byte.
+    const z = k4825('exposure', { stops: 0, space: 1 }, R);
+    z.forEach((p, v) => { if (Math.abs(p[0] - v) > 1) throw new Error('Linear light at 0 stops moves ' + v + ' to ' + p[0]); });
+    // GAMMA: out = in^(1/gamma) — 2 brightens the mids, 0.5 darkens them, the ends stay put.
+    const g2 = k4825('exposure', { stops: 0, gamma: 2 }, [[128, 128, 128], [0, 0, 0], [255, 255, 255]]);
+    if (Math.abs(g2[0][0] - 181) > 1 || g2[1][0] !== 0 || g2[2][0] !== 255) throw new Error('Gamma 2 at 0 stops sends 128/0/255 to ' + g2.map(p => p[0]) + ', not 181/0/255');
+    const gh = k4825('exposure', { stops: 0, gamma: 0.5 }, [[128, 128, 128]])[0];
+    if (Math.abs(gh[0] - 64) > 1) throw new Error('Gamma 0.5 sends 128 to ' + gh[0] + ', not 64');
+    // BLACK POINT lifts black to the same visible grey in both.
+    const bs = k4825('exposure', { stops: 0, offset: 40 }, [[0, 0, 0]])[0], bl = k4825('exposure', { stops: 0, offset: 40, space: 1 }, [[0, 0, 0]])[0];
+    if (Math.abs(bs[0] - 40) > 1 || Math.abs(bl[0] - 40) > 1) throw new Error('Black point 40 lifts black to ' + bs[0] + ' in sRGB and ' + bl[0] + ' in Linear light - not the same grey 40');
+    // HIGHLIGHT ROLLOFF in Linear light: +3 stops does not flatten the top into white.
+    const hr = k4825('exposure', { stops: 3, rolloff: 100, space: 1 }, R).map(p => p[0]);
+    for (let v = 1; v < 256; v++) if (hr[v] < hr[v - 1]) throw new Error('Linear light +3 stops with rolloff 100 turns over at ' + v);
+    if (hr[255] >= 255 || hr[255] - hr[128] < 8) throw new Error('Linear light +3 stops with rolloff 100 clips the highlights flat (128 -> ' + hr[128] + ', 255 -> ' + hr[255] + ')');
+    // PREVIEW = EXPORT, and the setting reaches the render.
+    const a = parity4825('exposure', { stops: 1 }, 'sRGB +1'), b = parity4825('exposure', { stops: 1, space: 1, gamma: 1.4 }, 'Linear light +1, Gamma 1.4');
+    if (Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 10) throw new Error('CONTROL: Linear light with Gamma 1.4 draws the red swatch as ' + b + ', the same as sRGB ' + a);
+  });
+
+  /* THE NEW ROWS FIT THE PANEL at 390 and 1280 px; Midtones sits between Shadows and Highlights and greys out while Colours is
+     Two, saying why, and wakes under Three. */
+  test('482 5.6 to 5.8 panels - Colours, Reverse, Blend, Film, Gamma and Work in fit the effect panel at 390 and 1280 px, and Midtones sits between Shadows and Highlights, greyed out while Colours is Two', { item: '482', budgetMs: 120000 }, async function () {
+    await panel482b('gradientmap', ['Colours', 'Midpoint', 'Reverse', 'Blend', 'Dither'], []);
+    await panel482b('crossprocess', ['Film', 'Colour cast', 'Curve'], []);
+    await panel482b('exposure', ['Gamma', 'Work in'], []);
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const show = async set => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'P4825', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance('gradientmap'); inst._expanded = true; if (set) Object.assign(inst.params, set);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const rows = () => [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .kf-color-row')).map(r => ({ row: r, name: ((r.querySelector('label') || {}).textContent || '').trim() }));
+    const check = async where => {
+      await show();
+      const names = rows().map(r => r.name).join(', ');
+      if (names !== 'Shadows, Midtones, Highlights') throw new Error(where + ': the colour rows read ' + JSON.stringify(names) + ', not Shadows, Midtones, Highlights');
+      const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+      const mid = rows().filter(r => r.name === 'Midtones')[0].row;
+      if (!mid.classList.contains('fx-overridden')) throw new Error(where + ': Midtones looks live while Colours is Two, where it does nothing');
+      const tag = mid.querySelector('.fx-ovr-tag');
+      if (!tag || !/Colours is Three/.test(tag.textContent)) throw new Error(where + ': greyed Midtones does not say why (' + JSON.stringify(tag && tag.textContent) + ')');
+      mid.scrollIntoView({ block: 'nearest' }); await sleep(20);
+      const tb = tag.getBoundingClientRect(), rb = mid.getBoundingClientRect();
+      if (tb.left < rb.left - 1 || tb.right > rb.right + 1 || rb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1) throw new Error(where + ': the Midtones pill spans ' + Math.round(tb.left) + '-' + Math.round(tb.right) + ' in a row at ' + Math.round(rb.left) + '-' + Math.round(rb.right) + ' (panel ends ' + Math.round(panel.right) + ')');
+      [].slice.call(mid.querySelectorAll('input, button')).forEach(el => { const sb = el.getBoundingClientRect(); if (sb.width && sb.right > panel.right + 1) throw new Error(where + ': a greyed Midtones control runs to ' + Math.round(sb.right) + ' px, past the panel at ' + Math.round(panel.right)); });
+      await show({ stops: 3 });
+      const mid3 = rows().filter(r => r.name === 'Midtones')[0];
+      if (!mid3 || mid3.row.classList.contains('fx-overridden')) throw new Error(where + ': Midtones is greyed out with Colours Three, where it is the colour that matters');
+      // CONTROL: the other two colour rows are never greyed.
+      rows().filter(r => r.name !== 'Midtones').forEach(r => { if (r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + r.name + ' is greyed out'); });
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 
 })();

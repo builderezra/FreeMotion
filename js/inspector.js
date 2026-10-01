@@ -1845,6 +1845,7 @@ window.FM = window.FM || {};
              which bubble to its row AFTER the row has written the new value (review of polish 1.2 — the edge stayed orange). */
           const lead = p.follows && colourRows[p.follows];
           if (lead && crow._resync) { lead.addEventListener('input', crow._resync); lead.addEventListener('change', crow._resync); }
+          markOverridden(crow, fx, p, reg);   // #482 5.6: Gradient Map's Midtones greys out while Colours is Two (a no-op for every other colour row)
           body.appendChild(crow);
         }
         else if (p.type === 'layer') {   // Displacement Map: pick which OTHER layer drives the warp

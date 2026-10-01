@@ -268,7 +268,16 @@ window.FM = window.FM || {};
     /* `follows` (#482 polish 1.2, Light Leak's Leak edge): a colour that, ABSENT, is the colour it names. makeInstance leaves it
        out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
     if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '' });
-    if (def.color3) out.push({ key: 'color3', label: def.color3Label || 'Colour 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: true });
+    /* A THIRD COLOUR THAT BELONGS BETWEEN THE OTHER TWO, AND ONLY COUNTS IN ONE MODE (#482 5.6, Gradient Map's Midtones).
+       `color3After` puts the row after the colour it names, so the panel reads Shadows, Midtones, Highlights rather than
+       ending on the middle one; `color3Gate` is overriddenBy/liveWhen for a colour row, so Midtones greys out and says why
+       while the map has two colours. Neither is set on Four-Colour Gradient or Palette Map, whose rows are unchanged. */
+    if (def.color3) {
+      const c3 = { key: 'color3', label: def.color3Label || 'Colour 3', type: 'color', default: def.defColor3 || '#ffffff', keyframable: true };
+      if (def.color3Gate) { c3.overriddenBy = def.color3Gate.by; c3.liveWhen = def.color3Gate.when; }
+      const at = def.color3After ? out.findIndex(q => q.key === def.color3After) : -1;
+      if (at >= 0) out.splice(at + 1, 0, c3); else out.push(c3);
+    }
     if (def.color4) out.push({ key: 'color4', label: def.color4Label || 'Colour 4', type: 'color', default: def.defColor4 || '#ffffff', keyframable: true });
     return out;
   }

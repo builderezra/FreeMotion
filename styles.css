@@ -1930,6 +1930,16 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    panel — Flash (darken)'s Hold dark pill ended at 414 px in a row ending at 366 on the phone. It may wrap now, inside the
    row; one that fits is laid out exactly as before (a flex line breaks on the pill's full width either way). */
 .fx-scrub-row.fx-overridden .fx-ovr-tag, .fx-seg-row.fx-overridden .fx-ovr-tag { white-space: normal; max-width: calc(100% - 8px); box-sizing: border-box; }
+/* …AND A COLOUR ROW (#482 5.6): Gradient Map's Midtones does nothing while Colours is Two. Same dim, lock and pill as a
+   slider. The row keeps its one line — diamond, name, swatch and hex box exactly where the live rows have them — and the
+   pill goes on a line of its own under it: the ::after is a zero-height full-width break ordered between the two. Without
+   it the row wrapped at the hex box's natural width and the name sat alone on a line above the swatch (seen at 390). */
+.kf-color-row.fx-overridden { opacity: .38; pointer-events: none; position: relative; flex-wrap: wrap; row-gap: 6px; }
+.kf-color-row.fx-overridden .color-field-wrap { flex-basis: 0; }
+.kf-color-row.fx-overridden::after { content: ''; order: 1; flex: 0 0 100%; height: 0; }
+.kf-color-row.fx-overridden .fx-ovr-tag { order: 2; pointer-events: none; font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-dim); border: 1px solid var(--line); border-radius: 99px; padding: 1px 7px; white-space: normal;
+  max-width: calc(100% - 8px); box-sizing: border-box; }
 
 /* WRAPS, so an option row can never put a button somewhere you cannot reach.
    Measured at 375px before this: Channel Remap's row was 686px wide and FIVE of its eight options sat

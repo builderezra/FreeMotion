@@ -235,10 +235,15 @@ window.FM = window.FM || {};
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Grey']] },
       { key: 'blend', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    /* #482 5.8 — GAMMA and WORK IN. Exposure multiplied the sRGB bytes, so +1 stop sent mid-grey 128 to 255 — a camera sends
+       it to 176, because light doubles in LINEAR terms. Linear light decodes, multiplies and encodes again; sRGB (the default)
+       is the old maths untouched, and Gamma 1 leaves it so. */
     { type: 'exposure', label: 'Exposure', params: [
       { key: 'stops', label: 'Stops', min: -5, max: 5, step: 0.05, def: 0.8, unit: ' EV' },
       { key: 'offset', label: 'Black point', min: -150, max: 150, step: 1, def: 0 },
       { key: 'rolloff', label: 'Highlight rolloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.01, def: 1 },
+      { key: 'space', label: 'Work in', def: 0, options: [[0, 'sRGB'], [1, 'Linear light']] },
     ] },
     { type: 'fisheye', label: 'Fisheye', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -310,9 +315,18 @@ window.FM = window.FM || {};
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'samples', label: 'Quality', min: 3, max: 33, step: 1, def: 9, unit: ' taps' },
     ] },
-    { type: 'gradientmap', label: 'Gradient Map', color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ffb86c', color2Label: 'Highlights', params: [
+    /* #482 5.6 — COLOURS (Two / Three, with a Midtones colour at the Midpoint), REVERSE and BLEND. Two, Off and Normal are
+       the old map exactly (the kernel runs its old loop untouched there), so a saved map and the defaults every new one gets
+       draw as they always did. Midtones sits BETWEEN Shadows and Highlights in the panel (`color3After`) and is greyed while
+       the map has two colours (`color3Gate`), where it does nothing. Blend's values are fxBlendPx's mode numbers, so
+       Colour and Luminosity are 8 and 9 — the two non-separable modes, which fxBlendRGB adds. */
+    { type: 'gradientmap', label: 'Gradient Map', color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ffb86c', color2Label: 'Highlights',
+      color3: true, defColor3: '#b0507a', color3Label: 'Midtones', color3After: 'color', color3Gate: { by: 'stops', when: 3 }, params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'stops', label: 'Colours', def: 2, options: [[2, 'Two'], [3, 'Three']] },
       { key: 'midpoint', label: 'Midpoint', min: 5, max: 95, step: 1, def: 50, unit: '%' },
+      { key: 'reverse', label: 'Reverse', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft light'], [8, 'Colour'], [9, 'Luminosity']] },
       { key: 'dither', label: 'Dither', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'colorize', label: 'Colourize', color: true, defColor: '#3aa0ff', colorLabel: 'Colour', params: [
@@ -851,8 +865,12 @@ window.FM = window.FM || {};
       { key: 'pivot', label: 'Split point', min: 5, max: 95, step: 1, def: 50, unit: '%' },
       { key: 'spread', label: 'Crossover', min: 10, max: 200, step: 5, def: 100, unit: '%' },
     ] },
+    /* #482 5.7 — FILM. Today's look is slide film developed as a negative (punchy, warm highlights, blue-black shadows); the
+       other way round — negative film developed as a slide — is flat, pastel and blue-green. Colour cast and Curve keep
+       their meaning in both: how strong the cast, how far the curve departs from none. */
     { type: 'crossprocess', label: 'Cross Process', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'variant', label: 'Film', def: 0, options: [[0, 'Slide (punchy)'], [1, 'Negative (pastel)']] },
       { key: 'lift', label: 'Colour cast', min: 0, max: 300, step: 5, def: 100, unit: '%' },
       { key: 'gain', label: 'Curve', min: 0, max: 300, step: 5, def: 100, unit: '%' },
     ] },
@@ -4523,11 +4541,68 @@ window.FM = window.FM || {};
       case 5: r = s <= 0.5 ? (2 * s * dv) : (1 - 2 * (1 - s) * (1 - dv)); break;    // Hard Light
       case 6: r = s + dv; break;                                            // Add
       case 7: r = Math.abs(s - dv); break;                                  // Difference
+      // 8 Colour and 9 Luminosity (#482 5.6) are NON-SEPARABLE — they need all three channels at once — so one channel
+      // cannot answer them. They live in fxBlendRGB below; a per-channel caller reaching here gets Normal.
       default: r = s;                                                       // Normal
     }
     r *= 255;
     return r < 0 ? 0 : (r > 255 ? 255 : r);
   }
+  /* THE THREE-CHANNEL DOOR TO EVERY MODE (#482 5.6, Gradient Map's Blend). Modes 0–7 are fxBlendPx channel by channel, so a
+     caller can use this for all of them; 8 COLOUR and 9 LUMINOSITY are the W3C compositing spec's non-separable pair:
+       Colour     = SetLum(source, Lum(backdrop))  — the effect's hue and saturation at the picture's brightness
+       Luminosity = SetLum(backdrop, Lum(source))  — the picture's hue and saturation at the effect's brightness
+     with Lum = 0.3R + 0.59G + 0.11B and the spec's ClipColor pulling an out-of-range result back along its own grey line
+     (so the brightness it was given survives the clip). Worked on the 0–255 scale; returns ONE shared array, which the
+     caller reads before its next call — a fresh array per pixel is 1.4 million allocations a 1080x1350 frame. */
+  const _fxBlendOut = new Float64Array(3);
+  function fxBlendRGB(mode, s0, s1, s2, d0, d1, d2) {
+    const o = _fxBlendOut;
+    if (mode !== 8 && mode !== 9) { o[0] = fxBlendPx(mode, s0, d0); o[1] = fxBlendPx(mode, s1, d1); o[2] = fxBlendPx(mode, s2, d2); return o; }
+    let r, g, b, l;
+    if (mode === 8) { r = s0; g = s1; b = s2; l = 0.3 * d0 + 0.59 * d1 + 0.11 * d2; }
+    else { r = d0; g = d1; b = d2; l = 0.3 * s0 + 0.59 * s1 + 0.11 * s2; }
+    const dl = l - (0.3 * r + 0.59 * g + 0.11 * b);
+    r += dl; g += dl; b += dl;
+    const L = 0.3 * r + 0.59 * g + 0.11 * b, n = Math.min(r, g, b), x = Math.max(r, g, b);
+    if (n < 0 && L - n > 1e-9) { const k = L / (L - n); r = L + (r - L) * k; g = L + (g - L) * k; b = L + (b - L) * k; }
+    if (x > 255 && x - L > 1e-9) { const k = (255 - L) / (x - L); r = L + (r - L) * k; g = L + (g - L) * k; b = L + (b - L) * k; }
+    o[0] = r < 0 ? 0 : (r > 255 ? 255 : r); o[1] = g < 0 ? 0 : (g > 255 ? 255 : g); o[2] = b < 0 ? 0 : (b > 255 ? 255 : b);
+    return o;
+  }
+  FM._fxBlendRGB = fxBlendRGB;   // suite seam
+
+  /* EXPOSURE'S TABLE (#482 5.8). sRGB <-> linear light by the IEC 61966-2-1 curve. The decode table is built once (every
+     input is a byte); the encode runs 256 times per frame, inside the table, never per pixel. */
+  const SRGB_DEC = (function () { const a = new Float64Array(256); for (let v = 0; v < 256; v++) { const c = v / 255; a[v] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); } return a; })();
+  function srgbDecode(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function srgbEncode(x) { return x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055; }
+  function exposureLUT(m, off, roll, lin, gam) {
+    const out = new Float64Array(256);
+    let g = +gam; if (!isFinite(g)) g = 1; if (g < 0.1) g = 0.1; if (g > 4) g = 4;
+    const ig = 1 / g;
+    if (lin) {
+      const oc = Math.min(255, Math.abs(off)) / 255, offL = off >= 0 ? srgbDecode(oc) : -srgbDecode(oc);
+      const knee = 1 - roll * 0.6, head = 1 - knee;
+      for (let v = 0; v < 256; v++) {
+        let x = SRGB_DEC[v] * m + offL;
+        if (roll > 0 && x > knee) { const u = (x - knee) / (head <= 0 ? 1 : head); x = knee + head * (u / (1 + u)); }
+        let y = x <= 0 ? 0 : (x >= 1 ? 255 : srgbEncode(x) * 255);
+        if (g !== 1) y = y <= 0 ? 0 : 255 * Math.pow(y / 255, ig);
+        out[v] = y;
+      }
+      return out;
+    }
+    const knee = 255 * (1 - roll * 0.6), head = 255 - knee;
+    for (let v = 0; v < 256; v++) {
+      let y = v * m + off;
+      if (roll > 0 && y > knee) { const u = (y - knee) / (head <= 0 ? 1 : head); y = knee + head * (u / (1 + u)); }
+      if (g !== 1) y = y <= 0 ? 0 : 255 * Math.pow(y / 255, ig);
+      out[v] = y;
+    }
+    return out;
+  }
+  FM._exposureLUT = exposureLUT;   // suite seam
 
   /* HOW STRONG ONE ROUND FILM GRAIN IS, PER PIXEL, AT A CELL SIZE OF `s` PIXELS (queue 986) — the RMS of the weight the
      filmgrain kernel gives each pixel (q·1.35 inside the inscribed disc, nothing outside), sampled at the kernel's own
@@ -5964,6 +6039,20 @@ window.FM = window.FM || {};
       // up compresses the highlights instead of smashing them into flat white. Both 0 = old loop.
       const off = p.offset == null ? 0 : FM.evalProp(p.offset, t);
       const roll = (p.rolloff == null ? 0 : FM.evalProp(p.rolloff, t)) / 100;
+      /* #482 5.8 — GAMMA and WORK IN. Either one off its default goes through ONE 256-entry table (the whole grade is a
+         function of the byte, the same for all three channels), built from the shared sRGB decode table; at sRGB and Gamma
+         1 the two loops below run exactly as they always did, so every saved Exposure is the old picture byte for byte.
+         · LINEAR LIGHT decodes each byte to light, multiplies by 2^stops there, and encodes again — +1 stop sends mid-grey
+           128 to 176, where sRGB sends it to 255. Black point lifts black to the SAME visible level in both modes (its
+           value is decoded too, so +40 is the grey 40 either way), and Highlight rolloff bends the top of the LIGHT scale.
+         · GAMMA reshapes the result's mids last, the way the Gamma effect does (out = in^(1/gamma): above 1 brightens). */
+      const gam = p.gamma == null ? 1 : FM.evalProp(p.gamma, t);
+      const lin = (p.space == null ? 0 : (Math.round(FM.evalProp(p.space, t)) | 0)) === 1;
+      if (lin || gam !== 1) {
+        const LUT = exposureLUT(m, off, roll, lin, gam);
+        for (let i = 0; i < d.length; i += 4) { d[i] = LUT[d[i]]; d[i + 1] = LUT[d[i + 1]]; d[i + 2] = LUT[d[i + 2]]; }
+        return;
+      }
       if (off === 0 && roll === 0) {
         for (let i = 0; i < d.length; i += 4) { d[i] *= m; d[i + 1] *= m; d[i + 2] *= m; }
         return;
@@ -6214,7 +6303,41 @@ window.FM = window.FM || {};
         sbX0=Math.max(0,Math.floor(sbMnx)-2); sbX1=Math.min(W-1,Math.ceil(sbMxx)+2); sbY0=Math.max(0,Math.floor(sbMny)-2); sbY1=Math.min(H-1,Math.ceil(sbMxy)+2);
       }
       for(var sby=sbY0;sby<=sbY1;sby++){ var sbDy=sby-sbCy; for(var sbx=sbX0;sbx<=sbX1;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
-    gradientmap: function(d,W,H,p,t){ var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
+    /* #482 5.6 — COLOURS, REVERSE, BLEND, and colours that keyframe. Two colours, Reverse Off and Blend Normal run the OLD
+       loop below byte for byte (it is the line this kernel was), so a saved map and every new one draw exactly as before.
+       · REVERSE swaps the end colours and leaves Midpoint where it is on the brightness scale — "the middle colour sits at
+         30%" still means 30% — so black takes the Highlights colour.
+       · THREE COLOURS put Midtones AT the Midpoint: Shadows -> Midtones over the darks below it, Midtones -> Highlights over
+         the lights above it. With two colours the Midpoint is where the 50/50 mix lands, as it always was.
+       · BLEND paints the mapped colour onto the picture through fxBlendRGB (Colour keeps the picture's brightness and takes
+         the map's colour; Luminosity keeps the picture's colour and takes the map's brightness), then Amount mixes as before.
+       · A KEYFRAMED colour is read at t. hexToRGB parsed the {kf} object as '[object Object]' — a muddy near-black — the
+         same defect queue 555 fixed in Light Leak. A plain colour string is passed through untouched. */
+    gradientmap: function(d,W,H,p,t){ var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1;
+      var gmCol=function(v){ return (FM.isAnimated&&FM.isAnimated(v))?FM.evalProp(v,t):v; };
+      var gmSh=hexToRGB(gmCol(p.color))||[36,26,82], gmHi=hexToRGB(gmCol(p.color2))||[255,184,108];
+      var gmStops=p.stops==null?2:(Math.round(FM.evalProp(p.stops,t))|0), gm3=gmStops===3;
+      var gmRev=(p.reverse==null?0:(Math.round(FM.evalProp(p.reverse,t))|0))===1;
+      var gmBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0);
+      if(gmRev){ var gmSw=gmSh; gmSh=gmHi; gmHi=gmSw; }
+      var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0;
+      if(!gm3&&!gmBl){ for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } return; }
+      var gmMt=gm3?hexToRGB(p.color3==null?'#b0507a':gmCol(p.color3)):null;   // absent = the catalogue Midtones (hexToRGB reads a missing colour as black, never null)
+      for(var gnI=0;gnI<d.length;gnI+=4){
+        var gnR=d[gnI], gnG=d[gnI+1], gnB=d[gnI+2];
+        var gnL=(0.299*gnR+0.587*gnG+0.114*gnB)/255;
+        if(gmDith>0){ var gnP=gnI>>2, gnX=gnP%gmW, gnY=(gnP/gmW)|0; gnL+=(BAYER8[(gnY&7)*8+(gnX&7)]-0.5)*gmDith*24; if(gnL<0)gnL=0; else if(gnL>1)gnL=1; }
+        var gn0, gn1, gn2, gnU;
+        if(gm3){
+          if(gnL<=gmMid){ gnU=gmMid<=0?1:gnL/gmMid; gn0=gmS0+(gmMt[0]-gmS0)*gnU; gn1=gmS1+(gmMt[1]-gmS1)*gnU; gn2=gmS2+(gmMt[2]-gmS2)*gnU; }
+          else { gnU=gmMid>=1?0:(gnL-gmMid)/(1-gmMid); gn0=gmMt[0]+(gmHi[0]-gmMt[0])*gnU; gn1=gmMt[1]+(gmHi[1]-gmMt[1])*gnU; gn2=gmMt[2]+(gmHi[2]-gmMt[2])*gnU; }
+        } else {
+          if(!gmPlain){ gnL = gnL<=gmMid ? (gmMid<=0?1:0.5*gnL/gmMid) : (gmMid>=1?0:0.5+0.5*(gnL-gmMid)/(1-gmMid)); }
+          gn0=gmS0+gmD0*gnL; gn1=gmS1+gmD1*gnL; gn2=gmS2+gmD2*gnL;
+        }
+        if(gmBl){ var gnO=fxBlendRGB(gmBl, gn0, gn1, gn2, gnR, gnG, gnB); gn0=gnO[0]; gn1=gnO[1]; gn2=gnO[2]; }
+        d[gnI]=gnR+(gn0-gnR)*gmAmt; d[gnI+1]=gnG+(gn1-gnG)*gmAmt; d[gnI+2]=gnB+(gn2-gnB)*gmAmt;
+      } },
     colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t,ps){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); chkSz=Math.max(1,Math.round(chkSz*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2];
       // MIX was welded at a 50/50 blend, so neither a solid checker nor a barely-there one existed.
@@ -7866,6 +7989,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var lk=cpL===100?1:cpL/100, gk=cpG===100?1:cpG/100;
       var l1=cpL===100?0.10:0.10*lk, l2=cpL===100?0.06:0.06*lk, l3=cpL===100?-0.12:-0.12*lk;
       var g1=cpG===100?0.90:1+(0.90-1)*gk, g2=cpG===100?0.95:1+(0.95-1)*gk, g3=cpG===100?1.10:1+(1.10-1)*gk;
+      /* #482 5.7 — FILM: NEGATIVE (PASTEL), negative film developed as a slide. Flat (black lifts to ~19%, white drops to
+         ~85%), a blue-green cast that is strongest in the shadows (red sits lowest there, blue highest), and a quarter of the
+         colour drained toward grey after the curves, which is what makes it pastel rather than just washed out.
+         CURVE (gain) is how flat: 0 = no flattening and no drain, so only the cast is left; above 100% it flattens on at
+         0.6 the rate, so 300% is very flat and never turns the picture inside out. COLOUR CAST (lift) scales every
+         channel's departure from grey — its own black and white, its gamma and its mid bump — so 0 is a neutral flat grade.
+         Absent (every saved Cross Process) or Slide (punchy): the old curves below, untouched. Still one table per channel. */
+      if((p.variant==null?0:(Math.round(FM.evalProp(p.variant,t))|0))===1){
+        var npK=lk, npF=gk<=1?gk:1+(gk-1)*0.6, npLo=0.19*npF, npHi=1-0.15*npF;
+        var npDL=[-0.06,0,0.04], npDH=[-0.03,0.02,0.01], npGa=[1.06,0.97,0.94], npBu=[-0.02,0.03,0.02], npT=[];
+        for(var npC=0;npC<3;npC++){ var npA=new Float64Array(256), npL0=npLo+npDL[npC]*npK, npH0=npHi+npDH[npC]*npK, npG0=1+(npGa[npC]-1)*npK, npB0=npBu[npC]*npK;
+          for(var npV=0;npV<256;npV++){ var npX=npV/255, npY=npL0+(npH0-npL0)*Math.pow(npX,npG0)+npB0*Math.sin(npX*Math.PI); npA[npV]=(npY<0?0:npY)*255; }
+          npT.push(npA); }
+        var npR=npT[0], npG=npT[1], npB=npT[2], npDs=0.25*npF; if(npDs>1)npDs=1;
+        for(var npI=0;npI<d.length;npI+=4){ if(d[npI+3]===0)continue; var npr=d[npI],npg=d[npI+1],npb=d[npI+2]; var nmr=npR[npr], nmg=npG[npg], nmb=npB[npb];
+          if(npDs>0){ var nml=0.299*nmr+0.587*nmg+0.114*nmb; nmr+=(nml-nmr)*npDs; nmg+=(nml-nmg)*npDs; nmb+=(nml-nmb)*npDs; }
+          d[npI]=npr+(nmr-npr)*a; d[npI+1]=npg+(nmg-npg)*a; d[npI+2]=npb+(nmb-npb)*a; }
+        return;
+      }
       /* ONE CURVE PER CHANNEL, NOT ONE PER PIXEL (queue 474). `cv` does a Math.sin AND a Math.pow, and
          it was called three times a pixel — 4.4 MILLION transcendental calls a frame at 1080x1350 to
          produce, at most, 768 distinct answers: it depends only on `v`, which is an integer 0-255 out
