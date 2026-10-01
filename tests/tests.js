@@ -5457,8 +5457,11 @@
         /* A control ADDED AFTER these hashes were frozen stays at its default here — that default is what every saved project
            gets, and each such control carries its own byte-identity test. Pushing it to 75% would change the picture for a
            reason that has nothing to do with masks. Listed by name so a new one is a visible edit, not a silent pass. */
-        const ADDED_AFTER_560 = { dropshadow: ['opacity'] };   // queue 904, v16.48
-        (FM.fxRegistry.paramsOf(id) || []).forEach(pd => { if (typeof pd.max === 'number' && typeof pd.min === 'number' && pd.key !== 'seed' && !(ADDED_AFTER_560[id] || []).includes(pd.key)) e.params[pd.key] = pd.min + (pd.max - pd.min) * 0.75; }); return e; };
+        const ADDED_AFTER_560 = { dropshadow: ['opacity', 'spread', 'smooth'] };   // queue 904, v16.48 · #482 6.3: Spread, Smoothness
+        /* A range WIDENED after the hashes were frozen keeps its old top here (#482 6.3: Distance 60 -> 300, Softness 20 -> 80),
+           so 75% is still the 45 px and 15 px these pictures were drawn with. */
+        const MAX_AT_560 = { dropshadow: { distance: 60, softness: 20 } };
+        (FM.fxRegistry.paramsOf(id) || []).forEach(pd => { const mx = (MAX_AT_560[id] && MAX_AT_560[id][pd.key] != null) ? MAX_AT_560[id][pd.key] : pd.max; if (typeof pd.max === 'number' && typeof pd.min === 'number' && pd.key !== 'seed' && !(ADDED_AFTER_560[id] || []).includes(pd.key)) e.params[pd.key] = pd.min + (mx - pd.min) * 0.75; }); return e; };
       build(L, mask, fx);
       FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.scene.selectedId = null;
       const cv = document.createElement('canvas'); cv.width = 320; cv.height = 240; const ctx = cv.getContext('2d');
@@ -43534,6 +43537,10 @@
          back in, so the panel already has the way out. Narrowing the range would not help: at 95% the wedge still misses
          this fixture's layer entirely. The opposite ends (centre at 0%) keep the layer, and are not listed. */
       'radialwipe:centery=max': 1, 'radialrepeat:centerx=max': 1, 'radialrepeat:centery=max': 1,
+      /* SHADOW ONLY (#482 6.3) is the layer swapped for its shadow — by design. The shadow is black by default and this
+         fixture's ground is black, so the swap reads as nothing; on any other ground it is the shadow, and '482 6.3 Drop
+         Shadow - Spread grows…' proves it is drawn. */
+      'dropshadow:shadowonly=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -118111,6 +118118,317 @@
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
       try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
     }
+  });
+
+
+  /* ═══ #482 / #966 POLISH BATCH 6 — DROP SHADOW (6.3) AND STROKE COLOUR (6.4) ════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 6
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md): Drop Shadow gains Spread, Smoothness and Shadow only, and its
+   * Distance and Softness reach 300 and 80 px; Stroke Colour gains Offset, the gap that makes the sticker double outline.
+   * C22 (no shadow under a soft edge) was fixed by #986 in v17.14 and is VERIFIED here, not redone. The rule that makes it
+   * safe (§0.3): every new key's default is the old picture. Every hash below was captured on v17.21 (28104a3e) BEFORE the
+   * first edit: a textured clip at half size, an ellipse, and a card with a half see-through rim (the C22 path), at the
+   * export (240 wide, t 0.7), a half-size preview (120, t 1.3) and a phone-sized plate (67, t 0.5). Pictures:
+   * tools/design/482/polish6. */
+  function shots4826(layers) {
+    return [[240, 0.7], [120, 1.3], [67, 0.5]].map(([w, t]) => {
+      const cv = offscreen(w, Math.round(w * 3 / 4)), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  function ghost4826() {   // a card whose rim is half see-through and whose middle is solid: the C22 path and the solid path in one
+    const c = offscreen(120, 80), g = c.getContext('2d');
+    g.fillStyle = 'rgba(235,235,250,0.5)'; g.fillRect(0, 0, 120, 80);
+    g.fillStyle = 'rgba(90,200,140,1)'; g.beginPath(); g.arc(60, 40, 22, 0, Math.PI * 2); g.fill();
+    return c;
+  }
+  function lay4826(kind, effs, ids) {
+    let l;
+    if (kind === 'image') { l = FM.makeLayer('image', { x: 110, y: 85, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: fix482(), width: 200, height: 150 }); ids.push(l.id); l.transform.scale = 0.5; }
+    else if (kind === 'ghost') { l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: ghost4826(), width: 120, height: 80 }); ids.push(l.id); l.transform.scale = 1; }
+    else l = FM.makeLayer('shape', { shape: 'ellipse', x: 100, y: 80, shapeW: 110, shapeH: 70, fill: '#c06040', start: 0, duration: 4 });
+    l.start = 0; l.duration = 4; l.effects = effs || []; return l;
+  }
+  /* A synthetic plate for the kernels themselves: a block with a two-pixel 140-alpha rim, a half see-through block and a
+     one-pixel hairline, every channel moving — a soft edge, a see-through layer and a hairline are where a shadow or an
+     outline goes wrong. */
+  function plate4826(W, H) {
+    const a = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4; let al = 0;
+      if (x >= 40 && x < 100 && y >= 30 && y < 75) al = (x < 42 || x >= 98 || y < 32 || y >= 73) ? 140 : 255;
+      else if (x >= 108 && x < 140 && y >= 20 && y < 50) al = 110;
+      else if (x === 60 && y >= 82 && y < 100) al = 255;
+      if (al) { a[i] = 200 - ((x * 7) % 90); a[i + 1] = 80 + ((y * 11) % 120); a[i + 2] = 40 + ((x + y) % 150); a[i + 3] = al; }
+    }
+    return a;
+  }
+  function khash4826(a) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < a.length; i++) { h ^= a[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const fx4826 = (type, set) => { const e = FM.fxRegistry.makeInstance(type); if (!e) throw new Error('no registry entry for ' + type); Object.assign(e.params, set || {}); return e; };
+  const DSPICS4826 = [
+    ['new', () => FM.fxRegistry.makeInstance('dropshadow'), ['image', 'shape', 'ghost']],
+    ['saved', () => ({ type: 'dropshadow', enabled: true, params: { distance: 30, angle: 45, softness: 10, opacity: 70, color: '#203080' } }), ['image', 'shape', 'ghost']],
+    ['empty', () => ({ type: 'dropshadow', enabled: true, params: {} }), ['shape']],
+    ['kf', () => ({ type: 'dropshadow', enabled: true, params: { distance: { kf: [{ t: 0, v: 4 }, { t: 2, v: 50 }] }, softness: 3, angle: 200, color: '#000000' } }), ['shape', 'ghost']],
+    ['oldmax', () => ({ type: 'dropshadow', enabled: true, params: { distance: 60, softness: 20, angle: 300, color: '#401010' } }), ['shape']],
+  ];
+  const STPICS4826 = [
+    ['new', () => FM.fxRegistry.makeInstance('stroke'), ['image', 'shape', 'ghost']],
+    ['saved', () => ({ type: 'stroke', enabled: true, params: { width: 10, color: '#ff3366' } }), ['shape', 'ghost']],
+    ['empty', () => ({ type: 'stroke', enabled: true, params: {} }), ['shape']],
+    ['centre', () => fx4826('stroke', { position: 1, width: 8 }), ['shape']],
+    ['inside', () => fx4826('stroke', { position: 2, width: 6 }), ['image']],
+    ['round', () => fx4826('stroke', { shape: 1, width: 9, color: '#20e0ff' }), ['shape', 'ghost']],
+    ['soft', () => fx4826('stroke', { softness: 3, width: 7 }), ['ghost']],
+    ['kf', () => ({ type: 'stroke', enabled: true, params: { width: { kf: [{ t: 0, v: 2 }, { t: 2, v: 20 }] }, color: '#ffffff' } }), ['shape']],
+  ];
+  const DSKERN4826 = [['defaults', {}], ['soft0', { softness: 0 }], ['dist0', { distance: 0, softness: 8 }], ['oldmax', { distance: 60, softness: 20, angle: 300 }], ['op40', { opacity: 40, color: '#ff0000' }]];
+  const STKERN4826 = [['defaults', {}, 1], ['centre', { position: 1 }, 1], ['inside', { position: 2 }, 1], ['round', { shape: 1 }, 1], ['soft', { softness: 4 }, 1], ['w60', { width: 60 }, 1], ['defaults-half', {}, 0.5], ['round-half', { shape: 1, width: 10 }, 0.5]];
+  function pics4826(only) {
+    const out = {}, ids = [];
+    try {
+      if (only !== 'stroke') DSPICS4826.forEach(([n, mk, kinds]) => kinds.forEach(k => { out['ds/' + n + '/' + k] = shots4826([lay4826(k, [mk()], ids)]); }));
+      if (only !== 'dropshadow') {
+        STPICS4826.forEach(([n, mk, kinds]) => kinds.forEach(k => { out['st/' + n + '/' + k] = shots4826([lay4826(k, [mk()], ids)]); }));
+        /* a clip's own outline (layer.stroke on media) runs the stroke kernel with no effect row at all */
+        const m = lay4826('image', [], ids); m.stroke = { enabled: true, width: 6, color: '#ffcc00', position: 'outside', round: false }; out['st/media/image'] = shots4826([m]);
+        const m2 = lay4826('ghost', [], ids); m2.stroke = { enabled: true, width: 5, color: '#ffcc00', position: 'outside', round: true }; out['st/media-round/ghost'] = shots4826([m2]);
+      }
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    const K = FM._FX_TABLES.PIXEL_FX, W = 160, H = 120;
+    if (only !== 'stroke') DSKERN4826.forEach(([n, set]) => { const a = plate4826(W, H); K.dropshadow(a, W, H, Object.assign({}, FM.fxRegistry.makeInstance('dropshadow').params, set), 0.4); out['kds/' + n] = khash4826(a); });
+    if (only !== 'dropshadow') STKERN4826.forEach(([n, set, ps]) => { const a = plate4826(W, H); K.stroke(a, W, H, Object.assign({}, FM.fxRegistry.makeInstance('stroke').params, set), 0.4, ps); out['kst/' + n] = khash4826(a); });
+    return out;
+  }
+  /* The 56 library filters, one render each, folded into one hash: none carries a Drop Shadow or a Stroke, so none may move. */
+  function filters4826() {
+    const ids = [], hs = [];
+    try {
+      FM.filters.all().map(f => f.id).sort().forEach(id => {
+        const l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: fix482(), width: 200, height: 150 }); ids.push(l.id);
+        l.start = 0; l.duration = 4; l.effects = [FM.filters.makeInstance(id)];
+        const cv = offscreen(120, 90), x = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: [l], selectedId: null, selectedIds: [] }, 0.9);
+        hs.push(id + ':' + hash482(x, cv));
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    let h = 0x811c9dc5 >>> 0; hs.join('|').split('').forEach(ch => { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; });
+    return { n: hs.length, hash: ('00000000' + h.toString(16)).slice(-8) };
+  }
+  /* Captured on v17.21 (28104a3e) before the first edit — identical in the 900 px and the 380 px runner, and stable across two
+     captures in one page. `ds/` and `st/` are renders through the app (export / half preview / phone plate); `kds/` and `kst/`
+     the kernels on plate4826; the filters are all 56 library looks folded into one hash. */
+  const HEAD4826 = {
+    'ds/new/image': '7df7c328/a3b6799b/eed02955', 'ds/new/shape': '9e5b4abc/68ec1192/08a40e51', 'ds/new/ghost': 'e74c4543/9eba8ba1/fdbe8c4b',
+    'ds/saved/image': '65669169/b66f726c/9a4c04f7', 'ds/saved/shape': 'b7c9dc56/e9ea4e59/bffb0496', 'ds/saved/ghost': 'e72ca888/a79dcb0e/ec27c250',
+    'ds/empty/shape': '9e5b4abc/68ec1192/08a40e51', 'ds/kf/shape': '6b2373c3/f08f2318/4772c032', 'ds/kf/ghost': '99ebbf09/c975a208/18097824',
+    'ds/oldmax/shape': 'f228316f/f54004a6/f3d98d09', 'kds/defaults': '061fee11', 'kds/soft0': '14c4d129',
+    'kds/dist0': '70445236', 'kds/oldmax': '45014e86', 'kds/op40': 'a1130913',
+    'st/new/image': '25ec9aea/617296be/63ab28ad', 'st/new/shape': '267efc27/b02cada2/06bb4451', 'st/new/ghost': '85b19f60/c7f3ba79/e17011df',
+    'st/saved/shape': 'd18d097b/f572b4c6/1216df0d', 'st/saved/ghost': '876095c0/81666a79/a7470377', 'st/empty/shape': '267efc27/b02cada2/06bb4451',
+    'st/centre/shape': '47b04164/5894f3e8/1b7b88eb', 'st/inside/image': '642032ec/9c32d0a3/146a94b9', 'st/round/shape': '914d8dd3/7b39382e/98068699',
+    'st/round/ghost': 'ce21e810/bf59fcd5/55066203', 'st/soft/ghost': '2678a3b0/7a2b9e49/e17011df', 'st/kf/shape': '64996853/ec59717e/1e597955',
+    'st/media/image': '920a7172/eb06a9aa/69e8f09d', 'st/media-round/ghost': 'dd755750/1f9128d5/c4a843db', 'kst/defaults': 'fb3533a9',
+    'kst/centre': 'a705f44d', 'kst/inside': 'd7fb8c21', 'kst/round': '2b30cb19',
+    'kst/soft': 'c0549635', 'kst/w60': '9f3da4b5', 'kst/defaults-half': '5ad5becd',
+    'kst/round-half': '4fcf29c9',
+  };
+  const FILTERS4826 = { n: 56, hash: '18d12cdf' };
+  /* The half both item tests share: each new control DECLARED in the catalogue (so the load sanitiser keeps it — the
+     whitelist-drift lesson) at a default that is the old look, filled at render time with that same value (queue 784 would
+     otherwise restyle every saved instance the first time it drew), surviving a save at a non-default value. */
+  function declared4826(type, NEW, SET) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + want.label + ' (' + k + ') control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.label !== want.label) throw new Error('the ' + type + ' ' + k + ' control is labelled ' + JSON.stringify(pd.label) + ', not ' + want.label);
+      if (pd.default !== want.def) throw new Error(type + ' ' + want.label + ' defaults to ' + pd.default + ', not ' + want.def + ' - the value that draws the old look');
+      if (inst.params[k] !== want.def) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want.def);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want.def) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want.def + ' - every saved ' + type + ' would change the first time it drew');
+      ['min', 'max', 'unit', 'type', 'overriddenBy', 'liveWhen', 'liveAbove'].forEach(f => { if (want[f] !== undefined && pd[f] !== want[f]) throw new Error(type + ' ' + want.label + ' ' + f + ' is ' + JSON.stringify(pd[f]) + ', not ' + JSON.stringify(want[f])); });
+    });
+    const lay = [{ id: 'l4826', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: type, enabled: true, params: Object.assign({}, SET) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (got.params[k] !== SET[k]) throw new Error('a saved ' + type + ' ' + k + ' of ' + SET[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+  }
+  function unmoved4826(only) {
+    const now = pics4826(only), moved = Object.keys(now).filter(k => now[k] !== HEAD4826[k]).map(k => k + ' ' + HEAD4826[k] + ' -> ' + now[k]);
+    if (Object.keys(now).length < 10) throw new Error('setup: only ' + Object.keys(now).length + ' pictures were drawn');
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  }
+  const ds4826 = (set) => Object.assign({}, FM.fxRegistry.makeInstance('dropshadow').params, { color: '#000000' }, set);
+
+  /* 6.3 — THE OLD SHADOWS DO NOT MOVE. */
+  test('482 6.3 Drop Shadow - Spread, Smoothness and Shadow only are in the catalogue at defaults that draw the old shadow byte for byte as on v17.21, Distance reaches 300 and Softness 80 with their defaults unchanged, a saved value survives the load sanitiser, and the 56 library filters do not move', { item: '482', budgetMs: 120000 }, function () {
+    declared4826('dropshadow', {
+      spread: { label: 'Spread', def: 0, min: 0, max: 100, unit: '%', overriddenBy: 'softness', liveAbove: 0 },
+      smooth: { label: 'Smoothness', def: 1, min: 1, max: 3, overriddenBy: 'softness', liveAbove: 0 },
+      shadowonly: { label: 'Shadow only', def: 0, type: 'segment' },
+      distance: { label: 'Distance', def: 18, min: 0, max: 300, unit: 'px' },
+      softness: { label: 'Softness', def: 6, min: 0, max: 80, unit: 'px' },
+    }, { distance: 240, softness: 70, spread: 60, smooth: 3, shadowonly: 1, opacity: 80, angle: 30 });
+    const so = (FM.fxRegistry.paramsOf('dropshadow') || []).filter(q => q.key === 'shadowonly')[0];
+    if (JSON.stringify(so.options || []) !== JSON.stringify([[0, 'Off'], [1, 'On']])) throw new Error('Shadow only offers ' + JSON.stringify(so.options) + ', not Off / On');
+    const px = FM._pxParamKeys('dropshadow') || [];
+    if (px.indexOf('distance') < 0 || px.indexOf('softness') < 0 || px.indexOf('spread') >= 0) throw new Error('the px controls are ' + px.join(', ') + ' - Distance and Softness must scale with the preview plate and Spread (a share of the Softness) must not');
+    if (FM._FX_TABLES.PIXEL_FX.dropshadow.length >= 6) throw new Error('the drop shadow kernel names ' + FM._FX_TABLES.PIXEL_FX.dropshadow.length + ' parameters, which opts it out of the plate scaling (#691) - its preview would stop matching the export');
+    /* no library filter carries one, so its default cannot move them — and they do not move */
+    const carry = FM.filters.all().filter(f => (FM.filters.makeInstance(f.id).effects || []).some(e => e.type === 'dropshadow' || e.type === 'stroke')).map(f => f.id);
+    if (carry.length) throw new Error('setup: the library filters ' + carry.join(', ') + ' now carry a Drop Shadow or a Stroke - pin them by name');
+    const f = filters4826();
+    if (f.n !== FILTERS4826.n || f.hash !== FILTERS4826.hash) throw new Error('the ' + f.n + ' library filters render ' + f.hash + ', not ' + FILTERS4826.hash + ' as on v17.21 - one of them moved (queue 675\'s distance test names which)');
+    unmoved4826('dropshadow');
+    /* CONTROL: the pinned fixture can see the new controls at all */
+    const ids = [];
+    try {
+      const base = shots4826([lay4826('ghost', [FM.fxRegistry.makeInstance('dropshadow')], ids)]);
+      [['Spread 100', { spread: 100 }], ['Smoothness 3', { smooth: 3 }], ['Shadow only', { shadowonly: 1 }]].forEach(([what, set]) => {
+        if (shots4826([lay4826('ghost', [fx4826('dropshadow', set)], ids)]) === base) throw new Error('CONTROL: ' + what + ' draws the default picture on this fixture - the pinned hashes cannot see the new control, so they prove nothing');
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+  });
+
+  /* 6.3 — WHAT THE NEW CONTROLS DO, on the kernel and through the app. MEASURED on v17.21 with a 60x40 block, Distance 30
+     to the right and Softness 12: 6 px past the shadow's edge the alpha is 71 whatever Spread says (none exists), 20 px past it
+     is 0 whatever Smoothness says, Shadow only leaves the block standing, and Distance 200 / Softness 50 draw at 60 / 20. */
+  test('482 6.3 Drop Shadow - Spread grows a hard round shadow, Smoothness carries a softer edge further, Shadow only hides the layer and keeps its whole shadow, Distance 200 and Softness 50 reach that far, the skip and the crop stay byte-identical, and the preview matches the export', { item: '482', budgetMs: 120000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX.dropshadow, W = 240, H = 200;
+    const block = (w) => { const a = new Uint8ClampedArray((w || W) * H * 4); for (let y = 50; y < 90; y++) for (let x = 60; x < 120; x++) { const i = (y * (w || W) + x) * 4; a[i] = 200; a[i + 1] = 80; a[i + 2] = 60; a[i + 3] = 255; } return a; };
+    const run = (set, w) => { const a = block(w); K(a, w || W, H, ds4826(Object.assign({ distance: 30, angle: 0, softness: 12 }, set)), 0.3); return a; };
+    const A = (a, x, y, w) => a[(y * (w || W) + x) * 4 + 3];
+    const E = 149, Y = 70, bad = [];   // the shadow's right edge (block 60..119 shifted 30) and a row through its middle
+    /* CONTROL: the fixture's default shadow is the old box ramp — 6 px past the edge about 7/25 of full */
+    const s0 = run({});
+    if (!(A(s0, E + 6, Y) > 50 && A(s0, E + 6, Y) < 100 && A(s0, E + 13, Y) === 0)) throw new Error('CONTROL: the default shadow reads ' + A(s0, E + 6, Y) + ' at 6 px and ' + A(s0, E + 13, Y) + ' at 13 px past its edge - not the old 12 px box ramp');
+    /* SPREAD: 100 = solid out to the Softness, then nothing; round at the corner; 50 sits between */
+    const s100 = run({ spread: 100 }), s50 = run({ spread: 50 });
+    if (!(A(s100, E + 6, Y) >= 250 && A(s100, E + 12, Y) >= 250 && A(s100, E + 14, Y) === 0)) bad.push('Spread 100 reads ' + [6, 12, 14].map(k => A(s100, E + k, Y)).join(' / ') + ' at 6 / 12 / 14 px past the edge - not a hard shadow grown by the 12 px Softness');
+    if (!(A(s100, E + 8, 89 + 8) >= 250 && A(s100, E + 10, 89 + 10) === 0)) bad.push('Spread 100 at the corner reads ' + A(s100, E + 8, 97) + ' at (8,8) and ' + A(s100, E + 10, 99) + ' at (10,10) - the grown corner is square, not round');
+    if (!(A(s50, E + 6, Y) > A(s0, E + 6, Y) + 20 && A(s50, E + 6, Y) < A(s100, E + 6, Y) - 20)) bad.push('Spread 50 reads ' + A(s50, E + 6, Y) + ' 6 px out, between ' + A(s0, E + 6, Y) + ' (0) and ' + A(s100, E + 6, Y) + ' (100)?');
+    /* SMOOTHNESS: three passes carry the edge further and soften its start */
+    const m3 = run({ smooth: 3 });
+    if (!(A(m3, E + 20, Y) > 0 && A(s0, E + 20, Y) === 0)) bad.push('Smoothness 3 reads ' + A(m3, E + 20, Y) + ' 20 px out (Smoothness 1 reads ' + A(s0, E + 20, Y) + ') - the softer edge does not reach further');
+    const ramp = (a) => { let mx = 0; for (let k = -10; k < 25; k++) mx = Math.max(mx, Math.abs((A(a, E + k + 1, Y) - A(a, E + k, Y)) - (A(a, E + k, Y) - A(a, E + k - 1, Y)))); return mx; };
+    if (!(ramp(m3) < ramp(s0))) bad.push('Smoothness 3 bends its edge as sharply as Smoothness 1 (' + ramp(m3) + ' vs ' + ramp(s0) + ') - it is not smoother');
+    /* SHADOW ONLY: the block is gone; where it hid its own shadow the shadow now shows */
+    const so = run({ shadowonly: 1 });
+    if (A(so, 70, Y) !== 0) bad.push('Shadow only leaves the layer at alpha ' + A(so, 70, Y) + ' where no shadow falls - the layer is still there');
+    const iu = (Y * W + 105) * 4;
+    if (!(so[iu + 3] >= 250 && so[iu] === 0 && so[iu + 1] === 0)) bad.push('Shadow only draws ' + [so[iu], so[iu + 1], so[iu + 2], so[iu + 3]].join(',') + ' where the layer covered its own shadow - not the black shadow');
+    if (s0[iu] !== 200) throw new Error('CONTROL: with Shadow only off the layer is not on top of its shadow (' + s0[iu] + ')');
+    const so0 = run({ shadowonly: 1, opacity: 0 }); let lit = 0; for (let i = 3; i < so0.length; i += 4) if (so0[i]) lit++;
+    if (lit) bad.push('Shadow only at Opacity 0 leaves ' + lit + ' pixels - it should leave nothing at all');
+    /* REACH: Distance 200 and Softness 50 on a wider plate */
+    const WW = 420, far = run({ distance: 200, softness: 0 }, WW), wide = run({ distance: 30, softness: 50 }, WW);
+    if (!(A(far, 300, Y, WW) >= 250 && A(far, 150, Y, WW) === 0)) bad.push('Distance 200 puts the shadow at ' + A(far, 300, Y, WW) + ' 200 px away and ' + A(far, 150, Y, WW) + ' 30 px away - it still stops at 60');
+    if (!(A(wide, E + 35, Y, WW) > 0)) bad.push('Softness 50 reads 0 35 px past the shadow edge - it still stops at 20');
+    /* C22 (#986) holds with the new controls: a 140-alpha rim over the shadow is darker than with no shadow */
+    { const p = plate4826(160, 120), q = plate4826(160, 120); K(p, 160, 120, ds4826({ distance: 6, angle: 0, softness: 6, spread: 50, smooth: 2 }), 0.3);
+      const i = (50 * 160 + 98) * 4;   // the block's right rim (alpha 140), over its own shadow
+      const lum = (a) => a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11;
+      if (!(p[i + 3] > q[i + 3] && lum(p) < lum(q) - 10)) bad.push('with Spread and Smoothness the soft rim over the shadow is ' + [p[i], p[i + 1], p[i + 2], p[i + 3]].join(',') + ' against ' + [q[i], q[i + 1], q[i + 2], q[i + 3]].join(',') + ' with no shadow - the C22 seam is back'); }
+    /* THE SKIP STAYS A SKIP: bounded and unbounded draw the same bytes, every quadrant, cut by the plate edge, every new control */
+    const CASES = [[{ spread: 40, smooth: 3 }, 70, 60], [{ spread: 100 }, 0, 0], [{ smooth: 2, angle: 225, distance: 40 }, 0, 0], [{ shadowonly: 1, spread: 30, smooth: 2 }, 70, 60],
+      [{ spread: 70, smooth: 3, angle: 315, softness: 30 }, 170, 140], [{ distance: 220, angle: 90, softness: 25, smooth: 3 }, 70, 30], [{ spread: 50, angle: 180, distance: 50 }, 10, 60]];
+    const mk = (rx, ry) => { const a = new Uint8ClampedArray(W * H * 4); for (let y = ry; y < Math.min(H, ry + 60); y++) for (let x = rx; x < Math.min(W, rx + 80); x++) { const i = (y * W + x) * 4, edge = (x < rx + 2 || y < ry + 2 || x >= rx + 78 || y >= ry + 58); a[i] = 200; a[i + 1] = 90; a[i + 2] = 60; a[i + 3] = edge ? 140 : 255; } return a; };
+    CASES.forEach(([set, rx, ry]) => {
+      const pr = ds4826(Object.assign({ distance: 18, angle: 135, softness: 6 }, set));
+      const a = mk(rx, ry); K(a, W, H, pr, 0.3, 1);
+      const b = mk(rx, ry); K(b, W, H, pr, 0.3, 1, FM._fxBoundsScan(b, W, H));
+      if (khash4826(a) !== khash4826(b)) bad.push('bounded and unbounded differ with ' + JSON.stringify(set) + ' at ' + rx + ',' + ry + ' - the skip is no longer a skip');
+    });
+    /* …and through the cropped readback, at the tightest reach the margin has to cover (distance 0, all the softness as blur) */
+    const big = () => { const PW = 640, PH = 520, a = new Uint8ClampedArray(PW * PH * 4); for (let y = 230; y < 290; y++) for (let x = 280; x < 360; x++) { const i = (y * PW + x) * 4; a[i] = 200; a[i + 1] = 90; a[i + 2] = 60; a[i + 3] = 255; } return a; };
+    [{ distance: 0, softness: 80, smooth: 3 }, { distance: 0, softness: 60, spread: 50, smooth: 3 }, { distance: 120, angle: 30, softness: 40, spread: 20, smooth: 3 }].forEach(set => {
+      const r = FM._cropIdentity('dropshadow', big(), 640, 520, ds4826(set), 0.3, 1);
+      if (!r || r.same !== true) bad.push('the cropped readback differs with ' + JSON.stringify(set) + ' (' + (r ? r.diff + ' bytes' : 'no result') + ') - the crop margin no longer covers the shadow');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));   // what the controls DO first: the preview check below needs them working
+    /* PREVIEW = EXPORT through the app: the half-size preview is the export at half size, within the plate's rounding.
+       MEASURED on the build: 0.65 / 0.39 / 0.57 levels off on average, against 11.3 / 9.3 / 31.1 for a different shadow — 3 sits between. */
+    const shot = (set, rs) => {
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      const L = FM.makeLayer('shape', { shape: 'ellipse', x: 90, y: 70, shapeW: 90, shapeH: 60, fill: '#e0a040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; L.effects = [fx4826('dropshadow', set)];
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#ffffff' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+      return g.getImageData(0, 0, c.width, c.height).data;
+    };
+    const off = (ex, pv) => { let s = 0, n = 0; for (let y = 0; y < 90; y++) for (let x = 0; x < 120; x++) { let e = 0; for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) e += ex[((2 * y + dy) * 240 + 2 * x + dx) * 4 + 1]; s += Math.abs(e / 4 - pv[(y * 120 + x) * 4 + 1]); n++; } return s / n; };
+    [['Spread 60 + Smoothness 3', { distance: 40, angle: 45, softness: 16, spread: 60, smooth: 3 }, { distance: 40, angle: 45, softness: 16 }], ['Shadow only', { distance: 40, angle: 45, softness: 10, shadowonly: 1 }, { distance: 40, angle: 45, softness: 10 }],
+     ['Distance 150', { distance: 150, angle: 20, softness: 30, smooth: 2 }, { distance: 60, angle: 20, softness: 20 }]].forEach(([what, set, other]) => {
+      const ex = shot(set, 1), pv = shot(set, 0.5), d = off(ex, pv), ctl = off(shot(other, 1), pv);
+      if (!(ctl > d * 2 && ctl > 2)) throw new Error('CONTROL: ' + what + ' - the preview is as close to a different shadow (' + ctl.toFixed(2) + ') as to its own export (' + d.toFixed(2) + '), so this comparison sees nothing');
+      if (d > 3) bad.push(what + ': the half-size preview is ' + d.toFixed(2) + ' levels off the export on average (a different shadow is ' + ctl.toFixed(2) + ' off)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 6.4 — STROKE COLOUR'S OFFSET, the sticker double outline. MEASURED on v17.21 with a 40x30 block, Width 4: 2 px out is the
+     red outline and 12 px out is empty whatever Offset says (no such control) — the reverse of a 10 px gap. */
+  test('482 6.4 Stroke Colour - Offset puts a clear gap between the layer and its outline when Position is Outside, round corners stay round, Centre and Inside ignore it, the defaults draw the old outline byte for byte as on v17.21, and the preview matches the export', { item: '482', budgetMs: 120000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX.stroke, W = 160, H = 120, bad = [];
+    const block = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 45; y < 75; y++) for (let x = 60; x < 100; x++) { const i = (y * W + x) * 4; a[i] = 40; a[i + 1] = 120; a[i + 2] = 220; a[i + 3] = 255; } return a; };
+    const run = (set, ps) => { const a = block(); K(a, W, H, Object.assign({}, FM.fxRegistry.makeInstance('stroke').params, { color: '#ff0000', width: 4 }, set), 0.3, ps || 1); return a; };
+    const px = (a, x, y) => { const i = (y * W + x) * 4; return [a[i], a[i + 1], a[i + 2], a[i + 3]]; };
+    const red = (v) => v[3] >= 250 && v[0] >= 250 && v[1] === 0 && v[2] === 0, clear = (v) => v[3] === 0;
+    const R = 99, Y = 60;   // the block's last column, and a row through its middle
+    /* CONTROL: Offset 0 is the old outline, 1-4 px out */
+    const g0 = run({});
+    if (!(red(px(g0, R + 2, Y)) && clear(px(g0, R + 5, Y)))) throw new Error('CONTROL: the plain outline reads ' + px(g0, R + 2, Y) + ' at 2 px and ' + px(g0, R + 5, Y) + ' at 5 px out - not the 4 px red outline');
+    /* Offset 10 + Width 4: clear for 10 px, the outline from 11 to 14, clear again */
+    const g10 = run({ gap: 10 });
+    [[2, 'clear'], [5, 'clear'], [10, 'clear'], [11, 'red'], [12, 'red'], [14, 'red'], [15, 'clear']].forEach(([k, want]) => {
+      const v = px(g10, R + k, Y); if (!(want === 'red' ? red(v) : clear(v))) bad.push('Offset 10 reads ' + v.join(',') + ' ' + k + ' px out, not ' + want);
+    });
+    if (px(g10, 80, Y).join(',') !== px(g0, 80, Y).join(',')) bad.push('Offset 10 changed the layer itself (' + px(g10, 80, Y) + ')');
+    /* round corners: the ring follows the corner on a circle; square corners keep the square ring */
+    const gr = run({ gap: 10, shape: 1 }), gs = run({ gap: 10 });
+    if (!(px(gr, R + 8, 74 + 8)[3] >= 250 && px(gr, R + 11, 74 + 11)[3] === 0 && px(gr, R + 6, 74 + 6)[3] === 0)) bad.push('Offset 10 with Round corners reads alpha ' + [px(gr, R + 6, 80)[3], px(gr, R + 8, 82)[3], px(gr, R + 11, 85)[3]].join(' / ') + ' at the corner diagonal 6 / 8 / 11 px - the gap does not run round the corner');
+    if (!(px(gs, R + 11, 74 + 11)[3] >= 250)) bad.push('Offset 10 with Square corners has no square corner at (11,11)');
+    /* soft: the outer edge fades and the gap stays clear */
+    const gf = run({ gap: 10, softness: 2 });
+    if (!(clear(px(gf, R + 5, Y)) && px(gf, R + 11, Y)[3] >= 250 && px(gf, R + 13, Y)[3] > 0 && px(gf, R + 13, Y)[3] < 250 && px(gf, R + 14, Y)[3] === 0)) bad.push('Offset 10 with Softness 2 reads ' + [5, 11, 13, 14].map(k => px(gf, R + k, Y)[3]).join(' / ') + ' at 5 / 11 / 13 / 14 px - the outer edge should fade out by 14 and the gap stay clear');
+    /* Centre and Inside sit on the edge: Offset does nothing there */
+    [[1, 'Centre'], [2, 'Inside']].forEach(([pos, name]) => { if (khash4826(run({ position: pos, gap: 25 })) !== khash4826(run({ position: pos }))) bad.push('Offset changes the ' + name + ' outline, where it should do nothing (it is greyed out there)'); });
+    /* the phone plate: the gap scales with the outline */
+    const gh = run({ gap: 10 }, 0.5);   // gap 5, width 2 plate px
+    if (!(clear(px(gh, R + 5, Y)) && red(px(gh, R + 6, Y)) && red(px(gh, R + 7, Y)) && clear(px(gh, R + 8, Y)))) bad.push('on a half-size plate Offset 10 reads ' + [5, 6, 7, 8].map(k => px(gh, R + k, Y)[3]).join(' / ') + ' at 5-8 px out - not a 5 px gap and a 2 px outline');
+    /* PREVIEW = EXPORT through the app: the ring sits at the same place on the half-size preview */
+    const ring = (rs) => {
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 90, shapeW: 80, shapeH: 60, fill: '#2060e0', start: 0, duration: 4 }); L.start = 0; L.duration = 4;
+      L.effects = [fx4826('stroke', { gap: 12, width: 6, color: '#ff0000' })];
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+      const d = g.getImageData(0, 0, c.width, c.height).data, y = Math.round(90 * rs), hit = [];
+      for (let x = Math.round(140 * rs); x < c.width; x++) { const i = (y * c.width + x) * 4; if (d[i] > 128 && d[i + 2] < 100) hit.push(x / rs); }
+      return hit.length ? { lo: hit[0], hi: hit[hit.length - 1] } : null;
+    };
+    const ex = ring(1), pv = ring(0.5);
+    if (!ex || !pv) bad.push('the outline did not draw through the app (export ' + JSON.stringify(ex) + ', preview ' + JSON.stringify(pv) + ')');
+    else {
+      if (!(ex.lo >= 151 && ex.lo <= 154 && ex.hi >= 156 && ex.hi <= 159)) bad.push('in the export the ring runs ' + ex.lo + '-' + ex.hi + ' px, not 152-158 (a 12 px gap and a 6 px outline off an edge at 140)');
+      if (Math.abs(pv.lo - ex.lo) > 2 || Math.abs(pv.hi - ex.hi) > 2) bad.push('the half-size preview puts the ring at ' + pv.lo + '-' + pv.hi + ' px and the export at ' + ex.lo + '-' + ex.hi);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+    /* …declared so the sanitiser keeps it, at a default that is the old outline, and the old outlines do not move */
+    declared4826('stroke', { gap: { label: 'Offset', def: 0, min: 0, max: 60, unit: 'px', overriddenBy: 'position', liveWhen: 0 } }, { gap: 25, width: 6, position: 0 });
+    if ((FM._pxParamKeys('stroke') || []).indexOf('gap') < 0) throw new Error('Offset is not a px control, so the crop margin would not cover the gap it adds');
+    unmoved4826('stroke');
+  });
+
+  /* THE NEW ROWS FIT THE PANEL at 390 and 1280 px, and the ones another control switches off say so. */
+  test('482 6.3 and 6.4 panels - Spread, Smoothness, Shadow only and Offset fit the effect panel at 390 and 1280 px, Spread and Smoothness grey out at Softness 0, and Offset greys out for Centre and Inside', { item: '482', budgetMs: 90000 }, async function () {
+    /* the sliders with their number box on the label's line; the option rows and the greying on their own (no number box) */
+    await panel482b('dropshadow', ['Distance', 'Angle', 'Softness', 'Spread', 'Smoothness', 'Opacity'], [], { boxOnLine: true });
+    await panel482b('dropshadow', ['Shadow only'], [[{}, [], ['Spread', 'Smoothness']], [{ softness: 0 }, ['Spread', 'Smoothness'], ['Distance', 'Opacity']]]);
+    await panel482b('stroke', ['Width', 'Softness', 'Offset'], [], { boxOnLine: true });
+    await panel482b('stroke', ['Position', 'Corners'], [[{}, [], ['Offset']], [{ position: 1 }, ['Offset'], ['Width']], [{ position: 2 }, ['Offset'], ['Width']]]);
   });
 
 
