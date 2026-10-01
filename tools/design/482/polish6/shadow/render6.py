@@ -9,7 +9,8 @@ sys.path.insert(0, os.path.join(HERE, '..', '..', '..', '..', '..', 'tests'))
 import _cdp  # noqa: E402
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9061
-ALL = ['dropshadow-spread', 'dropshadow-smoothness', 'dropshadow-shadowonly', 'dropshadow-distance-softness', 'stroke-offset']
+ALL = ['dropshadow-spread', 'dropshadow-smoothness', 'dropshadow-shadowonly', 'dropshadow-distance-softness', 'stroke-offset',
+       'dropshadow-spread-seethrough', 'dropshadow-shadowonly-edge']   # the last two: the 6.3 review fixes
 WANT = sys.argv[2:] or ALL
 W, H = 390, 1100   # tall enough for two rows of tiles; the capture is cropped to the content (well under 3x the width)
 SHEET = open(os.path.join(HERE, 'sheet6.js')).read()

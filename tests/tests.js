@@ -118432,4 +118432,198 @@
   });
 
 
+  /* ═══ #482 BATCH 6 (shadow) — THE REVIEW'S FINDINGS ═══════════════════════════════════════════════════════════════════════
+   * A review of the 6.3 build measured four faults its own tests could not see, because each lived at a setting they never
+   * used: a layer with MORE THAN ONE opacity on it, a layer the frame cuts, an eased keyframe, and Spread near 100%. Each test
+   * below drives exactly that setting, and each measured number in a comment is from the build (c8da2855) and the fix. */
+
+  /* SPREAD AT EACH PART'S OWN STRENGTH. MEASURED on the build through the app (export 240x180, a 100x60 card, Distance 30 at
+     0 degrees, Softness 10, white ground): a 50% card beside its own shadow reads 127 at Spread 0, 10, 30 and 100 alone, and 0
+     (solid black) at Spread 10 the moment a 20x20 opaque spot sits on the card; a 45% card with the spot did not grow at all at
+     Spread 100 (255 where the card alone reads 140); and a 60% card read 102 while its spot was off-frame and 0 from the frame
+     the spot crossed the edge. */
+  test('482 6.3 Drop Shadow - Spread grows every part of the layer at its own strength: a see-through card keeps its own shadow strength and still grows beside an opaque spot, the spot spreads solid, and a spot sliding in from off-frame leaves the card alone', { item: '482', budgetMs: 120000 }, function () {
+    const ids = [], bad = [];
+    const card = (a, spot) => { const c = offscreen(100, 60), g = c.getContext('2d'); g.fillStyle = 'rgba(20,40,200,' + a + ')'; g.fillRect(0, 0, 100, 60); if (spot != null) { g.fillStyle = 'rgb(200,40,20)'; g.fillRect(spot, 38, 20, 20); } return c; };
+    /* green on the white ground: 255 where there is no shadow, 255 - the shadow's alpha where there is (outside the card) */
+    const shot = (el, left, set, rs) => {
+      rs = rs || 1;
+      const l = FM.makeLayer('image', { x: left + 50, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: el, width: 100, height: 60 }); ids.push(l.id);
+      l.start = 0; l.duration = 4; l.transform.scale = 1;
+      l.effects = [fx4826('dropshadow', Object.assign({ distance: 30, angle: 0, softness: 10, color: '#000000' }, set))];
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#ffffff' }, layers: [l], selectedId: null, selectedIds: [] }, 0.5);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      return (x, y) => d[(Math.round(y * rs) * c.width + Math.round(x * rs)) * 4 + 1];
+    };
+    try {
+      /* the card spans x 60-159, y 60-119; its shadow starts at 90. (175, 72) is beside the card, clear of its top edge's blur and 26 px from the spot's rows. */
+      const alone0 = shot(card(0.5), 60, { spread: 0 }), alone30 = shot(card(0.5), 60, { spread: 30 });
+      if (!(Math.abs(alone0(175, 72) - 127) <= 3 && Math.abs(alone0(175, 90) - 127) <= 3)) throw new Error('CONTROL: the 50% card alone casts ' + alone0(175, 72) + ' / ' + alone0(175, 90) + ' beside itself, not about 127 - the fixture is not a half see-through card');
+      if (!(alone30(195, 90) < alone0(195, 90) - 8)) throw new Error('CONTROL: Spread 30 does not grow the card alone (' + alone30(195, 90) + ' against ' + alone0(195, 90) + ' at Spread 0, 6 px past its edge) - Spread does nothing');
+      /* the spot sits at card x 75-94, rows 98-117: its own shadow is at x 165-184 */
+      [0.5, 0.45, 0.7].forEach(a => {
+        [10, 30, 100].forEach(sp => {
+          const al = shot(card(a), 60, { spread: sp }), wi = shot(card(a, 75), 60, { spread: sp });
+          [[175, 72, 'beside the card'], [195, 72, 'where the card grew'], [175, 85, 'above the spot']].forEach(([x, y, where]) => {
+            if (Math.abs(wi(x, y) - al(x, y)) > 2) bad.push('a ' + Math.round(a * 100) + '% card at Spread ' + sp + ' reads ' + wi(x, y) + ' ' + where + ' with an opaque spot on it and ' + al(x, y) + ' without - the spot changed the card\'s own shadow');
+          });
+        });
+      });
+      /* …and the spot spreads SOLID: at Spread 100 its grown shadow is black, where the card's is its own 127 */
+      { const wi = shot(card(0.5, 75), 60, { spread: 100 }), al = shot(card(0.5), 60, { spread: 100 });
+        if (!(wi(192, 107) <= 8 && Math.abs(al(192, 107) - 127) <= 3)) bad.push('at Spread 100 the opaque spot\'s grown shadow reads ' + wi(192, 107) + ' (the card alone ' + al(192, 107) + ') 8 px past the spot\'s shadow - the solid part does not spread solid'); }
+      /* A SPOT SLIDING IN FROM OFF-FRAME (card x from -35 to 0, the spot at card x 10-29) does not touch the card's shadow */
+      const ref = shot(card(0.6), 0, { spread: 20 })(115, 72);
+      const slide = [-35, -25, -15, -5, 0].map(L => shot(card(0.6, 10), L, { spread: 20 })(L + 115, 72));
+      if (slide.some(v => Math.abs(v - ref) > 2)) bad.push('a 60% card at Spread 20 reads ' + slide.join(' / ') + ' beside itself as its opaque spot slides in from off-frame (card x -35 to 0), against ' + ref + ' for the card alone - the shadow pops as the spot crosses the edge');
+      /* PREVIEW = EXPORT for the spread of a mixed layer: over the card and its shadow the half-size preview is the export at
+         half size — and much nearer it than a different shadow. Softness 12 at Spread 50 halves into whole plate pixels (6 solid,
+         6 soft -> 3 and 3); an odd split rounds a pixel one way on the half plate, which is the plate's rounding, not the spread.
+         MEASURED on the fix: 1.02 levels off on average, against 29.2 for a different shadow (Spread 0: 0.77; the odd 3 + 7 split
+         of Softness 10 at Spread 30: 4.4, and 6.8 on the build). */
+      { const ex = shot(card(0.5, 75), 60, { spread: 50, softness: 12 }), pv = shot(card(0.5, 75), 60, { spread: 50, softness: 12 }, 0.5), other = shot(card(0.5, 75), 60, { spread: 100, softness: 12 });
+        const off = (e) => { let sum = 0, n = 0; for (let y = 50; y < 130; y += 2) for (let x = 80; x < 210; x += 2) { sum += Math.abs(pv(x, y) - (e(x, y) + e(x + 1, y) + e(x, y + 1) + e(x + 1, y + 1)) / 4); n++; } return sum / n; };
+        const d = off(ex), ctl = off(other);
+        if (!(ctl > 2 * d && ctl > 2)) bad.push('CONTROL: the preview is as near a different shadow (' + ctl.toFixed(2) + ') as its own export (' + d.toFixed(2) + ') - this comparison sees nothing');
+        else if (d > 3) bad.push('Spread 50 on the card with a spot: the half-size preview is ' + d.toFixed(2) + ' levels off the export on average (a different shadow is ' + ctl.toFixed(2) + ' off)'); }
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    /* THE GROWTH ITSELF, against a brute-force max over the disc with its anti-aliased rim, on a mixed-alpha plate and a word */
+    const GD = FM._greyDilateDisc;
+    if (!GD) bad.push('no FM._greyDilateDisc - the grey-level spread is not reachable');
+    else {
+      const brute = (A, w, h, r) => { const G = new Float32Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = 0; for (let dy = -r - 1; dy <= r + 1; dy++) for (let dx = -r - 1; dx <= r + 1; dx++) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= w || Y >= h) continue; const dd = Math.hypot(dx, dy), k = dd <= r ? 1 : (dd < r + 1 ? r + 1 - dd : 0), v = A[Y * w + X] * k; if (v > m) m = v; } G[y * w + x] = m; } return G; };
+      const word = () => { const c = offscreen(70, 40), g = c.getContext('2d'); g.fillStyle = 'rgba(255,255,255,0.55)'; g.fillRect(4, 4, 30, 30); g.fillStyle = '#fff'; g.font = 'bold 26px Arial'; g.textBaseline = 'middle'; g.fillText('Sg', 30, 22); const dd = g.getImageData(0, 0, 70, 40).data, A = new Uint8Array(70 * 40); for (let i = 0; i < A.length; i++) A[i] = dd[i * 4 + 3]; return A; };
+      [[3], [6]].forEach(([r]) => { const A = word(), got = GD(A, 70, 40, r), want = brute(A, 70, 40, r); let over = 0, under = 0; for (let i = 0; i < A.length; i++) { if (got[i] > want[i] + 0.01) over++; if (want[i] - got[i] > 3.01) under++; }
+        if (over || under) bad.push('the spread at ' + r + ' px differs from the brute-force max on ' + over + ' pixels above it and ' + under + ' more than 3 levels under it'); }); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SHADOW ONLY ON A LAYER THE FRAME CUTS. MEASURED on the build: a 200x30 bar spanning x 100-299 in a 240-wide frame, Distance
+     30 at 180 degrees, Softness 0, Shadow only On: row 60 is shadow from 70 to 209 and the white ground from 210 to 239 — the
+     shadow of the bar's off-frame part was never drawn, and with Shadow only nothing covers the hole. */
+  test('482 6.3 Drop Shadow - Shadow only draws the shadow of a layer the frame cuts right up to the frame edge, with and without Spread, in the export and the half-size preview, and a layer inside the frame keeps its own ends', { item: '482', budgetMs: 120000 }, function () {
+    const ids = [], bad = [];
+    const block = (w, h) => { const c = offscreen(w, h), g = c.getContext('2d'); g.fillStyle = '#d02020'; g.fillRect(0, 0, w, h); return c; };
+    const shot = (el, cx, cy, set, rs) => {
+      rs = rs || 1;
+      const l = FM.makeLayer('image', { x: cx, y: cy, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: el, width: el.width, height: el.height }); ids.push(l.id);
+      l.start = 0; l.duration = 4; l.transform.scale = 1;
+      l.effects = [fx4826('dropshadow', Object.assign({ distance: 30, angle: 180, softness: 0, color: '#000000' }, set))];
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#ffffff' }, layers: [l], selectedId: null, selectedIds: [] }, 0.5);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      return (x, y) => d[(Math.round(y * rs) * c.width + Math.round(x * rs)) * 4 + 1];   // green: 255 ground, 0 black shadow, 32 the red bar
+    };
+    const runOf = (px, y, x0, x1, step) => { const o = []; for (let x = x0; x <= x1; x += step) o.push(px(x, y)); return o; };
+    try {
+      /* CONTROL: Shadow only OFF — the bar covers the gap, as it always did (the shadow 70-99, then the bar) */
+      const off = shot(block(200, 30), 200, 60, {});
+      if (!(off(85, 60) === 0 && off(150, 60) === 32 && off(235, 60) === 32 && off(60, 60) === 255)) throw new Error('CONTROL: with Shadow only off the cut bar reads ' + [off(60, 60), off(85, 60), off(150, 60), off(235, 60)].join(' / ') + ' at x 60 / 85 / 150 / 235 - not ground, shadow, bar, bar');
+      /* the bar crossing the right edge: the shadow runs from 70 to the frame edge, in the export and the half preview */
+      [['the export', 1], ['the half-size preview', 0.5]].forEach(([where, rs]) => {
+        const on = shot(block(200, 30), 200, 60, { shadowonly: 1 }, rs), row = runOf(on, 60, 72, 236, 4);
+        if (row.some(v => v > 12) || on(60, 60) < 240) bad.push('with Shadow only, the bar the frame cuts reads ' + row.join(',') + ' along row 60 from x 72 to 236 in ' + where + ' (and ' + on(60, 60) + ' at x 60) - its shadow stops short of the frame edge');
+      });
+      /* …with Spread and Smoothness too (the grown buffer): to the edge, and still solid there */
+      { const on = shot(block(200, 30), 200, 60, { shadowonly: 1, softness: 8, spread: 50, smooth: 2 }); const row = runOf(on, 60, 90, 236, 6);
+        if (row.some(v => v > 20)) bad.push('with Shadow only and Spread 50, the cut bar reads ' + row.join(',') + ' along row 60 from x 90 to 236 - its shadow stops short of the frame edge'); }
+      /* a block the BOTTOM edge cuts, shadow straight up (270 degrees): the shadow reaches the bottom of the frame */
+      { const on = shot(block(60, 100), 120, 170, { shadowonly: 1, angle: 270, softness: 6 }), col = runOf((y) => on(120, y), 0, 100, 176, 8);
+        if (col.some(v => v > 20)) bad.push('with Shadow only, a block the bottom edge cuts reads ' + col.join(',') + ' down column 120 from y 100 to 176 - its shadow stops short of the bottom'); }
+      /* a bar INSIDE the frame (x 20-219) keeps its own end: the shadow stops 30 px short of where the bar ended */
+      { const inside = shot(block(200, 30), 120, 60, { shadowonly: 1 });
+        if (!(inside(150, 60) <= 12 && inside(185, 60) <= 12 && inside(195, 60) >= 240 && inside(230, 60) >= 240)) bad.push('with Shadow only, a bar inside the frame reads ' + [150, 185, 195, 230].map(x => inside(x, 60)).join(' / ') + ' at x 150 / 185 / 195 / 230 - its shadow should end at 189'); }
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    /* THE SKIP AND THE CROP stay byte-identical for a layer on the edge: bounded = unbounded, and the cropped readback = the full */
+    { const K = FM._FX_TABLES.PIXEL_FX.dropshadow, W = 240, H = 200;
+      const mk = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 60; y < 100; y++) for (let x = 150; x < W; x++) { const i = (y * W + x) * 4; a[i] = 200; a[i + 1] = 80; a[i + 2] = 60; a[i + 3] = (x < 152 || y < 62 || y >= 98) ? 140 : 255; } return a; };
+      [{ shadowonly: 1 }, { shadowonly: 1, spread: 60, softness: 10, smooth: 2, angle: 160 }, { shadowonly: 1, angle: 200, distance: 45, softness: 5 }].forEach(set => {
+        const pr = ds4826(Object.assign({ distance: 30, angle: 180, softness: 0 }, set));
+        const a = mk(); K(a, W, H, pr, 0.3, 1); const b = mk(); K(b, W, H, pr, 0.3, 1, FM._fxBoundsScan(b, W, H));
+        if (khash4826(a) !== khash4826(b)) bad.push('bounded and unbounded differ with ' + JSON.stringify(set) + ' on a layer the edge cuts - the skip is no longer a skip');
+        const r = FM._cropIdentity('dropshadow', mk(), W, H, pr, 0.3, 1);
+        if (!r || r.same !== true) bad.push('the cropped readback differs with ' + JSON.stringify(set) + ' on a layer the edge cuts (' + (r ? r.diff + ' bytes' : 'no result') + ')');
+      }); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE OLD CEILING FOR A SAVED RANGE. MEASURED: Distance keyed 10 -> 60 with the graph editor's Overshoot ease evaluates 64.0
+     at t 1.37; v17.21 clamped it to 60 and the build drew 64 (the shadow's right edge 169 -> 173 px). Softness keyed 2 -> 20
+     with Overshoot (21.4) and Distance 20 -> 60 with Elastic (65 at t 0.4) moved the same way. Compared here against a STATIC
+     60 / 20 at the same moment, so no pinned hash is needed: equal bytes are the old ceiling. */
+  test('482 6.3 Drop Shadow - a saved Distance or Softness eased past its old top still stops there as on v17.21, while a value or a keyframe past the old top reaches past it', { item: '482', budgetMs: 90000 }, function () {
+    const bad = [];
+    const pic = (params, t, rs) => {
+      rs = rs || 1;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 90, y: 80, shapeW: 60, shapeH: 40, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4;
+      L.effects = [{ type: 'dropshadow', enabled: true, params: JSON.parse(JSON.stringify(params)) }];
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#ffffff' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return khash4826(g.getImageData(0, 0, c.width, c.height).data);
+    };
+    const D = (v) => ({ distance: v, angle: 0, softness: 4, color: '#000000' }), S = (v) => ({ distance: 20, angle: 0, softness: v, color: '#000000' });
+    const kd = (a, b, e) => ({ kf: [{ t: 0, v: a }, { t: 2, v: b, e: e }] });
+    /* CONTROL: the eases really leave the old range */
+    const ov = FM.evalProp(kd(10, 60, 'overshoot'), 1.37), os = FM.evalProp(kd(2, 20, 'overshoot'), 1.37), el = FM.evalProp(kd(20, 60, 'elastic'), 0.4);
+    if (!(ov > 62 && os > 21 && el > 62)) throw new Error('CONTROL: the eased keyframes evaluate ' + [ov, os, el].map(v => v.toFixed(2)).join(' / ') + ' - they do not leave the old range, so this proves nothing');
+    /* SAVED: inside the old range, the eased overshoot draws exactly the old top */
+    [['Distance 10 -> 60 Overshoot', D(kd(10, 60, 'overshoot')), D(60), [1.0, 1.37, 1.5, 1.7]], ['Softness 2 -> 20 Overshoot', S(kd(2, 20, 'overshoot')), S(20), [1.0, 1.37, 1.5]], ['Distance 20 -> 60 Elastic', D(kd(20, 60, 'elastic')), D(60), [0.4, 1.0]]].forEach(([what, keyed, top, ts]) => {
+      ts.forEach(t => { if (pic(keyed, t) !== pic(top, t)) bad.push(what + ' at t ' + t + ' draws past the old top - on v17.21 it stopped there, and the frames he made moved'); });
+    });
+    /* NEW: a value past the old top reaches past it, and a keyframed one eases past its own top */
+    if (pic(D(120), 1) === pic(D(60), 1)) bad.push('Distance 120 draws the same shadow as Distance 60 - it still stops at 60');
+    if (pic(S(40), 1) === pic(S(20), 1)) bad.push('Softness 40 draws the same shadow as Softness 20 - it still stops at 20');
+    if (pic(D(kd(10, 120, 'overshoot')), 2) !== pic(D(120), 2)) bad.push('Distance keyed 10 -> 120 does not land on Distance 120');
+    if (pic(D(kd(10, 120, 'overshoot')), 1.37) === pic(D(120), 1.37)) bad.push('Distance keyed 10 -> 120 with Overshoot is clamped at 120 - a new range should ease past its top');
+    if (pic(S(kd(2, 40, 'overshoot')), 1.37) === pic(S(40), 1.37)) bad.push('Softness keyed 2 -> 40 with Overshoot is clamped at 40 - a new range should ease past its top');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SMOOTHNESS WHERE IT DOES NOTHING. MEASURED on the build at Softness 12: Spread 100 and Spread 96 drew Smoothness 1, 2 and 3
+     byte-identical (no blur pass ran: a rounded 96% of 12 was all 12), while the panel greyed the row only at Softness 0. */
+  test('482 6.3 Drop Shadow - below Spread 100 Smoothness always changes the shadow, and at Spread 100 (no blur left) the panel greys it and says why, re-judging it the moment Spread or Softness moves, at 390 and 1280 px', { item: '482', budgetMs: 120000 }, async function () {
+    const K = FM._FX_TABLES.PIXEL_FX.dropshadow, W = 160, H = 120, bad = [];
+    const run = (set) => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 40; y < 80; y++) for (let x = 40; x < 100; x++) { const i = (y * W + x) * 4; a[i] = 200; a[i + 3] = 255; } K(a, W, H, ds4826(Object.assign({ softness: 12, distance: 10, angle: 0 }, set)), 0.3); return khash4826(a); };
+    /* CONTROL: at Spread 100 the shadow is hard, so the three Smoothness values are one picture */
+    const h100 = [1, 2, 3].map(m => run({ spread: 100, smooth: m }));
+    if (!(h100[0] === h100[1] && h100[1] === h100[2])) throw new Error('CONTROL: Spread 100 draws ' + h100.join(' / ') + ' for Smoothness 1 / 2 / 3 - it is not the hard shadow, so greying Smoothness there would hide a working control');
+    [96, 99, 91].forEach(sp => {
+      const hs = [1, 2, 3].map(m => run({ spread: sp, smooth: m }));
+      if (new Set(hs).size !== 3) bad.push('Spread ' + sp + ' draws Smoothness 1 / 2 / 3 as ' + hs.join(' / ') + ' - the slider moves and the shadow does not');
+      if (hs[0] === h100[0]) bad.push('Spread ' + sp + ' draws the Spread 100 hard shadow - below 100% a pixel of the Softness should stay soft');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    /* THE PANEL: greyed at Spread 100 (and at Softness 0), live below it */
+    await panel482b('dropshadow', ['Smoothness'], [[{ spread: 100 }, ['Smoothness'], ['Spread', 'Softness', 'Distance']], [{ spread: 96, softness: 12 }, [], ['Smoothness', 'Spread']], [{ spread: 100, softness: 0 }, ['Smoothness', 'Spread'], ['Distance', 'Softness']]]);
+    /* …says why, and re-judges as the controlling slider moves (a greyed row is pointer-events:none, so a stale grey is a lock) */
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'P482s', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' }); L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance('dropshadow'); inst._expanded = true; inst.params.spread = 100; L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(250);
+      const rowOf = label => { const lab = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label')).filter(e => (e.textContent || '').trim() === label)[0]; return lab ? lab.closest('.fx-scrub-row, .fx-seg-row') : null; };
+      const grey = l => { const r = rowOf(l); if (!r) throw new Error('no ' + l + ' row'); return r.classList.contains('fx-overridden') ? ((r.querySelector('.fx-ovr-tag') || {}).textContent || '?') : ''; };
+      const type = async (l, v) => { const b = rowOf(l).querySelector('.fx-scrub-val'); b.value = String(v); b.dispatchEvent(new Event('change', { bubbles: true })); await sleep(120); };
+      if (grey('Smoothness') !== 'Not used when Spread is 100%') bad.push('at Spread 100 the Smoothness row says ' + JSON.stringify(grey('Smoothness')) + ', not Not used when Spread is 100%');
+      await type('Spread', 50);
+      if (inst.params.spread !== 50) throw new Error('setup: typing 50 into Spread left it at ' + inst.params.spread);
+      if (grey('Smoothness')) bad.push('Spread moved from 100 to 50 and Smoothness is still greyed (' + grey('Smoothness') + ') - and a greyed row cannot be touched');
+      await type('Softness', 0);
+      if (!grey('Spread') || !grey('Smoothness')) bad.push('Softness moved to 0 and Spread / Smoothness read ' + JSON.stringify(grey('Spread')) + ' / ' + JSON.stringify(grey('Smoothness')) + ' - they do nothing there and still look live');
+      await type('Softness', 8);
+      if (grey('Spread') || grey('Smoothness')) bad.push('Softness moved back to 8 and Spread / Smoothness are still greyed');
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+
 })();

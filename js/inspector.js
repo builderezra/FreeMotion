@@ -1243,7 +1243,7 @@ window.FM = window.FM || {};
        "above 0" would grey it under a cut, where it is the whole control. Judged over the keyframes like the rest. */
     if (p.deadAt !== undefined) {
       active = vals.every(v => Number(v) === Number(p.deadAt));
-      why = 'Not used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + p.deadAt;
+      why = 'Not used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + (p.deadAtText != null ? p.deadAtText : p.deadAt);
     } else if (p.liveAbove !== undefined) {
       active = vals.every(v => !(Number(v) > Number(p.liveAbove)));
       why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is above ' + p.liveAbove;
@@ -1269,6 +1269,13 @@ window.FM = window.FM || {};
     } else {
       active = vals.every(v => !!v);
       why = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
+    }
+    /* A SECOND CONTROL THAT SWITCHES IT OFF (#482 6.3 review): Drop Shadow's Smoothness does nothing at Softness 0 AND at
+       Spread 100% (no blur is left), and a row takes one overriddenBy. `alsoGate` is the second, judged by the same rules. */
+    if (!active && p.alsoGate && p.alsoGate.by) {
+      const g = p.alsoGate, c2 = reg.params.find(q => q.key === g.by);
+      markOverridden(row, fx, { overriddenBy: g.by, deadAt: g.deadAt, deadAtText: g.deadAt !== undefined ? g.deadAt + ((c2 && c2.unit) || '') : undefined, liveAbove: g.liveAbove, liveWhen: g.liveWhen }, reg);   // 'Not used when Spread is 100%'
+      return;
     }
     if (active) {
       row.classList.add('fx-overridden');
@@ -1811,10 +1818,11 @@ window.FM = window.FM || {};
          he asked for. Deleting 190-odd strings would have thrown away the thing he asked to keep. */
       const colourRows = {};   // colour rows by key, so a colour that follows another can listen to it (#482 polish 1.2)
       const rangeRows = {};    // …and slider rows, for a slider that follows another (#482 polish 2.1)
+      const gatedRows = {};    // …and every row another control can grey, so a SLIDER that greys it re-judges it live (#482 6.3 review)
       reg.params.forEach(p => {
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);
-          rangeRows[p.key] = row;
+          rangeRows[p.key] = row; gatedRows[p.key] = row;
           const leadR = p.follows && rangeRows[p.follows];
           if (leadR && row._resync) leadR.addEventListener('fx-range-set', row._resync);
           // Dim and lock a slider whose value is currently being overridden by a tick box above it,
@@ -1826,7 +1834,7 @@ window.FM = window.FM || {};
           if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note));
         }
         else if (p.type === 'toggle') body.appendChild(fxToggle(fx, p));
-        else if (p.type === 'segment') { const srow = fxSegment(fx, p); markOverridden(srow, fx, p, reg); body.appendChild(srow); if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note)); }
+        else if (p.type === 'segment') { const srow = fxSegment(fx, p); gatedRows[p.key] = srow; markOverridden(srow, fx, p, reg); body.appendChild(srow); if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note)); }
         /* ⚠️ EFFECT COLOURS KEYFRAME NOW (queue 555). Ezra, with a Gradient Overlay open: *"Colours for
            every effect like gradient overly should be key frame able"* — his screenshot shows Amount
            carrying a ◆ and a curve while Start and End have neither.
@@ -1845,6 +1853,7 @@ window.FM = window.FM || {};
              which bubble to its row AFTER the row has written the new value (review of polish 1.2 — the edge stayed orange). */
           const lead = p.follows && colourRows[p.follows];
           if (lead && crow._resync) { lead.addEventListener('input', crow._resync); lead.addEventListener('change', crow._resync); }
+          gatedRows[p.key] = crow;
           markOverridden(crow, fx, p, reg);   // #482 5.6: Gradient Map's Midtones greys out while Colours is Two (a no-op for every other colour row)
           body.appendChild(crow);
         }
@@ -1860,6 +1869,14 @@ window.FM = window.FM || {};
           sel.addEventListener('change', () => { fx.params[p.key] = sel.value; FM.requestRender(); if (FM.history) FM.history.commit(); });
           cr.appendChild(sel); body.appendChild(cr);
         }
+      });
+      /* A ROW A SLIDER GREYS IS RE-JUDGED THE MOMENT THAT SLIDER MOVES (#482 6.3 review — the audio rows have done this since
+         the #482 3.6 review). The panel is not rebuilt for a slider move and a greyed row is pointer-events:none, so Drop
+         Shadow's Smoothness, greyed at Spread 100%, stayed locked after Spread came back to 50, and Spread and Smoothness
+         stayed live after Softness went to 0. An option row that greys one rebuilds the panel already. */
+      reg.params.forEach(p => {
+        const gr = gatedRows[p.key]; if (!gr) return;
+        [p.overriddenBy, p.alsoGate && p.alsoGate.by].forEach(k => { const lead = k && rangeRows[k]; if (lead) lead.addEventListener('fx-range-set', () => regate(gr, fx, p, reg)); });
       });
       // Remove Object: dragging a box on the canvas beats nudging four % sliders (esp. on a phone)
       if (fx.type === 'touchup' && FM.touchupTool) {

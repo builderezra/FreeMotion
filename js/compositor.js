@@ -611,7 +611,9 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' },
       { key: 'softness', label: 'Softness', min: 0, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'spread', label: 'Spread', min: 0, max: 100, step: 1, def: 0, unit: '%', overriddenBy: 'softness', liveAbove: 0, note: 'How much of the Softness is solid · 100% = a hard shadow' },
-      { key: 'smooth', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1, overriddenBy: 'softness', liveAbove: 0 },
+      /* alsoGate (6.3 review): Spread 100% leaves no blur at all, so Smoothness does nothing there either — the panel takes one
+         overriddenBy, and this is the second condition. */
+      { key: 'smooth', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1, overriddenBy: 'softness', liveAbove: 0, alsoGate: { by: 'spread', deadAt: 100 } },
       { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' },   // queue 904: Opacity — every shadow was full strength
       { key: 'shadowonly', label: 'Shadow only', def: 0, options: [[0, 'Off'], [1, 'On']] }], color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'chromaticaberration', label: 'Chromatic Aberration', params: [{ key: 'amount', label: 'Amount', min: 0, max: 30, step: 1, def: 8, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
@@ -4547,6 +4549,61 @@ window.FM = window.FM || {};
     return out;
   }
 
+  /* ═══ GROW EVERY PIXEL AT ITS OWN STRENGTH (#482 6.3 review) ══════════════════════════════════════════════════════════
+   * Drop Shadow's Spread grows the layer's alpha by `r` px. Its first build grew a BINARY mask (the pixels at least half as
+   * opaque as the layer's most opaque one) and filled it at that maximum, so a see-through part's shadow jumped to full
+   * strength or did not grow at all depending on what ELSE was on the layer — a 50% card with one opaque spot cast a solid
+   * black spread (127 -> 0), and an opaque spot sliding in from off-frame flipped the whole card's shadow mid-animation.
+   * This is a grey-level dilation instead, over a round disc with an anti-aliased rim:
+   *     out(x) = max over y of A(y) x k(|x - y|),   k = 1 up to r, falling to 0 at r + 1 (pixel centres)
+   * so each part spreads at its own alpha and nothing farther than r + 1 px can change it. Computed in two exact parts:
+   *   · THE FLAT DISC (k = 1) as horizontal runs: disc row dy is a run of half-width floor(sqrt(r² - dy²)); the runs are
+   *     widened a pixel at a time (run k = max(run k-1, A[x-k], A[x+k])) and each output row takes the max of the runs its
+   *     disc rows need — about 3r reads a pixel.
+   *   · THE RIM (r < distance < r + 1), only where it can add anything. A rim source brighter than the flat value at x
+   *     lies within r of some pixel at most 2 px from x (step 2 px toward it), so the flat result is brighter somewhere in
+   *     x's 5x5 square; everywhere else the rim cannot win. Those pixels — a band two or three pixels wide round each grown
+   *     edge — read the ~2 pi r rim offsets, heaviest first, and stop once no remaining one can beat what they have.
+   *     A smooth ramp (a feathered edge) gains under RIM_T levels from its rim and is skipped, so it never costs r per pixel.
+   * `A` is alpha 0-255 on a w x h buffer; the result is a fresh Float32Array. */
+  const RIM_T = 3;
+  function greyDilateDisc(A, w, h, r) {
+    const N = w * h, run = new Float32Array(N), G = new Float32Array(N);
+    for (let i = 0; i < N; i++) run[i] = A[i];
+    const rows = [];   // the disc's rows by half-width
+    for (let dy = -r; dy <= r; dy++) { const hw = Math.floor(Math.sqrt(r * r - dy * dy)); (rows[hw] || (rows[hw] = [])).push(dy); }
+    for (let k = 0; k <= r; k++) {
+      if (k > 0) for (let y = 0; y < h; y++) { const ro = y * w; for (let x = 0; x < w; x++) { let m = run[ro + x], a; if (x >= k && (a = A[ro + x - k]) > m) m = a; if (x + k < w && (a = A[ro + x + k]) > m) m = a; run[ro + x] = m; } }
+      const dys = rows[k]; if (!dys) continue;
+      for (let j = 0; j < dys.length; j++) {
+        const dy = dys[j], y0 = dy < 0 ? -dy : 0, y1 = dy > 0 ? h - 1 - dy : h - 1;
+        for (let y = y0; y <= y1; y++) { const ro = y * w, rs = (y + dy) * w; for (let x = 0; x < w; x++) { const v = run[rs + x]; if (v > G[ro + x]) G[ro + x] = v; } }
+      }
+    }
+    /* the brightest flat value within 2 px (two passes of a 5-wide max; `run` is free now) */
+    const M5 = new Float32Array(N);
+    for (let y = 0; y < h; y++) { const ro = y * w; for (let x = 0; x < w; x++) { let m = 0; for (let q = x - 2; q <= x + 2; q++) { if (q >= 0 && q < w && G[ro + q] > m) m = G[ro + q]; } run[ro + x] = m; } }
+    for (let y = 0; y < h; y++) { const ro = y * w; for (let x = 0; x < w; x++) { let m = 0; for (let q = y - 2; q <= y + 2; q++) { if (q >= 0 && q < h && run[q * w + x] > m) m = run[q * w + x]; } M5[ro + x] = m; } }
+    /* the rim offsets, heaviest first */
+    const ro1 = [], R1 = r + 1;
+    for (let dy = -R1; dy <= R1; dy++) for (let dx = -R1; dx <= R1; dx++) { const dd = Math.sqrt(dx * dx + dy * dy); if (dd > r && dd < R1) ro1.push([dx, dy, R1 - dd]); }
+    ro1.sort((p, q) => q[2] - p[2] || p[1] - q[1] || p[0] - q[0]);
+    const nO = ro1.length, ODX = new Int32Array(nO), ODY = new Int32Array(nO), OK = new Float32Array(nO);
+    for (let o = 0; o < nO; o++) { ODX[o] = ro1[o][0]; ODY[o] = ro1[o][1]; OK[o] = ro1[o][2]; }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, top = M5[i]; let best = G[i];
+      if (!(top - best > RIM_T)) continue;
+      for (let o = 0; o < nO; o++) {
+        const kk = OK[o]; if (top * kk <= best) break;   // no source here is brighter than `top`, and the weights only fall
+        const X = x + ODX[o], Y = y + ODY[o]; if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
+        const v = A[Y * w + X] * kk; if (v > best) best = v;
+      }
+      G[i] = best;
+    }
+    return G;
+  }
+  FM._greyDilateDisc = greyDilateDisc;   // seam: the suite checks it against a brute-force max
+
   /* ONE REUSED SCRATCH FOR THE "copy the frame, then read it while you overwrite it" PATTERN
      (queue 474, v11.76). Sixteen kernels open with `d.slice()` — a fresh 5.6 MB Uint8ClampedArray at
      1080x1350, allocated and thrown away on EVERY invocation.
@@ -7314,7 +7371,15 @@ window.FM = window.FM || {};
        `softness` are both `unit: 'px'`, so naming the parameters would push this kernel past the arity
        pxToPlate checks and silently opt it out of the plate scaling (#691). A shadow that stopped
        matching the export is worse than a slow one. */
-    dropshadow: function(d,W,H,p,t){ var dsBB=arguments[6]; var dsDist = fparam(p, 'distance', 18, t); dsDist=Math.max(0,Math.min(300,dsDist)); var dsAng = fparam(p, 'angle', 135, t); var dsSoft = fparam(p, 'softness', 6, t); dsSoft=Math.max(0,Math.min(80,Math.round(dsSoft)));   /* #482 6.3: 300 and 80 — were 60 and 20 */ var dsCol=hexToRGB(p.color); var dsCr=dsCol?dsCol[0]:0, dsCg=dsCol?dsCol[1]:0, dsCb=dsCol?dsCol[2]:0; var dsN=W*H; var dsRad=dsAng*Math.PI/180; var dsOx=Math.round(Math.cos(dsRad)*dsDist); var dsOy=Math.round(Math.sin(dsRad)*dsDist); var s=fxSrc(d); var dsShift=new Float32Array(dsN); /* OPACITY (queue 904): 100% is the old full-strength shadow, byte-identical. */ var dsOp=(p.opacity==null?100:FM.evalProp(p.opacity,t))/100; if(dsOp<0)dsOp=0; if(dsOp>1)dsOp=1;
+    dropshadow: function(d,W,H,p,t){ var dsBB=arguments[6];
+      /* #482 6.3: Distance reaches 300 and Softness 80 — they stopped at 60 and 20. THE OLD CEILING STAYS for a value whose
+         keyframes all lie inside the old range (6.3 review): an Overshoot or Elastic ease carries a saved 10 -> 60 past 60
+         (64 at t 1.37), and v17.21 clamped that to 60, so the build's 300 moved the shadow 4 px on frames he had already made.
+         A keyframe above 60 / 20 can only be new, and gets the new ceiling. A reduced preview plate hands this kernel the value
+         already evaluated and scaled (pxToPlate), so there it cannot see the keyframes; v17.21's ceiling was 60 PLATE px, which
+         a saved range only reaches eased past 60/scale — at a half-size preview, 120 px. */
+      var dsCap=function(v,o,n){ if(!FM.isAnimated(v))return n; for(var k=0;k<v.kf.length;k++){ if(!(+v.kf[k].v<=o))return n; } return o; };
+      var dsDist = fparam(p, 'distance', 18, t); dsDist=Math.max(0,Math.min(dsCap(p.distance,60,300),dsDist)); var dsAng = fparam(p, 'angle', 135, t); var dsSoft = fparam(p, 'softness', 6, t); dsSoft=Math.max(0,Math.min(dsCap(p.softness,20,80),Math.round(dsSoft))); var dsCol=hexToRGB(p.color); var dsCr=dsCol?dsCol[0]:0, dsCg=dsCol?dsCol[1]:0, dsCb=dsCol?dsCol[2]:0; var dsN=W*H; var dsRad=dsAng*Math.PI/180; var dsOx=Math.round(Math.cos(dsRad)*dsDist); var dsOy=Math.round(Math.sin(dsRad)*dsDist); var s=fxSrc(d); var dsShift=new Float32Array(dsN); /* OPACITY (queue 904): 100% is the old full-strength shadow, byte-identical. */ var dsOp=(p.opacity==null?100:FM.evalProp(p.opacity,t))/100; if(dsOp<0)dsOp=0; if(dsOp>1)dsOp=1;
       /* #482 6.3. SPREAD: how much of the Softness is solid — the alpha is grown by that much (a round, exact distance field) and
          blurred by the rest, so 100% is a hard shadow grown by the Softness. SMOOTHNESS: the blur runs 1-3 times, a triangle and
          then a near-gaussian penumbra instead of one straight ramp. SHADOW ONLY: the layer is cleared and its shadow drawn alone.
@@ -7322,7 +7387,10 @@ window.FM = window.FM || {};
       var dsOnly=(p.shadowonly==null?0:(Math.round(FM.evalProp(p.shadowonly,t))|0))===1;
       var dsSpr=p.spread==null?0:FM.evalProp(p.spread,t); if(!(dsSpr>0))dsSpr=0; if(dsSpr>100)dsSpr=100;
       var dsPass=p.smooth==null?1:Math.round(FM.evalProp(p.smooth,t)); if(!(dsPass>=1))dsPass=1; if(dsPass>3)dsPass=3;
-      var dsDil=(dsSoft>0&&dsSpr>0)?Math.round(dsSoft*dsSpr/100):0;
+      /* Below 100% at least one pixel of the Softness stays a blur (6.3 review): a rounded 96% of 12 was all 12, no blur ran,
+         and Smoothness 1, 2 and 3 drew the same bytes while the panel offered them. Now only 100% is the hard shadow, and the
+         panel greys Smoothness there (its alsoGate). */
+      var dsDil=(dsSoft>0&&dsSpr>0)?(dsSpr>=100?dsSoft:Math.min(dsSoft-1,Math.round(dsSoft*dsSpr/100))):0;
       var dsClear=function(){ var cx0=dsBB?Math.max(0,dsBB.x):0, cx1=dsBB?Math.min(W-1,dsBB.x+dsBB.w-1):W-1, cy0=dsBB?Math.max(0,dsBB.y):0, cy1=dsBB?Math.min(H-1,dsBB.y+dsBB.h-1):H-1, cx, cy, ci;
         for(cy=cy0;cy<=cy1;cy++){ for(cx=cx0;cx<=cx1;cx++){ ci=(cy*W+cx)*4; d[ci]=0; d[ci+1]=0; d[ci+2]=0; d[ci+3]=0; } } };   // the layer's own pixels: its box holds every one (fxBounds scans at alpha > 0)
       if(dsOp<=0){ if(dsOnly)dsClear(); return; } var dsx,dsy,dssx,dssy;
@@ -7335,23 +7403,33 @@ window.FM = window.FM || {};
        * axis a running sum walks, so no accumulator's priming changes. */
       var dsSX0=dsBB?Math.max(0,dsBB.x+dsOx):0,             dsSX1=dsBB?Math.min(W-1,dsBB.x+dsBB.w-1+dsOx):W-1;
       var dsSY0=dsBB?Math.max(0,dsBB.y+dsOy):0,             dsSY1=dsBB?Math.min(H-1,dsBB.y+dsBB.h-1+dsOy):H-1;
-      for(dsy=dsSY0;dsy<=dsSY1;dsy++){ for(dsx=dsSX0;dsx<=dsSX1;dsx++){ dssx=dsx-dsOx; dssy=dsy-dsOy; if(dssx<0||dssx>=W||dssy<0||dssy>=H){ dsShift[dsy*W+dsx]=0; } else { dsShift[dsy*W+dsx]=s[(dssy*W+dssx)*4+3]; } } }
-      /* SPREAD (#482 6.3): grow the LAYER's alpha by dsDil before it is shifted — on a buffer that runs past the plate, so a shadow
-         whose layer is cut by the frame edge still grows back in from the part that is off it. Seeds are the pixels at least half
-         as opaque as the layer's most opaque one (so a half see-through card spreads at its own strength, not as a solid), the
-         growth is an exact round distance with an anti-aliased rim, and the soft rim of the layer keeps its own alpha under it. */
+      /* SHADOW ONLY PAST THE FRAME EDGE (#482 6.3 review). A layer the frame cuts carries on past it, but its off-frame part was
+         never drawn, so its shadow stopped Distance px short of the edge — with Shadow only on, the background showed through
+         where the layer used to cover the hole (a title sliding in from off-screen). On a side the layer TOUCHES (alpha on the
+         plate's edge row or column — the same whether or not a box is passed, and a crop never cuts a layer), a source off the
+         plate reads the edge pixel: the layer continues as it leaves. Shadow only alone, so every other shadow is as before. */
+      var dsTL=false, dsTR=false, dsTT=false, dsTB=false;
+      if(dsOnly){ for(dsy=0;dsy<H;dsy++){ if(s[dsy*W*4+3]>0)dsTL=true; if(s[(dsy*W+W-1)*4+3]>0)dsTR=true; } for(dsx=0;dsx<W;dsx++){ if(s[dsx*4+3]>0)dsTT=true; if(s[((H-1)*W+dsx)*4+3]>0)dsTB=true; }
+        if(dsTL)dsSX0=0; if(dsTR)dsSX1=W-1; if(dsTT)dsSY0=0; if(dsTB)dsSY1=H-1; }
+      var dsEdge=dsTL||dsTR||dsTT||dsTB;
+      /* SPREAD (#482 6.3): the layer's alpha grown by dsDil before it is shifted, every pixel at its OWN strength (greyDilateDisc —
+         a grey-level dilation over a round disc with an anti-aliased rim), on a buffer that runs dsDil + 1 px past the layer's box
+         and past the plate. The grown buffer replaces the alpha the shift reads. */
+      var dsG=null, dsDX0=0, dsDY0=0, dsDW=0, dsDH=0, dsU, dsV;
       if(dsDil>0){
-        var dsBX0=dsBB?dsBB.x:0, dsBX1=dsBB?dsBB.x+dsBB.w-1:W-1, dsBY0=dsBB?dsBB.y:0, dsBY1=dsBB?dsBB.y+dsBB.h-1:H-1, dsM=0, dsj;
-        for(dsy=Math.max(0,dsBY0);dsy<=Math.min(H-1,dsBY1);dsy++){ for(dsx=Math.max(0,dsBX0);dsx<=Math.min(W-1,dsBX1);dsx++){ dsj=s[(dsy*W+dsx)*4+3]; if(dsj>dsM)dsM=dsj; } }
-        if(dsM>0){
-          var dsE=dsDil+1, dsDX0=dsBX0-dsE, dsDY0=dsBY0-dsE, dsDW=dsBX1-dsBX0+1+2*dsE, dsDH=dsBY1-dsBY0+1+2*dsE, dsSeed=new Uint8Array(dsDW*dsDH), dsHalf=dsM/2, dsU, dsV, dsQx, dsQy, dsCov, dsGr, dsA0;
-          for(dsV=0;dsV<dsDH;dsV++){ dsQy=dsDY0+dsV; if(dsQy<0||dsQy>=H)continue; for(dsU=0;dsU<dsDW;dsU++){ dsQx=dsDX0+dsU; if(dsQx<0||dsQx>=W)continue; if(s[(dsQy*W+dsQx)*4+3]>=dsHalf)dsSeed[dsV*dsDW+dsU]=1; } }
-          var dsDF=distanceField(dsSeed,dsDW,dsDH,true);
-          dsSX0=Math.max(0,dsDX0+dsOx); dsSX1=Math.min(W-1,dsDX0+dsDW-1+dsOx); dsSY0=Math.max(0,dsDY0+dsOy); dsSY1=Math.min(H-1,dsDY0+dsDH-1+dsOy);
-          for(dsy=dsSY0;dsy<=dsSY1;dsy++){ dsV=dsy-dsOy-dsDY0; dssy=dsy-dsOy; for(dsx=dsSX0;dsx<=dsSX1;dsx++){ dsU=dsx-dsOx-dsDX0; dssx=dsx-dsOx;
-            dsCov=dsE-dsDF[dsV*dsDW+dsU]; dsGr=dsCov>0?dsM*(dsCov>1?1:dsCov):0; dsA0=(dssx<0||dssx>=W||dssy<0||dssy>=H)?0:s[(dssy*W+dssx)*4+3]; dsShift[dsy*W+dsx]=dsGr>dsA0?dsGr:dsA0; } }
-        }
+        var dsBX0=dsBB?dsBB.x:0, dsBX1=dsBB?dsBB.x+dsBB.w-1:W-1, dsBY0=dsBB?dsBB.y:0, dsBY1=dsBB?dsBB.y+dsBB.h-1:H-1, dsE=dsDil+1, dsQx, dsQy;
+        dsDX0=dsBX0-dsE; dsDY0=dsBY0-dsE; dsDW=dsBX1-dsBX0+1+2*dsE; dsDH=dsBY1-dsBY0+1+2*dsE;
+        var dsA=new Uint8Array(dsDW*dsDH);
+        for(dsV=0;dsV<dsDH;dsV++){ dsQy=dsDY0+dsV; if(dsQy<0||dsQy>=H)continue; for(dsU=0;dsU<dsDW;dsU++){ dsQx=dsDX0+dsU; if(dsQx<0||dsQx>=W)continue; dsA[dsV*dsDW+dsU]=s[(dsQy*W+dsQx)*4+3]; } }
+        dsG=greyDilateDisc(dsA,dsDW,dsDH,dsDil);
+        /* the grown buffer, shifted, is where the shadow can now be — and on a side the layer touches (Shadow only), to the edge */
+        dsSX0=Math.max(0,dsDX0+dsOx); dsSX1=Math.min(W-1,dsDX0+dsDW-1+dsOx); dsSY0=Math.max(0,dsDY0+dsOy); dsSY1=Math.min(H-1,dsDY0+dsDH-1+dsOy);
+        if(dsTL)dsSX0=0; if(dsTR)dsSX1=W-1; if(dsTT)dsSY0=0; if(dsTB)dsSY1=H-1;
       }
+      for(dsy=dsSY0;dsy<=dsSY1;dsy++){ for(dsx=dsSX0;dsx<=dsSX1;dsx++){ dssx=dsx-dsOx; dssy=dsy-dsOy;
+        if(dsEdge){ if(dssx<0){ if(dsTL)dssx=0; } else if(dssx>=W){ if(dsTR)dssx=W-1; } if(dssy<0){ if(dsTT)dssy=0; } else if(dssy>=H){ if(dsTB)dssy=H-1; } }   // a touched side only: past any other the grown buffer (or nothing) answers as before
+        if(dsG){ dsU=dssx-dsDX0; dsV=dssy-dsDY0; dsShift[dsy*W+dsx]=(dsU<0||dsU>=dsDW||dsV<0||dsV>=dsDH)?0:dsG[dsV*dsDW+dsU]; }
+        else if(dssx<0||dssx>=W||dssy<0||dssy>=H){ dsShift[dsy*W+dsx]=0; } else { dsShift[dsy*W+dsx]=s[(dssy*W+dssx)*4+3]; } } }
       /* The bounds grow with the passes (#482 6.3): each blur pass carries the shadow (dsR + 1) further out, so pass k may only
          skip the rows outside the box grown by k-1 passes, and its columns by k. With one pass and no spread these are exactly
          the old bounds — box shifted, then grown by the softness and a pixel — and the loops below are the old loops. */

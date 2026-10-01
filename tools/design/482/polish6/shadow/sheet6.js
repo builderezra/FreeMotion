@@ -42,6 +42,27 @@ return (async function () {
         { name: 'Distance 300', sub: 'Softness 0 · Angle 70 · a poster drop', fx: [['dropshadow', { distance: 300, softness: 0, angle: 70, color: '#1d3557' }]] },
         { name: 'Softness 60 · Distance 0', sub: 'Spread 40 · Smoothness 2 · a big dark halo', fx: [['dropshadow', { distance: 0, softness: 60, spread: 40, smooth: 2 }]] },
       ] },
+    /* #482 6.3 review fixes. A see-through card with a solid word on it: Spread grows each part at its own strength (the
+       first build turned the whole card's shadow solid black the moment anything on it was solid). */
+    'dropshadow-spread-seethrough': {
+      title: 'Drop Shadow — Spread on a see-through card', photo: 'shore', card: true,
+      note: 'A 45% white card with a solid word on it. Spread grows each part at its own strength: the card’s shadow stays as light as the card, the word’s shadow grows solid.',
+      tiles: [
+        { name: 'Today (default)', sub: 'Distance 18 · Softness 6', fx: [['dropshadow', {}]] },
+        { name: 'Spread 100%', sub: 'Softness 14 · the card light, the word solid', fx: [['dropshadow', { spread: 100, softness: 14 }]], rec: true },
+        { name: 'Spread 60%', sub: 'Softness 24 · Distance 30', fx: [['dropshadow', { spread: 60, softness: 24, distance: 30 }]] },
+        { name: 'Spread 100% · Distance 0', sub: 'Softness 10 · pink · a backing that follows the card', fx: [['dropshadow', { spread: 100, softness: 10, distance: 0, color: '#ff2d75' }]] },
+      ] },
+    /* …and a title the frame cuts: with Shadow only its shadow now runs right to the frame edge (it stopped Distance px short). */
+    'dropshadow-shadowonly-edge': {
+      title: 'Drop Shadow — Shadow only at the frame edge', photo: 'shore', word: 'SUMMER', size: 150, wordX: 0.66,
+      note: 'A title sliding in from the right, cut by the frame. With Shadow only its shadow runs right up to the edge, as if the words carried on past it.',
+      tiles: [
+        { name: 'Today (default)', sub: 'the words and their shadow', fx: [['dropshadow', {}]] },
+        { name: 'Shadow only', sub: 'Distance 30 · Angle 180 · the shadow reaches the edge', fx: [['dropshadow', { shadowonly: 1, distance: 30, angle: 180, softness: 4 }]], rec: true },
+        { name: 'Shadow only · Spread 60%', sub: 'Softness 16 · Distance 24', fx: [['dropshadow', { shadowonly: 1, distance: 24, softness: 16, spread: 60 }]] },
+        { name: 'Shadow only · white', sub: 'Distance 14 · Softness 0 · Opacity 80', fx: [['dropshadow', { shadowonly: 1, distance: 14, softness: 0, opacity: 80, color: '#ffffff' }]] },
+      ] },
     'stroke-offset': {
       title: 'Stroke Colour — Offset', photo: 'dusk', word: 'WOW', size: 190, color: '#ff3d7f',
       note: 'Offset leaves a clear gap between the layer and its outline. Stack two strokes for the sticker double outline. Only for Position: Outside.',
@@ -63,9 +84,19 @@ return (async function () {
   bg.drawImage(im, 0, 0, im.naturalWidth, im.naturalHeight, 0, 0, R, R);
   var mid = '_482p6_' + S.photo;
   FM.media.set(mid, { kind: 'image', el: base, width: R, height: R, duration: 0 }); if (FM.media.pin) FM.media.pin(mid);
+  /* a see-through card with a solid word on it (S.card): a real image layer, its own pixels at 45% and 100% */
+  var cid = '_482p6_card';
+  if (S.card) {
+    var cc = document.createElement('canvas'); cc.width = 420; cc.height = 230; var cg = cc.getContext('2d');
+    cg.fillStyle = 'rgba(255,255,255,0.45)'; cg.beginPath(); if (cg.roundRect) cg.roundRect(0, 0, 420, 230, 34); else cg.rect(0, 0, 420, 230); cg.fill();
+    cg.fillStyle = '#ffffff'; cg.font = 'bold 120px Helvetica Neue, Arial, sans-serif'; cg.textAlign = 'center'; cg.textBaseline = 'middle'; cg.fillText('SALE', 210, 122);
+    FM.media.set(cid, { kind: 'image', el: cc, width: 420, height: 230, duration: 0 }); if (FM.media.pin) FM.media.pin(cid);
+  }
   function render(fxs) {
     var l = FM.makeLayer('image', { x: R / 2, y: R / 2, start: 0, duration: 4 }); l.id = mid; l.start = 0; l.duration = 4;
-    var tx = FM.makeLayer('text', { text: S.word, x: R / 2, y: R * 0.46, fontSize: S.size, color: S.color || '#ffffff', fontFamily: 'Helvetica Neue, Arial, sans-serif', start: 0, duration: 4 });
+    var tx;
+    if (S.card) { tx = FM.makeLayer('image', { x: R / 2, y: R * 0.46, start: 0, duration: 4 }); tx.id = cid; tx.transform.scale = 1; }
+    else tx = FM.makeLayer('text', { text: S.word, x: R * (S.wordX || 0.5), y: R * 0.46, fontSize: S.size, color: S.color || '#ffffff', fontFamily: 'Helvetica Neue, Arial, sans-serif', start: 0, duration: 4 });
     tx.bold = true; tx.start = 0; tx.duration = 4;
     tx.effects = fxs.map(function (f) { var e = FM.fxRegistry.makeInstance(f[0]); Object.assign(e.params, f[1] || {}); return e; });
     var c = document.createElement('canvas'); c.width = R; c.height = R;
