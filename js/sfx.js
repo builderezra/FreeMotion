@@ -695,12 +695,20 @@ window.FM = window.FM || {};
      it — and the other copy of a starred sound restarted it too. So every row of the playing sound is lit,
      a row built while it plays comes back lit (rowFor), and a tap on any of them stops it. */
   let _cur = null;   // { def, src } — the preview in flight, if any
+  /* ▶ BECOMES ■ WHILE IT PLAYS (#482 polish 3.1). Since queue 986 a tap on the playing row stops it, but the button
+     kept drawing ▶ — only its spoken label said Stop — so on screen the one control that stops a sound still promised
+     to start one. Now the glyph says what a tap does. The square is 11 px of the triangle's 11 x 14 box, centred (the
+     triangle's 1 px nudge right is optical centring for a triangle, and a square does not want it). */
+  const PLAY_GLYPH = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const STOP_GLYPH = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg>';
   function paintRow(row, on, def) {
     row.classList.toggle('playing', !!on);
     const play = row.querySelector('.sfx-play');
     if (play) {
       const say = (on ? 'Stop ' : 'Hear ') + def.name;
       play.title = say; play.setAttribute('aria-label', say);
+      const g = on ? 'stop' : 'play';
+      if (play.dataset.glyph !== g) { play.dataset.glyph = g; play.innerHTML = on ? STOP_GLYPH : PLAY_GLYPH; }
     }
   }
   function markRow(def, on) {   // every row of this sound in the open sheet
@@ -839,7 +847,7 @@ window.FM = window.FM || {};
       play.type = 'button';
       play.title = 'Hear ' + def.name;
       play.setAttribute('aria-label', 'Hear ' + def.name);
-      play.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      play.innerHTML = PLAY_GLYPH; play.dataset.glyph = 'play';
       const name = el('button', 'sfx-name', def.name);
       name.type = 'button';
       const secs = el('span', 'sfx-dur', def.dur.toFixed(2).replace(/0$/, '') + 's');

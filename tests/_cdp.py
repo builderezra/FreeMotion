@@ -418,6 +418,13 @@ def main():
             return 2
 
         data = json.loads(payload)
+        # queue 996: what each test left in the shared scene (tests.js records it; report only)
+        try:
+            leaks = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                             "return JSON.stringify((w&&w.__fmSceneLeaks)||[]);})()")
+            data["sceneLeaks"] = json.loads(leaks or "[]")
+        except Exception:
+            pass
         try:
             data["slowest"] = cdp.eval("(function(){var f=document.querySelector('iframe');"
                                        "return (f&&f.contentWindow&&f.contentWindow.__fmSlow)||[];})()") or []
@@ -432,7 +439,7 @@ def main():
             for row in data["fails"]:
                 print("   FAIL: " + row.replace("\n", " ")[:300])
         else:
-            print(json.dumps({"ok": green, "summary": data["sum"], "failures": data["fails"], "slowest": data.get("slowest", [])},
+            print(json.dumps({"ok": green, "summary": data["sum"], "failures": data["fails"], "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])},
                              indent=1, ensure_ascii=False))
         return 0 if green else 1
     finally:

@@ -68,6 +68,12 @@ window.FM = window.FM || {};
     return dbToLin(0.6 * (1 - 1 / r) * Math.min(0, thresholdDb));
   }
   FM._hardKneeMakeupCancel = hardKneeMakeupCancel;   // one definition: the boost limiter (audio-fx-live.js) uses it too
+  /* The level of the Limiter's safety clip under a ceiling of `ceilingDb`, as a linear gain (#482 batch 3 review; the
+     reasons are at the Limiter). 1 dB above where its 20:1 line puts a full-scale sound (0.95·C), and never above full
+     scale: exactly 0 dBFS at the default -1 dB ceiling. */
+  function limHoldLin(ceilingDb) { return dbToLin(Math.min(0, (1 - 1 / 20) * Math.min(0, ceilingDb) + 1)); }
+  // A WaveShaper that is the identity inside ±1 and holds ±1 outside it: a hard clip, no oversampling, no delay.
+  const HARD_CLIP = new Float32Array([-1, 1]);
 
   /* ---- curves ---- */
   // A WaveShaper curve sampled over its input domain [-1, 1]. Shared between instances (never mutated).
@@ -223,18 +229,26 @@ window.FM = window.FM || {};
        * build every room it will need, and cross-fade between them with gains — and this is the hook
        * that hands it the window. Null for all thirty-odd other effects. */
       window: o.window || null,
+      /* What a live meter reads (#482 polish 3.7: the Compressor's gain-reduction bar), or null: { node } — the
+         DynamicsCompressorNode — plus, when the effect blends its result with the untouched sound, the { dry, wet }
+         gain params of that blend, so the meter can show what is HEARD (audioFxLive.reductionOf). Read only by the
+         preview (buildAudioFxChain's meterOf); an export never looks at it. */
+      meter: o.meter || null,
       // Non-null ONLY when set(key, v) is exactly param(key).setValueAtTime(v) — a caller that schedules
       // onto a returned param must not be able to desync a pair (mix) or skip a conversion (gain's dB).
       param: function (key) { return (aps[key] && !xf[key]) ? aps[key] : null; },
-      set: function (key, v, when) {
+      /* `sceneT` is the scene time the value was read at (#482 3.5). Every caller in this file passes it; only a custom
+         setter that folds TWO keys into one set of params needs it — Pitch Shift's Semitones and Fine tune, where the
+         key that drives has to read the other one at the same moment. Every other setter ignores it. */
+      set: function (key, v, when, sceneT) {
         const ap = aps[key];
         if (ap) { ap.setValueAtTime(xf[key] ? xf[key](v) : v, when); return; }
-        if (custom[key]) custom[key](v, when, false);
+        if (custom[key]) custom[key](v, when, false, sceneT);
       },
-      ramp: function (key, v, when) {
+      ramp: function (key, v, when, sceneT) {
         const ap = aps[key];
         if (ap) { ap.linearRampToValueAtTime(xf[key] ? xf[key](v) : v, when); return; }
-        if (custom[key]) custom[key](v, when, true);
+        if (custom[key]) custom[key](v, when, true, sceneT);
       },
       // Start every LFO at the phase that scene time implies: phase = frac(rate × scene), so scene 0 is
       // phase 0 in every context and the export renders the sweep the preview played. A KEYFRAMED rate
@@ -259,16 +273,73 @@ window.FM = window.FM || {};
 
   // One UI key → several AudioParams (ping-pong's two delay lines, chorus' three LFOs, a wet/dry pair).
   // Every target is a real AudioParam, so the key still schedules smoothly; it just can't be handed out
-  // through param(). Each entry is [param, factor] where factor is a number, a fn(v), or null (= v).
+  // through param(). Each entry is [param, factor] where factor is a number, a fn(v), or null (= v) —
+  // or a whole setter fn(v, when, ramp) that schedules its own params (a bypass pair's switch, below).
   function multi(list) {
     return function (v, when, ramp) {
       for (let i = 0; i < list.length; i++) {
+        if (typeof list[i] === 'function') { list[i](v, when, ramp); continue; }
         const ap = list[i][0], f = list[i][1];
         const x = typeof f === 'function' ? f(v) : v * (f == null ? 1 : f);
         if (ramp) ap.linearRampToValueAtTime(x, when); else ap.setValueAtTime(x, when);
       }
     };
   }
+
+  /* ═══ THE BYPASS PAIR (#482 polish 3 — the idle backlog's §0.3 rule for every new audio control) ═══════════
+   * Audio has no `legacy`: storage.js's sanitiser fills a key a saved project lacks with its `def`, so a new
+   * control's default has to BE today's sound, sample for sample — not close, identical. And a node may not be
+   * put in only once a value leaves its default, because that is a structural change and the live preview
+   * would have to rebuild the chain in the middle of a drag.
+   * So the node is ALWAYS built, and it is wired  from → [node … → gOn] + [gOff] → out.  At the default
+   * gOn is 0 and gOff is 1, and x·1 + y·0 = x is exact in IEEE floats in every engine — so the default renders
+   * the very samples it did before the control existed, on any browser, whatever the node does to its copy.
+   * Leaving the default flips the pair (a live move fades it over 20 ms, see pairTargets; a keyframe ramps it, a
+   * 33 ms crossfade), and the value itself rides the node's own AudioParam, so a slider drag never rebuilds anything.
+   * `nodeIn`/`nodeOut` may be one node (a filter) or the two ends of a little graph (Width's mid/side). */
+  function bypassPair(s, from, nodeIn, nodeOut, on) {
+    const gOn = s.gain(on ? 1 : 0), gOff = s.gain(on ? 0 : 1), sum = s.gain(1);
+    from.connect(nodeIn); nodeOut.connect(gOn); gOn.connect(sum);
+    from.connect(gOff); gOff.connect(sum);
+    return { out: sum, gOn: gOn, gOff: gOff };
+  }
+  /* The pair's switch as a `multi` target, flipped by one test of the control's value.
+   * A LIVE FLIP FADES (482 batch 3 review). The preview drives every key through set() once a frame, and a
+   * set that stepped the pair switched the output in ONE SAMPLE from x to the filtered copy — a 25 Hz highpass
+   * shifts the bass's phase, so Low cut 20 → 25 on the Echo jumped ~0.03–0.10 in a sample (measured), 250–500×
+   * an ordinary notch. That is a click, and the export never made it: a keyframe ramps the pair over its 33 ms
+   * step. So a set that CHANGES the state fades the pair over PAIR_FADE from wherever it is, and the next
+   * frames' sets leave that fade alone until it lands (a fresh setValueAtTime inside a running ramp would cut it
+   * short — the ramp would restart from the new event and step there).
+   * The FIRST set a chain gets is its starting state, not a move — the export's set at ctx time 0 and the
+   * preview's applyAt straight after a build — so it still steps, before any sound has gone through the pair,
+   * and every default and every export renders the very samples it did. ramp (the export's keyframes) is
+   * untouched. */
+  const PAIR_FADE = 0.02;
+  function pairTargets(pair, isOn) {
+    const on = pair.gOn.gain, off = pair.gOff.gain;
+    let target = null, from = 0, t0 = 0, t1 = 0;   // gOn's schedule: from at t0 → target at t1 (gOff = 1 − it)
+    return [function (v, when, ramp) {
+      const x = isOn(v) ? 1 : 0;
+      if (ramp || target === null || (x === target && when >= t1)) {
+        if (ramp) { on.linearRampToValueAtTime(x, when); off.linearRampToValueAtTime(1 - x, when); }
+        else { on.setValueAtTime(x, when); off.setValueAtTime(1 - x, when); }
+        target = from = x; t0 = t1 = when;
+        return;
+      }
+      if (x === target) return;                     // still fading towards x: let it land
+      const cur = when >= t1 ? target : from + (target - from) * (when - t0) / (t1 - t0);
+      on.cancelScheduledValues(when); off.cancelScheduledValues(when);
+      on.setValueAtTime(cur, when); off.setValueAtTime(1 - cur, when);
+      on.linearRampToValueAtTime(x, when + PAIR_FADE); off.linearRampToValueAtTime(1 - x, when + PAIR_FADE);
+      from = cur; target = x; t0 = when; t1 = when + PAIR_FADE;
+    }];
+  }
+  /* A lowpass/highpass with no peak: Q −3.01 dB is Butterworth (the spec reads a lowpass/highpass Q as dB of
+     resonance), so the response never rises above 1 anywhere. That matters inside an echo's feedback loop: a
+     filter with a +1.25 dB bump (the node's own default Q of 1) at Feedback 0.9 is a loop gain of 1.04 at the
+     bump, and the repeats would grow into a howl instead of dying away. */
+  const BUTTERWORTH_DB = 20 * Math.log10(Math.SQRT1_2);
 
   /* A FEEDBACK LOOP, UNROLLED (queue 986, hunts C16/C17). A loop's k-th time round is weighted fb^(k−1); these
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
@@ -358,6 +429,12 @@ window.FM = window.FM || {};
     return { key: key, label: label, min: min, max: max, step: step, def: def, unit: unit || '', keyframable: !!kf };
   }
   const MIX = def => P('mix', 'Mix', 0, 1, 0.01, def, '', true);
+  /* A CONTROL THAT DOES NOTHING WHILE ANOTHER IS AT 0 SAYS SO (#482 3.6 review). A shelf's or a band's corner moves a
+     boost or a cut, and at 0 dB there is none: a Bass & Treble whose Bass at is dragged with Bass at 0 plays the clip
+     bit for bit (measured on noise through the export chain) — and 0 dB is the default of every new and every saved
+     one. The panel greys the row and says "Not used when Bass is 0", the rule the visual effects already follow
+     (inspector.js markOverridden). `deadAt` is judged over every keyframe, like liveAbove: one keyframe off 0 wakes it. */
+  const DEAD0 = (p, by) => Object.assign(p, { overriddenBy: by, deadAt: 0 });
 
   const DEFS = [];
 
@@ -375,15 +452,31 @@ window.FM = window.FM || {};
     };
   }
 
+  /* ═══ WHERE THE BASS AND THE TREBLE START (#482 polish 3.6) ═════════════════════════════════════════════════
+   * The two shelves were fixed at 200 Hz and 3000 Hz (Bass & Treble) and 250 / 4000 Hz with a Mid of width Q 1
+   * (3-Band EQ), so "more bass" always meant the same slab from 200 Hz down: a sub boost under a voice, or a
+   * warmer 400 Hz, could not be had. "Bass at" / "Treble at" / "Low at" / "High at" are the shelves' own
+   * corner frequencies, and "Mid width" is how wide the Mid band reaches — each one a real biquad AudioParam, so
+   * it keyframes and glides like the gains beside it, and the preview (applyAt) and the export (schedule) drive
+   * the very same param.
+   * Their defaults are the numbers the build always used, so a project saved before they existed (the sanitiser
+   * fills a missing key with its def) renders sample for sample what it did — MEASURED against v17.19 on
+   * noise, a sweep and an impulse, export and preview paths (tools/design/482/polish3/tone/samecheck.py).
+   * MID WIDTH IS 1/Q, NOT Q. The biquad's Q gets NARROWER as it grows, so a slider labelled "width" driving it
+   * straight would narrow the band as you drag it wider. Width 1 is Q 1 exactly (1/1), so the default is the
+   * old band to the bit; 0.1 is a narrow notch-like band (Q 10) and 10 is a broad tilt (Q 0.1). */
   DEFS.push({
     type: 'bassTreble', label: 'Bass & Treble', category: 'eq',
-    params: [P('bass', 'Bass', -24, 24, 0.5, 0, 'dB', true), P('treble', 'Treble', -24, 24, 0.5, 0, 'dB', true)],
+    params: [
+      P('bass', 'Bass', -24, 24, 0.5, 0, 'dB', true), P('treble', 'Treble', -24, 24, 0.5, 0, 'dB', true),
+      DEAD0(P('bassFreq', 'Bass at', 40, 500, 1, 200, 'Hz', true), 'bass'), DEAD0(P('trebleFreq', 'Treble at', 1000, 16000, 10, 3000, 'Hz', true), 'treble'),
+    ],
     build: function (ctx) {
       const s = shop(ctx);
       const lo = s.biquad('lowshelf', 200, null, 0);
       const hi = s.biquad('highshelf', 3000, null, 0);
       lo.connect(hi);
-      return unit({ input: lo, output: hi, nodes: s.nodes, oscs: s.oscs, params: { bass: lo.gain, treble: hi.gain } });
+      return unit({ input: lo, output: hi, nodes: s.nodes, oscs: s.oscs, params: { bass: lo.gain, treble: hi.gain, bassFreq: lo.frequency, trebleFreq: hi.frequency } });
     },
   }, {
     type: 'eq3', label: '3-Band EQ', category: 'eq',
@@ -391,7 +484,10 @@ window.FM = window.FM || {};
       P('low', 'Low', -24, 24, 0.5, 0, 'dB', true),
       P('mid', 'Mid', -24, 24, 0.5, 0, 'dB', true),
       P('high', 'High', -24, 24, 0.5, 0, 'dB', true),
-      P('midFreq', 'Mid Freq', 200, 6000, 10, 1000, 'Hz', true),
+      DEAD0(P('midFreq', 'Mid Freq', 200, 6000, 10, 1000, 'Hz', true), 'mid'),
+      DEAD0(P('midWidth', 'Mid width', 0.1, 10, 0.1, 1, '×', true), 'mid'),
+      DEAD0(P('lowFreq', 'Low at', 40, 1000, 1, 250, 'Hz', true), 'low'),
+      DEAD0(P('highFreq', 'High at', 1000, 16000, 10, 4000, 'Hz', true), 'high'),
     ],
     build: function (ctx) {
       const s = shop(ctx);
@@ -399,7 +495,11 @@ window.FM = window.FM || {};
       const mid = s.biquad('peaking', 1000, 1, 0);
       const hi = s.biquad('highshelf', 4000, null, 0);
       lo.connect(mid).connect(hi);
-      return unit({ input: lo, output: hi, nodes: s.nodes, oscs: s.oscs, params: { low: lo.gain, mid: mid.gain, high: hi.gain, midFreq: mid.frequency } });
+      return unit({
+        input: lo, output: hi, nodes: s.nodes, oscs: s.oscs,
+        params: { low: lo.gain, mid: mid.gain, high: hi.gain, midFreq: mid.frequency, midWidth: mid.Q, lowFreq: lo.frequency, highFreq: hi.frequency },
+        xf: { midWidth: function (w) { return 1 / w; } },
+      });
     },
   },
     filterDef('lowpass', 'Low-Pass', 'lowpass', 40, 20000, 8000, 0.1, 20, 1),
@@ -425,7 +525,20 @@ window.FM = window.FM || {};
   /* ---- Space & Stereo ---- */
   DEFS.push({
     type: 'reverb', label: 'Reverb', category: 'space',
-    params: [P('size', 'Size', 0, 1, 0.01, 0.5, '', true), P('decay', 'Decay', 0.1, 8, 0.1, 2, 's', true), MIX(0.3)],
+    params: [
+      P('size', 'Size', 0, 1, 0.01, 0.5, '', true), P('decay', 'Decay', 0.1, 8, 0.1, 2, 's', true),
+      /* #482 polish 3.4, his #966 steer. The room could only be bigger or longer. Pre-delay holds the reverb back
+         after the sound (a big hall answers late, and a voice stays clear in front of its own room); Tone takes
+         the top off the reverb alone, Low cut its boom, and Width folds it from full stereo towards the middle.
+         All four work on the WET path only — the dry sound is never touched — and each sits in a bypass pair at
+         a default that is today's reverb, sample for sample. The animated-room bank (below) is fed from the
+         same pre-delay and drains into the same Tone / Low cut / Width, so a moving room is shaped the same. */
+      P('predelay', 'Pre-delay', 0, 0.25, 0.001, 0, 's', true),
+      P('highcut', 'Tone', 1000, 20000, 10, 20000, 'Hz', true),
+      P('lowcut', 'Low cut', 20, 1000, 1, 20, 'Hz', true),
+      P('width', 'Width', 0, 1, 0.01, 1, '', true),
+      MIX(0.3),
+    ],
     /* THE WARNING EZRA ASKED FOR LIVES ON THESE TWO, and only on these two. His answer on the six audio
        sliders that could not be keyframed: *"if audio key frames break the project and lag too much just
        put a warning next to it before use"*. The other four turned out not to need one — Distortion, Bit
@@ -443,7 +556,35 @@ window.FM = window.FM || {};
       const convG = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.3);
       input.connect(wd.dry).connect(out);
-      input.connect(conv); conv.connect(convG); convG.connect(wd.wet); wd.wet.connect(out);
+      /* THE WET CHAIN (#482 polish 3.4): input → Pre-delay → every room → wetBus → Tone → Low cut → Width → wet.
+         Each stage is a bypass pair (bypassPair above), so at its default it passes the room through ×1 exactly. */
+      const pd0 = initNum(inst, 'predelay', 0, 0, 0.25), hc0 = initNum(inst, 'highcut', 20000, 1000, 20000);
+      const lc0 = initNum(inst, 'lowcut', 20, 20, 1000), w0 = initNum(inst, 'width', 1, 0, 1);
+      const pd = s.delay(0.3); pd.delayTime.value = pd0;
+      const pre = bypassPair(s, input, pd, pd, pd0 > 0);
+      const wetBus = s.gain(1);             // where the static room and every banked room meet
+      const lp = s.biquad('lowpass', hc0, BUTTERWORTH_DB);
+      const hc = bypassPair(s, wetBus, lp, lp, hc0 < 20000);
+      const hp = s.biquad('highpass', lc0, BUTTERWORTH_DB);
+      const lc = bypassPair(s, hc.out, hp, hp, lc0 > 20);
+      /* Width is mid/side on the wet: L = M + w·S, R = M − w·S. The M/S sum is NOT exact at w = 1 in floats
+         ((L+R)/2 + (L−R)/2 can land an ulp off L), which is exactly why it too is switched in by a pair. The
+         splitter is discrete, so the wet is up-mixed to two channels first, as the Stereo Width effect does. */
+      const msIn = s.gain(1);
+      msIn.channelCount = 2; msIn.channelCountMode = 'explicit'; msIn.channelInterpretation = 'speakers';
+      const split = s.splitter(2), merge = s.merger(2);
+      const mid = s.gain(0.5);
+      split.connect(mid, 0); split.connect(mid, 1);
+      const sP = s.gain(0.5), sN = s.gain(-0.5), side = s.gain(1);
+      split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
+      const wG = s.gain(w0), wN = s.gain(-1);
+      side.connect(wG); wG.connect(wN);
+      mid.connect(merge, 0, 0); wG.connect(merge, 0, 0);
+      mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);
+      msIn.connect(split);
+      const wp = bypassPair(s, lc.out, msIn, merge, w0 < 1);
+      pre.out.connect(conv); conv.connect(convG); convG.connect(wetBus);
+      wp.out.connect(wd.wet); wd.wet.connect(out);
       let size = initNum(inst, 'size', 0.5, 0, 1), decay = initNum(inst, 'decay', 2, 0.1, 8);
       conv.buffer = impulse(ctx, size, decay);
 
@@ -529,7 +670,9 @@ window.FM = window.FM || {};
           const c = s.convolver();
           c.buffer = impulse(ctx, r.sz, r.dc);
           const g = s.gain(0);
-          input.connect(c); c.connect(g); g.connect(wd.wet);
+          // From the pre-delay and into the wet bus, like the static room (#482 polish 3.4): a moving room is
+          // held back, filtered and narrowed exactly as a still one is.
+          pre.out.connect(c); c.connect(g); g.connect(wetBus);
           const curve = new Float32Array(N);
           for (let n = 0; n < N; n++) {
             const x = n / (N - 1);
@@ -572,24 +715,67 @@ window.FM = window.FM || {};
             if (isAnim()) v = q(v, qDecay());
             if (v !== decay) { decay = v; conv.buffer = impulse(ctx, size, decay); }
           },
+          predelay: multi([[pd.delayTime, null]].concat(pairTargets(pre, v => v > 0))),
+          highcut: multi([[lp.frequency, null]].concat(pairTargets(hc, v => v < 20000))),
+          lowcut: multi([[hp.frequency, null]].concat(pairTargets(lc, v => v > 20))),
+          width: multi([[wG.gain, null]].concat(pairTargets(wp, v => v < 1))),
           mix: wd.set,
         },
       });
     },
   }, {
     type: 'delay', label: 'Echo / Delay', category: 'space',
-    params: [P('time', 'Time', 0.01, 2, 0.01, 0.35, 's', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.35, '', true), MIX(0.35)],
+    params: [
+      P('time', 'Time', 0.01, 2, 0.01, 0.35, 's', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.35, '', true),
+      /* #482 polish 3.3, his #966 steer (*"this is the complex version we want as much choice as possible"*). Every
+         repeat used to be a perfect copy of the one before, so a long Feedback piled up into a bright metallic smear.
+         Tone and Low cut sit INSIDE the loop, so each trip round loses a little more top (or bottom) — the way a
+         tape or bucket-brigade echo darkens as it fades — and they sit before the wet tap as well, so the first
+         repeat already changes and a drag is heard even at Feedback 0. Tape wobble swings the delay time by up to
+         ±2 ms at 0.7 Hz: the pitch of each repeat drifts, like a worn tape echo. Its LFO is pinned to SCENE time like
+         every other LFO here, so the export wobbles where the preview did. All three default to off, in a bypass
+         pair, so a saved echo renders exactly as it did. */
+      P('tone', 'Tone', 500, 20000, 10, 20000, 'Hz', true),
+      P('lowcut', 'Low cut', 20, 1000, 1, 20, 'Hz', true),
+      P('wobble', 'Tape wobble', 0, 1, 0.01, 0, '', true),
+      MIX(0.35),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const d = s.delay(2.2); d.delayTime.value = 0.35;
+      /* TAPE WOBBLE RIDES A TWIN OF THE LINE, never the line itself. Driving the one delay's time from an LFO
+         at depth 0 does render the same samples in the suite's Chrome (measured), but only because that engine's
+         swept and steady delay paths happen to round alike — nothing promises the iPhone's does. A second line
+         fed the same signal, switched in by the bypass pair, keeps the default exact by arithmetic instead. */
+      const dw = s.delay(2.2); dw.delayTime.value = 0.35;
       const fb = s.gain(0.35);
       const wd = wetDry(s, inst, 'mix', 0.35);
       input.connect(wd.dry).connect(out);
-      input.connect(d);
-      d.connect(fb).connect(d);
-      d.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { time: d.delayTime, feedback: fb.gain }, custom: { mix: wd.set } });
+      input.connect(d); input.connect(dw);
+      const wob0 = initNum(inst, 'wobble', 0, 0, 1), tone0 = initNum(inst, 'tone', 20000, 500, 20000), low0 = initNum(inst, 'lowcut', 20, 20, 1000);
+      const wOn = s.gain(wob0 > 0 ? 1 : 0), wOff = s.gain(wob0 > 0 ? 0 : 1), line = s.gain(1);
+      d.connect(wOff); wOff.connect(line); dw.connect(wOn); wOn.connect(line);
+      const lfo = s.lfo(0.7);
+      const wAmp = s.gain(wob0 * 0.002);   // ±2 ms at Tape wobble 1
+      lfo.connect(wAmp); wAmp.connect(dw.delayTime);
+      const lp = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
+      const tone = bypassPair(s, line, lp, lp, tone0 < 20000);
+      const hp = s.biquad('highpass', low0, BUTTERWORTH_DB);
+      const low = bypassPair(s, tone.out, hp, hp, low0 > 20);
+      const tap = low.out;                  // every repeat, darkened and thinned: it goes round again and out
+      tap.connect(fb); fb.connect(d); fb.connect(dw);
+      tap.connect(wd.wet); wd.wet.connect(out);
+      return unit({
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { feedback: fb.gain },
+        custom: {
+          time: multi([[d.delayTime, null], [dw.delayTime, null]]),
+          tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
+          lowcut: multi([[hp.frequency, null]].concat(pairTargets(low, v => v > 20))),
+          wobble: multi([[wAmp.gain, 0.002]].concat(pairTargets({ gOn: wOn, gOff: wOff }, v => v > 0))),
+          mix: wd.set,
+        },
+      });
     },
   }, {
     type: 'pingpong', label: 'Ping-Pong Delay', category: 'space',
@@ -681,17 +867,53 @@ window.FM = window.FM || {};
          IS the node's default, so every saved Compressor (which the sanitiser fills with def) sounds
          exactly as it always has. */
       P('knee', 'Knee', 0, 40, 0.5, 30, 'dB', true),
+      /* #482 polish 3.7 (his #966: "as much choice as possible"). Output is a plain gain at the very end, after
+         the blend; Mix blends the untouched sound back in under the squashed one (parallel compression: the
+         loud parts stay tamed, the quiet detail keeps its life). Both defs are exactly today's graph — Output
+         0 dB is a gain of 1 and Mix 1 puts the untouched path at 0, and x·1 + y·0 = x in floating point — so a
+         saved Compressor (the sanitiser fills a missing key with def) renders sample for sample as before. */
+      P('output', 'Output', -24, 24, 0.5, 0, 'dB', true),
+      MIX(1),
     ],
-    build: function (ctx) {
+    /* A live meter: the Compressor row in the Audio effects panel draws how far this node is turning the sound
+       down while the clip plays or is heard (inspector.js reductionMeter, read through audioFxLive.reductionOf). */
+    meter: 'reduction',
+    build: function (ctx, inst) {
       const s = shop(ctx);
+      const input = s.gain(1), out = s.gain(1);
       const c = s.comp();
-      return unit({ input: c, output: c, nodes: s.nodes, oscs: s.oscs, params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee } });
+      /* THE UNTOUCHED PATH WAITS FOR THE SQUASHED ONE. A DynamicsCompressorNode looks ahead: its output is its
+         input floor(0.006 × rate) samples late — but never more than 1023, the engine's pre-delay buffer (1024
+         frames, minus one). MEASURED in the suite's Chrome by cross-correlation: 132 frames at 22.05 kHz, 264 at
+         44.1, 288 at 48, 529 at 88.2, 576 at 96, and 1023 at BOTH 176.4 and 192 kHz, where 6 ms would be 1058
+         and 1152 (the spec engine's fixed 6 ms pre-delay, the same code in WebKit). Blended against a copy
+         that is late by a different amount, every Mix between 0 and 1 is a comb filter — a hollow, phasey
+         sound with a notch every 1 / (the difference): every 167 Hz against an un-delayed copy, every 1.5 kHz
+         at 192 kHz before the cap was counted (#482 batch 3 review; the live preview runs at the hardware's
+         rate, so a Mac on a 192 kHz interface heard it). So the untouched copy is delayed by the same frames,
+         cap included, and the two line up at every rate. */
+      const lag = s.delay(0.05);
+      lag.delayTime.value = Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate;
+      const wd = wetDry(s, inst, 'mix', 1);
+      input.connect(c); c.connect(wd.wet); wd.wet.connect(out);
+      input.connect(lag); lag.connect(wd.dry); wd.dry.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
+        params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee, output: out.gain },
+        xf: { output: dbToLin }, custom: { mix: wd.set } });
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
-    params: [P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true)],
+    params: [
+      P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true),
+      /* #482 polish 3.8. Input gain pushes the sound INTO the ceiling (louder, with the peaks held at it);
+         Release is how fast the limiter lets go after a peak (short = loud and pumping, long = smooth). Both
+         defs are today's graph (see build) — so a saved Limiter renders sample for sample as before. */
+      P('input', 'Input gain', 0, 24, 0.5, 0, 'dB', true),
+      P('release', 'Release', 0.01, 1, 0.01, 0.05, 's', true),
+    ],
     build: function (ctx) {
       const s = shop(ctx);
+      const pre = s.gain(1);
       const c = s.comp();
       c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05;
       c.threshold.value = -1;
@@ -699,9 +921,51 @@ window.FM = window.FM || {};
       // drives the threshold AND this gain from one key, so a keyframed ceiling stays compensated at
       // every step: both are real AudioParams scheduled together.
       const trim = s.gain(hardKneeMakeupCancel(-1, 20));
-      c.connect(trim);
-      return unit({ input: c, output: trim, nodes: s.nodes, oscs: s.oscs,
-        custom: { ceiling: multi([[c.threshold, null], [trim.gain, v => hardKneeMakeupCancel(v, 20)]]) } });
+      /* ═══ INPUT GAIN MUST NOT LIFT THE CEILING (#482 batch 3 review) ═══════════════════════════════════════
+       * The node's ratio stops at 20:1, so it lets 1 dB through for every 20 dB it is pushed over. A plain
+       * gain in front (the first build) therefore lifted the ceiling with the drive: MEASURED at the -1 dB
+       * ceiling, a full-scale sine came out at +0.74 dBFS with Input gain 24, noise at +1.71 and a kick at
+       * +1.58 — over full scale, which a phone plays as crackle — and 3 dB over a -6 ceiling.
+       * Two parts, both exactly today's graph at Input gain 0:
+       * 1) THE DRIVE MOVES THE KNEE DOWN BY G/19. With the knee at C − G/19 a 20:1 line lands a sound x dB
+       *    below full scale at 0.95·C + x/20 however hard it is pushed: the drive cancels out, so nothing
+       *    that reached the ceiling with no Input gain comes out any louder with it, and everything under
+       *    the ceiling is lifted by the full G. It is done as gains, not by moving the node's threshold:
+       *    the node sees the sound G + G/19 louder against the SAME threshold (so its makeup, which depends
+       *    only on the threshold, stays cancelled by `trim`), and `post` takes the G/19 back off. The same
+       *    curve as a moved threshold, and each gain follows ONE key, so a keyframed Input gain and a
+       *    keyframed Ceiling schedule independently and still agree at every step. At G = 0 both are 1.
+       * 2) A CLIP CATCHES WHAT THE DETECTOR MISSES. The node reacts in 1 ms, so the first moments of a hit
+       *    still get through: with part 1 alone, noise and a kick at +24 still peaked at +0.54 and +0.47 dBFS.
+       *    So while Input gain is above 0, the sound passes a hard clip (limHoldLin) 1 dB above where the
+       *    20:1 line puts a full-scale sound, and never above 0 dBFS — exactly 0 dBFS at the default -1
+       *    ceiling, -4.7 under -6, -10.4 under -12. Why not AT the line: the node's own gain ripples on a
+       *    steady tone (MEASURED up to +0.57 dB over the line, a full-scale 1 kHz sine under -24 at +24), so
+       *    a clip there cut the top off 20 % of every loud tone's samples (-32 dB of distortion, audible). At
+       *    +1 dB it touches no steady tone at all (identical to the unclipped graph to 1e-7) and only the
+       *    overshoot of hits: 0.5–2 % of noise samples, 2–11 % of a hard-driven kick's. The one exception is
+       *    a ceiling above -1 dB: there the clip is capped at full scale, and the ripple over it IS clipped
+       *    (at 0 dB and +24, the tops of a loud tone) — the alternative is the device clipping it. Everything driven
+       *    then peaks within about 0.6 dB of what the same Limiter already let through with no Input gain
+       *    (MEASURED: -0.63 → 0.00 dBFS at -1, -5.12 → -4.70 at -6, -10.54 → -10.40 at -12).
+       *    Bypass pair (backlog §0.3): the clip is always built, and at Input gain 0 its gain is 0 and the
+       *    straight path's is 1 — float-exact, so a saved Limiter is sample for sample what it was, and it
+       *    never shaves the default's own transients. */
+      const post = s.gain(1), out = s.gain(1);
+      const clipIn = s.gain(1 / limHoldLin(-1)), clipOut = s.gain(limHoldLin(-1));
+      const clip = s.shaper(HARD_CLIP);
+      const gOn = s.gain(0), gOff = s.gain(1);
+      pre.connect(c); c.connect(trim); trim.connect(post);
+      post.connect(clipIn); clipIn.connect(clip); clip.connect(clipOut); clipOut.connect(gOn); gOn.connect(out);
+      post.connect(gOff); gOff.connect(out);
+      return unit({ input: pre, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { release: c.release },
+        custom: {
+          ceiling: multi([[c.threshold, null], [trim.gain, v => hardKneeMakeupCancel(v, 20)],
+            [clipIn.gain, v => 1 / limHoldLin(v)], [clipOut.gain, limHoldLin]]),
+          input: multi([[pre.gain, v => dbToLin(v * 20 / 19)], [post.gain, v => dbToLin(-v / 19)],
+            [gOn.gain, v => (v > 0 ? 1 : 0)], [gOff.gain, v => (v > 0 ? 0 : 1)]]),
+        } });
     },
   }, {
     type: 'tremolo', label: 'Tremolo', category: 'dyn',
@@ -1015,7 +1279,22 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'pitch', label: 'Pitch Shift', category: 'char',
-    params: [P('semitones', 'Semitones', -12, 12, 1, 0, 'st', true), MIX(1)],
+    /* ═══ FINE TUNE, TWO OCTAVES, AND WHY IT LANDS LATE (#482 polish 3.5, hunt C20) ═══════════════════════════
+     * Semitones stopped at an octave either way and moved in whole steps, so a voice could be a chipmunk or not,
+     * but never "a touch higher", and a clip could not be nudged into tune with a song. Fine tune adds −100…+100
+     * cents (a cent is 1/100 of a semitone) on top of Semitones, and Semitones now reaches two octaves (±24).
+     * Fine tune is one more term in the same shift, not a second shifter: every param below is driven by
+     * v = Semitones + Fine tune / 100, so a keyframed Fine tune glides exactly as a keyframed Semitones does.
+     * At Fine tune 0 that sum IS Semitones (x + 0 = x), so a saved Pitch Shift renders sample for sample what it did.
+     * Two octaves up slides one grain's delay across 0.3 s (0.32 with +100 cents on top), where one octave needed
+     * 0.1 — more than the 0.2 s lines hold, so a second, longer pair takes over above an octave up (see THE LONG
+     * PAIR below for why it is a second pair and not simply longer lines).
+     * C20: the shifted copy is read from a delay line that slides across a grain, so on average it lands about
+     * half that slide late — 25 ms at +7, 50 ms an octave up, 150 ms two octaves up. At Mix 100 % that is a small
+     * lag behind the picture; below 100 % the dry sound plays on time beside it and the pair reads as a slap echo.
+     * The hint line under the sliders says so in plain words. */
+    params: [P('semitones', 'Semitones', -24, 24, 1, 0, 'st', true), P('cents', 'Fine tune', -100, 100, 1, 0, '¢', true), MIX(1)],
+    hint: 'The shifted sound lands a little late (about 1/20 of a second an octave up). Keep Mix at 100% for a clean result: lower, the late copy sounds like an echo.',
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1028,30 +1307,122 @@ window.FM = window.FM || {};
       const G = 0.1;
       const gA = s.delay(0.2), gB = s.delay(0.2);
       const mA = s.gain(0), mB = s.gain(0);
-      s.lfo(1 / G, { wave: 'ramp', secs: G }).connect(mA);
-      s.lfo(1 / G, { wave: 'ramp', secs: G, phase: 0.5 }).connect(mB);
+      const rampA = s.lfo(1 / G, { wave: 'ramp', secs: G }), rampB = s.lfo(1 / G, { wave: 'ramp', secs: G, phase: 0.5 });
+      rampA.connect(mA); rampB.connect(mB);
       mA.connect(gA.delayTime); mB.connect(gB.delayTime);
       const lA = s.gain(1), lB = s.gain(1);   // window depth
       const wA = s.gain(0), wB = s.gain(0);   // gain 0 + a window LFO on .gain = the cross-fade itself
-      s.lfo(1 / G, { wave: 'win', secs: G }).connect(lA); lA.connect(wA.gain);
-      s.lfo(1 / G, { wave: 'win', secs: G, phase: 0.5 }).connect(lB); lB.connect(wB.gain);
+      const winA = s.lfo(1 / G, { wave: 'win', secs: G }), winB = s.lfo(1 / G, { wave: 'win', secs: G, phase: 0.5 });
+      winA.connect(lA); lA.connect(wA.gain);
+      winB.connect(lB); lB.connect(wB.gain);
       input.connect(gA); gA.connect(wA); wA.connect(wd.wet);
       input.connect(gB); gB.connect(wB); wB.connect(wd.wet);
+      /* ═══ THE LONG PAIR — A BYPASS PAIR, NOT A LONGER LINE (#482 3.5) ═══════════════════════════════════════════
+       * Two octaves up, one grain's slide is 0.3 s (0.32 with +100 cents), and the 0.2 s lines above cannot hold it.
+       * Simply making them 0.5 s long was tried first and CHANGED EVERY SAVED PITCH SHIFT: Chrome's DelayNode works
+       * out its read position in float32 as (write index + buffer length − delay), so a longer buffer rounds the
+       * fraction differently. MEASURED against v17.19 (samecheck.py): +7 st on noise moved by up to −45 dB under the
+       * peak, a keyframed 0→12 sweep by −44 dB — not audible, and not the same sound either.
+       * So the 0.2 s lines stay exactly as they were for every shift up to an octave up — all of the old ±12 slider,
+       * every down-shift to −24, and Fine tune on top up to +12 — and a second pair of 0.5 s lines sits beside them on the same ramps
+       * and the same windows, silent (window depth 0 → gain exactly 0, and x + 0 = x) until the shift passes an
+       * octave up. Then the pairs swap: one depth goes to 0 and the other to 1 — ramped across a scheduling step when
+       * keyframed, so a glide through +12 st crossfades between two lines reading the same delay. Down-shifts never
+       * need it: their slide is at most one grain (0.1 s). */
+      const LONG_AT = 12;   // above an octave up, the long pair plays
+      const SHORT_MAX = 0.2;
+      const gA2 = s.delay(0.5), gB2 = s.delay(0.5);
+      mA.connect(gA2.delayTime); mB.connect(gB2.delayTime);
+      const lA2 = s.gain(0), lB2 = s.gain(0);
+      const wA2 = s.gain(0), wB2 = s.gain(0);
+      winA.connect(lA2); lA2.connect(wA2.gain);
+      winB.connect(lB2); lB2.connect(wB2.gain);
+      input.connect(gA2); gA2.connect(wA2); wA2.connect(wd.wet);
+      input.connect(gB2); gB2.connect(wB2); wB2.connect(wd.wet);
+      /* ═══ A SMALL SHIFT KEEPS ITS LEVEL (#482 3.5 review) ════════════════════════════════════════════════════════════
+       * The two grains are cross-faded with equal-POWER windows (sin and cos, `win`), right when the two lines carry
+       * DIFFERENT sound. Under a small shift they carry almost the SAME sound (the lines differ by half a grain's slide:
+       * 29 µs at 1 cent, 3 ms at a semitone), and equal-power windows over equal signals sum to between 1 and 1.41 in
+       * amplitude. Before Fine tune nothing could sit there — Semitones moves in whole steps — but Fine tune can.
+       * MEASURED on the build before this (tools/design/482/polish3/tone/level.js, export path): a voice-like 140 Hz
+       * tone came out +2.1 dB at 1 to 8 cents with a ±0.9 dB pump at the grain rate, so taking Fine tune off 0 by one
+       * cent was an audible jump in level.
+       * So for 0 < |v| < 1, a share of each window is its SQUARE (sin², cos²: equal-GAIN, summing to exactly 1 over
+       * equal signals), handing back to today's window as the shift reaches a semitone: sin share b = |v|, sin² share
+       * 1 − b. sin² is the sin window multiplied by itself (a gain node whose gain the window also drives), so it rides
+       * the very same LFO and cannot drift out of phase with it.
+       * ONLY WHILE FINE TUNE IS IN PLAY. A keyframed Semitones already glides through fractional values, and a saved
+       * project's glide must sound exactly as it did, so with Fine tune at 0 the sin² depth is 0 (x + 0 = x) and every
+       * window is today's, sample for sample. With Fine tune at 0 and Semitones static, v is a whole number anyway. */
+      const sqA = s.gain(0), sqB = s.gain(0);   // gain 0 + the window on .gain, fed the window = the window squared
+      winA.connect(sqA); winA.connect(sqA.gain);
+      winB.connect(sqB); winB.connect(sqB.gain);
+      const qA = s.gain(0), qB = s.gain(0);     // the squared window's depth — 0 unless Fine tune is in play
+      sqA.connect(qA); qA.connect(wA.gain);
+      sqB.connect(qB); qB.connect(wB.gain);
       wd.wet.connect(out);
-      let st = Math.round(initNum(inst, 'semitones', 0, -12, 12));
-      /* The seven values the knob drives, as functions of v. Written once and read by BOTH paths below,
-         because the static and animated versions differing by a stray sign is the kind of bug that only
-         ever shows up as "the export sounds wrong", long after anyone would connect it to this. */
+      let st = Math.round(initNum(inst, 'semitones', 0, -24, 24));
+      let ct = initNum(inst, 'cents', 0, -100, 100);   // Fine tune (#482 3.5)
+      /* The values the knobs drive, as functions of v = Semitones + Fine tune / 100. Written once and read by EVERY path
+         below (the build, a slider moved in the preview, the keyframed glide), because the static and animated versions
+         differing by a stray sign is the kind of bug that only ever shows up as "the export sounds wrong", long after
+         anyone would connect it to this. `fine` is the Fine tune term; only whether it is 0 matters (see above). */
       const dOf = function (v) { const r = Math.pow(2, v / 12); return Math.abs(1 - r) * G; };   // one grain's slide
       const upOf = function (v) { return Math.pow(2, v / 12) > 1; };
-      const shape = function (v) {
+      const targets = function (v, fine) {
         const up = upOf(v), D = dOf(v);   // the ramp's slope IS 1 − ratio
-        gA.delayTime.value = up ? D : 0; gB.delayTime.value = up ? D : 0;
-        mA.gain.value = up ? -D : D; mB.gain.value = up ? -D : D;
-        // At 0 st both lines carry the identical dry signal, and two equal-POWER windows over identical
-        // signals sum to +3 dB, not unity. Hold line A wide open and mute line B instead — a real bypass.
-        lA.gain.value = v ? 1 : 0; wA.gain.value = v ? 0 : 1;
-        lB.gain.value = v ? 1 : 0;
+        const long = v > LONG_AT, on = v ? 1 : 0;
+        // the short lines never get asked for more than they hold (they are silent whenever it would be more)
+        const Ds = Math.min(D, SHORT_MAX);
+        const depth = long ? 0 : on, b = fine ? Math.min(1, Math.abs(v)) : 1;
+        return [
+          [gA.delayTime, up ? Ds : 0], [gB.delayTime, up ? Ds : 0],
+          [gA2.delayTime, up ? D : 0], [gB2.delayTime, up ? D : 0],
+          [mA.gain, up ? -D : D], [mB.gain, up ? -D : D],
+          // At 0 st both lines carry the identical dry signal, and two equal-POWER windows over identical
+          // signals sum to +3 dB, not unity. Hold line A wide open and mute line B instead — a real bypass.
+          [lA.gain, depth * b], [lB.gain, depth * b], [qA.gain, depth * (1 - b)], [qB.gain, depth * (1 - b)],
+          [wA.gain, v ? 0 : 1],
+          [lA2.gain, long ? 1 : 0], [lB2.gain, long ? 1 : 0],
+        ];
+      };
+      // At build: ASSIGNED, exactly as always — nothing is playing yet, and a saved project renders from these values.
+      const built0 = targets(st + ct / 100, ct);
+      built0.forEach(function (t) { t[0].value = t[1]; });
+      /* ═══ A SLIDER MOVED WHILE THE PREVIEW PLAYS GLIDES, IT DOES NOT JUMP (#482 3.5 review) ═══════════════════════════
+       * The live preview never rebuilds the chain for a moved value — applyAt hands the new value in, every frame. These
+       * params used to be ASSIGNED, so each new value was a step: the grain delay jumped, the read position jumped with
+       * it, and the sound clicked. Fine tune is the slider people drag in small steps while listening, so a drag crackled
+       * end to end. MEASURED (tools/design/482/polish3/tone/clicks.js: applyAt every 16 ms in an OfflineAudioContext; a
+       * click = the biggest jump in the waveform's slope in 2 ms, against the render's median): dragging Fine tune 0 → 60
+       * scored 150, one step 30 → 31 cents 28, leaving 0 by one cent 49, a Semitones step 625; a steady tone scores 1.5.
+       * So after the build every change RAMPS to where it is going, across SLEW (a screen frame and a bit).
+       * ⚠️ A RAMP STILL UNDER WAY IS APPENDED TO, NEVER CANCELLED. The first version cancelled the ramp in flight and
+       * re-anchored at "now" (cancelScheduledValues + setValueAtTime) — and still scored 32 on the drag, from ONE-SAMPLE
+       * spikes at some frames and not others: an event time of ctx.currentTime can land a sample late once Chrome turns
+       * it back into a frame, and that one sample then fell back to the value before the cancelled ramp. Only a ramp
+       * shorter than a frame (never interrupted) was clean. So a new value is a linear ramp that starts where the last one
+       * ends — nothing is ever removed from under the sample being played, and the path stays continuous however fast
+       * the frames come. At rest, the ramp is anchored at the value the param rests on, which is known exactly.
+       * THIS NEVER RUNS IN AN EXPORT: schedule() hands the static path the value the chain was built with, which changes
+       * nothing (FM._pitchReshapes counts it), so every saved render is untouched. The KEYFRAMED preview (glide, set per
+       * frame) is left as it was on purpose: ramping it would change today's keyframed-Semitones preview. */
+      const SLEW = 0.02;
+      let slewAt = -Infinity, slewTo = built0.map(function (t) { return t[1]; }), glided = false;
+      const reshape = function (v, fine) {
+        FM._pitchReshapes = (FM._pitchReshapes || 0) + 1;
+        const now = ctx.currentTime, tg = targets(v, fine), end = now + SLEW;
+        const again = now <= slewAt, moving = now < slewAt + SLEW;
+        tg.forEach(function (t, i) {
+          const ap = t[0];
+          try {
+            if (glided) { const cur = ap.value; ap.cancelScheduledValues(now); ap.setValueAtTime(cur, now); }   // a keyframed glide ran since
+            else if (again) ap.cancelScheduledValues(end);   // a second move in the SAME frame (both keys at once): replace this frame's ramp, which has not begun
+            else if (!moving) ap.setValueAtTime(slewTo[i], now);   // at rest: anchor on the value it rests at
+            ap.linearRampToValueAtTime(t[1], end);
+          } catch (e) { try { ap.value = t[1]; } catch (e2) {} }
+        });
+        slewAt = now; slewTo = tg.map(function (t) { return t[1]; }); glided = false;
       };
       /* ---- THE ANIMATED PATH (the unnumbered per-effect-slider entry) ----------------------------
        * Pitch Shift is the last of the six, and it is NOT the crossfaded-shaper-bank fix that Distortion,
@@ -1069,31 +1440,49 @@ window.FM = window.FM || {};
        * Crossing zero stays continuous, and not by luck: D → 0 as v → 0, so the `up` flip happens exactly
        * where its two branches meet. The bypass pair is the one truly binary thing here, and it RAMPS
        * across a scheduling step (33 ms) instead of switching, so leaving 0 st is a crossfade. */
-      const animated = function () { return FM.isAnimated(inst && inst.params ? inst.params.semitones : undefined); };
-      const glide = function (v, when, ramp) {
+      const kfd = function (key) { return FM.isAnimated(inst && inst.params ? inst.params[key] : undefined); };
+      // The other key's value at the same scene moment, guarded like valueAt: a keyframed Fine tune read while
+      // Semitones drives, or a plain Semitones read while a keyframed Fine tune drives.
+      const other = function (key, t, lo, hi) {
+        const raw = inst && inst.params ? inst.params[key] : undefined;
+        let v = FM.isAnimated(raw) ? FM.evalProp(raw, isFinite(t) ? t : 0) : raw;
+        if (typeof v !== 'number' || !isFinite(v)) v = 0;
+        return clamp(v, lo, hi);
+      };
+      const glide = function (v, fine, when, ramp) {
         // Counted so the suite can prove a STATIC pitch never takes this path. Sound alone cannot police
         // that: scheduling one value 120 times renders identically to assigning it once. Same lesson as
         // the shaper-bank counter above, and as the motion-blur slice counter in queue 382.
         FM._pitchGlides = (FM._pitchGlides || 0) + 1;
-        const up = upOf(v), D = dOf(v), on = v ? 1 : 0;
-        const at = function (ap, x) {
-          try { ramp ? ap.linearRampToValueAtTime(x, when) : ap.setValueAtTime(x, when); } catch (e) {}
-        };
-        at(gA.delayTime, up ? D : 0); at(gB.delayTime, up ? D : 0);
-        at(mA.gain, up ? -D : D); at(mB.gain, up ? -D : D);
-        at(lA.gain, on); at(wA.gain, 1 - on); at(lB.gain, on);
+        glided = true;
+        targets(v, fine).forEach(function (t) {
+          try { ramp ? t[0].linearRampToValueAtTime(t[1], when) : t[0].setValueAtTime(t[1], when); } catch (e) {}
+        });
       };
-      shape(st);
+      /* TWO KEYS, ONE SHIFT (#482 3.5). Both sliders feed v, and the scheduler hands each key its values separately
+         (the whole window for Semitones, then the whole window for Fine tune), so the two cannot each glide on their
+         own — the second would overwrite the first. So ONE key drives: Semitones when it is keyframed, reading Fine
+         tune at the same scene moment (sceneT, which the chain passes), otherwise a keyframed Fine tune, reading the
+         plain Semitones. The key that does not drive does nothing. With neither keyframed it is the static path, as
+         before: whole semitones plus a plain Fine tune, assigned at the build and ramped when moved after it. */
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
         custom: {
-          semitones: function (v, when, ramp) {
+          semitones: function (v, when, ramp, sceneT) {
             /* Gated on isAnimated, NOT on `when` — the static path calls set(key, value, 0), so `when`
                is 0 and not null. Guarding on `when == null` is exactly the bug the Distortion bank
                shipped with, where every static instance in every project quietly took the expensive
                path while sounding identical. */
-            if (!animated()) { v = Math.round(clamp(v, -12, 12)); if (v !== st) { st = v; shape(v); } return; }
-            glide(clamp(v, -12, 12), Math.max(0, when || 0), !!ramp);
+            if (!kfd('semitones') && !kfd('cents')) { v = Math.round(clamp(v, -24, 24)); if (v !== st) { st = v; reshape(st + ct / 100, ct); } return; }
+            if (!kfd('semitones')) return;   // a keyframed Fine tune drives, and reads this value itself
+            const c = other('cents', sceneT, -100, 100);
+            glide(clamp(v, -24, 24) + c / 100, c, Math.max(0, when || 0), !!ramp);
+          },
+          cents: function (v, when, ramp, sceneT) {
+            if (!kfd('semitones') && !kfd('cents')) { v = clamp(v, -100, 100); if (v !== ct) { ct = v; reshape(st + ct / 100, ct); } return; }
+            if (kfd('semitones')) return;    // a keyframed Semitones drives, and reads Fine tune at the same moment
+            const c = clamp(v, -100, 100);
+            glide(Math.round(other('semitones', sceneT, -24, 24)) + c / 100, c, Math.max(0, when || 0), !!ramp);
           },
           mix: wd.set,
         },
@@ -1143,7 +1532,7 @@ window.FM = window.FM || {};
     vibrato: ['warble', 'wobble', 'wavy'],
     ringmod: ['robot', 'robot voice', 'dalek', 'metallic', 'alien'],
     vocalremove: ['karaoke', 'instrumental', 'acapella', 'a cappella', 'remove vocals', 'no vocals', 'backing track'],
-    pitch: ['chipmunk', 'deep voice', 'helium', 'higher', 'lower', 'key', 'voice changer'],
+    pitch: ['chipmunk', 'deep voice', 'helium', 'higher', 'lower', 'key', 'voice changer', 'fine tune', 'detune'],   // the last two: #482 3.5's Fine tune
   };
   DEFS.forEach(d => { d.tags = TAGS[d.type] || []; });
 
@@ -1232,7 +1621,7 @@ window.FM = window.FM || {};
         if (!armed) arm(anchor !== null ? anchor : sceneTime - when);   // "the scene is at sceneTime NOW"
         for (let i = 0; i < built.length; i++) {
           const b = built[i], ps = b.def.params;
-          for (let j = 0; j < ps.length; j++) b.u.set(ps[j].key, valueAt(b.inst, ps[j], sceneTime), when);
+          for (let j = 0; j < ps.length; j++) b.u.set(ps[j].key, valueAt(b.inst, ps[j], sceneTime), when, sceneTime);
         }
       },
       // Offline render: animated params sampled at 30 Hz across the window in ctx time (= scene − from),
@@ -1255,13 +1644,19 @@ window.FM = window.FM || {};
                 const sceneT = fromScene + span * (k / steps);
                 const v = valueAt(b.inst, p, sceneT);
                 const ct = Math.max(0, sceneT - fromScene);
-                if (k === 0) b.u.set(p.key, v, ct); else b.u.ramp(p.key, v, ct);
+                if (k === 0) b.u.set(p.key, v, ct, sceneT); else b.u.ramp(p.key, v, ct, sceneT);
               }
             } else {
-              b.u.set(p.key, valueAt(b.inst, p, fromScene), 0);
+              b.u.set(p.key, valueAt(b.inst, p, fromScene), 0, fromScene);
             }
           }
         }
+      },
+      /* The meter (unit.meter) the effect instance `inst` built in THIS chain (#482 polish 3.7), or null — matched by
+         identity, the same way the live chain is tied to its instances (audio-fx-live.js chainIsCurrent). */
+      meterOf: function (inst) {
+        for (let i = 0; i < built.length; i++) if (built[i].inst === inst) return built[i].u.meter || null;
+        return null;
       },
       dispose: function () {
         built.forEach(b => { try { b.u.dispose(); } catch (e) {} });

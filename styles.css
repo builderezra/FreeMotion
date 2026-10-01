@@ -1882,6 +1882,18 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    fired at the line bubbled up and ended the drag after one notch (Volume 100 → 105, then dead). */
 .fx-scrub-notch { position: absolute; left: 50%; top: 5px; bottom: 5px; width: 2px; margin-left: -1px; background: var(--accent); border-radius: 1px; pointer-events: none; }
 .fx-scrub-val { width: 62px; flex: none; text-align: center; background: var(--panel-3); border: 1px solid var(--line); border-radius: 7px; color: var(--text); font-size: 12px; height: 30px; font-variant-numeric: tabular-nums; }
+/* #482 polish 3.7 — the Compressor's "Turning down" bar (inspector.js reductionMeter). Built like a slider row — name and
+   number on one line, a full-width strip under them — so it sits in the column of sliders it explains, and it keeps its
+   place when idle (dimmed, empty) so nothing below it moves while he drags. The pad lines its name up with the slider
+   names, which sit after a keyframe diamond (20px) and an easing button (24px, 12px apart). */
+.afx-gr-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; transition: opacity .2s; }
+.afx-gr-row.idle { opacity: .5; }
+.afx-gr-pad { width: 24px; flex: none; margin-left: 12px; }
+.afx-gr-row > .afx-gr-label { flex: 1; }
+.afx-gr-val { width: 62px; flex: none; text-align: center; font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; line-height: 30px; }
+.afx-gr-track { flex: 1 1 100%; order: 2; height: 10px; border-radius: 5px; background: var(--panel-3); overflow: hidden; position: relative; }
+.afx-gr-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); border-radius: 5px; }
+@media (prefers-reduced-motion: reduce) { .afx-gr-row { transition: none; } }
 /* segmented sub-mode */
 .fx-seg-row { display: flex; align-items: center; gap: 8px; }
 
@@ -7800,6 +7812,7 @@ body.fm-pushing #toast { z-index: 213; }
   background: var(--panel-2); color: var(--text-dim); display: grid; place-items: center; cursor: pointer; }
 .sfx-play svg { width: 13px; height: 13px; margin-left: 1px; }
 .sfx-row.playing .sfx-play { color: var(--accent); border-color: var(--accent); }
+.sfx-play[data-glyph="stop"] svg { margin-left: 0; }   /* #482 polish 3.1: the ■ is centred as drawn; only the ▶ takes the optical nudge */
 .sfx-name { flex: 1 1 auto; min-width: 0; text-align: left; background: none; border: 0; color: var(--text);
   font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; padding: 6px 0; }
 .sfx-dur { flex: none; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }

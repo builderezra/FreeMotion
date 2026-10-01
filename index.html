@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=741">
+<link rel="stylesheet" href="styles.css?v=743">
 <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.19</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.20</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1049,7 +1049,7 @@
   <script src="js/settings.js?v=51"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=16"></script>
+  <script src="js/collab-core.js?v=18"></script>
   <script src="js/statusbar.js?v=4"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=118"></script>
@@ -1069,7 +1069,7 @@
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
   <script src="js/addmenu.js?v=83"></script>
-  <script src="js/inspector.js?v=403"></script>
+  <script src="js/inspector.js?v=406"></script>
   <script src="js/fx-browser.js?v=98"></script>
   <script src="js/elements-browser.js?v=4"></script>
   <script src="js/color-wheel.js?v=53"></script>
@@ -1088,9 +1088,9 @@
   <script src="js/text-edit.js?v=26"></script>
   <script src="js/tracker.js?v=10"></script>
   <script src="js/frames.js?v=21"></script>
-  <script src="js/audio-fx.js?v=13"></script>
-  <script src="js/audio-play.js?v=66"></script>
-  <script src="js/audio-fx-live.js?v=11"></script>
+  <script src="js/audio-fx.js?v=16"></script>
+  <script src="js/audio-play.js?v=68"></script>
+  <script src="js/audio-fx-live.js?v=14"></script>
   <script src="js/audio-fx-browser.js?v=14"></script>
   <script src="js/history.js?v=37"></script>
   <script src="js/storage.js?v=58"></script>
@@ -1113,7 +1113,7 @@
   <script src="js/app.js?v=466"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
-  <script src="js/sfx.js?v=17"></script>
+  <script src="js/sfx.js?v=19"></script>
   <script src="js/voice-rec.js?v=9"></script>
   <script src="js/audio-react.js?v=12"></script>
   <script src="js/mobile.js?v=46"></script>

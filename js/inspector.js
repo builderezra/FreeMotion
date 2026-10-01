@@ -1239,7 +1239,12 @@ window.FM = window.FM || {};
     const vals = FM.isAnimated(raw) ? (raw.kf.length ? raw.kf.map(k => k.v) : [0]) : [cur];
     /* LIVE ABOVE a level, not at one value (queue 904): Starfield's Twinkle speed does nothing while Twinkle is 0,
        and Twinkle is a slider, not a set of modes, so no single `liveWhen` value could say it. */
-    if (p.liveAbove !== undefined) {
+    /* DEAD AT ONE VALUE (#482 3.6 review): Bass at does nothing while Bass is 0 dB, and Bass cuts as well as boosts, so
+       "above 0" would grey it under a cut, where it is the whole control. Judged over the keyframes like the rest. */
+    if (p.deadAt !== undefined) {
+      active = vals.every(v => Number(v) === Number(p.deadAt));
+      why = 'Not used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + p.deadAt;
+    } else if (p.liveAbove !== undefined) {
       active = vals.every(v => !(Number(v) > Number(p.liveAbove)));
       why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is above ' + p.liveAbove;
     } else if (p.liveWhen !== undefined) {
@@ -1272,6 +1277,16 @@ window.FM = window.FM || {};
       tag.textContent = why;
       row.appendChild(tag);
     }
+  }
+  /* …and again, from scratch, when its controller moves under the finger (#482 3.6 review). The panel is not rebuilt
+     for a plain slider move, and a greyed row is pointer-events:none, so without this Bass at stayed locked after
+     Bass was raised off 0 — on the default state of every new Bass & Treble. */
+  function regate(row, fx, p, reg) {
+    row.classList.remove('fx-overridden');
+    row.removeAttribute('aria-disabled');
+    const old = row.querySelector('.fx-ovr-tag');
+    if (old) old.remove();
+    markOverridden(row, fx, p, reg);
   }
 
   /* A CONTROL THIS BROWSER CANNOT CARRY OUT SAYS SO (queue 904, textspacing). Letter Spread's spacing rows need the
@@ -2360,7 +2375,10 @@ window.FM = window.FM || {};
   // audio-fx.js param descriptors carry `def` and no `type`; fxScrubber reads `default` and dispatches
   // on `type`. Bridge them rather than teaching either side about the other.
   function afxParam(p) {
-    return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, unit: p.unit, keyframable: p.keyframable };
+    // overriddenBy/deadAt ride along since the #482 3.6 review: this bridge used to drop them, so no audio row could say
+    // "Not used when Bass is 0" however the effect declared it.
+    return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, unit: p.unit, keyframable: p.keyframable,
+      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt };
   }
   /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
      only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break
@@ -2410,6 +2428,53 @@ window.FM = window.FM || {};
       { sep: true },
       { label: 'Delete', danger: true, action: () => { layer.audioFx.splice(idx, 1); afterAudioFx(); } },
     ]));
+  }
+
+  /* ═══ THE COMPRESSOR'S "TURNING DOWN" BAR (#482 polish 3.7) ═══════════════════════════════════════════════
+   * A compressor is the one effect you cannot hear working by dragging a slider — it only acts on the loud
+   * parts, so Threshold and Ratio feel like nothing until you see how much it is actually taking off. This row
+   * shows that: while the clip plays or is heard (Hear), a bar grows with how far the Compressor is turning
+   * the sound down at this moment, with the number beside it. Read from the live chain's own node
+   * (FM.audioFxLive.reductionOf → DynamicsCompressorNode.reduction), so it is the sound you are hearing, not a
+   * model of it. Idle (nothing playing) it stays in place, empty and dimmed: a row that appeared and vanished
+   * would shove every slider under it up and down under the finger while he drags them.
+   * One loop per row, and it ends with the row: the next frame after a refresh or a close finds it detached.
+   * Every animation frame while something plays; four times a second otherwise (it only has to notice a start). */
+  const AFX_GR_RANGE = 24;   // dB across the full bar
+  function reductionMeter(layer, fx) {
+    const row = el('div', 'afx-gr-row idle');
+    row.title = 'How much the Compressor is turning the sound down right now. It moves while the clip plays or while you Hear it.';
+    const label = el('span', 'fx-scrub-label afx-gr-label', 'Turning down');
+    const track = el('div', 'afx-gr-track');
+    const fill = el('div', 'afx-gr-fill');
+    track.appendChild(fill);
+    track.setAttribute('role', 'meter');
+    track.setAttribute('aria-label', 'Compressor turning the sound down, in dB');
+    track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', String(AFX_GR_RANGE));
+    const val = el('span', 'afx-gr-val', '–');
+    row.appendChild(el('span', 'fx-kf-spacer')); row.appendChild(el('span', 'afx-gr-pad'));   // lines the name up with the slider names below
+    row.appendChild(label); row.appendChild(track); row.appendChild(val);
+    let shown = undefined, seen = false, waits = 0;
+    const tick = () => {
+      // Built but not yet in the panel: wait a moment for it. Detached after that — or never attached — the loop ends.
+      if (!row.isConnected) { if (seen || ++waits > 8) return; }
+      else seen = true;
+      const live = FM.audioFxLive && ((FM.audioFxLive.auditioning && FM.audioFxLive.auditioning(layer)) || FM.playing);
+      const db = (live && FM.audioFxLive.reductionOf) ? FM.audioFxLive.reductionOf(layer, fx) : null;
+      const on = typeof db === 'number';
+      const down = on ? Math.round(-db * 10) / 10 : null;   // 0.1 dB steps: finer than that only flickers
+      if (down !== shown) {
+        shown = down;
+        row.classList.toggle('idle', !on);
+        row.dataset.db = on ? String(-down) : '';
+        fill.style.width = on ? (Math.min(1, down / AFX_GR_RANGE) * 100).toFixed(1) + '%' : '0%';
+        val.textContent = on ? (down > 0 ? '-' + down.toFixed(1) : '0.0') + 'dB' : '–';   // '-' as the slider boxes write it (-30.0dB)
+        track.setAttribute('aria-valuenow', on ? String(down) : '0');
+      }
+      if (on) requestAnimationFrame(tick); else setTimeout(tick, 250);
+    };
+    requestAnimationFrame(tick);
+    return row;
   }
 
   function audioFxRow(layer, fx, idx) {
@@ -2485,12 +2550,25 @@ window.FM = window.FM || {};
     if (expanded) {
       const body = el('div', 'fx-ed-body');
       if (AFX_MONO_HINT[fx.type] && layerIsMono(layer)) body.appendChild(el('div', 'insp-hint', AFX_MONO_HINT[fx.type]));
+      if (reg.meter === 'reduction') body.appendChild(reductionMeter(layer, fx));
+      // A control another control switches off says so, as the visual rows do (#482 3.6 review). markOverridden reads
+      // the controller's label and default, so it gets the bridged descriptors, not the audio registry's own.
+      const areg = { params: reg.params.map(afxParam) }, rows = {};
       reg.params.forEach(p => {
-        body.appendChild(fxScrubber(fx, afxParam(p), layer, idx));
+        const ap = afxParam(p), row = fxScrubber(fx, ap, layer, idx);
+        rows[p.key] = row;
+        markOverridden(row, fx, ap, areg);
+        body.appendChild(row);
         const w = afxWarnFor(reg, fx, p);
         if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));
       });
+      reg.params.forEach(p => {
+        const lead = p.overriddenBy && rows[p.overriddenBy];
+        if (lead) lead.addEventListener('fx-range-set', () => regate(rows[p.key], fx, afxParam(p), areg));
+      });
       if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
+      // One plain line about how the effect behaves, under its sliders (#482 3.5: Pitch Shift's late copy, hunt C20).
+      if (reg.hint) body.appendChild(el('div', 'insp-hint afx-hint', reg.hint));
       wrap.appendChild(body);
     }
     row.appendChild(delBg);

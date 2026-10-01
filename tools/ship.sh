@@ -640,6 +640,11 @@ try: d=json.loads(raw[i:])
 except Exception: d=None
 fs=(d or {}).get("failures") or []
 for f in fs[:6]: print("   " + f[:1200])
+# queue 996: what earlier tests left in the shared scene — a red that only happens deep in a run is often one of these
+lk=(d or {}).get("sceneLeaks") or []
+if fs and lk:
+    print("   ── left in the shared scene by earlier tests (tests.js records it; report only):")
+    for l in lk[:8]: print("      · " + l.get("test","")[:90] + " → " + ", ".join(l.get("added") or []) + (" +%d more" % l["more"] if l.get("more") else "") + (" [effects-sheet preview left on]" if l.get("preview") else "") + (" [isolate left on]" if l.get("isolate") else ""))
 if not fs:
     import re
     for m in re.findall(r"FAIL[^\n]{0,400}", raw)[:6]: print("   " + m)
