@@ -164,7 +164,10 @@ window.FM = window.FM || {};
      mattering — grade an adjustment layer too (compositor PIXEL_ADJ runs them on the snapshot, as it runs Levels). Left out
      on purpose: vignette, gradientoverlay, lightleak, filmgrain, nightvision, dither and fourcolor are drawn from WHERE a
      pixel sits, and a zoomed preview's snapshot is only the slice on screen (queue 690) — they need the frame's geometry
-     handed to them first. Highlights & Shadows' Local radius reads its neighbours, not the frame, so it is safe here. */
+     handed to them first. Two that ARE here still need the whole frame when zoomed in (#482 5.1 review): Highlights &
+     Shadows' Local radius reads up to 1.2 x its radius around each pixel, past the slice's 18% margin, and Gradient Map's
+     Dither lays its pattern from the buffer's corner. So while a shown adjustment layer carries either, the preview does
+     not crop (compositor FM.adjNeedsFrame, app.js previewCrop). */
   const ADJ_OK = {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
     posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1,

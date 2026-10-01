@@ -22,7 +22,7 @@ return (async function () {
         { name: 'Original', sub: 'no effect', none: true },
         { name: 'Shadows +70 (today)', sub: 'the whole picture lifted — milky blacks, flat sand', set: { highlights: 0, shadows: 70 } },
         { name: 'Shadows +70 · Local radius 40', sub: 'the dog opens up, the sand keeps its bite', set: { highlights: 0, shadows: 70, radius: 40 }, rec: true },
-        { name: 'Local radius 120', sub: 'bigger areas — a gentler, broader lift', set: { highlights: 0, shadows: 70, radius: 120 } },
+        { name: 'Shadows +100 · Local radius 40', sub: 'pushed further — the dog opens right up, the blacks stay black', set: { highlights: 0, shadows: 100, radius: 40 } },
       ] },
     'highlightsshadows-tonalwidth': {
       title: 'Highlights & Shadows — Tonal width', photo: 'tesla',
@@ -47,13 +47,24 @@ return (async function () {
         { name: 'Blacks −80', sub: 'deep black silhouettes again', set: { blacks: -80 }, rec: true },
         { name: 'Blacks +60', sub: 'a matte, faded-film black', set: { blacks: 60 } },
       ] },
-    'highlightsshadows-colourcorrection': {
-      title: 'Highlights & Shadows — Colour correction', photo: 'revuelto',
-      note: 'A shadow lift washes the colour out of what it lifts. Colour correction puts it back (or takes more out), only where Highlights and Shadows moved the picture.',
+    'highlightsshadows-colourboost': {
+      title: 'Highlights & Shadows — Colour boost', photo: 'revuelto',
+      note: 'A shadow lift washes the colour out of what it lifts. Colour boost puts it back (or takes more out), only where Highlights and Shadows moved the picture. (Named Colour correction in the first draw — too long for the PC panel.)',
       tiles: [
         { name: 'Shadows +80 (today)', sub: 'the lifted shade goes grey and washed', set: { highlights: 0, shadows: 80 } },
-        { name: 'Colour correction +60', sub: 'the lifted areas keep their colour', set: { highlights: 0, shadows: 80, sat: 60 }, rec: true },
-        { name: 'Colour correction −60', sub: 'muted, desaturated shade', set: { highlights: 0, shadows: 80, sat: -60 } },
+        { name: 'Colour boost +60', sub: 'the lifted areas keep their colour', set: { highlights: 0, shadows: 80, sat: 60 }, rec: true },
+        { name: 'Colour boost −60', sub: 'muted, desaturated shade', set: { highlights: 0, shadows: 80, sat: -60 } },
+      ] },
+    /* #482 5.1 review: a filter fitted to an adjustment layer now keeps its colour grades AND runs them after its Contrast /
+       Saturation, the clip's order — the build ran them before, which turned Infrared into a hot magenta wash. */
+    'adjustment-filter-infrared': {
+      title: 'Adjustment layer — the Infrared filter', photo: 'bush', adj: true,
+      note: 'The Infrared filter put on an adjustment layer over a photo and a title. Today it keeps only its Contrast and Saturation there. Now it keeps its Colour Balance and Highlights & Shadows too, applied in the same order as on the clip, so it looks like Infrared.',
+      tiles: [
+        { name: 'Photo', sub: 'no filter', fx: null, none: true },
+        { name: 'Today', sub: 'on an adjustment layer: only Contrast and Saturation survive', filter: 'infrared', keep: 'today' },
+        { name: 'Now', sub: 'on an adjustment layer: the whole Infrared look', filter: 'infrared', keep: 'now', rec: true },
+        { name: 'Infrared on the photo itself', sub: 'the look to match (the title stays white here)', filter: 'infrared', onClip: true },
       ] },
   };
   var S = SHEETS[window.__SHEET];
@@ -79,6 +90,14 @@ return (async function () {
         if (!FM.fxRegistry.supportsLayer(f[0], A)) throw new Error(f[0] + ' is refused on an adjustment layer');
         return fxOf(f[0], f[1]);
       });
+      if (o.filter && o.onClip) { l.effects = [FM.filters.makeInstance(o.filter)]; A.effects = []; }
+      else if (o.filter) {
+        var box = FM.fxRegistry.fitToLayer(FM.filters.makeInstance(o.filter), A);
+        /* TODAY (v17.20) an adjustment layer kept only these sixteen (fx-registry ADJ_OK before #482 5.1) */
+        var OLD = { blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1, posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1 };
+        if (o.keep === 'today') box.effects = box.effects.filter(function (k) { return OLD[k.type]; });
+        A.effects = [box];
+      }
       layers = [A, title, l];
     } else if (!o.none) l.effects = [fxOf('highlightsshadows', o.set)];
     var c = document.createElement('canvas'); c.width = R; c.height = R;
@@ -104,7 +123,7 @@ return (async function () {
     var cv = render(o);
     cv.style.cssText = 'width:100%;aspect-ratio:1;display:block;border-radius:8px;' + (o.rec ? 'outline:2px solid #4fd1a5;outline-offset:2px' : '');
     cell.appendChild(cv);
-    label(cell, o, o.none ? 'PHOTO' : (o === before ? 'BEFORE' : 'AFTER')); g.appendChild(cell);
+    label(cell, o, o.none ? 'PHOTO' : (o.onClip ? 'ON THE CLIP' : (o === before ? 'BEFORE' : 'AFTER'))); g.appendChild(cell);
   });
   ov.appendChild(g);
   var last = ov.lastElementChild.getBoundingClientRect();

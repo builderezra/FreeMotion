@@ -10,7 +10,7 @@ import _cdp  # noqa: E402
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9111
 ALL = ['adjustment-colour-effects', 'highlightsshadows-localradius', 'highlightsshadows-tonalwidth', 'highlightsshadows-whites',
-       'highlightsshadows-blacks', 'highlightsshadows-colourcorrection']
+       'highlightsshadows-blacks', 'highlightsshadows-colourboost', 'adjustment-filter-infrared']
 WANT = sys.argv[2:] or ALL
 W, H = 390, 1100
 SHEET = open(os.path.join(HERE, 'sheet5.js')).read()

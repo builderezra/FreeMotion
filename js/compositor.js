@@ -559,13 +559,16 @@ window.FM = window.FM || {};
       /* #482 polish 5.2 (answers C47): it was one whole-picture curve that ADDS the same amount to every channel, so +Shadows
          lifted true black to grey (milky blacks) and could not tell a dark shirt from a dark corner. Whites and Blacks move the
          two ends; Tonal width narrows what counts as a shadow or a highlight; Local radius judges each area by its
-         surroundings and lifts it like a local exposure, so black stays black; Colour correction puts back (or takes out) the
-         colour a lift washes out. Every default runs the old loop byte for byte — 17 library filters are built on it. */
+         surroundings and lifts it like a local exposure, so black stays black; Colour boost puts back (or takes out) the
+         colour a lift washes out. Every default runs the old loop byte for byte — 17 library filters are built on it.
+         (Colour boost was "Colour correction" in the build: at a 1280 px window that name was too long for the 307 px
+         inspector, so its number box dropped under the keyframe diamond and the row grew to 109 px against 76 — #482 5.2
+         review. The key stays `sat`.) */
       { key: 'whites', label: 'Whites', min: -100, max: 100, step: 1, def: 0 },
       { key: 'blacks', label: 'Blacks', min: -100, max: 100, step: 1, def: 0 },
       { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
-      { key: 'sat', label: 'Colour correction', min: -100, max: 100, step: 1, def: 0 }] },
+      { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
     // ---- batch 12 ----
     { type: 'dropshadow', label: 'Drop Shadow', params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 18, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' }, { key: 'softness', label: 'Softness', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: Opacity — every shadow was full strength
@@ -4828,12 +4831,20 @@ window.FM = window.FM || {};
    *    reaching into the brights flattened the curve there while Highlights pulled down: measured on a 0–255 ramp at
    *    Shadows +100 / Highlights −100, the squared version folded back in 15 places between 140 and 230 (a lighter grey came
    *    out darker); the cube in none, and the suite walks a ramp through every extreme. At 0 it is the whole-picture add.
+   *    THE SURROUNDINGS ARE HELD WITHIN 0.1 OF THE PIXEL'S OWN BRIGHTNESS (HS_EDGE, #482 5.2 review). A plain blur does
+   *    not know where an edge is, so beside a dark subject the bright ground "saw" a dark neighbourhood and was lifted as
+   *    if it were shadow, and the subject's rim saw a bright one and was lifted less than its middle — a light halo on the
+   *    sand round his dog. Measured on a 30|200 step at Shadows +100, radius 40: the bright side read 203 away from the
+   *    edge and 249 beside it, the dark side 78 and 38; and a black dot in a bright field went to 54 under Highlights +60.
+   *    With the surroundings clamped to ±0.1 (25 levels) of the pixel: 203 / 209, 78 / 58, and the dot 1. Texture within
+   *    25 levels of its area is still judged by the area — what Local radius is for — and a hard edge can only lean on
+   *    it that far. The clamp is per pixel, after the blur, so the exact-integer blur below is untouched.
    *  · Whites / Blacks: the two ends, on the result's own brightness — ±80 levels × L³ at the top and × (1−L)³ at the
    *    bottom (crush or lift the black point, pull down or push the white point). Cubed, not squared, so they stay off the
    *    ground Highlights and Shadows already cover; 80 because 3·80 = 240 is under 255, so even both at full stretch
    *    never fold the curve back on itself. (A fourth power reached too little: measured on a cloud photo whose brightest
    *    areas sit near 0.7, Whites −90 moved them 10–13 levels.)
-   *  · Colour correction: an equal add is a step toward grey, so a lift washes colour out. This scales each pixel's colour
+   *  · Colour boost: an equal add is a step toward grey, so a lift washes colour out. This scales each pixel's colour
    *    by 1 + 2·cc × how much of the correction it got (never below grey), so it touches only what Shadows and Highlights
    *    moved: +100 on a fully lifted pixel triples its colour, −100 turns it grey.
    * THE BLUR IS EXACT INTEGER ARITHMETIC, so it is the same wherever the buffer starts. The luma is a whole number 0–255
@@ -4842,7 +4853,7 @@ window.FM = window.FM || {};
    * the very picture the full plate does, and preview = export = scrub. Transparent pixels weigh nothing and nothing lies
    * past the edge, so neither a layer's own outline nor the frame's edge darkens the brightness around it. */
   function hsNum(v, lo, hi, dflt) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : dflt; }
-  const HS_SH_STOPS = 2, HS_ENDS = 80, HS_BOX_MAX = 300;
+  const HS_SH_STOPS = 2, HS_ENDS = 80, HS_BOX_MAX = 300, HS_EDGE = 0.1;
   let _hsA = null, _hsB = null, _hsLn = null;
   function hsBox(a, W, H, b, alongRows, line) {   // one box pass of half-width b, zero past the ends, unnormalised
     const n = alongRows ? W : H, m = alongRows ? H : W, step = alongRows ? 1 : W, top = b < n - 1 ? b : n - 1;
@@ -4891,7 +4902,10 @@ window.FM = window.FM || {};
       if (d[i + 3] <= 0) continue;
       let r = d[i], g = d[i + 1], u = d[i + 2];
       let L = (0.299 * r + 0.587 * g + 0.114 * u) / 255; if (L < 0) L = 0; else if (L > 1) L = 1;
-      if (A) { const den = B ? B[j] : cx[x] * cy[y]; if (den > 0) { L = A[j] / den / 255; if (L > 1) L = 1; } }
+      if (A) {
+        const den = B ? B[j] : cx[x] * cy[y];
+        if (den > 0) { let Lb = A[j] / den / 255; if (Lb > 1) Lb = 1; const dl = Lb - L; L += dl > HS_EDGE ? HS_EDGE : (dl < -HS_EDGE ? -HS_EDGE : dl); }   // the surroundings, never more than HS_EDGE from the pixel's own (see Local radius above)
+      }
       let s0, h0;
       if (w === 1) { s0 = 1 - L; h0 = L; }
       else { s0 = 1 - L / w; h0 = 1 - (1 - L) / w; if (s0 < 0) s0 = 0; if (h0 < 0) h0 = 0; }
@@ -6331,7 +6345,13 @@ window.FM = window.FM || {};
         sbX0=Math.max(0,Math.floor(sbMnx)-2); sbX1=Math.min(W-1,Math.ceil(sbMxx)+2); sbY0=Math.max(0,Math.floor(sbMny)-2); sbY1=Math.min(H-1,Math.ceil(sbMxy)+2);
       }
       for(var sby=sbY0;sby<=sbY1;sby++){ var sbDy=sby-sbCy; for(var sbx=sbX0;sbx<=sbX1;sbx++){ var sbDx=sbx-sbCx; var sbR=0,sbG=0,sbB=0,sbA=0; for(var sbj=0;sbj<sbN;sbj++){ var sbC=sbCos[sbj], sbN2=sbSin[sbj]; var sbSx=sbCx+sbDx*sbC-sbDy*sbN2; var sbSy=sbCy+sbDx*sbN2+sbDy*sbC; var sbIx=sbSx<0?0:(sbSx>W-1?W-1:(sbSx+0.5)|0); var sbIy=sbSy<0?0:(sbSy>H-1?H-1:(sbSy+0.5)|0); var sbI=sbIy*sbW4+sbIx*4; sbR+=sbS[sbI]; sbG+=sbS[sbI+1]; sbB+=sbS[sbI+2]; sbA+=sbS[sbI+3]; } var sbO=sby*sbW4+sbx*4; d[sbO]=sbR/sbN; d[sbO+1]=sbG/sbN; d[sbO+2]=sbB/sbN; d[sbO+3]=sbA/sbN; } } },
-    gradientmap: function(d,W,H,p,t){ var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0; gmL+=(BAYER8[(gmY&7)*8+(gmX&7)]-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
+    /* Dither's 8x8 cells are one PROJECT pixel (#482 5.1 review). On a clip the plate is never above scale 1, so a cell
+       was always one plate pixel and nothing there changes. An adjustment layer grades the canvas itself, which a
+       supersampled or zoomed preview holds at 2-6x — there the cells shrank to a device pixel and the dither became a
+       finer texture than the export's. `S` above 1 now reads the pattern at (x, y) / S, blended between its four nearest
+       cells the way the export's frame is when it is drawn up to that size; at 1 and below it is the old index, byte for
+       byte. */
+    gradientmap: function(d,W,H,p,t,S){ var gmCs=(S>1&&isFinite(S))?S:1; var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1; var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108]; var gmS0=gmSh[0],gmS1=gmSh[1],gmS2=gmSh[2], gmD0=gmHi[0]-gmS0,gmD1=gmHi[1]-gmS1,gmD2=gmHi[2]-gmS2; var gmMidP=p.midpoint==null?50:FM.evalProp(p.midpoint,t), gmMid=gmMidP/100, gmPlain=gmMidP===50; var gmDith=(p.dither==null?0:FM.evalProp(p.dither,t))/100/255; var gmW=W|0; for(var gmI=0;gmI<d.length;gmI+=4){ var gmL=(0.299*d[gmI]+0.587*d[gmI+1]+0.114*d[gmI+2])/255; if(gmDith>0){ var gmP=gmI>>2, gmX=gmP%gmW, gmY=(gmP/gmW)|0, gmB; if(gmCs!==1){ var gmU=(gmX+0.5)/gmCs-0.5, gmV=(gmY+0.5)/gmCs-0.5, gmX0=Math.floor(gmU), gmY0=Math.floor(gmV), gmFu=gmU-gmX0, gmFv=gmV-gmY0, gmR0=(gmY0&7)*8, gmR1=((gmY0+1)&7)*8, gmC0=gmX0&7, gmC1=(gmX0+1)&7; gmB=(BAYER8[gmR0+gmC0]*(1-gmFu)+BAYER8[gmR0+gmC1]*gmFu)*(1-gmFv)+(BAYER8[gmR1+gmC0]*(1-gmFu)+BAYER8[gmR1+gmC1]*gmFu)*gmFv; } else gmB=BAYER8[(gmY&7)*8+(gmX&7)]; gmL+=(gmB-0.5)*gmDith*24; if(gmL<0)gmL=0; else if(gmL>1)gmL=1; } if(!gmPlain){ gmL = gmL<=gmMid ? (gmMid<=0?1:0.5*gmL/gmMid) : (gmMid>=1?0:0.5+0.5*(gmL-gmMid)/(1-gmMid)); } var gmO0=gmS0+gmD0*gmL, gmO1=gmS1+gmD1*gmL, gmO2=gmS2+gmD2*gmL; d[gmI]=d[gmI]+(gmO0-d[gmI])*gmAmt; d[gmI+1]=d[gmI+1]+(gmO1-d[gmI+1])*gmAmt; d[gmI+2]=d[gmI+2]+(gmO2-d[gmI+2])*gmAmt; } },
     colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t,ps){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); chkSz=Math.max(1,Math.round(chkSz*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2];
       // MIX was welded at a 50/50 blend, so neither a solid checker nor a barely-there one existed.
@@ -7027,7 +7047,7 @@ window.FM = window.FM || {};
       if(cbRg>0){ for(var cbJ=0;cbJ<cbN;cbJ+=4){ if(d[cbJ+3]<=0)continue; var cbL=(0.299*d[cbJ]+0.587*d[cbJ+1]+0.114*d[cbJ+2])/255, cbW=cbRg===1?(1-cbL)*(1-cbL):cbRg===3?cbL*cbL:1-(2*cbL-1)*(2*cbL-1);
           var cbQ=d[cbJ]+cbAddR*cbW; d[cbJ]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+1]+cbAddG*cbW; d[cbJ+1]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+2]+cbAddB*cbW; d[cbJ+2]=cbQ<0?0:(cbQ>255?255:cbQ); } return; } for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
     highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4;
-      /* #482 polish 5.2 — Whites, Blacks, Tonal width, Local radius, Colour correction (hsGrade, above PIXEL_FX). At their
+      /* #482 polish 5.2 — Whites, Blacks, Tonal width, Local radius, Colour boost (hsGrade, above PIXEL_FX). At their
          defaults none of them is read past this line: the old loop below runs exactly as it always has. */
       var hsRd = hsNum(fparam(p, 'radius', 0, t), 0, 2000, 0), hsWd = hsNum(fparam(p, 'width', 100, t), 10, 100, 100), hsWt = hsNum(fparam(p, 'whites', 0, t), -100, 100, 0), hsBk = hsNum(fparam(p, 'blacks', 0, t), -100, 100, 0), hsCc = hsNum(fparam(p, 'sat', 0, t), -100, 100, 0);
       if (hsRd > 0 || hsWd !== 100 || hsWt !== 0 || hsBk !== 0 || hsCc !== 0) { hsGrade(d, W, H, hsSh, hsHi, hsRd, hsWd, hsWt, hsBk, hsCc); return; }
@@ -17253,6 +17273,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     g.globalCompositeOperation = 'copy'; g.drawImage(r, 0, 0); g.globalCompositeOperation = 'source-over';
     return _adjCssOut;
   }
+  /* ═══ TWO ADJUSTMENT-LAYER GRADES THAT A ZOOMED SLICE CANNOT DRAW (#482 5.1 review) ═══════════════════════════════════
+   * Zoomed past 1.35x the preview canvas holds only the slice on screen plus 18% (app.js previewCrop), and an adjustment
+   * layer grades that slice — the layers below it were never drawn anywhere else, so it has no frame-sized plate to read the
+   * way a clip has (913.5). Every point grade is the same on a slice, and Pixelate / RGB Split are told where the frame is
+   * (queue 690). Two are not:
+   *   · Highlights & Shadows with Local radius judges each pixel by the brightness up to 1.2 x the radius around it, past
+   *     the 18% margin — measured zoomed in on a photo, radius 100 was 11.8 levels off the export on average (max 64),
+   *     radius 200 27-30, and panning 40 px changed the same pixels by 4.6, where the clip is exact.
+   *   · Gradient Map's Dither lays its 8x8 pattern from the buffer's own corner, so on a slice it started at the slice's
+   *     corner and crawled as he panned.
+   * So while a shown adjustment layer carries either (any keyframe, so the decision does not flip mid-play), the preview
+   * renders the whole comp — app.js asks this before cropping. `maxScale` is the other half: Local radius's blur is exact
+   * integer arithmetic only up to a 300-px box (hsGrade), i.e. 0.6 x radius x scale <= 300, and an adjustment layer's
+   * plate is the canvas itself, at the canvas's scale — so a supersampled preview is held under 500 / radius, or the
+   * reach would shrink against the export's. Returns null when nothing needs it. */
+  function adjPeak(v) {                           // the most a param reaches: a number, or its largest keyframe
+    if (typeof v === 'number') return v === v ? v : 0;
+    if (v && Array.isArray(v.kf)) { let m = 0; for (const k of v.kf) if (k && typeof k.v === 'number' && k.v > m) m = k.v; return m; }
+    return 0;
+  }
+  FM.adjNeedsFrame = function (scene) {
+    const ls = (scene && scene.layers) || [];
+    let need = false, maxScale = Infinity;
+    const walk = (effs) => {
+      for (const e of effs || []) {
+        if (!e || e.enabled === false) continue;
+        if (FM.isFxContainer && FM.isFxContainer(e)) { walk(e.effects); continue; }
+        const p = e.params || {};
+        if (e.type === 'highlightsshadows') {
+          const r = Math.min(2000, adjPeak(p.radius));
+          if (r > 0) { need = true; maxScale = Math.min(maxScale, HS_BOX_MAX / (0.6 * r)); }
+        } else if (e.type === 'gradientmap' && adjPeak(p.dither) > 0) need = true;
+      }
+    };
+    for (const L of ls) if (L && L.type === 'adjustment' && L.visible) walk(L.effects);
+    return need ? { maxScale: maxScale } : null;
+  };
   function applyAdjustment(ctx, layer, t, scene, effs, into) {
     if (!effs) {
       /* …plus a PREVIEWED stack (#986 C52): picking a filter tile on an adjustment layer set FM._fxPreview and changed
@@ -17288,8 +17345,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _adjCv.__fmRS = rs;
     _adjCv.__fmOX = ctx.canvas.__fmOX || 0; _adjCv.__fmOY = ctx.canvas.__fmOY || 0;
     const a = _adjCv.getContext('2d');
+    /* ═══ WITH ONE OF THE TWENTY COLOUR GRADES IN THE STACK, THE CSS HALF RUNS FIRST — THE CLIP'S ORDER (#482 5.1 review) ═══
+     * On a clip the nine CSS effects (Contrast, Saturation, Brightness…) are drawn into the layer before any pixel effect
+     * runs, whatever their row (postFxOrder). Here the CSS half was the filter on the final blit, so it ran AFTER the
+     * pixel pass — and 5.1's promise, "they grade everything below exactly as they grade the clip", held only for one
+     * effect on its own. Measured on two photos: [Contrast 1.5, Exposure +1] was 31 levels off the same stack on the clip
+     * (the grade itself is 49), [Saturation 2.2, Colour Balance] 20, and the Infrared filter fitted to an adjustment layer
+     * a hot magenta wash 52 levels off its own ingredients on the clip. So with any of them present the CSS half is
+     * applied to the snapshot here (through the shader where ctx.filter does nothing, #986 batch 2), the pixel pass runs
+     * on that, and the blit below carries no filter. A stack of only the six that could always go on an adjustment layer
+     * (Posterize, Tint, Threshold, Duotone, RGB Split, Levels) keeps its old order: saved projects draw as they did.
+     * `levels` is the one PIXEL_FX kernel among the six, which is why it is named. */
+    const cssFirst = hasCss && ppfx.some(e => e.type !== 'levels' && !!PIXEL_FX[e.type]);
     a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch); a.globalAlpha = 1; a.filter = 'none';
-    a.drawImage(ctx.canvas, 0, 0);                 // snapshot current frame (background + layers below), now 1:1
+    if (cssFirst && ctxFilterOK()) { a.filter = filter; a.drawImage(ctx.canvas, 0, 0); a.filter = 'none'; }   // the snapshot, CSS-graded on the way in
+    else {
+      a.drawImage(ctx.canvas, 0, 0);               // snapshot current frame (background + layers below), now 1:1
+      if (cssFirst) {                              // ctx.filter is dead here: the same passes through the shader, copied back
+        const o = adjCssNoFilter(lay, t, cw, ch, renderScale(ctx));
+        if (o) { a.globalCompositeOperation = 'copy'; a.drawImage(o, 0, 0); a.globalCompositeOperation = 'source-over'; }
+      }
+    }
     /* ═══ ZOOMED IN, AN ADJUSTMENT LAYER STILL GRADES THE WHOLE FRAME'S GEOMETRY (queue 690, HUNT-d) ═══════════════════
      * 913.5 made every per-layer effect draw the same in a zoomed slice as in the frame, and v16.90 told him "a zoomed view
      * is exactly the export, just closer". Adjustment layers never got it: this snapshot is the TARGET, and zoomed in the
@@ -17301,7 +17377,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the frame's. `onFrame` is the plate being exactly the frame — the export, every unzoomed preview, every playback
      * tier — and there nothing below changes by a byte. The one thing a slice cannot know is what lies past its own edge,
      * so a block straddling it, or a split sampling past it, reads the nearest pixel it has. The preview renders 18% past
-     * every visible edge (app.js CROP_MARGIN) so that band is off screen. */
+     * every visible edge (app.js CROP_MARGIN) so that band is off screen. Local radius reaches further than that band and
+     * Dither has no geometry to be told, so for those two the preview does not crop at all (FM.adjNeedsFrame, above). */
     const aOX = ctx.canvas.__fmOX || 0, aOY = ctx.canvas.__fmOY || 0;
     const onFrame = Math.abs(aOX * rs) <= 0.5 && Math.abs(aOY * rs) <= 0.5 && Math.abs(cw - W * rs) <= 1 && Math.abs(ch - H * rs) <= 1;
     const frameGeo = onFrame ? null : { cx: (W / 2 - aOX) * rs, cy: (H / 2 - aOY) * rs, maxR: Math.hypot(W / 2, H / 2) * rs };
@@ -17353,8 +17430,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        the frame back ungraded on his class of phone — measured: the whole grade gone. The same passes run here on the
        graded snapshot, radii at the target's own scale (what effectFilter was handed), and the result is drawn with no
        filter. Anything the shader cannot do leaves the old line exactly as it was. */
-    let src = _adjCv, css = hasCss ? filter : 'none';
-    if (hasCss && !ctxFilterOK()) { const o = adjCssNoFilter(lay, t, cw, ch, renderScale(ctx)); if (o) { src = o; css = 'none'; } }
+    let src = _adjCv, css = (hasCss && !cssFirst) ? filter : 'none';   // cssFirst: already in the snapshot (above)
+    if (hasCss && !cssFirst && !ctxFilterOK()) { const o = adjCssNoFilter(lay, t, cw, ch, renderScale(ctx)); if (o) { src = o; css = 'none'; } }
     if (into) {                                     // #986 C1: one side of a filter's cross-fade — baked, not blitted
       const m = into.getContext('2d');
       m.setTransform(1, 0, 0, 1, 0, 0); m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
