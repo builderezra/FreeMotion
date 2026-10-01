@@ -118114,4 +118114,405 @@
   });
 
 
+  /* ═══ #482 POLISH BATCH 6 (flares) — 6.5 Lens Flare, 6.6 Linear and Spin Streaks, 6.7 Glow Scan ══════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 6
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 6.5 answers C38 (the flare's core and six rays were welded) and
+   * 6.7 answers C35 (Glow Scan was frame-relative and phase-locked to project time). The rule that makes it safe (§0.3): every
+   * new key's default is the old look. No library filter is built on these four effects, but all 56 are re-hashed anyway, and
+   * new and saved instances are pinned against hashes captured on v17.21 (28104a3e) BEFORE the first edit, with polish 1's
+   * fixture (a textured 200x150 clip and an ellipse in a 240x180 project) at the export (240 wide, t 0.7 and 0.35) and a
+   * half-size preview (120 wide, t 1.3). */
+  function shots6(layers) {
+    return [[240, 0.7], [120, 1.3], [240, 0.35]].map(([w, t]) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  const NEW6 = { lensflare: { size: 100, rays: 6, rotation: 0, ghosts: 0, halo: 0, streak: 0 }, linstreaks: { both: 0, threshold: 0, color: '#ffffff' },
+    spinstreaks: { threshold: 0, dir: 0 }, glowscan: { angle: 30, span: 0, pause: 0, loop: 0 } };
+
+  test('482 6.0 Lens Flare, Linear and Spin Streaks and Glow Scan - every new control is in the catalogue at a default that draws the old look, and the 56 library filters and saved and new flares, streaks and scans render byte for byte as on v17.21', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them, at a default that is the old look, and the render-time fill agrees. */
+    Object.keys(NEW6).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW6[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW6[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    const SET = { lensflare: { size: 180, rays: 9, rotation: -40, ghosts: 5, halo: 0.6, streak: 0.7 }, linstreaks: { both: 1, threshold: 55, color: '#40a0ff' },
+      spinstreaks: { threshold: 40, dir: 1 }, glowscan: { direction: 4, angle: -65, span: 1, pause: 1.5, loop: 1 } };
+    const lay = [{ id: 'l4826', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.21: a new instance (every new key at its default) on a clip and on an ellipse, and saved
+       instances holding only the old keys — the default flare, a moved two-colour one, every Glow Scan direction. */
+    const HEAD = { 'lensflare/new/image': 'a5eb45bc/e068126b/a5eb45bc', 'lensflare/new/shape': 'f017597b/a7d29d52/f017597b', 'lensflare/saved0/image': 'a5eb45bc/e068126b/a5eb45bc', 'lensflare/saved0/shape': 'f017597b/a7d29d52/f017597b',
+      'lensflare/saved1/image': '81a42512/06f53a54/81a42512', 'lensflare/saved1/shape': 'd516f9ae/f0b914a8/d516f9ae', 'lensflare/saved2/image': '1c2bcd3a/2a2fd902/1c2bcd3a', 'lensflare/saved2/shape': '98b5b2f2/d91f0123/98b5b2f2',
+      'linstreaks/new/image': '2e35c1a8/b1390d8e/2e35c1a8', 'linstreaks/new/shape': '368ac31b/d4b7ec90/368ac31b', 'linstreaks/saved0/image': '2e35c1a8/b1390d8e/2e35c1a8', 'linstreaks/saved0/shape': '368ac31b/d4b7ec90/368ac31b',
+      'linstreaks/saved1/image': 'b32b4129/c4c6b89d/b32b4129', 'linstreaks/saved1/shape': '1cf98588/e7c5ee7b/1cf98588',
+      'spinstreaks/new/image': '8c6bda15/1fcf6ade/8c6bda15', 'spinstreaks/new/shape': '5b02afb8/e7bd075a/5b02afb8', 'spinstreaks/saved0/image': '8c6bda15/1fcf6ade/8c6bda15', 'spinstreaks/saved0/shape': '5b02afb8/e7bd075a/5b02afb8',
+      'spinstreaks/saved1/image': '217b7ef6/43587c51/217b7ef6', 'spinstreaks/saved1/shape': '8f106870/54946fbd/8f106870',
+      'glowscan/new/image': 'e9d0635a/9df85d52/8f125992', 'glowscan/new/shape': '706ebe18/aa3c47dc/9731fe31', 'glowscan/saved0/image': 'e9d0635a/9df85d52/8f125992', 'glowscan/saved0/shape': '706ebe18/aa3c47dc/9731fe31',
+      'glowscan/saved1/image': '8402597d/760395a0/b702a6c6', 'glowscan/saved1/shape': '108d2cac/9c5adb97/5d766f4e', 'glowscan/saved2/image': '529e1515/650c2851/01e0cfcc', 'glowscan/saved2/shape': '5e325498/bfb5626f/dde238c4',
+      'glowscan/saved3/image': 'b4cf29e1/922f456a/16759aa6', 'glowscan/saved3/shape': 'c8775204/055c519e/44ecc0c7' };
+    const SAVED = {
+      lensflare: [{ x: 0.3, y: 0.3, intensity: 1 }, { x: 0.75, y: 0.2, intensity: 1.6, color: '#ffd080', color2: '#80b0ff' }, { x: 0.5, y: 0.6, intensity: 0.6 }],
+      linstreaks: [{ length: 30, angle: 90 }, { length: 55, angle: 30, samples: 16 }],
+      spinstreaks: [{ amount: 0.5 }, { amount: 0.8, centerx: 30, centery: 65, decay: 0.2, samples: 20 }],
+      glowscan: [{ speed: 1.5, width: 60, color: '#ffffff' }, { speed: 1, width: 30, amount: 0.6, direction: 1, color: '#80ffcc' }, { speed: 0.7, width: 90, direction: 2, color: '#ffffff' }, { speed: 2.3, width: 20, direction: 3, color: '#ff8040' }],
+    };
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    const all = FM.filters.all();
+    if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
+    const tex = fix482(), ids = [], moved = [];
+    const clip = () => { const L = FM.makeLayer('image', { name: '4826 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    const got = {};
+    try {
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots5([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      Object.keys(SAVED).forEach(type => {
+        ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots6([L]); });
+        SAVED[type].forEach((p, i) => { ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [{ type: type, enabled: true, params: Object.assign({}, p) }]; got[type + '/saved' + i + '/' + kind] = shots6([L]); }); });
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    if (Object.keys(got).length !== Object.keys(HEAD).length) throw new Error('setup: ' + Object.keys(got).length + ' pictures rendered against ' + Object.keys(HEAD).length + ' pinned');
+    Object.keys(got).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+
+  /* Batch 6 helpers. A flat dark plate through a kernel at the export scale; a renderScene of one layer at the export (240 wide)
+     and at a half-size preview (120 wide), and the export shrunk to the preview's size for comparing the two. */
+  function plate6(W, H, v) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return d; }
+  function lf6(W, H, p, ps) { const d = plate6(W, H, 20); FM._pixelFx.lensflare(d, W, H, Object.assign({ x: 0.5, y: 0.5, intensity: 1 }, p), 0.5, ps || 1); return d; }
+  /* The bright lobes met going once round a circle about (cx, cy), as their centre angles in degrees (0 = right, 90 = down). */
+  function lobes6(d, W, cx, cy, r, ch) {
+    const v = [];
+    for (let a = 0; a < 720; a++) { const th = a / 2 * Math.PI / 180; v.push(d[(Math.round(cy + r * Math.sin(th)) * W + Math.round(cx + r * Math.cos(th))) * 4 + (ch || 0)]); }
+    const lo = Math.min.apply(null, v), hi = Math.max.apply(null, v);
+    if (hi - lo < 6) return [];
+    const cut = lo + (hi - lo) * 0.5, s0 = v.findIndex(x => x < cut), out = [];
+    let inL = false, sum = 0, n = 0;
+    for (let k = 0; k <= 720; k++) {
+      const on = v[(s0 + k) % 720] >= cut;
+      if (on && !inL) { inL = true; sum = 0; n = 0; }
+      if (on) { sum += (s0 + k) / 2; n++; }
+      if (!on && inL) { inL = false; out.push(((sum / n) % 360 + 360) % 360); }
+    }
+    return out;
+  }
+  function scene6(w, layer, t, PW, PH) {
+    PW = PW || 240; PH = PH || 180;
+    const cv = offscreen(w, Math.round(w * PH / PW)), x = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(x, { project: { width: PW, height: PH, fps: 30, duration: 6, background: '#000000' }, layers: [layer], selectedId: null, selectedIds: [] }, t);
+    return cv;
+  }
+  function shrink6(cv, w, h) { const c = offscreen(w, h), g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high'; g.drawImage(cv, 0, 0, w, h); return g.getImageData(0, 0, w, h).data; }
+  function mad6(a, b) { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return s / (a.length / 4 * 3); }
+  /* Preview against export for one effect on a full-frame layer: [how far the half-size preview is from the export shrunk, the same
+     for the effect at its defaults (the jitter every effect has between the two plates), how far the new controls move the picture]. */
+  function parity6(type, set, mk) {
+    const lay = p => { const L = mk(); const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, p); L.effects = [e]; return L; };
+    const pv = (p, t) => scene6(120, lay(p), t).getContext('2d').getImageData(0, 0, 120, 90).data;
+    const ex = (p, t) => shrink6(scene6(240, lay(p), t), 120, 90);
+    const T = 0.5;
+    return { got: mad6(ex(set, T), pv(set, T)), base: mad6(ex({}, T), pv({}, T)), moved: mad6(ex(set, T), ex({}, T)) };
+  }
+
+  /* 6.5 LENS FLARE. The core was W x 0.18 and the rays six, welded (C38). Rays are counted as bright lobes on a ring 60 px out
+     with the core shrunk (Core size 40) so the ring meets rays and not core. Ghost 1 sits 1.35 of the way from the light to the
+     middle of the plate; the ring is 0.3 of the short side out (54 px on 240x180); the streak runs level with the light. */
+  test('482 6.5 Lens Flare - Rays 8 and 16 draw 8 and 16 rays, Rotation turns them, Core size shrinks and grows the core, Ghosts, Ring and Anamorphic streak each light their own place in their own colour, and the half-size preview draws them where the export does', { item: '482', budgetMs: 60000 }, function () {
+    const P = FM._pixelFx; if (!P || !P.lensflare) throw new Error('the Lens Flare kernel is not reachable');
+    const W = 240, H = 180, at = (d, x, y, c) => d[(Math.round(y) * W + Math.round(x)) * 4 + (c || 0)];
+    const n6 = lobes6(lf6(W, H, { size: 40 }), W, 120, 90, 60).length;
+    if (n6 !== 6) throw new Error('CONTROL: the default flare shows ' + n6 + ' rays on the ring, not 6 - the ring is not reading the rays');
+    const bad = [];
+    [8, 16, 3, 1].forEach(n => { const got = lobes6(lf6(W, H, { size: 40, rays: n }), W, 120, 90, 60).length; if (got !== n) bad.push('Rays ' + n + ' draws ' + got + ' rays round the light'); });
+    if (lobes6(lf6(W, H, { size: 40, rays: 0 }), W, 120, 90, 60).length) bad.push('Rays 0 still draws rays');
+    const r0 = lobes6(lf6(W, H, { size: 40 }), W, 120, 90, 60), r30 = lobes6(lf6(W, H, { size: 40, rotation: 30 }), W, 120, 90, 60);
+    const off = (a, by) => { const o = ((a - by) % 60 + 60) % 60; return Math.min(o, 60 - o); };
+    if (r0.some(a => off(a, 0) > 2)) bad.push('CONTROL: the default rays are not at 0, 60, 120... (' + r0.map(a => a.toFixed(1)) + ')');
+    if (r30.length !== 6 || r30.some(a => off(a, 30) > 2)) bad.push('Rotation 30 puts the rays at ' + r30.map(a => a.toFixed(1)) + ' degrees, not 30, 90, 150...');
+    const core = (s, r) => at(lf6(W, H, { rays: 0, size: s }), 120 + r, 90);
+    if (!(core(40, 30) < core(100, 30) - 40)) bad.push('Core size 40 is no smaller than 100: 30 px out it reads ' + core(40, 30) + ' against ' + core(100, 30));
+    if (!(core(200, 80) > core(100, 80) + 40)) bad.push('Core size 200 is no bigger than 100: 80 px out it reads ' + core(200, 80) + ' against ' + core(100, 80));
+    const g0 = lf6(W, H, { x: 0.25, y: 0.25, rays: 0 }), g1 = lf6(W, H, { x: 0.25, y: 0.25, rays: 0, ghosts: 1 });
+    const gR = at(g1, 141, 106) - at(g0, 141, 106), gB = at(g1, 141, 106, 2) - at(g0, 141, 106, 2);
+    if (!(gR > 25)) bad.push('Ghosts 1 lifts the point 1.35 of the way from the light through the middle by ' + gR + ' levels - no ghost there');
+    if (!(gR > gB + 10)) bad.push('the first ghost is not warm in a warm flare (red +' + gR + ', blue +' + gB + ')');
+    if (at(g1, 200, 160) !== at(g0, 200, 160)) bad.push('Ghosts 1 lit a pixel nowhere near the ghost');
+    const h0 = lf6(W, H, { x: 0.75, y: 0.25, rays: 0 }), h1 = lf6(W, H, { x: 0.75, y: 0.25, rays: 0, ghosts: 1 });
+    if (!(at(h1, 99, 106) - at(h0, 99, 106) > 25)) bad.push('with the light top right, the first ghost is not at (99, 106) - the ghosts do not swing round with the light');
+    const q0 = lf6(W, H, { size: 40, rays: 0 }), q1 = lf6(W, H, { size: 40, rays: 0, halo: 1 });
+    let pr = 0, pb = 0, br = -1, bb = -1;
+    for (let r = 40; r <= 70; r++) { const dr = at(q1, 120 + r, 90) - at(q0, 120 + r, 90), db = at(q1, 120 + r, 90, 2) - at(q0, 120 + r, 90, 2); if (dr > br) { br = dr; pr = r; } if (db > bb) { bb = db; pb = r; } }
+    if (!(br > 40 && Math.abs(pr - 54) <= 4)) bad.push('Ring 1 lifts red most ' + pr + ' px out by ' + br + ' - no ring 54 px round the light');
+    if (!(pr > pb)) bad.push('the ring is not red outside blue (red peaks ' + pr + ' px out, blue ' + pb + ')');
+    if (at(q1, 120 + 20, 90) !== at(q0, 120 + 20, 90)) bad.push('Ring 1 lit a pixel 20 px from the light, well inside the ring');
+    const s0 = lf6(W, H, { size: 40, rays: 0 }), s1 = lf6(W, H, { size: 40, rays: 0, streak: 1, color2: '#3070ff' });
+    const sB = at(s1, 200, 90, 2) - at(s0, 200, 90, 2), sR = at(s1, 200, 90) - at(s0, 200, 90);
+    if (!(sB > 40)) bad.push('Anamorphic streak 1 lifts the point 80 px right of the light by only ' + sB + ' levels');
+    if (!(sB > 2 * sR)) bad.push('the streak is not in the Rays & streak colour (#3070ff: blue +' + sB + ', red +' + sR + ')');
+    if (at(s1, 40, 90, 2) - at(s0, 40, 90, 2) < 40) bad.push('the streak runs only one way from the light');
+    if (at(s1, 120, 10, 2) !== at(s0, 120, 10, 2)) bad.push('the streak lit a point 80 px ABOVE the light - it should be a level line');
+    /* PREVIEW = EXPORT: every new control is a fraction of the plate, so a half-size plate (120x90, scale 0.5) puts the ring, the
+       first ghost and the streak where the export does, at half the distance. */
+    const h = (p) => lf6(120, 90, p, 0.5), ah = (d, x, y, c) => d[(Math.round(y) * 120 + Math.round(x)) * 4 + (c || 0)];
+    const hq0 = h({ size: 40, rays: 0 }), hq1 = h({ size: 40, rays: 0, halo: 1 });
+    let hpr = 0, hbr = -1; for (let r = 15; r <= 40; r++) { const dr = ah(hq1, 60 + r, 45) - ah(hq0, 60 + r, 45); if (dr > hbr) { hbr = dr; hpr = r; } }
+    if (Math.abs(hpr * 2 - pr) > 2) bad.push('the ring is ' + hpr + ' px out on the half-size plate and ' + pr + ' on the export - not half the distance');
+    const hg0 = h({ x: 0.25, y: 0.25, rays: 0 }), hg1 = h({ x: 0.25, y: 0.25, rays: 0, ghosts: 1 });
+    if (!(ah(hg1, 70.5, 53) - ah(hg0, 70.5, 53) > 25)) bad.push('on the half-size plate the first ghost is not at (70.5, 53), half of the export (141, 106)');
+    const hs0 = h({ size: 40, rays: 0 }), hs1 = h({ size: 40, rays: 0, streak: 1, color2: '#3070ff' }), hsB = ah(hs1, 100, 45, 2) - ah(hs0, 100, 45, 2);
+    if (!(hsB > 0.6 * sB && hsB < 1.4 * sB)) bad.push('on the half-size plate the streak lifts its point by ' + hsB + ' against ' + sB + ' on the export');
+    if (bad.length) throw new Error(bad.join(' · '));
+    /* …and through FM.renderScene with every new control on: the half-size preview against the export shrunk to it. MEASURED: 2.06
+       levels apart (the default flare 1.13, the jitter every flare has between the two plates); one new control drawn in project
+       pixels instead of plate fractions adds its own share of the 31.1 the controls move the picture by (the ring alone 5.2, the
+       ghosts 3.7), so the line sits between: within 1.5 of the default's jitter and under an eighth of the move. */
+    const mk = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 240, shapeH: 180, fill: '#141414', start: 0, duration: 6 }); L.start = 0; L.duration = 6; return L; };
+    const pp = parity6('lensflare', { x: 0.3, y: 0.3, size: 70, rays: 9, rotation: 20, ghosts: 8, halo: 1, streak: 1, color2: '#80b0ff' }, mk);
+    if (!(pp.moved > 4)) throw new Error('CONTROL: the new controls moved the picture only ' + pp.moved.toFixed(2) + ' levels - the parity check below would prove nothing');
+    if (!(pp.got < pp.base + 1.5 && pp.got < pp.moved / 8)) throw new Error('the half-size preview of a flare with every new control is ' + pp.got.toFixed(2) + ' levels from the export (the default flare: ' + pp.base.toFixed(2) + ', the controls move it ' + pp.moved.toFixed(2) + ')');
+  });
+
+  /* 6.6 LINEAR STREAKS. A 3x3 white dot on a dark plate, Angle 0: the old streak runs right of the dot only. */
+  test('482 6.6 Linear Streaks - Both ways smears a bright dot to both sides, Only above keeps a mid-grey block from smearing while white still does, Tint colours the streak and white is the old streak, and the half-size preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.linstreaks) throw new Error('the Linear Streaks kernel is not reachable');
+    const W = 120, H = 60;
+    const scene = () => { const d = plate6(W, H, 20); for (let y = 29; y <= 31; y++) for (let x = 59; x <= 61; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; }
+      for (let y = 45; y <= 55; y++) for (let x = 15; x <= 25; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 128; } return d; };
+    const run = p => { const d = scene(); K.linstreaks(d, W, H, Object.assign({ length: 30, angle: 0 }, p), 0, 1); return d; };
+    const lift = (d, x, y, c) => d[(y * W + x) * 4 + (c || 0)] - 20;
+    const bad = [], one = run({}), both = run({ both: 1 });
+    if (!(lift(one, 70, 30) > 10)) throw new Error('CONTROL: the old streak does not light 10 px right of the dot (+' + lift(one, 70, 30) + ')');
+    if (lift(one, 50, 30) !== 0) throw new Error('CONTROL: the old streak already lights 10 px LEFT of the dot (+' + lift(one, 50, 30) + ')');
+    if (!(lift(both, 50, 30) > 10)) bad.push('Both ways leaves the left of the dot dark (+' + lift(both, 50, 30) + ')');
+    if (Math.abs(lift(both, 50, 30) - lift(both, 70, 30)) > 3) bad.push('Both ways is lopsided: +' + lift(both, 50, 30) + ' left, +' + lift(both, 70, 30) + ' right');
+    const g0 = lift(one, 35, 50), g60 = lift(run({ threshold: 60 }), 35, 50), w60 = lift(run({ threshold: 60 }), 70, 30);
+    if (!(g0 > 5)) bad.push('CONTROL: the mid-grey block does not streak at Only above 0 (+' + g0 + ')');
+    if (g60 !== 0) bad.push('Only above 60 still smears the mid-grey block (+' + g60 + ' 10 px right of it)');
+    if (Math.abs(w60 - lift(one, 70, 30)) > 1) bad.push('Only above 60 changed the white dot streak (+' + w60 + ', was +' + lift(one, 70, 30) + ') - white is above any cut');
+    const blue = run({ color: '#0000ff' });
+    if (!(lift(blue, 70, 30, 2) > 10 && lift(blue, 70, 30, 0) === 0 && lift(blue, 70, 30, 1) === 0)) bad.push('Tint blue does not make a blue streak (' + [0, 1, 2].map(c => '+' + lift(blue, 70, 30, c)) + ')');
+    if (lift(blue, 60, 30, 0) !== 235) bad.push('Tint changed the dot itself');
+    const white = run({ color: '#ffffff', both: 0, threshold: 0 });
+    for (let i = 0; i < one.length; i++) if (white[i] !== one[i]) { bad.push('a white Tint, One way and 0 % is not the old streak (byte ' + i + ')'); break; }
+    /* Linear Streaks runs on the CROPPED readback (CROP_FX, #692): the layer's box plus three times Length. Both ways reaches
+       Length the other way too, so the crop must still give the whole plate's picture, byte for byte. */
+    { const CW = 160, CH = 120, cd = new Uint8ClampedArray(CW * CH * 4);
+      for (let y = 40; y < 80; y++) for (let x = 50; x < 110; x++) { const i = (y * CW + x) * 4, v = ((x * 7 + y * 13) % 200) + 55; cd[i] = v; cd[i + 1] = 255 - v; cd[i + 2] = (v * 3) & 255; cd[i + 3] = 255; }
+      [{ length: 40, angle: 30, both: 1 }, { length: 25, angle: 200, both: 1, threshold: 40, color: '#60a0ff' }].forEach(p => {
+        const r = FM._cropIdentity('linstreaks', cd, CW, CH, p, 0, 1);
+        if (!r || r.same !== true) bad.push('the cropped readback differs from the whole plate at ' + JSON.stringify(p) + ' (' + (r && r.diff) + ' bytes)');
+      }); }
+    if (bad.length) throw new Error(bad.join(' · '));
+    const tex = fix482(), id = '_4826ls';
+    FM.media.set(id, { kind: 'image', el: tex, width: 200, height: 150 });
+    try {
+      const mk = () => { const L = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 6 }); L.id = id; L.start = 0; L.duration = 6; return L; };
+      // MEASURED: 1.70 levels apart with the new controls, 1.64 at the defaults; the controls move the picture 3.32
+      const pp = parity6('linstreaks', { length: 40, angle: 30, both: 1, threshold: 30, color: '#60a0ff' }, mk);
+      if (!(pp.moved > 3)) throw new Error('CONTROL: the new controls moved the picture only ' + pp.moved.toFixed(2) + ' levels');
+      if (!(pp.got < Math.max(2 * pp.base, 1.5))) throw new Error('the half-size preview of Linear Streaks with the new controls is ' + pp.got.toFixed(2) + ' levels from the export (at its defaults: ' + pp.base.toFixed(2) + ')');
+    } finally { FM.media.remove(id); }
+  });
+
+  /* 6.6 SPIN STREAKS. A white dot 40 px straight above the centre: the old trail runs clockwise from it, i.e. to the right. */
+  test('482 6.6 Spin Streaks - Anticlockwise trails a dot the other way round the centre, Only above keeps a mid-grey block in place while white still sweeps, the bounded path matches the whole plate, and the half-size preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.spinstreaks) throw new Error('the Spin Streaks kernel is not reachable');
+    const W = 121, H = 121;
+    const scene = (bg) => { const d = bg ? new Uint8ClampedArray(W * H * 4) : plate6(W, H, 20);
+      const box = (x0, y0, x1, y1, v) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } };
+      if (bg) box(15, 12, 105, 100, 20);
+      box(57, 17, 63, 23, 255); box(20, 50, 35, 70, 128); return d; };
+    const run = (p, bg, bb) => { const d = scene(bg); K.spinstreaks(d, W, H, Object.assign({ amount: 0.6 }, p), 0, 1, bb ? FM._fxBounds(d, W, H) : undefined); return d; };
+    const lift = (d, x, y) => d[(y * W + x) * 4] - scene()[(y * W + x) * 4];
+    const bad = [], cw = run({}), acw = run({ dir: 1 });
+    // 12 degrees round from the dot, either way: (60.5 + 40 sin 12, 60.5 - 40 cos 12) = (68.8, 21.4) and its mirror (52.2, 21.4)
+    if (!(lift(cw, 69, 21) > 15)) throw new Error('CONTROL: the old trail does not reach 12 degrees clockwise of the dot (+' + lift(cw, 69, 21) + ')');
+    if (!(lift(cw, 52, 21) < 3)) throw new Error('CONTROL: the old trail already runs anticlockwise of the dot (+' + lift(cw, 52, 21) + ')');
+    if (!(lift(acw, 52, 21) > 15 && lift(acw, 69, 21) < 3)) bad.push('Anticlockwise does not trail the other way: +' + lift(acw, 52, 21) + ' anticlockwise, +' + lift(acw, 69, 21) + ' clockwise of the dot');
+    // Only above 70: the block (luma 0.5) is more than the 10 % fade below the cut, so it must not move at all
+    let moved0 = 0, moved70 = 0; const t70 = run({ threshold: 70 });
+    for (let y = 42; y <= 78; y++) for (let x = 10; x <= 45; x++) { moved0 = Math.max(moved0, Math.abs(lift(cw, x, y))); moved70 = Math.max(moved70, Math.abs(lift(t70, x, y))); }
+    if (!(moved0 > 10)) bad.push('CONTROL: the mid-grey block does not spin at Only above 0 (' + moved0 + ')');
+    if (moved70 > 1) bad.push('Only above 70 still moves the mid-grey block and the dark round it (up to ' + moved70 + ' levels)');
+    if (!(lift(t70, 69, 21) > 15)) bad.push('Only above 70 stopped the white dot sweeping (+' + lift(t70, 69, 21) + ')');
+    [{ dir: 1 }, { threshold: 40 }, { dir: 1, threshold: 40, centerx: 30, centery: 70 }, { dir: 1, amount: 1, samples: 20 }].forEach(p => {
+      const a = run(p, true, false), b = run(p, true, true);
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { bad.push('the bounded path differs from the whole plate at ' + JSON.stringify(p) + ' (byte ' + i + ')'); break; }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    const tex = fix482(), id = '_4826ss';
+    FM.media.set(id, { kind: 'image', el: tex, width: 200, height: 150 });
+    try {
+      const mk = () => { const L = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 6 }); L.id = id; L.start = 0; L.duration = 6; return L; };
+      // MEASURED: 2.65 levels apart with the new controls, 3.55 at the defaults; the controls move the picture 16.9
+      const pp = parity6('spinstreaks', { dir: 1, threshold: 45 }, mk);
+      if (!(pp.moved > 3)) throw new Error('CONTROL: the new controls moved the picture only ' + pp.moved.toFixed(2) + ' levels');
+      if (!(pp.got < Math.max(2 * pp.base, 1.5))) throw new Error('the half-size preview of Spin Streaks with the new controls is ' + pp.got.toFixed(2) + ' levels from the export (at its defaults: ' + pp.base.toFixed(2) + ')');
+    } finally { FM.media.remove(id); }
+  });
+
+  /* 6.7 GLOW SCAN. C35: the band sat at phase x FRAME height on project time, so a title got a sliver of it. The title test is the
+     backlog's: a 100 px title in the middle of a 9:16 frame, Sweeps across Layer, the band on the title through the first half of
+     the cycle. The rest drive the kernel on a flat grey plate, with the clip handed in as the dispatcher does (its 8th argument). */
+  test('482 6.7 Glow Scan - Sweeps across Layer puts the band on a 100 px title through the first half of the sweep, Angle sends it any way, Wait rests before and between sweeps, Once sweeps a single time on the clip clock, every frame is the same however it is reached, and the half-size preview matches the export', { item: '482', budgetMs: 90000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.glowscan) throw new Error('the Glow Scan kernel is not reachable');
+    /* 1. THE TITLE. 300x1000 frame, a 200x100 grey title in the middle; 40 moments through one 1.5 Hz sweep. "Lit" is the
+       title's mean brightened by more than 20 levels. */
+    const title = span => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 500, shapeW: 200, shapeH: 100, fill: '#404040', start: 0, duration: 6 }); L.start = 0; L.duration = 6;
+      const e = FM.fxRegistry.makeInstance('glowscan'); if (span) e.params.span = 1; L.effects = [e]; return L; };
+    const lit = span => { const out = []; for (let k = 0; k < 40; k++) { const cv = scene6(300, title(span), k / 60, 300, 1000), d = cv.getContext('2d').getImageData(50, 450, 200, 100).data;
+      let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]; out.push(s / (d.length / 4) - 64 > 20); } return out; };
+    // MEASURED: across the Frame the title is lit in 7 of the 40 moments (17.5 %), across the Layer in 21 (52.5 %), from moment 10
+    const fr = lit(false), ly = lit(true), share = a => a.filter(Boolean).length / a.length;
+    if (!(share(fr) <= 0.25)) throw new Error('CONTROL: across the Frame the band already lights the title ' + Math.round(share(fr) * 100) + '% of the sweep - the fixture does not show C35');
+    if (!(share(ly) >= 0.4 && share(ly) >= 2.5 * share(fr))) throw new Error('Sweeps across Layer lights the 100 px title only ' + Math.round(share(ly) * 100) + '% of the sweep (across the Frame: ' + Math.round(share(fr) * 100) + '%)');
+    if (!(ly.indexOf(true) >= 0 && ly.indexOf(true) < 20)) throw new Error('Sweeps across Layer does not reach the title in the first half of the sweep (first lit at moment ' + ly.indexOf(true) + ' of 40)');
+    /* 2. ANGLE, WAIT, ONCE, THE CLIP CLOCK — on the kernel. */
+    const W = 100, H = 100, clip = { start: 0, duration: 10 };
+    const run = (p, t, layer) => { const d = plate6(W, H, 100); K.glowscan(d, W, H, Object.assign({ speed: 1.5, width: 20, amount: 1, color: '#ffffff' }, p), t, 1, null, layer || clip); return d; };
+    const v = (d, x, y) => d[(y * W + x) * 4];
+    const dark = d => { for (let i = 0; i < d.length; i += 4) if (d[i] !== 100) return false; return true; };
+    const bad = [];
+    const a0 = run({ direction: 4, angle: 0 }, 1 / 6);   // phase 0.25: a column 25 px in
+    if (!(v(a0, 25, 5) > 200 && v(a0, 25, 95) > 200 && v(a0, 75, 50) === 100)) bad.push('Angle 0 does not draw an upright band 25 px in, travelling right (' + v(a0, 25, 5) + ', ' + v(a0, 25, 95) + ', ' + v(a0, 75, 50) + ')');
+    const a90 = run({ direction: 4, angle: 90 }, 1 / 6), down = run({ direction: 0 }, 1 / 6);
+    let worst = 0; for (let i = 0; i < a90.length; i++) worst = Math.max(worst, Math.abs(a90[i] - down[i]));
+    if (worst > 1) bad.push('Angle 90 is not Down (' + worst + ' levels apart)');
+    const a45 = run({ direction: 4, angle: 45 }, 0.2);
+    if (Math.abs(v(a45, 20, 60) - v(a45, 60, 20)) > 1 || Math.abs(v(a45, 30, 30) - v(a45, 60, 20)) < 20) bad.push('Angle 45 does not draw a diagonal band');
+    const w = (t, p) => run(Object.assign({ pause: 1 }, p), t);
+    if (!dark(w(0.5))) bad.push('Wait 1 s draws a band 0.5 s into the clip - the first sweep should wait');
+    if (!(v(w(1 + 1 / 3), 50, 50) > 200)) bad.push('Wait 1 s: the sweep after the wait is not across the middle at 1.33 s (' + v(w(1 + 1 / 3), 50, 50) + ')');
+    if (!dark(w(2.167))) bad.push('Wait 1 s draws a band during the second wait (2.17 s)');
+    if (!(v(w(3.0), 50, 50) > 200)) bad.push('Wait 1 s does not sweep again after the second wait (3.0 s)');
+    if (!dark(w(1))) bad.push('Wait 1 s: the band does not start off the top edge (a half band showed at 1.0 s)');
+    const o = (t, layer) => run({ loop: 1 }, t, layer);
+    if (!(v(o(1 / 3), 50, 50) > 200)) bad.push('Once does not sweep across the middle at 0.33 s');
+    if (!dark(o(1)) || !dark(o(5))) bad.push('Once sweeps again after the first sweep');
+    if (!(v(run({}, 1), 50, 50) > 200)) bad.push('CONTROL: Loop has no band across the middle at 1.0 s');
+    const late = { start: 2, duration: 6 };
+    if (!(v(o(2 + 1 / 3, late), 50, 50) > 200)) bad.push('Once on a clip that starts at 2 s does not sweep at 2.33 s - it is not on the clip clock');
+    if (!dark(o(1 / 3, late))) bad.push('Once on a clip that starts at 2 s swept at 0.33 s project time');
+    const split = { start: 3, duration: 3, fxTimeOffset: 2 };
+    if (!dark(o(3 + 1 / 3, split))) bad.push('Once on the second half of a split clip swept again where the half starts');
+    /* 3. STATELESS: the same moment, reached directly or after other moments, is the same frame. */
+    const p3 = { direction: 4, angle: -50, pause: 0.7, span: 0 };
+    const first = run(p3, 2.05); run(p3, 0.4); run(p3, 3.9); const again = run(p3, 2.05);
+    for (let i = 0; i < first.length; i++) if (first[i] !== again[i]) { bad.push('the frame at 2.05 s changed after other moments were drawn'); break; }
+    if (bad.length) throw new Error(bad.join(' · '));
+    /* 4. PREVIEW = EXPORT, on the title with every new control on. */
+    const mk = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 150, shapeH: 50, fill: '#405060', start: 0, duration: 6 }); L.start = 0; L.duration = 6; return L; };
+    // MEASURED: 0.24 levels apart with the new controls, 0.17 at the defaults; the controls move the picture 11.2
+    const pp = parity6('glowscan', { direction: 4, angle: 30, span: 1, pause: 0.2 }, mk);
+    if (!(pp.moved > 1)) throw new Error('CONTROL: the new controls moved the picture only ' + pp.moved.toFixed(2) + ' levels');
+    if (!(pp.got < Math.max(2 * pp.base, 1.5))) throw new Error('the half-size preview of Glow Scan with the new controls is ' + pp.got.toFixed(2) + ' levels from the export (at its defaults: ' + pp.base.toFixed(2) + ')');
+  });
+
+  /* THE PANEL: every new row fits at 390 and 1280 px, Rotation says it is off while Rays is 0, and Angle says it is off unless
+     Sweeps is Angle — each greyed row naming why in a pill that fits the row. */
+  test('482 6.5 to 6.7 the new Lens Flare, Streaks and Glow Scan rows fit the effect panel at 390 and 1280 px, Rotation greys out at Rays 0 and Angle unless Sweeps is Angle', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { lensflare: ['Core size', 'Rays', 'Rotation', 'Ghosts', 'Ring', 'Anamorphic streak', 'Rays & streak'], linstreaks: ['Streaks', 'Only above', 'Tint'],
+      spinstreaks: ['Only above', 'Direction'], glowscan: ['Sweeps', 'Angle', 'Sweeps across', 'Wait between sweeps', 'Repeat'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label, #inspector-panel .fx-row.fx-open .kf-color-row > label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row') } : null;
+    };
+    const show = async (type, set) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S4826', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const greyed = async (where, label, why) => {
+      const r = rowOf(label); if (!r) throw new Error(where + ': no ' + label + ' row');
+      if (!r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + label + ' looks live where it does nothing');
+      const tag = r.row.querySelector('.fx-ovr-tag');
+      if (!tag || tag.textContent.indexOf(why) < 0) throw new Error(where + ': greyed ' + label + ' does not say why (' + JSON.stringify(tag && tag.textContent) + ')');
+      r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+      const tb = tag.getBoundingClientRect(), rb = r.row.getBoundingClientRect(), panel = document.getElementById('inspector-panel').getBoundingClientRect();
+      if (tb.left < rb.left - 1 || tb.right > rb.right + 1 || rb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1) throw new Error(where + ': the ' + label + ' pill spans ' + Math.round(tb.left) + '-' + Math.round(tb.right) + ' in a row at ' + Math.round(rb.left) + '-' + Math.round(rb.right));
+    };
+    const live = (where, label) => { const r = rowOf(label); if (!r || r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + label + ' is greyed out where it does something'); };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await show(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const r = rowOf(label);
+          if (!r) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = r.row.getBoundingClientRect();
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+          [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+        }
+      }
+      await show('lensflare'); live(where, 'Rotation');
+      await show('lensflare', p => { p.rays = 0; }); await greyed(where, 'Rotation', 'Rays');
+      await show('glowscan'); await greyed(where, 'Angle', 'Angle');
+      await show('glowscan', p => { p.direction = 4; }); live(where, 'Angle');
+      const note = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-range-note')).filter(n => /first sweep waits/.test(n.textContent))[0];
+      if (!note) throw new Error(where + ': Wait between sweeps does not say the first sweep waits too');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
+  /* A SCAN THAT RESTS IS NOT TOLD IT DOES NOTHING. The open effect's "changes nothing" check looks at the playhead and seven
+     moments spread through the clip (fx-thumbs noopTimes). A Once sweep is 0.67 s at the start of the clip, and a 5 s wait puts
+     the first sweep at 5-5.67 s of the clip: on a 10 s clip every one of those eight moments misses the band, and the panel
+     would tell him a working effect is broken — the line he has fought the app over (#460, #477, queue 690's Spin). The sweep's
+     own middle (FM.fxNoopMoments) is offered as a moment to look at. CONTROLS: Strength 0 really does nothing and is still told
+     so; the Once scan really is at rest 9.33 s in, where a looping scan would be right across the layer. */
+  test('482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is', { item: '482', budgetMs: 60000 }, function () {
+    const saved = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      const L = FM.makeLayer('shape', { name: '4826 scan', shape: 'rect', x: FM.scene.project.width / 2, y: FM.scene.project.height / 2, shapeW: 300, shapeH: 160, fill: '#405060', start: 1, duration: 10 });
+      L.start = 1; L.duration = 10;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      const put = set => { const e = FM.fxRegistry.makeInstance('glowscan'); Object.assign(e.params, set); L.effects = [e]; FM.time = L.start; };
+      const say = set => { put(set); return FM.fxThumbs.effectDoesNothing(L, 0); };
+      if (say({ amount: 0, loop: 1 }) !== true) throw new Error('CONTROL: a Glow Scan at Strength 0 is not measured as doing nothing - the check is not running');
+      if (say({}) !== false) throw new Error('CONTROL: the default Glow Scan is measured as doing nothing');
+      // 10.33 s: a looping scan is half way down the frame there, right across the layer — a Once scan has long finished
+      put({ loop: 1 });
+      if (FM.fxThumbs.effectDoesNothing(L, 0, 10 + 1 / 3) !== true) throw new Error('CONTROL: a Once scan is not at rest 9.33 s into the clip - it swept again, so this fixture shows nothing');
+      [{ loop: 1 }, { pause: 5 }, { loop: 1, pause: 2, span: 1 }].forEach(set => {
+        const v = say(set);
+        if (v !== false) throw new Error('a Glow Scan with ' + JSON.stringify(set) + ' on a 10 s clip is measured as ' + (v === true ? 'doing nothing' : 'unknown') + ' - its sweep falls between the moments the check looks at, so the panel tells him a working effect changes nothing');
+      });
+    } finally { FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.time = t0; }
+  });
+
+
 })();

@@ -607,7 +607,13 @@ window.FM = window.FM || {};
     { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has
     { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
-    { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 8, unit: ' taps' }] },
+    /* #482 polish 6.6 (#966 "as much choice as possible"). The streak only ever ran one way along Angle, every bright-ish
+       pixel joined it (a mid-tone streaks a little, so a busy picture smeared all over rather than just its lights), and it
+       was always the colour of what it smeared. Both ways smears to both sides, Only above is Zoom Streaks' gate (the same
+       name and maths), and Tint colours the streak. One way, 0 % and white draw the old streak exactly. */
+    { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 8, unit: ' taps' },
+      { key: 'both', label: 'Streaks', def: 0, options: [[0, 'One way'], [1, 'Both ways']] },
+      { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' }], color: true, defColor: '#ffffff', colorLabel: 'Tint' },
     // ---- batch 13: Opacity / Visibility (time-based alpha) ----
     { type: 'blink', label: 'Blink', params: [
       { key: 'rate', label: 'Rate', min: 0.5, max: 12, step: 0.1, def: 2, unit: 'Hz' },
@@ -730,7 +736,19 @@ window.FM = window.FM || {};
         { key: 'dither', label: 'Dither', def: 0, options: [[0, 'Off'], [1, 'On']] },
         { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
-    { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
+    /* #482 polish 6.5 (#966 "as much choice as possible"; answers the backlog's C38). The core was welded at W x 0.18 and the
+       rays at six, flat, and the description promised "the streaks and ghosts a real one throws" while it drew neither. Core
+       size scales the core; Rays 0-16 (more rays are thinner, so sixteen still read as sixteen) and Rotation turn the star;
+       Ghosts are the discs a lens throws along the line from the light through the middle of the frame, tinted the Flare
+       colour; Ring is a faint rainbow halo round the light; Anamorphic streak is the long horizontal line in the Rays &
+       streak colour. 100 %, 6, 0 and nothing draw the old flare to the byte (queue 474 pins the six-ray path). */
+    { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays & streak', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 },
+      { key: 'size', label: 'Core size', min: 20, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'rays', label: 'Rays', min: 0, max: 16, step: 1, def: 6 },
+      { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'rays', liveAbove: 0 },
+      { key: 'ghosts', label: 'Ghosts', min: 0, max: 8, step: 1, def: 0 },
+      { key: 'halo', label: 'Ring', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'streak', label: 'Anamorphic streak', min: 0, max: 1, step: 0.02, def: 0 }] },
     { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
@@ -752,13 +770,27 @@ window.FM = window.FM || {};
      the picture is gone under the band. Speed and Width move the band; nothing could turn it DOWN.
      Default 1 is exactly today's behaviour, so every saved project renders unchanged — the control
      only adds the half of the range that never existed. */
-    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }, { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left']] }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },   // direction: queue 904, it only ever swept down
+    /* #482 polish 6.7 (#966; answers the backlog's C35 — the band was measured across the FRAME and locked to project time).
+       Angle sends it any way, not just the four; Sweeps across Layer runs it over the layer's own box, so a title gets the
+       whole band instead of a sliver as it crosses the frame; Wait between sweeps rests between passes (and before the
+       first); Once sweeps a single time. A sweep that rests, runs on a layer, or happens once starts off the edge and leaves
+       off the far one, on the clip's own clock, so the shine lands when the title does. Frame, no wait and Loop are the old
+       wrapping scan on project time, to the byte. */
+    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }, { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left'], [4, 'Angle']] },   // direction: queue 904, it only ever swept down
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 30, unit: '°', overriddenBy: 'direction', liveWhen: 4 },
+      { key: 'span', label: 'Sweeps across', def: 0, options: [[0, 'Frame'], [1, 'Layer']] },
+      { key: 'pause', label: 'Wait between sweeps', min: 0, max: 5, step: 0.1, def: 0, unit: 's', note: 'The first sweep waits too' },
+      { key: 'loop', label: 'Repeat', def: 0, options: [[0, 'Loop'], [1, 'Once']] }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },
+    /* #482 polish 6.6: Only above is Zoom Streaks' gate — a darker part stays put instead of smearing — and Direction turns
+       the arcs the other way round the centre. 0 % and Clockwise are the old streaks to the byte. */
     { type: 'spinstreaks', label: 'Spin Streaks', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'decay', label: 'Trail falloff', min: 0, max: 2, step: 0.05, def: 0.6 },
       { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },   // queue 904: the tap count was a hardcoded 10 while the Blur twins expose it
+      { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Clockwise'], [1, 'Anticlockwise']] },
     ] },
     /* FRACTAL RIDGES — reworked. It shipped with two sliders over a picture that never moved and had
      * no colour at all. Measured before the rework (real app, real renderScene, 240x240, ps 1): the
@@ -7328,7 +7360,15 @@ window.FM = window.FM || {};
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
       for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
-    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
+    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d);
+      /* #482 polish 6.6. BOTH WAYS reads the same taps on the far side too, each side as strong as the one-way streak, so a bright dot
+         streaks out both ways along Angle. ONLY ABOVE is Zoom Streaks' gate: a tap's brightness below the cut weighs nothing and the
+         rest is stretched back over 0..1 before it is squared, so 0 % is the old (lum)^2 weight exactly. TINT multiplies the streak
+         (never the picture under it) by a colour; white skips the multiply. One way, 0 % and white are the old streak to the byte. */
+      var lsSides=(p.both==null?0:(Math.round(FM.evalProp(p.both,t))|0))===1?2:1;
+      var lsThrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(!(lsThrP>0))lsThrP=0; if(lsThrP>100)lsThrP=100; var lsGate=lsThrP>0, lsThr=lsThrP/100, lsSpan=1-lsThr;
+      var lsTc=hexToRGB(p.color||'#ffffff'), lsTint=!(lsTc[0]===255&&lsTc[1]===255&&lsTc[2]===255);
+      for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; for(var lsSide=0;lsSide<lsSides;lsSide++){ var lsSx=lsSide===0?lsX-lsDx*lsOff:lsX+lsDx*lsOff, lsSy=lsSide===0?lsY-lsDy*lsOff:lsY+lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; if(lsGate){ lsBright = lsBright<=lsThr ? 0 : (lsSpan<=0?1:(lsBright-lsThr)/lsSpan); } lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; if(lsTint){ lsTr=lsTr*lsTc[0]/255; lsTg=lsTg*lsTc[1]/255; lsTb=lsTb*lsTc[2]/255; } var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
     // ---- batch 13 (opacity / visibility) ----
     blink: function(d, W, H, p, t) { var blkRate = FM.evalProp(p.rate, t); if (blkRate == null || !isFinite(blkRate)) blkRate = 2; if (blkRate < 0.5) blkRate = 0.5; if (blkRate > 12) blkRate = 12; var blkTime = (typeof t === 'number' && isFinite(t)) ? t : 0; if (blkTime < 0) blkTime = 0; 
       // Every blink in every project was the same hard 50/50 square wave locked to t=0. DUTY makes a
@@ -7667,7 +7707,43 @@ window.FM = window.FM || {};
         }
       }
     },
-    lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
+    lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSz=fparam(p, 'size', 100, t); if(!(lfSz>=20))lfSz=20; if(lfSz>400)lfSz=400; var lfSig=W*0.18; if(lfSz!==100)lfSig=W*0.18*lfSz/100; /* CORE SIZE (#482 6.5): 100 % keeps the old W*0.18 untouched */ if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4;
+      /* #482 polish 6.5. RAYS 0-16 and ROTATION: the nearest-ray rounding below works for any even spacing, so N rays are one
+         rounding at 2pi/N. Six keeps the old literal step and the five squarings, and rotation 0 subtracts nothing, so the default is
+         queue 474's path to the byte. Past six the rays narrow with N squared (cos^e at the half-gap stays where six put it), or
+         sixteen would merge into a ring. Fewer than six keep the old width. */
+      var lfN=Math.round(fparam(p, 'rays', 6, t)); if(!(lfN>=0))lfN=0; if(lfN>16)lfN=16;
+      var lfRot=fparam(p, 'rotation', 0, t); if(!isFinite(lfRot))lfRot=0; lfRot=lfRot*Math.PI/180;
+      var lfStepN=lfN===6?1.0471975512:(lfN>0?6.283185307179586/lfN:0), lfExp=lfN<=6?32:32*(lfN/6)*(lfN/6), lfP32=lfExp===32;
+      /* GHOSTS, RING and ANAMORPHIC STREAK — extra light added to the same screen, drawn only where the layer is (as the core is).
+         Ghosts sit on the line from the light through the middle of the plate (1 = the middle, 2 = the light mirrored through it),
+         sized off the plate's short side, each a soft disc with a brighter rim in a tint of the Flare colour. The ring is a thin
+         halo round the light with red outside and blue inside. The streak is a thin bright line through the light with a soft
+         glow, fading along the width, in the Rays & streak colour. All are fractions of the plate, so a preview plate draws them
+         where the export does. None is drawn at 0, and the old expression is untouched when all three are 0. */
+      var lfGh=Math.round(fparam(p, 'ghosts', 0, t)); if(!(lfGh>=0))lfGh=0; if(lfGh>8)lfGh=8;
+      var lfHalo=fparam(p, 'halo', 0, t); if(!(lfHalo>=0))lfHalo=0; if(lfHalo>1)lfHalo=1;
+      var lfStk=fparam(p, 'streak', 0, t); if(!(lfStk>=0))lfStk=0; if(lfStk>1)lfStk=1;
+      var lfX=lfGh>0||lfHalo>0||lfStk>0, lfU=Math.min(W,H), lfCX=W/2, lfCY=H/2;
+      var lfGT=[[1.35,0.050,0.45,1.00,0.85,0.55],[1.75,0.090,0.34,0.55,1.00,0.70],[0.62,0.032,0.52,0.70,0.80,1.00],[2.10,0.130,0.26,1.00,0.70,0.95],
+                [1.12,0.024,0.58,0.95,1.00,0.60],[0.40,0.056,0.34,0.60,0.90,1.00],[2.45,0.170,0.20,1.00,0.80,0.65],[1.95,0.040,0.44,0.75,0.65,1.00]];
+      var lfGx=[], lfGy=[], lfGr=[], lfGa=[], lfGcr=[], lfGcg=[], lfGcb=[];
+      for(var lfq=0;lfq<lfGh;lfq++){ var lfg=lfGT[lfq]; lfGx.push(lfLX+(lfCX-lfLX)*lfg[0]); lfGy.push(lfLY+(lfCY-lfLY)*lfg[0]); lfGr.push(Math.max(1,lfU*lfg[1])); lfGa.push(lfI*255*lfg[2]); lfGcr.push(lfFR*lfg[3]/255); lfGcg.push(lfFG*lfg[4]/255); lfGcb.push(lfFB*lfg[5]/255); }
+      var lfRR0=lfU*0.3, lfRW=Math.max(0.75,lfU*0.016), lfRDen=2*lfRW*lfRW, lfRA=lfHalo*lfI*120*(lfU*0.016<0.75?lfU*0.016/0.75:1);   // dimmed below 0.75 px, as the streak line is
+      /* The streak's bright line is thinner than a pixel on a small plate. Sampled at whole rows, a Gaussian that thin still puts
+         its full peak on one row, so a reduced preview plate drew it heavier than the export does (measured on a 240x180 project:
+         the half-size preview of a full flare sat 2.32 levels from the export, 2.06 after this). Below 0.7 px it is drawn 0.7 wide
+         and dimmed by the same ratio, which keeps the light it carries per row (sigma x sqrt(2 pi)) the export's. */
+      var lfS1t=lfU*0.0035, lfS1=Math.max(0.7,lfS1t), lfS1A=lfS1t<0.7?lfS1t/0.7:1, lfS2=Math.max(1.5,lfU*0.02), lfS2A=lfU*0.02<1.5?lfU*0.02/1.5:1, lfSD1=2*lfS1*lfS1, lfSD2=2*lfS2*lfS2, lfSL=Math.max(1,W*0.45), lfSA=lfStk*lfI;
+      for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfN>0&&lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); if(lfRot!==0)lfAng-=lfRot; /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=lfStepN; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfShape; if(lfP32){ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; lfShape=lfB16*lfB16; } else lfShape=Math.pow(lfBest,lfExp); var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; var lfEr=0, lfEg=0, lfEb=0;
+        if(lfX){
+          for(var lfk=0;lfk<lfGh;lfk++){ var lfgx=lfXX-lfGx[lfk], lfgr=lfGr[lfk]; if(lfgx>=lfgr||lfgx<=-lfgr)continue; var lfgy=lfYY-lfGy[lfk]; if(lfgy>=lfgr||lfgy<=-lfgr)continue; var lfgd2=lfgx*lfgx+lfgy*lfgy; if(lfgd2>=lfgr*lfgr)continue;
+            var lfrho=Math.sqrt(lfgd2)/lfgr, lfr4=lfrho*lfrho*lfrho*lfrho, lfedge=(1-lfrho)/0.18; if(lfedge>1)lfedge=1; var lfgv=lfGa[lfk]*(0.55+0.45*lfr4)*lfedge; lfEr+=lfGcr[lfk]*lfgv; lfEg+=lfGcg[lfk]*lfgv; lfEb+=lfGcb[lfk]*lfgv; }
+          if(lfRA>0){ var lfe0=lfDist-lfRR0*1.04, lfe1=lfDist-lfRR0, lfe2=lfDist-lfRR0*0.96; var lfRc=lfRW*4.5;
+            if(lfe0<lfRc&&lfe0>-lfRc) lfEr+=lfFR*lfRA*Math.exp(-lfe0*lfe0/lfRDen)/255; if(lfe1<lfRc&&lfe1>-lfRc) lfEg+=lfFG*lfRA*Math.exp(-lfe1*lfe1/lfRDen)/255; if(lfe2<lfRc&&lfe2>-lfRc) lfEb+=lfFB*lfRA*Math.exp(-lfe2*lfe2/lfRDen)/255; }
+          if(lfSA>0){ var lfsy2=lfDY*lfDY; if(lfsy2<lfSD2*9){ var lfsv=lfSA*(190*lfS1A*Math.exp(-lfsy2/lfSD1)+55*lfS2A*Math.exp(-lfsy2/lfSD2))*Math.exp(-(lfDX<0?-lfDX:lfDX)/lfSL); lfEr+=lfRR*lfsv/255; lfEg+=lfRG*lfsv/255; lfEb+=lfRB*lfsv/255; } }
+        }
+        if(lfAmt<=0&&!(lfEr>0||lfEg>0||lfEb>0)) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } if(lfX){ lfAddR+=lfEr; lfAddG+=lfEg; lfAddB+=lfEb; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
     roughenedges: function(d,W,H,p,t){ var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
     /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
        catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
@@ -7697,6 +7773,44 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          Down is the loop below, untouched — a saved scan is byte-identical. Up runs the same line backwards; Right and Left are
          the same maths along COLUMNS, with the same wrap-around distance. */
       var gsDir=p.direction==null?0:(Math.round(FM.evalProp(p.direction,t))|0);
+      /* #482 polish 6.7. ANGLE (Sweeps = 4), SWEEPS ACROSS LAYER, WAIT BETWEEN SWEEPS and ONCE all take this path; Frame, no wait,
+         Loop and the four directions never reach it, so a saved scan is the loop below to the byte.
+         The band is the same Gaussian at the same strength, screened the same way, measured along a unit vector: Down (0,1), Up
+         (0,-1), Right, Left, or (cos, sin) of Angle — so 0 deg travels right and 90 deg travels down, like Linear Streaks.
+         WHERE it runs is the frame, or the layer's own box on this plate (the exact alpha scan the bounded kernels use), taken
+         across that vector from its first corner to its last.
+         TWO KINDS OF SWEEP. Frame, no wait and Loop with an Angle is still the old wrapping scan on project time (the band leaves
+         one end as it enters the other) — the same model the four directions have always used. Anything else TRAVELS: the band
+         starts 3.6 sigma before the first edge (where it is under the 0.002 the loop below already skips) and ends 3.6 sigma past
+         the last, on the clip's own clock (FM.fxLocalTime, so a split or trimmed clip keeps its timing), with the wait first:
+         wait, sweep, wait, sweep — or wait, sweep, nothing, for Once. So a sweep that rests never leaves half a band parked on an
+         edge, and the shine lands when the title does. Stateless: a hash of nothing, only t, so preview = export = scrub. */
+      var gsSpan=p.span==null?0:(Math.round(FM.evalProp(p.span,t))|0), gsOnce=p.loop==null?0:(Math.round(FM.evalProp(p.loop,t))|0);
+      var gsWait=fparam(p,'pause',0,t); if(!(gsWait>0))gsWait=0; if(gsWait>5)gsWait=5;
+      if(gsDir===4||gsSpan===1||gsWait>0||gsOnce===1){
+        var gsTravel=!(gsSpan!==1&&gsWait===0&&gsOnce!==1), gsU=gsPhase;
+        if(gsTravel){
+          var gsLay=arguments[7], gsTl=gsLay?FM.fxLocalTime(gsLay,t):t;
+          if(!(gsSpeed>0)) return;
+          if(gsOnce===1){ var gsK=(gsTl-gsWait)*gsSpeed; if(!(gsK>=0&&gsK<=1)) return; gsU=gsK; }
+          else { var gsCyc=1/gsSpeed+gsWait, gsM=gsTl%gsCyc; if(gsM<0)gsM+=gsCyc; if(gsM<gsWait) return; gsU=(gsM-gsWait)*gsSpeed; if(gsU>1)gsU=1; }
+        }
+        var gsX0=0, gsY0=0, gsX1=W, gsY1=H;
+        if(gsSpan===1){ var gsBox=fxBoundsScan(d,W,H); if(!gsBox) return; if(!gsBox.dirty){ gsX0=gsBox.x; gsY0=gsBox.y; gsX1=gsBox.x+gsBox.w; gsY1=gsBox.y+gsBox.h; } }
+        var gsUx=0, gsUy=1;
+        if(gsDir===1){ gsUy=-1; } else if(gsDir===2){ gsUx=1; gsUy=0; } else if(gsDir===3){ gsUx=-1; gsUy=0; }
+        else if(gsDir===4){ var gsA=(p.angle==null?30:FM.evalProp(p.angle,t)); if(!isFinite(gsA))gsA=30; gsA=gsA*Math.PI/180; gsUx=Math.cos(gsA); gsUy=Math.sin(gsA); }
+        var gsC=[gsX0*gsUx+gsY0*gsUy, gsX1*gsUx+gsY0*gsUy, gsX0*gsUx+gsY1*gsUy, gsX1*gsUx+gsY1*gsUy];
+        var gsS0=Math.min(gsC[0],gsC[1],gsC[2],gsC[3]), gsS1=Math.max(gsC[0],gsC[1],gsC[2],gsC[3]), gsL=gsS1-gsS0; if(!(gsL>0)) return;
+        var gsMid, gsWrap=!gsTravel;
+        if(gsWrap) gsMid=gsS0+gsU*gsL; else { var gsMg=3.6*gsSigma; gsMid=gsS0-gsMg+gsU*(gsL+2*gsMg); }
+        var gsCut=gsDen*6.2146;   // exp(-6.2146) = 0.002, the floor the loop below skips at
+        for(var gsYa=gsY0;gsYa<gsY1;gsYa++){ var gsRowa=gsYa*gsW4, gsSy=gsYa*gsUy-gsMid; for(var gsXa2=gsX0;gsXa2<gsX1;gsXa2++){
+          var gsDd=gsXa2*gsUx+gsSy; if(gsWrap) gsDd-=gsL*Math.round(gsDd/gsL); var gsD2=gsDd*gsDd; if(gsD2>=gsCut) continue;
+          var gsIa=gsRowa+gsXa2*4; if(d[gsIa+3]<=0) continue; var gsBa=Math.exp(-gsD2/gsDen); if(gsBa<0.002) continue;
+          var gsRa=gsCr*gsBa, gsGa=gsCg*gsBa, gsBb2=gsCb*gsBa; d[gsIa]=255-(255-d[gsIa])*(255-gsRa)/255; d[gsIa+1]=255-(255-d[gsIa+1])*(255-gsGa)/255; d[gsIa+2]=255-(255-d[gsIa+2])*(255-gsBb2)/255; } }
+        return;
+      }
       if(gsDir===1) gsScanY=(1-gsPhase)*H;
       if(gsDir===2||gsDir===3){ var gsScanX=(gsDir===2?gsPhase:1-gsPhase)*W, gsBx=new Float32Array(W);
         for(var gsXa=0;gsXa<W;gsXa++){ var gsDx=Math.abs(gsXa-gsScanX), gsAx=W-gsDx; if(gsAx<gsDx)gsDx=gsAx; gsBx[gsXa]=Math.exp(-(gsDx*gsDx)/gsDen); }
@@ -7734,8 +7848,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          Same identity, not an approximation — only the ORDER of floating-point operations differs, which
          is why the suite pins this with a BOUNDED-difference assertion rather than the byte-identity one
          used for tilt shift. See the test for why exact equality is not reachable here. */
+      /* #482 polish 6.6. DIRECTION: Anticlockwise mirrors every tap angle, which is the sine's sign — the bound below inverts the
+         same arrays, so it stays exact either way. ONLY ABOVE: a tap that lands on something darker than the cut is read as this
+         pixel itself instead (fading over the 10 % below the cut, so nothing pops), so dark parts stay where they are and only the
+         bright parts sweep round into arcs. At 0 nothing is gated and the old loop runs. */
+      var ssDir=p.dir==null?0:(Math.round(FM.evalProp(p.dir,t))|0);
+      var ssThrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(!(ssThrP>0))ssThrP=0; if(ssThrP>100)ssThrP=100; var ssThr=ssThrP/100;
       var ssCos=new Float64Array(ssN), ssSin=new Float64Array(ssN), ssWts=new Float64Array(ssN), ssWtot=0;
-      for(var ssP=0; ssP<ssN; ssP++){ var ssAng=ssP*ssDa; ssCos[ssP]=Math.cos(ssAng); ssSin[ssP]=Math.sin(ssAng); ssWts[ssP]=1/(1+ssP*(9/(ssN-1))*ssDec);   /* falloff per ANGLE, not per tap, so more taps smooth the trail without shortening it; 9/9 is exactly 1 at the old 10 */ ssWtot+=ssWts[ssP]; }
+      for(var ssP=0; ssP<ssN; ssP++){ var ssAng=ssP*ssDa; ssCos[ssP]=Math.cos(ssAng); ssSin[ssP]=ssDir===1?-Math.sin(ssAng):Math.sin(ssAng); ssWts[ssP]=1/(1+ssP*(9/(ssN-1))*ssDec);   /* falloff per ANGLE, not per tap, so more taps smooth the trail without shortening it; 9/9 is exactly 1 at the old 10 */ ssWtot+=ssWts[ssP]; }
       var ssY0=0, ssY1=H-1, ssX0=0, ssX1=W-1;
        /* ⚠️ NOT WHEN THE LAYER TOUCHES A FRAME EDGE. A tap whose sample falls outside the frame is
           CLAMPED to the border rather than dropped, so if the layer is ON that border a pixel arbitrarily
@@ -7761,6 +7881,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        // a rotation preserves distance, so the tap's truncation costs about a pixel; 3 is slack
        ssX0=Math.max(0,Math.floor(ssMnx)-3); ssX1=Math.min(W-1,Math.ceil(ssMxx)+3);
        ssY0=Math.max(0,Math.floor(ssMny)-3); ssY1=Math.min(H-1,Math.ceil(ssMxy)+3);
+     }
+     if(ssThrP>0){
+       for(var sgY=ssY0; sgY<=ssY1; sgY++){ for(var sgX=ssX0; sgX<=ssX1; sgX++){
+         var sgDx=sgX-ssCx, sgDy=sgY-ssCy, sgO=(sgY*W+sgX)*4, sgR0=ssSrc[sgO], sgG0=ssSrc[sgO+1], sgB0=ssSrc[sgO+2], sgA0=ssSrc[sgO+3];
+         var sgR=0, sgG=0, sgB=0, sgA=0;
+         for(var sgK=0; sgK<ssN; sgK++){ var sgWt=ssWts[sgK]; var sgSx=ssCx + sgDx*ssCos[sgK] + sgDy*ssSin[sgK]; var sgSy=ssCy + sgDy*ssCos[sgK] - sgDx*ssSin[sgK];
+           var sgXi=sgSx<0?0:(sgSx>W-1?W-1:(sgSx|0)); var sgYi=sgSy<0?0:(sgSy>H-1?H-1:(sgSy|0)); var sgI=sgYi*ssW4 + sgXi*4;
+           var sr=ssSrc[sgI], sg=ssSrc[sgI+1], sb=ssSrc[sgI+2], sa=ssSrc[sgI+3];
+           var sgL=(sr*0.299+sg*0.587+sb*0.114)*(sa/255)/255, sgG1=sgL>=ssThr?1:1-(ssThr-sgL)/0.1; if(sgG1<0)sgG1=0;
+           if(sgG1<1){ sr=sgR0+(sr-sgR0)*sgG1; sg=sgG0+(sg-sgG0)*sgG1; sb=sgB0+(sb-sgB0)*sgG1; sa=sgA0+(sa-sgA0)*sgG1; }
+           sgR+=sr*sgWt; sgG+=sg*sgWt; sgB+=sb*sgWt; sgA+=sa*sgWt; }
+         d[sgO]=sgR/ssWtot; d[sgO+1]=sgG/ssWtot; d[sgO+2]=sgB/ssWtot; d[sgO+3]=sgA/ssWtot; } }
+       return;
      }
      for(var ssY=ssY0; ssY<=ssY1; ssY++){ for(var ssX=ssX0; ssX<=ssX1; ssX++){ var ssDx=ssX-ssCx, ssDy=ssY-ssCy; var ssAccR=0, ssAccG=0, ssAccB=0, ssAccA=0; for(var ssK=0; ssK<ssN; ssK++){ var ssWt=ssWts[ssK]; var ssCk=ssCos[ssK], ssSk=ssSin[ssK]; var ssSx=ssCx + ssDx*ssCk + ssDy*ssSk; var ssSy=ssCy + ssDy*ssCk - ssDx*ssSk; var ssXi=ssSx<0?0:(ssSx>W-1?W-1:(ssSx|0)); var ssYi=ssSy<0?0:(ssSy>H-1?H-1:(ssSy|0)); var ssIdx=ssYi*ssW4 + ssXi*4; ssAccR+=ssSrc[ssIdx]*ssWt; ssAccG+=ssSrc[ssIdx+1]*ssWt; ssAccB+=ssSrc[ssIdx+2]*ssWt; ssAccA+=ssSrc[ssIdx+3]*ssWt; } var ssOut=(ssY*W+ssX)*4; d[ssOut]=ssAccR/ssWtot; d[ssOut+1]=ssAccG/ssWtot; d[ssOut+2]=ssAccB/ssWtot; d[ssOut+3]=ssAccA/ssWtot; } } },
     /* FRACTAL RIDGES. Three octaves of value noise, each folded to a ridge (1 - |2n-1|) and summed
@@ -8796,6 +8929,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      fast box blur produces the SAME bytes as the 17-tap one it replaced, not merely a similar picture.
      Read-only by convention; nothing outside may mutate a kernel. */
   FM._pixelFx = PIXEL_FX;
+  /* WHEN A GLOW SCAN IS ACTUALLY SWEEPING (#482 polish 6.7). The open effect's "changes nothing" check (fx-thumbs noopTimes) looks
+     at the playhead and seven moments spread through the clip. A Glow Scan that waits between sweeps, or sweeps Once, can be at
+     rest at all eight — one 0.67 s sweep at the start of a 10 s clip misses every one of them — and the panel would tell him a
+     working effect does nothing (#460, #477). So the middle of its first sweeps, on the clip clock the kernel runs them on, are
+     offered as moments to look at too. Only for the sweeps that rest; the wrapping scan is always somewhere on the frame. */
+  FM.fxNoopMoments = function (layer) {
+    const out = [];
+    if (!layer || !Array.isArray(layer.effects)) return out;
+    layer.effects.forEach(fx => {
+      if (!fx || fx.type !== 'glowscan' || fx.enabled === false) return;
+      const p = fx.params || {}, t0 = +layer.start || 0;
+      const ev = (k, d) => { const v = p[k] == null ? d : FM.evalProp(p[k], t0); return (typeof v === 'number' && isFinite(v)) ? v : d; };
+      const sp = Math.min(8, ev('speed', 1.5)), wait = Math.max(0, Math.min(5, ev('pause', 0)));
+      const once = Math.round(ev('loop', 0)) === 1, span = Math.round(ev('span', 0));
+      if (!(sp > 0) || (wait === 0 && !once && span !== 1)) return;
+      const shift = -FM.fxLocalTime(layer, 0), cyc = 1 / sp + wait;   // project time = clip-clock time + shift
+      for (let k = 0; k < (once ? 1 : 3); k++) out.push(shift + wait + 0.5 / sp + k * cyc);
+    });
+    return out;
+  };
   Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
