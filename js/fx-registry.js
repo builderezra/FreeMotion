@@ -160,9 +160,17 @@ window.FM = window.FM || {};
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
   // Every other effect (geometry warps, the rest of the pixel/text passes) is accepted but renders
   // nothing on an adjustment layer — a silent no-op — so this whitelist gates them out. (#6)
+  /* #482 polish 5.1: the colour grades that are POINT OPS in PIXEL_FX — each pixel from its own value, nowhere in the frame
+     mattering — grade an adjustment layer too (compositor PIXEL_ADJ runs them on the snapshot, as it runs Levels). Left out
+     on purpose: vignette, gradientoverlay, lightleak, filmgrain, nightvision, dither and fourcolor are drawn from WHERE a
+     pixel sits, and a zoomed preview's snapshot is only the slice on screen (queue 690) — they need the frame's geometry
+     handed to them first. Highlights & Shadows' Local radius reads its neighbours, not the frame, so it is safe here. */
   const ADJ_OK = {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
     posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1,
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
+    bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
+    palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1,
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently

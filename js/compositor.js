@@ -555,7 +555,17 @@ window.FM = window.FM || {};
          range weight (100 = the old weights). Both defaults run the old loops. */
       { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] }] },
-    { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 }] },
+    { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 },
+      /* #482 polish 5.2 (answers C47): it was one whole-picture curve that ADDS the same amount to every channel, so +Shadows
+         lifted true black to grey (milky blacks) and could not tell a dark shirt from a dark corner. Whites and Blacks move the
+         two ends; Tonal width narrows what counts as a shadow or a highlight; Local radius judges each area by its
+         surroundings and lifts it like a local exposure, so black stays black; Colour correction puts back (or takes out) the
+         colour a lift washes out. Every default runs the old loop byte for byte — 17 library filters are built on it. */
+      { key: 'whites', label: 'Whites', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'blacks', label: 'Blacks', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
+      { key: 'sat', label: 'Colour correction', min: -100, max: 100, step: 1, def: 0 }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
     // ---- batch 12 ----
     { type: 'dropshadow', label: 'Drop Shadow', params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 18, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' }, { key: 'softness', label: 'Softness', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: Opacity — every shadow was full strength
@@ -4801,6 +4811,113 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══ HIGHLIGHTS & SHADOWS: THE CONTROLS A REAL ONE HAS (#482 polish 5.2, answers C47) ══════════════════════════════
+   * The old kernel adds sh·(1−L)² + hi·L² levels to every channel — one curve for the whole picture, and an ADD, so at
+   * +50 Shadows pure black came out 60/60/60: the milky blacks of C47. 17 library filters are built on it, so at the
+   * defaults the kernel still runs its own loop, untouched; everything new runs here.
+   *  · Tonal width (10–100 %): how far up from black a shadow reaches, and down from white a highlight. The weights become
+   *    (1 − L/w)² and (1 − (1−L)/w)², which at 100 % are the old (1−L)² and L², float for float. On the whole-picture add
+   *    the lift is scaled by w as well: unscaled, a narrow width at +80 lifted pure black PAST its slightly brighter
+   *    neighbours (measured on a car photo at 35 %: the dark road went flat and reversed), and × w keeps every curve rising
+   *    — its steepest fall is 2·120 levels, under the 255 the picture itself rises by.
+   *  · Local radius (px): above 0 the weights come from the brightness AROUND each pixel (a tent blur of the luma), and the
+   *    Shadows lift is a local EXPOSURE — every channel × 2^(2·Shadows·ws) stops — so a dark area opens up as a whole,
+   *    texture and all, and black × anything is still black. Highlights stays the add it was, from the surroundings'
+   *    weight: as a gain (× 2^(Highlights·L²)) −100 pulled pure white below the grey just under it — over an even sky the
+   *    curve peaks near 0.85 and falls. The gain's weight is (1 − L/w)³, not ², because a squared tail
+   *    reaching into the brights flattened the curve there while Highlights pulled down: measured on a 0–255 ramp at
+   *    Shadows +100 / Highlights −100, the squared version folded back in 15 places between 140 and 230 (a lighter grey came
+   *    out darker); the cube in none, and the suite walks a ramp through every extreme. At 0 it is the whole-picture add.
+   *  · Whites / Blacks: the two ends, on the result's own brightness — ±80 levels × L³ at the top and × (1−L)³ at the
+   *    bottom (crush or lift the black point, pull down or push the white point). Cubed, not squared, so they stay off the
+   *    ground Highlights and Shadows already cover; 80 because 3·80 = 240 is under 255, so even both at full stretch
+   *    never fold the curve back on itself. (A fourth power reached too little: measured on a cloud photo whose brightest
+   *    areas sit near 0.7, Whites −90 moved them 10–13 levels.)
+   *  · Colour correction: an equal add is a step toward grey, so a lift washes colour out. This scales each pixel's colour
+   *    by 1 + 2·cc × how much of the correction it got (never below grey), so it touches only what Shadows and Highlights
+   *    moved: +100 on a fully lifted pixel triples its colour, −100 turns it grey.
+   * THE BLUR IS EXACT INTEGER ARITHMETIC, so it is the same wherever the buffer starts. The luma is a whole number 0–255
+   * (× alpha where the plate has any transparency), each box pass is an unnormalised running sum, and a Float64 holds such
+   * sums exactly below 2^53 — the reason the box is capped at 300 px a side. So the cropped readback (#692 route 2) draws
+   * the very picture the full plate does, and preview = export = scrub. Transparent pixels weigh nothing and nothing lies
+   * past the edge, so neither a layer's own outline nor the frame's edge darkens the brightness around it. */
+  function hsNum(v, lo, hi, dflt) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : dflt; }
+  const HS_SH_STOPS = 2, HS_ENDS = 80, HS_BOX_MAX = 300;
+  let _hsA = null, _hsB = null, _hsLn = null;
+  function hsBox(a, W, H, b, alongRows, line) {   // one box pass of half-width b, zero past the ends, unnormalised
+    const n = alongRows ? W : H, m = alongRows ? H : W, step = alongRows ? 1 : W, top = b < n - 1 ? b : n - 1;
+    for (let q = 0; q < m; q++) {
+      const o = alongRows ? q * W : q;
+      for (let k = 0, i = o; k < n; k++, i += step) line[k] = a[i];
+      let acc = 0;
+      for (let k = 0; k <= top; k++) acc += line[k];
+      for (let k = 0, i = o; k < n; k++, i += step) {
+        a[i] = acc;
+        const ki = k + b + 1, ko = k - b;
+        if (ki < n) acc += line[ki];
+        if (ko >= 0) acc -= line[ko];
+      }
+    }
+  }
+  function hsTent(a, W, H, b, line) { hsBox(a, W, H, b, true, line); hsBox(a, W, H, b, true, line); hsBox(a, W, H, b, false, line); hsBox(a, W, H, b, false, line); }
+  function hsGrade(d, W, H, sh, hi, rad, wd, wt, bk, cc) {
+    const N = W * H, SA = sh / 100 * 120, HA = hi / 100 * 120, w = wd / 100;
+    const local = rad > 0, b = local ? Math.min(HS_BOX_MAX, Math.round(rad * 0.6)) : 0;
+    let A = null, B = null, cx = null, cy = null;
+    if (b > 0) {
+      if (!_hsA || _hsA.length < N) _hsA = new Float64Array(N);
+      A = _hsA;
+      let opaque = true;
+      for (let i = 3; i < N * 4; i += 4) if (d[i] !== 255) { opaque = false; break; }
+      if (opaque) for (let j = 0, i = 0; j < N; j++, i += 4) A[j] = ((299 * d[i] + 587 * d[i + 1] + 114 * d[i + 2] + 500) / 1000) | 0;
+      else {
+        if (!_hsB || _hsB.length < N) _hsB = new Float64Array(N);
+        B = _hsB;
+        for (let j = 0, i = 0; j < N; j++, i += 4) { const al = d[i + 3]; A[j] = al ? (((299 * d[i] + 587 * d[i + 1] + 114 * d[i + 2] + 500) / 1000) | 0) * al : 0; B[j] = al; }
+      }
+      const LN = Math.max(W, H);
+      if (!_hsLn || _hsLn.length < LN) _hsLn = new Float64Array(LN);
+      hsTent(A, W, H, b, _hsLn);
+      if (B) hsTent(B, W, H, b, _hsLn);
+      else {                                       // all opaque: the weight under the tent is just how many pixels it covers
+        cx = new Float64Array(W).fill(1); cy = new Float64Array(H).fill(1);
+        hsBox(cx, W, 1, b, true, _hsLn); hsBox(cx, W, 1, b, true, _hsLn); hsBox(cy, H, 1, b, true, _hsLn); hsBox(cy, H, 1, b, true, _hsLn);
+      }
+    }
+    const WT = wt / 100 * HS_ENDS, BK = bk / 100 * HS_ENDS, CC = cc / 100, eS = sh / 100 * HS_SH_STOPS * Math.LN2;
+    const aS = (sh < 0 ? -sh : sh) / 100, aH = (hi < 0 ? -hi : hi) / 100;
+    for (let y = 0, j = 0; y < H; y++) for (let x = 0; x < W; x++, j++) {
+      const i = j * 4;
+      if (d[i + 3] <= 0) continue;
+      let r = d[i], g = d[i + 1], u = d[i + 2];
+      let L = (0.299 * r + 0.587 * g + 0.114 * u) / 255; if (L < 0) L = 0; else if (L > 1) L = 1;
+      if (A) { const den = B ? B[j] : cx[x] * cy[y]; if (den > 0) { L = A[j] / den / 255; if (L > 1) L = 1; } }
+      let s0, h0;
+      if (w === 1) { s0 = 1 - L; h0 = L; }
+      else { s0 = 1 - L / w; h0 = 1 - (1 - L) / w; if (s0 < 0) s0 = 0; if (h0 < 0) h0 = 0; }
+      let ws = s0 * s0;
+      const wh = h0 * h0;
+      if (local) {
+        ws *= s0;                                  // the gain's weight is CUBED: see Local radius above
+        const k = Math.exp(eS * ws), add = w === 1 ? HA * wh : HA * wh * w;
+        r = r * k + add; g = g * k + add; u = u * k + add;
+      } else { const add = w === 1 ? SA * ws + HA * wh : (SA * ws + HA * wh) * w; r += add; g += add; u += add; }
+      if (WT !== 0 || BK !== 0) {
+        let Lp = (0.299 * r + 0.587 * g + 0.114 * u) / 255; if (Lp < 0) Lp = 0; else if (Lp > 1) Lp = 1;
+        const ip = 1 - Lp, off = WT * Lp * Lp * Lp + BK * ip * ip * ip;
+        r += off; g += off; u += off;
+      }
+      if (CC !== 0) {
+        r = r < 0 ? 0 : (r > 255 ? 255 : r); g = g < 0 ? 0 : (g > 255 ? 255 : g); u = u < 0 ? 0 : (u > 255 ? 255 : u);
+        let m = w === 1 ? aS * ws + aH * wh : (local ? aS * ws + aH * wh * w : (aS * ws + aH * wh) * w); if (m > 1) m = 1;
+        let k = 1 + 2 * CC * m; if (k < 0) k = 0;
+        const Y = 0.299 * r + 0.587 * g + 0.114 * u;
+        r = Y + (r - Y) * k; g = Y + (g - Y) * k; u = Y + (u - Y) * k;
+      }
+      d[i] = r < 0 ? 0 : (r > 255 ? 255 : r); d[i + 1] = g < 0 ? 0 : (g > 255 ? 255 : g); d[i + 2] = u < 0 ? 0 : (u > 255 ? 255 : u);
+    }
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -6909,7 +7026,12 @@ window.FM = window.FM || {};
         return; }
       if(cbRg>0){ for(var cbJ=0;cbJ<cbN;cbJ+=4){ if(d[cbJ+3]<=0)continue; var cbL=(0.299*d[cbJ]+0.587*d[cbJ+1]+0.114*d[cbJ+2])/255, cbW=cbRg===1?(1-cbL)*(1-cbL):cbRg===3?cbL*cbL:1-(2*cbL-1)*(2*cbL-1);
           var cbQ=d[cbJ]+cbAddR*cbW; d[cbJ]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+1]+cbAddG*cbW; d[cbJ+1]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+2]+cbAddB*cbW; d[cbJ+2]=cbQ<0?0:(cbQ>255?255:cbQ); } return; } for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
-    highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4; for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
+    highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4;
+      /* #482 polish 5.2 — Whites, Blacks, Tonal width, Local radius, Colour correction (hsGrade, above PIXEL_FX). At their
+         defaults none of them is read past this line: the old loop below runs exactly as it always has. */
+      var hsRd = hsNum(fparam(p, 'radius', 0, t), 0, 2000, 0), hsWd = hsNum(fparam(p, 'width', 100, t), 10, 100, 100), hsWt = hsNum(fparam(p, 'whites', 0, t), -100, 100, 0), hsBk = hsNum(fparam(p, 'blacks', 0, t), -100, 100, 0), hsCc = hsNum(fparam(p, 'sat', 0, t), -100, 100, 0);
+      if (hsRd > 0 || hsWd !== 100 || hsWt !== 0 || hsBk !== 0 || hsCc !== 0) { hsGrade(d, W, H, hsSh, hsHi, hsRd, hsWd, hsWt, hsBk, hsCc); return; }
+      for(var hsI=0;hsI<hsN;hsI+=4){ if(d[hsI+3]<=0)continue; var hsR=d[hsI], hsG=d[hsI+1], hsB=d[hsI+2]; var hsL=(0.299*hsR+0.587*hsG+0.114*hsB)/255; if(hsL<0)hsL=0; else if(hsL>1)hsL=1; var hsInv=1-hsL; var hsWS=hsInv*hsInv; var hsWH=hsL*hsL; var hsAdd=hsSA*hsWS+hsHA*hsWH; var hsO; hsO=hsR+hsAdd; d[hsI]=hsO<0?0:hsO>255?255:hsO; hsO=hsG+hsAdd; d[hsI+1]=hsO<0?0:hsO>255?255:hsO; hsO=hsB+hsAdd; d[hsI+2]=hsO<0?0:hsO>255?255:hsO; } },
     /* TILT SHIFT WAS THE MOST EXPENSIVE EFFECT IN THE APP BY A FACTOR OF FIVE (queue 474, v11.74).
        Measured at 1080x1350 — the exact size of Ezra's own slow reading — against all 179 effects:
        median 14.85ms, and tiltshift **775.75ms**. The next worst was 320ms. He asked for the mobile lag
@@ -16887,7 +17009,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Per-pixel post-fx that an adjustment layer can also apply to everything beneath it (matching
   // the layer-level draw* math exactly). Geometric post-fx (pixelate/mirror/rgbsplit) aren't done
   // here — they need a geometry pass, so they only apply per-layer for now.
-  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1 };
+  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1,
+    /* #482 polish 5.1 — the PIXEL_FX colour grades that are point ops (fx-registry ADJ_OK says which and why the rest wait).
+       applyPixelFx hands each straight to its PIXEL_FX kernel over the snapshot, the very function the clip itself runs. */
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
+    bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
+    palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1 };
   // Own keys only — see POSTFX. Missed with TEXT_FX when the others were cut off. Milder than that one
   // (the filter below only TESTS the hit), but a junk type still passes, so applyAdjustment believes it
   // has pixel work to do and pays for a full comp-sized getImageData/putImageData round trip that
@@ -16948,8 +17075,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const p = resolveFxColors(fx.params || {}, t);
     // Levels is the one grade people reach for on an adjustment layer — "set the black point for
     // everything below" — and its pixel pass is already byte-in/byte-out, so the adjustment path can
-    // call it directly instead of carrying a second copy. (No overlap: none of the other PIXEL_ADJ
-    // types live in PIXEL_FX; they have their own draw* functions.)
+    // call it directly instead of carrying a second copy. (No overlap: posterize, tint, threshold,
+    // duotone and rgbsplit are not in PIXEL_FX — they have their own draw* functions; the twenty colour
+    // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
     if (fx.type === 'rgbsplit') {
       const dd = Math.round((FM.evalProp(p.amount, t) || 0) * S);   // project px → plate px (#691)

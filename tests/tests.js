@@ -117116,4 +117116,250 @@
     if (bad.length) throw new Error(bad.join(' · ') + ' - two builds that disagree about these normalise the same project differently, and would be let into one session');
   });
 
+  /* ═══ #482 / #966 POLISH BATCH 5 — GRADING DEPTH ═══════════════════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 5
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md): 5.1 twenty colour effects on adjustment layers (building on #986
+   * C1), 5.2 Highlights & Shadows' Whites, Blacks, Tonal width, Local radius and Colour correction (answers C47: +Shadows
+   * lifted pure black to milky grey). Every hash below was captured on v17.20 (1403309a) BEFORE the first edit, with the
+   * polish-1 fixture (fix482) at three sizes: the export (240 wide, t 0.7), a half-size preview (120, t 1.3) and a
+   * phone-sized plate (67, t 0.5). Pictures: tools/design/482/polish5. */
+  function shots4825(layers) {
+    return [[240, 0.7], [120, 1.3], [67, 0.5]].map(([w, t]) => {
+      const cv = offscreen(w, Math.round(w * 3 / 4)), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  const ADJ4825 = ['exposure', 'gamma', 'temperature', 'vibrance', 'colorbalance', 'highlightsshadows', 'hslbands', 'channelremap', 'bleachbypass', 'tealorange',
+    'crossprocess', 'faded', 'gradientmap', 'colorize', 'thermal', 'spectralmap', 'palettemap', 'replacecolor', 'spotcolor', 'solarize'];
+  const HS4825 = { whites: 0, blacks: 0, width: 100, radius: 0, sat: 0 };
+
+  /* 5.1 — on v17.20 an adjustment layer refused all twenty ("Adjustment layers only do colour, blur & pixel grades"), and a
+     library filter landed on one with these ingredients dropped (#986 C52: Teal & Orange kept 2 of its 4). They are point
+     ops in PIXEL_FX, so the adjustment path hands its snapshot to the very kernel the clip runs: over a clip that fills the
+     frame the two pictures must be the SAME BYTES, at the export and on a half-size preview. MEASURED after the change: 0
+     bytes differ for all twenty at both sizes, and every one moves at least 4,800 channel values off the ungraded frame. */
+  test('482 5.1 Adjustment layer - Teal & Orange, Exposure and 18 more colour effects grade everything below it exactly as they grade the clip itself, on the export and a half-size preview, and the frame-shaped effects stay off', { item: '482', budgetMs: 120000 }, function () {
+    const A0 = FM.makeLayer('adjustment', { name: 'probe' });
+    const refused = ADJ4825.filter(ty => !FM.fxRegistry.supportsLayer(ty, A0));
+    if (refused.length) throw new Error('an adjustment layer still refuses ' + refused.length + ' colour effects: ' + refused.join(', ') + ' - he picks Teal & Orange for an adjustment layer and is told it only does colour grades');
+    const PA = FM._FX_TABLES && FM._FX_TABLES.PIXEL_ADJ;
+    const unrun = ADJ4825.filter(ty => !(PA && PA[ty]));
+    if (unrun.length) throw new Error('the adjustment path does not run ' + unrun.join(', ') + ' (not in PIXEL_ADJ) - added, and then nothing happens');
+    /* The seven drawn from WHERE a pixel sits stay off until they are handed the frame's geometry (queue 690). */
+    const STAY = ['vignette', 'gradientoverlay', 'lightleak', 'filmgrain', 'nightvision', 'dither', 'fourcolor'];
+    const leaked = STAY.filter(ty => FM.fxRegistry.supportsLayer(ty, A0) || (PA && PA[ty]));
+    if (leaked.length) throw new Error(leaked.join(', ') + ' became adjustment-layer effects - they are drawn from where a pixel sits, and a zoomed preview hands an adjustment layer only the slice on screen');
+    const PW = 240, PH = 180, tex = offscreen(PW, PH), tc = tex.getContext('2d'), ti = tc.createImageData(PW, PH);
+    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) { const i = (y * PW + x) * 4; ti.data[i] = (x * 255 / (PW - 1)) | 0; ti.data[i + 1] = (y * 255 / (PH - 1)) | 0; ti.data[i + 2] = (x * 7 + y * 13) % 256; ti.data[i + 3] = 255; }
+    tc.putImageData(ti, 0, 0);
+    const had = FM.media.get('_4825adj');
+    FM.media.set('_4825adj', { kind: 'image', el: tex, width: PW, height: PH, duration: 0 });
+    const clip = fx => { const L = FM.makeLayer('image', { x: PW / 2, y: PH / 2, start: 0, duration: 4 }); L.id = '_4825adj'; L.start = 0; L.duration = 4; L.transform.scale = 1.1; L.effects = fx ? [fx] : []; return L; };   // 1.1: every pixel of the frame is the clip's
+    const adjOf = effs => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = effs; return A; };
+    const shot = (layers, rs) => {
+      const c = offscreen(Math.round(PW * rs), Math.round(PH * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, 0.5);
+      return g.getImageData(0, 0, c.width, c.height).data;
+    };
+    const vs = (a, b) => { let mx = 0, n = 0; for (let i = 0; i < a.length; i++) { if ((i & 3) === 3) continue; const d = Math.abs(a[i] - b[i]); if (d) n++; if (d > mx) mx = d; } return { mx: mx, n: n }; };
+    const moved = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if ((i & 3) !== 3 && Math.abs(a[i] - b[i]) > 3) n++; return n; };
+    const bad = [];
+    try {
+      const cases = ADJ4825.map(ty => [ty, () => FM.fxRegistry.makeInstance(ty)]);
+      // …and a neighbourhood grade: Highlights & Shadows with Local radius and every new control, which reads around each pixel
+      cases.push(['highlightsshadows with Local radius 30', () => { const e = FM.fxRegistry.makeInstance('highlightsshadows'); Object.assign(e.params, { shadows: 70, radius: 30, width: 70, whites: -40, blacks: 30, sat: 40 }); return e; }]);
+      for (const rs of [1, 0.5]) {
+        const none = shot([clip()], rs);
+        for (const [name, mk] of cases) {
+          const own = shot([clip(mk())], rs), adj = shot([adjOf([mk()]), clip()], rs);
+          const mv = moved(own, none);
+          if (mv < 1000) throw new Error('CONTROL at scale ' + rs + ': ' + name + ' on the clip itself moves only ' + mv + ' channel values - this fixture cannot tell a grade from none');
+          const d = vs(adj, own);
+          if (d.n) bad.push(name + ' at scale ' + rs + ': on an adjustment layer it differs from the same effect on the clip in ' + d.n + ' channel values (by up to ' + d.mx + ')' + (moved(adj, none) === 0 ? ' - it graded nothing at all' : ''));
+        }
+      }
+      /* …inside a filter on the adjustment layer (#986 C1's path), and through the Filters tab's own fitting (C52). */
+      const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); box.effects = [FM.fxRegistry.makeInstance('tealorange')];
+      const inBox = shot([adjOf([box]), clip()], 1), direct = shot([adjOf([FM.fxRegistry.makeInstance('tealorange')]), clip()], 1);
+      const db = vs(inBox, direct);
+      if (db.n) bad.push('Teal & Orange inside a filter on an adjustment layer differs from Teal & Orange placed directly in ' + db.n + ' channel values');
+      const fitted = FM.fxRegistry.fitToLayer(FM.filters.makeInstance('tealorange'), A0);
+      const kept = ((fitted && fitted.effects) || []).map(k => k.type);
+      if (kept.indexOf('tealorange') < 0) bad.push('the Teal & Orange filter lands on an adjustment layer as [' + kept.join(', ') + '] - its own Teal & Orange is still dropped');
+    } finally { if (had) FM.media.set('_4825adj', had); else FM.media.remove('_4825adj'); }
+    /* What an adjustment layer could already do draws exactly as on v17.20. */
+    const HEAD_ADJ = { posterize: '6cdee479/c797f115/14278b23', tint: '88a82fbb/9517c0d0/03a55847', threshold: '6f2d2214/3df5b1d5/276281bd', duotone: '33379941/20cd2e5c/507aa416',
+      rgbsplit: '4e4dc449/e8deba7e/2c3c158c', levels: 'ea9b97e7/aecfa9ae/b9a7e733', pixelate: '9266b085/6fa13505/59e0a8ee', brightness: '331e1eb1/4820da1b/ce038b1c',
+      saturate: 'aa6e175c/864297b9/82cee017', grayscale: 'ea4c0ca3/46e66bbc/299ab456' };
+    const tex2 = fix482(), ids = [];
+    try {
+      Object.keys(HEAD_ADJ).forEach(ty => {
+        const L = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex2, width: 200, height: 150 }); ids.push(L.id);
+        const got = shots4825([adjOf([FM.fxRegistry.makeInstance(ty)]), L]);
+        if (got !== HEAD_ADJ[ty]) bad.push('an adjustment layer carrying ' + ty + ' draws ' + got + ', not v17.20\'s ' + HEAD_ADJ[ty]);
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  /* 5.2 — THE DEFAULTS ARE THE OLD CURVE. 17 library filters carry Highlights & Shadows and every one gets the new keys from
+     makeInstance, so a default that moved a pixel would restyle all of them (and queue 675's distance test). Pinned against
+     v17.20 at three sizes: new and saved instances on a clip and a shape, a keyframed Shadows, the kernel itself on a buffer
+     with transparent, half-transparent and opaque rows, and the 17 filters. */
+  test('482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour correction are in the catalogue at defaults that draw the old curve byte for byte as on v17.20, and the 17 library filters built on it do not move', { item: '482', budgetMs: 120000 }, function () {
+    const ps = FM.fxRegistry.paramsOf('highlightsshadows') || [], inst = FM.fxRegistry.makeInstance('highlightsshadows');
+    const LABEL = { whites: 'Whites', blacks: 'Blacks', width: 'Tonal width', radius: 'Local radius', sat: 'Colour correction' };
+    Object.keys(HS4825).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = HS4825[k];
+      if (!pd) throw new Error('Highlights & Shadows has no ' + LABEL[k] + ' (' + k + ') control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.label !== LABEL[k]) throw new Error('the ' + k + ' control is labelled ' + JSON.stringify(pd.label) + ', not ' + LABEL[k]);
+      if (pd.default !== want) throw new Error('Highlights & Shadows ' + LABEL[k] + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old curve');
+      if (inst.params[k] !== want) throw new Error('a new Highlights & Shadows gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue('highlightsshadows', k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved Highlights & Shadows would change the first time it drew');
+    });
+    if ((FM._pxParamKeys('highlightsshadows') || []).indexOf('radius') < 0) throw new Error('Local radius is not a px control, so a reduced preview would judge each area over 3.5x the export\'s reach');
+    /* a saved value survives the load sanitiser */
+    const SET = { highlights: -10, shadows: 30, whites: -35, blacks: 20, width: 40, radius: 60, sat: 45 };
+    const lay = [{ id: 'l4825', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'highlightsshadows', enabled: true, params: Object.assign({}, SET) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === 'highlightsshadows')[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole Highlights & Shadows');
+    Object.keys(SET).forEach(k => { if (got.params[k] !== SET[k]) throw new Error('a saved Highlights & Shadows ' + k + ' of ' + SET[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    /* THE PICTURES, against v17.20. */
+    const HEAD = { 'new/image': 'fe509255/bd92cb80/e307f9f7', 'saved-25-45/image': '7c05cead/1d2da996/02c04141', 'empty/image': 'fe509255/bd92cb80/e307f9f7', 'kf/image': '36fd608c/d33765cf/b7a51eb1',
+      'new/shape': 'c1dcf9ef/b99d1828/227036ab', 'saved-25-45/shape': 'bff54164/491fd283/9abfab2d', 'empty/shape': 'c1dcf9ef/b99d1828/227036ab', 'kf/shape': '906a659a/c51b1033/272d6e20' };
+    const KERN = { '-40/50': 'ed110990', '-25/-45': '560fb8a6', '30/-30': 'b4ef388a', '100/100': 'f406986c', '-100/-100': '194984b4', '0/0': '97df3dc5', '-8/14': 'de520e6f' };
+    const FLT = { blackout: '47650b5d/85d01e92/25d2b458', bloodline: 'a37b429d/b263bf4f/c41bf6f5', copperplate: 'e615f9ed/dad40cf8/f68cbe73', desert: 'd3ae8c56/4be4b22e/713fe7de',
+      fog: 'a782a9c4/9d1a16e7/26c6bf92', infrared: 'f130bcec/fbfe26ed/01d6988c', ink: '33db7275/294ba8d1/bf7c7bef', lowkey: 'df424918/5e2981c7/19044a35', matte: 'badc4502/b215d215/dc3862c0',
+      midnight: '91d88f6d/33e67930/15606c13', noir: '8f65ef53/bb24bfcb/ed9c6f3a', platinum: 'aff4ae77/33607f4f/fdae3e52', poppy: 'e816a502/03770590/c05970c3', silver: 'dacb5546/7d6000f3/849201e5',
+      technicolor: 'bb3ee832/a1d09dff/0cb1eda6', tropic: '63da082f/7f7f98aa/b170001a', whiteout: '6556ce3e/5a6bebdb/0a38b46d' };
+    const withHS = FM.filters.all().filter(f => { const b = FM.filters.makeInstance(f.id); return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();
+    if (withHS.join(',') !== Object.keys(FLT).sort().join(',')) throw new Error('setup: the library filters carrying Highlights & Shadows are now ' + withHS.join(', ') + ' - re-capture the hashes on the build before the change');
+    const tex = fix482(), ids = [], moved = [];
+    const L = (kind, eff) => {
+      let l;
+      if (kind === 'image') { l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(l.id); }
+      else l = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 });
+      l.start = 0; l.duration = 4; l.effects = eff ? [eff] : []; return l;
+    };
+    const raw = params => ({ type: 'highlightsshadows', enabled: true, params: params });
+    try {
+      ['image', 'shape'].forEach(kind => {
+        [['new', () => FM.fxRegistry.makeInstance('highlightsshadows')], ['saved-25-45', () => raw({ highlights: -25, shadows: -45 })], ['empty', () => raw({})],
+         ['kf', () => raw({ highlights: 30, shadows: { kf: [{ t: 0, v: -60 }, { t: 2, v: 80 }] } })]].forEach(([n, mk]) => {
+          const h = shots4825([L(kind, mk())]);
+          if (h !== HEAD[n + '/' + kind]) moved.push('a ' + n + ' Highlights & Shadows on a ' + kind + ' ' + HEAD[n + '/' + kind] + ' -> ' + h);
+        });
+      });
+      Object.keys(FLT).forEach(id => { const h = shots4825([L('image', FM.filters.makeInstance(id))]); if (h !== FLT[id]) moved.push('the ' + id + ' filter ' + FLT[id] + ' -> ' + h); });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    const K = FM._FX_TABLES.PIXEL_FX.highlightsshadows, W = 256, H = 40;
+    Object.keys(KERN).forEach(key => {
+      const [h, s] = key.split('/').map(Number), a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; a[i] = x; a[i + 1] = (x * 3 + y * 7) & 255; a[i + 2] = 255 - x; a[i + 3] = y < 4 ? 0 : (y < 8 ? 128 : 255); }
+      K(a, W, H, { highlights: h, shadows: s }, 0.5);
+      let hh = 0x811c9dc5 >>> 0; for (let i = 0; i < a.length; i++) { hh ^= a[i]; hh = Math.imul(hh, 16777619) >>> 0; }
+      const hx = ('00000000' + hh.toString(16)).slice(-8);
+      if (hx !== KERN[key]) moved.push('the kernel at Highlights ' + h + ' / Shadows ' + s + ' ' + KERN[key] + ' -> ' + hx);
+    });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  /* 5.2 — WHAT THE NEW CONTROLS DO. MEASURED on v17.20: Shadows +50 lifts pure black to 60/60/60 (C47), and no key but
+     Highlights and Shadows is read. After: with Local radius 40, black stays 0 while a dark grey of 40 opens to 61. */
+  test('482 5.2 Highlights & Shadows - Local radius keeps pure black black under +50 Shadows and still opens a dark grey up, Tonal width spares the mid-tones without reversing a ramp, Whites and Blacks move only their own ends, Colour correction puts back the colour a lift washed out, and the preview matches the export', { item: '482', budgetMs: 120000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.highlightsshadows;
+    if (!K) throw new Error('the Highlights & Shadows kernel is not reachable');
+    const base = Object.assign({}, FM.fxRegistry.makeInstance('highlightsshadows').params, { highlights: 0 });
+    const bad = [];
+    /* 1. C47. A frame a third pure black, a third dark grey (40) and a third light (160). */
+    const W = 300, H = 100;
+    const strip = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = x < 100 ? 0 : (x < 200 ? 40 : 160); a[i] = a[i + 1] = a[i + 2] = v; a[i + 3] = 255; } return a; };
+    const lv = (over) => { const a = strip(); K(a, W, H, Object.assign({}, base, over), 0); return { black: a[(50 * W + 50) * 4], dark: a[(50 * W + 150) * 4] }; };
+    const glob = lv({ shadows: 50 }), loc = lv({ shadows: 50, radius: 40 });
+    if (!(glob.black >= 55)) throw new Error('CONTROL: the whole-picture curve lifts pure black to ' + glob.black + ', not about 60 - the fixture does not show C47');
+    if (loc.black > 5) bad.push('Shadows +50 with Local radius 40 lifts pure black to ' + loc.black + ' (the whole-picture curve: ' + glob.black + ') - the blacks still go milky');
+    if (!(loc.dark >= 55)) bad.push('Shadows +50 with Local radius 40 leaves a dark grey of 40 at ' + loc.dark + ' - it no longer opens the shadows up');
+    /* 2. TONAL WIDTH, on a 0..255 ramp. */
+    const ramp = over => { const a = new Uint8ClampedArray(256 * 4); for (let v = 0; v < 256; v++) { a[v * 4] = a[v * 4 + 1] = a[v * 4 + 2] = v; a[v * 4 + 3] = 255; } K(a, 256, 1, Object.assign({}, base, over), 0); return v => a[v * 4]; };
+    const wide = ramp({ shadows: 80 }), narrow = ramp({ shadows: 80, width: 30 });
+    if (!(wide(128) >= 133)) throw new Error('CONTROL: Shadows +80 at 100% moves a mid-grey 128 only to ' + wide(128));
+    if (Math.abs(narrow(128) - 128) > 1) bad.push('Shadows +80 at Tonal width 30% moves a mid-grey 128 to ' + narrow(128) + ' (at 100%: ' + wide(128) + ') - a narrow width should leave the mid-tones alone');
+    if (!(narrow(10) >= 25)) bad.push('Shadows +80 at Tonal width 30% lifts a deep shadow of 10 only to ' + narrow(10));
+    const rev = [];
+    [10, 30, 60, 100].forEach(wd => [-100, 100].forEach(sh => [-100, 100].forEach(hi => [[-100, 100], [100, -100], [0, 0]].forEach(([wt, bk]) => [0, 20].forEach(r => {
+      const f = ramp({ width: wd, shadows: sh, highlights: hi, whites: wt, blacks: bk, radius: r });
+      for (let v = 1; v < 256; v++) if (f(v) < f(v - 1)) { rev.push('width ' + wd + ' shadows ' + sh + ' highlights ' + hi + ' whites ' + wt + ' blacks ' + bk + ' radius ' + r + ': ' + (v - 1) + '->' + f(v - 1) + ' but ' + v + '->' + f(v)); break; }
+    })))));
+    if (rev.length) bad.push(rev.length + ' settings turn a darker grey brighter than a lighter one (the curve folds back): ' + rev.slice(0, 3).join('; '));
+    /* 3. WHITES AND BLACKS, each at its own end only. */
+    const wDn = ramp({ shadows: 0, whites: -100 }), wUp = ramp({ shadows: 0, whites: 100 }), bDn = ramp({ shadows: 0, blacks: -100 }), bUp = ramp({ shadows: 0, blacks: 100 });
+    if (!(wDn(255) <= 185)) bad.push('Whites -100 leaves white at ' + wDn(255));
+    if (!(wUp(200) >= 230)) bad.push('Whites +100 lifts 200 only to ' + wUp(200));
+    if (Math.abs(wDn(40) - 40) > 1 || Math.abs(wUp(40) - 40) > 1) bad.push('Whites moves a dark grey of 40 (to ' + wDn(40) + ' / ' + wUp(40) + ') - it should only touch the top end');
+    if (!(bDn(30) <= 5)) bad.push('Blacks -100 leaves 30 at ' + bDn(30));
+    if (!(bUp(0) >= 70)) bad.push('Blacks +100 lifts black only to ' + bUp(0));
+    if (Math.abs(bDn(220) - 220) > 1 || Math.abs(bUp(220) - 220) > 1) bad.push('Blacks moves a light grey of 220 (to ' + bDn(220) + ' / ' + bUp(220) + ') - it should only touch the bottom end');
+    /* 4. COLOUR CORRECTION — a dark red lifted by Shadows +80, and a light orange outside a 40% tonal width that must not move. */
+    const px = (rgb, over) => { const a = new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]); K(a, 1, 1, Object.assign({}, base, over), 0); return [a[0], a[1], a[2]]; };
+    const satOf = c => { const mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]); return mx ? (mx - mn) / mx : 0; };
+    const red = [90, 25, 20], s0 = satOf(px(red, { shadows: 80 })), sUp = satOf(px(red, { shadows: 80, sat: 100 })), sDn = satOf(px(red, { shadows: 80, sat: -100 }));
+    if (!(s0 < satOf(red) - 0.2)) throw new Error('CONTROL: Shadows +80 washes a dark red only from ' + satOf(red).toFixed(2) + ' to ' + s0.toFixed(2));
+    if (!(sUp >= s0 + 0.15)) bad.push('Colour correction +100 gives the lifted dark red a saturation of ' + sUp.toFixed(2) + ' against ' + s0.toFixed(2) + ' at 0 - the colour the lift washed out is not put back');
+    if (!(sDn <= 0.03)) bad.push('Colour correction -100 leaves the lifted dark red at a saturation of ' + sDn.toFixed(2) + ', not grey');
+    const orange = [250, 200, 60], o0 = px(orange, { shadows: 80, width: 40 }), oUp = px(orange, { shadows: 80, width: 40, sat: 100 });
+    if (o0.some((v, i) => Math.abs(v - orange[i]) > 1) || oUp.some((v, i) => Math.abs(v - o0[i]) > 1)) bad.push('Colour correction moves a light orange outside a 40% Shadows range (' + orange + ' -> ' + oUp + ') - it should touch only what Shadows and Highlights moved');
+    /* 5. THE CROPPED READBACK (#692) draws the full plate's picture to the byte with Local radius on: a 180x150 subject in a
+       1080x1920 plate, every control off its default. */
+    const PW = 1080, PH = 1920, big = new Uint8ClampedArray(PW * PH * 4);
+    for (let y = 900; y < 1050; y++) for (let x = 450; x < 630; x++) { const i = (y * PW + x) * 4; big[i] = (x * 3) & 255; big[i + 1] = (y * 5) & 255; big[i + 2] = ((x + y) * 2) & 255; big[i + 3] = (x < 452 || y < 902) ? 140 : 255; }
+    const ci = FM._cropIdentity('highlightsshadows', big, PW, PH, Object.assign({}, base, { radius: 30, shadows: 70, whites: -40, blacks: 30, sat: 50, width: 60 }), 0.3, 1);
+    if (!ci || ci.same !== true) bad.push('with Local radius 30 the cropped readback differs from the full plate in ' + (ci ? ci.diff : '?') + ' bytes - a layer would change as it moved');
+    else if (!(ci.area < ci.plate * 0.25)) bad.push('with Local radius 30 the crop covered ' + Math.round(ci.area * 100 / ci.plate) + '% of the plate');
+    /* 6. PREVIEW = EXPORT, through the renderer: a picture with a pure black block, a grey ramp and colour patches. */
+    const art = offscreen(320, 240), ax = art.getContext('2d'), gr = ax.createLinearGradient(0, 0, 320, 0);
+    gr.addColorStop(0, '#050505'); gr.addColorStop(0.5, '#404040'); gr.addColorStop(1, '#f0e0d0'); ax.fillStyle = gr; ax.fillRect(0, 0, 320, 240);
+    ax.fillStyle = '#000000'; ax.fillRect(40, 60, 60, 120); ax.fillStyle = '#c03020'; ax.fillRect(200, 40, 70, 70); ax.fillStyle = '#203060'; ax.fillRect(130, 140, 60, 80);
+    const had = FM.media.get('_4825hs');
+    FM.media.set('_4825hs', { kind: 'image', el: art, width: 320, height: 240, duration: 0 });
+    const shot = (rs, over, t) => {
+      const l = FM.makeLayer('image', { x: 160, y: 120, start: 0, duration: 4 }); l.id = '_4825hs'; l.start = 0; l.duration = 4;
+      const e = FM.fxRegistry.makeInstance('highlightsshadows'); Object.assign(e.params, over); l.effects = [e];
+      const c = offscreen(Math.round(320 * rs), Math.round(240 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      FM.renderScene(c.getContext('2d', { willReadFrequently: true }), { project: { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: [l], selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+      return c;
+    };
+    const pxAt = (c, x, y) => c.getContext('2d').getImageData(Math.round(x * c.width / 320), Math.round(y * c.height / 240), 1, 1).data;
+    try {
+      const LOC = { shadows: 70, highlights: -30, radius: 40 };
+      const ex = shot(1, LOC);
+      [0.5, 0.28].forEach(rs => {
+        const pv = shot(rs, LOC), s = offscreen(pv.width, pv.height), sg = s.getContext('2d', { willReadFrequently: true });
+        sg.imageSmoothingQuality = 'high'; sg.drawImage(ex, 0, 0, s.width, s.height);
+        const a = sg.getImageData(0, 0, s.width, s.height).data, b = pv.getContext('2d').getImageData(0, 0, s.width, s.height).data;
+        let sum = 0, n = 0; for (let i = 0; i < a.length; i += 4) for (let k = 0; k < 3; k++) { sum += Math.abs(a[i + k] - b[i + k]); n++; }
+        if (sum / n > (rs === 0.5 ? 2 : 3)) bad.push('with Local radius 40 the ' + rs + ' preview is ' + (sum / n).toFixed(2) + ' levels off the export on average - the preview judges a different area');
+        const blk = pxAt(pv, 70, 120)[0];
+        if (blk > 5) bad.push('on the ' + rs + ' preview, Local radius 40 lifts the black block to ' + blk);
+      });
+      if (pxAt(ex, 70, 120)[0] > 5) bad.push('in the export, Local radius 40 lifts the black block to ' + pxAt(ex, 70, 120)[0]);
+      /* stateless: the same moment twice is the same picture, and a keyframed radius is read at its moment */
+      const h1 = hash482(shot(1, LOC).getContext('2d'), ex), h2 = hash482(ex.getContext('2d'), ex);
+      if (h1 !== h2) bad.push('the same frame rendered twice with Local radius 40 differs (' + h1 + ' / ' + h2 + ')');
+      const kf = { shadows: 70, highlights: 0, radius: { kf: [{ t: 0, v: 0 }, { t: 2, v: 40 }] } };
+      const k0 = pxAt(shot(1, kf, 0), 70, 120)[0], k2 = pxAt(shot(1, kf, 2), 70, 120)[0];
+      if (!(k0 >= 50 && k2 <= 5)) bad.push('a Local radius keyframed from 0 to 40 reads the black block as ' + k0 + ' at 0 s and ' + k2 + ' at 2 s - not the whole-picture lift and then black');
+    } finally { if (had) FM.media.set('_4825hs', had); else FM.media.remove('_4825hs'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour correction fit the effect panel at 390 and 1280 px, and Local radius says what 0 means', { item: '482', budgetMs: 60000 }, async function () {
+    await panel482b('highlightsshadows', ['Whites', 'Blacks', 'Tonal width', 'Local radius', 'Colour correction'], []);
+    const reg = (FM.fxRegistry.paramsOf('highlightsshadows') || []).filter(p => p.key === 'radius')[0];
+    if (!reg || !/0 = whole picture/.test(reg.note || '') || !/black stays black/.test(reg.note || '')) throw new Error('Local radius carries no note saying 0 is the whole-picture curve and that above 0 black stays black (' + JSON.stringify(reg && reg.note) + ')');
+  });
+
 })();
