@@ -103,6 +103,12 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'range', label: 'Range', def: 0, options: [[0, 'All'], [1, 'Shadows'], [2, 'Midtones'], [3, 'Highlights']] },
       { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      /* #482 polish 5.4. Tint REPLACED every pixel with its brightness times the colour, so a red jacket under a blue Tint
+         came out the same blue as a grey wall — the clip's own colours were gone. Tint over soft-lights the colour in
+         instead: the clip keeps its colours and saturation and takes a cast. Range width is an exponent on the Range
+         weight, as on Colour Balance (100 = the old weights; nothing to widen under All). Defaults run the old loops. */
+      { key: 'mode', label: 'Method', def: 0, options: [[0, 'Colourise'], [1, 'Tint over']] },
+      { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
     ] },
     { type: 'threshold', label: 'Threshold', color: true, defColor: '#000000', colorLabel: 'Below', color2: true, defColor2: '#ffffff', color2Label: 'Above', params: [
       { key: 'level', label: 'Level', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -112,6 +118,10 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
       { key: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      /* #482 polish 5.5. The two colours always REPLACED the picture. Soft light and Overlay lay them over it as a cast (the
+         clip's own colours show through), and Colour takes their hue and saturation but keeps every pixel's own brightness,
+         so the detail stays. Replace is the old duotone, byte for byte. (Tritone lives on Gradient Map, not here.) */
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Replace'], [1, 'Soft light'], [2, 'Overlay'], [3, 'Colour']] },
     ] },
     // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
     { type: 'solarize', label: 'Solarize', params: [
@@ -850,6 +860,15 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'pivot', label: 'Split point', min: 5, max: 95, step: 1, def: 50, unit: '%' },
       { key: 'spread', label: 'Crossover', min: 10, max: 200, step: 5, def: 100, unit: '%' },
+      /* #482 polish 5.3 (answers the backlog's C48, #858 "the whole frame goes blue"). The split read BRIGHTNESS only, so a
+         face in shade went teal with everything else dark. Splits by Hue sends warm colours (reds, oranges, yellows, skin)
+         to orange and cool ones to teal whatever their brightness; a grey has no hue, so it still splits by brightness at
+         Split point. Protect skin holds skin-coloured pixels back from the grade; Balance trades teal for orange; Keep
+         brightness puts every pixel back at its own luma so the grade is a colour move only. Every default runs the old loop. */
+      { key: 'mode', label: 'Splits by', def: 0, options: [[0, 'Brightness'], [1, 'Hue']] },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0, note: '−100 teal only · +100 orange only' },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'crossprocess', label: 'Cross Process', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
@@ -7845,16 +7864,63 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         var tr=ov(dr,l), tg=ov(dg,l), tb=ov(db,l);
         if(bbC!==1){ tr=dr+(tr-dr)*bbC; tg=dg+(tg-dg)*bbC; tb=db+(tb-db)*bbC; }
         d[i]=r+(tr-r)*a; d[i+1]=g+(tg-g)*a; d[i+2]=b+(tb-b)*a; } },
-    tealorange: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
+    tealorange: (function(){
+      /* #482 polish 5.3 — two tables, one entry per degree of hue (read with a linear blend between entries), so Splits by Hue
+         and Protect skin cost two table reads a pixel instead of a Math.cos. TOH is the hue's warmth: +1 at the warm hues (reds
+         through yellows, peak 35°), −1 at the cool ones (cyan-blue, 215°), (cos(h − 35°) − 0.2) × 1.6 before Crossover and the
+         clamp. TOS is the skin window: a raised cosine, full at 25°, nothing below −5° or above 55°. */
+      var TOH = new Float32Array(362), TOS = new Float32Array(362), toOut = [0, 0, 0];
+      for (var hh = 0; hh < 362; hh++) {
+        TOH[hh] = (Math.cos((hh - 35) * Math.PI / 180) - 0.2) * 1.6;
+        var dh = Math.abs(((hh - 25) % 360 + 540) % 360 - 180);
+        TOS[hh] = dh < 30 ? 0.5 + 0.5 * Math.cos(Math.PI * dh / 30) : 0;
+      }
+      return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The split between warm and cool sat permanently at mid-grey, so whether FACES land in the
       // orange half was decided by how the shot happened to be exposed rather than by any choice.
       // PIVOT moves that dividing line; SPREAD is how sharply it crosses over (a small spread pushes
       // almost everything fully warm or fully cool, a large one keeps a wide neutral middle).
       var toPv=p.pivot==null?50:FM.evalProp(p.pivot,t); if(toPv<5)toPv=5; if(toPv>95)toPv=95;
       var toSpP=p.spread==null?100:FM.evalProp(p.spread,t); if(toSpP<10)toSpP=10; if(toSpP>200)toSpP=200;
-      var toPiv=toPv===50?0.5:toPv/100, toSp=toSpP===100?1:100/toSpP; for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=toPiv===0.5&&toSp===1?(l-0.5)*2:(l-toPiv)*2*toSp;
+      var toPiv=toPv===50?0.5:toPv/100, toSp=toSpP===100?1:100/toSpP;
+      /* SPLITS BY, PROTECT SKIN, BALANCE, KEEP BRIGHTNESS (#482 polish 5.3, the backlog's C48). Read once a frame; all four at
+         their defaults run the old loop below, untouched, so every saved grade and the two library filters built on it draw
+         byte for byte as they did. */
+      var toMd=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0);
+      var toSk=p.skin==null?0:FM.evalProp(p.skin,t); if(!(toSk>0))toSk=0; if(toSk>100)toSk=100;
+      var toBa=p.balance==null?0:FM.evalProp(p.balance,t); if(toBa!==toBa)toBa=0; if(toBa<-100)toBa=-100; if(toBa>100)toBa=100;
+      var toKp=p.keep==null?0:FM.evalProp(p.keep,t); if(!(toKp>0))toKp=0; if(toKp>100)toKp=100;
+      if(toMd!==1&&toSk===0&&toBa===0&&toKp===0){
+      for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=(r*0.299+g*0.587+b*0.114)/255; var w=toPiv===0.5&&toSp===1?(l-0.5)*2:(l-toPiv)*2*toSp;
         if(w<-1)w=-1; else if(w>1)w=1;
-        var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); } },
+        var rr=r+w*42*a, gg=g+w*8*a, bb=b-w*42*a; d[i]=rr<0?0:(rr>255?255:rr); d[i+1]=gg<0?0:(gg>255?255:gg); d[i+2]=bb<0?0:(bb>255?255:bb); }
+        return; }
+      /* The extended loop. HUE: a coloured pixel's warmth comes from its hue (TOH, scaled by Crossover), blended in by how much
+         colour it has (full from a chroma of 48 levels), so a grey — which has no hue — still splits by brightness at Split
+         point and the step from grey to colour is smooth. PROTECT SKIN scales the grade down on skin-coloured pixels: skin
+         hue (TOS) × a saturation window (HSV S 0.2–0.65 full, nothing under 0.08 or over 0.85) × not near-black (V from 0.2).
+         BALANCE scales the warm side by 1 + b and the cool side by 1 − b. KEEP BRIGHTNESS moves the result toward the pixel
+         at its own luma (setLum255, as Colour Balance's Keep brightness), so 100 is a pure colour move. */
+      var toBf=toBa/100, toKk=toKp/100, toSf=toSk/100;
+      for(var j=0;j<d.length;j+=4){ if(d[j+3]===0)continue; var r2=d[j],g2=d[j+1],b2=d[j+2]; var l2=(r2*0.299+g2*0.587+b2*0.114)/255; var w2=toPiv===0.5&&toSp===1?(l2-0.5)*2:(l2-toPiv)*2*toSp;
+        if(w2<-1)w2=-1; else if(w2>1)w2=1;
+        var a2=a;
+        if(toMd===1||toSf>0){
+          var mx=r2>g2?(r2>b2?r2:b2):(g2>b2?g2:b2), mn=r2<g2?(r2<b2?r2:b2):(g2<b2?g2:b2), ch=mx-mn;
+          if(ch>0){
+            var hu=mx===r2?(g2-b2)/ch:(mx===g2?(b2-r2)/ch+2:(r2-g2)/ch+4); if(hu<0)hu+=6; hu*=60;
+            var hi=hu|0, hf=hu-hi;
+            if(toMd===1){ var wh=(TOH[hi]+(TOH[hi+1]-TOH[hi])*hf)*toSp; if(wh<-1)wh=-1; else if(wh>1)wh=1; w2+=(wh-w2)*(ch>=48?1:ch/48); }
+            if(toSf>0){ var sS=ch/mx, sV=mx/255;
+              var mS=sS<0.08?0:(sS<0.2?(sS-0.08)/0.12:(sS<=0.65?1:(sS<0.85?(0.85-sS)/0.2:0)));
+              var mV=sV<0.08?0:(sV<0.2?(sV-0.08)/0.12:1);
+              var mk=(TOS[hi]+(TOS[hi+1]-TOS[hi])*hf)*mS*mV; if(mk>0)a2=a*(1-toSf*mk); }
+          }
+        }
+        if(toBf!==0)w2*=w2>0?1+toBf:1-toBf;
+        var r3=r2+w2*42*a2, g3=g2+w2*8*a2, b3=b2-w2*42*a2;
+        if(toKk>0){ setLum255(r3,g3,b3,r2*0.299+g2*0.587+b2*0.114,toOut); r3+=(toOut[0]-r3)*toKk; g3+=(toOut[1]-g3)*toKk; b3+=(toOut[2]-b3)*toKk; }
+        d[j]=r3<0?0:(r3>255?255:r3); d[j+1]=g3<0?0:(g3>255?255:g3); d[j+2]=b3<0?0:(b3>255?255:b3); } }; })(),
     crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The whole look lived in six hardcoded constants, so Amount could only crossfade between the
       // footage and that ONE fixed C-41 curve. LIFT scales the per-channel S-bend (0 = none, so the
@@ -13910,10 +13976,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     (l) => 1 - Math.abs(2 * l - 1),         // Midtones
     (l) => l * l,                           // Highlights
   ];
+  /* METHOD and RANGE WIDTH (#482 polish 5.4). Colourise is the old replace: brightness × colour, so a red jacket under a blue
+     Tint came out the same blue as a grey wall. TINT OVER soft-lights the colour onto the pixel instead (fxBlendPx's W3C soft
+     light, the colour as the source), so the clip keeps its own colours and saturation and only takes a cast; Range, Amount
+     and Keep brightness work on it exactly as on Colourise. RANGE WIDTH is an exponent on the Range weight, 100/width, as on
+     Colour Balance — 100 is the old weights and All has no range to widen. Colourise + 100 run the old loops below. */
   function tintPixels(d, am, C, p, t) {
     const rng = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
     const pres = p.preserve == null ? 0 : (Math.round(FM.evalProp(p.preserve, t)) | 0);
     const wf = TINT_W[rng > 0 && rng < TINT_W.length ? rng : 0];
+    const over = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+    let so = p.soft == null ? 100 : FM.evalProp(p.soft, t); if (!(so >= 10)) so = 10; if (so > 200) so = 200;
+    const ex = wf && so !== 100 ? 100 / so : 1;
+    if (over || ex !== 1) {
+      for (let i = 0; i < d.length; i += 4) {
+        const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+        const l = (r0 * 0.299 + g0 * 0.587 + b0 * 0.114) / 255;
+        let wv = wf ? wf(l) : 1; if (ex !== 1) wv = wv > 0 ? Math.pow(wv, ex) : 0;
+        const k = am * wv;
+        const tr = over ? fxBlendPx(4, C[0], r0) : l * C[0], tg = over ? fxBlendPx(4, C[1], g0) : l * C[1], tb = over ? fxBlendPx(4, C[2], b0) : l * C[2];
+        let nr = r0 + (tr - r0) * k, ng = g0 + (tg - g0) * k, nb = b0 + (tb - b0) * k;
+        if (pres) {
+          const l1 = 0.299 * nr + 0.587 * ng + 0.114 * nb;
+          if (l1 > 0.0001) { const s = (l * 255) / l1; nr *= s; ng *= s; nb *= s; }
+        }
+        d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+      }
+      return;
+    }
     if (!wf && !pres) {
       for (let i = 0; i < d.length; i += 4) {
         const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
@@ -13974,11 +14064,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // BALANCE bends the luma curve so the handover between shadow and highlight colour can move
   // (every duotone used to land in exactly the same place); CONTRAST widens or flattens the ramp.
   // 0 / 100 short-circuits to the original straight line — 0.5 + (x - 0.5) is NOT exactly x.
+  /* BLEND (#482 polish 5.5). The two colours always REPLACED the picture. Soft light and Overlay lay the mapped colour over the
+     pixel through fxBlendPx (the mapped colour as the source), and Colour puts the mapped colour at the pixel's OWN luma
+     (setLum255), so the picture keeps every bit of its brightness detail and takes only the two colours' hue and saturation.
+     Amount fades each toward the untouched pixel, as before. Replace runs the old loop below, byte for byte. */
+  const _duOut = [0, 0, 0];
   function duotonePixels(d, am, A, B, p, t) {
     const bal = p.balance == null ? 0 : FM.evalProp(p.balance, t);
     const con = p.contrast == null ? 100 : FM.evalProp(p.contrast, t);
     const plain = (bal === 0 && con === 100);
     const g = plain ? 1 : Math.pow(2, -bal / 100), k = con / 100;
+    const bl = p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0);
+    if (bl >= 1 && bl <= 3) {
+      for (let i = 0; i < d.length; i += 4) {
+        const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2], l0 = r0 * 0.299 + g0 * 0.587 + b0 * 0.114;
+        let l = l0 / 255;
+        if (!plain) { l = Math.pow(l, g); l = 0.5 + (l - 0.5) * k; l = l < 0 ? 0 : (l > 1 ? 1 : l); }
+        const m0 = A[0] + (B[0] - A[0]) * l, m1 = A[1] + (B[1] - A[1]) * l, m2 = A[2] + (B[2] - A[2]) * l;
+        let t0, t1, t2;
+        if (bl === 3) { setLum255(m0, m1, m2, l0, _duOut); t0 = _duOut[0]; t1 = _duOut[1]; t2 = _duOut[2]; }
+        else { const md = bl === 1 ? 4 : 3; t0 = fxBlendPx(md, m0, r0); t1 = fxBlendPx(md, m1, g0); t2 = fxBlendPx(md, m2, b0); }
+        d[i] = r0 + (t0 - r0) * am; d[i + 1] = g0 + (t1 - g0) * am; d[i + 2] = b0 + (t2 - b0) * am;
+      }
+      return;
+    }
     for (let i = 0; i < d.length; i += 4) {
       let l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;   // luma 0..1
       if (!plain) { l = Math.pow(l, g); l = 0.5 + (l - 0.5) * k; l = l < 0 ? 0 : (l > 1 ? 1 : l); }

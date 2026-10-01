@@ -117116,4 +117116,252 @@
     if (bad.length) throw new Error(bad.join(' · ') + ' - two builds that disagree about these normalise the same project differently, and would be let into one session');
   });
 
+  /* ═══ #482 POLISH BATCH 5 (grading depth) — 5.3 Teal & Orange, 5.4 Tint, 5.5 Duotone ══════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 5
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 5.3 answers C48: Teal & Orange read brightness only, so a face
+   * in shade went teal with everything else dark. The rule that makes it safe (§0.3): every new key's default is the old
+   * look, because a filter recipe gets every key it does not set from makeInstance. The first test pins that against hashes
+   * captured on v17.20 (1403309a) BEFORE the first edit, with polish 1's fixture (a textured 200x150 clip in a 240x180
+   * project, the export at t 0.7 and a half-size preview at t 1.3) — the per-layer path and the adjustment-layer path. */
+  function shots5(layers) {
+    return [[240, 0.7], [120, 1.3]].map(([w, t]) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  /* The centre pixel of a flat colour rect carrying `fx` (or under an adjustment layer carrying it), rendered as the export
+     (240 wide) and as a half-size preview (120 wide). A grade is a point operation, so all three must be the kernel's own
+     answer for that colour: the preview is the export. */
+  function centre5(hex, fx, onAdj) {
+    const R = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 200, shapeH: 150, fill: hex, start: 0, duration: 4 }); R.start = 0; R.duration = 4;
+    let layers = [R];
+    if (onAdj) { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = [fx]; layers = [A, R]; } else R.effects = [fx];
+    return [240, 120].map(w => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, 0.5);
+      const d = x.getImageData(w / 2, w * 3 / 8, 1, 1).data; return [d[0], d[1], d[2]];
+    });
+  }
+  function kpx5(rgb, type, params) {
+    const d = new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]);
+    FM._applyPixelFx(d, { type: type, params: params }, 0.5, 1, 1, 1);
+    return [d[0], d[1], d[2]];
+  }
+  const NEW5 = { tealorange: { mode: 0, skin: 0, balance: 0, keep: 0 }, tint: { mode: 0, soft: 100 }, duotone: { blend: 0 } };
+
+  test('482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone - every new control is in the catalogue at a default that draws the old look, and the 56 library filters, saved and new grades and the adjustment-layer Tint and Duotone render byte for byte as on v17.20', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
+       render-time fill (queue 784) agrees with that default. */
+    Object.keys(NEW5).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW5[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW5[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    const rw = (FM.fxRegistry.paramsOf('tint') || []).filter(q => q.key === 'soft')[0];
+    if (!rw || rw.overriddenBy !== 'range' || JSON.stringify(rw.liveWhen) !== '[1,2,3]') throw new Error('Tint Range width does not say it is switched off under Range All (overriddenBy ' + (rw && rw.overriddenBy) + ', liveWhen ' + JSON.stringify(rw && rw.liveWhen) + ')');
+    /* …and a saved value survives the load sanitiser, at a non-default value for each key. */
+    const SET = { tealorange: { mode: 1, skin: 60, balance: -40, keep: 50 }, tint: { mode: 1, soft: 160 }, duotone: { blend: 3 } };
+    const lay = [{ id: 'l4825', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.20. A new instance (every new key spelled out at its default), saved instances with only the
+       old keys (the fast loops and the slow ones: Tint under a Range with Keep brightness, a curved Duotone, a moved Split
+       point), and Tint and Duotone on an adjustment layer — a new one there must be the saved default to the byte. */
+    const HEAD = { 'tealorange/new/image': '6557cd64/057560f0', 'tealorange/new/shape': 'd9017533/a41411f2', 'tealorange/saved0': '6557cd64/057560f0', 'tealorange/saved1': '64b5af31/8465cbc8',
+      'tint/new/image': '5756b47b/bab79518', 'tint/new/shape': 'c8af3b80/1b6b8316', 'tint/saved0': '5756b47b/bab79518', 'tint/saved1': 'beeab85a/f4994eba', 'tint/saved2': 'bfdb9ce3/53fb1c0e',
+      'tint/adj0': '88a82fbb/9517c0d0', 'tint/adj1': 'e9a3fe9a/cfd57f9a', 'tint/adj2': 'cdeaa823/171bb34e', 'tint/adjnew': '88a82fbb/9517c0d0',
+      'duotone/new/image': 'eb248c41/c7a74304', 'duotone/new/shape': 'b34fa899/e8eb1c75', 'duotone/saved0': 'eb248c41/c7a74304', 'duotone/saved1': '53ee2f7d/e65b77c5',
+      'duotone/adj0': '33379941/20cd2e5c', 'duotone/adj1': '47da023d/9451c545', 'duotone/adjnew': '33379941/20cd2e5c' };
+    const SAVED = {
+      tealorange: [{ amount: 0.6 }, { amount: 0.8, pivot: 35, spread: 60 }],
+      tint: [{ amount: 1, color: '#ff3366' }, { amount: 0.7, color: '#3080ff', range: 2, preserve: 1 }, { amount: 0.5, color: '#20c080', range: 1 }],
+      duotone: [{ amount: 1, color: '#241a52', color2: '#ff9e5e' }, { amount: 0.8, color: '#102040', color2: '#ffd080', balance: 30, contrast: 140 }],
+    };
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    const all = FM.filters.all();
+    if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
+    const tex = fix482(), ids = [], moved = [];
+    const clip = () => { const L = FM.makeLayer('image', { name: '4825 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    const adj = fx => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = [fx]; return A; };
+    const got = {};
+    try {
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots5([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      Object.keys(SAVED).forEach(type => {
+        ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots5([L]); });
+        SAVED[type].forEach((p, i) => { const L = clip(); L.effects = [{ type: type, enabled: true, params: Object.assign({}, p) }]; got[type + '/saved' + i] = shots5([L]); });
+        if (type === 'tealorange') return;
+        SAVED[type].forEach((p, i) => { got[type + '/adj' + i] = shots5([adj({ type: type, enabled: true, params: Object.assign({}, p) }), clip()]); });
+        got[type + '/adjnew'] = shots5([adj(FM.fxRegistry.makeInstance(type)), clip()]);
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+  /* 5.3 TEAL & ORANGE (C48). The grade pushed +42 R / +8 G / −42 B by BRIGHTNESS alone, so a shadowed face (#6b4a3a, a brown in
+     shade) went bluer with everything else dark. Measured at the kernel through the adjustment-layer seam's PIXEL_FX call. */
+  test('482 5.3 Teal & Orange - Splits by Hue keeps a shadowed skin pixel warm instead of teal, Protect skin holds skin back, Balance trades teal for orange, Keep brightness holds the luma, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.tealorange) throw new Error('the Teal & Orange kernel is not reachable');
+    const run = (rgb, over) => { const d = new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]); K.tealorange(d, 1, 1, Object.assign({ amount: 0.6 }, over), 0.5, 1); return [d[0], d[1], d[2]]; };
+    const skin = [0x6b, 0x4a, 0x3a], sky = [60, 120, 180], dark = [50, 50, 50], light = [200, 200, 200];
+    const s0 = run(skin, {}), sH = run(skin, { mode: 1 });
+    if (!(s0[2] > skin[2] + 3)) throw new Error('CONTROL: by brightness the shadowed skin pixel #6b4a3a did not go bluer (' + s0 + ') - the fixture does not show C48');
+    if (!(sH[2] < skin[2] - 5 && sH[0] > skin[0] + 5)) throw new Error('Splits by Hue still sends the shadowed skin pixel #6b4a3a toward teal: ' + skin + ' -> ' + sH + ' (by brightness ' + s0 + ') - a face in shade goes blue');
+    const kH = run(sky, { mode: 1 }), k0 = run(sky, {});
+    if (!(kH[2] - kH[0] > (sky[2] - sky[0]) + 10)) throw new Error('Splits by Hue did not send a blue sky toward teal: ' + sky + ' -> ' + kH);
+    if (!(kH[2] - kH[0] > k0[2] - k0[0])) throw new Error('a mid-bright blue sky is no cooler by Hue (' + kH + ') than by brightness (' + k0 + ')');
+    if (run(dark, { mode: 1 }).join() !== run(dark, {}).join() || run(light, { mode: 1 }).join() !== run(light, {}).join()) throw new Error('Splits by Hue moved a grey differently from by brightness - a grey has no hue, so Split point still decides it');
+    const sP = run(skin, { skin: 100 });
+    if (Math.max(Math.abs(sP[0] - skin[0]), Math.abs(sP[1] - skin[1]), Math.abs(sP[2] - skin[2])) > 3) throw new Error('Protect skin 100 still moved the skin pixel #6b4a3a from ' + skin + ' to ' + sP + ' (unprotected ' + s0 + ')');
+    if (run(sky, { skin: 100 }).join() !== k0.join()) throw new Error('Protect skin 100 changed a blue sky (' + run(sky, { skin: 100 }) + ' against ' + k0 + ') - it must only hold back skin colours');
+    if (run(dark, { balance: 100 }).join() !== dark.join()) throw new Error('Balance +100 still pushed a dark grey toward teal: ' + run(dark, { balance: 100 }));
+    const l0 = run(light, {}), lB = run(light, { balance: 100 });
+    if (!(lB[0] - lB[2] > (l0[0] - l0[2]) + 20)) throw new Error('Balance +100 did not push a light grey further toward orange: ' + lB + ' against ' + l0);
+    if (run(light, { balance: -100 }).join() !== light.join()) throw new Error('Balance −100 still warmed a light grey: ' + run(light, { balance: -100 }));
+    const d0 = run(dark, {}), dB = run(dark, { balance: -100 });
+    if (!(dB[2] - dB[0] > (d0[2] - d0[0]) + 10)) throw new Error('Balance −100 did not push a dark grey further toward teal: ' + dB + ' against ' + d0);
+    /* KEEP BRIGHTNESS: a grey ramp at Amount 1 stays at its own luma within a level, and keeps its colour. */
+    const n = 256, ramp = over => { const d = new Uint8ClampedArray(n * 4); for (let i = 0; i < n; i++) { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = i; d[i * 4 + 3] = 255; } K.tealorange(d, n, 1, Object.assign({ amount: 1 }, over), 0.5, 1); return d; };
+    const off = (d, i) => 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2] - i;
+    const rOff = ramp({}), rOn = ramp({ keep: 100 });
+    let worstOff = 0, worstOn = 0; for (let i = 0; i < n; i++) { worstOff = Math.max(worstOff, Math.abs(off(rOff, i))); worstOn = Math.max(worstOn, Math.abs(off(rOn, i))); }
+    if (!(worstOff > 5)) throw new Error('CONTROL: without Keep brightness the grade moved a grey ramp only ' + worstOff.toFixed(2) + ' levels off its luma');
+    if (!(worstOn <= 1)) throw new Error('Keep brightness 100 left a grey ramp up to ' + worstOn.toFixed(2) + ' levels off its own luma (' + worstOff.toFixed(2) + ' without it)');
+    if (!(rOn[220 * 4] - rOn[220 * 4 + 2] > 30)) throw new Error('Keep brightness took the colour away too - light grey 220 is ' + [rOn[880], rOn[881], rOn[882]].join(','));
+    /* THE PREVIEW IS THE EXPORT, each control, per layer: the centre of a flat skin-brown rect, export and half-size preview,
+       is the kernel's own answer. */
+    [{ mode: 1 }, { skin: 100 }, { balance: 60 }, { keep: 100 }, { mode: 1, skin: 50, balance: -30, keep: 40 }].forEach(over => {
+      const fx = FM.fxRegistry.makeInstance('tealorange'); Object.assign(fx.params, over);
+      const want = run(skin, Object.assign({}, fx.params)), c = centre5('#6b4a3a', fx);
+      c.forEach((g, i) => { if (Math.max(Math.abs(g[0] - want[0]), Math.abs(g[1] - want[1]), Math.abs(g[2] - want[2])) > 1) throw new Error(JSON.stringify(over) + ': the ' + (i ? 'half-size preview' : 'export') + ' draws ' + g + ' where the grade gives ' + want); });
+    });
+  });
+
+  /* 5.4 TINT. Colourise replaces the pixel with brightness × colour, so under a blue Tint a red jacket comes out the same blue as
+     a grey wall. Tint over soft-lights the colour in: the jacket stays red, the wall takes the cast. Range width is the exponent
+     on the Range weight (100 = the old weights). Through FM._applyPixelFx — the one kernel both paths use — and then rendered
+     on a layer and on an adjustment layer, export and preview. */
+  test('482 5.4 Tint - Tint over keeps a red jacket red under a blue Tint where Colourise turns it blue, Range width widens and narrows the range, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const red = [220, 40, 40], blue = '#2060ff';
+    const sat = c => { const mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]); return mx ? (mx - mn) / mx : 0; };
+    const col = kpx5(red, 'tint', { amount: 1, color: blue }), ovr = kpx5(red, 'tint', { amount: 1, color: blue, mode: 1 });
+    if (!(col[2] > col[0])) throw new Error('CONTROL: Colourise under a blue Tint left the red ' + col + ' - it should be blue, which is the complaint');
+    if (!(ovr[0] > ovr[2] + 40 && ovr[0] > ovr[1] + 40)) throw new Error('Tint over still turns a red jacket blue under a blue Tint: ' + red + ' -> ' + ovr + ' (Colourise ' + col + ')');
+    if (!(sat(ovr) > 0.5)) throw new Error('Tint over left the red at saturation ' + sat(ovr).toFixed(2) + ' (' + ovr + ') - it must keep the colour, above 0.5');
+    const grey = kpx5([128, 128, 128], 'tint', { amount: 1, color: blue, mode: 1 });
+    if (!(grey[2] > grey[0] + 30)) throw new Error('Tint over gave a grey wall no blue cast: ' + grey);
+    if (kpx5([128, 128, 128], 'tint', { amount: 0, color: blue, mode: 1 }).join() !== '128,128,128') throw new Error('Tint over at Amount 0 still moved the grey');
+    const kb = kpx5(red, 'tint', { amount: 1, color: blue, mode: 1, preserve: 1 }), lum = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    if (Math.abs(lum(kb) - lum(red)) > 1.5) throw new Error('Tint over with Keep brightness moved the red off its own brightness: ' + lum(red).toFixed(1) + ' -> ' + lum(kb).toFixed(1));
+    /* RANGE WIDTH under Range Shadows: a light-mid grey (160) is barely in the shadows at 100, more at 200, out of them at 10. */
+    const mv = s => { const c = kpx5([160, 160, 160], 'tint', Object.assign({ amount: 1, color: blue, range: 1 }, s == null ? {} : { soft: s })); return c[2] - c[0]; };
+    const n100 = mv(100), wide = mv(200), narrow = mv(10);
+    if (!(wide > n100 + 5 && narrow < n100 - 5)) throw new Error('under Range Shadows a light-mid grey took a cast of ' + narrow + ' / ' + n100 + ' / ' + wide + ' at Range width 10 / 100 / 200 - the width does not change the range');
+    if (mv(100) !== mv(null)) throw new Error('Range width 100 is not the old weights');
+    if (kpx5([160, 160, 160], 'tint', { amount: 1, color: blue, soft: 30 }).join() !== kpx5([160, 160, 160], 'tint', { amount: 1, color: blue }).join()) throw new Error('Range width moved a Tint under Range All, where there is no range to widen');
+    /* THE PREVIEW IS THE EXPORT, on a layer (drawTint) and on an adjustment layer (applyPixelFx). */
+    [{ mode: 1 }, { mode: 1, range: 3, soft: 160 }, { range: 1, soft: 40 }].forEach(over => {
+      const fx = FM.fxRegistry.makeInstance('tint'); Object.assign(fx.params, { color: blue }, over);
+      const want = kpx5(red, 'tint', Object.assign({}, fx.params));
+      [false, true].forEach(onAdj => centre5('#dc2828', fx, onAdj).forEach((g, i) => {
+        if (Math.max(Math.abs(g[0] - want[0]), Math.abs(g[1] - want[1]), Math.abs(g[2] - want[2])) > 1) throw new Error(JSON.stringify(over) + (onAdj ? ' on an adjustment layer' : '') + ': the ' + (i ? 'half-size preview' : 'export') + ' draws ' + g + ' where the Tint gives ' + want);
+      }));
+    });
+  });
+
+  /* 5.5 DUOTONE. The two colours always replaced the picture. Colour takes their hue and saturation and keeps every pixel's
+     own brightness; Soft light and Overlay lay them over the picture as a cast. Replace is the old duotone. */
+  test('482 5.5 Duotone - Colour keeps a grey ramp at its own brightness within one level, Soft light and Overlay lay the colours over the picture, and the preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const base = { amount: 1, color: '#241a52', color2: '#ff9e5e' };
+    const n = 256, ramp = over => { const d = new Uint8ClampedArray(n * 4); for (let i = 0; i < n; i++) { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = i; d[i * 4 + 3] = 255; } FM._applyPixelFx(d, { type: 'duotone', params: Object.assign({}, base, over) }, 0.5, n, 1, 1); return d; };
+    const worst = d => { let w = 0; for (let i = 0; i < n; i++) w = Math.max(w, Math.abs(0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2] - i)); return w; };
+    const rep = ramp({}), colr = ramp({ blend: 3 });
+    if (!(worst(rep) > 20)) throw new Error('CONTROL: Replace moved a grey ramp only ' + worst(rep).toFixed(1) + ' levels off its brightness');
+    if (!(worst(colr) <= 1)) throw new Error('Blend Colour left a grey ramp up to ' + worst(colr).toFixed(2) + ' levels off its own brightness (Replace ' + worst(rep).toFixed(1) + ')');
+    if (!(colr[128 * 4] - colr[128 * 4 + 2] > 20)) throw new Error('Blend Colour did not take the duotone colour at mid-grey: ' + [colr[512], colr[513], colr[514]].join(','));
+    if (!(colr[40 * 4 + 2] > colr[40 * 4] + 5)) throw new Error('Blend Colour did not take the shadow colour in the darks: ' + [colr[160], colr[161], colr[162]].join(','));
+    if (!(worst(ramp({ blend: 3, amount: 0.5 })) <= 1)) throw new Error('Blend Colour at Amount 0.5 left the ramp off its own brightness');
+    [[1, 'Soft light'], [2, 'Overlay']].forEach(([b, name]) => {
+      const r = ramp({ blend: b });
+      if ([r[0], r[1], r[2]].join() !== '0,0,0' || [r[1020], r[1021], r[1022]].join() !== '255,255,255') throw new Error(name + ' moved black or white (' + [r[0], r[1], r[2]] + ' / ' + [r[1020], r[1021], r[1022]] + ') - a cast laid over the picture keeps its ends');
+      if (!(r[160 * 4] - r[160 * 4 + 2] > 15)) throw new Error(name + ' gave a light-mid grey no warm cast from the highlight colour: ' + [r[640], r[641], r[642]].join(','));
+      if (r.join() === rep.join()) throw new Error(name + ' draws exactly the Replace duotone');
+    });
+    if (ramp({ blend: 1 }).join() === ramp({ blend: 2 }).join()) throw new Error('Soft light and Overlay draw the same picture');
+    /* THE PREVIEW IS THE EXPORT, on a layer and on an adjustment layer: the centre of a flat grey rect. */
+    [1, 2, 3].forEach(b => {
+      const fx = FM.fxRegistry.makeInstance('duotone'); fx.params.blend = b;
+      const want = kpx5([150, 150, 150], 'duotone', Object.assign({}, fx.params));
+      [false, true].forEach(onAdj => centre5('#969696', fx, onAdj).forEach((g, i) => {
+        if (Math.max(Math.abs(g[0] - want[0]), Math.abs(g[1] - want[1]), Math.abs(g[2] - want[2])) > 1) throw new Error('Blend ' + b + (onAdj ? ' on an adjustment layer' : '') + ': the ' + (i ? 'half-size preview' : 'export') + ' draws ' + g + ' where the Duotone gives ' + want);
+      }));
+    });
+  });
+
+  /* THE NEW ROWS FIT THE PANEL, at a phone's 390 px and at a 1280 px PC window: every new row is on screen inside the
+     inspector, its name is not cut off, and each option button shows its whole label. Tint's Range width is greyed out under
+     Range All, where there is no range to widen, and wakes under Shadows. */
+  test('482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone panels - the new rows fit the effect panel at 390 and 1280 px, and Range width is greyed out under Range All', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { tealorange: ['Splits by', 'Protect skin', 'Balance', 'Keep brightness'], tint: ['Method', 'Range width'], duotone: ['Blend'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label, #inspector-panel .fx-row.fx-open .kf-color-row > label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row') } : null;
+    };
+    const show = async (type, set) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S4825', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await show(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const r = rowOf(label);
+          if (!r) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = r.row.getBoundingClientRect();
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+          [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+        }
+      }
+      await show('tint');
+      if (!rowOf('Range width').row.classList.contains('fx-overridden')) throw new Error(where + ': Tint Range width looks live under Range All, where there is no range to widen');
+      if (rowOf('Method').row.classList.contains('fx-overridden')) throw new Error(where + ': CONTROL - Tint Method is greyed out, and nothing switches it off');
+      await show('tint', p => { p.range = 1; });
+      if (rowOf('Range width').row.classList.contains('fx-overridden')) throw new Error(where + ': Tint Range width is greyed out under Range Shadows');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
 })();
