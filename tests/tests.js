@@ -118515,4 +118515,28 @@
   });
 
 
+  /* 6.6 LINEAR STREAKS, REVIEW. Both ways was first added as a side loop with a ternary per tap INSIDE the tap loop, and it ran
+     at One way too, where it adds nothing: measured on a 1080x1920 plate at the defaults, 126 against 159 ms with the v17.21 and
+     the build kernels interleaved in one page (bytes identical), and a saved 16-tap streak 264 against 315-346 ms. Every saved
+     streak is One way, Only above 0 and white, so every project using it got a quarter slower. A time limit cannot hold that down
+     on a shared machine, so this reads THE SOURCE: those three settings must take the v17.21 loop, letter for letter (white space
+     aside), behind ONE test made before the pixel loop starts, and return before the new loop. Both ways is checked first, so on
+     v17.21, which never had a second side, this fails on the missing feature and not on the text. */
+  test('482 6.6 Linear Streaks - One way with Only above 0 and a white Tint runs the v17.21 pixel loop letter for letter, chosen once before the pixels, so saved streaks draw at the old speed, while Both ways still smears both sides', { item: '482' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.linstreaks) throw new Error('the Linear Streaks kernel is not reachable');
+    const W = 120, H = 60, d = plate6(W, H, 20);
+    for (let y = 29; y <= 31; y++) for (let x = 59; x <= 61; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; }
+    K.linstreaks(d, W, H, { length: 30, angle: 0, both: 1 }, 0, 1);
+    if (!(d[(30 * W + 50) * 4] - 20 > 10)) throw new Error('Both ways leaves the left of the dot dark (+' + (d[(30 * W + 50) * 4] - 20) + ') - there is no second side, so there is nothing for One way to be kept apart from');
+    const OLD = 'for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } }';
+    const norm = v => String(v).replace(/\s+/g, ''), src = norm(K.linstreaks), old = norm(OLD), guard = norm('if(lsSides===1&&!lsGate&&!lsTint){');
+    const at = src.indexOf(old);
+    if (at < 0) throw new Error('the v17.21 Linear Streaks pixel loop is not in the kernel any more - One way runs the Both ways loop, with a side loop and two ternaries per tap, about a quarter slower on every saved streak');
+    if (src.indexOf(old, at + 1) >= 0) throw new Error('the v17.21 loop is in the kernel twice - this check cannot tell which one One way runs');
+    if (src.slice(at - guard.length, at) !== guard) throw new Error('the v17.21 loop is not behind if(lsSides===1&&!lsGate&&!lsTint){, the once-per-call test for One way, Only above 0 and white: ' + src.slice(Math.max(0, at - 60), at));
+    if (src.slice(at + old.length, at + old.length + 8) !== 'return;}') throw new Error('the v17.21 loop does not return when it is done, so the Both ways loop runs after it as well');
+    if (src.indexOf(old) > src.indexOf('lsSide<lsSides')) throw new Error('the side loop comes before the v17.21 loop, so it is still in the path One way takes');
+  });
+
+
 })();
