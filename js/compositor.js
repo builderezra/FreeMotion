@@ -8170,8 +8170,10 @@ globalThis.FM = globalThis.FM || {};
        * like Drift 0.39). Expressed in CYCLES rather than pixels on purpose: the sheen then slides
        * the same fraction of a band whatever Scale is set to, instead of crawling at Scale 10 and
        * tearing across at Scale 500. sin(0)=0, so t=0 is the frame it always was, Motion up or not,
-       * and += leaves iri_ph bit-for-bit `iri_sp*t` when Motion is 0. */
-      var iri_ph=iri_sp*t; if(iri_mo>0)iri_ph+=(iri_mo/100)*Math.sin(t*1.5707963267948966);
+       * and += leaves iri_ph bit-for-bit `iri_sp*t` when Motion is 0 and Drift is static.
+       * Animated Drift is a rate: integrate it so a zero keyframe holds the sheen where it arrived. */
+      var iri_ph=FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,t,function(u){return FM.evalProp(p.speed,u);}):iri_sp*t;
+      if(iri_mo>0)iri_ph+=(iri_mo/100)*Math.sin(t*1.5707963267948966);
       iri_amt=iri_amt<0?0:(iri_amt>1?1:iri_amt); if(iri_amt<=0)return;
       var iri_bl=p.blur==null?0:FM.evalProp(p.blur,t); if(!(iri_bl>0))iri_bl=0; else if(iri_bl>60)iri_bl=60;
       iri_bl=Math.round(iri_bl*(ps||1));   /* PROJECT px → plate px — see plateScale */

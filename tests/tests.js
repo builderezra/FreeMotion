@@ -120660,4 +120660,25 @@
     // 40 px/s for one second, then 0, is 40 px traveled: the same as 32 px/s for 1.25 seconds.
     if (!same(atStop, render(32, 1.25))) throw new Error('Clouds used the current Drift for the whole clip');
   });
+
+  test('690 Iridescence keyframed Drift holds the sheen at its traveled hue', { item: 'TBD' }, function () {
+    const fx = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.iridescence;
+    if (!fx || !FM.integrateProp) throw new Error('Iridescence kernel or rate integrator is unavailable');
+    const render = (speed, time) => {
+      const W = 24, H = 16, pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 160;
+        pixels[i + 3] = 255;
+      }
+      fx(pixels, W, H, { amount:1, scale:100, bands:3, blur:0, motion:0, speed }, time, 1);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, i) => value === b[i]);
+    const stopped = { kf:[{ t:0, v:0.6 }, { t:1, v:0, e:'hold' }] };
+    const atStop = render(stopped, 1.25);
+    if (same(atStop, render(stopped, 0))) throw new Error('Control: Iridescence did not move');
+    if (!same(atStop, render(stopped, 2))) throw new Error('Iridescence rewound when Drift reached zero');
+    // 0.6 cycles traveled in the first second equals static Drift 0.3 for two seconds.
+    if (!same(atStop, render(0.3, 2))) throw new Error('Iridescence multiplied the current rate by elapsed time');
+  });
 })();
