@@ -119101,4 +119101,23 @@
       throw new Error('Overdrive left a coloured fringe on neutral detail: ' + Array.from(d.slice(at, at + 4)));
   });
 
+  test('690 Unsharp Mask keeps its pixels while using less frame memory', { item: 'TBD' }, function () {
+    const W = 7, H = 7, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = 90 + x * 12 + (y === 3 ? 10 : 0);
+      src[i] = v; src[i + 1] = v - 7; src[i + 2] = v - 14;
+      src[i + 3] = (x === 0 && y === 0) ? 0 : 255;
+    }
+    for (const [params, expected] of [
+      [{ amount: 1.2, radius: 2, threshold: 0, coloursafe: 0 }, 29982],
+      [{ amount: 1.2, radius: 2, threshold: 12, coloursafe: 100 }, 29997]
+    ]) {
+      const d = src.slice();
+      FM._FX_TABLES.PIXEL_FX.unsharpmask(d, W, H, params, 0);
+      const sum = d.reduce((n, v) => n + v, 0), center = (3 * W + 3) * 4;
+      if (sum !== expected || d[center + 3] !== 255 || d[3] !== 0)
+        throw new Error('Unsharp Mask changed its output: ' + JSON.stringify({ params, sum, center: Array.from(d.slice(center, center + 4)) }));
+    }
+  });
+
 })();
