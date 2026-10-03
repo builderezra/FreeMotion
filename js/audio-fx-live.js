@@ -240,6 +240,8 @@ window.FM = window.FM || {};
       if (!layer || layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (!m || !m.el) return;
+      if (FM.prepareLoudness && layer.audioFx && layer.audioFx.some(f => f && f.type === 'loudnessmatch' && f.enabled !== false))
+        FM.prepareLoudness(layer, m).catch(() => {});
       const has = (FM.layerHasAudioFx && FM.layerHasAudioFx(layer)) || needsBoost(layer) || needsLevel(layer, m);   // …or an iPhone level below 100% (queue 690)
       if (!has) {
         if (m._mes) passthrough(m);   // was routed; can't un-route an element, so hand it straight through

@@ -118911,4 +118911,33 @@
       throw new Error('Gate failed to separate quiet and loud audio: ' + JSON.stringify(closed));
   });
 
+  test('690 Loudness Match measures and renders a target level with a peak guard', { item: 'TBD' }, async function () {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR, ctx = new OAC(1, N, SR);
+    const buffer = ctx.createBuffer(1, N, SR), samples = buffer.getChannelData(0);
+    for (let i = 0; i < N; i++) samples[i] = 0.5 * Math.sin(2 * Math.PI * 997 * i / SR);
+    const fx = FM.audioFxRegistry.makeInstance('loudnessmatch');
+    const layer = { id: 'loudness-test', type: 'video', start: 0, duration: 1, trimStart: 0, speed: 1, audioFx: [fx] };
+    const media = { audioBuffer: buffer, file: null };
+    const oldGet = FM.media.get;
+    try {
+      FM.media.get = id => id === layer.id ? media : oldGet.call(FM.media, id);
+      const result = await FM.prepareLoudness(layer, media);
+      if (!result || Math.abs(result.lufs - (-9.03)) > 0.35 || Math.abs(result.peak - 0.5) > 0.001)
+        throw new Error('K-weighted measurement is incorrect: ' + JSON.stringify(result));
+      const source = ctx.createBufferSource(); source.buffer = buffer;
+      const chain = FM.buildAudioFxChain(ctx, layer, 0);
+      if (!chain) throw new Error('Loudness Match graph did not build');
+      source.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 1); source.start(0);
+      const rendered = (await ctx.startRendering()).getChannelData(0);
+      let power = 0, peak = 0;
+      for (let i = 0; i < N; i++) { power += rendered[i] * rendered[i]; peak = Math.max(peak, Math.abs(rendered[i])); }
+      const rms = Math.sqrt(power / N);
+      if (!(rms > 0.145 && rms < 0.17 && peak <= Math.pow(10, -1 / 20) + 0.001))
+        throw new Error('Matched render has wrong level or peak: ' + JSON.stringify({ rms: rms, peak: peak }));
+      chain.dispose();
+    } finally { FM.media.get = oldGet; }
+  });
+
 })();

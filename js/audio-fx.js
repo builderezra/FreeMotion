@@ -366,6 +366,101 @@ window.FM = window.FM || {};
     return clamp(v, lo, hi);
   }
 
+  // BS.1770 K weighting. The bilinear forms reproduce the ITU 48 kHz coefficient table
+  // and move both poles correctly when decodeAudioData supplies a different sample rate.
+  function loudnessFilters(rate) {
+    function shelf() {
+      const k = Math.tan(Math.PI * 1681.974450955533 / rate), q = 0.7071752369554196;
+      const h = Math.pow(10, 3.999843853973347 / 20), b = Math.pow(h, 0.4996667741545416);
+      const a = 1 + k / q + k * k;
+      return [(h + b * k / q + k * k) / a, 2 * (k * k - h) / a,
+        (h - b * k / q + k * k) / a, 2 * (k * k - 1) / a, (1 - k / q + k * k) / a];
+    }
+    function highpass() {
+      const k = Math.tan(Math.PI * 38.13547087602444 / rate), q = 0.5003270373238773;
+      const a = 1 + k / q + k * k;
+      return [1, -2, 1, 2 * (k * k - 1) / a, (1 - k / q + k * k) / a];
+    }
+    return [shelf(), highpass()];
+  }
+  function loudnessKey(layer) {
+    return [layer.trimStart || 0, layer.duration || 0,
+      FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, layer.duration || 0) : (layer.duration || 0) * (layer.speed || 1),
+      JSON.stringify(layer.speed || 1)].join('|');
+  }
+  FM.measureLoudness = function (buffer, layer) {
+    if (!buffer || !buffer.sampleRate || !buffer.getChannelData) return null;
+    const rate = buffer.sampleRate, start = Math.max(0, Math.floor((layer.trimStart || 0) * rate));
+    const advance = FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, layer.duration || 0) : (layer.duration || 0) * (layer.speed || 1);
+    const end = Math.min(buffer.length, Math.ceil(((layer.trimStart || 0) + Math.max(0, advance)) * rate));
+    if (end <= start) return null;
+    if (end - start > rate * 600) return null; // never scan an hour-long decoded file on the UI thread
+    const qLen = Math.max(1, Math.round(rate * 0.1)), n = end - start;
+    const sums = new Float64Array(Math.ceil(n / qLen));
+    const filters = loudnessFilters(rate);
+    const weights = buffer.numberOfChannels === 4 ? [1, 1, 1.41, 1.41]
+      : buffer.numberOfChannels === 5 ? [1, 1, 1, 1.41, 1.41]
+      : [1, 1, 1, 0, 1.41, 1.41, 1.41, 1.41];
+    let peak = 0;
+    for (let ch = 0; ch < Math.min(buffer.numberOfChannels, 8); ch++) {
+      const data = buffer.getChannelData(ch), weight = buffer.numberOfChannels <= 2 ? 1 : weights[ch];
+      if (!weight) continue; // LFE is not part of the BS.1770 sum.
+      const state = filters.map(() => [0, 0, 0, 0]);
+      for (let i = start; i < end; i++) {
+        const x = data[i] || 0;
+        peak = Math.max(peak, Math.abs(x));
+        let y = x;
+        for (let f = 0; f < 2; f++) {
+          const c = filters[f], s = state[f], out = c[0] * y + c[1] * s[0] + c[2] * s[1] - c[3] * s[2] - c[4] * s[3];
+          s[1] = s[0]; s[0] = y; s[3] = s[2]; s[2] = out; y = out;
+        }
+        sums[Math.floor((i - start) / qLen)] += weight * y * y;
+      }
+    }
+    const blocks = [];
+    for (let i = 0; i + 4 * qLen <= n; i += qLen) {
+      const k = i / qLen;
+      blocks.push((sums[k] + sums[k + 1] + sums[k + 2] + sums[k + 3]) / (4 * qLen));
+    }
+    // BS.1770 has no complete 400 ms block for a shorter sound. Use its entire
+    // available window so short UI sounds can still be matched.
+    if (!blocks.length) blocks.push(sums.reduce((a, b) => a + b, 0) / n);
+    const loud = z => -0.691 + 10 * Math.log10(z);
+    const absolute = blocks.filter(z => z > 0 && loud(z) >= -70);
+    if (!absolute.length) return { lufs: null, peak: peak };
+    const first = absolute.reduce((a, b) => a + b, 0) / absolute.length;
+    const relativeGate = loud(first) - 10;
+    const final = absolute.filter(z => loud(z) >= relativeGate);
+    const energy = final.reduce((a, b) => a + b, 0) / final.length;
+    return { lufs: loud(energy), peak: peak };
+  };
+  FM.prepareLoudness = function (layer, media) {
+    if (!layer || !media || !layer.audioFx || !layer.audioFx.some(f => f && f.type === 'loudnessmatch' && f.enabled !== false)) return Promise.resolve(null);
+    const key = loudnessKey(layer), file = media.file;
+    if (media._loudFile === file && media._loudKey === key && media._loudness) return Promise.resolve(media._loudness);
+    if (media._loudFile === file && media._loudKey === key && media._loudPending) return media._loudPending;
+    media._loudFile = file; media._loudKey = key; media._loudness = null;
+    // Keep a second full decode off a phone for long files. An export's already decoded
+    // buffer can still be analysed without allocating another copy.
+    const canDecode = file && file.size <= 64 * 1024 * 1024 && (layer.duration || 0) <= 180;
+    const work = async () => {
+      const buffer = media.audioBuffer || (canDecode ? await FM.decodeAudio(file, { rate: 24000 }) : null);
+      const result = buffer ? FM.measureLoudness(buffer, layer) : null;
+      if (media._loudFile !== file || media._loudKey !== key) return null;
+      media._loudness = result || { lufs: null, peak: 0 };
+      Promise.resolve().then(() => {
+        if (FM.audioFxLive && FM.scene && FM.scene.layers && FM.scene.layers.includes(layer) && FM.media.get(layer.id) === media) {
+          media._afxSig = '';
+          FM.audioFxLive.sync(layer);
+          if (layer.reversed && FM.playing && FM.audioPlay) FM.audioPlay.start();
+        }
+      });
+      return media._loudness;
+    };
+    media._loudPending = work().finally(() => { if (media._loudKey === key) media._loudPending = null; });
+    return media._loudPending;
+  };
+
   // dry(1−mix) + wet(mix) summed into the output. Both are real AudioParams so `mix` schedules like any
   // other param — set/ramp just have to touch the pair.
   function wetDry(s, inst, key, dflt) {
@@ -1154,6 +1249,43 @@ window.FM = window.FM || {};
       });
     },
   }, {
+    type: 'loudnessmatch', label: 'Loudness Match', category: 'dyn',
+    hint: 'Measures the clip before matching its average level. Peak guard may hold the result below Target to avoid clipping; it checks sample peaks, not true peaks. Files over 64 MB or clips over 3 minutes need an already decoded buffer; clips over 10 minutes stay unchanged.',
+    params: [
+      Object.assign(P('target', 'Target', 0, 3, 1, 1, '', false), { options: [[0, '−23 LUFS'], [1, '−16 LUFS'], [2, '−14 LUFS'], [3, '−9 LUFS']] }),
+      Object.assign(P('guard', 'Peak guard', 0, 1, 1, 1, '', false), { options: [[0, 'Off'], [1, 'On']] }),
+      P('ceiling', 'Peak ceiling', -6, 0, 0.5, -1, 'dB', false),
+    ],
+    build: function (ctx, inst, layer) {
+      const s = shop(ctx), input = s.gain(1), gain = s.gain(1), out = s.gain(1);
+      const limited = s.gain(1), direct = s.gain(0), pre = s.gain(1), post = s.gain(1);
+      const clip = s.shaper(HARD_CLIP);
+      input.connect(gain); gain.connect(pre); pre.connect(clip); clip.connect(post); post.connect(limited); limited.connect(out);
+      gain.connect(direct); direct.connect(out);
+      const media = layer && FM.media && FM.media.get(layer.id);
+      const measured = media && media._loudKey === loudnessKey(layer) ? media._loudness : null;
+      let target = initNum(inst, 'target', 1, 0, 3), guard = initNum(inst, 'guard', 1, 0, 1);
+      let ceiling = initNum(inst, 'ceiling', -1, -6, 0);
+      function update(when) {
+        const chosen = [-23, -16, -14, -9][Math.round(target)];
+        const ready = measured && Number.isFinite(measured.lufs);
+        const desired = ready ? dbToLin(chosen - measured.lufs) : 1;
+        const cap = dbToLin(ceiling);
+        const held = guard >= 0.5 && ready && measured.peak > 0 ? Math.min(desired, cap / measured.peak) : desired;
+        gain.gain.setValueAtTime(Math.min(64, Math.max(0, held)), when);
+        limited.gain.setValueAtTime(ready && guard >= 0.5 ? 1 : 0, when);
+        direct.gain.setValueAtTime(ready && guard >= 0.5 ? 0 : 1, when);
+        pre.gain.setValueAtTime(1 / cap, when);
+        post.gain.setValueAtTime(cap, when);
+      }
+      update(0);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: {
+        target: function (v, when) { target = v; update(when); },
+        guard: function (v, when) { guard = v; update(when); },
+        ceiling: function (v, when) { ceiling = v; update(when); },
+      } });
+    },
+  }, {
     type: 'deesser', label: 'De-esser', category: 'dyn',
     hint: 'Compresses the high-frequency sibilance band only. Listen isolates that band while you tune it.',
     params: [
@@ -1882,6 +2014,7 @@ window.FM = window.FM || {};
     gain: ['louder', 'quieter', 'volume', 'boost'],
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
     noisegate: ['noise gate', 'room noise', 'hiss', 'background noise', 'silence'],
+    loudnessmatch: ['loudness', 'lufs', 'normalise', 'normalize', 'podcast', 'voice level'],
     deesser: ['sibilance', 'ess', 'harsh s', 'sharp voice', 'reduce s'],
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
     tremolo: ['wobble', 'pulse', 'throb'],
@@ -1947,7 +2080,7 @@ window.FM = window.FM || {};
     list.forEach(inst => {
       const def = REG[inst.type];
       let u = null;
-      try { u = def.build(ctx, inst); } catch (e) { u = null; }   // one bad effect must not silence the clip
+      try { u = def.build(ctx, inst, layer); } catch (e) { u = null; }   // one bad effect must not silence the clip
       if (!u) return;
       prev.connect(u.input);
       prev = u.output;

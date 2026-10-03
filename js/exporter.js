@@ -577,6 +577,9 @@ window.FM = window.FM || {};
         if (FM.soundTrackInFile && (await FM.soundTrackInFile(m.file)) === false) continue;
         dropped.push(nameOf(layer) + ' (its audio would not decode)'); continue;
       }
+      if (FM.prepareLoudness && layer.audioFx && layer.audioFx.some(f => f && f.type === 'loudnessmatch' && f.enabled !== false)) {
+        try { await FM.prepareLoudness(layer, m); } catch (e) { console.warn('loudness analysis failed', layer.id, e); }
+      }
       const geom = clipGeom(m.audioBuffer, layer);
       const clipEnd = layer.start + Math.min(layer.duration, geom.lenSamples / geom.sr);   // = the old buf.duration, without building buf
       const oStart = Math.max(layer.start, from), oEnd = Math.min(clipEnd, to);   // overlap with [from,to]
