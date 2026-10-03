@@ -48340,6 +48340,28 @@
     });
   });
 
+  test('690 Spin keyframed Speed slows to a stop without turning backwards', { item: 'TBD' }, function () {
+    const spin = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.spin;
+    if (!spin) throw new Error('Spin effect is unavailable');
+    const shot = (params, t) => {
+      const A = cfxSource(), C = document.createElement('canvas');
+      C.width = CFX.W; C.height = CFX.H;
+      const B = C.getContext('2d', { willReadFrequently: true });
+      spin(A, B, CFX.W, CFX.H, CFX.bb, params, t, t);
+      return B.getImageData(0, 0, CFX.W, CFX.H).data;
+    };
+    const stop = { speed: { kf: [{ t: 0, v: 90 }, { t: 1, v: 0 }] } };
+    const settled = { speed: 0, offset: 45 };
+    if (!fxDiff(shot(settled, 1), shot({ speed: 0 }, 1)))
+      throw new Error('Fixture has no visible rotation to compare');
+    if (fxDiff(shot(stop, 1), shot(settled, 1)))
+      throw new Error('Slowing 90 to 0 degrees per second over one second should finish 45 degrees from the start');
+    if (fxDiff(shot(stop, 2), shot(settled, 2)))
+      throw new Error('After Speed reaches zero, Spin must hold at 45 degrees instead of returning to its starting angle');
+    if (fxDiff(shot({ speed: 90 }, 1), shot({ speed: 0, offset: 90 }, 1)))
+      throw new Error('An unkeyframed 90 degrees per second Spin changed');
+  });
+
   /* "It flips in place about the bounds centre and throws the original away, so it can only ever
    * produce the same layer backwards." Both halves of the fix need care to TEST, because each is a
    * no-op in the obvious case and that is correct rather than broken:

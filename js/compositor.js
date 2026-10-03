@@ -13704,7 +13704,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
-      const ang = (off === 0 ? spd * tl : spd * tl + off) * Math.PI / 180;
+      // A keyed speed is a rate: accumulate its turns from the effect clock's origin so slowing to zero holds the current angle.
+      const turns = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : spd * tl;
+      const ang = (off === 0 ? turns : turns + off) * Math.PI / 180;
       const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
