@@ -118274,5 +118274,31 @@
     if (music.volume !== 0.8 || music.autoDuck) throw new Error('Original volume was not restored');
   });
 
+  test('690 Clarity and Dehaze controls change detail and haze without changing alpha', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('claritydehaze');
+    if (!reg || reg.category !== 'color' || reg.params.length !== 4 || !FM._pixelFx.claritydehaze)
+      throw new Error('Clarity & Dehaze is missing from Colouring');
+    const W = 32, H = 32, source = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = (x < 16 ? 135 : 205) + ((x + y) % 2 ? 8 : -8);
+      source[i] = source[i + 1] = source[i + 2] = v;
+      source[i + 3] = x === 0 ? 127 : 255;
+    }
+    const neutral = source.slice();
+    FM._pixelFx.claritydehaze(neutral, W, H, { clarity: 0, texture: 0, dehaze: 0, radius: 60 }, 0);
+    if (neutral.some((v, i) => v !== source[i])) throw new Error('Neutral controls changed the image');
+    for (const key of ['clarity', 'texture', 'dehaze']) {
+      const result = source.slice(), params = { clarity: 0, texture: 0, dehaze: 0, radius: 60 };
+      params[key] = 75;
+      FM._pixelFx.claritydehaze(result, W, H, params, 0);
+      let changed = 0;
+      for (let i = 0; i < result.length; i += 4) {
+        if (result[i] !== source[i]) changed++;
+        if (result[i + 3] !== source[i + 3]) throw new Error(key + ' changed alpha');
+      }
+      if (changed < 50) throw new Error(key + ' had no visible effect');
+    }
+  });
+
 
 })();

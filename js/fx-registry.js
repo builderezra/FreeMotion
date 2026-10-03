@@ -113,6 +113,7 @@ window.FM = window.FM || {};
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
     colourwheels: 'color',
     hslmixer: 'color',
+    claritydehaze: 'color',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).

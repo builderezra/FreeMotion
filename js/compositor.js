@@ -1356,6 +1356,12 @@ window.FM = window.FM || {};
       });
       return params;
     })() },
+    { type: 'claritydehaze', label: 'Clarity & Dehaze', desc: 'Recover local contrast, fine detail and depth in hazy footage.', params: [
+      { key: 'clarity', label: 'Clarity', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'texture', label: 'Texture', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'dehaze', label: 'Dehaze', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'radius', label: 'Radius', min: 10, max: 200, step: 1, def: 60, unit: 'px' },
+    ] },
     // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
@@ -3701,7 +3707,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -5050,7 +5056,143 @@ window.FM = window.FM || {};
     }
   }
 
+  // Separable quarter-resolution filters for Clarity & Dehaze. Their cost is linear in image area,
+  // even at Radius 200; a naive two-dimensional neighbourhood would grow quadratically with it.
+  function quarterBox(src, W, H, radius, tmp, out) {
+    const r = Math.max(1, radius | 0);
+    for (let y = 0; y < H; y++) {
+      let sum = 0, row = y * W;
+      for (let x = 0; x <= r && x < W; x++) sum += src[row + x];
+      for (let x = 0; x < W; x++) {
+        if (x) { if (x + r < W) sum += src[row + x + r]; if (x - r - 1 >= 0) sum -= src[row + x - r - 1]; }
+        tmp[row + x] = sum / (Math.min(W - 1, x + r) - Math.max(0, x - r) + 1);
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      let sum = 0;
+      for (let y = 0; y <= r && y < H; y++) sum += tmp[y * W + x];
+      for (let y = 0; y < H; y++) {
+        if (y) { if (y + r < H) sum += tmp[(y + r) * W + x]; if (y - r - 1 >= 0) sum -= tmp[(y - r - 1) * W + x]; }
+        out[y * W + x] = sum / (Math.min(H - 1, y + r) - Math.max(0, y - r) + 1);
+      }
+    }
+    return out;
+  }
+  function quarterMin(src, W, H, radius, tmp, out, q) {
+    const r = Math.max(1, radius | 0);
+    for (let y = 0; y < H; y++) {
+      let head = 0, tail = 0, right = -1;
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        const limit = Math.min(W - 1, x + r);
+        while (right < limit) {
+          right++;
+          while (tail > head && src[row + q[tail - 1]] >= src[row + right]) tail--;
+          q[tail++] = right;
+        }
+        while (q[head] < x - r) head++;
+        tmp[row + x] = src[row + q[head]];
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      let head = 0, tail = 0, bottom = -1;
+      for (let y = 0; y < H; y++) {
+        const limit = Math.min(H - 1, y + r);
+        while (bottom < limit) {
+          bottom++;
+          while (tail > head && tmp[q[tail - 1] * W + x] >= tmp[bottom * W + x]) tail--;
+          q[tail++] = bottom;
+        }
+        while (q[head] < y - r) head++;
+        out[y * W + x] = tmp[q[head] * W + x];
+      }
+    }
+    return out;
+  }
+  function quarterSample(map, width, x0, x1, y0, y1, fx, fy) {
+    const a = map[y0 * width + x0] * (1 - fx) + map[y0 * width + x1] * fx;
+    const b = map[y1 * width + x0] * (1 - fx) + map[y1 * width + x1] * fx;
+    return a * (1 - fy) + b * fy;
+  }
+  let clarityScratch = null;
+  function getClarityScratch(size, edge) {
+    if (!clarityScratch || clarityScratch.size < size || clarityScratch.edge < edge) {
+      const arr = () => new Float32Array(size);
+      clarityScratch = { size, edge, weighted: arr(), coverage: arr(), dark: arr(), tmp: arr(),
+        wideW: arr(), wideC: arr(), fineW: arr(), fineC: arr(), delta: arr(), transmission: arr(), min: arr(),
+        deque: new Int32Array(edge) };
+    }
+    return clarityScratch;
+  }
+
   const PIXEL_FX = {
+    claritydehaze: function (d, W, H, p, t) {
+      const value = (key) => { const n = fparam(p, key, 0, t); return isFinite(n) ? Math.max(-100, Math.min(100, n)) : 0; };
+      const clarity = value('clarity') / 100, texture = value('texture') / 100, dehaze = value('dehaze') / 100;
+      if ((!clarity && !texture && !dehaze) || !W || !H) return; // neutral default is byte-identical
+      const rawRadius = fparam(p, 'radius', 60, t);
+      const radius = isFinite(rawRadius) ? Math.max(10, Math.min(200, rawRadius)) : 60;
+      const Q = 4, qw = Math.ceil(W / Q), qh = Math.ceil(H / Q), size = qw * qh;
+      const scratch = getClarityScratch(size, Math.max(qw, qh));
+      const weighted = scratch.weighted, coverage = scratch.coverage, dark = scratch.dark;
+      weighted.fill(0, 0, size); coverage.fill(0, 0, size); dark.fill(255, 0, size);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, alpha = d[i + 3] / 255;
+        if (alpha <= 0) continue;
+        const j = ((y / Q) | 0) * qw + ((x / Q) | 0);
+        weighted[j] += (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) * alpha;
+        coverage[j] += alpha;
+        if (dehaze) dark[j] = Math.min(dark[j], d[i], d[i + 1], d[i + 2]);
+      }
+      let atmospheric = 240, darkestHigh = -1;
+      if (dehaze > 0) for (let j = 0; j < size; j++) {
+        if (coverage[j] <= 0 || dark[j] < darkestHigh) continue;
+        darkestHigh = dark[j]; atmospheric = Math.max(160, Math.min(255, weighted[j] / coverage[j]));
+      }
+      const delta = (clarity || texture) ? scratch.delta : null;
+      if (delta) {
+        delta.fill(0, 0, size);
+        const wideR = Math.max(1, Math.round(radius / Q));
+        const blurW = quarterBox(weighted, qw, qh, wideR, scratch.tmp, scratch.wideW);
+        const blurC = quarterBox(coverage, qw, qh, wideR, scratch.tmp, scratch.wideC);
+        const fineR = Math.max(1, Math.min(3, Math.round(radius / 32)));
+        const fineW = texture ? quarterBox(weighted, qw, qh, fineR, scratch.tmp, scratch.fineW) : null;
+        const fineC = texture ? quarterBox(coverage, qw, qh, fineR, scratch.tmp, scratch.fineC) : null;
+        for (let j = 0; j < size; j++) {
+          if (coverage[j] <= 0) continue;
+          const local = weighted[j] / coverage[j];
+          const mid = Math.max(0, 1 - Math.abs(local - 128) / 128);
+          if (clarity && blurC[j] > 0) delta[j] += (local - blurW[j] / blurC[j]) * clarity * 1.6 * mid;
+          if (texture && fineC[j] > 0) delta[j] += (local - fineW[j] / fineC[j]) * texture * 1.4;
+        }
+      }
+      const transmission = dehaze > 0 ? scratch.transmission : null;
+      if (transmission) {
+        const patch = quarterMin(dark, qw, qh, Math.max(1, Math.round(radius / (Q * 2))), scratch.tmp, scratch.min, scratch.deque);
+        for (let j = 0; j < size; j++) {
+          const tr = 1 - 0.85 * dehaze * patch[j] / atmospheric;
+          transmission[j] = 1 / Math.max(0.25, Math.min(1, tr));
+        }
+      }
+      for (let y = 0; y < H; y++) {
+        const gy = Math.max(0, Math.min(qh - 1, (y + 0.5) / Q - 0.5));
+        const y0 = gy | 0, y1 = Math.min(qh - 1, y0 + 1), fy = gy - y0;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (d[i + 3] <= 0) continue;
+          const gx = Math.max(0, Math.min(qw - 1, (x + 0.5) / Q - 0.5));
+          const x0 = gx | 0, x1 = Math.min(qw - 1, x0 + 1), fx = gx - x0;
+          const lift = delta ? quarterSample(delta, qw, x0, x1, y0, y1, fx, fy) : 0;
+          const gain = transmission ? quarterSample(transmission, qw, x0, x1, y0, y1, fx, fy) : 1;
+          for (let c = 0; c < 3; c++) {
+            let v = d[i + c];
+            if (dehaze > 0) v = atmospheric + (v - atmospheric) * gain;
+            else if (dehaze < 0) v = v * (1 + 0.42 * dehaze) + atmospheric * (-0.42 * dehaze);
+            d[i + c] = v + lift;
+          }
+        }
+      }
+    },
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
       const inB = p.inblack == null ? 14 : FM.evalProp(p.inblack, t);
