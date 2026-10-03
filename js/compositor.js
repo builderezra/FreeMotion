@@ -15384,7 +15384,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    const dd = Math.round(Math.max(0, d) * ps);   // offset is PROJECT px, indexes the plate; × 1 on every export
+    const dd = d > 0 ? Math.max(1, Math.round(d * ps)) : 0;   // a positive project-pixel shift must survive a reduced preview plate
+    const pp = (fx && fx.params) || {};
+    const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // an independent shift, including when Amount is zero
     if (!_rgbA) _rgbA = document.createElement('canvas');
     if (!_rgbB) _rgbB = document.createElement('canvas');
     if (_rgbA.width !== W || _rgbA.height !== H) { _rgbA.width = W; _rgbA.height = H; }
@@ -15396,17 +15398,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // render the layer with the rgbsplit effect removed (full opacity, normal blend) — keeps other fx/mask/blur
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'rgbsplit'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
-    if (dd <= 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, OX, OY, PWp, PHp); ctx.restore(); return; }
+    if (dd <= 0 && gsh === 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, OX, OY, PWp, PHp); ctx.restore(); return; }
     const src = actx.getImageData(0, 0, W, H).data;
     const bctx = _rgbB.getContext('2d'); const out = bctx.createImageData(W, H); const o = out.data;
     // Same three additions as the adjustment-layer path: an ANGLE so the tear isn't stuck horizontal,
     // RADIAL so the offset can grow toward the edge like real lens fringing, and a GREEN shift that
     // was welded at zero. At angle 0 / radial 0 / green 0 the sampling reduces to the original
     // left-right offsets exactly, so existing projects don't move.
-    const pp = (fx && fx.params) || {};
     const ang = (pp.angle == null ? 0 : FM.evalProp(pp.angle, t)) * Math.PI / 180;
     const radl = (pp.radial == null ? 0 : FM.evalProp(pp.radial, t)) / 100;
-    const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // PROJECT px → plate px
     const plain = (ang === 0 && radl === 0 && gsh === 0);
     const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
     const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
@@ -15431,7 +15431,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (gsh !== 0) gi = idx(x + ux * gsh * k, y + uy * gsh * k);
         }
         o[i] = src[ri]; o[i + 1] = src[gi + 1]; o[i + 2] = src[bi + 2];
-        o[i + 3] = Math.max(src[i + 3], src[ri + 3], src[bi + 3]);
+        o[i + 3] = Math.max(src[i + 3], src[ri + 3], src[bi + 3], src[gi + 3]);
       }
     }
     bctx.putImageData(out, 0, 0);
@@ -18792,15 +18792,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
     if (fx.type === 'rgbsplit') {
-      const dd = Math.round((FM.evalProp(p.amount, t) || 0) * S);   // project px → plate px (#691)
-      if (dd > 0 && W && H) {
+      const amount = FM.evalProp(p.amount, t) || 0;
+      const dd = amount > 0 ? Math.max(1, Math.round(amount * S)) : 0;   // project px → plate px (#691); preserve small positive preview shifts
+      const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;
+      if ((dd > 0 || gsh !== 0) && W && H) {
         // ANGLE frees the split from the horizontal axis (a vertical or diagonal tear was impossible),
         // RADIAL grows the offset toward the frame edge the way real lens fringing does, and GREEN
         // lets the third channel move at all — it was welded to zero. Defaults reproduce the old
         // horizontal-only shift exactly: angle 0 gives cos/sin of 1/0, radial 0 skips the scaling.
         const ang = (p.angle == null ? 0 : FM.evalProp(p.angle, t)) * Math.PI / 180;
         const rad = (p.radial == null ? 0 : FM.evalProp(p.radial, t)) / 100;
-        const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;   // …and the green channel's own offset
         const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
         const src = d.slice();
         const cx = geo ? geo.cx : W / 2, cy = geo ? geo.cy : H / 2, maxR = (geo ? geo.maxR : Math.hypot(cx, cy)) || 1;

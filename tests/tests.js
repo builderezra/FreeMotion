@@ -82426,6 +82426,41 @@
     }
   });
 
+  test('690 RGB Split keeps a green-only shift and a small positive Amount on reduced previews', { item: 'TBD' }, function () {
+    const W = 40, H = 8, original = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, value = x < 20 ? 30 : 225;
+      original[i] = original[i + 1] = original[i + 2] = value; original[i + 3] = 255;
+    }
+    const greenOnly = original.slice();
+    FM._applyPixelFx(greenOnly, { type: 'rgbsplit', params: { amount: 0, angle: 0, radial: 0, green: 8 } }, 0, W, H, 0.25);
+    const at = (data, x, channel) => data[(4 * W + x) * 4 + channel];
+    if (at(greenOnly, 19, 1) === at(original, 19, 1) ||
+        at(greenOnly, 19, 0) !== at(original, 19, 0) || at(greenOnly, 19, 2) !== at(original, 19, 2))
+      throw new Error('An adjustment RGB Split with Amount 0 did not independently shift only green');
+    const smallAmount = original.slice();
+    FM._applyPixelFx(smallAmount, { type: 'rgbsplit', params: { amount: 1, angle: 0, radial: 0, green: 0 } }, 0, W, H, 0.25);
+    if (at(smallAmount, 19, 0) === at(original, 19, 0))
+      throw new Error('A positive Amount vanished when the preview plate was one quarter size');
+
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 20, shapeW: 20, shapeH: 20, fill: '#ffffff' });
+    const s = scene([layer], { project: { width: 40, height: 40, fps: 30, duration: 1, background: '#000000' } });
+    const render = (effect) => {
+      layer.effects = effect ? [{ type: 'rgbsplit', enabled: true, params: effect }] : [];
+      const canvas = offscreen(10, 10), ctx = canvas.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, s, 0);
+      return ctx.getImageData(0, 0, 10, 10).data;
+    };
+    const clean = render(null), green = render({ amount: 0, angle: 0, radial: 0, green: 8 });
+    const red = render({ amount: 1, angle: 0, radial: 0, green: 0 });
+    let greenDiff = 0, redDiff = 0;
+    for (let i = 0; i < clean.length; i += 4) {
+      if (green[i + 1] !== clean[i + 1]) greenDiff++;
+      if (red[i] !== clean[i]) redDiff++;
+    }
+    if (!greenDiff || !redDiff) throw new Error('A per-layer RGB Split lost its green-only or small positive red shift on the reduced plate');
+  });
+
   test('effects: Tilt Shift and Matte Choker bound to the layer without changing it', { item: '692' }, async function () {
     /* #692, the next tier, measured on 1 Sep at each effect's DEFAULTS on a 180x150 subject in a
      * 1080x1920 plate — the shape of the lag, where the layer covers 1.3% of the frame:
