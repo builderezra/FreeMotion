@@ -205,6 +205,11 @@ window.FM = window.FM || {};
       { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
       { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' },   // queue 904: welded to the horizontal/vertical axes
     ] },
+    { type: 'titlewarp', label: 'Title Warp', desc: 'Bend a title around its own visible bounds, with ten arc, wave and shape presets. Also works on shapes and images.', params: [
+      { key: 'style', label: 'Shape', options: [[0, 'Arc'], [1, 'Arch'], [2, 'Bulge'], [3, 'Flag'], [4, 'Wave'], [5, 'Fish'], [6, 'Rise'], [7, 'Inflate'], [8, 'Squeeze'], [9, 'Twist']], def: 0 },
+      { key: 'amount', label: 'Bend', min: -100, max: 100, step: 1, def: 35, unit: '%' },
+      { key: 'phase', label: 'Wave phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+    ] },
     { type: 'ripple', label: 'Circular Ripple', params: [
       { key: 'amount', label: 'Height', min: 0, max: 480, step: 1, def: 22, unit: 'px' },
       { key: 'wavelength', label: 'Spacing', min: 4, max: 200, step: 1, def: 20, unit: 'px' },
@@ -3782,7 +3787,7 @@ window.FM = window.FM || {};
     mosaic: 1, lensblur: 1, dots: 1, polarcoords: 1, bend: 1, glass: 1,
     lightglow: 1, longshadow: 1, halftonelines: 1, clouds: 1, rays: 1, stripes: 1,
     darkglow: 1, stroke: 1, smoothedges: 1, blocknoise: 1, starfield: 1, curl: 1, filmgrain: 1,
-    bumpmap: 1, edgeglow: 1, contourlines: 1, grunge: 1, iridescence: 1, fractalwarp: 1,
+    bumpmap: 1, edgeglow: 1, contourlines: 1, grunge: 1, iridescence: 1, fractalwarp: 1, titlewarp: 1,
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
@@ -9636,7 +9641,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       } else {
         plate([fx]);
       }
-      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
+      let warpSource = null, warpBounds = null;
+      if (mapFn.needsBounds) {
+        warpSource = actx.getImageData(0, 0, W, H).data;
+        warpBounds = alphaBBoxExact(warpSource, W, H);
+      }
+      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps, warpBounds) : null;
       /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
        * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
        * further kernel tuning closes it. A kernel that carries a `.glsl` twin runs as a fragment shader
@@ -9660,7 +9670,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {});
       }
       if (!warped) {
-        const src = actx.getImageData(0, 0, W, H).data;
+        const src = warpSource || actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
         for (let y = 0; y < H; y++) {
           for (let x = 0; x < W; x++) {
@@ -11011,6 +11021,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         return [x + a1 * ca - a2 * sa, y + a1 * sa + a2 * ca]; }
       return [x + amp * Math.sin(y / wl + ph), y + amp * cross * Math.sin(x / wl2 + ph)];
     },
+    titlewarp: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
+      const C = pre || WARP_FX.titlewarp.prep(W, H, cx, cy, maxR, p, t, ps, null);
+      if (!C.a) return [x, y];
+      const u = (x - C.x) / C.w, v = (y - C.y) / C.h;
+      const qx = 2 * u - 1, qy = 2 * v - 1;
+      const xFall = Math.max(0, 1 - qx * qx), yFall = Math.max(0, 1 - qy * qy);
+      if (C.style === 0) return [x, y + C.a * C.h * 0.5 * xFall];                       // Arc
+      if (C.style === 1) return [x, y + C.a * C.h * 0.5 * Math.sqrt(xFall)];      // Arch
+      if (C.style === 2) return [C.cx + (x - C.cx) / (1 + C.a * 0.8 * yFall), y]; // Bulge
+      if (C.style === 3) return [x, y + C.a * C.h * (0.1 + 0.25 * u) * Math.sin(2 * Math.PI * 1.4 * u + C.phase)]; // Flag
+      if (C.style === 4) return [x, y + C.a * C.h * 0.3 * Math.sin(2 * Math.PI * 1.2 * u + C.phase)]; // Wave
+      if (C.style === 5) return [C.cx + (x - C.cx) / (1 + C.a * 0.65 * yFall), C.cy + (y - C.cy) / (1 - C.a * 0.25 * xFall)]; // Fish
+      if (C.style === 6) return [x, y + C.a * C.h * 0.7 * (u - 0.5)];            // Rise
+      if (C.style === 7) {                                                        // Inflate
+        const r = Math.sqrt(qx * qx + qy * qy), f = Math.max(0, 1 - r / 1.41421356237);
+        const k = 1 + C.a * 0.8 * f;
+        return [C.cx + (x - C.cx) / k, C.cy + (y - C.cy) / k];
+      }
+      if (C.style === 8) return [C.cx + (x - C.cx) * (1 + C.a * 0.8 * yFall), y]; // Squeeze
+      const angle = C.a * qy * 1.2, ca = Math.cos(angle), sa = Math.sin(angle);    // Twist
+      const dx = x - C.cx, dy = y - C.cy;
+      return [C.cx + dx * ca + dy * sa, C.cy - dx * sa + dy * ca];
+    },
     /* PREPPED (shape 1 — hoist only, exact). Centre, amplitude, wavelength and phase were per-pixel. */
     ripple: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
       const C = pre || WARP_FX.ripple.prep(W, H, cx, cy, maxR, p, t, ps);
@@ -11842,6 +11875,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              i57: 1 / (57 * fwS), i40: 1 / (40 * fwS), i47: 1 / (47 * fwS), i61: 1 / (61 * fwS),
              i29: 1 / (29 * fwS), i53: 1 / (53 * fwS), i35: 1 / (35 * fwS), i27: 1 / (27 * fwS),
              i15: 1 / (15 * fwS), i19: 1 / (19 * fwS), i13: 1 / (13 * fwS), i21: 1 / (21 * fwS) };
+  };
+  WARP_FX.titlewarp.needsBounds = true;
+  WARP_FX.titlewarp.prep = function (W, H, cx, cy, maxR, p, t, ps, bb) {
+    const b = bb || { x: 0, y: 0, w: W, h: H };
+    const a = Math.max(-1, Math.min(1, fparam(p, 'amount', 35, t) / 100));
+    const style = Math.max(0, Math.min(9, Math.round(fparam(p, 'style', 0, t))));
+    const phase = fparam(p, 'phase', 0, t) * Math.PI / 180;
+    return { x: b.x, y: b.y, w: Math.max(1, b.w - 1), h: Math.max(1, b.h - 1),
+             cx: b.x + (b.w - 1) / 2, cy: b.y + (b.h - 1) / 2, a: a, style: style, phase: phase };
   };
 
   WARP_FX.tunnel.prep = function (W, H, cx, cy, maxR, p, t, ps) {

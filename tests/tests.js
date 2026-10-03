@@ -118602,5 +118602,34 @@
       throw new Error('Softness or Invert changed the expected threshold');
   });
 
+  test('690 Title Warp uses the visible title bounds and all ten shapes move', { item: 'TBD' }, function () {
+    const fn = FM._FX_TABLES.WARP_FX.titlewarp, instance = FM.fxRegistry.makeInstance('titlewarp');
+    if (!fn || !fn.needsBounds || !instance || FM.fxRegistry.get('titlewarp')?.category !== 'distort' || !FM._postFxTypes().includes('titlewarp'))
+      throw new Error('Title Warp is not registered and routed');
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 30, y: 50, shapeW: 30, shapeH: 20, fill: '#ffffff' });
+    L.start = 0; L.duration = 3; L.effects = [instance];
+    const original = fn.prep, bounds = [];
+    fn.prep = function (...args) { bounds.push(args[8]); return original.apply(this, args); };
+    try {
+      const c = offscreen(100, 100);
+      FM.renderScene(c.getContext('2d'), scene([L], { project: { width: 100, height: 100, fps: 30, duration: 3, background: '#000000' } }), 0);
+    } finally { fn.prep = original; }
+    if (!bounds.length || !bounds[0] || bounds[0].w < 25 || bounds[0].w > 35 || bounds[0].h < 15 || bounds[0].h > 25)
+      throw new Error('Warp driver measured the frame instead of the title: ' + JSON.stringify(bounds[0]));
+    const bb = { x: 15, y: 40, w: 30, h: 20 }, signatures = new Set();
+    for (let style = 0; style < 10; style++) {
+      const p = { style, amount: 60, phase: 40 }, C = original(100, 100, 50, 50, 70, p, 0, 1, bb);
+      const points = [[37, 55], [23, 44], [30, 51]].map(q => fn(q[0], q[1], 100, 100, 50, 50, 70, p, 0, 1, C));
+      if (points.every((q, i) => q[0] === [[37, 55], [23, 44], [30, 51]][i][0] && q[1] === [[37, 55], [23, 44], [30, 51]][i][1]))
+        throw new Error('Shape ' + style + ' does not bend');
+      if (points.some(q => !isFinite(q[0]) || !isFinite(q[1]))) throw new Error('Shape ' + style + ' returned an invalid pixel');
+      signatures.add(JSON.stringify(points));
+    }
+    if (signatures.size !== 10) throw new Error('Two Title Warp shapes map to the same geometry');
+    const zero = { style: 9, amount: 0 }, neutral = original(100, 100, 50, 50, 70, zero, 0, 1, bb);
+    if (fn(37, 55, 100, 100, 50, 50, 70, zero, 0, 1, neutral).some((v, i) => v !== [37, 55][i]))
+      throw new Error('Zero Bend changed the title');
+  });
+
 
 })();

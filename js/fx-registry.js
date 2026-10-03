@@ -22,7 +22,7 @@ window.FM = window.FM || {};
     vibrance: 'color', thermal: 'color',
     sharpen: 'blur', dither: 'stylize', halftone: 'drawing',
     // batch 3 — geometric warps
-    wave: 'distort', ripple: 'distort', twirl: 'distort', bulge: 'distort',
+    wave: 'distort', titlewarp: 'distort', ripple: 'distort', twirl: 'distort', bulge: 'distort',
     // batch 4
     edge: 'drawing', emboss: 'drawing', exposure: 'color', fisheye: 'distort',
     // batch 5
@@ -361,6 +361,7 @@ window.FM = window.FM || {};
     mirror: 'Reflects one half of the frame onto the other.',
     kaleidoscope: 'Repeats a wedge of the image around a centre.',
     wave: 'Ripples the image along a sine wave.',
+    titlewarp: 'Bends a title inside its own visible bounds. Choose from ten arc, wave and shape warps.',
     ripple: 'Rings spreading from a centre, like a drop in water.',
     twirl: 'Spirals the image around a centre point.',
     bulge: 'Pushes the middle out or sucks it in.',
