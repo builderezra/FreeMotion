@@ -118578,5 +118578,29 @@
     if (!draw({ ...base, amount: 0 }).every((v, i) => v === original[i])) throw new Error('Zero amount changed the source');
   });
 
+  test('690 Gradient Wipe follows a chosen map and has exact progress endpoints', { item: 'TBD' }, function () {
+    const fx = FM.fxRegistry.makeInstance('gradientwipe');
+    if (!fx || FM.fxRegistry.get('gradientwipe')?.category !== 'matte' || !FM._postFxTypes().includes('gradientwipe'))
+      throw new Error('Gradient Wipe is not registered and routed');
+    const target = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 100, shapeH: 100, fill: '#ff0000' });
+    const map = FM.makeLayer('shape', { shape: 'rect', x: 25, y: 50, shapeW: 50, shapeH: 100, fill: '#ffffff' });
+    target.start = map.start = 0; target.duration = map.duration = 4;
+    map.transform.opacity = 0; fx.params.source = map.id; fx.params.softness = 0;
+    target.effects = [fx];
+    const sc = scene([target, map], { project: { width: 100, height: 100, fps: 30, duration: 4, background: '#000000' } });
+    const render = progress => {
+      fx.params.progress = progress;
+      const c = offscreen(100, 100), ctx = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, sc, 0);
+      return [px(ctx, 25, 50)[0], px(ctx, 75, 50)[0]];
+    };
+    const start = render(0), middle = render(0.5), end = render(1);
+    if (start[0] > 20 || start[1] > 20 || middle[0] < 220 || middle[1] > 20 || end[0] < 220 || end[1] < 220)
+      throw new Error('The map did not wipe the correct half, or Progress endpoints are wrong: ' + JSON.stringify({ start, middle, end }));
+    const a = FM._gradientWipeAlpha;
+    if (a(0.5, 0.5, 0.2, false) !== 0.5 || a(0.8, 0.5, 0, true) !== 0 || a(0, 1, 0.2, false) !== 1)
+      throw new Error('Softness or Invert changed the expected threshold');
+  });
+
 
 })();

@@ -46,7 +46,7 @@ window.FM = window.FM || {};
     blink: 'opacity', flicker: 'opacity', pulseopacity: 'opacity', dissolve: 'opacity', blockdissolve: 'opacity',
     flashdark: 'opacity',   // queue 349 — sits with its family, though it is the only one that leaves alpha alone
     // batch 14 (matte / mask / key)
-    wipe: 'matte', radialwipe: 'matte', venetianblinds: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
+    wipe: 'matte', radialwipe: 'matte', gradientwipe: 'matte', venetianblinds: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
     // batch 15 (repeat / tiling)
     gridrepeat: 'repeat', linearrepeat: 'repeat', radialrepeat: 'repeat', mirrortile: 'repeat', scatterarray: 'repeat', circlearray: 'repeat',
     // batch 16 (other / color / proc / drawing)
@@ -460,6 +460,7 @@ window.FM = window.FM || {};
     // Matte / mask / key
     wipe: 'Reveals or hides the layer behind a straight line at any angle. Keyframe Progress to run it.',
     radialwipe: 'The same, but the line sweeps around like a clock hand.',
+    gradientwipe: 'Reveals this layer according to another layer’s brightness or alpha. Keyframe Progress for a custom-shaped wipe.',
     venetianblinds: 'Reveals the layer in parallel slats. Stagger opens the slats one after another.',
     radiowaves: 'Repeated coloured rings expand from one point, with circle and polygon shapes.',
     laserbeam: 'A straight beam between two points, with coloured glow, a white-hot core and optional pulse.',

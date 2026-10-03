@@ -653,6 +653,12 @@ window.FM = window.FM || {};
        old step could hold is still exactly representable. */
     { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the edge was a hard 1-bit cut
     { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
+    { type: 'gradientwipe', label: 'Gradient Wipe', layer: true, layerLabel: 'Wipe map', desc: 'Reveal this layer in the brightness order of another layer. Use a gradient, noise or image as the map; keyframe Progress to animate the wipe.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
+      { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 10, unit: '%' },
+      { key: 'channel', label: 'Read', options: [[0, 'Luma'], [1, 'Alpha'], [2, 'Red'], [3, 'Green'], [4, 'Blue']], def: 0 },
+      { key: 'invert', label: 'Invert', options: [[0, 'Off'], [1, 'On']], def: 0 },
+    ] },
     { type: 'venetianblinds', label: 'Venetian Blinds', desc: 'Reveal a layer in parallel slats. Keyframe Progress to open them; Stagger makes each slat follow the previous one.', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
       { key: 'count', label: 'Slats', min: 2, max: 60, step: 1, def: 10 },
@@ -3780,7 +3786,7 @@ window.FM = window.FM || {};
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
-    wipe: 1, radialwipe: 1, venetianblinds: 1, radiowaves: 1, laserbeam: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
+    wipe: 1, radialwipe: 1, gradientwipe: 1, venetianblinds: 1, radiowaves: 1, laserbeam: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
     gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1, circlearray: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, fractalnoise: 1, smoothbevel: 1,
@@ -3887,6 +3893,7 @@ window.FM = window.FM || {};
     if (fx.type === 'squish') return drawSquish(ctx, layer, t, scene, fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
+    if (fx.type === 'gradientwipe') return drawGradientWipe(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
     if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
@@ -10647,6 +10654,73 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
       ctx.filter = 'none';
       ctx.drawImage(slot.A, OX, OY, PWp, PHp);   // plate → project units; identical to drawImage(A,0,0) at scale 1
+      ctx.restore();
+    } finally { _dspLvl--; }
+  }
+
+  function gradientWipeAlpha(value, progress, softness, invert) {
+    if (progress <= 0) return 0;
+    if (progress >= 1) return 1;
+    const v = invert ? 1 - value : value;
+    const edge = 1 - progress;
+    if (softness <= 0) return v >= edge ? 1 : 0;
+    const a = (v - edge) / softness + 0.5;
+    return a <= 0 ? 0 : (a >= 1 ? 1 : a);
+  }
+  FM._gradientWipeAlpha = gradientWipeAlpha;
+
+  function drawGradientWipe(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const PW = proj.width, PH = proj.height;
+    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
+    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
+    const p = fx.params || {};
+    const srcId = p.source;
+    const mapLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    if (!mapLayer || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
+    const progress = clamp01(p.progress == null ? 0.5 : FM.evalProp(p.progress, t));
+    if (progress >= 1) { drawLayer(ctx, clean, t, scene); return; }
+    if (progress <= 0) return;
+    const slot = dspSlot(W, H, ps);
+    _dspLvl++;
+    try {
+      const softness = Math.max(0, Math.min(1, (p.softness == null ? 10 : FM.evalProp(p.softness, t)) / 100));
+      const channel = Math.max(0, Math.min(4, Math.round(FM.evalProp(p.channel, t) || 0)));
+      const invert = Math.round(FM.evalProp(p.invert, t) || 0) === 1;
+      const actx = slot.A.getContext('2d');
+      baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
+      const mctx = slot.M.getContext('2d');
+      baseT(mctx); mctx.clearRect(OX, OY, PWp, PHp);
+      mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
+      drawLayer(mctx, Object.assign({}, mapLayer, { blendMode: 'normal', effects: (mapLayer.effects || []).filter(e => e.type !== 'gradientwipe'), transform: Object.assign({}, mapLayer.transform, { opacity: 1 }) }), t, scene);
+      let target, map;
+      try { target = actx.getImageData(0, 0, W, H); map = mctx.getImageData(0, 0, W, H).data; }
+      catch (e) { drawLayer(ctx, clean, t, scene); return; }
+      const d = target.data;
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const ma = map[i + 3] / 255;
+        let v;
+        if (channel === 1) v = ma;
+        else if (channel === 2) v = map[i] / 255 * ma;
+        else if (channel === 3) v = map[i + 1] / 255 * ma;
+        else if (channel === 4) v = map[i + 2] / 255 * ma;
+        else v = (0.299 * map[i] + 0.587 * map[i + 1] + 0.114 * map[i + 2]) / 255 * ma;
+        d[i + 3] *= gradientWipeAlpha(v, progress, softness, invert);
+      }
+      actx.setTransform(1, 0, 0, 1, 0, 0);
+      actx.putImageData(target, 0, 0);
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(slot.A, OX, OY, PWp, PHp);
       ctx.restore();
     } finally { _dspLvl--; }
   }
