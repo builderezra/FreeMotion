@@ -115,6 +115,8 @@ window.FM = window.FM || {};
     return curveFrom(x => { const q = Math.round(x / step) * step; return k < 1e-3 ? q : Math.tanh(k * q) / norm; }, 8192);
   }
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
+  const WAH_RECTIFY = curveFrom(x => Math.abs(x), 2049);
+  const WAH_ENVELOPE_LIMIT = curveFrom(x => clamp(x, 0, 1), 2049);
 
   /* ---- reverb impulse ---- */
   // Deterministic noise: a Math.random IR would differ between the preview build and the export build,
@@ -1477,6 +1479,58 @@ window.FM = window.FM || {};
       return unit({ input: d, output: d, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi([[amp.gain, 0.003]]) } });
     },
   }, {
+    type: 'autowah', label: 'Auto-Wah', category: 'char',
+    params: [
+      Object.assign(P('mode', 'Motion', 0, 1, 1, 0, '', false), { options: ['LFO', 'Envelope'] }),
+      P('base', 'Base', 200, 4000, 1, 500, 'Hz', true),
+      P('range', 'Range', 100, 5000, 1, 2500, 'Hz', true),
+      P('resonance', 'Resonance', 0.5, 15, 0.1, 5, '', true),
+      P('rate', 'Rate', 0.1, 8, 0.01, 2, 'Hz', true),
+      P('sensitivity', 'Sensitivity', 0.25, 10, 0.05, 4, '', true),
+      MIX(1),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx);
+      const input = s.gain(1), out = s.gain(1);
+      const wd = wetDry(s, inst, 'mix', 1);
+      const base = initNum(inst, 'base', 500, 200, 4000);
+      const wah = s.biquad('bandpass', base, initNum(inst, 'resonance', 5, 0.5, 15));
+      input.connect(wd.dry).connect(out);
+      input.connect(wah); wah.connect(wd.wet); wd.wet.connect(out);
+
+      // AudioParam modulation lets both preview and offline export follow the same envelope
+      // without a timer, ScriptProcessor or a different render path. Sum base + range * 0..1.
+      const envelopeMode = initNum(inst, 'mode', 0, 0, 1) >= 0.5;
+      const lfo = s.lfo(2, { key: 'rate', wave: 'win' });
+      const lfoRange = s.gain(initNum(inst, 'range', 2500, 100, 5000));
+      const lfoOn = s.gain(envelopeMode ? 0 : 1);
+      lfo.connect(lfoRange); lfoRange.connect(lfoOn); lfoOn.connect(wah.frequency);
+
+      // Explicit speaker downmix makes stereo left/right contribute to one detector.
+      const detector = s.gain(1);
+      detector.channelCount = 1;
+      detector.channelCountMode = 'explicit';
+      detector.channelInterpretation = 'speakers';
+      const rect = s.shaper(WAH_RECTIFY);
+      const smooth = s.biquad('lowpass', 12, BUTTERWORTH_DB);
+      const sensitivity = s.gain(initNum(inst, 'sensitivity', 4, 0.25, 10));
+      const limit = s.shaper(WAH_ENVELOPE_LIMIT);
+      const envRange = s.gain(initNum(inst, 'range', 2500, 100, 5000));
+      const envOn = s.gain(envelopeMode ? 1 : 0);
+      input.connect(detector); detector.connect(rect); rect.connect(smooth);
+      smooth.connect(sensitivity); sensitivity.connect(limit);
+      limit.connect(envRange); envRange.connect(envOn); envOn.connect(wah.frequency);
+      return unit({
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        params: { base: wah.frequency, resonance: wah.Q, rate: lfo.playbackRate, sensitivity: sensitivity.gain },
+        custom: {
+          mode: pairTargets({ gOn: envOn, gOff: lfoOn }, v => v >= 0.5)[0],
+          range: multi([[lfoRange.gain, null], [envRange.gain, null]]),
+          mix: wd.set,
+        },
+      });
+    },
+  }, {
     type: 'ringmod', label: 'Ring Mod', category: 'char',
     params: [P('freq', 'Frequency', 10, 2000, 1, 220, 'Hz', true), MIX(1)],
     build: function (ctx, inst) {
@@ -1781,6 +1835,7 @@ window.FM = window.FM || {};
     flanger: ['jet', 'whoosh', 'sweep'],
     phaser: ['swirl', 'sweep', 'swoosh'],
     vibrato: ['warble', 'wobble', 'wavy'],
+    autowah: ['wah', 'guitar', 'sweep', 'envelope follower', 'filter sweep'],
     ringmod: ['robot', 'robot voice', 'dalek', 'metallic', 'alien'],
     vocalremove: ['karaoke', 'instrumental', 'acapella', 'a cappella', 'remove vocals', 'no vocals', 'backing track'],
     pitch: ['chipmunk', 'deep voice', 'helium', 'higher', 'lower', 'key', 'voice changer', 'fine tune', 'detune'],   // the last two: #482 3.5's Fine tune

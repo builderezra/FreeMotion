@@ -118767,4 +118767,33 @@
       throw new Error('Safe widening did not preserve mono or produce stereo separation');
   });
 
+  test('690 Auto-Wah envelope follows level while LFO ignores level', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('autowah');
+    if (!def || def.category !== 'char' || !def.params.some(p => p.key === 'mode'))
+      throw new Error('Auto-Wah is not registered');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR / 2;
+    async function level(amplitude, mode) {
+      const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) d[i] = amplitude * Math.sin(2 * Math.PI * 500 * i / SR);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('autowah');
+      Object.assign(fx.params, { mode, base: 500, range: 2500, resonance: 5, sensitivity: 4, mix: 1 });
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('Auto-Wah signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.5); src.start(0);
+      const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+      let power = 0, count = 0;
+      for (let i = SR / 4; i < N; i++) { power += out[i] * out[i]; count++; }
+      return Math.sqrt(power / count) / amplitude;
+    }
+    const quietEnv = await level(0.005, 1), loudEnv = await level(0.5, 1);
+    const quietLfo = await level(0.005, 0), loudLfo = await level(0.5, 0);
+    if (!(quietEnv > loudEnv * 3)) throw new Error('Envelope mode did not follow input level');
+    if (Math.abs(quietLfo - loudLfo) > quietLfo * 0.05)
+      throw new Error('LFO mode changed its sweep with input level');
+  });
+
 })();
