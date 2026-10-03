@@ -202,9 +202,11 @@ window.FM = window.FM || {};
     if (lbl) lbl.textContent = cues.length && activeCue() ? 'Cue ' + (active.cueIndex + 1) + ' / ' + cues.length : 'Cue —';
   }
 
-  // Built-in families (mirrors inspector.js FONTS); imported fonts come from FM.fonts.list().
+  // Device families (mirrors inspector.js FONTS); bundled and imported faces are separate lists.
   const FONTS = ['Inter, sans-serif', 'Helvetica, Arial, sans-serif', 'Georgia, serif', 'Times New Roman, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Verdana, sans-serif', 'Trebuchet MS, sans-serif', 'Palatino, serif', 'Comic Sans MS, cursive'];
   function fontLabel(css) {
+    const studio = (FM.studioFonts ? FM.studioFonts.list() : []).find(f => f.css === css);
+    if (studio) return studio.name;
     const mine = (FM.fonts ? FM.fonts.list() : []).find(f => f.css === css);
     if (mine) return mine.name;
     return String(css || 'Inter').split(',')[0].trim();
@@ -467,25 +469,55 @@ window.FM = window.FM || {};
   function buildFontRail(host) {
     const l = layer(); if (!l) return;
     const rail = elc('div', 'te-font-rail');
+    let chooseToken = 0;
+    const addHeading = (name) => {
+      const heading = elc('span', 'te-font-section');
+      heading.textContent = name;
+      rail.appendChild(heading);
+    };
     const addCard = (css, name) => {
       const card = elc('button', 'te-font-card' + (css === l.fontFamily ? ' on' : ''));
       card.type = 'button';
       const abc = elc('span', 'te-font-abc'); abc.textContent = 'Abc'; abc.style.fontFamily = css;
       const nm = elc('span', 'te-font-name'); nm.textContent = name;
       card.append(abc, nm);
-      card.addEventListener('click', () => { const ly = layer(); if (!ly) return; ly.fontFamily = css; FM.requestRender(); updateBarLabels(); rail.querySelectorAll('.te-font-card.on').forEach(c => c.classList.remove('on')); card.classList.add('on'); });
+      card.addEventListener('click', async () => {
+        const ly = layer(); if (!ly) return;
+        const token = ++chooseToken;
+        // A missing offline asset must never be written into undo history or autosave. Wait
+        // before changing the layer, and ignore a slower choice if another card was tapped.
+        if (FM.studioFonts && FM.studioFonts.has(css)) {
+          card.setAttribute('aria-busy', 'true');
+          try { await FM.studioFonts.load(css, !!ly.bold); }
+          catch (_) { if (token === chooseToken && FM.toast) FM.toast('That font is unavailable offline. Open the font picker while online and try again.'); return; }
+          finally { card.removeAttribute('aria-busy'); }
+        }
+        if (token !== chooseToken || layer() !== ly) return;
+        ly.fontFamily = css; FM.requestRender(); updateBarLabels();
+        rail.querySelectorAll('.te-font-card.on').forEach(c => c.classList.remove('on')); card.classList.add('on');
+      });
       rail.appendChild(card);
     };
-    // Settings → Show system fonts. Off = only the fonts you imported, so the rail is your own set.
+    // FreeMotion faces stay available when device fonts are hidden. System fonts still depend
+    // on the device; imported files remain the user's own catalogue.
+    const studio = FM.studioFonts ? FM.studioFonts.list() : [];
+    const originals = studio.filter(f => f.group === 'original');
+    const open = studio.filter(f => f.group !== 'original');
+    if (originals.length) { addHeading('Made for FreeMotion'); originals.forEach(f => addCard(f.css, f.name)); }
+    if (open.length) { addHeading('More included fonts'); open.forEach(f => addCard(f.css, f.name)); }
     const showSystem = !FM.settings || FM.settings.get('systemFonts') !== false;
-    if (showSystem) FONTS.forEach(css => addCard(css, css.split(',')[0].trim()));
-    (FM.fonts ? FM.fonts.list() : []).forEach(f => addCard(f.css, f.name));
+    if (showSystem) { addHeading('On this device'); FONTS.filter(css => !studio.some(f => f.css === css)).forEach(css => addCard(css, css.split(',')[0].trim())); }
+    const mine = FM.fonts ? FM.fonts.list() : [];
+    if (mine.length) { addHeading('Your fonts'); mine.forEach(f => addCard(f.css, f.name)); }
     // Import (AM's "View All Fonts" → here it's the useful action: pull a font off the device)
     const imp = elc('button', 'te-font-card te-font-import', '<span class="te-font-abc">＋</span><span class="te-font-name">Import</span>');
     imp.type = 'button';
     imp.addEventListener('click', () => { if (!FM.fonts) return; FM.fonts.pick(rec => { const ly = layer(); if (!ly || !rec) return; ly.fontFamily = rec.css; FM.requestRender(); updateBarLabels(); if (popKind === 'font') openPop('font', buildFontRail); }); });
     rail.appendChild(imp);
     host.appendChild(rail);
+    // Loading the real faces makes the "Abc" samples honest. The default Inter face
+    // loads on boot; the other included faces wait until the picker opens.
+    if (studio.length) FM.studioFonts.warmPreviews();
     // scroll the selected card into view
     requestAnimationFrame(() => { const on = rail.querySelector('.te-font-card.on'); if (on && on.scrollIntoView) on.scrollIntoView({ inline: 'center', block: 'nearest' }); });
   }

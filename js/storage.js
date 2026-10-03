@@ -901,6 +901,11 @@ window.FM = window.FM || {};
          left a remote `fillImage` URL intact through a save and reopen, and the compositor assigns that
          straight to `Image.src`. Cheap enough to run on every layer of every open. */
       FM.scene.layers.forEach(l => { if (l) { sanitizeMasks(l); /* masks FIRST — a marker is validated against their ids (queue 560) */ sanitizeEffects(l); sanitizeUnsafeValues(l); } });
+      // Bundled fonts load from versioned app assets, not from the user's imported-font IDB.
+      // Start these in parallel with media hydration; arrival invalidates cached text wraps.
+      if (FM.studioFonts && FM.studioFonts.usesScene(FM.scene)) FM.studioFonts.forScene(FM.scene).catch(() => {
+        if (FM.toast) FM.toast('A project font is unavailable offline. Reconnect and reopen this project.');
+      });
       // BEFORE anything walks the graph. A document saved by a pre-v5.06 build can carry a parent
       // cycle; every parent walk below (refreshAll → the timeline, the layers panel, the compositor)
       // then throws, and because that throw happens inside this promise the boot .then() never runs:
@@ -1706,6 +1711,9 @@ window.FM = window.FM || {};
     ['ofTemplate', 'ofElement', 'returnTo'].forEach(k => { try { delete obj.project[k]; } catch (e) {} });
     FM.scene.project = obj.project;
     FM.scene.layers = re.layers;
+    if (FM.studioFonts && FM.studioFonts.usesScene(FM.scene)) FM.studioFonts.forScene(FM.scene).catch(() => {
+      if (FM.toast) FM.toast('An imported project font is unavailable offline. Reconnect and reopen the project.');
+    });
     repairAndAnnounce(FM.scene.layers, false);   // an imported .fmotion.json is untrusted input: a cycle in it is a hang, not a render
     FM.scene.selectedId = (obj.selectedId && re.map[obj.selectedId]) || (re.layers[0] ? re.layers[0].id : null);
     FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : []).map(id => re.map[id]).filter(Boolean);
@@ -3208,6 +3216,9 @@ window.FM = window.FM || {};
       const re = reIdLayers(pack.layers);
       FM.scene.layers = re.layers;
       await hydratePack(re.layers, pack.media, re.map, packKey);
+      if (FM.studioFonts && FM.studioFonts.usesScene(FM.scene)) FM.studioFonts.forScene(FM.scene).catch(() => {
+        if (FM.toast) FM.toast('A template font is unavailable offline. Reconnect to load it.');
+      });
     },
     /* ═══ OPEN A TEMPLATE FOR EDITING (queue 505 clause 4) — the shape `elements.openForEdit` settled on.
        Ezra, 1 Sep: "The element opens as its own document" — and his words were "Elements AND templates".
@@ -3351,6 +3362,9 @@ window.FM = window.FM || {};
       if (FM.scene.layers.some(l => l.type === 'camera')) re.layers = re.layers.filter(l => l.type !== 'camera');
       FM.scene.layers = re.layers.concat(FM.scene.layers);
       await hydratePack(re.layers, pack.media, re.map, 'tpl:' + tid);
+      if (FM.studioFonts && FM.studioFonts.usesScene(FM.scene)) FM.studioFonts.forScene(FM.scene).catch(() => {
+        if (FM.toast) FM.toast('A template font is unavailable offline. Reconnect to load it.');
+      });
       if (FM.refreshAll) FM.refreshAll();
       if (FM.history) FM.history.commit();
       FM.storage.autosave();
@@ -3624,6 +3638,9 @@ window.FM = window.FM || {};
       re.layers.forEach(l => { const d = FM.time - t0; l.start = (l.start || 0) + d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });   // keyframes are absolute time — inserted animation rides to the playhead
       FM.scene.layers = re.layers.concat(FM.scene.layers);
       await hydratePack(re.layers, pack.media, re.map, 'elem:' + eid);
+      if (FM.studioFonts && FM.studioFonts.usesScene(FM.scene)) FM.studioFonts.forScene(FM.scene).catch(() => {
+        if (FM.toast) FM.toast('An element font is unavailable offline. Reconnect to load it.');
+      });
       FM.scene.selectedId = re.layers[0] ? re.layers[0].id : FM.scene.selectedId;
       FM.scene.selectedIds = re.layers.map(l => l.id);
       if (FM.refreshAll) FM.refreshAll();

@@ -1,0 +1,686 @@
+{
+  "selection_count": 11,
+  "font_file_count": 17,
+  "total_font_bytes": 1741596,
+  "families": [
+    {
+      "name": "Inter",
+      "role": "neutral everyday sans",
+      "repo": "rsms/inter",
+      "commit": "66647c0bbbe41a850d79d9c76fb13add3378940f",
+      "license": "LICENSE.txt",
+      "fonts": [
+        "docs/font-files/Inter-Regular.woff2",
+        "docs/font-files/Inter-Bold.woff2"
+      ],
+      "license_copy": {
+        "path": "open/inter/LICENSE.txt",
+        "filename": "LICENSE.txt",
+        "source_url": "https://raw.githubusercontent.com/rsms/inter/66647c0bbbe41a850d79d9c76fb13add3378940f/LICENSE.txt",
+        "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+        "bytes": 4380
+      },
+      "copyright_header": "Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)",
+      "license_url": "https://github.com/rsms/inter/blob/66647c0bbbe41a850d79d9c76fb13add3378940f/LICENSE.txt",
+      "source_repo_url": "https://github.com/rsms/inter",
+      "total_font_bytes": 219528,
+      "font_copies": [
+        {
+          "path": "open/inter/Inter-Regular.woff2",
+          "filename": "Inter-Regular.woff2",
+          "source_url": "https://raw.githubusercontent.com/rsms/inter/66647c0bbbe41a850d79d9c76fb13add3378940f/docs/font-files/Inter-Regular.woff2",
+          "sha256": "b6f9db9e45be20f3c1312c97fbee7ec36b7d8280f8caa4d53c9ba0408cc9997a",
+          "bytes": 108488,
+          "validation": {
+            "family": "Inter",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 2857,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 334,
+              "greek": 105,
+              "cyrillic": 249,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        },
+        {
+          "path": "open/inter/Inter-Bold.woff2",
+          "filename": "Inter-Bold.woff2",
+          "source_url": "https://raw.githubusercontent.com/rsms/inter/66647c0bbbe41a850d79d9c76fb13add3378940f/docs/font-files/Inter-Bold.woff2",
+          "sha256": "220976705fbec109f43c5cfdceca639e99ace7e51f3eb67292b105d3575eb39b",
+          "bytes": 111040,
+          "validation": {
+            "family": "Inter",
+            "style": "Bold",
+            "weight": 700,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 2857,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 334,
+              "greek": 105,
+              "cyrillic": 249,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "regular-and-bold"
+    },
+    {
+      "name": "Outfit",
+      "role": "rounded geometric sans",
+      "repo": "Outfitio/Outfit-Fonts",
+      "commit": "902773808eb372f70fb34e8946dd1ffe604efc79",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/webfonts/Outfit-Regular.woff2",
+        "fonts/webfonts/Outfit-Bold.woff2"
+      ],
+      "license_copy": {
+        "path": "open/outfit/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/Outfitio/Outfit-Fonts/902773808eb372f70fb34e8946dd1ffe604efc79/OFL.txt",
+        "sha256": "c676351bf8576b9aba743cd5eaa8c0e7ee0d51f805d720447b4df4ddb6a2e416",
+        "bytes": 4389
+      },
+      "copyright_header": "Copyright 2021 The Outfit Project Authors (https://github.com/Outfitio/Outfit-Fonts)",
+      "license_url": "https://github.com/Outfitio/Outfit-Fonts/blob/902773808eb372f70fb34e8946dd1ffe604efc79/OFL.txt",
+      "source_repo_url": "https://github.com/Outfitio/Outfit-Fonts",
+      "total_font_bytes": 57424,
+      "font_copies": [
+        {
+          "path": "open/outfit/Outfit-Regular.woff2",
+          "filename": "Outfit-Regular.woff2",
+          "source_url": "https://raw.githubusercontent.com/Outfitio/Outfit-Fonts/902773808eb372f70fb34e8946dd1ffe604efc79/fonts/webfonts/Outfit-Regular.woff2",
+          "sha256": "ec67667e022f75a7a96f69ab96192c97115b906245569ad0a9189e42d7665460",
+          "bytes": 28748,
+          "validation": {
+            "family": "Outfit",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 360,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 106,
+              "greek": 0,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 2
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        },
+        {
+          "path": "open/outfit/Outfit-Bold.woff2",
+          "filename": "Outfit-Bold.woff2",
+          "source_url": "https://raw.githubusercontent.com/Outfitio/Outfit-Fonts/902773808eb372f70fb34e8946dd1ffe604efc79/fonts/webfonts/Outfit-Bold.woff2",
+          "sha256": "4ae9e9981407aae94cac71a5a5ae83c25550b4e6ae0c9c85a374fea91accbc66",
+          "bytes": 28676,
+          "validation": {
+            "family": "Outfit",
+            "style": "Bold",
+            "weight": 700,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 360,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 106,
+              "greek": 0,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 2
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "regular-and-bold"
+    },
+    {
+      "name": "Space Grotesk",
+      "role": "expressive modern sans",
+      "repo": "floriankarsten/space-grotesk",
+      "commit": "03507d024a01282884232081fc6011c09ff4e849",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/woff2/static/SpaceGrotesk-Regular.woff2",
+        "fonts/woff2/static/SpaceGrotesk-Bold.woff2"
+      ],
+      "license_copy": {
+        "path": "open/space-grotesk/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/floriankarsten/space-grotesk/03507d024a01282884232081fc6011c09ff4e849/OFL.txt",
+        "sha256": "564ce565c371c5e5bbf286006565a7c9aa55a9f56e7ca58d56e05d649dd61a72",
+        "bytes": 4495
+      },
+      "copyright_header": "Copyright 2020 The Space Grotesk Project Authors (https://github.com/floriankarsten/space-grotesk)",
+      "license_url": "https://github.com/floriankarsten/space-grotesk/blob/03507d024a01282884232081fc6011c09ff4e849/OFL.txt",
+      "source_repo_url": "https://github.com/floriankarsten/space-grotesk",
+      "total_font_bytes": 84488,
+      "font_copies": [
+        {
+          "path": "open/space-grotesk/SpaceGrotesk-Regular.woff2",
+          "filename": "SpaceGrotesk-Regular.woff2",
+          "source_url": "https://raw.githubusercontent.com/floriankarsten/space-grotesk/03507d024a01282884232081fc6011c09ff4e849/fonts/woff2/static/SpaceGrotesk-Regular.woff2",
+          "sha256": "c6620e3d49a9f9dba3be3aa93c89d6d5a51096cb1c616d2691edb630551d5da5",
+          "bytes": 42708,
+          "validation": {
+            "family": "Space Grotesk",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 731,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 208,
+              "greek": 3,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        },
+        {
+          "path": "open/space-grotesk/SpaceGrotesk-Bold.woff2",
+          "filename": "SpaceGrotesk-Bold.woff2",
+          "source_url": "https://raw.githubusercontent.com/floriankarsten/space-grotesk/03507d024a01282884232081fc6011c09ff4e849/fonts/woff2/static/SpaceGrotesk-Bold.woff2",
+          "sha256": "06d705cebbab916f0c0fe82b6c6f4cae06aa07fd6f5ee078421206040326ef63",
+          "bytes": 41780,
+          "validation": {
+            "family": "Space Grotesk",
+            "style": "Bold",
+            "weight": 700,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 731,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 208,
+              "greek": 3,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "regular-and-bold"
+    },
+    {
+      "name": "Barlow Condensed",
+      "role": "narrow headlines and captions",
+      "repo": "jpt/barlow",
+      "commit": "b4726ddf91525818e85e5fce111c285b9273d764",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/woff2/BarlowCondensed-Regular.woff2",
+        "fonts/woff2/BarlowCondensed-Bold.woff2"
+      ],
+      "license_copy": {
+        "path": "open/barlow-condensed/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/jpt/barlow/b4726ddf91525818e85e5fce111c285b9273d764/OFL.txt",
+        "sha256": "186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f",
+        "bytes": 4377
+      },
+      "copyright_header": "Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)",
+      "license_url": "https://github.com/jpt/barlow/blob/b4726ddf91525818e85e5fce111c285b9273d764/OFL.txt",
+      "source_repo_url": "https://github.com/jpt/barlow",
+      "total_font_bytes": 78480,
+      "font_copies": [
+        {
+          "path": "open/barlow-condensed/BarlowCondensed-Regular.woff2",
+          "filename": "BarlowCondensed-Regular.woff2",
+          "source_url": "https://raw.githubusercontent.com/jpt/barlow/b4726ddf91525818e85e5fce111c285b9273d764/fonts/woff2/BarlowCondensed-Regular.woff2",
+          "sha256": "f54823e7aa6ee06941001e55282d22a24cc1bf889b61af10b3bb4974c315af3c",
+          "bytes": 38140,
+          "validation": {
+            "family": "Barlow Condensed",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 525,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 141,
+              "greek": 4,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        },
+        {
+          "path": "open/barlow-condensed/BarlowCondensed-Bold.woff2",
+          "filename": "BarlowCondensed-Bold.woff2",
+          "source_url": "https://raw.githubusercontent.com/jpt/barlow/b4726ddf91525818e85e5fce111c285b9273d764/fonts/woff2/BarlowCondensed-Bold.woff2",
+          "sha256": "bbe24c2eabc0ef5cb658c1d667577bbff0605e6f4708abf9e63e58f561ece27b",
+          "bytes": 40340,
+          "validation": {
+            "family": "Barlow Condensed",
+            "style": "Bold",
+            "weight": 700,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 525,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 141,
+              "greek": 4,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "regular-and-bold"
+    },
+    {
+      "name": "Fraunces 72pt Soft",
+      "role": "warm editorial display serif",
+      "repo": "undercasetype/Fraunces",
+      "commit": "d6d385783609ceb11ac0f220f3abd9f1631c8a36",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/static/ttf/Fraunces72ptSoft-Bold.ttf"
+      ],
+      "license_copy": {
+        "path": "open/fraunces-72pt-soft/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/undercasetype/Fraunces/d6d385783609ceb11ac0f220f3abd9f1631c8a36/OFL.txt",
+        "sha256": "bdf4c22802eaf804f998195871c6b8938aac2ac14b2d78a8bd66a6f1eced833b",
+        "bytes": 4391
+      },
+      "copyright_header": "Copyright 2018 The Fraunces Project Authors (https://github.com/undercasetype/Fraunces)",
+      "license_url": "https://github.com/undercasetype/Fraunces/blob/d6d385783609ceb11ac0f220f3abd9f1631c8a36/OFL.txt",
+      "source_repo_url": "https://github.com/undercasetype/Fraunces",
+      "total_font_bytes": 65084,
+      "font_copies": [
+        {
+          "path": "open/fraunces-72pt-soft/Fraunces72ptSoft-Bold.ttf",
+          "filename": "Fraunces72ptSoft-Bold.ttf",
+          "source_url": "https://raw.githubusercontent.com/undercasetype/Fraunces/d6d385783609ceb11ac0f220f3abd9f1631c8a36/fonts/static/ttf/Fraunces72ptSoft-Bold.ttf",
+          "sha256": "9dac2c69819398e9557193ee0189c63f766e3fd3fbba75701d693cb14a3628b7",
+          "bytes": 65084,
+          "validation": {
+            "family": "Fraunces 72pt Soft",
+            "style": "Bold",
+            "weight": 700,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 624,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 190,
+              "greek": 0,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "single-style display"
+    },
+    {
+      "name": "Cormorant Garamond",
+      "role": "elegant classical serif",
+      "repo": "CatharsisFonts/Cormorant",
+      "commit": "6d210fd3550b7358ca62d6ba3e354ec1ec940813",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/webfonts/CormorantGaramond-Regular.woff2",
+        "fonts/webfonts/CormorantGaramond-Bold.woff2"
+      ],
+      "license_copy": {
+        "path": "open/cormorant-garamond/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/CatharsisFonts/Cormorant/6d210fd3550b7358ca62d6ba3e354ec1ec940813/OFL.txt",
+        "sha256": "60700d351cac4650c51f3f9db318d2a420f8b45052dba2715eb5fec41f0f6956",
+        "bytes": 4387
+      },
+      "copyright_header": "Copyright 2015 the Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)",
+      "license_url": "https://github.com/CatharsisFonts/Cormorant/blob/6d210fd3550b7358ca62d6ba3e354ec1ec940813/OFL.txt",
+      "source_repo_url": "https://github.com/CatharsisFonts/Cormorant",
+      "total_font_bytes": 247452,
+      "font_copies": [
+        {
+          "path": "open/cormorant-garamond/CormorantGaramond-Regular.woff2",
+          "filename": "CormorantGaramond-Regular.woff2",
+          "source_url": "https://raw.githubusercontent.com/CatharsisFonts/Cormorant/6d210fd3550b7358ca62d6ba3e354ec1ec940813/fonts/webfonts/CormorantGaramond-Regular.woff2",
+          "sha256": "ba94ea02bcb624f4da51b53a988fbc5c60c5eac2391cdb61b0b33bb44c67ae65",
+          "bytes": 126292,
+          "validation": {
+            "family": "Cormorant Garamond",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 972,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 199,
+              "greek": 4,
+              "cyrillic": 236,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        },
+        {
+          "path": "open/cormorant-garamond/CormorantGaramond-Bold.woff2",
+          "filename": "CormorantGaramond-Bold.woff2",
+          "source_url": "https://raw.githubusercontent.com/CatharsisFonts/Cormorant/6d210fd3550b7358ca62d6ba3e354ec1ec940813/fonts/webfonts/CormorantGaramond-Bold.woff2",
+          "sha256": "e39c80f822172ec4b7e6facb6341687d2e4ca2b265576f06a2f234eab7232745",
+          "bytes": 121160,
+          "validation": {
+            "family": "Cormorant Garamond",
+            "style": "Bold",
+            "weight": 700,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 972,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 199,
+              "greek": 4,
+              "cyrillic": 236,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "regular-and-bold"
+    },
+    {
+      "name": "DM Serif Display",
+      "role": "high contrast editorial serif",
+      "repo": "google/fonts",
+      "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb",
+      "license": "ofl/dmserifdisplay/OFL.txt",
+      "fonts": [
+        "ofl/dmserifdisplay/DMSerifDisplay-Regular.ttf"
+      ],
+      "license_copy": {
+        "path": "open/dm-serif-display/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/google/fonts/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/dmserifdisplay/OFL.txt",
+        "sha256": "a3e5cdd67d4571dd0a24fcc968de0efde7ae97ef752daf0906e4767619dd7231",
+        "bytes": 4605
+      },
+      "copyright_header": "Copyright 2014-2018 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries. Copyright 2019 Google LLC.",
+      "license_url": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/dmserifdisplay/OFL.txt",
+      "source_repo_url": "https://github.com/google/fonts",
+      "total_font_bytes": 76580,
+      "font_copies": [
+        {
+          "path": "open/dm-serif-display/DMSerifDisplay-Regular.ttf",
+          "filename": "DMSerifDisplay-Regular.ttf",
+          "source_url": "https://raw.githubusercontent.com/google/fonts/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/dmserifdisplay/DMSerifDisplay-Regular.ttf",
+          "sha256": "8cc3643535edf039aa5d95440a8542735e9197e4f4b8d9303e980fefbf5ab616",
+          "bytes": 76580,
+          "validation": {
+            "family": "DM Serif Display",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 333,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 91,
+              "greek": 0,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 0
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "single-style display"
+    },
+    {
+      "name": "Bebas Neue",
+      "role": "all-caps poster display",
+      "repo": "dharmatype/Bebas-Neue",
+      "commit": "686d14af640c17af3691c597778f121d840d9051",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/BebasNeue(2018)ByDhamraType/woff2-cffbased/BebasNeue-Regular.woff2"
+      ],
+      "license_copy": {
+        "path": "open/bebas-neue/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/dharmatype/Bebas-Neue/686d14af640c17af3691c597778f121d840d9051/OFL.txt",
+        "sha256": "72082f6cb4d04be2ecf7cc7d9e1e7d73787f0af8a5a278a47cade70c16b78341",
+        "bytes": 4337
+      },
+      "copyright_header": "Copyright © 2010 by Dharma Type.",
+      "license_url": "https://github.com/dharmatype/Bebas-Neue/blob/686d14af640c17af3691c597778f121d840d9051/OFL.txt",
+      "source_repo_url": "https://github.com/dharmatype/Bebas-Neue",
+      "total_font_bytes": 21760,
+      "font_copies": [
+        {
+          "path": "open/bebas-neue/BebasNeue-Regular.woff2",
+          "filename": "BebasNeue-Regular.woff2",
+          "source_url": "https://raw.githubusercontent.com/dharmatype/Bebas-Neue/686d14af640c17af3691c597778f121d840d9051/fonts/BebasNeue%282018%29ByDhamraType/woff2-cffbased/BebasNeue-Regular.woff2",
+          "sha256": "395cb0944c3d0ada8beb178b9e9a9887e75f76302544abeaaf1f1ef4b3a0b19b",
+          "bytes": 21760,
+          "validation": {
+            "family": "Bebas Neue",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 460,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 137,
+              "greek": 4,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 2
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "single-style display",
+      "case_note": "All ASCII lowercase codepoints are present, but the lowercase letterforms are cap-shaped. Show as a caps/display face in the picker."
+    },
+    {
+      "name": "Caveat",
+      "role": "quick handwritten notes",
+      "repo": "googlefonts/caveat",
+      "commit": "59745e818ef7973e11e70cb1358d0e902b56c5fc",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/ttf/Caveat-Regular.ttf"
+      ],
+      "license_copy": {
+        "path": "open/caveat/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/googlefonts/caveat/59745e818ef7973e11e70cb1358d0e902b56c5fc/OFL.txt",
+        "sha256": "1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b",
+        "bytes": 4385
+      },
+      "copyright_header": "Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)",
+      "license_url": "https://github.com/googlefonts/caveat/blob/59745e818ef7973e11e70cb1358d0e902b56c5fc/OFL.txt",
+      "source_repo_url": "https://github.com/googlefonts/caveat",
+      "total_font_bytes": 297900,
+      "font_copies": [
+        {
+          "path": "open/caveat/Caveat-Regular.ttf",
+          "filename": "Caveat-Regular.ttf",
+          "source_url": "https://raw.githubusercontent.com/googlefonts/caveat/59745e818ef7973e11e70cb1358d0e902b56c5fc/fonts/ttf/Caveat-Regular.ttf",
+          "sha256": "7af58d70e539c9195cc328617a68c9961ed804a4404b0b818989ba7c013e8776",
+          "bytes": 297900,
+          "validation": {
+            "family": "Caveat",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 753,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 186,
+              "greek": 1,
+              "cyrillic": 236,
+              "vietnamese_precomposed": 14
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "single-style handwriting"
+    },
+    {
+      "name": "Lobster",
+      "role": "bold brush script",
+      "repo": "impallari/The-Lobster-Font",
+      "commit": "0796aa8aa42f6cbc89fa61be4a2a12fdcd2b8998",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/ttf/Lobster-Regular.ttf"
+      ],
+      "license_copy": {
+        "path": "open/lobster/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/impallari/The-Lobster-Font/0796aa8aa42f6cbc89fa61be4a2a12fdcd2b8998/OFL.txt",
+        "sha256": "88aece7d90f2bb7049719f11619a560af22af3451af141f12aa4f46bb157a99b",
+        "bytes": 4430
+      },
+      "copyright_header": "Copyright 2010 The Lobster Project Authors (https://github.com/impallari/The-Lobster-Font), with Reserved Font Name \"Lobster\".",
+      "license_url": "https://github.com/impallari/The-Lobster-Font/blob/0796aa8aa42f6cbc89fa61be4a2a12fdcd2b8998/OFL.txt",
+      "source_repo_url": "https://github.com/impallari/The-Lobster-Font",
+      "total_font_bytes": 405892,
+      "font_copies": [
+        {
+          "path": "open/lobster/Lobster-Regular.ttf",
+          "filename": "Lobster-Regular.ttf",
+          "source_url": "https://raw.githubusercontent.com/impallari/The-Lobster-Font/0796aa8aa42f6cbc89fa61be4a2a12fdcd2b8998/fonts/ttf/Lobster-Regular.ttf",
+          "sha256": "c59cb2abde68874a6ac4203e06044449816c9566be03c0da2d0a349015b954da",
+          "bytes": 405892,
+          "validation": {
+            "family": "Lobster",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 828,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 200,
+              "greek": 4,
+              "cyrillic": 182,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "single-style display"
+    },
+    {
+      "name": "JetBrains Mono",
+      "role": "monospace technical text",
+      "repo": "JetBrains/JetBrainsMono",
+      "commit": "19371302b95d218af43299bce79ddbddd0bc364d",
+      "license": "OFL.txt",
+      "fonts": [
+        "fonts/webfonts/JetBrainsMono-Regular.woff2",
+        "fonts/webfonts/JetBrainsMono-Bold.woff2"
+      ],
+      "license_copy": {
+        "path": "open/jetbrains-mono/OFL.txt",
+        "filename": "OFL.txt",
+        "source_url": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/OFL.txt",
+        "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+        "bytes": 4399
+      },
+      "copyright_header": "Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)",
+      "license_url": "https://github.com/JetBrains/JetBrainsMono/blob/19371302b95d218af43299bce79ddbddd0bc364d/OFL.txt",
+      "source_repo_url": "https://github.com/JetBrains/JetBrainsMono",
+      "total_font_bytes": 187008,
+      "font_copies": [
+        {
+          "path": "open/jetbrains-mono/JetBrainsMono-Regular.woff2",
+          "filename": "JetBrainsMono-Regular.woff2",
+          "source_url": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/webfonts/JetBrainsMono-Regular.woff2",
+          "sha256": "f1a7a03672cdd494ce0d5543fac6e4360fe22403c6de297fdc2e55a815f7baff",
+          "bytes": 92380,
+          "validation": {
+            "family": "JetBrains Mono",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 1372,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 169,
+              "greek": 79,
+              "cyrillic": 122,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        },
+        {
+          "path": "open/jetbrains-mono/JetBrainsMono-Bold.woff2",
+          "filename": "JetBrainsMono-Bold.woff2",
+          "source_url": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/webfonts/JetBrainsMono-Bold.woff2",
+          "sha256": "08863c7964612257a90bd821e3127dc5ccb0b5046f881673a1ade5809eb21d0f",
+          "bytes": 94628,
+          "validation": {
+            "family": "JetBrains Mono",
+            "style": "Bold",
+            "weight": 558,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 1372,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 169,
+              "greek": 79,
+              "cyrillic": 122,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        }
+      ],
+      "style_scope": "regular-and-bold"
+    }
+  ]
+}

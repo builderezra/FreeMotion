@@ -4241,10 +4241,18 @@ window.FM = window.FM || {};
    * The scale is applied by rendering at full size and drawing down, rather than rendering into a
    * smaller canvas: `renderScene` reads the project's dimensions in several places, and a still is not
    * worth the risk of teaching it a second meaning for them. */
-  FM.snapshotPNG = function (opts) {
-    const P = FM.scene.project;
+  FM.snapshotPNG = async function (opts) {
+    const scene = FM.scene, P = scene.project, layers = scene.layers;
     const t = FM.frameExportTime(FM.time);
     const o = opts || {};
+    if (FM.studioFonts && FM.studioFonts.usesScene(scene)) {
+      try { await FM.studioFonts.forScene(scene); }
+      catch (_) {
+        if (FM.toast) FM.toast('A font could not load. Reconnect and retry this frame export.');
+        return;
+      }
+      if (FM.scene !== scene || scene.project !== P || scene.layers !== layers) return; // project changed while waiting for a face
+    }
     /* ⚠️ NOT CLAMPED TO 1. Every rung the dialog builds today is a DOWNSCALE, so a `Math.min(1, …)`
        would be invisible — and would silently ignore an upscale rung the moment one was added, which is
        the exact bug this change exists to fix. Clamped against an impossible ALLOCATION instead: 64
@@ -6211,6 +6219,8 @@ window.FM = window.FM || {};
       else if (e.message === 'CANCELLED') { /* silent */ }
       else if (e.message === 'FRAMES_TOO_BIG') alert('That PNG sequence is too large to build in memory. Shorten the range, lower the frame rate, or drop the resolution and try again.');
       else if (e.message === 'NO_ZIP_WRITER') alert('The frame-sequence exporter failed to load. Please hard-refresh and try again.');
+      else if (e.message && e.message.indexOf('BUNDLED_FONT_UNAVAILABLE:') === 0) alert('The font “' + e.message.slice('BUNDLED_FONT_UNAVAILABLE:'.length) + '” has not loaded. Reconnect to the internet, open the font picker, and retry the export.');
+      else if (e.message === 'BUNDLED_FONT_UNSUPPORTED') alert('This browser could not load FreeMotion’s included fonts. Try opening the project in an up-to-date browser before exporting it.');
       /* queue 674: was `alert('Export failed: ' + e.message)`, which on his phone read "Export failed:
          blit is not defined" — a variable name he can do nothing with and cannot copy. */
       else FM.reportError('exporting a video', e, 'The export stopped before it finished, and the file was not made.\n\nWorth trying: a shorter range, a lower resolution, or closing other tabs — most export failures are the browser running out of memory.');

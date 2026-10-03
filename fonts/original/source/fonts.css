@@ -1,0 +1,28 @@
+@font-face {
+  font-family: 'FM Aster Round';
+  src: url('./fonts/fm-aster-round-regular.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'FM Aster Round';
+  src: url('./fonts/fm-aster-round-bold.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'FM Circuit Sans';
+  src: url('./fonts/fm-circuit-sans-regular.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'FM Circuit Sans';
+  src: url('./fonts/fm-circuit-sans-bold.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}

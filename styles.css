@@ -1240,6 +1240,7 @@ body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path
   border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.55); padding: 10px; }
 .te-font-rail { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px; }
 .te-font-rail::-webkit-scrollbar { display: none; }
+.te-font-section { flex: 0 0 auto; align-self: center; max-width: 96px; color: var(--text-dim); font-size: 11px; font-weight: 700; line-height: 1.25; }
 .te-font-card { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 76px; max-width: 108px;
   padding: 9px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); cursor: pointer; }
 .te-font-card.on { border-color: var(--accent); background: rgba(41,217,187,.13); }
@@ -1273,6 +1274,7 @@ body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path
     display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
     gap: 8px; overflow-x: hidden; overflow-y: visible;
   }
+  .te-pop-font .te-font-section { grid-column: 1 / -1; max-width: none; padding: 6px 2px 0; }
   .te-pop-font .te-font-card { max-width: none; min-width: 0; }
 }
 .te-extras-inner .prop-row { margin: 6px 0; }
