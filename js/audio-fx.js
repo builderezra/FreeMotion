@@ -1000,6 +1000,58 @@ window.FM = window.FM || {};
         xf: { output: dbToLin }, custom: { mix: wd.set } });
     },
   }, {
+    type: 'deesser', label: 'De-esser', category: 'dyn',
+    hint: 'Compresses the high-frequency sibilance band only. Listen isolates that band while you tune it.',
+    params: [
+      P('frequency', 'Sibilance at', 3000, 10000, 100, 6000, 'Hz', true),
+      P('threshold', 'Threshold', -60, 0, 0.5, -30, 'dB', true),
+      P('reduction', 'Reduction', 0, 100, 1, 50, '%', true),
+      Object.assign(P('listen', 'Listen', 0, 1, 1, 0, '', false), { options: [[0, 'Off'], [1, 'Sibilance']] }),
+      MIX(1),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      const hp = s.biquad('highpass', 6000, BUTTERWORTH_DB);
+      const c = s.comp();
+      let threshold = initNum(inst, 'threshold', -30, -60, 0);
+      let reduction = initNum(inst, 'reduction', 50, 0, 100);
+      const ratio = () => 1 + 19 * reduction / 100;
+      c.threshold.value = threshold; c.ratio.value = ratio(); c.knee.value = 0;
+      c.attack.value = 0.001; c.release.value = 0.08;
+      const trim = s.gain(hardKneeMakeupCancel(threshold, ratio()));
+      // The high-pass band is subtracted from a matching delayed copy of the full signal. Added
+      // back after compression, it changes only the sibilance band; at Reduction 0 the sum is unity.
+      const lagSec = Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate;
+      const fullLag = s.delay(0.05), highLag = s.delay(0.05), neg = s.gain(-1), low = s.gain(1);
+      fullLag.delayTime.value = highLag.delayTime.value = lagSec;
+      const wd = wetDry(s, inst, 'mix', 1), main = s.gain(1);
+      const listen = initNum(inst, 'listen', 0, 0, 1) >= 0.5;
+      const gListen = s.gain(listen ? 1 : 0), gMain = s.gain(listen ? 0 : 1);
+      input.connect(fullLag); input.connect(hp);
+      hp.connect(highLag); hp.connect(c); c.connect(trim);
+      fullLag.connect(low); highLag.connect(neg); neg.connect(low);
+      low.connect(wd.wet); trim.connect(wd.wet);
+      fullLag.connect(wd.dry);
+      wd.wet.connect(main); wd.dry.connect(main); main.connect(gMain); gMain.connect(out);
+      highLag.connect(gListen); gListen.connect(out);
+      const monitor = pairTargets({ gOn: gListen, gOff: gMain }, v => v >= 0.5)[0];
+      const set = (ap, v, when, ramp) => { if (ramp) ap.linearRampToValueAtTime(v, when); else ap.setValueAtTime(v, when); };
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { frequency: hp.frequency },
+        custom: {
+          threshold: function (v, when, ramp) {
+            threshold = v; set(c.threshold, v, when, ramp);
+            set(trim.gain, hardKneeMakeupCancel(v, ratio()), when, ramp);
+          },
+          reduction: function (v, when, ramp) {
+            reduction = v; set(c.ratio, ratio(), when, ramp);
+            set(trim.gain, hardKneeMakeupCancel(threshold, ratio()), when, ramp);
+          },
+          listen: monitor,
+          mix: wd.set,
+        } });
+    },
+  }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
     params: [
       P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true),
@@ -1621,6 +1673,7 @@ window.FM = window.FM || {};
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
     gain: ['louder', 'quieter', 'volume', 'boost'],
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
+    deesser: ['sibilance', 'ess', 'harsh s', 'sharp voice', 'reduce s'],
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
     tremolo: ['wobble', 'pulse', 'throb'],
     distortion: ['fuzz', 'overdrive', 'crunch', 'guitar', 'distorted', 'blown out'],

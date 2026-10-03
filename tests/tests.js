@@ -118681,4 +118681,30 @@
       throw new Error('60 Hz setting missed mains hum or cut unrelated audio: ' + JSON.stringify({ hum50, hum60, voice }));
   });
 
+  test('690 De-esser reduces strong sibilance while preserving lower voice tones', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('deesser');
+    if (!def || def.category !== 'dyn' || !def.params.some(p => p.key === 'listen'))
+      throw new Error('De-esser controls are missing');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR / 2;
+    async function level(hz, reduction) {
+      const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR), d = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) d[i] = 0.4 * Math.sin(2 * Math.PI * hz * i / SR);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('deesser');
+      Object.assign(fx.params, { frequency: 5000, threshold: -30, reduction, listen: 0, mix: 1 });
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('De-esser signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.5); src.start(0);
+      const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+      let sum = 0; for (let i = N / 2; i < N; i++) sum += out[i] * out[i];
+      return Math.sqrt(sum / (N / 2));
+    }
+    const sDry = await level(7000, 0), sWet = await level(7000, 100);
+    const lowDry = await level(500, 0), lowWet = await level(500, 100);
+    if (!(sWet < sDry * 0.6 && lowWet > lowDry * 0.9 && lowWet < lowDry * 1.1))
+      throw new Error('Sibilance and low-band balance are wrong: ' + JSON.stringify({ sDry, sWet, lowDry, lowWet }));
+  });
+
 })();
