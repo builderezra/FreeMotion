@@ -119324,4 +119324,21 @@
     }
   });
 
+  test('690 Linear Streaks keeps short positive trails in reduced preview', { item: 'TBD' }, function () {
+    const W = 8, H = 2, source = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = x === 1 ? 255 : 0;
+        d[i + 3] = 255;
+      }
+      return d;
+    };
+    const trail = source(), zero = source(), base = source();
+    FM._applyPixelFx(trail, { type: 'linstreaks', params: { length: 3, angle: 0, samples: 8 } }, 0, W, H, 0.25);
+    FM._applyPixelFx(zero, { type: 'linstreaks', params: { length: 0, angle: 0, samples: 8 } }, 0, W, H, 0.25);
+    if (!trail[(0 * W + 2) * 4]) throw new Error('Short Linear Streaks trail vanished at quarter-scale preview');
+    if (zero.some((v, i) => v !== base[i])) throw new Error('Zero-length trail changed the image');
+  });
+
 })();
