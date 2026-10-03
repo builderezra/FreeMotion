@@ -6,7 +6,7 @@ Orbit previously placed each frame at `speed(now) × clip-local time`. A ramp or
 
 Changed files: `js/compositor.js` (Orbit phase), `tests/tests.js` (one focused `{ item: 'TBD' }` regression with a shifted clip clock, a stop, and a static-speed control), and `index.html` (compositor cache tag 208 → 209).
 
-Checks: JavaScriptCore parsed the changed JavaScript files; the focused regression passed against the loaded scene and compositor code in JavaScriptCore; `git diff --check` passed. Browser and installed-iPhone rendering were not run in this job.
+Checks: JavaScriptCore parsed the changed JavaScript files; the focused regression passed against the loaded scene and compositor code in JavaScriptCore; `git diff --check` passed. The same focused regression passed in headless Chrome (`Regression 1/1`). The first browser attempt on a reused local port reported an incomplete app load; a fresh port passed. Installed-iPhone rendering was not run.
 
 Face direction of travel still uses the instantaneous Speed sign. At exactly zero it chooses the forward tangent, as before, so an Orbit that was moving in reverse may visibly turn when it stops even though its position now holds. That orientation choice is separate from the path-phase fix.
 
