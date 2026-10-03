@@ -118814,4 +118814,26 @@
     if (!mixed.every((v, i) => v === otherPicker[i])) throw new Error('Output picker changed the rendered grade');
   });
 
+  test('690 Auto Grade measures contrast and steadies changing frames without stale seek history', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('autograde'), fn = FM._FX_TABLES.PIXEL_FX.autograde;
+    if (!reg || reg.category !== 'color' || !fn || !FM._postFxTypes().includes('autograde'))
+      throw new Error('Auto Grade is not registered and routed');
+    const frame = (low, high) => {
+      const d = new Uint8ClampedArray(16 * 16 * 4);
+      for (let i = 0; i < d.length; i += 4) {
+        const v = i < d.length / 2 ? low : high;
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+      }
+      return d;
+    };
+    const p = { mode: 1, clip: 0, smooth: 0.25, strength: 100 }, fx = {};
+    const first = frame(40, 180); fn(first, 16, 16, p, 0, 1, null, null, null, fx);
+    if (first[0] > 1 || first[first.length - 4] < 254) throw new Error('Auto Contrast did not set black and white');
+    const moving = frame(100, 220); fn(moving, 16, 16, p, 1 / 30, 1, null, null, null, fx);
+    const fresh = frame(100, 220); fn(fresh, 16, 16, p, 1 / 30, 1, null, null, null, {});
+    if (!(moving[0] > fresh[0] + 40)) throw new Error('Temporal smoothing did not steady the grade');
+    const seek = frame(100, 220); fn(seek, 16, 16, p, 2, 1, null, null, null, fx);
+    if (seek[0] !== fresh[0]) throw new Error('Seek reused a stale temporal grade');
+  });
+
 })();

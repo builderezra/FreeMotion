@@ -758,6 +758,12 @@ window.FM = window.FM || {};
       { key: 'blueOffset', label: 'Blue constant', min: -255, max: 255, step: 1, def: 0 },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    { type: 'autograde', label: 'Auto Grade', desc: 'Automatically set levels, contrast or colour balance from this frame. Temporal smoothing steadies the grade across a playing clip.', params: [
+      { key: 'mode', label: 'Correct', options: [[0, 'Levels'], [1, 'Contrast'], [2, 'Colour']], def: 0 },
+      { key: 'clip', label: 'Clip ends', min: 0, max: 10, step: 0.1, def: 1, unit: '%' },
+      { key: 'smooth', label: 'Temporal smoothing', min: 0, max: 2, step: 0.05, def: 0.25, unit: 's' },
+      { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3912,7 +3918,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, autograde: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -4574,7 +4580,7 @@ window.FM = window.FM || {};
           const sub = actx.getImageData(rect.x, rect.y, rect.w, rect.h);
           // a bounded kernel gets its box measured on the cropped buffer — the same scan, 1/50th of the pixels
           const bb2 = bounded ? fxBounds(sub.data, rect.w, rect.h) : null;
-          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2, layer, scene);   // layer, scene: the few kernels on the clip's own clock and the project's frame rate (Flash (darken)'s rhythms, #482 2.3)
+          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2, layer, scene, fx);   // layer, scene: the few kernels on the clip's own clock and the project's frame rate (Flash (darken)'s rhythms, #482 2.3)
           bctx.putImageData(sub, rect.x, rect.y);
         }
         ctx.save();
@@ -4599,7 +4605,7 @@ window.FM = window.FM || {};
        * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
        * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
       // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
-      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene, fx);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -5348,7 +5354,71 @@ window.FM = window.FM || {};
     return _oilPaintScratch;
   }
   let fractalNoiseScratch = null;
+  let _autoGradeCache = new WeakMap(), _autoGradeExportState = !!FM._exporting;
   const PIXEL_FX = {
+    autograde: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
+      const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
+      if (!strength || W < 1 || H < 1) return;
+      const mode = Math.max(0, Math.min(2, Math.round(fparam(p, 'mode', 0, t))));
+      const clip = Math.max(0, Math.min(0.1, fparam(p, 'clip', 1, t) / 100));
+      const smooth = Math.max(0, Math.min(2, fparam(p, 'smooth', 0.25, t)));
+      const hist = new Uint32Array(1024), sums = [0, 0, 0];
+      const stride = Math.max(1, Math.floor(Math.sqrt(W * H / 4096)));
+      let count = 0;
+      for (let y = 0; y < H; y += stride) for (let x = 0; x < W; x += stride) {
+        const i = (y * W + x) * 4;
+        if (d[i + 3] < 8) continue;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        hist[r]++; hist[256 + g]++; hist[512 + b]++;
+        hist[768 + Math.max(0, Math.min(255, Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b)))]++;
+        sums[0] += r; sums[1] += g; sums[2] += b; count++;
+      }
+      if (count < 8) return;
+      const quantile = function (offset, target) {
+        let n = 0;
+        for (let v = 0; v < 256; v++) { n += hist[offset + v]; if (n > target) return v; }
+        return 255;
+      };
+      const cut = Math.floor(count * clip);
+      const raw = new Array(9);
+      const mean = (sums[0] + sums[1] + sums[2]) / (3 * count);
+      for (let ch = 0; ch < 3; ch++) {
+        const off = mode === 0 ? ch * 256 : 768;
+        raw[ch * 2] = quantile(off, cut);
+        raw[ch * 2 + 1] = quantile(off, count - cut - 1);
+        raw[6 + ch] = mode === 2 ? Math.max(0.5, Math.min(2, mean / Math.max(1, sums[ch] / count))) : 1;
+      }
+      // Effect identity owns the history; a second Auto Grade on this layer has its own.
+      // An export starts afresh even if the editor previewed other frames first.
+      const exporting = !!FM._exporting;
+      if (exporting !== _autoGradeExportState) { _autoGradeCache = new WeakMap(); _autoGradeExportState = exporting; }
+      let stats = raw;
+      if (fx && typeof fx === 'object') {
+        const prev = _autoGradeCache.get(fx);
+        if (prev && prev.mode === mode && prev.w === W && prev.h === H) {
+          const dt = t - prev.t;
+          if (dt > 0.0001 && dt <= 0.35 && smooth > 0) {
+            const a = 1 - Math.exp(-dt / smooth);
+            stats = raw.map((v, i) => prev.stats[i] + (v - prev.stats[i]) * a);
+          } else if (Math.abs(dt) <= 0.0001 && raw.every((v, i) => v === prev.raw[i])) stats = prev.stats;
+        }
+        _autoGradeCache.set(fx, { t: t, mode: mode, w: W, h: H, raw: raw, stats: stats });
+      }
+      const black = [0, 0, 0], gain = [1, 1, 1];
+      for (let ch = 0; ch < 3; ch++) {
+        const lo = stats[ch * 2], hi = stats[ch * 2 + 1];
+        if (hi - lo >= 16) { black[ch] = lo; gain[ch] = Math.min(4, 255 / (hi - lo)); }
+      }
+      const lut = [new Uint8ClampedArray(256), new Uint8ClampedArray(256), new Uint8ClampedArray(256)];
+      for (let ch = 0; ch < 3; ch++) for (let v = 0; v < 256; v++) {
+        const corrected = Math.max(0, Math.min(255, (v * stats[6 + ch] - black[ch]) * gain[ch]));
+        lut[ch][v] = v + (corrected - v) * strength;
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        d[i] = lut[0][d[i]]; d[i + 1] = lut[1][d[i + 1]]; d[i + 2] = lut[2][d[i + 2]];
+      }
+    },
     channelmixer: function (d, W, H, p, t) {
       const mix = clamp01(fparam(p, 'mix', 100, t) / 100);
       if (!mix) return;

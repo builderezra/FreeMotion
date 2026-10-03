@@ -120,6 +120,7 @@ window.FM = window.FM || {};
     oilpaint: 'stylize',
     bwmixer: 'color',
     channelmixer: 'color',
+    autograde: 'color',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -322,6 +323,7 @@ window.FM = window.FM || {};
     grayscale: 'Removes colour entirely.',
     bwmixer: 'Choose how reds, yellows, greens, cyans, blues and magentas turn into light or dark grey.',
     channelmixer: 'Mix red, green and blue into each output colour, with a separate constant per output.',
+    autograde: 'Sets levels, contrast or colour balance from the picture and smooths changes while it plays.',
     sepia: 'Warm monochrome — the old-photograph tone.',
     invert: 'Flips every colour to its opposite, like a film negative.',
     gamma: 'Reshapes the midtones without moving black or white.',
