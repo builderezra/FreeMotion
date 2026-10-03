@@ -121,6 +121,7 @@ window.FM = window.FM || {};
     bwmixer: 'color',
     channelmixer: 'color',
     autograde: 'color',
+    logtonormal: 'color',
     deflicker: 'blur',
   };
 
@@ -182,7 +183,7 @@ window.FM = window.FM || {};
   const ADJ_OK = {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
     posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1, colourwheels: 1, hslmixer: 1,
-    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1, channelmixer: 1,
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1, channelmixer: 1, logtonormal: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1,
   };
@@ -325,6 +326,7 @@ window.FM = window.FM || {};
     bwmixer: 'Choose how reds, yellows, greens, cyans, blues and magentas turn into light or dark grey.',
     channelmixer: 'Mix red, green and blue into each output colour, with a separate constant per output.',
     autograde: 'Sets levels, contrast or colour balance from the picture and smooths changes while it plays.',
+    logtonormal: 'Converts Panasonic V-Log/V-Gamut footage to Rec.709 with exposure and highlight controls.',
     deflicker: 'Steadies changing exposure over adjacent frames while resetting on a detected scene change.',
     spillsuppressor: 'Reduces the screen-colour cast after a key. Use Whole subject or limit it to soft alpha edges.',
     sepia: 'Warm monochrome — the old-photograph tone.',

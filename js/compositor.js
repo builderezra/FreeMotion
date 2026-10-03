@@ -764,6 +764,11 @@ window.FM = window.FM || {};
       { key: 'smooth', label: 'Temporal smoothing', min: 0, max: 2, step: 0.05, def: 0.25, unit: 's' },
       { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    { type: 'logtonormal', label: 'V-Log to Rec.709', desc: 'Convert Panasonic V-Log/V-Gamut footage to Rec.709. Select this only for footage recorded in that camera profile.', params: [
+      { key: 'exposure', label: 'Exposure', min: -4, max: 4, step: 0.1, def: 0, unit: 'stops' },
+      { key: 'rolloff', label: 'Highlight roll-off', min: 0, max: 100, step: 1, def: 20, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'deflicker', label: 'Deflicker', desc: 'Evens out frame-to-frame exposure flicker. Scene changes reset the correction; preview and export each start with fresh history.', params: [
       { key: 'smooth', label: 'Smoothing', min: 0.1, max: 2, step: 0.05, def: 0.5, unit: 's' },
       { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
@@ -3928,7 +3933,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, autograde: 1, deflicker: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, autograde: 1, logtonormal: 1, deflicker: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, spillsuppressor: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -4473,7 +4478,7 @@ window.FM = window.FM || {};
   /* chromaticaberration LEFT this list in v15.83 (queue 798): its offset now grows from the FRAME centre (the lens is the
      frame, so a layer in the corner fringes more than one in the middle), and a centre-based kernel cannot draw the same
      picture on a cropped plate — test 692 says so, and said so. It renders on the full plate, like bulge and fisheye. */
-  const CROP_FX = Object.assign(Object.create(null), { levels: 1, colourwheels: 1, hslmixer: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, channelmixer: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
+  const CROP_FX = Object.assign(Object.create(null), { levels: 1, colourwheels: 1, hslmixer: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, channelmixer: 1, logtonormal: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
   FM._cropFx = CROP_FX;
   /* BOUNDED kernels that can ALSO take the cropped readback (#692 round 7). A bounded kernel needs its box, so on the
    * crop path it gets the box measured on the cropped buffer (fxBounds on a buffer 1/50th the size). Only kernels whose
@@ -5366,6 +5371,17 @@ window.FM = window.FM || {};
   let fractalNoiseScratch = null;
   let _autoGradeCache = new WeakMap(), _autoGradeExportState = !!FM._exporting;
   let _deflickerCache = new WeakMap(), _deflickerExportState = !!FM._exporting;
+  // Panasonic's published V-Log inverse and BT.709's published output curve.
+  // Tables are shared across frames; the per-pixel grade only does a matrix and lookups.
+  const _vlogDecode = new Float32Array(256), _rec709Encode = new Float32Array(4097);
+  for (let i = 0; i < 256; i++) {
+    const x = i / 255;
+    _vlogDecode[i] = x < 0.181 ? (x - 0.125) / 5.6 : Math.pow(10, (x - 0.598206) / 0.241514) - 0.00873;
+  }
+  for (let i = 0; i <= 4096; i++) {
+    const x = i / 4096;
+    _rec709Encode[i] = x < 0.018 ? 4.5 * x : 1.099 * Math.pow(x, 0.45) - 0.099;
+  }
   const PIXEL_FX = {
     deflicker: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
       const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
@@ -5474,6 +5490,26 @@ window.FM = window.FM || {};
       for (let i = 0; i < d.length; i += 4) {
         if (!d[i + 3]) continue;
         d[i] = lut[0][d[i]]; d[i + 1] = lut[1][d[i + 1]]; d[i + 2] = lut[2][d[i + 2]];
+      }
+    },
+    logtonormal: function (d, W, H, p, t) {
+      const mix = clamp01(fparam(p, 'mix', 100, t) / 100);
+      if (!mix) return;
+      const exposure = Math.pow(2, Math.max(-4, Math.min(4, fparam(p, 'exposure', 0, t))));
+      const roll = clamp01(fparam(p, 'rolloff', 20, t) / 100);
+      function output(x) {
+        // A pivot-preserving highlight shoulder: 18% grey stays at 18%.
+        if (x > 0.18) x = 0.18 + (x - 0.18) / (1 + roll * (x - 0.18));
+        return _rec709Encode[Math.round(clamp01(x) * 4096)] * 255;
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const r = _vlogDecode[d[i]] * exposure, g = _vlogDecode[d[i + 1]] * exposure, b = _vlogDecode[d[i + 2]] * exposure;
+        // V-Gamut RGB to BT.709 RGB, from Panasonic's V-Log/V-Gamut reference manual.
+        const nr = output(1.806576 * r - 0.695697 * g - 0.110879 * b);
+        const ng = output(-0.170090 * r + 1.305955 * g - 0.135865 * b);
+        const nb = output(-0.025206 * r - 0.154468 * g + 1.179674 * b);
+        d[i] += (nr - d[i]) * mix; d[i + 1] += (ng - d[i + 1]) * mix; d[i + 2] += (nb - d[i + 2]) * mix;
       }
     },
     channelmixer: function (d, W, H, p, t) {
@@ -18595,7 +18631,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1, colourwheels: 1, hslmixer: 1,
     /* #482 polish 5.1 — the PIXEL_FX colour grades that are point ops (fx-registry ADJ_OK says which and why the rest wait).
        applyPixelFx hands each straight to its PIXEL_FX kernel over the snapshot, the very function the clip itself runs. */
-    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1, channelmixer: 1,
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1, channelmixer: 1, logtonormal: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1 };
   // Own keys only — see POSTFX. Missed with TEXT_FX when the others were cut off. Milder than that one

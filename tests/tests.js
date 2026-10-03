@@ -118940,4 +118940,21 @@
     } finally { FM.media.get = oldGet; }
   });
 
+  test('690 Panasonic V-Log grade maps reference grey and preserves zero Mix and alpha', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('logtonormal'), fn = FM._FX_TABLES.PIXEL_FX.logtonormal;
+    if (!reg || reg.category !== 'color' || !fn || !FM._postFxTypes().includes('logtonormal') ||
+        !FM.fxRegistry.gates().adjOk.includes('logtonormal'))
+      throw new Error('V-Log grade is missing from layer or adjustment routing');
+    const original = new Uint8ClampedArray([108, 108, 108, 255, 150, 108, 108, 255, 75, 80, 85, 0]);
+    const unchanged = original.slice(); fn(unchanged, 3, 1, { mix: 0 }, 0);
+    if (!unchanged.every((v, i) => v === original[i])) throw new Error('Zero Mix changed the input');
+    const graded = original.slice(); fn(graded, 3, 1, {}, 0);
+    if (!(graded[0] >= 100 && graded[0] <= 109 && graded[0] === graded[1] && graded[1] === graded[2]))
+      throw new Error('Panasonic reference grey did not map to Rec.709 grey: ' + Array.from(graded.slice(0, 3)));
+    if (!(graded[4] > graded[5] && graded[5] < 115)) throw new Error('V-Gamut matrix did not separate a warm colour');
+    if (!graded.slice(8).every((v, i) => v === original[i + 8])) throw new Error('Transparent pixel changed');
+    const brighter = original.slice(); fn(brighter, 3, 1, { exposure: 1 }, 0);
+    if (!(brighter[0] > graded[0])) throw new Error('Exposure control had no effect');
+  });
+
 })();
