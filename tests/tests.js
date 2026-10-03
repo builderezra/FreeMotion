@@ -118444,5 +118444,26 @@
       throw new Error('The phone-sized working-plate path lost the subject edge');
   });
 
+  test('690 Oil Paint smooths textured regions without washing out their shared edge', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('oilpaint'), fn = FM._pixelFx.oilpaint;
+    if (!reg || reg.category !== 'stylize' || !fn || !FM._postFxTypes().includes('oilpaint'))
+      throw new Error('Oil Paint is not registered and routed');
+    const W = 32, H = 32, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = (x < 16 ? 75 : 205) + ((x + y) % 2 ? 10 : -10);
+      src[i] = src[i + 1] = src[i + 2] = v;
+      src[i + 3] = x === 0 ? 128 : 255;
+    }
+    const params = { brush: 6, sharpness: 100, detail: 8, levels: 0, mix: 100 };
+    const neutral = src.slice(); fn(neutral, W, H, { ...params, mix: 0 }, 0, 1);
+    if (neutral.some((v, i) => v !== src[i])) throw new Error('Zero mix changed pixels');
+    const out = src.slice(); fn(out, W, H, params, 0, 1);
+    const at = (x, y) => out[(y * W + x) * 4];
+    if (at(15, 16) >= 120 || at(16, 16) <= 160 || Math.abs(at(8, 8) - at(9, 8)) >= 15)
+      throw new Error('Texture was not smoothed while retaining the colour edge');
+    for (let i = 3; i < src.length; i += 4)
+      if (out[i] !== src[i]) throw new Error('Oil Paint changed source transparency');
+  });
+
 
 })();

@@ -116,6 +116,7 @@ window.FM = window.FM || {};
     claritydehaze: 'color',
     radiowaves: 'proc',
     cartoon: 'stylize',
+    oilpaint: 'stylize',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -459,6 +460,7 @@ window.FM = window.FM || {};
     radiowaves: 'Repeated coloured rings expand from one point, with circle and polygon shapes.',
     lensmagnifier: 'Magnifies this layer under a movable round or square lens with a soft edge, border and shadow.',
     cartoon: 'Simplifies shading and texture into broad colour regions, then draws ink along subject edges.',
+    oilpaint: 'Blends nearby colour into directional brush patches while keeping strong edges intact.',
     solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
     mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
     mattefringe: 'Draws a coloured band along the layer’s edge.',
