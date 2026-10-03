@@ -5694,7 +5694,52 @@ window.FM = window.FM || {};
     const arBtn = el('button', 'vol-tool-btn', 'Audio → keyframes…');
     arBtn.title = 'Drive scale, opacity, rotation or position from this clip’s loudness';
     arBtn.addEventListener('click', () => { if (FM.audioReact) FM.audioReact.openSheet(layer); });
-    tools.append(wavBtn, karBtn, afxBtn, arBtn);
+    const noiseState = FM.noiseState ? FM.noiseState(layer) : 'off';
+    const noiseBtn = el('button', 'vol-tool-btn' + (noiseState === 'off' ? '' : ' on'),
+      noiseState === 'off' ? 'Reduce noise…' : 'Restore original audio');
+    noiseBtn.title = 'On-device noise reduction for mono or stereo clips up to two minutes';
+    const noiseOptions = el('div', 'vol-noise-options');
+    noiseOptions.hidden = true;
+    noiseOptions.style.cssText = 'padding:10px 0;display:grid;gap:8px';
+    const settings = { amount: 0.6, reduction: 12, sensitivity: 0.5, keepVoice: true };
+    const noiseRange = (key, label, min, max, step) => {
+      const row = el('label', '', label + ': ');
+      const value = el('span', '', String(settings[key]));
+      const input = document.createElement('input');
+      input.type = 'range'; input.min = min; input.max = max; input.step = step; input.value = settings[key];
+      input.setAttribute('aria-label', label);
+      input.addEventListener('input', () => { settings[key] = +input.value; value.textContent = input.value; });
+      row.append(value, input); noiseOptions.appendChild(row);
+    };
+    noiseRange('amount', 'Amount', 0, 1, 0.05);
+    noiseRange('reduction', 'Reduction (dB)', 0, 30, 1);
+    noiseRange('sensitivity', 'Sensitivity', 0, 1, 0.05);
+    const voice = el('label', '', 'Keep voice ');
+    const voiceCheck = document.createElement('input'); voiceCheck.type = 'checkbox'; voiceCheck.checked = true;
+    voiceCheck.addEventListener('change', () => { settings.keepVoice = voiceCheck.checked; });
+    voice.appendChild(voiceCheck); noiseOptions.appendChild(voice);
+    const listen = el('button', 'vol-tool-btn', 'Listen to removed noise');
+    listen.addEventListener('click', async () => {
+      if (listen.disabled) return;
+      listen.disabled = true;
+      try { await FM.previewRemovedNoise(layer, settings); }
+      catch (e) { if (FM.toast) FM.toast(e.message || 'Could not preview removed noise'); }
+      finally { listen.disabled = false; }
+    });
+    const applyNoise = el('button', 'vol-tool-btn', 'Apply noise reduction');
+    applyNoise.addEventListener('click', async () => {
+      if (applyNoise.disabled) return;
+      applyNoise.disabled = true;
+      try { FM.stopRemovedNoisePreview(); await FM.toggleNoiseReduction(layer, settings); }
+      finally { applyNoise.disabled = false; if (FM.inspector) FM.inspector.refresh(); }
+    });
+    noiseOptions.append(listen, applyNoise);
+    noiseBtn.addEventListener('click', async () => {
+      if (noiseState !== 'off') { await FM.toggleNoiseReduction(layer); if (FM.inspector) FM.inspector.refresh(); }
+      else { noiseOptions.hidden = !noiseOptions.hidden; noiseOptions.style.display = noiseOptions.hidden ? 'none' : 'grid'; }
+    });
+    noiseOptions.style.display = 'none';
+    tools.append(wavBtn, karBtn, noiseBtn, noiseOptions, afxBtn, arBtn);
     control.appendChild(tools);
 
     panel.append(left, center);

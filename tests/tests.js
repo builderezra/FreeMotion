@@ -118223,5 +118223,31 @@
     }
   });
 
+  test('690 Reduce Noise suppresses a learned hum while keeping a voiced tone', { item: 'TBD' }, async function () {
+    if (!FM.reduceNoiseBuffer) throw new Error('Reduce Noise tool is missing');
+    const rate = 16384, length = rate, context = FM.audioCtx();
+    const input = context.createBuffer(1, length, rate), src = input.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+      const t = i / rate;
+      src[i] = 0.22 * Math.sin(2 * Math.PI * 192 * t) +
+        (i >= length / 2 ? 0.35 * Math.sin(2 * Math.PI * 1024 * t) : 0);
+    }
+    const detector = FM.detectSpeech;
+    FM.detectSpeech = async () => ({ segments: [{ start: 0.5, end: 1 }] });
+    let cleaned;
+    try { cleaned = await FM.reduceNoiseBuffer(input, { amount: 1, reduction: 24, sensitivity: 0.7, keepVoice: true }); }
+    finally { FM.detectSpeech = detector; }
+    const output = cleaned.getChannelData(0);
+    const amplitude = (data, hz) => {
+      let sum = 0;
+      for (let i = length / 2; i < length; i++) sum += data[i] * Math.sin(2 * Math.PI * hz * i / rate);
+      return 4 * Math.abs(sum) / length;
+    };
+    if (amplitude(output, 192) >= amplitude(src, 192) * 0.85)
+      throw new Error('Learned hum was not reduced');
+    if (amplitude(output, 1024) <= amplitude(src, 1024) * 0.7)
+      throw new Error('Voice tone was over-suppressed');
+  });
+
 
 })();
