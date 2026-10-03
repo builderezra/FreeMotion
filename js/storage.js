@@ -1700,7 +1700,7 @@ window.FM = window.FM || {};
     } catch (e) { return []; }
   };
   FM.storage.applyScene = async function (obj) {
-    if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
+    if (!obj || !obj.project || typeof obj.project !== 'object' || Array.isArray(obj.project) || !Array.isArray(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
     clampProjectDims(obj.project);
     sanitizeImportedLayers(obj.layers);
@@ -1983,6 +1983,7 @@ window.FM = window.FM || {};
     if (!obj || typeof obj !== 'object') return 'That file is not a FreeMotion project.';
     if (obj.app !== 'freemotion') return 'That is not a FreeMotion project file.';
     if (!obj.project) return 'That project file is missing its canvas settings — it may be truncated or only half-downloaded.';
+    if (typeof obj.project !== 'object' || Array.isArray(obj.project)) return 'That project file has invalid canvas settings — it may be corrupt or only half-downloaded.';
     if (!Array.isArray(obj.layers)) return 'That project file has no layers list — it may be truncated or only half-downloaded.';
     if (obj.layers.length > 2000) return 'That project has ' + obj.layers.length + ' layers, which is more than FreeMotion will open.';
     return null;

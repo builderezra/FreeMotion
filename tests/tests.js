@@ -119132,4 +119132,21 @@
       throw new Error('Valid project fields were damaged: ' + JSON.stringify(valid));
   });
 
+  test('690 invalid project object is refused before import creates a project', { item: 'TBD' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      for (const project of ['broken', []]) {
+        const file = { app: 'freemotion', project, layers: [] };
+        if (!FM.storage.sceneFileProblem(file) || await FM.storage.importObject(file) !== false)
+          throw new Error('Invalid canvas settings passed import validation');
+        if (await FM.storage.applyScene(file) !== false)
+          throw new Error('Direct scene import accepted invalid canvas settings');
+      }
+      if (created) throw new Error('Import created ' + created + ' junk projects');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
 })();
