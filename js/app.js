@@ -3475,6 +3475,53 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  // A filter needs an empty adjustment layer. Put it immediately over the frontmost
+  // picture at the playhead, then open that layer's Filters side for the first pick.
+  FM.addFilterLayer = function () {
+    const scene = FM.scene, P = scene.project;
+    const time = Math.max(0, Math.min(Number.isFinite(FM.time) ? FM.time : 0, P.duration || 0));
+    const targetIndex = scene.layers.findIndex(l => {
+      if (!l || l.visible === false || (l.type !== 'image' && l.type !== 'video')) return false;
+      if (FM.groupContext && l.parent !== FM.groupContext) return false;
+      if (l.type === 'video') {
+        const media = FM.media && FM.media.get && FM.media.get(l.id);
+        if (!media || !(media.width > 0 && media.height > 0)) return false; // an audio-only clip has no picture to filter
+      }
+      const start = Number.isFinite(l.start) ? l.start : 0;
+      const duration = Number.isFinite(l.duration) ? l.duration : 0;
+      return duration > 0 && time >= start && time < start + duration;
+    });
+    const clip = targetIndex >= 0 ? scene.layers[targetIndex] : null;
+    const layer = FM.makeLayer('adjustment', {
+      name: 'Filter layer', x: P.width / 2, y: P.height / 2,
+      start: clip ? clip.start : time,
+      duration: clip ? clip.duration : FM.defaultLayerDuration(),
+    });
+    // The ordinary Adjustment tile deliberately starts with brightness and saturation.
+    // A Filter layer starts neutral so its first chosen look is exactly the chosen recipe.
+    layer.effects = [];
+    if (clip) {
+      const marker = FM.addAt;
+      try {
+        if (!FM.groupContext) FM.addAt = targetIndex;
+        FM.insertLayer(layer);
+        if (FM.groupContext) {
+          // Group insertion starts at the top of the flat array. Move this new
+          // child next to the matched child without disturbing its siblings.
+          scene.layers.splice(scene.layers.indexOf(layer), 1);
+          scene.layers.splice(scene.layers.indexOf(clip), 0, layer);
+        }
+      }
+      finally { FM.addAt = marker; }
+    } else FM.insertLayer(layer);
+    scene.selectedId = layer.id;
+    scene.selectedIds = [layer.id];
+    refreshAll();
+    if (FM.history) FM.history.commit();
+    if (FM.inspector && FM.inspector.openFxTab) FM.inspector.openFxTab('filters');
+    return layer;
+  };
+
   FM.addCaptionLayer = function () {
     const P = FM.scene.project;
     const dur = P.duration || 5;   // empty project → a usable 5s track (was duration 0 = invisible)
@@ -6932,6 +6979,7 @@ window.FM = window.FM || {};
         { label: 'Ellipse', action: () => FM.addShapeLayer && FM.addShapeLayer('ellipse') },
         { label: 'Camera', action: () => FM.addCameraLayer && FM.addCameraLayer() },
         { label: 'Adjustment layer', action: () => FM.addAdjustmentLayer && FM.addAdjustmentLayer() },
+        { label: 'Filter layer', action: () => FM.addFilterLayer && FM.addFilterLayer() },
         { label: 'Controller (rig control)', action: () => FM.addNullLayer && FM.addNullLayer() },
       ];
       if (FM.contextMenu) FM.contextMenu.show(r.left, r.bottom + 4, items);

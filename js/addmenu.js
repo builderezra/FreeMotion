@@ -279,6 +279,9 @@ window.FM = window.FM || {};
         { label: 'Adjustment', icon: ico('<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>'),
           desc: 'Applies its effects to everything BELOW it, so one grade can cover the whole video.',
           add: function () { FM.addAdjustmentLayer && FM.addAdjustmentLayer(); if (FM.toast) FM.toast('Adjustment: its effects apply to every layer BELOW it — one grade over the whole video.', 4200); } },
+        { label: 'Filter layer', icon: ico('<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M7 9h10M7 12h10M7 15h7"/>'),
+          desc: 'Put a ready-made look above the clip at the playhead.',
+          add: function () { FM.addFilterLayer && FM.addFilterLayer(); } },
         // An EMPTY group: grouping used to require selecting two layers first, so there was no way to
         // make the container and then fill it. Drag layers onto it, or parent them to it.
         // "New group", not "Empty group" (queue 412) — his words: "Rename empty group to new group".

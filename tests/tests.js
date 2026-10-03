@@ -118113,5 +118113,42 @@
     }
   });
 
+  test('690 Filter layer starts neutral over the visible clip at the playhead and opens Filters', { item: 'TBD' }, function () {
+    if (!FM.addFilterLayer) throw new Error('Filter layer creator is missing');
+    const old = { project: FM.scene.project, layers: FM.scene.layers.slice(), selectedId: FM.scene.selectedId,
+      selectedIds: FM.scene.selectedIds, time: FM.time, addAt: FM.addAt, groupContext: FM.groupContext };
+    const title = FM.makeLayer('text', { name: 'Title', start: 0, duration: 10 });
+    const sound = FM.makeLayer('video', { name: 'Sound', start: 0, duration: 10 });
+    const front = FM.makeLayer('image', { name: 'Front', start: 2, duration: 3 });
+    const back = FM.makeLayer('image', { name: 'Back', start: 0, duration: 9 });
+    if (FM.history && FM.history.mute) FM.history.mute();
+    try {
+      FM.scene.project = Object.assign({}, old.project, { width: 320, height: 240, duration: 10 });
+      FM.scene.layers.splice(0, FM.scene.layers.length, title, sound, front, back);
+      FM.media.set(sound.id, { width: 0, height: 0 });
+      FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.groupContext = null;
+      FM.time = 3; FM.addAt = 4; // the Add marker is deliberately below the clip
+      const made = FM.addFilterLayer();
+      if (!made || made.type !== 'adjustment' || made.start !== 2 || made.duration !== 3)
+        throw new Error('Filter layer did not inherit the visible clip timing');
+      if (FM.scene.layers[2] !== made || FM.scene.layers[3] !== front)
+        throw new Error('Filter layer did not land immediately above the visible clip');
+      if (made.effects.length || FM.scene.selectedId !== made.id)
+        throw new Error('Filter layer did not start neutral and selected');
+      const active = document.querySelector('#inspector .fxmode-btn.on');
+      if (FM.inspector.currentView() !== 'effects' || !active || active.textContent.trim() !== 'Filters')
+        throw new Error('The selected Filter layer did not open the Filters tab');
+      if (FM.addAt !== 4) throw new Error('Filter layer permanently moved the Add marker');
+    } finally {
+      FM.media.remove(sound.id);
+      FM.scene.project = old.project;
+      FM.scene.layers.splice(0, FM.scene.layers.length, ...old.layers);
+      FM.scene.selectedId = old.selectedId; FM.scene.selectedIds = old.selectedIds;
+      FM.time = old.time; FM.addAt = old.addAt; FM.groupContext = old.groupContext;
+      if (FM.history && FM.history.unmute) FM.history.unmute();
+      FM.refreshAll();
+    }
+  });
+
 
 })();
