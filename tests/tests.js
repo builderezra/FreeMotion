@@ -119341,4 +119341,18 @@
     if (zero.some((v, i) => v !== base[i])) throw new Error('Zero-length trail changed the image');
   });
 
+  test('690 Roughen Edges scales project-pixel controls on preview plates', { item: 'TBD' }, function () {
+    const W = 32, H = 32, make = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+        d[(y * W + x) * 4 + 3] = (x + y) % 3 === 0 ? 255 : 0;
+      return d;
+    };
+    const params = { amount: 8, scale: 2 }, direct = make(), dispatched = make();
+    FM._FX_TABLES.PIXEL_FX.roughenedges(direct, W, H, params, 0, 0.25);
+    FM._applyPixelFx(dispatched, { type: 'roughenedges', params }, 0, W, H, 0.25);
+    if (direct.some((v, i) => v !== dispatched[i]))
+      throw new Error('Reduced-preview dispatch changed Roughen Edges scale or displacement');
+  });
+
 })();
