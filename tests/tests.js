@@ -120444,4 +120444,39 @@
       throw new Error('Boil zero returned to the first-frame holes');
   });
 
+  test('690 rebuilding a long caption list does not keep another document listener per cue', { item: 'TBD' }, function () {
+    if (!FM.captionsEditor || !FM.captionsEditor.mount) throw new Error('caption editor unavailable');
+    const host = document.createElement('div');
+    const layer = { id: 'caption-listener-probe', type: 'text', start: 0, duration: 20,
+      captions: Array.from({ length: 8 }, (_, i) => ({ start: i, end: i + 0.8, text: 'Cue ' + i })) };
+    const originalAdd = document.addEventListener;
+    const ownAdd = Object.getOwnPropertyDescriptor(document, 'addEventListener');
+    let added = 0;
+    document.addEventListener = function (type, listener, options) {
+      if (type === 'pointerdown' && options === true) added++;
+      return originalAdd.call(this, type, listener, options);
+    };
+    document.body.appendChild(host);
+    try {
+      for (let i = 0; i < 6; i++) FM.captionsEditor.mount(host, layer);
+      if (added > 1) throw new Error('six redraws of eight caption cues added ' + added +
+        ' document pointerdown listeners; discarded rows remain retained and every later tap walks them');
+
+      // The surviving capture listener must still start a drag on the newest row.
+      const grip = host.querySelector('.cap-grip');
+      const cue = layer.captions[0], before = cue.end;
+      const event = (type, x) => new PointerEvent(type, { bubbles: true, cancelable: true,
+        pointerId: 912, pointerType: 'mouse', clientX: x, clientY: 10, button: 0, buttons: 1 });
+      const down = event('pointerdown', 10);
+      grip.dispatchEvent(down);
+      grip.dispatchEvent(event('pointermove', 30));
+      if (!down.defaultPrevented || cue.end < before + 0.35)
+        throw new Error('delegated capture pointerdown no longer lets the current caption grip extend its cue');
+    } finally {
+      if (ownAdd) Object.defineProperty(document, 'addEventListener', ownAdd);
+      else delete document.addEventListener;
+      host.remove();
+    }
+  });
+
 })();

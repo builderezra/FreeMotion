@@ -333,6 +333,18 @@ window.FM = window.FM || {};
     if (FM.textEdit && FM.textEdit.cuesChanged) FM.textEdit.cuesChanged();
   }
 
+  // The inspector and Aa sheet rebuild cue rows often. Keep one capture-phase listener for all
+  // current grips; a listener closed over each row would retain every removed row after a redraw.
+  let gripDownListening = false;
+  function listenForGripDown() {
+    if (gripDownListening) return;
+    document.addEventListener('pointerdown', ev => {
+      const grip = ev.target && ev.target.closest && ev.target.closest('.cap-grip');
+      if (grip && grip._capPointerDown) grip._capPointerDown(ev);
+    }, true);
+    gripDownListening = true;
+  }
+
   FM.captionsEditor = {
     mount(container, layer) {
       container.innerHTML = '';
@@ -342,6 +354,7 @@ window.FM = window.FM || {};
          when this no longer matches — js/text-edit.js capsStale. */
       container._capDrawn = (layer && Array.isArray(layer.captions)) ? { layer: layer, cues: layer.captions.slice() } : null;
       if (!layer || !Array.isArray(layer.captions)) return;
+      listenForGripDown();
 
       // Detection FIRST. It is the reason to use captions at all, and the Aa sheet is a 46vh
       // scroller — parked under a long cue list on a phone it sat below the fold, unfound.
@@ -412,13 +425,11 @@ window.FM = window.FM || {};
              it was meant to fix.
              Capture on `document` runs before every ancestor, so it cannot be intercepted. The move/up
              handlers stay on the grip because those DO arrive. */
-          document.addEventListener('pointerdown', (ev) => {
-            if (!ev.target || !ev.target.closest || !ev.target.closest('.cap-grip')) return;
-            if (ev.target.closest('.cap-grip') !== grip) return;      // this row's grip, not a sibling's
+          grip._capPointerDown = (ev) => {
             id = ev.pointerId; x0 = ev.clientX; end0 = c.end;
             try { grip.setPointerCapture(id); } catch (_) {}
             ev.preventDefault(); ev.stopPropagation();
-          }, true);
+          };
           grip.addEventListener('pointermove', (ev) => {
             if (id === null || ev.pointerId !== id) return;
             const dur = layer.duration > 0 ? layer.duration : Infinity;
