@@ -966,7 +966,15 @@ window.FM = window.FM || {};
     for (const layer of scene.layers) {
       if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
       const m = await mediaOf(layer.id);
-      if (!m || !m.file) continue;                     // nothing loaded for this layer — not an omission
+      if (!m || !m.file) {
+        // A video/image layer still exists in the file, but its footage does not. The full backup
+        // names this case too; a single project or template file must not claim a clean save.
+        if (layer.type === 'video' || layer.type === 'image') {
+          const name = layer.name || (layer.type === 'video' ? 'a clip' : 'a photo');
+          omitted.push({ layer: name, file: name, mb: 0, missing: true });
+        }
+        continue;
+      }
       if (m.file.size > EMBED_LIMIT) {
         omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
         continue;
@@ -1769,10 +1777,15 @@ window.FM = window.FM || {};
       const blank = want.filter(l => !hydratedMediaIds.has(l.id)).map(l => l.name || l.type);
       if (blank.length) {
         const om = obj.omitted || [];
-        const named = om.slice(0, 2).map(o => o.file).join(', ');
-        const omMany = om.length > 1;
+        const absent = om.filter(o => o.missing);
+        const oversized = om.filter(o => !o.missing);
+        const details = [];
+        if (absent.length) details.push(absent.slice(0, 2).map(o => o.layer || o.file).join(', ') +
+          (absent.length > 2 ? ' and more' : '') + ' not stored when saved');
+        if (oversized.length) details.push(oversized.slice(0, 2).map(o => o.file).join(', ') +
+          (oversized.length > 2 ? ' and more' : '') + ' too big to embed');
         if (FM.toast) FM.toast(blank.length + (blank.length === 1 ? ' layer has' : ' layers have') + ' no footage in this file' +
-          (named ? ' (' + named + (om.length > 2 ? ' and more' : '') + (omMany ? ' were' : ' was') + ' too big to embed)' : '') +
+          (details.length ? ' (' + details.join('; ') + ')' : '') +
           ' — ' + blank.slice(0, 3).join(', ') + (blank.length > 3 ? ' and more' : '') +
           '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.', 12000);
       }
@@ -1838,6 +1851,17 @@ window.FM = window.FM || {};
        trusted, and one that does not cannot. */
     const miss = obj.omitted || [];
     if (!miss.length) { if (FM.toast) FM.toast('Project file saved'); return; }
+    const absent = miss.filter(m => m.missing);
+    if (absent.length) {
+      const names = absent.concat(miss.filter(m => !m.missing)).slice(0, 2).map(m =>
+        m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
+      const large = miss.length - absent.length;
+      if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (miss.length === 1 ? ' media file — ' : ' media files — ') +
+        names + (miss.length > 2 ? ' and more' : '') + '. ' + absent.length +
+        (absent.length === 1 ? ' source file is' : ' source files are') + ' no longer stored on this device. Re-import or replace missing media before relying on this file.' +
+        (large ? ' Use Settings → Back up every project to keep oversized clips.' : ''), 12000);
+      return;
+    }
     const names = miss.slice(0, 2).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
     const many = miss.length > 1;
     if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (many ? ' clips — ' : ' clip — ') +

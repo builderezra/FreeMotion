@@ -2004,11 +2004,16 @@ window.FM = window.FM || {};
           if (FM.toast) {
             const missing = result && result.omitted || [];
             if (!result) FM.toast('Could not save that template file');
-            else if (missing.length) FM.toast('Template file saved WITHOUT ' + missing.length +
-              (missing.length === 1 ? ' clip — ' : ' clips — ') +
-              missing.slice(0, 2).map(m => m.file + ' (' + m.mb + ' MB)').join(', ') +
-              (missing.length > 2 ? ' and more' : '') +
-              '. Replace missing media after import or use a smaller clip.', 12000);
+            else if (missing.length) {
+              const absent = missing.filter(m => m.missing);
+              const names = absent.concat(missing.filter(m => !m.missing)).slice(0, 2).map(m =>
+                m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
+              FM.toast('Template file saved WITHOUT ' + missing.length +
+                (missing.length === 1 ? ' media file — ' : ' media files — ') + names +
+                (missing.length > 2 ? ' and more' : '') + '. ' +
+                (absent.length ? 'Re-import or replace missing source media. ' : '') +
+                (missing.length > absent.length ? 'Use a smaller clip for files that are too big.' : ''), 12000);
+            }
             else FM.toast('Template file saved — send it to anyone');
           }
         } },
