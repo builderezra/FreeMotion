@@ -2416,7 +2416,22 @@ window.FM = window.FM || {};
     // overriddenBy/deadAt ride along since the #482 3.6 review: this bridge used to drop them, so no audio row could say
     // "Not used when Bass is 0" however the effect declared it.
     return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, unit: p.unit, keyframable: p.keyframable,
-      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt };
+      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, options: p.options };
+  }
+  function afxChoice(fx, p) {
+    const row = el('div', 'prop-row afx-choice-row');
+    row.appendChild(el('label', null, p.label));
+    const sel = document.createElement('select');
+    sel.setAttribute('aria-label', p.label);
+    const value = fx.params[p.key] == null ? p.def : fx.params[p.key];
+    p.options.forEach(opt => {
+      const item = document.createElement('option');
+      item.value = opt[0]; item.textContent = opt[1]; item.selected = Number(value) === Number(opt[0]);
+      sel.appendChild(item);
+    });
+    sel.addEventListener('change', () => { fx.params[p.key] = Number(sel.value); afterAudioFx(); });
+    row.appendChild(sel);
+    return row;
   }
   /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
      only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break
@@ -2593,7 +2608,7 @@ window.FM = window.FM || {};
       // the controller's label and default, so it gets the bridged descriptors, not the audio registry's own.
       const areg = { params: reg.params.map(afxParam) }, rows = {};
       reg.params.forEach(p => {
-        const ap = afxParam(p), row = fxScrubber(fx, ap, layer, idx);
+        const ap = afxParam(p), row = p.options ? afxChoice(fx, p) : fxScrubber(fx, ap, layer, idx);
         rows[p.key] = row;
         markOverridden(row, fx, ap, areg);
         body.appendChild(row);

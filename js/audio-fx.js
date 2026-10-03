@@ -502,6 +502,58 @@ window.FM = window.FM || {};
       });
     },
   },
+  {
+    type: 'graphicEq', label: 'Graphic EQ', category: 'eq',
+    hint: 'Ten fixed frequency bands. Lower Output if boosted bands sound too loud.',
+    params: [Object.assign(P('preset', 'Preset', 0, 5, 1, 0, '', false), { options: [
+      [0, 'Flat'], [1, 'Bass lift'], [2, 'Voice clarity'], [3, 'Warm'], [4, 'Bright'], [5, 'Radio']
+    ] })].concat(
+      ['31 Hz', '63 Hz', '125 Hz', '250 Hz', '500 Hz', '1 kHz', '2 kHz', '4 kHz', '8 kHz', '16 kHz'].map((label, i) =>
+        P('band' + i, label, -12, 12, 0.5, 0, 'dB', true)),
+      [P('output', 'Output', -24, 12, 0.5, 0, 'dB', true)]
+    ),
+    build: function (ctx, inst) {
+      const s = shop(ctx);
+      const freq = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+      // Presets are dB offsets from the sliders, so selecting one never erases a custom curve.
+      const curves = [
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [5, 5, 4, 2, 0, 0, 0, 0, 0, 0],
+        [-5, -3, -2, 0, 1, 3, 4, 3, 1, 0],
+        [1, 2, 3, 3, 1, 0, -1, -1, -1, -2],
+        [-2, -1, 0, 0, 0, 1, 2, 3, 4, 4],
+        [-12, -12, -9, -4, 2, 4, 3, -2, -9, -12],
+      ];
+      const filters = freq.map((f, i) => s.biquad(i === 0 ? 'lowshelf' : (i === 9 ? 'highshelf' : 'peaking'),
+        Math.min(f, ctx.sampleRate * 0.45), i === 0 || i === 9 ? null : Math.SQRT2, 0));
+      const out = s.gain(1);
+      for (let i = 0; i < 9; i++) filters[i].connect(filters[i + 1]);
+      filters[9].connect(out);
+      const base = freq.map((_, i) => initNum(inst, 'band' + i, 0, -12, 12));
+      let preset = Math.round(initNum(inst, 'preset', 0, 0, 5));
+      for (let i = 0; i < 10; i++) filters[i].gain.value = clamp(base[i] + curves[preset][i], -24, 24);
+      const custom = {
+        preset: function (v, when, ramp) {
+          const next = Math.round(clamp(v, 0, 5));
+          if (next === preset) return;
+          preset = next;
+          for (let i = 0; i < 10; i++) {
+            const gain = clamp(base[i] + curves[preset][i], -24, 24);
+            if (ramp) filters[i].gain.linearRampToValueAtTime(gain, when);
+            else filters[i].gain.setValueAtTime(gain, when);
+          }
+        },
+      };
+      for (let i = 0; i < 10; i++) custom['band' + i] = function (v, when, ramp) {
+        base[i] = clamp(v, -12, 12);
+        const gain = clamp(base[i] + curves[preset][i], -24, 24);
+        if (ramp) filters[i].gain.linearRampToValueAtTime(gain, when);
+        else filters[i].gain.setValueAtTime(gain, when);
+      };
+      return unit({ input: filters[0], output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { output: out.gain }, xf: { output: dbToLin }, custom: custom });
+    },
+  },
     filterDef('lowpass', 'Low-Pass', 'lowpass', 40, 20000, 8000, 0.1, 20, 1),
     filterDef('highpass', 'High-Pass', 'highpass', 20, 12000, 200, 0.1, 20, 1),
     filterDef('bandpass', 'Band-Pass', 'bandpass', 60, 12000, 1200, 0.1, 20, 2),
@@ -1508,6 +1560,7 @@ window.FM = window.FM || {};
   const TAGS = {
     bassTreble: ['bass boost', 'bass', 'treble', 'tone', 'warmer', 'brighter'],
     eq3: ['equaliser', 'equalizer', 'eq', 'tone', 'mids'],
+    graphicEq: ['equaliser', 'equalizer', '10 band', 'bass boost', 'voice clarity', 'tone curve'],
     lowpass: ['muffled', 'underwater', 'next room', 'through a wall', 'dull', 'dark'],
     highpass: ['thin', 'rumble', 'cut bass', 'wind noise'],
     bandpass: ['focus', 'narrow'],

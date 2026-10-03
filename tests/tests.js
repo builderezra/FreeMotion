@@ -118483,5 +118483,30 @@
     if (tinted[0] <= tinted[1] || tinted[1] !== tinted[2]) throw new Error('Tint did not colour the grey result');
   });
 
+  test('690 Graphic EQ presets and output change a rendered tone', { item: 'TBD' }, async function () {
+    const reg = FM.audioFxRegistry.get('graphicEq');
+    if (!reg || reg.category !== 'eq' || reg.params.filter(p => /^band\d+$/.test(p.key)).length !== 10 ||
+        !reg.params.find(p => p.key === 'preset' && p.options && p.options.length === 6))
+      throw new Error('Graphic EQ controls are not registered');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR / 2;
+    async function level(params) {
+      const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR), samples = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) samples[i] = Math.sin(2 * Math.PI * 125 * i / SR) * 0.25;
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const inst = FM.audioFxRegistry.makeInstance('graphicEq'); Object.assign(inst.params, params);
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [inst] }, 0);
+      if (!chain) throw new Error('Graphic EQ signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.5); src.start(0);
+      const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+      let power = 0; for (let i = N / 2; i < N; i++) power += out[i] * out[i];
+      return Math.sqrt(power / (N / 2));
+    }
+    const flat = await level({}), bass = await level({ preset: 1 }), quiet = await level({ output: -6 });
+    if (!(bass > flat * 1.15 && quiet < flat * 0.55 && quiet > flat * 0.45))
+      throw new Error('Preset or output control did not change the rendered audio');
+  });
+
 
 })();
