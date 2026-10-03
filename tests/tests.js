@@ -119282,4 +119282,17 @@
     } finally { release(); }
   });
 
+  test('690 Smooth Edges keeps a one-pixel feather visible on reduced preview plates', { item: 'TBD' }, function () {
+    const W = 12, H = 12, make = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 4; y < 8; y++) for (let x = 4; x < 8; x++) d[(y * W + x) * 4 + 3] = 255;
+      return d;
+    };
+    const noFx = make(), feather = make(), zero = make();
+    FM._applyPixelFx(feather, { type: 'smoothedges', params: { radius: 1 } }, 0, W, H, 0.25);
+    FM._applyPixelFx(zero, { type: 'smoothedges', params: { radius: 0 } }, 0, W, H, 0.25);
+    if (feather[(5 * W + 3) * 4 + 3] <= 0) throw new Error('Small positive softness vanished in reduced preview');
+    if (zero.some((v, i) => v !== noFx[i])) throw new Error('Zero softness changed the matte');
+  });
+
 })();
