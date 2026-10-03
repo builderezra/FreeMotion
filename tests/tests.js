@@ -118414,4 +118414,28 @@
     }
   });
 
+  test('690 Chunk Noise keyframed Speed advances by its integral and holds at zero', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.blocknoise;
+    if (!K || !FM.integrateProp) throw new Error('the Chunk Noise kernel or shared rate integrator is missing');
+    const W = 48, H = 32;
+    const run = (speed, t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 100; d[i + 3] = 255; }
+      const p = Object.assign({}, FM.fxRegistry.makeInstance('blocknoise').params, { speed, size: 4, amount: 1 });
+      K(d, W, H, p, t, 1);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const keyframes = (...pairs) => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    if (same(run(4, 2), run(8, 2))) throw new Error('control: the picture cannot distinguish two steady speeds');
+    if (!same(run(8, 0.75), run(FM.fxRegistry.makeInstance('blocknoise').params.speed, 0.75)))
+      throw new Error('an unchanged Speed no longer draws the saved pattern');
+    // The linear 0 → 16 Hz ramp has made 16 frames by 2 s, like a steady 8 Hz.
+    if (!same(run(keyframes([0, 0], [2, 16]), 2), run(8, 2)))
+      throw new Error('a Speed ramp is positioned at speed(now) × elapsed instead of its accumulated frame count');
+    const stopped = keyframes([1, 8], [2, 0]);
+    if (!same(run(stopped, 2), run(stopped, 3))) throw new Error('Speed zero reset or kept changing the blocks');
+    if (same(run(stopped, 2), run(0, 0))) throw new Error('Speed zero returned to the first-frame pattern');
+  });
+
 })();
