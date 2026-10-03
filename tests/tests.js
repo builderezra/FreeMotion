@@ -118300,5 +118300,39 @@
     }
   });
 
+  test('690 Venetian Blinds fits and staggers its slats while preserving colour', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('venetianblinds');
+    if (!reg || reg.category !== 'matte' || reg.params.length !== 6 || !FM._pixelFx.venetianblinds)
+      throw new Error('Venetian Blinds is missing from Keying');
+    const W = 40, H = 20;
+    const source = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      source[i] = 120; source[i + 1] = 80; source[i + 2] = 40;
+      source[i + 3] = x >= 10 && x < 30 ? 255 : 0;
+    }
+    const render = (params) => { const data = source.slice(); FM._pixelFx.venetianblinds(data, W, H, params, 0); return data; };
+    const alphaAt = (data, x) => data[(10 * W + x) * 4 + 3];
+    const base = { progress: 0.5, count: 2, angle: 0, softness: 0, stagger: 0, fit: 1 };
+    const fitted = render(base);
+    if (alphaAt(fitted, 12) !== 255 || alphaAt(fitted, 18) !== 0 ||
+        alphaAt(fitted, 22) !== 255 || alphaAt(fitted, 28) !== 0)
+      throw new Error('Slats did not fit the visible layer with matching half-open bars');
+    const staggered = render({ ...base, stagger: 100 });
+    if (alphaAt(staggered, 18) !== 255 || alphaAt(staggered, 22) !== 0)
+      throw new Error('Stagger did not make the first slat lead the second');
+    const feathered = render({ ...base, softness: 4 });
+    if (alphaAt(feathered, 15) <= 0 || alphaAt(feathered, 15) >= 255)
+      throw new Error('The slat edge was not softened');
+    for (const progress of [0, 1]) {
+      const data = render({ ...base, progress });
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] !== source[i] || data[i + 1] !== source[i + 1] || data[i + 2] !== source[i + 2] ||
+            data[i + 3] !== (progress ? source[i + 3] : 0))
+          throw new Error('An endpoint changed colour or left alpha in the wrong state');
+      }
+    }
+  });
+
 
 })();

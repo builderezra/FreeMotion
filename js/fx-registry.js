@@ -46,7 +46,7 @@ window.FM = window.FM || {};
     blink: 'opacity', flicker: 'opacity', pulseopacity: 'opacity', dissolve: 'opacity', blockdissolve: 'opacity',
     flashdark: 'opacity',   // queue 349 — sits with its family, though it is the only one that leaves alpha alone
     // batch 14 (matte / mask / key)
-    wipe: 'matte', radialwipe: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
+    wipe: 'matte', radialwipe: 'matte', venetianblinds: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
     // batch 15 (repeat / tiling)
     gridrepeat: 'repeat', linearrepeat: 'repeat', radialrepeat: 'repeat', mirrortile: 'repeat', scatterarray: 'repeat',
     // batch 16 (other / color / proc / drawing)
@@ -453,6 +453,7 @@ window.FM = window.FM || {};
     // Matte / mask / key
     wipe: 'Reveals or hides the layer behind a straight line at any angle. Keyframe Progress to run it.',
     radialwipe: 'The same, but the line sweeps around like a clock hand.',
+    venetianblinds: 'Reveals the layer in parallel slats. Stagger opens the slats one after another.',
     solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
     mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
     mattefringe: 'Draws a coloured band along the layer’s edge.',

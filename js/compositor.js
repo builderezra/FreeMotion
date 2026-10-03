@@ -653,6 +653,14 @@ window.FM = window.FM || {};
        old step could hold is still exactly representable. */
     { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the edge was a hard 1-bit cut
     { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
+    { type: 'venetianblinds', label: 'Venetian Blinds', desc: 'Reveal a layer in parallel slats. Keyframe Progress to open them; Stagger makes each slat follow the previous one.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
+      { key: 'count', label: 'Slats', min: 2, max: 60, step: 1, def: 10 },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 100, step: 1, def: 0, unit: 'px' },
+      { key: 'stagger', label: 'Stagger', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'fit', label: 'Fit slats to', options: [[0, 'Frame'], [1, 'Visible layer']], def: 0 },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3692,7 +3700,7 @@ window.FM = window.FM || {};
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
-    wipe: 1, radialwipe: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
+    wipe: 1, radialwipe: 1, venetianblinds: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
     gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
@@ -7774,6 +7782,48 @@ window.FM = window.FM || {};
           var rq_sd = rq_f <= rw_prog ? Math.min(rq_f, rw_prog - rq_f) : -Math.min(rq_f - rw_prog, 1 - rq_f);
           var rq_c = rq_sd*rq_arc/rw_sf + 0.5; if(rq_c >= 1) continue; var rq_i = (rq_y*W + rq_x)*4 + 3; d[rq_i] = rq_c <= 0 ? 0 : d[rq_i]*rq_c; } } return; }
       for(var rw_y=0; rw_y<H; rw_y++){ var rw_dy = rw_y - rw_cy; var rw_row = rw_y*W; for(var rw_x=0; rw_x<W; rw_x++){ var rw_dx = rw_x - rw_cx; var rw_ang = Math.atan2(rw_dy, rw_dx); var rw_frac = (rw_ang - rw_startRad) % rw_TAU; if(rw_frac<0) rw_frac += rw_TAU; rw_frac = rw_frac / rw_TAU; if(rw_frac > rw_prog){ d[(rw_row + rw_x)*4 + 3] = 0; } } } },
+    venetianblinds: function(d, W, H, p, t){
+      var progress = p.progress == null ? 0.5 : FM.evalProp(p.progress, t);
+      if (!isFinite(progress)) progress = 0.5;
+      if (progress >= 1) return;
+      if (progress <= 0) { for (var z = 3; z < d.length; z += 4) d[z] = 0; return; }
+      var count = p.count == null ? 10 : Math.round(FM.evalProp(p.count, t));
+      count = isFinite(count) ? Math.max(2, Math.min(60, count)) : 10;
+      var angle = p.angle == null ? 0 : FM.evalProp(p.angle, t);
+      if (!isFinite(angle)) angle = 0;
+      var dx = Math.cos(angle * Math.PI / 180), dy = Math.sin(angle * Math.PI / 180);
+      var x0 = 0, y0 = 0, x1 = W, y1 = H;
+      if (p.fit != null && Math.round(FM.evalProp(p.fit, t)) === 1) {
+        var minX = W, minY = H, maxX = -1, maxY = -1;
+        for (var sy = 0; sy < H; sy++) for (var sx = 0; sx < W; sx++) {
+          if (!d[(sy * W + sx) * 4 + 3]) continue;
+          if (sx < minX) minX = sx; if (sx > maxX) maxX = sx;
+          if (sy < minY) minY = sy; if (sy > maxY) maxY = sy;
+        }
+        if (maxX < 0) return;
+        x0 = minX; y0 = minY; x1 = maxX + 1; y1 = maxY + 1;
+      }
+      // Project the chosen bounds onto the slat normal; the count always fits that span exactly.
+      var min = (dx >= 0 ? x0 : x1) * dx + (dy >= 0 ? y0 : y1) * dy;
+      var max = (dx >= 0 ? x1 : x0) * dx + (dy >= 0 ? y1 : y0) * dy;
+      var pitch = Math.max(1e-6, (max - min) / count);
+      var softness = p.softness == null ? 0 : FM.evalProp(p.softness, t);
+      softness = isFinite(softness) ? Math.max(0, softness) : 0;
+      var stagger = p.stagger == null ? 0 : FM.evalProp(p.stagger, t);
+      stagger = isFinite(stagger) ? Math.max(-1, Math.min(1, stagger / 100)) : 0;
+      var spread = Math.abs(stagger), sweep = progress * (1 + spread);
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var i = (y * W + x) * 4 + 3;
+        if (!d[i]) continue;
+        var position = ((x + 0.5) * dx + (y + 0.5) * dy - min) / pitch;
+        var strip = Math.max(0, Math.min(count - 1, Math.floor(position)));
+        var along = (position - strip) * pitch;
+        var order = stagger >= 0 ? strip / (count - 1) : 1 - strip / (count - 1);
+        var opening = Math.max(0, Math.min(1, sweep - spread * order)) * pitch;
+        var coverage = softness > 0 ? Math.max(0, Math.min(1, (opening - along) / softness + 0.5)) : (along < opening ? 1 : 0);
+        if (coverage < 1) d[i] *= coverage;
+      }
+    },
     solidmatte: function(d,W,H,p,t){ var sm_amt = fparam(p, 'amount', 1, t); if(sm_amt<0) sm_amt=0; if(sm_amt>1) sm_amt=1; var sm_col=hexToRGB(p.color); var sm_cr=sm_col[0], sm_cg=sm_col[1], sm_cb=sm_col[2]; var sm_n=W*H, sm_i=0; for(var sm_k=0; sm_k<sm_n; sm_k++){ if(d[sm_i+3]>0){ d[sm_i]=d[sm_i]+(sm_cr-d[sm_i])*sm_amt; d[sm_i+1]=d[sm_i+1]+(sm_cg-d[sm_i+1])*sm_amt; d[sm_i+2]=d[sm_i+2]+(sm_cb-d[sm_i+2])*sm_amt; } sm_i+=4; } },
     mattechoker: function(d,W,H,p,t){ var mcBB=arguments[6];
       /* Erode/dilate ran on whole pixels with a hard square kernel and no post-softening, so a choked
