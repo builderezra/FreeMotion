@@ -2855,7 +2855,8 @@ window.FM = window.FM || {};
   // A Home portrait is a small local image, separate from fm.profile. The latter is shared with
   // collaborators; putting a photo there would send it to peers and inflate every signalling message.
   const HOME_PHOTO_DB = 'fm-home-profile-photo';
-  let homePhotoURL = null, homePhotoInput = null, homePhotoReadVersion = 0;
+  let homePhotoURL = null, homePhotoInput = null, homePhotoReadVersion = 0, homePhotoActionVersion = 0;
+  let homePhotoWrite = Promise.resolve();
   function homePhotoStore(mode, value) {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) { reject(new Error('Local photo storage is unavailable')); return; }
@@ -2878,6 +2879,17 @@ window.FM = window.FM || {};
       };
     });
   }
+  function queueHomePhotoWrite(mode, value, version) {
+    // A put already in flight must finish before a later Remove deletes it.
+    // A slow crop queued after Remove must not write the photo back.
+    const write = homePhotoWrite.catch(() => {}).then(async () => {
+      if (version !== homePhotoActionVersion) return false;
+      await homePhotoStore(mode, value);
+      return version === homePhotoActionVersion;
+    });
+    homePhotoWrite = write;
+    return write;
+  }
   function showHomePhoto(blob) {
     const b = document.getElementById('hm-profile-btn'), img = b && b.querySelector('.hm-profile-photo');
     if (!img) return;
@@ -2889,7 +2901,8 @@ window.FM = window.FM || {};
   }
   function loadHomePhoto() {
     const version = ++homePhotoReadVersion;
-    return homePhotoStore('get').then(blob => { if (version === homePhotoReadVersion) showHomePhoto(blob); }).catch(() => {});
+    const actionVersion = homePhotoActionVersion;
+    return homePhotoStore('get').then(blob => { if (version === homePhotoReadVersion && actionVersion === homePhotoActionVersion) showHomePhoto(blob); }).catch(() => {});
   }
   function cropHomePhoto(file) {
     return new Promise((resolve, reject) => {
@@ -2924,14 +2937,15 @@ window.FM = window.FM || {};
       const file = homePhotoInput.files && homePhotoInput.files[0];
       if (!file) return;
       homePhotoReadVersion++;  // a slow initial read must not replace the user's new choice
+      const version = ++homePhotoActionVersion;
       try {
         if (file.size > 15 * 1024 * 1024 ||
             (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)))
           throw new Error('Choose a JPEG, PNG, WebP or HEIC photo under 15 MB');
         const blob = await cropHomePhoto(file);
-        await homePhotoStore('put', blob);  // keep the old photo on a failed decode or write
-        showHomePhoto(blob);
-      } catch (e) { if (FM.toast) FM.toast(e.message || 'Could not save that photo', 3500); }
+        if (version !== homePhotoActionVersion) return;
+        if (await queueHomePhotoWrite('put', blob, version)) showHomePhoto(blob);  // keep the old photo on a failed decode or write
+      } catch (e) { if (version === homePhotoActionVersion && FM.toast) FM.toast(e.message || 'Could not save that photo', 3500); }
     });
     loadHomePhoto();
     window.addEventListener('pagehide', () => showHomePhoto(null));
@@ -2949,7 +2963,8 @@ window.FM = window.FM || {};
       { label: 'Choose profile photo…', action: chooseHomePhoto },
       ...(b.classList.contains('has-photo') ? [{ label: 'Remove profile photo', action: () => {
         homePhotoReadVersion++;
-        homePhotoStore('delete').then(() => showHomePhoto(null)).catch(() => { if (FM.toast) FM.toast('Could not remove that photo', 3500); });
+        const version = ++homePhotoActionVersion;
+        queueHomePhotoWrite('delete', null, version).then(removed => { if (removed) showHomePhoto(null); }).catch(() => { if (version === homePhotoActionVersion && FM.toast) FM.toast('Could not remove that photo', 3500); });
       } }] : []),
       { label: 'Join a friend’s project…', action: () => ui.joinDoor() },
       { label: 'Settings', action: () => { if (FM.settings) (FM.settings.open || FM.settings.toggle)(); } },

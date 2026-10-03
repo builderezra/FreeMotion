@@ -119694,4 +119694,59 @@
     }
   });
 
+  test('Home removing a portrait wins over a replacement still cropping', { item: 'TBD' }, async function () {
+    const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const waitFor = async fn => { for (let i = 0; i < 30; i++) { if (fn()) return; await pause(100); } throw new Error('Timed out waiting for the portrait operation'); };
+    const dbOp = (mode, value) => new Promise((resolve, reject) => {
+      const open = indexedDB.open('fm-home-profile-photo', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('photos');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('photos', mode === 'get' ? 'readonly' : 'readwrite');
+        const req = mode === 'get' ? tx.objectStore('photos').get('avatar')
+          : mode === 'put' ? tx.objectStore('photos').put(value, 'avatar') : tx.objectStore('photos').delete('avatar');
+        let result;
+        req.onsuccess = () => { result = req.result; };
+        tx.oncomplete = () => { db.close(); resolve(result); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      };
+    });
+    const wasOpen = FM.home.isOpen(), toBlob = HTMLCanvasElement.prototype.toBlob;
+    let prior, captured = false, releaseCrop = null;
+    try {
+      prior = await dbOp('get'); captured = true;
+      if (!wasOpen) { FM.home.open(); await pause(300); }
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 8;
+      canvas.getContext('2d').fillRect(0, 0, 8, 8);
+      const source = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      await dbOp('put', source);
+      await FM.home.refreshProfilePhoto();
+      const button = document.getElementById('hm-profile-btn');
+      await waitFor(() => button.classList.contains('has-photo'));
+      HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+        if (this.width !== 192 || this.height !== 192) return toBlob.call(this, callback, type, quality);
+        return toBlob.call(this, blob => { releaseCrop = () => callback(blob); }, type, quality);
+      };
+      const input = document.querySelector('input[aria-label="Choose local profile photo"]');
+      const transfer = new DataTransfer(); transfer.items.add(new File([source], 'new-portrait.png', { type: 'image/png' }));
+      input.files = transfer.files; input.dispatchEvent(new Event('change'));
+      await waitFor(() => !!releaseCrop);
+      button.click();
+      const remove = Array.from(document.querySelectorAll('#ctx-menu .ctx-item')).find(n => n.textContent.trim() === 'Remove profile photo');
+      if (!remove) throw new Error('The current portrait cannot be removed while another is being prepared');
+      remove.click();
+      await waitFor(() => !button.classList.contains('has-photo'));
+      releaseCrop(); releaseCrop = null;
+      await pause(300);
+      if (button.classList.contains('has-photo') || await dbOp('get'))
+        throw new Error('The stale replacement came back after Remove');
+    } finally {
+      HTMLCanvasElement.prototype.toBlob = toBlob;
+      if (releaseCrop) { releaseCrop(); await pause(300); }
+      FM.contextMenu.hide();
+      if (captured) { await dbOp(prior ? 'put' : 'delete', prior); await FM.home.refreshProfilePhoto(); }
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
 })();
