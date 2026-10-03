@@ -23,8 +23,8 @@
  * 📐 …AND TWO DOORS, SINCE #967 BATCH 2 (§23 relaxed, his pick). Asked "is it OK to show one sharing door while the
  * feature is off?", the recommended answer he builds by was yes: one button that only opens the explanation and the
  * switch, with no network and no listeners. So with Labs off there is the phone's person+ on the video (#btn-share on
- * #stage, `.cs-door`, hidden above 700px) and Home's worded Join (#hm-join-btn) — each ONE button with its own click and
- * nothing else — built by syncDoors() from syncLabs(). Everything below still waits for the switch. The suite's rule for
+ * #stage, `.cs-door`, hidden above 700px) and Home's profile menu Join action (#hm-join-btn remains the internal
+ * click target). Everything below still waits for the switch. The suite's rule for
  * it is `doors23` in tests/tests.js.
  *
  * ⚠️ EVERY PIECE OF TEXT THAT CAME FROM ANOTHER DEVICE GOES IN AS `textContent` (§14.9). Names and
@@ -129,6 +129,7 @@ window.FM = window.FM || {};
     const old = U.getProfile();
     const p = { mk: (old && old.mk) || C.signal.b64url(C.signal.randomBytes(16)), name: n, color: c };
     try { localStorage.setItem('fm.profile', JSON.stringify(p)); } catch (e) {}
+    window.dispatchEvent(new Event('fm:profile-change'));
     return p;
   };
 
@@ -2123,9 +2124,9 @@ window.FM = window.FM || {};
     const cc = btn('cs-copycode', 'Copy', function () { copyPlain(code, 'Short code copied', cc); });
     codeRow.appendChild(cc);
     box.appendChild(codeRow);
-    /* #967 batch 2 (J5-4, the owner's half): what the friend DOES with the code, right under it — Home's worded Join is
-       there for them whether or not their feature is on yet. */
-    box.appendChild(el('div', 'cs-relay cs-codehow', 'That’s the short code — they open FreeMotion, tap Join, and type it in.'));
+    /* #967 batch 2 (J5-4, the owner's half): what the friend DOES with the code, right under it.
+       Home's profile menu offers Join whether or not their feature is on yet. */
+    box.appendChild(el('div', 'cs-relay cs-codehow', 'That’s the short code — they open FreeMotion, tap profile, choose Join a friend’s project, and type it in.'));
     /* The relay line's own style (spacing, size, light-Home ink), so the hint needs no CSS of its own. */
     box.appendChild(el('div', 'cs-relay cs-codehint', 'The short code stops working ' + Math.round(codeTtlMs() / 60000) + ' minutes after you close this.'));
     const st = el('div', 'cs-relay', relayLine());
@@ -5029,7 +5030,7 @@ window.FM = window.FM || {};
     const steps = el('ol', 'cl-steps');
     steps.appendChild(el('li', null, 'Tap Copy invite'));
     steps.appendChild(el('li', null, 'Open FreeMotion from your Home Screen'));
-    steps.appendChild(el('li', null, 'On Home, tap Join, then Paste'));
+    steps.appendChild(el('li', null, 'On Home, tap profile → Join a friend’s project, then Paste'));
     lb.appendChild(steps);
     const acts = el('div', 'fm-ask-actions cl-acts');
     acts.appendChild(btn('fm-ask-cancel cl-here', 'Join here in Safari instead', function () {
@@ -5211,9 +5212,8 @@ window.FM = window.FM || {};
     return b;
   }
 
-  /* 📐 #967 BATCH 2 — HOME'S JOIN IS A WORD, AND IT IS ALWAYS THERE (his pick A: "a word needs no learning"; picture
-     tools/design/967/r4-home.jpg). It was a bare ⎇ before the search button, and with the feature off it did not exist at
-     all — a friend who had been sent a code had nowhere to type it (J2-2, J1-5). Select's own pill, right before Select. */
+  /* The Join door remains available with the feature off. Home's new profile menu is its visible
+     route; this existing button remains as an internal click target for older callers. */
   function makeJoinButton() {
     const already = document.getElementById('hm-join-btn');
     if (already) return already;

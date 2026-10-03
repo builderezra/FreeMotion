@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=747">
+<link rel="stylesheet" href="styles.css?v=748">
 <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -680,10 +680,15 @@
            pseudo-element, and the sheen has to be MASKED by the wordmark's own alpha or the band
            would show in the gaps between the letters instead of travelling through them. -->
       <div class="hm-brand"><span class="hm-brand-wm"><span class="hm-brand-halo" aria-hidden="true"></span><img class="hm-brand-img" src="brand-wordmark-m.png?v=1" alt="FreeMotion" decoding="async"><span class="hm-brand-glint" aria-hidden="true"></span></span></div>
-      <button class="hm-search-btn" id="hm-search-btn" aria-label="Search projects" aria-controls="hm-searchbar" aria-expanded="false" title="Search by name or date">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.4" y1="16.4" x2="21.2" y2="21.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      </button>
-
+      <div class="hm-top-actions">
+        <button class="hm-search-btn" id="hm-search-btn" aria-label="Search projects" aria-controls="hm-searchbar" aria-expanded="false" title="Search by name or date">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.4" y1="16.4" x2="21.2" y2="21.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="hm-search-btn hm-profile-btn" id="hm-profile-btn" type="button" aria-label="Local profile and joining friends" title="Local profile and joining friends">
+          <span class="hm-profile-initials" aria-hidden="true"></span>
+          <svg class="hm-profile-person" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="3.1"/><path d="M5.5 19c.5-3.4 3-5.1 6.5-5.1s6 1.7 6.5 5.1"/></svg>
+        </button>
+      </div>
     </div>
     <div id="hm-searchbar" class="hidden" role="search">
       <div class="hm-search-wrap">
@@ -694,13 +699,13 @@
       <div class="hm-search-hint">Vague is fine — “yesterday”, “last week”, “2 aug”, “august”, or part of a name.</div>
     </div>
     <div class="hm-tabs">
-      <button class="hm-tab active" data-tab="projects">Projects</button>
-      <button class="hm-tab" data-tab="templates">Templates</button>
-      <button class="hm-tab" data-tab="elements">Elements</button>
+      <button class="hm-tab active" data-tab="projects"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10 12 3l8.5 7v10h-6v-6h-5v6h-6z"/></svg><span class="hm-tab-label">Projects</span></button>
+      <button class="hm-tab" data-tab="templates"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.3"/><rect x="14" y="3" width="7" height="7" rx="1.3"/><rect x="3" y="14" width="7" height="7" rx="1.3"/><rect x="14" y="14" width="7" height="7" rx="1.3"/></svg><span class="hm-tab-label">Templates</span></button>
+      <button class="hm-tab" data-tab="elements"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M7 3 3 10h8z"/><rect x="3" y="15" width="8" height="6" rx="1.2"/><circle cx="17.5" cy="17.5" r="3.5"/><path d="M15 3h6v6h-6z"/></svg><span class="hm-tab-label">Elements</span></button>
       <!-- Tutorials is deliberately EMPTY for now (v5.50). Ezra: "don't make any tutorials yet, but
            add a tab alongside elements projects etc that says tutorials, we will later make tutorials
            and put them in there." The tab and its empty state exist so the content can drop in. -->
-      <button class="hm-tab" data-tab="tutorials">Tutorials</button>
+      <button class="hm-tab" data-tab="tutorials"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m10 8 6 4-6 4z"/></svg><span class="hm-tab-label">Tutorials</span></button>
     </div>
     <div class="hm-scroll"><div class="hm-grid"></div></div>
     <!-- Geometry, not a font glyph. A text "+" sits wherever the device's resolved font puts its ink
@@ -1098,7 +1103,7 @@
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
   <script src="js/home-arrow.js?v=4"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
-  <script src="js/home.js?v=194"></script>
+  <script src="js/home.js?v=195"></script>
   <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -1154,7 +1159,7 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=17"></script>
+  <script src="js/collab-ui.js?v=18"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->

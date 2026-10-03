@@ -5043,9 +5043,6 @@ body.home-open #toast { z-index: 205; }
 .hm-clear-disc { fill: var(--text-dim); }
 .hm-clear-x { fill: none; stroke: var(--panel); stroke-width: 2; stroke-linecap: round; }
 #hm-search-clear:active .hm-clear-disc { opacity: .7; }
-/* queue 950: on a phone the Select bar loses Cancel — Done in the header already leaves Select, and Cancel wrapped the bar
-   onto a second row. A keyboard-and-mouse screen keeps it. */
-@media (hover: none) { .hm-selcancel { display: none; } }
 .hm-search-hint { max-width: 700px; margin: 0 auto; font-size: 11.5px; color: var(--text-dim); padding: 6px 4px 0; line-height: 1.4; }   /* --text-dim, not --text-faint: at 11px the faint tone is ~3:1 and this line is the ONLY place the date syntax is taught */
 .hm-search-hint.hidden { display: none; }
 /* AM-style pill tabs */
@@ -6918,18 +6915,63 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   .hm-brand-halo         { filter: blur(24px); }
   .hm-brand-halo::after  { filter: blur(26px); }
 }
-/* #967 batch 2 review: Home's Join is there always now, and the wordmark paid for it — its 135 px came down to 98 at
-   375, 83 at 360 and 43 at 320 (measured; unreadable). On a narrow phone the buttons close up instead: 6 px between them
-   (4 at 340 and under), none after the cog, slimmer pills. The 18 px edge stays, so the wordmark still lines up with the
-   tabs under it; 390 (his r4 picture) and the PC are untouched. Here, after the .hm-brand rule above, so its margin wins. */
-@media (max-width: 380px) {
-  .hm-top > .hm-brand, .hm-top > .hm-search-btn, .hm-top > .hm-select-btn { margin-right: 6px; }
-  .hm-top > #hm-settings-btn { margin-right: 0; }
-  .hm-top > .hm-select-btn { padding-left: 10px; padding-right: 10px; }
+/* Home header: balanced outer columns keep the wordmark centred on the SCREEN, even though the
+   right side has two controls and the left only one. Join and idle Select are in menus now. */
+.hm-top { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); column-gap: 4px; padding-top: calc(12px + env(safe-area-inset-top)); }
+.hm-top > #hm-settings-btn { grid-column: 1; justify-self: start; }
+.hm-top > .hm-brand { grid-column: 2; justify-self: center; width: min(135px, calc(100vw - 228px)); flex: none; margin: 0; }
+.hm-top-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 4px; min-width: 0; }
+.hm-top .hm-search-btn { width: 44px; height: 44px; flex: none; margin: 0; }
+.hm-top-actions #hm-join-btn, .hm-top-actions #hm-select-btn { display: none; }
+#hm-profile-btn { overflow: hidden; padding: 0; font-size: 15px; font-weight: 800; letter-spacing: -.03em; }
+#hm-profile-btn .hm-profile-initials { display: none; }
+#hm-profile-btn.has-profile { background: color-mix(in srgb, var(--hm-profile-color) 55%, #16232c); color: #fff; border-color: color-mix(in srgb, var(--hm-profile-color) 65%, #647887); text-shadow: 0 1px 2px #0008; }
+#hm-profile-btn.has-profile .hm-profile-initials { display: block; }
+#hm-profile-btn.has-profile .hm-profile-person { display: none; }
+.hm-top .hm-search-btn:focus-visible, .hm-top-actions .hm-select-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.hm-tab-ico { display: none; }
+@media (max-width: 360px) {
+  .hm-top { padding-left: 14px; padding-right: 14px; }
+  .hm-top > .hm-brand { width: min(135px, calc(100vw - 220px)); }
+  .hm-empty-title { font-size: 15px; letter-spacing: 0; }
 }
-@media (max-width: 340px) {
-  .hm-top > .hm-brand, .hm-top > .hm-search-btn, .hm-top > .hm-select-btn { margin-right: 4px; }
-  .hm-top > .hm-select-btn { padding-left: 8px; padding-right: 8px; font-size: 12px; }
+/* The list itself fades at its top edge only after it has moved. The JS caps this at 32px, so no
+   per-card scroll animation is needed and the first card is fully visible at scrollTop 0. */
+.hm-scroll { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--hm-scroll-fade, 0px), #000 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 var(--hm-scroll-fade, 0px), #000 100%); }
+@media (prefers-reduced-motion: reduce) { .hm-scroll { -webkit-mask-image: none; mask-image: none; } }
+/* With Select entered from a card menu, the phone needs a visible way back out. Put it beside the
+   count; actions have their own row, keeping every touch target large and inside the screen. */
+.hm-selbreak { display: none; }
+@media (max-width: 700px) {
+  /* The reference's four destinations sit in a dock around the existing New orb. The DOM stays
+     navigation-first for keyboard users; flex order places the scroller above that dock on phones. */
+  #home-screen .hm-scroll { order: 2; }
+  #home-screen .hm-tabs { order: 3; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 76px repeat(2, minmax(0, 1fr)); gap: 2px;
+    flex: none; width: 100%; max-width: none; height: calc(50px + env(safe-area-inset-bottom)); margin: 0;
+    padding: 3px 10px calc(2px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line);
+    border-radius: 22px 22px 0 0; background: rgba(7, 17, 24, .90);
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); position: relative; z-index: 3; }
+  #home-screen .hm-tabs .hm-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    min-height: 44px; padding: 0; border: 0; border-radius: 12px; background: transparent; box-shadow: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--text-dim); font-size: 11px; line-height: 1.15; overflow: visible; }
+  #home-screen .hm-tabs .hm-tab:nth-child(1) { grid-column: 1; }
+  #home-screen .hm-tabs .hm-tab:nth-child(2) { grid-column: 2; }
+  #home-screen .hm-tabs .hm-tab:nth-child(3) { grid-column: 4; }
+  #home-screen .hm-tabs .hm-tab:nth-child(4) { grid-column: 5; }
+  #home-screen .hm-tabs .hm-tab.active { color: var(--accent); background: transparent; border: 0; }
+  #home-screen .hm-tab-ico { display: block; flex: none; width: 21px; height: 21px; }
+  #home-screen .hm-tab-label { white-space: nowrap; }
+  #hm-new { bottom: max(20px, env(safe-area-inset-bottom)); z-index: 4; }
+  html[data-home="light"] #home-screen .hm-tabs { background: rgba(250, 253, 255, .94); border-top-color: rgba(16, 30, 52, .13); }
+  html[data-home="light"] #home-screen .hm-tabs .hm-tab { color: #5a6478; }
+  html[data-home="light"] #home-screen .hm-tabs .hm-tab.active { color: #08769b; }
+  .hm-selbar { bottom: calc(50px + env(safe-area-inset-bottom)); padding-bottom: 12px; }
+  .hm-selbar .hm-selcancel { display: inline-flex; align-items: center; order: 1; min-height: 44px; }
+  .hm-selbar .hm-selcount, .hm-selbar .hm-selspacer { order: 0; }
+  .hm-selbar .hm-selbreak { display: block; order: 2; flex-basis: 100%; height: 0; }
+  .hm-selbar .hm-selbtn:not(.hm-selcancel) { order: 3; min-height: 44px; }
+  body.hm-selecting #home-screen .hm-scroll { padding-bottom: 160px; }
+  #home-screen .hm-scroll:has(> .hm-grid > .hm-empty:only-child) { padding-bottom: 0; }
 }
 
 /* ---------------- Home backdrop (v4.88) ----------------

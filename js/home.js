@@ -1821,15 +1821,15 @@ window.FM = window.FM || {};
       }
       exitSelect();
     });
-    /* queue 950: hidden on a phone (styles.css, under hover: none) — the header's Done already leaves Select, and there
-       Cancel wrapped onto a row of its own. A keyboard-and-mouse screen keeps it. */
+    /* Select now starts from a card's menu. Cancel stays available on every screen, including phones,
+       where it sits beside the count above the bulk actions instead of being squeezed off the edge. */
     const cancel = el('button', 'hm-selbtn hm-selcancel', 'Cancel');
     cancel.addEventListener('click', exitSelect);
     bar.appendChild(count); bar.appendChild(el('span', 'hm-selspacer')); bar.appendChild(all);
     // Duplicate is projects-only: neither FM.templates nor FM.elements has one, and a button that
     // throws is worse than a button that isn't there.
     if (K.canDuplicate) bar.appendChild(dup);
-    bar.appendChild(del); bar.appendChild(cancel);
+    bar.appendChild(del); bar.appendChild(cancel); bar.appendChild(el('span', 'hm-selbreak'));
   }
 
   /* Everything a card needs to take part in Select, factored out of projectCard so templates and
@@ -2013,6 +2013,7 @@ window.FM = window.FM || {};
           }
         } },
         pinMenuItem('templates', t.id),
+        { label: 'Select…', action: () => enterSelect(t.id) },
         { sep: true },
         { label: 'Delete template…', danger: true, action: async () => { if (!await FM.ask({ title: 'Delete template', message: 'Delete template "' + t.name + '"?', ok: 'Delete', danger: true })) return; await FM.templates.remove(t.id); render(); } },
       ], { right: r.right, above: r.top });
@@ -2106,6 +2107,7 @@ window.FM = window.FM || {};
         { label: 'Add to the open project', action: use },
         { label: 'Duplicate element', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.elements.duplicate(e.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
         pinMenuItem('elements', e.id),
+        { label: 'Select…', action: () => enterSelect(e.id) },
         { sep: true },
         { label: 'Delete element…', danger: true, action: async () => { if (!await FM.ask({ title: 'Delete element', message: 'Delete element "' + e.name + '"?', ok: 'Delete', danger: true })) return; await FM.elements.remove(e.id); render(); } },
       ], { right: r.right, above: r.top });
@@ -2275,6 +2277,7 @@ window.FM = window.FM || {};
           if (FM.toast) FM.toast(ok ? 'Element saved' : 'Could not save element');
           render();
         } },
+        { label: 'Select…', action: () => enterSelect(p.id) },
         { sep: true },
         { label: 'Delete draft…', danger: true, action: async () => {
           if (!await FM.ask({ title: 'Delete draft', message: 'Delete the draft “' + (p.name || 'Untitled') + '”? ' + (p.ofTemplate ? 'Anything in it that you have not saved back to its template will be lost.' : p.ofElement ? 'Anything in it that you have not saved back to its element will be lost.' : looseT ? 'It was never saved as a template, so everything in it will be lost.' : 'It was never saved as an element, so everything in it will be lost.'), ok: 'Delete', danger: true })) return;   // queue 771: the right noun
@@ -2547,9 +2550,9 @@ window.FM = window.FM || {};
     // and its redraw carries the draw on from where it was, instead of starting it again from the middle of it
     if (FM.homeArrow) FM.homeArrow.clear({ soft: !root.classList.contains('hidden') });
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    // header Select toggle (built once, kept in sync)
+    // Keep the legacy programmatic Select control in sync; cards' menus are the visible entry.
     const selBtn = document.getElementById('hm-select-btn');
-    if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.style.display = ''; selBtn.classList.toggle('on', selectMode); }   // queue 952: Done is lit, like the search button
+    if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.classList.toggle('on', selectMode); }
     // the + means something different on each tab — say which, so it isn't a mystery button
     const newBtn = document.getElementById('hm-new');
     // Nothing to create on the Tutorials tab, so the + hides rather than making a project from a
@@ -2592,8 +2595,8 @@ window.FM = window.FM || {};
       const h = FM.projects.health && FM.projects.health();
       if (h && h.level !== 'ok') {
         const msg = h.level === 'full'
-          ? 'You have ' + h.count + ' projects. Things still run fast — but tap Select to tidy up any you don’t need.'
-          : 'You have ' + h.count + ' projects. Tap Select to bulk-delete or duplicate.';
+          ? 'You have ' + h.count + ' projects. Things still run fast — use a project’s ⋯ menu to select any you don’t need.'
+          : 'You have ' + h.count + ' projects. Use a project’s ⋯ menu to select, bulk-delete or duplicate.';
         grid.appendChild(el('div', 'hm-note', msg));
       }
       list.forEach(p => { shownIds.push(p.id); grid.appendChild(projectCard(p)); });
@@ -2824,6 +2827,33 @@ window.FM = window.FM || {};
       const hint = document.querySelector('.hm-search-hint'); if (hint) hint.classList.remove('hidden');
       if (query) { query = ''; render(); }
     }
+  }
+
+  function refreshHomeProfile() {
+    const b = document.getElementById('hm-profile-btn');
+    if (!b) return;
+    const ui = FM.collab && FM.collab.ui;
+    const p = ui && ui.getProfile ? ui.getProfile() : null;
+    const parts = p ? p.name.trim().split(/\s+/) : [];
+    const initials = parts.length ? (Array.from(parts[0])[0] || '') + (parts.length > 1 ? (Array.from(parts[parts.length - 1])[0] || '') : '') : '';
+    b.classList.toggle('has-profile', !!p);
+    b.querySelector('.hm-profile-initials').textContent = initials.toLocaleUpperCase();
+    if (p) b.style.setProperty('--hm-profile-color', p.color);
+    else b.style.removeProperty('--hm-profile-color');
+    b.setAttribute('aria-label', p ? p.name + ' — local profile and friends' : 'Set up local profile and join friends');
+  }
+
+  function openHomeProfileMenu() {
+    const b = document.getElementById('hm-profile-btn');
+    const ui = FM.collab && FM.collab.ui;
+    if (!b || !ui || !FM.contextMenu) return;
+    const p = ui.getProfile();
+    const r = b.getBoundingClientRect();
+    FM.contextMenu.show(r.left, r.bottom + 4, [
+      { label: p ? 'Edit local profile…' : 'Set up local profile…', action: () => ui.profile({ force: true }).then(refreshHomeProfile) },
+      { label: 'Join a friend’s project…', action: () => ui.joinDoor() },
+      { label: 'Settings', action: () => { if (FM.settings) (FM.settings.open || FM.settings.toggle)(); } },
+    ], { right: r.right, above: r.top });
   }
 
   /* ---------- new-project dialog: every canvas option up front ---------------------------------
@@ -3067,6 +3097,16 @@ window.FM = window.FM || {};
       if (!root) return;
       grid = root.querySelector('.hm-grid');
       initOverpull();
+      const sc = root.querySelector('.hm-scroll');
+      if (sc) {
+        let lastFade = -1;
+        const syncFade = () => {
+          const fade = Math.max(0, Math.min(32, Math.round(sc.scrollTop)));
+          if (fade !== lastFade) { lastFade = fade; sc.style.setProperty('--hm-scroll-fade', fade + 'px'); }
+        };
+        sc.addEventListener('scroll', syncFade, { passive: true });
+        syncFade();
+      }
       root.querySelectorAll('.hm-tab').forEach(b => b.addEventListener('click', () => {
         const changed = tab !== b.dataset.tab;
         // keep select MODE across tabs, drop the SELECTION — see the note in render()
@@ -3086,22 +3126,27 @@ window.FM = window.FM || {};
         if (changed) stampCards('restage');   // the short one — a tab change is not a first open (queue 504)
       }));
       document.getElementById('hm-new').addEventListener('click', newFromTab);   // per-tab: project / template / element
-      // "Select" toggle in the top bar → enter/leave multi-select (bulk delete / duplicate)
+      // The visible Select entry is in each card's ⋯ menu. This hidden control keeps older
+      // programmatic callers working while the selection bar supplies the visible exit.
       const top = root.querySelector('.hm-top');
       if (top && !document.getElementById('hm-select-btn')) {
         const sb = el('button', 'hm-select-btn', 'Select'); sb.id = 'hm-select-btn';
         sb.addEventListener('click', () => { if (selectMode) exitSelect(); else enterSelect(); });
-        top.appendChild(sb);   // the ⋯ used to anchor this; it is gone (v5.24), so these simply append
+        top.querySelector('.hm-top-actions').appendChild(sb);
       }
-      // settings cog — app-wide preferences (sorting, demo mode, defaults). Injected like the
-      // Select button so the markup stays put; sits left of the ⋯ file menu.
+      // Settings is the left anchor; the wordmark and right actions are centred independently.
       if (top && !document.getElementById('hm-settings-btn')) {
         const cg = el('button', 'hm-search-btn', ''); cg.id = 'hm-settings-btn';
         cg.setAttribute('aria-label', 'Settings'); cg.title = 'Settings';
         cg.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';   // same mark as the editor's cog
         cg.addEventListener('click', () => { if (FM.cogTurn) FM.cogTurn(cg); if (FM.settings) (FM.settings.toggle || FM.settings.open)(); });   // queue 762: tap again to close; queue 946: it turns
-        top.appendChild(cg);   // cog is now the last control in the row
+        top.prepend(cg);
       }
+      const profileBtn = document.getElementById('hm-profile-btn');
+      if (profileBtn) profileBtn.addEventListener('click', openHomeProfileMenu);
+      window.addEventListener('fm:profile-change', refreshHomeProfile);
+      window.addEventListener('storage', e => { if (e.key === 'fm.profile') refreshHomeProfile(); });
+      refreshHomeProfile();
       // re-sort / re-render when a setting that affects this screen changes
       if (FM.settings) FM.settings.onChange(() => { if (FM.home.isOpen()) render(); });
       // The home ⋯ is GONE (v5.24). Its only two entries — Import project file and Shortcuts — moved
@@ -3179,6 +3224,7 @@ window.FM = window.FM || {};
     },
     open() {
       if (!root) return;
+      refreshHomeProfile();
       endPush(false);   // coming back before the push finished: unwind it, and never leave the transform on #app
       if (FM.pause) FM.pause(); else FM.playing = false;   // silence playback under the overlay (#r4)
       if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);   // home always shows the top-level project
