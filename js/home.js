@@ -2843,6 +2843,92 @@ window.FM = window.FM || {};
     b.setAttribute('aria-label', p ? p.name + ' — local profile and friends' : 'Set up local profile and join friends');
   }
 
+  // A Home portrait is a small local image, separate from fm.profile. The latter is shared with
+  // collaborators; putting a photo there would send it to peers and inflate every signalling message.
+  const HOME_PHOTO_DB = 'fm-home-profile-photo';
+  let homePhotoURL = null, homePhotoInput = null, homePhotoReadVersion = 0;
+  function homePhotoStore(mode, value) {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) { reject(new Error('Local photo storage is unavailable')); return; }
+      const open = indexedDB.open(HOME_PHOTO_DB, 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('photos');
+      open.onerror = () => reject(open.error || new Error('Could not open local photo storage'));
+      open.onsuccess = () => {
+        const db = open.result;
+        let result = null;
+        try {
+          const tx = db.transaction('photos', mode === 'get' ? 'readonly' : 'readwrite');
+          const req = mode === 'get' ? tx.objectStore('photos').get('avatar')
+            : mode === 'put' ? tx.objectStore('photos').put(value, 'avatar')
+              : tx.objectStore('photos').delete('avatar');
+          req.onsuccess = () => { result = req.result; };
+          tx.oncomplete = () => { db.close(); resolve(result); };
+          tx.onerror = () => { db.close(); reject(tx.error || new Error('Could not save local photo')); };
+          tx.onabort = () => { db.close(); reject(tx.error || new Error('Could not save local photo')); };
+        } catch (e) { db.close(); reject(e); }
+      };
+    });
+  }
+  function showHomePhoto(blob) {
+    const b = document.getElementById('hm-profile-btn'), img = b && b.querySelector('.hm-profile-photo');
+    if (!img) return;
+    if (homePhotoURL) URL.revokeObjectURL(homePhotoURL);
+    homePhotoURL = blob instanceof Blob ? URL.createObjectURL(blob) : null;
+    if (homePhotoURL) img.src = homePhotoURL;
+    else img.removeAttribute('src');
+    b.classList.toggle('has-photo', !!homePhotoURL);
+  }
+  function loadHomePhoto() {
+    const version = ++homePhotoReadVersion;
+    return homePhotoStore('get').then(blob => { if (version === homePhotoReadVersion) showHomePhoto(blob); }).catch(() => {});
+  }
+  function cropHomePhoto(file) {
+    return new Promise((resolve, reject) => {
+      const source = URL.createObjectURL(file), img = new Image();
+      img.onerror = () => { URL.revokeObjectURL(source); reject(new Error('Could not read that photo')); };
+      img.onload = () => {
+        URL.revokeObjectURL(source);
+        try {
+          const side = Math.min(img.naturalWidth, img.naturalHeight);
+          if (!side) throw new Error('That photo has no pixels');
+          const canvas = document.createElement('canvas'); canvas.width = canvas.height = 192;
+          canvas.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2,
+            side, side, 0, 0, 192, 192);
+          canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not prepare that photo')), 'image/jpeg', .8);
+        } catch (e) { reject(e); }
+      };
+      img.src = source;
+    });
+  }
+  function chooseHomePhoto() {
+    if (!homePhotoInput) return;
+    homePhotoInput.value = '';
+    homePhotoInput.click();  // synchronous with the menu tap, so iOS keeps its file-picker gesture
+  }
+  function initHomePhoto() {
+    if (homePhotoInput) return;
+    homePhotoInput = document.createElement('input');
+    homePhotoInput.type = 'file'; homePhotoInput.accept = 'image/*'; homePhotoInput.hidden = true;
+    homePhotoInput.setAttribute('aria-label', 'Choose local profile photo');
+    document.body.appendChild(homePhotoInput);
+    homePhotoInput.addEventListener('change', async () => {
+      const file = homePhotoInput.files && homePhotoInput.files[0];
+      if (!file) return;
+      homePhotoReadVersion++;  // a slow initial read must not replace the user's new choice
+      try {
+        if (file.size > 15 * 1024 * 1024 ||
+            (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)))
+          throw new Error('Choose a JPEG, PNG, WebP or HEIC photo under 15 MB');
+        const blob = await cropHomePhoto(file);
+        await homePhotoStore('put', blob);  // keep the old photo on a failed decode or write
+        showHomePhoto(blob);
+      } catch (e) { if (FM.toast) FM.toast(e.message || 'Could not save that photo', 3500); }
+    });
+    loadHomePhoto();
+    window.addEventListener('pagehide', () => showHomePhoto(null));
+    window.addEventListener('pageshow', e => { if (e.persisted) loadHomePhoto(); });
+  }
+
   function openHomeProfileMenu() {
     const b = document.getElementById('hm-profile-btn');
     const ui = FM.collab && FM.collab.ui;
@@ -2851,6 +2937,11 @@ window.FM = window.FM || {};
     const r = b.getBoundingClientRect();
     FM.contextMenu.show(r.left, r.bottom + 4, [
       { label: p ? 'Edit local profile…' : 'Set up local profile…', action: () => ui.profile({ force: true }).then(refreshHomeProfile) },
+      { label: 'Choose profile photo…', action: chooseHomePhoto },
+      ...(b.classList.contains('has-photo') ? [{ label: 'Remove profile photo', action: () => {
+        homePhotoReadVersion++;
+        homePhotoStore('delete').then(() => showHomePhoto(null)).catch(() => { if (FM.toast) FM.toast('Could not remove that photo', 3500); });
+      } }] : []),
       { label: 'Join a friend’s project…', action: () => ui.joinDoor() },
       { label: 'Settings', action: () => { if (FM.settings) (FM.settings.open || FM.settings.toggle)(); } },
     ], { right: r.right, above: r.top });
@@ -3144,6 +3235,7 @@ window.FM = window.FM || {};
       }
       const profileBtn = document.getElementById('hm-profile-btn');
       if (profileBtn) profileBtn.addEventListener('click', openHomeProfileMenu);
+      initHomePhoto();
       window.addEventListener('fm:profile-change', refreshHomeProfile);
       window.addEventListener('storage', e => { if (e.key === 'fm.profile') refreshHomeProfile(); });
       refreshHomeProfile();
@@ -3374,6 +3466,7 @@ window.FM = window.FM || {};
     _grain: { tile: STATIC_PX, tiles: STATIC_TILES },
   };
   FM.home._render = function (which) { if (which) tab = which; render(); };   // queue 828 suite seam: the render is where the pruning lives
+  FM.home.refreshProfilePhoto = loadHomePhoto;
   FM.home._selectionState = selectionState;   // queue 828
   FM.home._setSelection = setSelectionForTest;   // queue 828
 

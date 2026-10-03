@@ -91,8 +91,8 @@ window.FM = window.FM || {};
     var S = [t.left + t.width / 2 + Math.min(34, t.width * 0.13), t.bottom + 12];
     var H = p.top - 12 - S[1]; if (H < 110) { drop(); return null; }  // no room for a swoop: draw nothing
     var k = Math.max(0.75, Math.min(1.2, H / 250));
-    var a = -52 * Math.PI / 180, u = [Math.cos(a), Math.sin(a)];      // from the +'s centre out to the tip (up-right)
-    var E = [pcx + u[0] * (pr + 12), pcy + u[1] * (pr + 12)];
+    var a = -60 * Math.PI / 180, u = [Math.cos(a), Math.sin(a)];      // from the +'s centre out to the tip (up-right)
+    var E = [pcx + u[0] * (pr + 13.5), pcy + u[1] * (pr + 13.5)];
     var rho = 15 * k, M = [Math.min(vw - 32 - 1.7 * rho, S[0] + H * 0.4), S[1] + H * 0.42];   // the widest point of the swing
     function swoop() {                                               // two soft cubics S->M->E, plus ONE curl at the widest point
       var dx1 = M[0] - S[0], dy1 = M[1] - S[1], c2 = Math.hypot(E[0] - M[0], E[1] - M[1]);

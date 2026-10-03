@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=749">
+<link rel="stylesheet" href="styles.css?v=750">
 <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -685,6 +685,7 @@
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.4" y1="16.4" x2="21.2" y2="21.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
         <button class="hm-search-btn hm-profile-btn" id="hm-profile-btn" type="button" aria-label="Local profile and joining friends" title="Local profile and joining friends">
+          <img class="hm-profile-photo" alt="" aria-hidden="true">
           <span class="hm-profile-initials" aria-hidden="true"></span>
           <svg class="hm-profile-person" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="3.1"/><path d="M5.5 19c.5-3.4 3-5.1 6.5-5.1s6 1.7 6.5 5.1"/></svg>
         </button>
@@ -1102,8 +1103,8 @@
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
-  <script src="js/home-arrow.js?v=4"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
-  <script src="js/home.js?v=195"></script>
+  <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
+  <script src="js/home.js?v=196"></script>
   <script src="js/graph-editor.js?v=18"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>

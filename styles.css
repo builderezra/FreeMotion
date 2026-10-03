@@ -6924,6 +6924,9 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .hm-top .hm-search-btn { width: 44px; height: 44px; flex: none; margin: 0; }
 .hm-top-actions #hm-join-btn, .hm-top-actions #hm-select-btn { display: none; }
 #hm-profile-btn { overflow: hidden; padding: 0; font-size: 15px; font-weight: 800; letter-spacing: -.03em; }
+#hm-profile-btn .hm-profile-photo { display: none; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+#hm-profile-btn.has-photo .hm-profile-photo { display: block; }
+#hm-profile-btn.has-photo .hm-profile-initials, #hm-profile-btn.has-photo .hm-profile-person { display: none; }
 #hm-profile-btn .hm-profile-initials { display: none; }
 #hm-profile-btn.has-profile { background: color-mix(in srgb, var(--hm-profile-color) 55%, #16232c); color: #fff; border-color: color-mix(in srgb, var(--hm-profile-color) 65%, #647887); text-shadow: 0 1px 2px #0008; }
 #hm-profile-btn.has-profile .hm-profile-initials { display: block; }
@@ -6946,28 +6949,48 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   /* Keep the iPhone status area native while placing the three header circles where the phone
      reference has them. The controls retain 44px touch targets; only their spacing changes. */
   #home-screen .hm-top { padding-left: 11px; padding-right: 11px; border-bottom: 0; box-shadow: none; }
-  #home-screen .hm-top > .hm-brand { width: min(128px, calc(100vw - 220px)); }
+  #home-screen .hm-top > .hm-brand { width: min(121px, calc(100vw - 220px)); }
   #home-screen .hm-empty-title { font-size: 15px; letter-spacing: 0; }
-  #home-screen .hm-empty { transform: translateY(clamp(0px, 2vh, 16px)); }
+  #home-screen .hm-empty { transform: translateY(clamp(0px, 1.7vh, 14px)); }
+  #home-screen .hm-empty-mark { font-size: 28px; }
+  /* The photograph uses 36px circles. The buttons remain 44px wide for a reliable phone tap;
+     only their painted discs shrink, so the target and hit area do not fight each other. */
+  #home-screen .hm-top .hm-search-btn { position: relative; overflow: visible; background: none; border: 0; box-shadow: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none; }
+  #home-screen .hm-top .hm-search-btn::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; pointer-events: none;
+    background: linear-gradient(180deg, rgba(188, 230, 239, .14), rgba(188, 230, 239, .045));
+    border: 1px solid var(--line-soft); box-shadow: inset 0 1px 0 var(--glass-rim-soft); }
+  #home-screen .hm-top .hm-search-btn > svg, #home-screen .hm-top .hm-search-btn > span { position: relative; z-index: 1; }
+  #home-screen .hm-top .hm-search-btn > .hm-profile-photo { position: absolute; inset: 4px; width: 36px; height: 36px; z-index: 1; }
+  #home-screen .hm-top .hm-search-btn.on::before { background: linear-gradient(180deg, #7ad6f2, var(--accent)); }
+  #home-screen #hm-profile-btn.has-profile { background: none; border: 0; }
+  #home-screen #hm-profile-btn.has-profile::before { background: color-mix(in srgb, var(--hm-profile-color) 55%, #16232c);
+    border-color: color-mix(in srgb, var(--hm-profile-color) 65%, #647887); }
+  html[data-home="light"] #home-screen .hm-top .hm-search-btn::before { background: rgba(255, 255, 255, .82);
+    border-color: rgba(16, 30, 52, .12); }
+  html[data-home="light"] #home-screen #hm-profile-btn.has-profile::before { background: color-mix(in srgb, var(--hm-profile-color) 55%, #16232c);
+    border-color: color-mix(in srgb, var(--hm-profile-color) 65%, #647887); }
+  html[data-home="dark"][data-theme="glass"] #home-screen .hm-top { background: transparent;
+    -webkit-backdrop-filter: none; backdrop-filter: none; }
   /* The reference's four destinations sit in a dock around the existing New orb. The DOM stays
      navigation-first for keyboard users; flex order places the scroller above that dock on phones. */
   #home-screen .hm-scroll { order: 2; }
   #home-screen .hm-tabs { order: 3; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 76px repeat(2, minmax(0, 1fr)); gap: 2px;
     flex: none; width: 100%; max-width: none; height: calc(50px + env(safe-area-inset-bottom)); margin: 0;
-    padding: 3px 10px calc(2px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line);
+    padding: 8px 10px max(0px, calc(env(safe-area-inset-bottom) - 3px)); border-top: 1px solid var(--line);
     border-radius: 22px 22px 0 0; background: rgba(7, 17, 24, .90);
     -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); position: relative; z-index: 3; }
-  #home-screen .hm-tabs .hm-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  #home-screen .hm-tabs .hm-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
     min-height: 44px; padding: 0; border: 0; border-radius: 12px; background: transparent; box-shadow: none;
-    -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--text-dim); font-size: 11px; line-height: 1.15; overflow: visible; }
+    -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--text-dim); font-size: 9px; line-height: 1.15; overflow: visible; }
   #home-screen .hm-tabs .hm-tab:nth-child(1) { grid-column: 1; }
   #home-screen .hm-tabs .hm-tab:nth-child(2) { grid-column: 2; }
   #home-screen .hm-tabs .hm-tab:nth-child(3) { grid-column: 4; }
   #home-screen .hm-tabs .hm-tab:nth-child(4) { grid-column: 5; }
   #home-screen .hm-tabs .hm-tab.active { color: var(--accent); background: transparent; border: 0; }
-  #home-screen .hm-tab-ico { display: block; flex: none; width: 21px; height: 21px; }
+  #home-screen .hm-tab-ico { display: block; flex: none; width: 20px; height: 20px; }
   #home-screen .hm-tab-label { white-space: nowrap; }
-  #hm-new { bottom: max(20px, env(safe-area-inset-bottom)); z-index: 4; }
+  #hm-new { bottom: max(22px, calc(env(safe-area-inset-bottom) + 2px)); width: 48px; height: 48px; z-index: 4; }
   html[data-home="light"] #home-screen .hm-tabs { background: rgba(250, 253, 255, .94); border-top-color: rgba(16, 30, 52, .13); }
   html[data-home="light"] #home-screen .hm-tabs .hm-tab { color: #5a6478; }
   html[data-home="light"] #home-screen .hm-tabs .hm-tab.active { color: #08769b; }

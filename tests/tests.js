@@ -119346,6 +119346,12 @@
           throw new Error('Home header has a clipped or small control at ' + width + 'px');
         if (getComputedStyle(document.querySelector('#home-screen .hm-top')).borderBottomWidth !== '0px')
           throw new Error('Phone header still has a divider across the reference layout');
+        if (width === 390) {
+          if (Math.abs(brand.width - 121) > 1 || Math.abs(document.getElementById('hm-new').getBoundingClientRect().width - 48) > 1)
+            throw new Error('Phone wordmark or New disc is larger than the saved reference');
+          if (getComputedStyle(document.getElementById('hm-profile-btn'), '::before').top !== '4px')
+            throw new Error('Profile disc lost its small painted circle inside the 44px hit area');
+        }
         const tabs = document.querySelector('.hm-tabs').getBoundingClientRect();
         const sc = document.querySelector('.hm-scroll').getBoundingClientRect();
         if (!(tabs.top >= sc.bottom - 1)) throw new Error('Phone destinations are not below the project list');
@@ -119387,6 +119393,65 @@
       FM.contextMenu.hide();
       if (FM.home._selectionState().selectMode) document.querySelector('#hm-selbar .hm-selcancel').click();
       if (made) await FM.projects.remove(made);
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('Home portrait stays local, persists, and can be removed', { item: 'TBD' }, async function () {
+    const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const waitFor = async fn => { for (let i = 0; i < 30; i++) { if (fn()) return; await pause(100); } throw new Error('Home portrait did not update'); };
+    const dbOp = (mode, value) => new Promise((resolve, reject) => {
+      const open = indexedDB.open('fm-home-profile-photo', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('photos');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('photos', mode === 'get' ? 'readonly' : 'readwrite');
+        const req = mode === 'get' ? tx.objectStore('photos').get('avatar')
+          : mode === 'put' ? tx.objectStore('photos').put(value, 'avatar') : tx.objectStore('photos').delete('avatar');
+        let result;
+        req.onsuccess = () => { result = req.result; };
+        tx.oncomplete = () => { db.close(); resolve(result); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      };
+    });
+    const wasOpen = FM.home.isOpen(), profileBefore = localStorage.getItem('fm.profile');
+    let prior, captured = false;
+    try {
+      prior = await dbOp('get'); captured = true;
+      if (!wasOpen) { FM.home.open(); await pause(300); }
+      const button = document.getElementById('hm-profile-btn');
+      button.click();
+      if (!Array.from(document.querySelectorAll('#ctx-menu .ctx-item')).some(n => n.textContent.trim() === 'Choose profile photo…'))
+        throw new Error('Profile menu has no local photo choice');
+      FM.contextMenu.hide();
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 8;
+      canvas.getContext('2d').fillRect(0, 0, 8, 8);
+      const source = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const input = document.querySelector('input[aria-label="Choose local profile photo"]');
+      const transfer = new DataTransfer(); transfer.items.add(new File([source], 'portrait.png', { type: 'image/png' }));
+      input.files = transfer.files; input.dispatchEvent(new Event('change'));
+      await waitFor(() => button.classList.contains('has-photo'));
+      const image = button.querySelector('.hm-profile-photo');
+      await image.decode();
+      await atPhoneWidth(async () => {
+        const rect = image.getBoundingClientRect();
+        if (image.naturalWidth !== 192 || Math.abs(rect.width - 36) > 1 || Math.abs(rect.height - 36) > 1)
+          throw new Error('Local portrait did not render inside the phone-sized profile circle');
+      }, 390);
+      const saved = await dbOp('get');
+      if (!(saved instanceof Blob) || saved.type !== 'image/jpeg' || saved.size > 100000)
+        throw new Error('Home photo was not stored as a small JPEG');
+      if (localStorage.getItem('fm.profile') !== profileBefore)
+        throw new Error('Home photo was inserted into the collaboration profile');
+      button.click();
+      const remove = Array.from(document.querySelectorAll('#ctx-menu .ctx-item')).find(n => n.textContent.trim() === 'Remove profile photo');
+      if (!remove) throw new Error('Profile menu has no remove-photo action');
+      remove.click();
+      await waitFor(() => !button.classList.contains('has-photo'));
+      if (await dbOp('get')) throw new Error('Removed photo remains in local storage');
+    } finally {
+      FM.contextMenu.hide();
+      if (captured) { await dbOp(prior ? 'put' : 'delete', prior); await FM.home.refreshProfilePhoto(); }
       if (!wasOpen && FM.home.isOpen()) FM.home.close();
     }
   });
