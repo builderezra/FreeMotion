@@ -1657,6 +1657,9 @@ window.FM = window.FM || {};
       sanitizeKeyframes(l, 0);
     });
   }
+  function hasInvalidLayerEntries(layers) {
+    return layers.some(l => !l || typeof l !== 'object' || Array.isArray(l));
+  }
   // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a
   // re-implementation of it in the test (which would only ever agree with itself).
   FM.storage._sanitizeEffects = sanitizeEffects;
@@ -1700,7 +1703,7 @@ window.FM = window.FM || {};
     } catch (e) { return []; }
   };
   FM.storage.applyScene = async function (obj) {
-    if (!obj || !obj.project || typeof obj.project !== 'object' || Array.isArray(obj.project) || !Array.isArray(obj.layers)) return false;
+    if (!obj || !obj.project || typeof obj.project !== 'object' || Array.isArray(obj.project) || !Array.isArray(obj.layers) || hasInvalidLayerEntries(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
     clampProjectDims(obj.project);
     sanitizeImportedLayers(obj.layers);
@@ -1986,6 +1989,7 @@ window.FM = window.FM || {};
     if (typeof obj.project !== 'object' || Array.isArray(obj.project)) return 'That project file has invalid canvas settings — it may be corrupt or only half-downloaded.';
     if (!Array.isArray(obj.layers)) return 'That project file has no layers list — it may be truncated or only half-downloaded.';
     if (obj.layers.length > 2000) return 'That project has ' + obj.layers.length + ' layers, which is more than FreeMotion will open.';
+    if (hasInvalidLayerEntries(obj.layers)) return 'That project file has an invalid layer — it may be corrupt or only half-downloaded.';
     return null;
   };
 

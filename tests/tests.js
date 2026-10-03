@@ -119149,4 +119149,21 @@
     } finally { FM.projects = oldProjects; FM.toast = oldToast; }
   });
 
+  test('690 invalid layer entry is refused before import creates a project', { item: 'TBD' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      for (const layers of [[null], [42], [[]]]) {
+        const file = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers };
+        if (!FM.storage.sceneFileProblem(file) || await FM.storage.importObject(file) !== false)
+          throw new Error('Invalid layer passed import validation');
+        if (await FM.storage.applyScene(file) !== false)
+          throw new Error('Direct scene import accepted an invalid layer');
+      }
+      if (created) throw new Error('Import created ' + created + ' junk projects');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
 })();
