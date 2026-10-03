@@ -118170,5 +118170,26 @@
       throw new Error('Colour Wheels changed alpha');
   });
 
+  test('690 HSL Mixer changes independent colour bands and preserves neutrals', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('hslmixer');
+    if (!reg || reg.category !== 'color' || reg.params.filter(p => p.type === 'range').length !== 24 ||
+        !FM.fxRegistry.gates().adjOk.includes('hslmixer')) throw new Error('HSL Mixer registration is incomplete');
+    const fx = FM.fxRegistry.makeInstance('hslmixer');
+    const original = new Uint8ClampedArray([255, 0, 0, 201, 0, 255, 0, 202, 0, 0, 255, 203, 100, 100, 100, 204]);
+    const neutral = original.slice();
+    FM._pixelFx.hslmixer(neutral, 4, 1, fx.params, 0);
+    if (neutral.some((v, i) => v !== original[i])) throw new Error('Neutral HSL Mixer changed pixels');
+    Object.assign(fx.params, { hRed: 60, lGreen: 60, sBlue: -100 });
+    const result = original.slice(), adjustment = original.slice();
+    FM._pixelFx.hslmixer(result, 4, 1, fx.params, 0);
+    FM._applyPixelFx(adjustment, fx, 0, 4, 1);
+    if (result.some((v, i) => v !== adjustment[i])) throw new Error('HSL Mixer differs on an adjustment layer');
+    if (result[1] <= 0 || result[4] <= 0 || result[6] <= 0 || result[8] === 0 && result[10] === 255)
+      throw new Error('Hue, luminance or saturation view failed to change its colour band');
+    if (result[12] !== 100 || result[13] !== 100 || result[14] !== 100 ||
+        result[3] !== 201 || result[7] !== 202 || result[11] !== 203 || result[15] !== 204)
+      throw new Error('HSL Mixer changed neutral RGB or alpha');
+  });
+
 
 })();

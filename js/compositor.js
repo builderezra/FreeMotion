@@ -1348,6 +1348,14 @@ window.FM = window.FM || {};
       { key: 'blending', label: 'Blending', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'keepBrightness', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    { type: 'hslmixer', label: 'HSL Mixer', desc: 'Retune all eight colour ranges separately in Hue, Saturation and Luminance views.', params: (() => {
+      const bands = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
+      const params = [{ key: 'view', label: 'View', options: [[0, 'Hue'], [1, 'Saturation'], [2, 'Luminance']], def: 0 }];
+      [['h', 'Hue', '°'], ['s', 'Saturation', '%'], ['l', 'Luminance', '%']].forEach(([prefix, label, unit]) => {
+        bands.forEach(band => params.push({ key: prefix + band, label: band, min: -100, max: 100, step: 1, def: 0, unit }));
+      });
+      return params;
+    })() },
     // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
@@ -3693,7 +3701,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, colourwheels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -4237,7 +4245,7 @@ window.FM = window.FM || {};
   /* chromaticaberration LEFT this list in v15.83 (queue 798): its offset now grows from the FRAME centre (the lens is the
      frame, so a layer in the corner fringes more than one in the middle), and a centre-based kernel cannot draw the same
      picture on a cropped plate — test 692 says so, and said so. It renders on the full plate, like bulge and fisheye. */
-  const CROP_FX = Object.assign(Object.create(null), { levels: 1, colourwheels: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
+  const CROP_FX = Object.assign(Object.create(null), { levels: 1, colourwheels: 1, hslmixer: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
   FM._cropFx = CROP_FX;
   /* BOUNDED kernels that can ALSO take the cropped readback (#692 round 7). A bounded kernel needs its box, so on the
    * crop path it gets the box measured on the cropped buffer (fxBounds on a buffer 1/50th the size). Only kernels whose
@@ -5097,6 +5105,58 @@ window.FM = window.FM || {};
         if (!d[i + 3]) continue;
         const y = Math.max(0, Math.min(255, Math.round(d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722)));
         d[i] += table[0][y]; d[i + 1] += table[1][y]; d[i + 2] += table[2][y];
+      }
+    },
+    hslmixer: function (d, W, H, p, t) {
+      const names = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
+      const centres = [0, 30, 60, 120, 180, 240, 280, 320];
+      const values = [[], [], []], prefix = ['h', 's', 'l'];
+      let active = false;
+      for (let mode = 0; mode < 3; mode++) for (let band = 0; band < 8; band++) {
+        const raw = p[prefix[mode] + names[band]];
+        const v = raw == null ? 0 : Math.max(-100, Math.min(100, FM.evalProp(raw, t)));
+        values[mode][band] = v;
+        if (v !== 0) active = true;
+      }
+      if (!active) return;
+      const lut = [new Float32Array(360), new Float32Array(360), new Float32Array(360)];
+      for (let degree = 0; degree < 360; degree++) {
+        let sum = 0, h = 0, s = 0, l = 0;
+        for (let band = 0; band < 8; band++) {
+          const delta = Math.abs(degree - centres[band]);
+          const distance = Math.min(delta, 360 - delta);
+          const edge = Math.max(0, 1 - distance / 50);
+          const weight = edge * edge;
+          sum += weight;
+          h += weight * values[0][band]; s += weight * values[1][band]; l += weight * values[2][band];
+        }
+        if (sum > 0) { lut[0][degree] = h / sum; lut[1][degree] = s / sum; lut[2][degree] = l / sum; }
+      }
+      const offsets = [0, 8, 4];
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b), chroma = max - min;
+        if (chroma === 0) continue;  // a grey pixel belongs to no colour range
+        let hue;
+        if (max === r) hue = 60 * (((g - b) / chroma) % 6);
+        else if (max === g) hue = 60 * ((b - r) / chroma + 2);
+        else hue = 60 * ((r - g) / chroma + 4);
+        if (hue < 0) hue += 360;
+        let light = (max + min) / 2;
+        let sat = chroma / (1 - Math.abs(2 * light - 1));
+        const gate = clamp01(sat * 4); // low-saturation skin and neutrals are less affected
+        const lookup = Math.round(hue) % 360;
+        const dh = lut[0][lookup] * gate, ds = lut[1][lookup] * gate, dl = lut[2][lookup] * gate;
+        if (dh === 0 && ds === 0 && dl === 0) continue;
+        hue = (hue + dh + 360) % 360;
+        sat = clamp01(sat * (1 + ds / 100));
+        light = clamp01(light + dl / 200);
+        const amp = sat * Math.min(light, 1 - light), turn = hue / 30;
+        for (let c = 0; c < 3; c++) {
+          const k = (offsets[c] + turn) % 12;
+          d[i + c] = (light - amp * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255;
+        }
       }
     },
     /* Lens Distortion — the real thing: a radial polynomial r' = r(1 + k1·r² + k2·r⁴), sampled
@@ -17341,7 +17401,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Per-pixel post-fx that an adjustment layer can also apply to everything beneath it (matching
   // the layer-level draw* math exactly). Geometric post-fx (pixelate/mirror/rgbsplit) aren't done
   // here — they need a geometry pass, so they only apply per-layer for now.
-  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1, colourwheels: 1,
+  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1, colourwheels: 1, hslmixer: 1,
     /* #482 polish 5.1 — the PIXEL_FX colour grades that are point ops (fx-registry ADJ_OK says which and why the rest wait).
        applyPixelFx hands each straight to its PIXEL_FX kernel over the snapshot, the very function the clip itself runs. */
     exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
