@@ -118836,4 +118836,24 @@
     if (seek[0] !== fresh[0]) throw new Error('Seek reused a stale temporal grade');
   });
 
+  test('690 Spill Suppressor targets the selected screen hue and preserves matte', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('spillsuppressor'), fn = FM._FX_TABLES.PIXEL_FX.spillsuppressor;
+    if (!reg || reg.category !== 'matte' || !fn || !FM._postFxTypes().includes('spillsuppressor'))
+      throw new Error('Spill Suppressor is not available in Keying');
+    const source = [30, 150, 40, 128, 180, 70, 30, 255, 20, 40, 180, 128, 0, 180, 0, 0];
+    const green = new Uint8ClampedArray(source);
+    fn(green, 4, 1, { color: '#00c23c', amount: 100, range: 0 }, 0);
+    if (!(green[1] < source[1]) || green[0] !== source[0] || green[4] !== source[4] ||
+        green[10] !== source[10] || green[12] !== source[12] || green[3] !== 128 || green[7] !== 255)
+      throw new Error('Green spill removal changed unrelated colour or alpha');
+    const blue = new Uint8ClampedArray(source);
+    fn(blue, 4, 1, { color: '#1e3cff', amount: 100, range: 0 }, 0);
+    if (!(blue[10] < source[10]) || blue[1] !== source[1] || blue[11] !== 128)
+      throw new Error('Blue screen did not target blue spill');
+    const edges = new Uint8ClampedArray(source);
+    fn(edges, 4, 1, { color: '#00c23c', amount: 100, range: 0, area: 1 }, 0);
+    if (!(edges[1] < source[1]) || edges[5] !== source[5])
+      throw new Error('Soft-edge mode changed the opaque interior');
+  });
+
 })();

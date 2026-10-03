@@ -764,6 +764,11 @@ window.FM = window.FM || {};
       { key: 'smooth', label: 'Temporal smoothing', min: 0, max: 2, step: 0.05, def: 0.25, unit: 's' },
       { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    { type: 'spillsuppressor', label: 'Spill Suppressor', desc: 'Reduce a screen-colour cast after keying, without changing the matte. Put it after the key in the effect stack.', color: true, defColor: '#00c23c', colorLabel: 'Screen colour', params: [
+      { key: 'amount', label: 'Remove spill', min: 0, max: 100, step: 1, def: 60, unit: '%' },
+      { key: 'range', label: 'Hue range', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'area', label: 'Area', options: [[0, 'Whole subject'], [1, 'Soft edges only']], def: 0 },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3919,7 +3924,7 @@ window.FM = window.FM || {};
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
     touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, autograde: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
-    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
+    timewarp: 1, chromakeypro: 1, spillsuppressor: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
   Object.setPrototypeOf(POSTFX, null);
@@ -6184,6 +6189,34 @@ window.FM = window.FM || {};
      * subject. This converts to YCbCr and throws Y away: chroma-only distance means a dark green and
      * a hot green are the same colour, which is the entire point. Despill fixes the green rim that
      * every key leaves behind, and edge-desaturate takes the remaining fringe toward neutral. */
+    spillsuppressor: function (d, W, H, p, t) {
+      const amount = clamp01((p.amount == null ? 60 : FM.evalProp(p.amount, t)) / 100);
+      if (amount <= 0) return;
+      const key = hexToRGB(p.color == null ? '#00c23c' : FM.evalProp(p.color, t));
+      const kc = key[1] >= key[0] && key[1] >= key[2] ? 1 : (key[2] >= key[0] ? 2 : 0);
+      const other1 = (kc + 1) % 3, other2 = (kc + 2) % 3;
+      const keyCb = -0.169 * key[0] - 0.331 * key[1] + 0.5 * key[2];
+      const keyCr = 0.5 * key[0] - 0.419 * key[1] - 0.081 * key[2];
+      const keyLength = Math.hypot(keyCb, keyCr);
+      if (keyLength < 1) return;
+      const range = clamp01((p.range == null ? 50 : FM.evalProp(p.range, t)) / 100) * 0.98;
+      const edgesOnly = Math.round(p.area == null ? 0 : FM.evalProp(p.area, t)) === 1;
+      for (let i = 0; i < d.length; i += 4) {
+        const alpha = d[i + 3];
+        if (!alpha) continue;
+        const excess = d[i + kc] - Math.max(d[i + other1], d[i + other2]);
+        if (excess <= 0) continue;
+        const cb = -0.169 * d[i] - 0.331 * d[i + 1] + 0.5 * d[i + 2];
+        const cr = 0.5 * d[i] - 0.419 * d[i + 1] - 0.081 * d[i + 2];
+        const length = Math.hypot(cb, cr);
+        if (length < 1) continue;
+        const similarity = (cb * keyCb + cr * keyCr) / (length * keyLength);
+        if (similarity <= range) continue;
+        let weight = amount * Math.min(1, (similarity - range) / (1 - range));
+        if (edgesOnly) weight *= Math.min(1, 2 * (1 - alpha / 255));
+        d[i + kc] -= excess * weight;
+      }
+    },
     chromakeypro: function (d, W, H, p, t) {
       const k = hexToRGB(p.color || '#00c23c');
       const kcb = -0.169 * k[0] - 0.331 * k[1] + 0.5 * k[2];

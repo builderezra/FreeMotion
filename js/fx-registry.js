@@ -96,7 +96,7 @@ window.FM = window.FM || {};
     // batch 33 (manga lines + the HSL panel)
     speedlines: 'proc', hslbands: 'color',
     // batch 34 (the scan bar + a key that survives bad lighting)
-    timewarp: 'stylize', chromakeypro: 'matte',
+    timewarp: 'stylize', chromakeypro: 'matte', spillsuppressor: 'matte',
     // batch 35 (the compositing shot)
     lightwrap: 'matte',
     // batch 36 (disintegrate + tape damage)
@@ -324,6 +324,7 @@ window.FM = window.FM || {};
     bwmixer: 'Choose how reds, yellows, greens, cyans, blues and magentas turn into light or dark grey.',
     channelmixer: 'Mix red, green and blue into each output colour, with a separate constant per output.',
     autograde: 'Sets levels, contrast or colour balance from the picture and smooths changes while it plays.',
+    spillsuppressor: 'Reduces the screen-colour cast after a key. Use Whole subject or limit it to soft alpha edges.',
     sepia: 'Warm monochrome — the old-photograph tone.',
     invert: 'Flips every colour to its opposite, like a film negative.',
     gamma: 'Reshapes the midtones without moving black or white.',
@@ -576,6 +577,7 @@ window.FM = window.FM || {};
     wrapshift:         ['offset', 'wrap around', 'loop shift'],
     objectblur:        ['echo keyframes', 'ghost trail', 'motion trail'],
     chromakeypro:      ['advanced chroma key', 'green screen', 'key spill'],
+    spillsuppressor:   ['despill', 'green spill', 'blue spill'],
     smoothedges:       ['feather', 'soften edge'],
     stretchseg:        ['stretch axis'],
     shake:             ['auto shake', 'camera shake'],
