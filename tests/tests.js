@@ -119220,4 +119220,27 @@
     }
   });
 
+  test('690 Light Glow and Soft Glow reuse their luminance planes across frames', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
+    if (!P.lightglow || !P.softglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
+    const W = 19, H = 13, params = { amount: 0.8, radius: 6, threshold: 35, color: '#ff8844' };
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 3; y < 10; y++) for (let x = 5; x < 14; x++) {
+        const i = (y * W + x) * 4; d[i] = 240; d[i + 1] = 180; d[i + 2] = 120; d[i + 3] = 255;
+      }
+      return d;
+    }
+    const start = info();
+    const first = source(); P.lightglow(first, W, H, params, 0);
+    const warmed = info();
+    const middle = source(); P.softglow(middle, W, H, params, 0);
+    const again = source(); P.lightglow(again, W, H, params, 0);
+    const end = info();
+    if (warmed.pixels < W * H || end.uses !== start.uses + 3 || end.allocations !== warmed.allocations)
+      throw new Error('Glow reallocated its full-frame planes after they were warmed');
+    if (first.some((value, i) => value !== again[i]))
+      throw new Error('Sharing glow planes changed the result on a later frame');
+  });
+
 })();
