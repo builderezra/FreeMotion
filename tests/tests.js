@@ -118191,5 +118191,20 @@
       throw new Error('HSL Mixer changed neutral RGB or alpha');
   });
 
+  test('690 Drums category renders six distinct playable sounds', { item: 'TBD' }, async function () {
+    const ids = ['drum-kick', 'drum-snare', 'drum-clap', 'drum-hat', 'drum-rimshot', 'drum-roll'];
+    for (const id of ids) {
+      const def = FM.sfx.byId(id);
+      if (!def || def.cat !== 'Drums') throw new Error(id + ' is missing from Drums');
+      const buffer = await FM.sfx.renderBuffer(def);
+      if (!buffer || buffer.length < def.dur * buffer.sampleRate)
+        throw new Error(id + ' did not render its complete clip');
+      const samples = buffer.getChannelData(0);
+      let peak = 0;
+      for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+      if (peak < 0.1 || peak > 1) throw new Error(id + ' is silent or clipped (' + peak + ')');
+    }
+  });
+
 
 })();

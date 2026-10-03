@@ -84,6 +84,34 @@ window.FM = window.FM || {};
     param.exponentialRampToValueAtTime(Math.max(1e-4, to), t0 + secs);
   }
 
+  // Short drum voices reused by the one-shots and the two fills below. Every
+  // voice is scheduled inside its own OfflineAudioContext, so Hear and Add agree.
+  function drumKick(ctx, at, out, power) {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    expTo(o.frequency, at, 150, 47, 0.28);
+    const g = ctx.createGain(); env(g.gain, at, [[0, 0.95 * power], [0.13, 0.55 * power], [0.43, 0]]);
+    o.connect(g); g.connect(out); o.start(at); o.stop(at + 0.44);
+    const click = ctx.createBufferSource(); click.buffer = noiseBuffer(ctx, 0.018, 'white');
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+    const cg = ctx.createGain(); env(cg.gain, at, [[0, 0.23 * power], [0.017, 0]]);
+    click.connect(hp); hp.connect(cg); cg.connect(out); click.start(at); click.stop(at + 0.018);
+  }
+  function drumSnare(ctx, at, out, power) {
+    const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.24, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2100; bp.Q.value = 0.8;
+    const ng = ctx.createGain(); env(ng.gain, at, [[0, 0.85 * power], [0.04, 0.55 * power], [0.23, 0]]);
+    n.connect(bp); bp.connect(ng); ng.connect(out); n.start(at); n.stop(at + 0.24);
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = 175;
+    const og = ctx.createGain(); env(og.gain, at, [[0, 0.27 * power], [0.08, 0]]);
+    o.connect(og); og.connect(out); o.start(at); o.stop(at + 0.08);
+  }
+  function drumHat(ctx, at, out, power) {
+    const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.15, 'white');
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6800;
+    const g = ctx.createGain(); env(g.gain, at, [[0, 0.85 * power], [0.07, 0.22 * power], [0.14, 0]]);
+    n.connect(hp); hp.connect(g); g.connect(out); n.start(at); n.stop(at + 0.15);
+  }
+
   /* ---- the catalogue ---------------------------------------------------------------------------
    * Each entry renders itself into an OfflineAudioContext. `dur` is the whole tail, so a clip lands in
    * the timeline at its real length — a whoosh cut off by its own clip length is the first thing that
@@ -164,6 +192,34 @@ window.FM = window.FM || {};
         o.start(t0); o.stop(t0 + d);
       },
     },
+    // ---------- drums ----------
+    { id: 'drum-kick', name: 'Kick', cat: 'Drums', level: 0.85, dur: 0.48,
+      render(ctx, t0, d, out) { drumKick(ctx, t0, out, 1); } },
+    { id: 'drum-snare', name: 'Snare', cat: 'Drums', level: 0.8, dur: 0.3,
+      render(ctx, t0, d, out) { drumSnare(ctx, t0, out, 1); } },
+    { id: 'drum-clap', name: 'Clap', cat: 'Drums', level: 0.75, dur: 0.38,
+      render(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.65;
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0.75], [0.02, 0], [0.035, 0.6], [0.06, 0], [0.075, 0.9], [0.13, 0.45], [d, 0]]);
+        n.connect(bp); bp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+      } },
+    { id: 'drum-hat', name: 'Hi-hat', cat: 'Drums', level: 0.5, dur: 0.2,
+      render(ctx, t0, d, out) { drumHat(ctx, t0, out, 1); } },
+    { id: 'drum-rimshot', name: 'Ba-dum-tss', cat: 'Drums', level: 0.82, dur: 0.9,
+      render(ctx, t0, d, out) {
+        drumKick(ctx, t0, out, 0.65); drumKick(ctx, t0 + 0.23, out, 0.85);
+        drumHat(ctx, t0 + 0.53, out, 1.1);
+      } },
+    { id: 'drum-roll', name: 'Drumroll', cat: 'Drums', level: 0.82, dur: 1.55,
+      render(ctx, t0, d, out) {
+        for (let i = 0; i < 12; i++) {
+          const at = i * 0.105 - i * i * 0.0025;
+          drumSnare(ctx, t0 + at, out, 0.3 + i * 0.045);
+        }
+        drumSnare(ctx, t0 + 1.1, out, 1);
+      } },
     // ---------- build ----------
     {
       id: 'riser', name: 'Riser', cat: 'Build', dur: 2.2,
