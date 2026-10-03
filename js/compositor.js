@@ -13805,7 +13805,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const cx = eb ? eb.x + eb.w / 2 : W / 2, cy = eb ? eb.y + eb.h / 2 : H / 2;
         let rot = 0;
         if (face) {   // the tangent of (cos a, ey·sin a), the way the orbit is turning
-          const dir = spd < 0 ? -1 : 1, tx = -Math.sin(a) * dir, ty = ey * Math.cos(a) * dir;
+          let dir = spd < 0 ? -1 : 1;
+          if (spd === 0 && FM.isAnimated(p.speed) && tl > 0) {
+            // A stopped orbit keeps facing the direction it last travelled. Look back through
+            // keyframe intervals (including loop passes), so a long zero hold does not flip it.
+            const speed = p.speed, kf = speed.kf || [], start = t - tl, marks = [start, t];
+            const mark = at => { if (at > start && at < t) marks.push(at); };
+            kf.forEach(key => mark(key.t));
+            if (speed.loopMode && speed.loopMode !== 'none' && kf.length > 1) {
+              const lo = kf[0].t, hi = kf[kf.length - 1].t, span = hi - lo;
+              if (span > 0 && t > hi) {
+                const pass = Math.floor((t - lo) / span);
+                for (let n = Math.max(1, pass - 2); n <= pass; n++) {
+                  kf.forEach(key => mark(n % 2 && speed.loopMode === 'pingpong'
+                    ? lo + n * span + hi - key.t : key.t + n * span));
+                }
+              }
+            }
+            marks.sort((x, y) => y - x);
+            for (let i = 0; i + 1 < marks.length; i++) {
+              const end = marks[i], begin = marks[i + 1];
+              if (!(end > begin)) continue;
+              const before = end - Math.min(0.00001, (end - begin) / 2);
+              let rate = FM.evalProp(speed, before);
+              if (rate === 0) rate = FM.evalProp(speed, (begin + end) / 2);
+              if (rate < 0 || rate > 0) { dir = rate < 0 ? -1 : 1; break; }
+            }
+          }
+          const tx = -Math.sin(a) * dir, ty = ey * Math.cos(a) * dir;
           rot = Math.abs(tx) + Math.abs(ty) > 1e-9 ? Math.atan2(ty, tx) : 0;
         }
         const sc = depth > 0 ? 1 - 0.7 * depth * (1 - Math.sin(a)) / 2 : 1;
