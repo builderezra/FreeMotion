@@ -114579,6 +114579,26 @@
     [0.4, 2.6].forEach(t => { const e = at(all, t, bar), h = at(all, t, bar, 0.5); if (Math.hypot(e.cx - h.cx, e.cy - h.cy) > 1.2 || Math.abs(e.ang - h.ang) > 3 || Math.abs(e.n - h.n) > e.n * 0.15) throw new Error('at ' + t + ' s the half-size preview draws the orbiting bar at ' + h.cx.toFixed(1) + ',' + h.cy.toFixed(1) + ' (' + h.ang.toFixed(1) + ' deg, ' + Math.round(h.n) + ' px) against the export at ' + e.cx.toFixed(1) + ',' + e.cy.toFixed(1) + ' (' + e.ang.toFixed(1) + ' deg, ' + Math.round(e.n) + ' px)'); });
   });
 
+  /* #690: Orbit's Speed is a rate. With a clip whose effect clock starts at composition time 3,
+     a 0.5 → 0 rev/s ramp over two seconds carries half a revolution, then stays there. */
+  test('690 Orbit keyframed Speed holds its reached angle when the rate stops', { item: 'TBD' }, function () {
+    const orbit = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.orbit;
+    if (!orbit || !FM.integrateProp) throw new Error('Orbit or the rate integrator is unavailable');
+    const at = (speed, t, local) => {
+      let move = null;
+      const dst = { save() {}, translate(x, y) { move = [x, y]; }, drawImage() {}, restore() {} };
+      orbit({}, dst, 200, 160, { x: 80, y: 60, w: 20, h: 20 }, { radius: 40, speed }, t, local, null, 1);
+      if (!move) throw new Error('Orbit did not move its layer');
+      return move;
+    };
+    const same = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.01;
+    const ramp = { kf: [{ t: 3, v: 0.5, e: 'linear' }, { t: 5, v: 0, e: 'linear' }] };
+    const steady = at(0.25, 5, 2), stopped = at(ramp, 5, 2), later = at(ramp, 6, 3);
+    if (!same(steady, [-40, 0])) throw new Error('control: static 0.25 rev/s did not make half a revolution');
+    if (!same(stopped, steady)) throw new Error('the speed ramp rewound Orbit instead of carrying its half revolution');
+    if (!same(later, stopped)) throw new Error('Orbit moved after keyframed Speed reached zero');
+  });
+
   /* 2.2 DRIFT — Wrap around frame. A 30x20 box starting at x 85..115 in a 200-wide frame, drifting right at 120 px/s: it has
      wholly left the right edge by 0.96 s. Wrapped, it comes straight back in at the left — never gone, never doubled. */
   test('482 2.2 Drift - Wrap around frame brings the layer back in at the far edge, like a ticker, and a ticker wider than the frame scrolls all of itself', { item: '482', budgetMs: 60000 }, function () {

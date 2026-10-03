@@ -13789,7 +13789,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     orbit: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const k = ps || 1;
       const r = fparam(p, 'radius', 80, t) * k, spd = fparam(p, 'speed', 0.5, t);
-      const a = 2 * Math.PI * spd * tl + (p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180);   // START ANGLE (queue 904); 0 = the old orbit exactly
+      // A keyframed Speed carries its earlier revolutions forward. At zero it holds the reached angle;
+      // an unkeyframed Speed keeps the original multiplication, including negative and zero values.
+      const revs = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : spd * tl;
+      const a = 2 * Math.PI * revs + (p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180);   // START ANGLE (queue 904); 0 = the old orbit exactly
       /* ELLIPSE, DEPTH, FACE DIRECTION OF TRAVEL (#482 polish 2.2). Ellipse scales the orbit's height (100 = the circle, 0 = a
          straight side-to-side pass, 200 = twice as tall); Depth shrinks the layer toward the TOP of its path, the far side of an
          orbit tilted away from you (at 100 it is 0.3 of its size there, full size at the bottom); Face direction of travel turns
