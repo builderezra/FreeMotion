@@ -119271,6 +119271,32 @@
     }
   });
 
+  test('690 the completed import keeps its missing-footage warning visible', { item: 'TBD' }, async function () {
+    const priorId = FM.projects.currentId(), oldToast = FM.toast, said = [], made = [];
+    try {
+      FM.toast = function (message) { said.push(String(message)); };
+      const clip = FM.makeLayer('video', { name: 'Unpacked holiday clip', start: 0, duration: 2 });
+      clip.name = 'Unpacked holiday clip';
+      const project = { name: 'FX690 MISSING IMPORT', width: 320, height: 240, duration: 2, fps: 30 };
+      if (await FM.storage.importObject({ app: 'freemotion', project, layers: [clip], media: {} }) !== true)
+        throw new Error('Valid media-less project did not import');
+      made.push(FM.projects.currentId());
+      const finalWarning = said[said.length - 1] || '';
+      if (!finalWarning.includes('Unpacked holiday clip') || !finalWarning.includes('no footage'))
+        throw new Error('Import success replaced the missing-footage warning: ' + finalWarning);
+      said.length = 0;
+      if (await FM.storage.importObject({ app: 'freemotion', project: Object.assign({}, project, { name: 'FX690 CLEAN IMPORT' }), layers: [] }) !== true)
+        throw new Error('Valid clean project did not import');
+      made.push(FM.projects.currentId());
+      if (said[said.length - 1] !== 'Project imported')
+        throw new Error('Clean import did not keep its ordinary success message: ' + said[said.length - 1]);
+    } finally {
+      FM.toast = oldToast;
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
+    }
+  });
+
   test('690 deeply nested project files are rejected before creating a project', { item: 'TBD' }, async function () {
     const oldProjects = FM.projects, oldToast = FM.toast;
     let created = 0;

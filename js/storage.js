@@ -1742,7 +1742,7 @@ window.FM = window.FM || {};
       return ks.filter(function (k) { return typeof k === 'string' && k.indexOf(p) === 0; }).sort();
     } catch (e) { return []; }
   };
-  FM.storage.applyScene = async function (obj) {
+  FM.storage.applyScene = async function (obj, importWarnings) {
     if (!obj || !obj.project || typeof obj.project !== 'object' || Array.isArray(obj.project) || !Array.isArray(obj.layers) || hasInvalidLayerEntries(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
     if (hasUnsafeSceneNesting(obj.project, obj.layers)) return false;
@@ -1766,7 +1766,11 @@ window.FM = window.FM || {};
       let missingFonts = 0;
       try { missingFonts = await FM.fonts.applyEmbedded(obj.fonts); }
       catch (e) { missingFonts = 1; }
-      if (missingFonts && FM.toast) FM.toast(missingFonts + (missingFonts === 1 ? ' embedded font could' : ' embedded fonts could') + ' not be restored — text may use a fallback font.', 7000);
+      if (missingFonts) {
+        const warning = missingFonts + (missingFonts === 1 ? ' embedded font could' : ' embedded fonts could') + ' not be restored — text may use a fallback font.';
+        if (Array.isArray(importWarnings)) importWarnings.push(warning);
+        else if (FM.toast) FM.toast(warning, 7000);
+      }
     }
     const hydratedMediaIds = new Set();
     if (obj.media) {
@@ -1808,9 +1812,13 @@ window.FM = window.FM || {};
       }
     } catch (e) {}                                    // a warning must never break an import
     const missingFonts = Array.isArray(obj.omittedFonts) ? obj.omittedFonts.slice(0, 100).filter(f => f && typeof f === 'object') : [];
-    if (FM.toast && (missingMediaWarning || missingFonts.length)) FM.toast(missingMediaWarning +
+    const missingContentWarning = missingMediaWarning +
       (missingMediaWarning && missingFonts.length ? ' ' : '') +
-      (missingFonts.length ? 'This file is also missing ' + omittedFontSummary(missingFonts) + '. Text may use a fallback font.' : ''), 12000);
+      (missingFonts.length ? 'This file is also missing ' + omittedFontSummary(missingFonts) + '. Text may use a fallback font.' : '');
+    if (missingContentWarning) {
+      if (Array.isArray(importWarnings)) importWarnings.push(missingContentWarning);
+      else if (FM.toast) FM.toast(missingContentWarning, 12000);
+    }
 
     if (FM.resizeCanvas) FM.resizeCanvas();
     if (FM.refreshAll) FM.refreshAll();
@@ -2084,7 +2092,8 @@ window.FM = window.FM || {};
          file INTO whatever is open, so going on would put the import over the very work he just chose to keep. */
       if (!pid) return false;
     }
-    const ok = await FM.storage.applyScene(obj);
+    const importWarnings = opts && opts.quiet ? null : [];
+    const ok = await FM.storage.applyScene(obj, importWarnings);
     if (!ok) {
       /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
          two ever disagree the user must still be told rather than left in an empty project. */
@@ -2094,7 +2103,7 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.reset();
     FM.storage.markDirty(); FM.storage.save();
     if (FM.projects) FM.projects.touchCurrent(true);
-    if (FM.toast && !(opts && opts.quiet)) FM.toast('Project imported');
+    if (FM.toast && !(opts && opts.quiet)) FM.toast(importWarnings.length ? 'Project imported. ' + importWarnings.join(' ') : 'Project imported', importWarnings.length ? 12000 : undefined);
     if (onDone) onDone();
     return true;
   };
