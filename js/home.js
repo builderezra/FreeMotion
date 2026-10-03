@@ -2003,6 +2003,10 @@ window.FM = window.FM || {};
           const result = await FM.templates.exportFile(t.id);
           if (FM.toast) {
             const missing = result && result.omitted || [];
+            const fonts = result && result.omittedFonts || [];
+            const fontNote = fonts.length ? 'WITHOUT ' + fonts.length + (fonts.length === 1 ? ' custom font — ' : ' custom fonts — ') +
+              fonts.slice(0, 2).map(f => (f.name || 'Custom font') + (f.tooBig ? ' (too big)' : ' (not stored)')).join(', ') +
+              (fonts.length > 2 ? ' and more' : '') + '. Text may use a fallback on another device.' : '';
             if (!result) FM.toast('Could not save that template file');
             else if (missing.length) {
               const absent = missing.filter(m => m.missing);
@@ -2012,9 +2016,9 @@ window.FM = window.FM || {};
                 (missing.length === 1 ? ' media file — ' : ' media files — ') + names +
                 (missing.length > 2 ? ' and more' : '') + '. ' +
                 (absent.length ? 'Re-import or replace missing source media. ' : '') +
-                (missing.length > absent.length ? 'Use a smaller clip for files that are too big.' : ''), 12000);
+                (missing.length > absent.length ? 'Use a smaller clip for files that are too big.' : '') + (fontNote ? ' Also ' + fontNote : ''), 12000);
             }
-            else FM.toast('Template file saved — send it to anyone');
+            else FM.toast(fonts.length ? 'Template file saved ' + fontNote : 'Template file saved — send it to anyone', fonts.length ? 12000 : undefined);
           }
         } },
         pinMenuItem('templates', t.id),

@@ -983,8 +983,8 @@ window.FM = window.FM || {};
       if (dataURL) media[layer.id] = { kind: m.kind, name: m.file.name, dataURL: dataURL };
       else omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
     }
-    const fonts = await embedFonts(scene.layers);
-    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts, omitted: omitted };
+    const fontPack = await embedFonts(scene.layers);
+    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fontPack.fonts, omitted: omitted, omittedFonts: fontPack.omitted };
   }
 
   /* Embed the custom fonts the text layers actually use, so the file still renders correctly when it is
@@ -993,16 +993,32 @@ window.FM = window.FM || {};
      these eight lines would have been the easy move and the wrong one: the two would drift, and the way
      they would drift is that the newer path silently stops embedding fonts, which nobody notices until
      someone else opens the file and the type is wrong. */
-  async function embedFonts(layers) {
-    const fonts = {};
-    if (!FM.fonts) return fonts;
+  async function embedFonts(layers, limit = FONT_EMBED_LIMIT) {
+    const fonts = {}, omitted = [];
+    if (!FM.fonts) return { fonts, omitted };
     const used = new Set((layers || []).filter(l => l.type === 'text' && l.fontFamily).map(l => l.fontFamily));
     for (const f of FM.fonts.list()) {
+      if (!f || typeof f.css !== 'string') continue;
       if (!used.has(f.css)) continue;
+      used.delete(f.css);
       const file = await FM.fonts.getFile(f.id);
-      if (file && file.size <= FONT_EMBED_LIMIT) { const durl = await fileToDataURL(file); if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl }; }
+      if (!file) { omitted.push({ name: f.name, css: f.css, missing: true }); continue; }
+      if (file.size > limit) { omitted.push({ name: f.name, css: f.css, mb: Math.round(file.size / 1048576), tooBig: true }); continue; }
+      let durl = null;
+      try { durl = await fileToDataURL(file); } catch (e) {}
+      if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl };
+      else omitted.push({ name: f.name, css: f.css, unreadable: true });
     }
-    return fonts;
+    // A saved layer can still name a custom font after its index entry was lost.
+    for (const css of used) if (/^FMF[a-z0-9]+(?:,|$)/i.test(css)) omitted.push({ name: css.split(',')[0], css, missing: true });
+    return { fonts, omitted };
+  }
+  function omittedFontSummary(fonts) {
+    const names = fonts.slice(0, 2).map(f =>
+      ((typeof f.name === 'string' ? f.name : typeof f.css === 'string' ? f.css : 'Custom font').slice(0, 80)) +
+      (f.tooBig ? ' (too big)' : f.missing ? ' (not stored)' : ' (could not be read)')).join(', ');
+    return fonts.length + (fonts.length === 1 ? ' custom font' : ' custom fonts') + ' — ' + names +
+      (fonts.length > 2 ? ' and more' : '');
   }
 
   // Clamp untrusted project dimensions to sane bounds. An imported/AI/hand-crafted .fmotion.json with
@@ -1772,6 +1788,7 @@ window.FM = window.FM || {};
      * before deleting the original. A video or image layer with no restored media is unambiguous, so it
      * can be named. Read from the file's own `omitted` list when it has one (written since v16.33) and
      * worked out from the layers otherwise, so files saved BEFORE this fix still get the warning. */
+    let missingMediaWarning = '';
     try {
       const want = (obj.layers || []).filter(l => l && (l.type === 'video' || l.type === 'image'));
       const blank = want.filter(l => !hydratedMediaIds.has(l.id)).map(l => l.name || l.type);
@@ -1784,12 +1801,16 @@ window.FM = window.FM || {};
           (absent.length > 2 ? ' and more' : '') + ' not stored when saved');
         if (oversized.length) details.push(oversized.slice(0, 2).map(o => o.file).join(', ') +
           (oversized.length > 2 ? ' and more' : '') + ' too big to embed');
-        if (FM.toast) FM.toast(blank.length + (blank.length === 1 ? ' layer has' : ' layers have') + ' no footage in this file' +
+        missingMediaWarning = blank.length + (blank.length === 1 ? ' layer has' : ' layers have') + ' no footage in this file' +
           (details.length ? ' (' + details.join('; ') + ')' : '') +
           ' — ' + blank.slice(0, 3).join(', ') + (blank.length > 3 ? ' and more' : '') +
-          '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.', 12000);
+          '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.';
       }
     } catch (e) {}                                    // a warning must never break an import
+    const missingFonts = Array.isArray(obj.omittedFonts) ? obj.omittedFonts.slice(0, 100).filter(f => f && typeof f === 'object') : [];
+    if (FM.toast && (missingMediaWarning || missingFonts.length)) FM.toast(missingMediaWarning +
+      (missingMediaWarning && missingFonts.length ? ' ' : '') +
+      (missingFonts.length ? 'This file is also missing ' + omittedFontSummary(missingFonts) + '. Text may use a fallback font.' : ''), 12000);
 
     if (FM.resizeCanvas) FM.resizeCanvas();
     if (FM.refreshAll) FM.refreshAll();
@@ -1850,7 +1871,9 @@ window.FM = window.FM || {};
        of nothing. Naming the clips is the whole fix: a file that says what it is missing can be
        trusted, and one that does not cannot. */
     const miss = obj.omitted || [];
-    if (!miss.length) { if (FM.toast) FM.toast('Project file saved'); return; }
+    const fontMiss = Array.isArray(obj.omittedFonts) ? obj.omittedFonts : [];
+    const fontNote = fontMiss.length ? 'WITHOUT ' + omittedFontSummary(fontMiss) + '. Text may use a fallback on another device.' : '';
+    if (!miss.length) { if (FM.toast) FM.toast(fontMiss.length ? 'Project file saved ' + fontNote : 'Project file saved', fontMiss.length ? 12000 : undefined); return; }
     const absent = miss.filter(m => m.missing);
     if (absent.length) {
       const names = absent.concat(miss.filter(m => !m.missing)).slice(0, 2).map(m =>
@@ -1859,14 +1882,14 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (miss.length === 1 ? ' media file — ' : ' media files — ') +
         names + (miss.length > 2 ? ' and more' : '') + '. ' + absent.length +
         (absent.length === 1 ? ' source file is' : ' source files are') + ' no longer stored on this device. Re-import or replace missing media before relying on this file.' +
-        (large ? ' Use Settings → Back up every project to keep oversized clips.' : ''), 12000);
+        (large ? ' Use Settings → Back up every project to keep oversized clips.' : '') + (fontNote ? ' Also ' + fontNote : ''), 12000);
       return;
     }
     const names = miss.slice(0, 2).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
     const many = miss.length > 1;
     if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (many ? ' clips — ' : ' clip — ') +
       names + (miss.length > 2 ? ' and more' : '') + (many ? ' are' : ' is') +
-      ' too big to fit in a project file. Use Settings → Back up every project to keep the footage.', 12000);
+      ' too big to fit in a project file. Use Settings → Back up every project to keep the footage.' + (fontNote ? ' Also ' + fontNote : ''), 12000);
   }
 
   /* ═══ BACK UP EVERY PROJECT TO ONE FILE (queue 869) ═══════════════════════════════════════════
@@ -1894,7 +1917,7 @@ window.FM = window.FM || {};
 
   FM.storage.buildBackup = async function (onProgress) {
     const idx = (FM.projects && FM.projects.list()) || [];
-    const projects = [], skippedProjects = [], skippedMedia = [];
+    const projects = [], skippedProjects = [], skippedMedia = [], skippedFonts = [];
     let drafts = 0;
     for (let i = 0; i < idx.length; i++) {
       const p = idx[i];
@@ -1931,7 +1954,10 @@ window.FM = window.FM || {};
       /* The INDEX's name wins over the packed project's, for the same reason templates.exportFile
          gives: the doc's own name can be stale ("Untitled 3") while the card he recognises is right. */
       const project = Object.assign({}, pack.project, { name: p.name || pack.project.name || 'Untitled' });
-      const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
+      // Whole-library backups carry fonts of any size; the small sharing-file limit does not apply.
+      const fontPack = await embedFonts(pack.layers, Infinity);
+      fontPack.omitted.forEach(f => skippedFonts.push(Object.assign({ project: project.name }, f)));
+      const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: fontPack.fonts, omittedFonts: fontPack.omitted };
       /* ⚠️ queue 915 clause 8: SAY WHICH ONES ARE WORKSPACES. list() includes the hidden element and
          template drafts, and restoring them through create() with no flag turned each into an ordinary
          project — the Projects-list clutter queue 340 removed. Kept IN the file rather than skipped: a
@@ -1948,7 +1974,7 @@ window.FM = window.FM || {};
       projects: projects,
       /* Written INTO the file, not only shown once in a toast he may not be looking at. A year from
          now the file has to be able to answer "is my video in here" by itself. */
-      notIncluded: { projects: skippedProjects, media: skippedMedia },
+      notIncluded: { projects: skippedProjects, media: skippedMedia, fonts: skippedFonts },
       count: projects.length,
       drafts: drafts,   // queue 915: of `count`, how many are element/template workspaces rather than projects
     };
@@ -3185,7 +3211,7 @@ window.FM = window.FM || {};
       const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      return { omitted: obj.omitted };
+      return { omitted: obj.omitted, omittedFonts: obj.omittedFonts };
     },
     async remove(tid) {
       writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));

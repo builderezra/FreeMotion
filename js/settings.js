@@ -231,6 +231,7 @@ window.FM = window.FM || {};
     /* ⚠️ SAY WHAT IS NOT IN IT, EVERY TIME. A backup that quietly leaves a clip out is worse
        than no backup, because he would trust it and find out when it mattered. */
     const miss = (r.notIncluded && r.notIncluded.media) || [];
+    const missingFonts = (r.notIncluded && r.notIncluded.fonts) || [];
     const mb = Math.round((r.bytes || 0) / 1048576);
     /* queue 915 clause 8: drafts are counted as what they are, not as projects he would go looking for */
     const nd = r.drafts || 0, np = r.count - nd;
@@ -246,8 +247,12 @@ window.FM = window.FM || {};
       const names = gone.slice(0, 3).map(m => m.file + ' in ' + m.project).join(', ');
       msg += ' ⚠️ ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
     }
-    if (miss.length) msg += ' Everything else is in the file.';
-    if (FM.toast) FM.toast(msg, miss.length ? 12000 : 6000);
+    if (missingFonts.length) {
+      const names = missingFonts.slice(0, 3).map(f => f.name + ' in ' + f.project).join(', ');
+      msg += ' ⚠️ ' + missingFonts.length + (missingFonts.length === 1 ? ' custom font is' : ' custom fonts are') + ' not in this backup: ' + names + (missingFonts.length > 3 ? ' and more' : '') + '. Text may use a fallback after restore.';
+    }
+    if (miss.length || missingFonts.length) msg += ' Everything else is in the file.';
+    if (FM.toast) FM.toast(msg, miss.length || missingFonts.length ? 12000 : 6000);
     return r;
   };
   /* A LABS ROW OPENS ITS CARD ON TOP OF SETTINGS, AND CLOSING THE CARD COMES BACK HERE (queue 933). Ezra: "every time I

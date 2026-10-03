@@ -119254,6 +119254,51 @@
     }
   });
 
+  test('690 shared files name oversized fonts while whole backups keep them', { item: 'TBD' }, async function () {
+    const priorId = FM.projects.currentId(), list = FM.fonts.list, getFile = FM.fonts.getFile;
+    const toast = FM.toast, said = [];
+    let madeId = null;
+    try {
+      await FM.projects.create({ name: 'FX690 FONT SHARE', width: 320, height: 240 });
+      madeId = FM.projects.currentId();
+      const big = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'large.ttf', { type: 'font/ttf' });
+      const small = new File([new Uint8Array(16)], 'small.ttf', { type: 'font/ttf' });
+      const records = [
+        { id: 'big690font', name: 'Large test', family: 'FMFbig690font', css: 'FMFbig690font, sans-serif' },
+        { id: 'small690font', name: 'Small test', family: 'FMFsmall690font', css: 'FMFsmall690font, sans-serif' }
+      ];
+      FM.fonts.list = () => records;
+      FM.fonts.getFile = async id => id === records[0].id ? big : small;
+      FM.toast = message => said.push(String(message));
+      const largeText = FM.makeLayer('text', { text: 'large font' }); largeText.fontFamily = records[0].css;
+      const smallText = FM.makeLayer('text', { text: 'small font' }); smallText.fontFamily = records[1].css;
+      FM.scene.layers = [largeText, smallText];
+      FM.storage.markDirty();
+      await FM.storage.save();
+      const shared = await FM.storage.serializeScene(FM.scene);
+      if (!shared.omittedFonts.some(f => f.name === 'Large test' && f.tooBig) ||
+          !shared.fonts.small690font || shared.fonts.big690font)
+        throw new Error('A shared file did not distinguish the oversized font from the embedded small font');
+      said.length = 0;
+      await FM.storage.exportFile();
+      if (!said.some(message => message.includes('Large test') && message.includes('custom font')))
+        throw new Error('The shared project file claimed a clean save without its large custom font');
+      said.length = 0;
+      await FM.storage.applyScene(JSON.parse(JSON.stringify(shared)));
+      if (!said.some(message => message.includes('Large test') && message.includes('fallback')))
+        throw new Error('Import did not identify the omitted font and possible fallback');
+      const backup = await FM.storage.buildBackup();
+      const entry = backup.projects.find(p => p.project.name === 'FX690 FONT SHARE');
+      if (!entry || !entry.fonts.big690font || !entry.fonts.small690font ||
+          (backup.notIncluded.fonts || []).some(f => f.project === 'FX690 FONT SHARE'))
+        throw new Error('The whole-library backup still applied the sharing-file font limit');
+    } finally {
+      FM.fonts.list = list; FM.fonts.getFile = getFile; FM.toast = toast;
+      if (madeId) { try { await FM.projects.remove(madeId); } catch (e) {} }
+      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
+    }
+  });
+
   test('690 Light Glow and Soft Glow reuse their luminance planes across frames', { item: 'TBD' }, function () {
     const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
     if (!P.lightglow || !P.softglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
