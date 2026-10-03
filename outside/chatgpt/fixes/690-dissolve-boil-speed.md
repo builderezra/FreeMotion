@@ -1,0 +1,7 @@
+# #690 — Dissolve Boil keyframes keep their reached pattern
+
+Starting commit: `f8c2f757b8b96145a2708456a528c46934a1e349` in isolated `/private/tmp/freemotion-dissolve-boil-20261004`, branch `chatgpt/690-dissolve-boil-speed`. The standing #690 brief says “go find some bugs, polish the effects” (`REQUESTS.md:27378-27386`). The adjacent confirmed #913 rate-keyframe finding describes Snow/Rain and **Turbulent Displace** Boil, not Dissolve (`REQUESTS.md:32459-32461`, `audits/912-audit.json:843-850`).
+
+In Dissolve, `js/compositor.js:8505-8507` used `Math.floor(t*dsSpd)` and forced frame zero whenever Boil reached zero. A clip with Boil ramping 4→0 over one second therefore jumped back to its first holes instead of pausing. The animated rate now accumulates through `FM.integrateProp`; numeric and saved default paths retain their prior calculation. This affects users who keyframe Boil to a stop (medium severity, uncommon in ordinary editing).
+
+Changed: `js/compositor.js`, its `index.html` cache tag (`248→249`), one focused `{ item: 'TBD' }` regression in `tests/tests.js`, and this report. The new browser check passed 1/1 for an animated ramp, held stop and static/default controls. The existing Dissolve sweep/soften/boil check also passed 1/1. JavaScriptCore syntax and `git diff --check` passed. Installed-iPhone appearance remains unverified. Local only; nothing was pushed or written to Claude's checkout.

@@ -8517,7 +8517,9 @@ window.FM = window.FM || {};
       var dsDir=p.direction==null?0:(Math.round(FM.evalProp(p.direction,t))|0);
       var dsSoft=p.soft==null?0:FM.evalProp(p.soft,t); if(dsSoft<0)dsSoft=0; if(dsSoft>0.5)dsSoft=0.5;
       var dsSpd=p.speed==null?0:FM.evalProp(p.speed,t); if(dsSpd<0)dsSpd=0; if(dsSpd>30)dsSpd=30;
-      var dsFr=dsSpd===0?0:Math.floor(t*dsSpd);
+      /* Boil is a rate: a keyframed slowdown must keep the pattern it reached. Keep the
+         saved static-speed calculation, including zero, exactly as it was. */
+      var dsFr=FM.isAnimated(p.speed)?Math.floor(FM.integrateProp(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<30?k:30):0; })):(dsSpd===0?0:Math.floor(t*dsSpd));
       var dsPlain=dsDir===0&&dsSoft===0&&dsSpd===0;
       var dsThr=(dsAmt>=1)?4294967296:Math.floor(dsAmt*4294967296);
       for(var dsY=0;dsY<H;dsY++){ for(var dsX=0;dsX<W;dsX++){ var dsI=(dsY*W+dsX)<<2; if(d[dsI+3]===0)continue;

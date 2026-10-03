@@ -120289,4 +120289,27 @@
     }
   });
 
+  test('690 Dissolve keyframed Boil advances by accumulated rate and holds at zero', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!P || !P.dissolve || !FM.integrateProp) throw new Error('Dissolve kernel or rate integrator is unavailable');
+    const W = 96, H = 64;
+    const render = (speed, t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 3; i < d.length; i += 4) d[i] = 255;
+      P.dissolve(d, W, H, { amount: 0.5, speed }, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const kf = pairs => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    if (same(render(2, 2), render(4, 2))) throw new Error('control: this plate cannot distinguish two Boil frames');
+    if (!same(render(undefined, 2), render(0, 2))) throw new Error('the saved static default changed');
+    if (!same(render(kf([[0, 0], [2, 4]]), 2), render(2, 2)))
+      throw new Error('a 0-to-4 Boil ramp over two seconds must reach the same frame as steady Boil 2');
+    const stopped = kf([[0, 4], [1, 4], [2, 0]]);
+    if (!same(render(stopped, 2), render(stopped, 3)))
+      throw new Error('Dissolve reset its holes when Boil reached zero');
+    if (same(render(stopped, 2), render(0, 0)))
+      throw new Error('Boil zero returned to the first-frame holes');
+  });
+
 })();
