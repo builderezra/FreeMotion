@@ -120641,4 +120641,23 @@
       FM._exportTransparent = prior.transparent; FM.time = prior.time;
     }
   });
+
+  test('690 Clouds keyframed Drift holds its traveled pattern when stopped', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!P || !P.clouds || !FM.integrateProp) throw new Error('Clouds kernel or rate integrator is unavailable');
+    const W = 96, H = 64;
+    const render = (drift, time) => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255;
+      P.clouds(pixels, W, H, { amount:1, scale:100, drift, color:'#ffffff' }, time, 1);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, i) => value === b[i]);
+    const stopped = { kf:[{ t:0, v:40 }, { t:1, v:0, e:'hold' }] };
+    const atStop = render(stopped, 1.25);
+    if (same(atStop, render(stopped, 0))) throw new Error('Control: moving Clouds did not change their pattern');
+    if (!same(atStop, render(stopped, 2))) throw new Error('Clouds jumped after Drift reached zero');
+    // 40 px/s for one second, then 0, is 40 px traveled: the same as 32 px/s for 1.25 seconds.
+    if (!same(atStop, render(32, 1.25))) throw new Error('Clouds used the current Drift for the whole clip');
+  });
 })();
