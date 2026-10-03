@@ -1850,6 +1850,7 @@ window.FM = window.FM || {};
       reg.params.forEach(p => {
         if (p.type === 'range') {
           if (fx.type === 'hslmixer' && p.key[0] !== 'hsl'[Math.max(0, Math.min(2, Math.round(Number(fx.params.view) || 0)))]) return;
+          if (fx.type === 'channelmixer' && p.key !== 'mix' && !p.key.startsWith(['red', 'green', 'blue'][Math.max(0, Math.min(2, Math.round(Number(fx.params.out) || 0)))])) return;
           const row = fxScrubber(fx, p, layer, idx);
           rangeRows[p.key] = row;
           const leadR = p.follows && rangeRows[p.follows];

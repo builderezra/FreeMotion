@@ -118796,4 +118796,22 @@
       throw new Error('LFO mode changed its sweep with input level');
   });
 
+  test('690 Channel Mixer keeps identity, mixes all three outputs and ignores the output picker when drawing', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('channelmixer'), fn = FM._FX_TABLES.PIXEL_FX.channelmixer;
+    if (!reg || reg.category !== 'color' || !fn || !FM._postFxTypes().includes('channelmixer') ||
+        !FM.fxRegistry.gates().adjOk.includes('channelmixer'))
+      throw new Error('Channel Mixer is not registered for layers and adjustments');
+    const make = () => new Uint8ClampedArray([100, 50, 20, 255, 90, 40, 10, 0]);
+    const original = make(), identity = make();
+    fn(identity, 2, 1, {}, 0);
+    if (!identity.every((v, i) => v === original[i])) throw new Error('Default matrix changed the image');
+    const p = { redR: 0, redB: 100, greenR: 50, blueOffset: -30, mix: 50 };
+    const mixed = make(); fn(mixed, 2, 1, p, 0);
+    if (mixed[0] !== 60 || mixed[1] !== 75 || mixed[2] !== 10 || mixed[3] !== 255 ||
+        !mixed.slice(4).every((v, i) => v === original[i + 4]))
+      throw new Error('Matrix, mix or alpha handling is wrong: ' + Array.from(mixed));
+    const otherPicker = make(); fn(otherPicker, 2, 1, { ...p, out: 2 }, 0);
+    if (!mixed.every((v, i) => v === otherPicker[i])) throw new Error('Output picker changed the rendered grade');
+  });
+
 })();

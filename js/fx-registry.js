@@ -119,6 +119,7 @@ window.FM = window.FM || {};
     cartoon: 'stylize',
     oilpaint: 'stylize',
     bwmixer: 'color',
+    channelmixer: 'color',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -179,7 +180,7 @@ window.FM = window.FM || {};
   const ADJ_OK = {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
     posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1, colourwheels: 1, hslmixer: 1,
-    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1, channelmixer: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1,
   };
@@ -320,6 +321,7 @@ window.FM = window.FM || {};
     hue: 'Rotates every colour around the wheel.',
     grayscale: 'Removes colour entirely.',
     bwmixer: 'Choose how reds, yellows, greens, cyans, blues and magentas turn into light or dark grey.',
+    channelmixer: 'Mix red, green and blue into each output colour, with a separate constant per output.',
     sepia: 'Warm monochrome — the old-photograph tone.',
     invert: 'Flips every colour to its opposite, like a film negative.',
     gamma: 'Reshapes the midtones without moving black or white.',

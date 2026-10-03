@@ -742,6 +742,22 @@ window.FM = window.FM || {};
       { key: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, def: 100, unit: '%' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    { type: 'channelmixer', label: 'Channel Mixer', desc: 'Build each output colour from red, green, blue and a constant. Select an output to edit its four controls.', params: [
+      { key: 'out', label: 'Output', options: [[0, 'Red'], [1, 'Green'], [2, 'Blue']], def: 0 },
+      { key: 'redR', label: 'Red from red', min: -200, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'redG', label: 'Red from green', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'redB', label: 'Red from blue', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'redOffset', label: 'Red constant', min: -255, max: 255, step: 1, def: 0 },
+      { key: 'greenR', label: 'Green from red', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'greenG', label: 'Green from green', min: -200, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'greenB', label: 'Green from blue', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'greenOffset', label: 'Green constant', min: -255, max: 255, step: 1, def: 0 },
+      { key: 'blueR', label: 'Blue from red', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'blueG', label: 'Blue from green', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'blueB', label: 'Blue from blue', min: -200, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'blueOffset', label: 'Blue constant', min: -255, max: 255, step: 1, def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3896,7 +3912,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -4441,7 +4457,7 @@ window.FM = window.FM || {};
   /* chromaticaberration LEFT this list in v15.83 (queue 798): its offset now grows from the FRAME centre (the lens is the
      frame, so a layer in the corner fringes more than one in the middle), and a centre-based kernel cannot draw the same
      picture on a cropped plate — test 692 says so, and said so. It renders on the full plate, like bulge and fisheye. */
-  const CROP_FX = Object.assign(Object.create(null), { levels: 1, colourwheels: 1, hslmixer: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
+  const CROP_FX = Object.assign(Object.create(null), { levels: 1, colourwheels: 1, hslmixer: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, channelmixer: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
   FM._cropFx = CROP_FX;
   /* BOUNDED kernels that can ALSO take the cropped readback (#692 round 7). A bounded kernel needs its box, so on the
    * crop path it gets the box measured on the cropped buffer (fxBounds on a buffer 1/50th the size). Only kernels whose
@@ -5333,6 +5349,31 @@ window.FM = window.FM || {};
   }
   let fractalNoiseScratch = null;
   const PIXEL_FX = {
+    channelmixer: function (d, W, H, p, t) {
+      const mix = clamp01(fparam(p, 'mix', 100, t) / 100);
+      if (!mix) return;
+      // Read once per frame. "out" changes only which row the inspector displays;
+      // all three rows always render, so switching the selector cannot alter the grade.
+      const rr = fparam(p, 'redR', 100, t) / 100, rg = fparam(p, 'redG', 0, t) / 100;
+      const rb = fparam(p, 'redB', 0, t) / 100, ro = fparam(p, 'redOffset', 0, t);
+      const gr = fparam(p, 'greenR', 0, t) / 100, gg = fparam(p, 'greenG', 100, t) / 100;
+      const gb = fparam(p, 'greenB', 0, t) / 100, go = fparam(p, 'greenOffset', 0, t);
+      const br = fparam(p, 'blueR', 0, t) / 100, bg = fparam(p, 'blueG', 0, t) / 100;
+      const bb = fparam(p, 'blueB', 100, t) / 100, bo = fparam(p, 'blueOffset', 0, t);
+      if (rr === 1 && rg === 0 && rb === 0 && ro === 0 &&
+          gr === 0 && gg === 1 && gb === 0 && go === 0 &&
+          br === 0 && bg === 0 && bb === 1 && bo === 0) return;
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const nr = Math.max(0, Math.min(255, r * rr + g * rg + b * rb + ro));
+        const ng = Math.max(0, Math.min(255, r * gr + g * gg + b * gb + go));
+        const nb = Math.max(0, Math.min(255, r * br + g * bg + b * bb + bo));
+        d[i] = r + (nr - r) * mix;
+        d[i + 1] = g + (ng - g) * mix;
+        d[i + 2] = b + (nb - b) * mix;
+      }
+    },
     bwmixer: function (d, W, H, p, t) {
       var mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
       if (!mix) return;
@@ -18399,7 +18440,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1, colourwheels: 1, hslmixer: 1,
     /* #482 polish 5.1 — the PIXEL_FX colour grades that are point ops (fx-registry ADJ_OK says which and why the rest wait).
        applyPixelFx hands each straight to its PIXEL_FX kernel over the snapshot, the very function the clip itself runs. */
-    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1, channelmixer: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1 };
   // Own keys only — see POSTFX. Missed with TEXT_FX when the others were cut off. Milder than that one
