@@ -48,7 +48,7 @@ window.FM = window.FM || {};
     // batch 14 (matte / mask / key)
     wipe: 'matte', radialwipe: 'matte', venetianblinds: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
     // batch 15 (repeat / tiling)
-    gridrepeat: 'repeat', linearrepeat: 'repeat', radialrepeat: 'repeat', mirrortile: 'repeat', scatterarray: 'repeat',
+    gridrepeat: 'repeat', linearrepeat: 'repeat', radialrepeat: 'repeat', mirrortile: 'repeat', scatterarray: 'repeat', circlearray: 'repeat',
     // batch 16 (other / color / proc / drawing)
     channelremap: 'color', gradientoverlay: 'color', lensflare: 'proc', roughenedges: 'drawing', hexarray: 'proc',
     // batch 17 (drawing / blur / proc)
@@ -467,6 +467,7 @@ window.FM = window.FM || {};
     linearrepeat: 'Repeats the layer in a line.',
     scatterarray: 'Scatters loose copies of the layer around it, each one nudged, turned and resized a little. Every other repeat here is a neat grid or line \u2014 this is the untidy one. Change Seed to re-roll the arrangement.',
     radialrepeat: 'Repeats the layer in a ring around the centre.',
+    circlearray: 'Places separate whole copies around a circle or spiral, with scale, facing and fade controls.',
     mirrortile: 'Tiles the frame with alternating mirrored copies, so the joins are seamless.',
 
     // Opacity / visibility

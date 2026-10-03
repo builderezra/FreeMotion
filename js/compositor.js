@@ -684,6 +684,16 @@ window.FM = window.FM || {};
       { key: 'border', label: 'Border width', min: 0, max: 40, step: 1, def: 3, unit: 'px' },
       { key: 'shadow', label: 'Shadow', min: 0, max: 100, step: 1, def: 12, unit: 'px' },
     ] },
+    { type: 'circlearray', label: 'Circle Array', desc: 'Arrange whole copies of a layer around a circle or spiral. Ring Array folds the picture into wedges instead.', params: [
+      { key: 'count', label: 'Copies', min: 2, max: 36, step: 1, def: 8 },
+      { key: 'radius', label: 'Radius', min: 0, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'start', label: 'Start angle', min: -360, max: 360, step: 1, def: -90, unit: '°' },
+      { key: 'facecenter', label: 'Face centre', options: [[0, 'Off'], [1, 'On']], def: 0 },
+      { key: 'scalestep', label: 'Scale step', min: -90, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 1, def: 0, unit: '°/s' },
+      { key: 'spiral', label: 'Spiral', min: -100, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'fade', label: 'Fade across copies', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3724,7 +3734,7 @@ window.FM = window.FM || {};
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
     wipe: 1, radialwipe: 1, venetianblinds: 1, radiowaves: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
-    gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1,
+    gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1, circlearray: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
@@ -12420,6 +12430,44 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   const _lensMagnifierPool = [];
   const CANVAS_FX = {
+    circlearray: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+      var count = Math.max(2, Math.min(36, Math.round(fparam(p, 'count', 8, t))));
+      var frame = scene && scene.project;
+      var s = ps > 0 ? ps : 1;
+      var shortSide = frame ? Math.min(frame.width, frame.height) * s : Math.min(W, H);
+      var radius = shortSide * Math.max(0, Math.min(100, fparam(p, 'radius', 30, t))) / 200;
+      var start = fparam(p, 'start', -90, t) * Math.PI / 180;
+      var spin = fparam(p, 'spin', 0, t) * (tl == null ? t : tl) * Math.PI / 180;
+      var face = Math.round(fparam(p, 'facecenter', 0, t)) === 1;
+      var step = Math.max(-0.9, Math.min(2, fparam(p, 'scalestep', 0, t) / 100));
+      var spiral = Math.max(-1, Math.min(2, fparam(p, 'spiral', 0, t) / 100));
+      var fade = Math.max(0, Math.min(1, fparam(p, 'fade', 0, t) / 100));
+      var sourceBox = layer && scene ? layerAABB(layer, t, scene) : null;
+      var sourceX = sourceBox ? ((sourceBox.x0 + sourceBox.x1) * 0.5 - (A.__fmOX || 0)) * s : bb.x + bb.w * 0.5;
+      var sourceY = sourceBox ? ((sourceBox.y0 + sourceBox.y1) * 0.5 - (A.__fmOY || 0)) * s : bb.y + bb.h * 0.5;
+      var copies = [], matrices = [];
+      for (var i = 0; i < count; i++) {
+        var f = i / (count - 1);
+        var angle = start + spin + i * Math.PI * 2 / count;
+        var r = Math.max(0, radius * (1 + spiral * f));
+        var x = sourceX + Math.cos(angle) * r, y = sourceY + Math.sin(angle) * r;
+        var size = Math.max(0.1, 1 + step * f);
+        var rotation = face ? angle - Math.PI / 2 : 0;
+        var opacity = 1 - fade * f;
+        if (opacity <= 0.004) continue;
+        copies.push([x, y, size, rotation, opacity]);
+        if (expand && typeof DOMMatrix !== 'undefined') matrices.push(new DOMMatrix().translateSelf(x, y).rotateSelf(rotation * 180 / Math.PI).scaleSelf(size).translateSelf(-sourceX, -sourceY));
+      }
+      // Reuse the expanded-plate path when a moved copy needs pixels outside the frame.
+      var src = matrices.length ? moverSource(A, W, H, ps, expand, layer, t, scene, matrices) : { cv: A, x: 0, y: 0 };
+      for (var k = 0; k < copies.length; k++) {
+        var q = copies[k];
+        B.save(); B.globalAlpha = q[4];
+        B.translate(q[0], q[1]); B.rotate(q[3]); B.scale(q[2], q[2]);
+        B.drawImage(src.cv, src.x - sourceX, src.y - sourceY);
+        B.restore();
+      }
+    },
     lensmagnifier: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       B.drawImage(A, 0, 0);
       var scale = ps > 0 ? ps : 1;

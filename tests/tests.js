@@ -118392,5 +118392,27 @@
     if (actual.some((v, i) => v !== original[i])) throw new Error('A plain 1× lens changed the frame');
   });
 
+  test('690 Circle Array places whole copies around a ring with scale and fade', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('circlearray'), fn = FM._FX_TABLES.CANVAS_FX.circlearray;
+    if (!reg || reg.category !== 'repeat' || !fn || !FM._postFxTypes().includes('circlearray'))
+      throw new Error('Circle Array is not registered and routed');
+    const calls = [];
+    const ctx = {
+      save() { calls.push({}); }, restore() {}, translate(x, y) { calls[calls.length - 1].position = [x, y]; },
+      rotate(r) { calls[calls.length - 1].rotation = r; },
+      scale(x, y) { calls[calls.length - 1].scale = x; },
+      drawImage() { calls[calls.length - 1].alpha = this.globalAlpha; },
+    };
+    fn({}, ctx, 100, 100, { x: 48, y: 48, w: 4, h: 4 },
+       { count: 4, radius: 40, start: 0, facecenter: 0, scalestep: 50,
+         spin: 0, spiral: 0, fade: 50 }, 0, 0, null, 1, null, null);
+    if (calls.length !== 4 || Math.abs(calls[0].position[0] - 70) > 1e-6 ||
+        Math.abs(calls[1].position[1] - 70) > 1e-6 ||
+        Math.abs(calls[2].position[0] - 30) > 1e-6 ||
+        Math.abs(calls[3].position[1] - 30) > 1e-6 ||
+        Math.abs(calls[3].scale - 1.5) > 1e-6 || Math.abs(calls[3].alpha - 0.5) > 1e-6)
+      throw new Error('Copies did not land around the ring or scale/fade as requested');
+  });
+
 
 })();
