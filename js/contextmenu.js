@@ -19,6 +19,21 @@ window.FM = window.FM || {};
   let openedBy = null;            // element whose click opened the menu currently showing
   let closedOpener = null;        // what openedBy was at the moment an outside press closed it
   let lastClick = { t: 0, el: null };
+  let returnFocus = null;
+  let insidePointerUntil = 0;
+  function focusTrigger(node) {
+    if (!(node instanceof Element)) return null;
+    const target = node.closest('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    return target && target.isConnected ? target : null;
+  }
+  function menuItems() {
+    return Array.from(menu.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])'));
+  }
+  function focusItem(item) {
+    if (!item) return;
+    menuItems().forEach(n => { n.tabIndex = n === item ? 0 : -1; });
+    item.focus({ preventScroll: true });
+  }
   function sameTriggerAsLastOpen() {
     if (!closedOpener || !lastClick.el) return false;
     // 400ms, not 60: a trigger may do real work before it calls show() — the parent picker builds a
@@ -46,6 +61,32 @@ window.FM = window.FM || {};
   function ensure() {
     if (menu) return menu;
     menu = document.createElement('div'); menu.id = 'ctx-menu'; menu.className = 'hidden';
+    menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Actions'); menu.tabIndex = -1;
+    // A touch on a div menu item can move focus to the page before its click fires. Keep the
+    // menu mounted for that gesture; the item's click closes it after running its action.
+    menu.addEventListener('pointerdown', () => { insidePointerUntil = performance.now() + 500; });
+    menu.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation(); FM.contextMenu.hide(true); return;
+      }
+      const items = menuItems();
+      const current = e.target.closest('[role="menuitem"]');
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+        e.preventDefault(); e.stopPropagation();
+        const index = items.indexOf(current);
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1
+          : e.key === 'ArrowDown' ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        focusItem(items[next]); return;
+      }
+      // Div/span menu items do not get the browser's native button keyboard click.
+      if ((e.key === 'Enter' || e.key === ' ') && current && current.tagName !== 'BUTTON') {
+        e.preventDefault(); e.stopPropagation(); current.click();
+      }
+    });
+    menu.addEventListener('focusout', () => queueMicrotask(() => {
+      if (menu && !menu.classList.contains('hidden') && !menu.contains(document.activeElement)
+          && performance.now() >= insidePointerUntil) FM.contextMenu.hide();
+    }));
     document.body.appendChild(menu);
     return menu;
   }
@@ -53,22 +94,26 @@ window.FM = window.FM || {};
     show(x, y, items, opts) {
       ensure();
       // Second tap on the trigger that just closed this menu → leave it closed.
-      if (sameTriggerAsLastOpen()) { closedOpener = null; openedBy = null; FM.contextMenu.hide(); return; }
+      if (sameTriggerAsLastOpen()) { closedOpener = null; openedBy = null; FM.contextMenu.hide(true); return; }
       closedOpener = null;
       // Whoever is being clicked right now owns this menu, so the NEXT tap on them closes it.
       openedBy = (performance.now() - lastClick.t < 400) ? lastClick.el : null;
+      if (!menu.contains(document.activeElement)) returnFocus = focusTrigger(openedBy) || focusTrigger(document.activeElement);
       menu.innerHTML = '';
       items.forEach(it => {
-        if (it.sep) { const s = document.createElement('div'); s.className = 'ctx-sep'; menu.appendChild(s); return; }
+        if (it.sep) { const s = document.createElement('div'); s.className = 'ctx-sep'; s.setAttribute('role', 'separator'); menu.appendChild(s); return; }
         if (it.swatches) {   // quick-colour strip (AM ⋯ menu): ✕ clears, dots set a layer colour tag
           if (it.swatchLabel) { const lb = document.createElement('div'); lb.className = 'ctx-swatch-label'; lb.textContent = it.swatchLabel; menu.appendChild(lb); }
-          const row = document.createElement('div'); row.className = 'ctx-swatches';
+          const row = document.createElement('div'); row.className = 'ctx-swatches'; row.setAttribute('role', 'group');
+          row.setAttribute('aria-label', it.swatchLabel || 'Colours');
           const none = document.createElement('button'); none.className = 'ctx-swatch ctx-swatch-none'; none.textContent = '✕'; none.title = 'No fill';
-          none.addEventListener('click', () => { FM.contextMenu.hide(); it.onPick(null); });
+          none.setAttribute('role', 'menuitem'); none.setAttribute('aria-label', 'No fill'); none.tabIndex = -1;
+          none.addEventListener('click', () => { FM.contextMenu.hide(true); it.onPick(null); });
           row.appendChild(none);
           it.swatches.forEach(hex => {
             const b = document.createElement('button'); b.className = 'ctx-swatch'; b.style.background = hex; b.title = hex;
-            b.addEventListener('click', () => { FM.contextMenu.hide(); it.onPick(hex); });
+            b.setAttribute('role', 'menuitem'); b.setAttribute('aria-label', hex); b.tabIndex = -1;
+            b.addEventListener('click', () => { FM.contextMenu.hide(true); it.onPick(hex); });
             row.appendChild(b);
           });
           menu.appendChild(row); return;
@@ -77,10 +122,12 @@ window.FM = window.FM || {};
         if (it.arrow && !it.disabled) {
           // split button: the label runs the main action; the ▸ chevron runs arrowAction (which usually
           // opens a follow-up menu — it does its own show(), so we don't hide first)
-          b.classList.add('ctx-split');
+          b.classList.add('ctx-split'); b.setAttribute('role', 'group'); b.setAttribute('aria-label', it.label);
           const lab = document.createElement('span'); lab.className = 'ctx-split-label'; lab.textContent = it.label;
-          lab.addEventListener('click', (e) => { e.stopPropagation(); FM.contextMenu.hide(); it.action(); });
+          lab.setAttribute('role', 'menuitem'); lab.tabIndex = -1;
+          lab.addEventListener('click', (e) => { e.stopPropagation(); FM.contextMenu.hide(true); it.action(); });
           const arr = document.createElement('button'); arr.className = 'ctx-split-arrow'; arr.type = 'button'; arr.textContent = '▸'; arr.title = it.arrowTitle || 'More…';
+          arr.setAttribute('role', 'menuitem'); arr.setAttribute('aria-label', it.arrowTitle || 'More ' + it.label); arr.tabIndex = -1;
           arr.addEventListener('click', (e) => { e.stopPropagation(); it.arrowAction(); });
           b.appendChild(lab); b.appendChild(arr);
         } else if (it.iconEl) {
@@ -90,10 +137,14 @@ window.FM = window.FM || {};
           b.appendChild(it.iconEl);
           const lab = document.createElement('span'); lab.className = 'ctx-icon-label'; lab.textContent = it.label;
           b.appendChild(lab);
-          if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
+          b.setAttribute('role', 'menuitem'); b.setAttribute('aria-label', it.label); b.tabIndex = -1;
+          if (it.disabled) b.setAttribute('aria-disabled', 'true');
+          if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(true); it.action(); });
         } else {
           b.textContent = it.label;
-          if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(); it.action(); });
+          b.setAttribute('role', 'menuitem'); b.tabIndex = -1;
+          if (it.disabled) b.setAttribute('aria-disabled', 'true');
+          if (!it.disabled) b.addEventListener('click', () => { FM.contextMenu.hide(true); it.action(); });
         }
         menu.appendChild(b);
       });
@@ -166,8 +217,17 @@ window.FM = window.FM || {};
       menu.classList.toggle('ctx-up', flipY);
       void menu.offsetWidth;               // restart the animation when the menu is re-opened in place
       menu.classList.add('ctx-hinge');
+      focusItem(menuItems()[0] || menu);
     },
-    hide() { if (menu) menu.classList.add('hidden'); },
+    hide(restore) {
+      if (!menu) return;
+      const hadFocus = menu.contains(document.activeElement) || document.activeElement === menu;
+      menu.classList.add('hidden');
+      if (hadFocus) {
+        if (restore && returnFocus && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
+        else document.activeElement.blur();
+      }
+    },
     isOpen() { return !!menu && !menu.classList.contains('hidden'); },
   };
 })(window.FM);

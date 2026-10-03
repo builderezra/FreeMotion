@@ -13764,10 +13764,13 @@
       const tab = [].find.call(document.querySelectorAll('.hm-tab'), b => b.dataset.tab === 'templates');
       if (!tab) throw new Error('templates tab missing');
       tab.click();
-      const selBtn = document.getElementById('hm-select-btn');
-      if (!selBtn) throw new Error('Select button missing');
-      if (getComputedStyle(selBtn).display === 'none') throw new Error('Select is not offered on the Templates tab');
-      selBtn.click();
+      const card = document.querySelector('.hm-grid .hm-card');
+      const more = card && card.querySelector('.hm-card-more');
+      if (!more) throw new Error('Template card has no actions menu for Select');
+      more.click();
+      const select = [].find.call(document.querySelectorAll('#ctx-menu [role="menuitem"]'), b => b.textContent.trim() === 'Select…');
+      if (!select) throw new Error('Select is not offered in the Templates card menu');
+      select.click();
       const all = [].find.call(document.querySelectorAll('.hm-selbtn'), b => b.textContent === 'Select all');
       if (!all) throw new Error('Select all button missing');
       all.click();
@@ -38187,12 +38190,11 @@
         ui._iosProbe({ nav: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1', maxTouchPoints: 5 }, standalone: false });
         await ui.resumePendingJoin();
         const steps = Array.prototype.map.call(document.querySelectorAll('#collab-landing .cl-steps li'), function (li) { return li.textContent; }).join(' | ');
-        if (/Settings →/.test(steps)) throw new Error('the steps still send him to Settings first — Home’s Join is there with the feature off and asks to turn it on itself (#967 batch 2): ' + steps);
-        if (!/On Home, tap Join, then Paste/.test(steps)) throw new Error('the steps do not name Home’s Join by the word it wears: ' + steps);
-        /* …and the step is true: Home really has that word on a button, with the feature off as well as on. */
+        if (/Settings →/.test(steps)) throw new Error('the steps still send him to Settings first — profile Join works with the feature off: ' + steps);
+        if (!/On Home, tap profile → Join a friend/.test(steps)) throw new Error('the steps do not name Home’s profile Join route: ' + steps);
+        /* …and the step is true: the profile button exists with the feature off as well as on. */
         FM.settings.set('collabLabs', false); ui.syncLabs();
-        const hj = document.getElementById('hm-join-btn');
-        if (!hj || hj.textContent.trim() !== 'Join') throw new Error('the steps say “tap Join” and with the feature off Home has ' + (hj ? '“' + hj.textContent.trim() + '”' : 'no Join'));
+        if (!document.getElementById('hm-profile-btn')) throw new Error('the steps say “tap profile” and Home has no profile button');
         FM.settings.set('collabLabs', true); ui.syncLabs();
       } finally {
         ui._iosProbe(null); ui.close();
@@ -42455,11 +42457,11 @@
           return 120;
         };
         // "don't make it bigger" — the DISC is unchanged.
-        if (Math.abs(r.width - 58) > 1 || Math.abs(r.height - 58) > 1) {
+        if (Math.abs(r.width - 48) > 1 || Math.abs(r.height - 48) > 1) {
           throw new Error('the button itself is now ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — he asked for a bigger hit box, not a bigger button');
         }
         // "larger hit box" — measured, because a hit box cannot be seen.
-        const visualRadius = r.width / 2;                       // 29
+        const visualRadius = r.width / 2;                       // 24 in the reference dock
         ['left', 'right', 'up'].forEach(function (dir, i) {
           const d = reach([-1, 1, 0][i], [0, 0, -1][i]);
           if (!(d >= visualRadius + 8)) throw new Error('the + only catches ' + d + 'px ' + dir + ' of centre, against a ' + visualRadius + 'px disc — that is barely more than the button itself');
@@ -92084,7 +92086,9 @@
   async function h3aTap(el, what) {
     if (!el) throw new Error('setup: nothing to tap for ' + what);
     const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
-    if (!(r.width > 0) || x > 350 || y > 740 || x < 0 || y < 0) throw new Error('setup: ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
+    // run.html's on-screen frame is 760px tall. The reference dock puts the Projects
+    // button around y=741, still inside the real-input viewport.
+    if (!(r.width > 0) || x > 350 || y > Math.min(750, window.innerHeight - 2) || x < 0 || y < 0) throw new Error('setup: ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
     await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
   }
   // ⋯ → an item of the layer menu, by a real finger on the phone top bar (the only door to Replace media on a phone).
@@ -100752,35 +100756,23 @@
 
   /* ---------------- queues 950, 951, 952: three Home fixes from his claude.ai handoff (26 Sep) ----------------
      His approved before/after picture is tools/design/950-952-before-after.png. */
-  test('950 on a phone the Select bar has no Cancel (Done in the header leaves Select); a mouse screen keeps it', { item: '950' }, async function () {
-    /* "In mobile, remove the council [Cancel] button at the bottom left of the screen." On his phone it wrapped the bar onto a
-       second row. The runner cannot switch its own media (the 797 precedent), so the phone half is read off the stylesheet: a
-       rule under hover: none that hides the class the bar's Cancel carries. The mouse half is measured for real. */
-    let hides = false;
-    for (const sheet of document.styleSheets) {
-      let rules; try { rules = sheet.cssRules; } catch (e) { continue; }
-      for (const r of rules) {
-        if (!(r instanceof CSSMediaRule) || !/hover:\s*none/.test(r.conditionText || r.media.mediaText)) continue;
-        for (const q of r.cssRules) if (q.selectorText && /\.hm-selcancel\b/.test(q.selectorText) && q.style.display === 'none') hides = true;
-      }
-    }
-    if (!hides) throw new Error('no rule under a hover: none media hides .hm-selcancel — on his phone Cancel still wraps the Select bar onto a second row');
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+  test('950 superseded: the phone Select bar keeps a visible Cancel in its own row', { item: '950' }, async function () {
+    const wasOpen = FM.home.isOpen();
     try {
-      if (!wasOpen) { FM.home.open(); await sleep(700); }
-      if (FM.home._selectionState().selectMode) { document.getElementById('hm-select-btn').click(); await sleep(300); }
-      document.getElementById('hm-select-btn').click(); await sleep(400);
-      if (!FM.home._selectionState().selectMode) throw new Error('setup: the Select button did not turn Select on');
-      const cancel = Array.prototype.find.call(document.querySelectorAll('#hm-selbar button'), function (b) { return b.textContent.trim() === 'Cancel'; });
-      if (!cancel) throw new Error('the Select bar has no Cancel at all — a mouse screen should keep it');
-      if (!cancel.classList.contains('hm-selcancel')) throw new Error('the bar\'s Cancel does not carry .hm-selcancel, so the phone rule cannot reach it');
-      if (matchMedia('(hover: none)').matches) throw new Error('setup: this runner reports hover: none, so the mouse half cannot be checked here');
-      if (!cancel.getBoundingClientRect().width) throw new Error('on a mouse screen Cancel is hidden — only the phone was meant to lose it');
-      document.getElementById('hm-select-btn').click(); await sleep(400);
-      if (FM.home._selectionState().selectMode) throw new Error('Done in the header did not leave Select — with Cancel gone on a phone, that is the only way out');
+      if (!wasOpen) FM.home.open();
+      if (!FM.home._selectionState().selectMode) document.getElementById('hm-select-btn').click();
+      await atPhoneWidth(async function () {
+        const bar = document.getElementById('hm-selbar');
+        const cancel = bar && bar.querySelector('.hm-selcancel');
+        const all = bar && Array.from(bar.querySelectorAll('.hm-selbtn')).find(b => b.textContent === 'Select all');
+        if (!cancel || getComputedStyle(cancel).display === 'none') throw new Error('No visible selection exit on a phone');
+        if (all && !(cancel.getBoundingClientRect().bottom < all.getBoundingClientRect().top))
+          throw new Error('Cancel is squeezed into the bulk-actions row');
+        cancel.click();
+      }, 390);
+      if (FM.home._selectionState().selectMode) throw new Error('Cancel did not leave Select');
     } finally {
-      if (FM.home._selectionState().selectMode) { document.getElementById('hm-select-btn').click(); await sleep(300); }
+      if (FM.home._selectionState().selectMode) document.getElementById('hm-select-btn').click();
       if (!wasOpen && FM.home.isOpen()) FM.home.close();
     }
   });
@@ -100821,38 +100813,22 @@
     }
   });
 
-  test('952 while selecting, Done is lit exactly like the lit search button, and goes back when Select ends', { item: '952' }, async function () {
-    /* "Make the done button when you're selecting stuff um, blue, like how everything else goes blue when you have it selected
-       like the search button." Compared with the search button lit the same moment, in both Home looks — the light look's ID
-       rule outranks the .on rules, which is where this could go wrong. */
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const wasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
-    const look0 = document.documentElement.getAttribute('data-home');
-    const s = document.getElementById('hm-search-btn');
+  test('952 superseded: selection is visible in the bar, not an idle header pill', { item: '952' }, function () {
+    const wasOpen = FM.home.isOpen();
     try {
-      if (!wasOpen) { FM.home.open(); await sleep(700); }
+      if (!wasOpen) FM.home.open();
       const b = document.getElementById('hm-select-btn');
-      if (FM.home._selectionState().selectMode) { b.click(); await sleep(300); }
-      if (b.classList.contains('on')) throw new Error('Select is lit before Select mode is on');
-      b.click(); await sleep(400);
-      if (!FM.home._selectionState().selectMode || b.textContent.trim() !== 'Done') throw new Error('setup: the header button did not turn into Done');
-      if (!b.classList.contains('on')) throw new Error('Done is not lit while selecting');
-      for (const look of ['light', 'dark']) {
-        document.documentElement.setAttribute('data-home', look);
-        const hadOn = s.classList.contains('on'); s.classList.add('on');
-        const bc = getComputedStyle(b), sc = getComputedStyle(s);
-        const got = { image: bc.backgroundImage, ink: bc.color }, want = { image: sc.backgroundImage, ink: sc.color };
-        if (!hadOn) s.classList.remove('on');
-        if (got.image !== want.image) throw new Error('on the ' + look + ' Home, lit Done paints ' + got.image + ' but the lit search button paints ' + want.image);
-        if (got.ink !== want.ink) throw new Error('on the ' + look + ' Home, lit Done\'s text is ' + got.ink + ' but the lit search button\'s is ' + want.ink);
-        if (got.image === 'none' && bc.backgroundColor !== sc.backgroundColor) throw new Error('on the ' + look + ' Home, lit Done is ' + bc.backgroundColor + ', the lit search button ' + sc.backgroundColor);
-      }
-      if (look0 === null) document.documentElement.removeAttribute('data-home'); else document.documentElement.setAttribute('data-home', look0);
-      b.click(); await sleep(400);
-      if (b.classList.contains('on')) throw new Error('Done stays lit after Select ends');
+      if (getComputedStyle(b).display !== 'none') throw new Error('Idle Select still occupies the header');
+      if (!FM.home._selectionState().selectMode) b.click();
+      const bar = document.getElementById('hm-selbar');
+      if (!bar || !bar.querySelector('.hm-selcount') || !document.body.classList.contains('hm-selecting'))
+        throw new Error('Selection mode has no visible count and actions');
+      if (getComputedStyle(b).display !== 'none') throw new Error('Hidden header Select reappeared as Done');
+      bar.querySelector('.hm-selcancel').click();
+      if (FM.home._selectionState().selectMode || document.getElementById('hm-selbar'))
+        throw new Error('Selection bar stayed after Cancel');
     } finally {
-      if (look0 === null) document.documentElement.removeAttribute('data-home'); else document.documentElement.setAttribute('data-home', look0);
-      if (FM.home._selectionState().selectMode) { document.getElementById('hm-select-btn').click(); await sleep(300); }
+      if (FM.home._selectionState().selectMode) document.getElementById('hm-select-btn').click();
       if (!wasOpen && FM.home.isOpen()) FM.home.close();
     }
   });
@@ -102168,9 +102144,9 @@
         await ui.resumePendingJoin();
         const land = document.getElementById('collab-landing');
         bad(land.textContent, 'the iPhone landing card');
-        /* #967 batch 2: Home's Join is a worded button that is always there, so the steps go straight to it — no trip to Settings. */
-        if (!/tap Join/.test(land.textContent) || /Settings →/.test(land.textContent)) throw new Error('the landing card does not send him straight to Home’s Join: “' + land.textContent.slice(0, 200) + '”');
-        if (!document.getElementById('hm-join-btn') || document.getElementById('hm-join-btn').textContent.trim() !== 'Join') throw new Error('the landing card says “tap Join” and Home has no Join with the feature off');
+        /* The newer Home profile menu carries Join; the landing card must name that visible route. */
+        if (!/tap profile → Join a friend/.test(land.textContent) || /Settings →/.test(land.textContent)) throw new Error('the landing card does not send him to Home’s profile Join: “' + land.textContent.slice(0, 200) + '”');
+        if (!document.getElementById('hm-profile-btn')) throw new Error('the landing card names profile but Home has no profile button');
         ui.close();
         ui._iosProbe(null);
         /* The Friends block with Labs off. */
@@ -103323,19 +103299,19 @@
   });
   /* ═══ QUEUE 957 — THE ARROW'S TIP LANDS INSIDE THE + ══════════════════════════════════════════════════════════════
      Ezra, 26 Sep, on his phone at v17.02 (dictated): *"The hour [arrow] is inside of the plus button"*.
-     home-arrow.js aims the tip at the +'s centre + (radius + 12) px, reading the + from getBoundingClientRect() at the
+     home-arrow.js aims the tip at the +'s centre + (radius + 13.5) px, reading the + from getBoundingClientRect() at the
      moment it draws — and on the first open that moment falls inside the +'s OWN ENTRANCE (hm-rise-fab: held at
      translateY(18px) scale(.86) through its animation-delay, then rising). So the arrow is aimed at a + that is 18px low
      and 14% small, and the + then rises up into the tip. Reproduced here the way both launch roads reach it: the + is
      stamped with the exact classes stampIntro() gives it, and Home re-renders its EMPTY Projects tab, which calls
      arrowSoon() -> FM.homeArrow.draw() two frames later, inside the +'s delay. Measured on HEAD (tools/shot.py, a real
-     first launch in a 440x956 phone frame): see plan — the tip ends ~25px from the centre of a 29px-radius +.
+     first launch in a 440x956 phone frame): see plan — the old tip ended ~25px from the centre of a 29px-radius +.
      CONTROL first: the same arrow drawn with the + at rest must land exactly where the code aims it — proves the tip is
      read correctly, so a red below is the timing, not the measuring. */
   test('957 the Home arrow to the + ends outside the + even when Home opens with the + still rising in (queue 957)', { item: '957', budgetMs: 60000 }, async function () {
     if (!FM.homeArrow || !FM.home || !FM.projects) throw new Error('need FM.homeArrow, FM.home and FM.projects');
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const U = [Math.cos(-52 * Math.PI / 180), Math.sin(-52 * Math.PI / 180)];
+    const U = [Math.cos(-60 * Math.PI / 180), Math.sin(-60 * Math.PI / 180)];
     const tip = () => {            // the main stroke's centre-line is the FIRST mask path; its last point is the tip E
       const mp = document.querySelector('#hm-arrow936 mask path');
       if (!mp) return null;
@@ -103352,12 +103328,12 @@
       FM.home.refresh(); await wait(700);             // the empty Projects tab, settled: no entrance on the +
       if (!document.querySelector('#home-screen .hm-grid .hm-empty-title')) throw new Error(label + ': the Projects tab is not showing its empty state');
       if (finiteAnims(fab).length) throw new Error(label + ': the + is still animating before the case starts');
-      // CONTROL — drawn with the + at rest, the tip is exactly radius + 12 from the centre, up and to the right
+      // CONTROL — drawn with the + at rest, the tip is exactly radius + 13.5 from the centre, up and to the right
       FM.homeArrow.draw({ still: true });
       const P0 = plus(), E0 = tip();
       if (!E0) throw new Error(label + ': control: no arrow was drawn at rest (is the frame tall enough for the swoop?)');
       const d0 = Math.hypot(E0[0] - P0.cx, E0[1] - P0.cy);
-      if (Math.abs(d0 - (P0.r + 12)) > 1) throw new Error(label + ': control: at rest the tip is ' + d0.toFixed(1) + 'px from the +\'s centre, the code aims at ' + (P0.r + 12).toFixed(1) + ' — the tip is not being read right');
+      if (Math.abs(d0 - (P0.r + 13.5)) > 1) throw new Error(label + ': control: at rest the tip is ' + d0.toFixed(1) + 'px from the +\'s centre, the code aims at ' + (P0.r + 13.5).toFixed(1) + ' — the tip is not being read right');
       // HIS CONDITION — the + stamped exactly as stampIntro() stamps it on a first open, then Home renders the empty tab
       home.classList.add('hm-intro');
       fab.classList.add('hm-in-fab');
@@ -103372,10 +103348,10 @@
       const P = plus(), E = tip();
       if (!E) throw new Error(label + ': no arrow at all once the + had landed — the empty Projects tab must still point at the +');
       const d = Math.hypot(E[0] - P.cx, E[1] - P.cy);
-      const want = [P.cx + U[0] * (P.r + 12), P.cy + U[1] * (P.r + 12)], off = Math.hypot(E[0] - want[0], E[1] - want[1]);
-      rows.push(label + ' ' + d.toFixed(1) + '/' + (P.r + 12).toFixed(1));
+      const want = [P.cx + U[0] * (P.r + 13.5), P.cy + U[1] * (P.r + 13.5)], off = Math.hypot(E[0] - want[0], E[1] - want[1]);
+      rows.push(label + ' ' + d.toFixed(1) + '/' + (P.r + 13.5).toFixed(1));
       if (d < P.r + 4) throw new Error(label + ': the arrow\'s tip is ' + d.toFixed(1) + 'px from the centre of a ' + P.r.toFixed(1) + 'px-radius + — INSIDE it (his "the arrow is inside of the plus button"). It was aimed while the + was still rising in.');
-      if (off > 2) throw new Error(label + ': the tip is ' + off.toFixed(1) + 'px from where it is aimed (radius + 12 at -52°) — ' + d.toFixed(1) + 'px from the centre, wanted ' + (P.r + 12).toFixed(1));
+      if (off > 2) throw new Error(label + ': the tip is ' + off.toFixed(1) + 'px from where it is aimed (radius + 13.5 at -60°) — ' + d.toFixed(1) + 'px from the centre, wanted ' + (P.r + 13.5).toFixed(1));
       home.classList.remove('hm-intro'); fab.classList.remove('hm-in-fab'); fab.style.animationDelay = '';
     };
     try {
@@ -104132,7 +104108,7 @@
     });
   });
 
-  test('967 B2 4 Home has a worded Join beside Select, always — off, it asks to turn the feature on in one tap and then opens the Join sheet; it offers an invite he put away; it fits a 380 px phone; and the Friends block has “Got an invite?”', { item: '967', budgetMs: 120000 }, async function () {
+  test('967 B2 4 Home profile menu offers a worded Join entry — off, it asks to turn the feature on in one tap and then opens the Join sheet; it offers an invite he put away; it fits a 380 px phone; and the Friends block has “Got an invite?”', { item: '967', budgetMs: 120000 }, async function () {
     /* R3 / J2-2, J2-4, J2-6, J4-6, J5-4, J1-5 (⎇) — his pick A: "a word needs no learning". Measured at v17.06: with the
        feature off Home had no Join at all, and with it on a bare ⎇ before the search button. */
     const C = need921S6('the Join door on Home');
@@ -104148,20 +104124,15 @@
         localStorage.removeItem('fm.pendingJoin');
         FM.settings.set('collabLabs', false); C.ui.syncLabs();
         if (!FM.home.isOpen()) { FM.home.open(); await settle921(350); }
-        const j = document.getElementById('hm-join-btn'), sel = document.getElementById('hm-select-btn');
-        if (!j) throw new Error('with the feature off Home has no Join — a friend who was sent a code has nowhere to type it (J2-2)');
-        if (j.textContent.trim() !== 'Join') throw new Error('Home’s Join reads “' + j.textContent.trim() + '” — his pick was the word, like Select, not a glyph (J1-5)');
-        if (!sel || j.nextElementSibling !== sel) throw new Error('Join does not sit right before Select');
-        const jr = j.getBoundingClientRect(), sr = sel.getBoundingClientRect();
-        if (Math.abs(jr.height - sr.height) > 1 || Math.abs(jr.top - sr.top) > 1) throw new Error('Join is ' + Math.round(jr.height) + ' px tall at ' + Math.round(jr.top) + ' and Select ' + Math.round(sr.height) + ' px at ' + Math.round(sr.top) + ' — they should be the same pill');
-        if (getComputedStyle(j).borderTopLeftRadius !== getComputedStyle(sel).borderTopLeftRadius || getComputedStyle(j).fontWeight !== getComputedStyle(sel).fontWeight) throw new Error('Join is not styled like Select');
-        /* …and fits a narrow phone WITHOUT squeezing the wordmark (review fix): Join took its room from the FreeMotion
-           wordmark, measured 43 px wide at 320 and 83 at 360 (135 at full size) while every check here stayed green. */
+        const j = document.getElementById('hm-join-btn'), profile = document.getElementById('hm-profile-btn');
+        if (!j || !profile) throw new Error('Home has no route to Join with the feature off (J2-2)');
+        if (getComputedStyle(j).display !== 'none') throw new Error('Old Join pill still occupies the new Home header');
+        /* The profile menu replaces Join/Select pills without squeezing the wordmark on a narrow phone. */
         for (const w of [320, 360, 380]) {
           await atPhoneWidth(async function () {
             await settle921(120);
             const top = document.querySelector('.hm-top').getBoundingClientRect();
-            const parts = ['.hm-brand', '#hm-search-btn', '#hm-join-btn', '#hm-select-btn', '#hm-settings-btn'].map(function (q) {
+            const parts = ['#hm-settings-btn', '.hm-brand', '#hm-search-btn', '#hm-profile-btn'].map(function (q) {
               const n = document.querySelector(q);
               if (!n) throw new Error('setup: no ' + q);
               return { q: q, r: n.getBoundingClientRect() };
@@ -104169,22 +104140,29 @@
             parts.forEach(function (p, i) {
               if (p.r.left < top.left - 0.5 || p.r.right > top.right + 0.5) throw new Error('at ' + w + ' px ' + p.q + ' runs off the top bar (' + Math.round(p.r.left) + '–' + Math.round(p.r.right) + ' in ' + Math.round(top.left) + '–' + Math.round(top.right) + ')');
               if (i && p.r.left < parts[i - 1].r.right - 0.5) throw new Error('at ' + w + ' px ' + p.q + ' overlaps ' + parts[i - 1].q);
-              if (i && (p.r.width < 24 || p.r.height < 24)) throw new Error('at ' + w + ' px ' + p.q + ' is ' + Math.round(p.r.width) + '×' + Math.round(p.r.height));
+              if (p.q !== '.hm-brand' && (p.r.width < 24 || p.r.height < 24)) throw new Error('at ' + w + ' px ' + p.q + ' is ' + Math.round(p.r.width) + '×' + Math.round(p.r.height));
             });
-            const jn = document.getElementById('hm-join-btn');
-            if (jn.scrollWidth > jn.clientWidth + 1) throw new Error('at ' + w + ' px “Join” is cut off inside its pill');
             const wm = document.querySelector('.hm-brand-img');
             const ww = wm ? wm.getBoundingClientRect().width : 0;
-            if (!(ww >= 90)) throw new Error('at ' + w + ' px the FreeMotion wordmark is squeezed to ' + Math.round(ww) + ' px wide beside Join (135 px at full size) — too small to read');
+            if (!(ww >= 90)) throw new Error('at ' + w + ' px the FreeMotion wordmark is squeezed to ' + Math.round(ww) + ' px wide (135 px at full size) — too small to read');
           }, w);
         }
-        /* Off: one real tap → the one-tap card, nothing connected; Turn on → the Join sheet. */
+        /* Off: one real tap through profile → Join opens the one-tap card, nothing connected. */
         const c0 = net.constructed;
         await atPhoneWidth(async function () {
-          await onScreen924(async function () { await hd5Tap(document.getElementById('hm-join-btn'), 'Home’s Join'); });
+          await onScreen924(async function () { await hd5Tap(profile, 'Home profile'); });
+          const item = Array.prototype.find.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (n) { return /Join a friend/.test(n.textContent); });
+          if (!item) throw new Error('Profile menu has no Join entry');
+          await settle921(250); // wait until the hinge stops moving before aiming the second real touch
+          await onScreen924(async function () {
+            const rr = item.getBoundingClientRect(), xx = Math.round(rr.left + rr.width / 2), yy = Math.round(rr.top + rr.height / 2);
+            const hit = document.elementFromPoint(xx, yy);
+            if (!item.contains(hit)) throw new Error('Profile Join hit ' + (hit && hit.id) + '/' + (hit && hit.className) + ' at ' + xx + ',' + yy + ' instead of the menu');
+            await hd5Tap(item, 'Profile menu Join');
+          });
         }, 360);
         const lc = await until921S6('the one-tap “turn it on” card', function () { return document.getElementById('collab-labs-ask'); }, 4000)
-          .catch(function () { throw new Error('with the feature off, Join opened nothing'); });
+          .catch(function () { throw new Error('with the feature off, profile-menu Join opened nothing'); });
         if (FM.settings.get('collabLabs')) throw new Error('Join turned the feature on without asking');
         if (net.constructed !== c0) throw new Error('Join with the feature off opened ' + (net.constructed - c0) + ' socket(s) before he said yes');
         lc.querySelector('.cl-turnon').click();
@@ -104195,13 +104173,18 @@
         /* An invite he put away earlier is offered, filled in. */
         const inv = S.newRoom();
         localStorage.setItem('fm.pendingJoin', JSON.stringify({ j: S.inviteJ(inv), at: Date.now(), put: Date.now() }));
-        document.getElementById('hm-join-btn').click();
+        profile.click();
+        const pendingJoin = Array.prototype.find.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (n) { return /Join a friend/.test(n.textContent); });
+        if (!pendingJoin) throw new Error('Profile menu lost Join while an invite is pending');
+        pendingJoin.click();
         const sheet = await until921S6('the Join sheet', function () { return document.getElementById('collab-join'); }, 4000);
         if (sheet.querySelector('.cj-code').value !== S.inviteLink(inv)) throw new Error('an invite he put away is not offered — Join opened an empty sheet, and the link he was sent is out of reach (J2-6)');
         C.ui.close(); await settle921(80);
-        /* CONTROL: with it on, the same worded Join in the same place. */
-        const j2 = document.getElementById('hm-join-btn');
-        if (!j2 || j2.textContent.trim() !== 'Join' || j2.nextElementSibling !== document.getElementById('hm-select-btn')) throw new Error('with the feature on Home’s Join is not the worded button beside Select');
+        /* CONTROL: with it on, the same worded Join entry remains in the profile menu. */
+        profile.click();
+        const joinOn = Array.prototype.find.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (n) { return /Join a friend/.test(n.textContent); });
+        if (!joinOn) throw new Error('with the feature on Home lost the profile Join route');
+        FM.contextMenu.hide();
         localStorage.removeItem('fm.pendingJoin');
         /* The Friends block: “Got an invite?”, on and off. */
         await editorWithShape(async function () {
@@ -104434,7 +104417,7 @@
       const ok2 = c2 && c2.querySelector('.fm-ask-ok');
       if (!ok2 || !/Copy invite/.test(ok2.textContent)) throw new Error('a Safari used before is not led with the app (Copy invite)');
       const steps = Array.prototype.map.call(c2.querySelectorAll('.cl-steps li'), function (li) { return li.textContent; }).join(' | ');
-      if (!/tap Join/.test(steps) || /⎇|Settings →/.test(steps)) throw new Error('the steps read “' + steps + '” — Home has a worded Join now, always, so there is no trip to Settings first');
+      if (!/tap profile → Join a friend/.test(steps) || /⎇|Settings →/.test(steps)) throw new Error('the steps read “' + steps + '” — Home should lead through the profile Join menu, without a trip to Settings');
       C.ui.close(); await settle921(60);
       /* CONTROL: the real question — this suite's browser has projects and a profile, so it is a returning one. */
       put();
@@ -104507,7 +104490,7 @@
               if (!(invite.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('Comments sits above the invite');
               const code = fr.querySelector('.cs-roomrow');
               const how2 = code && code.nextElementSibling;
-              if (!how2 || how2.textContent.trim() !== 'That’s the short code — they open FreeMotion, tap Join, and type it in.') throw new Error('under the short code: “' + (how2 && how2.textContent) + '” — it should say what the friend does (J5-4)');
+              if (!how2 || how2.textContent.trim() !== 'That’s the short code — they open FreeMotion, tap profile, choose Join a friend’s project, and type it in.') throw new Error('under the short code: “' + (how2 && how2.textContent) + '” — it should say what the friend does (J5-4)');
             }, 390);
           } finally {
             got.restore();
@@ -105498,7 +105481,7 @@
               const lab = fr.querySelector('.cs-invite > .cs-rowlabel');
               if (!lab || lab.textContent !== 'Send your friend the link') throw new Error('the invite is headed “' + (lab && lab.textContent) + '” — “a link or a code” is the short code here and the swap code six rows down');
               const how = fr.querySelector('.cs-invite .cs-codehow');
-              if (!how || !/^That’s the short code — they open FreeMotion, tap Join, and type it in\.$/.test(how.textContent)) throw new Error('under the 9 characters: “' + (how && how.textContent) + '” — it should name them the short code');
+              if (!how || !/^That’s the short code — they open FreeMotion, tap profile, choose Join a friend’s project, and type it in\.$/.test(how.textContent)) throw new Error('under the 9 characters: “' + (how && how.textContent) + '” — it should name them the short code');
               const add = fr.querySelector('.cs-body > .cs-add');
               const main = add && add.firstChild && add.firstChild.nodeType === 3 ? add.firstChild.textContent : '';
               const sub = add && add.querySelector('.cs-add-sub') ? add.querySelector('.cs-add-sub').textContent : '';
@@ -118113,5 +118096,322 @@
     }
   });
 
+
+  test('Home reference: centred header, profile Join, card Select and scrolling fade on a phone', { item: 'TBD' }, async function () {
+    const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const wasOpen = FM.home.isOpen();
+    let made = null;
+    try {
+      if (!wasOpen) { FM.home.open(); await pause(300); }
+      if (!document.querySelector('#home-screen .hm-card[data-pid]')) {
+        made = await FM.projects.create({ name: 'Home layout probe', width: 320, height: 240 });
+        FM.home.open(); await pause(300);
+      }
+      for (const width of [320, 390]) await atPhoneWidth(async function () {
+        const home = document.getElementById('home-screen').getBoundingClientRect();
+        const cog = document.getElementById('hm-settings-btn').getBoundingClientRect();
+        const brand = document.querySelector('.hm-brand').getBoundingClientRect();
+        const search = document.getElementById('hm-search-btn').getBoundingClientRect();
+        const profile = document.getElementById('hm-profile-btn').getBoundingClientRect();
+        if (!(cog.right < brand.left && brand.right < search.left && search.right < profile.left))
+          throw new Error('Home header controls overlap or are in the wrong order at ' + width + 'px');
+        if (Math.abs((brand.left + brand.right) / 2 - (home.left + home.right) / 2) > 2)
+          throw new Error('Home wordmark is not centred on the screen at ' + width + 'px');
+        if ([cog, search, profile].some(r => r.width < 44 || r.height < 44 || r.left < home.left || r.right > home.right))
+          throw new Error('Home header has a clipped or small control at ' + width + 'px');
+        if (getComputedStyle(document.querySelector('#home-screen .hm-top')).borderBottomWidth !== '0px')
+          throw new Error('Phone header still has a divider across the reference layout');
+        if (width === 390) {
+          if (Math.abs(brand.width - 121) > 1 || Math.abs(document.getElementById('hm-new').getBoundingClientRect().width - 48) > 1)
+            throw new Error('Phone wordmark or New disc is larger than the saved reference');
+          if (getComputedStyle(document.getElementById('hm-profile-btn'), '::before').top !== '4px')
+            throw new Error('Profile disc lost its small painted circle inside the 44px hit area');
+          const html = document.documentElement, priorLook = html.getAttribute('data-home');
+          const searchButton = document.getElementById('hm-search-btn'), wasSearching = searchButton.classList.contains('on');
+          try {
+            html.setAttribute('data-home', 'light');
+            const lightTop = getComputedStyle(document.querySelector('#home-screen .hm-top'));
+            if (lightTop.backgroundImage !== 'none' || lightTop.backgroundColor !== 'rgba(0, 0, 0, 0)' ||
+                lightTop.borderBottomLeftRadius !== '0px' || lightTop.backdropFilter !== 'none')
+              throw new Error('Light Home still has a rounded, painted header band');
+            searchButton.classList.add('on');
+            if (!getComputedStyle(searchButton, '::before').backgroundImage.includes('gradient'))
+              throw new Error('Light Home search has no visible active disc');
+          } finally {
+            searchButton.classList.toggle('on', wasSearching);
+            if (priorLook == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', priorLook);
+          }
+        }
+        const tabs = document.querySelector('.hm-tabs').getBoundingClientRect();
+        const sc = document.querySelector('.hm-scroll').getBoundingClientRect();
+        if (!(tabs.top >= sc.bottom - 1)) throw new Error('Phone destinations are not below the project list');
+        if (document.querySelectorAll('.hm-tabs .hm-tab-ico').length !== 4)
+          throw new Error('A bottom destination has no icon');
+        document.querySelectorAll('.hm-tabs .hm-tab').forEach(b => {
+          if (b.scrollWidth > b.clientWidth + 1) throw new Error(b.textContent.trim() + ' is clipped at ' + width + 'px');
+        });
+        if (getComputedStyle(document.getElementById('hm-select-btn')).display !== 'none')
+          throw new Error('The idle Select button is still in the phone header');
+      }, width);
+      const profile = document.getElementById('hm-profile-btn');
+      profile.click();
+      if (!Array.from(document.querySelectorAll('#ctx-menu .ctx-item')).some(n => /Join a friend/.test(n.textContent)))
+        throw new Error('The profile menu has no Join route');
+      FM.contextMenu.hide();
+      const card = document.querySelector('#home-screen .hm-card[data-pid]');
+      if (!card) throw new Error('No project card to start selection from');
+      const id = card.dataset.pid;
+      card.querySelector('[aria-label="Project actions"]').click();
+      const select = Array.from(document.querySelectorAll('#ctx-menu .ctx-item')).find(n => n.textContent.trim() === 'Select…');
+      if (!select) throw new Error('The project menu has no Select entry');
+      select.click();
+      if (!FM.home._selectionState().selected.includes(id)) throw new Error('Card menu did not select its project');
+      await atPhoneWidth(async function () {
+        const cancel = document.querySelector('#hm-selbar .hm-selcancel');
+        if (!cancel || getComputedStyle(cancel).display === 'none') throw new Error('No visible way to leave selection on a phone');
+        cancel.click();
+      }, 390);
+      if (FM.home._selectionState().selectMode) throw new Error('Cancel did not leave selection');
+      const sc = document.querySelector('#home-screen .hm-scroll');
+      const spacer = document.createElement('div'); spacer.style.cssText = 'height:2000px;flex:none';
+      document.querySelector('.hm-grid').appendChild(spacer);
+      sc.scrollTop = 45; sc.dispatchEvent(new Event('scroll'));
+      if (sc.style.getPropertyValue('--hm-scroll-fade') !== '32px') throw new Error('Scrolled cards have no top-edge fade');
+      spacer.remove(); sc.scrollTop = 0; sc.dispatchEvent(new Event('scroll'));
+      if (sc.style.getPropertyValue('--hm-scroll-fade') !== '0px') throw new Error('The fade covers the first card at the top');
+    } finally {
+      FM.contextMenu.hide();
+      if (FM.home._selectionState().selectMode) document.querySelector('#hm-selbar .hm-selcancel').click();
+      if (made) await FM.projects.remove(made);
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('Home PC keeps the reference header and readable navigation in both looks', { item: 'TBD' }, async function () {
+    if (innerWidth <= 700) return;
+    const wasOpen = FM.home.isOpen(), html = document.documentElement, priorLook = html.getAttribute('data-home');
+    try {
+      if (!wasOpen) { FM.home.open(); await new Promise(resolve => setTimeout(resolve, 300)); }
+      for (const look of ['dark', 'light']) {
+        html.setAttribute('data-home', look);
+        const home = document.getElementById('home-screen').getBoundingClientRect();
+        const brand = document.querySelector('#home-screen .hm-brand').getBoundingClientRect();
+        const tabs = Array.from(document.querySelectorAll('#home-screen .hm-tabs .hm-tab'));
+        if (Math.abs((brand.left + brand.right) / 2 - (home.left + home.right) / 2) > 2 || brand.width < 155)
+          throw new Error(look + ' PC Home wordmark is small or off-centre');
+        if (tabs.length !== 4 || tabs.some(b => {
+          const icon = b.querySelector('.hm-tab-ico');
+          return !icon || getComputedStyle(icon).display === 'none' || b.scrollWidth > b.clientWidth + 1;
+        })) throw new Error(look + ' PC Home tabs lost an icon or clip their labels');
+        const first = tabs[0].getBoundingClientRect(), last = tabs[3].getBoundingClientRect();
+        if (last.right - first.left > 702 || first.left < home.left || last.right > home.right)
+          throw new Error(look + ' PC Home navigation no longer shares the card column');
+        const title = document.querySelector('#home-screen .hm-empty-title');
+        if (title && parseFloat(getComputedStyle(title).fontSize) < 21)
+          throw new Error(look + ' PC Home empty heading is still phone-sized');
+        const cardName = document.querySelector('#home-screen .hm-card .hm-name');
+        if (cardName && parseFloat(getComputedStyle(cardName).fontSize) < 16)
+          throw new Error(look + ' PC project names are still phone-sized');
+      }
+    } finally {
+      if (priorLook == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', priorLook);
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('Home portrait stays local, persists, and can be removed', { item: 'TBD' }, async function () {
+    const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const waitFor = async fn => { for (let i = 0; i < 30; i++) { if (fn()) return; await pause(100); } throw new Error('Home portrait did not update'); };
+    const dbOp = (mode, value) => new Promise((resolve, reject) => {
+      const open = indexedDB.open('fm-home-profile-photo', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('photos');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('photos', mode === 'get' ? 'readonly' : 'readwrite');
+        const req = mode === 'get' ? tx.objectStore('photos').get('avatar')
+          : mode === 'put' ? tx.objectStore('photos').put(value, 'avatar') : tx.objectStore('photos').delete('avatar');
+        let result;
+        req.onsuccess = () => { result = req.result; };
+        tx.oncomplete = () => { db.close(); resolve(result); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      };
+    });
+    const wasOpen = FM.home.isOpen(), profileBefore = localStorage.getItem('fm.profile');
+    let prior, captured = false;
+    try {
+      prior = await dbOp('get'); captured = true;
+      if (!wasOpen) { FM.home.open(); await pause(300); }
+      const button = document.getElementById('hm-profile-btn');
+      if (!button) throw new Error('Home has no local profile photo control');
+      button.click();
+      if (!Array.from(document.querySelectorAll('#ctx-menu .ctx-item')).some(n => n.textContent.trim() === 'Choose profile photo…'))
+        throw new Error('Profile menu has no local photo choice');
+      FM.contextMenu.hide();
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 8;
+      canvas.getContext('2d').fillRect(0, 0, 8, 8);
+      const source = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const input = document.querySelector('input[aria-label="Choose local profile photo"]');
+      const transfer = new DataTransfer(); transfer.items.add(new File([source], 'portrait.png', { type: 'image/png' }));
+      input.files = transfer.files; input.dispatchEvent(new Event('change'));
+      await waitFor(() => button.classList.contains('has-photo'));
+      const image = button.querySelector('.hm-profile-photo');
+      await image.decode();
+      const hadProfileClass = button.classList.contains('has-profile');
+      button.classList.add('has-profile');
+      try {
+        if (getComputedStyle(button.querySelector('.hm-profile-initials')).display !== 'none')
+          throw new Error('Profile initials cover the local photo when a profile name exists');
+      } finally {
+        button.classList.toggle('has-profile', hadProfileClass);
+      }
+      await atPhoneWidth(async () => {
+        const rect = image.getBoundingClientRect();
+        if (image.naturalWidth !== 192 || Math.abs(rect.width - 36) > 1 || Math.abs(rect.height - 36) > 1)
+          throw new Error('Local portrait did not render inside the phone-sized profile circle');
+      }, 390);
+      const saved = await dbOp('get');
+      if (!(saved instanceof Blob) || saved.type !== 'image/jpeg' || saved.size > 100000)
+        throw new Error('Home photo was not stored as a small JPEG');
+      if (localStorage.getItem('fm.profile') !== profileBefore)
+        throw new Error('Home photo was inserted into the collaboration profile');
+      button.click();
+      const remove = Array.from(document.querySelectorAll('#ctx-menu .ctx-item')).find(n => n.textContent.trim() === 'Remove profile photo');
+      if (!remove) throw new Error('Profile menu has no remove-photo action');
+      remove.click();
+      await waitFor(() => !button.classList.contains('has-photo'));
+      if (await dbOp('get')) throw new Error('Removed photo remains in local storage');
+    } finally {
+      FM.contextMenu.hide();
+      if (captured) { await dbOp(prior ? 'put' : 'delete', prior); if (FM.home.refreshProfilePhoto) await FM.home.refreshProfilePhoto(); }
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('Home removing a portrait wins over a replacement still cropping', { item: 'TBD' }, async function () {
+    const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const waitFor = async fn => { for (let i = 0; i < 30; i++) { if (fn()) return; await pause(100); } throw new Error('Timed out waiting for the portrait operation'); };
+    const dbOp = (mode, value) => new Promise((resolve, reject) => {
+      const open = indexedDB.open('fm-home-profile-photo', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('photos');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('photos', mode === 'get' ? 'readonly' : 'readwrite');
+        const req = mode === 'get' ? tx.objectStore('photos').get('avatar')
+          : mode === 'put' ? tx.objectStore('photos').put(value, 'avatar') : tx.objectStore('photos').delete('avatar');
+        let result;
+        req.onsuccess = () => { result = req.result; };
+        tx.oncomplete = () => { db.close(); resolve(result); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      };
+    });
+    const wasOpen = FM.home.isOpen(), toBlob = HTMLCanvasElement.prototype.toBlob;
+    let prior, captured = false, releaseCrop = null;
+    try {
+      prior = await dbOp('get'); captured = true;
+      if (!wasOpen) { FM.home.open(); await pause(300); }
+      const button = document.getElementById('hm-profile-btn');
+      if (!button) throw new Error('Home has no local profile photo control');
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 8;
+      canvas.getContext('2d').fillRect(0, 0, 8, 8);
+      const source = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      await dbOp('put', source);
+      await FM.home.refreshProfilePhoto();
+      await waitFor(() => button.classList.contains('has-photo'));
+      HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+        if (this.width !== 192 || this.height !== 192) return toBlob.call(this, callback, type, quality);
+        return toBlob.call(this, blob => { releaseCrop = () => callback(blob); }, type, quality);
+      };
+      const input = document.querySelector('input[aria-label="Choose local profile photo"]');
+      const transfer = new DataTransfer(); transfer.items.add(new File([source], 'new-portrait.png', { type: 'image/png' }));
+      input.files = transfer.files; input.dispatchEvent(new Event('change'));
+      await waitFor(() => !!releaseCrop);
+      button.click();
+      const remove = Array.from(document.querySelectorAll('#ctx-menu .ctx-item')).find(n => n.textContent.trim() === 'Remove profile photo');
+      if (!remove) throw new Error('The current portrait cannot be removed while another is being prepared');
+      remove.click();
+      await waitFor(() => !button.classList.contains('has-photo'));
+      releaseCrop(); releaseCrop = null;
+      await pause(300);
+      if (button.classList.contains('has-photo') || await dbOp('get'))
+        throw new Error('The stale replacement came back after Remove');
+    } finally {
+      HTMLCanvasElement.prototype.toBlob = toBlob;
+      if (releaseCrop) { releaseCrop(); await pause(300); }
+      FM.contextMenu.hide();
+      if (captured) { await dbOp(prior ? 'put' : 'delete', prior); if (FM.home.refreshProfilePhoto) await FM.home.refreshProfilePhoto(); }
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
+  test('690 Home project menu closes when a card opens the editor by keyboard', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    try {
+      const first = await FM.projects.create({ name: 'Menu keyboard A', width: 320, height: 240 }); made.push(first);
+      const second = await FM.projects.create({ name: 'Menu keyboard B', width: 320, height: 240 }); made.push(second);
+      FM.home.open();
+      const cardA = document.querySelector('#home-screen .hm-card[data-pid="' + first + '"]');
+      const cardB = document.querySelector('#home-screen .hm-card[data-pid="' + second + '"]');
+      if (!cardA || !cardB) throw new Error('The two project cards did not render');
+      cardA.querySelector('.hm-card-more').click();
+      if (!FM.contextMenu.isOpen()) throw new Error('The project actions menu did not open');
+      cardB.focus();
+      cardB.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      cardB.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+      for (let i = 0; i < 80 && FM.home.isOpen(); i++) await sleep(20);
+      if (FM.home.isOpen()) throw new Error('Enter did not open the selected project');
+      if (FM.contextMenu.isOpen()) throw new Error('The previous project’s actions menu stayed over the editor');
+    } finally {
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('Home profile Join and project Select menus work from the keyboard', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const ui = FM.collab.ui, realJoin = ui.joinDoor;
+    const key = (target, name) => target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+    let joined = 0;
+    try {
+      ui.joinDoor = () => { joined++; };
+      FM.contextMenu.hide();
+      const id = await FM.projects.create({ name: 'Keyboard menu A', width: 320, height: 240 }); made.push(id);
+      FM.home.open();
+      const profile = document.getElementById('hm-profile-btn');
+      profile.focus(); profile.click();
+      const menu = document.getElementById('ctx-menu');
+      if (!FM.contextMenu.isOpen() || menu.getAttribute('role') !== 'menu' || !menu.getAttribute('aria-label'))
+        throw new Error('The profile actions did not open as a named menu');
+      const join = Array.from(menu.querySelectorAll('[role="menuitem"]')).find(n => /Join a friend/.test(n.textContent));
+      if (!join || !menu.contains(document.activeElement)) throw new Error('Join is not a focusable menu action');
+      for (let i = 0; i < 8 && document.activeElement !== join; i++) key(document.activeElement, 'ArrowDown');
+      if (document.activeElement !== join) throw new Error('ArrowDown did not reach Join');
+      key(join, 'Enter');
+      if (joined !== 1 || FM.contextMenu.isOpen() || document.activeElement !== profile)
+        throw new Error('Enter did not activate Join and return focus to the profile button');
+      profile.click();
+      key(document.activeElement, 'Escape');
+      if (FM.contextMenu.isOpen() || document.activeElement !== profile)
+        throw new Error('Escape did not close the profile menu and return focus');
+      const card = document.querySelector('#home-screen .hm-card[data-pid="' + id + '"]');
+      if (!card) throw new Error('The project card did not render');
+      const more = card.querySelector('.hm-card-more');
+      more.focus(); more.click();
+      const select = Array.from(menu.querySelectorAll('[role="menuitem"]')).find(n => n.textContent.trim() === 'Select…');
+      if (!select) throw new Error('Project Select has no menu item role');
+      for (let i = 0; i < 20 && document.activeElement !== select; i++) key(document.activeElement, 'ArrowDown');
+      if (document.activeElement !== select) throw new Error('ArrowDown did not reach project Select');
+      key(select, ' ');
+      if (!FM.home._selectionState().selected.includes(id) || FM.contextMenu.isOpen())
+        throw new Error('Space did not select the project and close its menu');
+      if (document.activeElement !== document.querySelector('#hm-selbar .hm-selcancel'))
+        throw new Error('Selection replaced the focused project menu without moving focus to its controls');
+    } finally {
+      ui.joinDoor = realJoin;
+      FM.contextMenu.hide();
+      if (FM.home._selectionState().selectMode) document.querySelector('#hm-selbar .hm-selcancel').click();
+      await hfCleanup(made, orig, wasOpen);
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
 
 })();
