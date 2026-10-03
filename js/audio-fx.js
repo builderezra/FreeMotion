@@ -972,6 +972,53 @@ window.FM = window.FM || {};
         } });
     },
   }, {
+    type: 'stereoizer', label: 'Stereoizer', category: 'space',
+    hint: 'Creates width from mono audio. Fold-down safe keeps the original centre when heard in mono; Haas is wider but can colour a mono mix.',
+    params: [
+      P('amount', 'Width', 0, 1, 0.01, 0.5, '', true),
+      P('delay', 'Delay', 1, 30, 0.5, 12, 'ms', true),
+      Object.assign(P('monoSafe', 'Fold-down safe', 0, 1, 1, 1, '', false), { options: [[0, 'Haas'], [1, 'Safe']] }),
+      P('lowcut', 'Side low cut', 20, 1000, 10, 150, 'Hz', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = s.splitter(2), safe = s.merger(2), haas = s.merger(2);
+      input.connect(split);
+      // Mid/side path: generated side is added to L and subtracted from R. The mono fold-down
+      // therefore equals the untouched mid signal at every sample, even when the input was mono.
+      const ml = s.gain(0.5), mr = s.gain(0.5), mid = s.gain(1);
+      const sl = s.gain(0.5), sr = s.gain(-0.5), side = s.gain(1);
+      split.connect(ml, 0); split.connect(mr, 1); ml.connect(mid); mr.connect(mid);
+      split.connect(sl, 0); split.connect(sr, 1); sl.connect(side); sr.connect(side);
+      const sf = s.biquad('highpass', 150, BUTTERWORTH_DB), sd = s.delay(0.05);
+      const add = s.gain(initNum(inst, 'amount', 0.5, 0, 1) * 0.5), wide = s.gain(1), opposite = s.gain(-1);
+      mid.connect(sf); sf.connect(sd); sd.connect(add); add.connect(wide);
+      side.connect(wide); wide.connect(opposite);
+      mid.connect(safe, 0, 0); wide.connect(safe, 0, 0);
+      mid.connect(safe, 0, 1); opposite.connect(safe, 0, 1);
+      // Optional Haas path moves only the high frequencies of the right channel, leaving bass
+      // centred. It is offered as an explicit choice because its mono fold-down can comb-filter.
+      const hf = s.biquad('highpass', 150, BUTTERWORTH_DB), hd = s.delay(0.05);
+      const amount = initNum(inst, 'amount', 0.5, 0, 1);
+      const subtract = s.gain(-amount), delayed = s.gain(amount);
+      split.connect(haas, 0, 0); split.connect(haas, 1, 1);
+      split.connect(hf, 1); hf.connect(subtract); subtract.connect(haas, 0, 1);
+      hf.connect(hd); hd.connect(delayed); delayed.connect(haas, 0, 1);
+      const ms = initNum(inst, 'monoSafe', 1, 0, 1) >= 0.5;
+      const gSafe = s.gain(ms ? 1 : 0), gHaas = s.gain(ms ? 0 : 1);
+      safe.connect(gSafe); haas.connect(gHaas); gSafe.connect(out); gHaas.connect(out);
+      const delay = initNum(inst, 'delay', 12, 1, 30) / 1000;
+      sd.delayTime.value = hd.delayTime.value = delay;
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          amount: multi([[add.gain, 0.5], [subtract.gain, -1], [delayed.gain, 1]]),
+          delay: multi([[sd.delayTime, 0.001], [hd.delayTime, 0.001]]),
+          monoSafe: pairTargets({ gOn: gSafe, gOff: gHaas }, v => v >= 0.5)[0],
+          lowcut: multi([[sf.frequency, null], [hf.frequency, null]]),
+        } });
+    },
+  }, {
     type: 'pan', label: 'Pan', category: 'space',
     params: [P('pan', 'Pan', -1, 1, 0.05, 0, '', true)],
     build: function (ctx) {
@@ -1718,6 +1765,7 @@ window.FM = window.FM || {};
     delay: ['repeat', 'echo'],
     pingpong: ['bounce', 'left right', 'stereo echo'],
     width: ['wide', 'stereo', 'mono', 'narrow'],
+    stereoizer: ['mono to stereo', 'haas', 'width', 'wide', 'fold down safe'],
     channelutility: ['mono', 'swap channels', 'left channel', 'right channel', 'phase invert', 'balance'],
     pan: ['left', 'right', 'balance'],
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],

@@ -118736,4 +118736,35 @@
     }
   });
 
+  test('690 Stereoizer widens mono without changing its fold-down in safe mode', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('stereoizer');
+    if (!def || def.category !== 'space' || !def.params.some(p => p.key === 'monoSafe'))
+      throw new Error('Stereoizer is not registered');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR / 2;
+    async function render(amount) {
+      const ctx = new OAC(2, N, SR), buf = ctx.createBuffer(1, N, SR), source = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) source[i] = 0.3 * Math.sin(2 * Math.PI * 900 * i / SR);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('stereoizer');
+      Object.assign(fx.params, { amount, delay: 12, monoSafe: 1, lowcut: 150 });
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('Stereoizer signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.5); src.start(0);
+      const out = await ctx.startRendering(); chain.dispose();
+      return { source, left: out.getChannelData(0), right: out.getChannelData(1) };
+    }
+    const dry = await render(0), wide = await render(1);
+    let foldError = 0, sidePower = 0, drySide = 0;
+    for (let i = N / 2; i < N; i++) {
+      const mid = (wide.left[i] + wide.right[i]) / 2;
+      foldError += Math.abs(mid - wide.source[i]);
+      sidePower += Math.pow(wide.left[i] - wide.right[i], 2);
+      drySide += Math.pow(dry.left[i] - dry.right[i], 2);
+    }
+    if (foldError / (N / 2) > 0.001 || Math.sqrt(sidePower / (N / 2)) < 0.03 || drySide > 0.0001)
+      throw new Error('Safe widening did not preserve mono or produce stereo separation');
+  });
+
 })();
