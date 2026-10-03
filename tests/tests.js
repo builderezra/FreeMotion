@@ -118632,4 +118632,27 @@
   });
 
 
+  test('690 Odometer Roll keeps label text and rolls both columns through a carry', { item: 'TBD' }, function () {
+    const def = FM.fxRegistry.get('odometer'), fx = FM.fxRegistry.makeInstance('odometer');
+    if (!def || def.category !== 'text' || def.appliesTo !== 'text' || !fx || !FM._FX_TABLES.TEXT_FX.odometer)
+      throw new Error('Odometer Roll is missing from the text effect browser');
+    const layer = FM.makeLayer('text', { text: 'Score: 0%', fontSize: 40 });
+    layer.effects = [fx];
+    Object.assign(fx.params, { from: 0, to: 10, progress: 0.95, digits: 2, decimals: 0, group: 0, wrap: 1 });
+    const state = FM.applyTextEffects(layer, layer.text, 0, 0, { project: { fps: 30 } });
+    if (state.text !== 'Score: 10%' || !state.odometer || state.odometer.value !== 9.5)
+      throw new Error('Label or progress was lost: ' + JSON.stringify(state));
+    const marks = [], ctx = {
+      globalAlpha: 1, textAlign: 'left', textBaseline: 'alphabetic', letterSpacing: '0px',
+      save() {}, restore() {}, beginPath() {}, rect() {}, clip() {},
+      measureText(s) { return { width: String(s).length * 10 }; },
+      fillText(s, x, y) { marks.push([s, x, y]); }, strokeText() {},
+    };
+    FM._drawOdometerText(ctx, layer, state.odometer, 0, 0, false, 0, '#000', 'outside');
+    const has = (char, sign) => marks.some(m => m[0] === char && (sign < 0 ? m[2] < -1 : m[2] > 1));
+    if (!marks.some(m => m[0] === 'Score: ') || !marks.some(m => m[0] === '%') ||
+        !has('0', -1) || !has('1', 1) || !has('9', -1) || !has('0', 1))
+      throw new Error('Digit columns did not roll across 09 to 10: ' + JSON.stringify(marks));
+  });
+
 })();

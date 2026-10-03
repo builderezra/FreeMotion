@@ -56,7 +56,7 @@ window.FM = window.FM || {};
     // batch 18 (blur / proc / distort / drawing)
     zoomstreaks: 'blur', innerblur: 'blur', contourstrips: 'proc', innerpinch: 'distort', crosshatch: 'drawing',
     // batch 19 (text)
-    counter: 'text', textprogress: 'text', textrandomizer: 'text', textspacing: 'text', texttransform: 'text', timecode: 'text',
+    counter: 'text', odometer: 'text', textprogress: 'text', textrandomizer: 'text', textspacing: 'text', texttransform: 'text', timecode: 'text',
     textcurve: 'text', textreverse: 'text', textrepeat: 'text', textpad: 'text',
     // batch 20 (cinematic grades + framing)
     bleachbypass: 'color', tealorange: 'color', crossprocess: 'color', lightleak: 'color', letterbox: 'stylize', border: 'drawing',
@@ -162,7 +162,7 @@ window.FM = window.FM || {};
   // add-flow gate would now block a working effect.)
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
-  const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
+  const TEXT_ONLY = { counter: 1, odometer: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
                       textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
@@ -498,6 +498,7 @@ window.FM = window.FM || {};
 
     // Text
     counter: 'Counts a number up or down. Keyframe Progress and it animates between the two ends.',
+    odometer: 'Rolls each digit vertically as the number changes, like a mechanical counter.',
     textprogress: 'Types the text on, character by character, as Progress runs.',
     textrandomizer: 'Scrambles the characters and resolves them into the real text.',
     textspacing: 'Widens or tightens the gaps between letters. Also carries Line height.',

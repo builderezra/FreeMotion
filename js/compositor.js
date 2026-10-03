@@ -937,6 +937,15 @@ window.FM = window.FM || {};
     { type: 'counter', label: 'Number Roll', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: -100000, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: -100000, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 },
       { key: 'group', label: 'Thousands', def: 1, legacy: 0, options: [[0, '1234'], [1, '1,234'], [2, '1 234'], [3, '1.234']] },
       { key: 'wrap', label: 'Your text', def: 1, legacy: 0, options: [[0, 'Replace'], [1, 'Keep'] ], note: 'Keep: type e.g. $0 or 0% or Subscribers: 0 — the number rolls in place of the 0' }] },   // queue 904: could not go negative, no separator, and the layer's own text was thrown away
+    { type: 'odometer', label: 'Odometer Roll', desc: 'Roll each digit vertically like a mechanical counter. Higher columns turn as the lower column carries.', params: [
+      { key: 'from', label: 'From', min: -99999999, max: 99999999, step: 1, def: 0 },
+      { key: 'to', label: 'To', min: -99999999, max: 99999999, step: 1, def: 100 },
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0 },
+      { key: 'digits', label: 'Minimum digits', min: 1, max: 8, step: 1, def: 4 },
+      { key: 'decimals', label: 'Decimals', min: 0, max: 2, step: 1, def: 0 },
+      { key: 'group', label: 'Thousands', def: 0, options: [[0, 'Off'], [1, 'Commas']] },
+      { key: 'wrap', label: 'Your text', def: 1, options: [[0, 'Replace'], [1, 'Keep']] },
+    ] },
     { type: 'textprogress', label: 'Type-On', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 },
       { key: 'unit', label: 'Reveal by', def: 0, options: [[0, 'Letter'], [1, 'Word'], [2, 'Line']] },
@@ -2634,6 +2643,27 @@ window.FM = window.FM || {};
         st.text = m ? src.slice(0, m.index) + num + src.slice(m.index + m[0].length) : num; return; }   // no number in the layer's text to keep a place for: the number is the text, as before
       st.text = num;
     },
+    odometer: function (st, p, t) {
+      const safe = (key, def) => { const n = Number(fparam(p, key, def, t)); return isFinite(n) ? n : def; };
+      const from = Math.max(-99999999, Math.min(99999999, safe('from', 0)));
+      const to = Math.max(-99999999, Math.min(99999999, safe('to', 100)));
+      const progress = clamp01(safe('progress', 0));
+      const decimals = Math.max(0, Math.min(2, Math.round(safe('decimals', 0))));
+      const wanted = Math.max(1, Math.min(8, Math.round(safe('digits', 4))));
+      const digits = Math.max(wanted, String(Math.floor(Math.max(Math.abs(from), Math.abs(to)))).length);
+      const value = from + (to - from) * progress;
+      const signSlot = from < 0 || to < 0;
+      const grouped = Math.round(safe('group', 0)) === 1;
+      const keep = Math.round(safe('wrap', 1)) === 1;
+      const source = st.text || '', match = keep ? /-?\d[\d,.\u202f ]*\d|-?\d/.exec(source) : null;
+      const prefix = match ? source.slice(0, match.index) : '', suffix = match ? source.slice(match.index + match[0].length) : '';
+      const body = Math.abs(value).toFixed(decimals).split('.');
+      let integer = body[0].padStart(digits, '0');
+      if (grouped) integer = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      const display = prefix + (value < 0 ? '−' : '') + integer + (decimals ? '.' + body[1] : '') + suffix;
+      st.text = display;
+      st.odometer = { value: value, digits: digits, decimals: decimals, signSlot: signSlot, grouped: grouped, prefix: prefix, suffix: suffix, display: display };
+    },
     textprogress: function (st, p, t) {
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
       // A typewriter that could only run left-to-right one code unit at a time, with no caret.
@@ -2814,6 +2844,66 @@ window.FM = window.FM || {};
     }
     return st;
   };
+  function odometerMetrics(ctx, state, spacing) {
+    const old = ('letterSpacing' in ctx) ? ctx.letterSpacing : null;
+    if (old != null) ctx.letterSpacing = '0px';
+    let col = 1;
+    for (let n = 0; n < 10; n++) col = Math.max(col, ctx.measureText(String(n)).width);
+    const sign = state.signSlot ? ctx.measureText('−').width : 0;
+    const dot = state.decimals ? ctx.measureText('.').width : 0;
+    const comma = state.grouped ? ctx.measureText(',').width : 0;
+    const prefix = state.prefix ? ctx.measureText(state.prefix).width : 0;
+    const suffix = state.suffix ? ctx.measureText(state.suffix).width : 0;
+    if (old != null) ctx.letterSpacing = old;
+    const gap = isFinite(spacing) ? spacing : 0;
+    const commas = state.grouped ? Math.floor((state.digits - 1) / 3) : 0;
+    const slots = state.digits + state.decimals + (state.decimals ? 1 : 0) + (state.signSlot ? 1 : 0) + commas + (state.prefix ? 1 : 0) + (state.suffix ? 1 : 0);
+    return { col: col, sign: sign, dot: dot, comma: comma, prefix: prefix, suffix: suffix, gap: gap,
+             width: (state.digits + state.decimals) * col + sign + dot + commas * comma + prefix + suffix + Math.max(0, slots - 1) * gap };
+  }
+  function drawOdometerText(ctx, layer, state, spacing, t, drawStroke, bw, bcol, bpos) {
+    const m = odometerMetrics(ctx, state, spacing), fs = layer.fontSize || 96;
+    const align = layer.align || 'center';
+    let x = align === 'right' ? -m.width : align === 'center' ? -m.width / 2 : 0;
+    const scaled = Math.abs(state.value) * Math.pow(10, state.decimals);
+    const fillA = textFillAlpha(layer);
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    function glyph(char, px, py) {
+      if (drawStroke) {
+        ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+        ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol;
+        ctx.strokeText(char, px, py); ctx.restore();
+      }
+      fillTextA(ctx, char, px, py, fillA);
+    }
+    if (state.prefix) { glyph(state.prefix, x + m.prefix / 2, 0); x += m.prefix + m.gap; }
+    if (state.signSlot) { if (state.value < 0) glyph('−', x + m.sign / 2, 0); x += m.sign + m.gap; }
+    const count = state.digits + state.decimals;
+    for (let j = 0; j < count; j++) {
+      if (state.decimals && j === state.digits) { glyph('.', x + m.dot / 2, fs * 0.12); x += m.dot + m.gap; }
+      const place = Math.pow(10, count - j - 1);
+      const v = scaled / place, whole = Math.floor(v + 1e-9), frac = Math.max(0, Math.min(1, v - whole));
+      const digit = whole % 10, roll = place === 1 ? frac : Math.max(0, Math.min(1, (frac - 0.9) * 10));
+      const center = x + m.col / 2;
+      if (roll <= 0.001) glyph(String(digit), center, 0);
+      else {
+        const step = fs * 1.16;
+        ctx.save(); ctx.beginPath(); ctx.rect(x - bw, -fs * 0.58, m.col + bw * 2, fs * 1.16); ctx.clip();
+        glyph(String(digit), center, -roll * step);
+        glyph(String((digit + 1) % 10), center, (1 - roll) * step);
+        ctx.restore();
+      }
+      x += m.col + m.gap;
+      if (state.grouped && j < state.digits - 1 && (state.digits - j - 1) % 3 === 0) {
+        glyph(',', x + m.comma / 2, fs * 0.1); x += m.comma + m.gap;
+      }
+    }
+    if (state.suffix) glyph(state.suffix, x + m.suffix / 2, 0);
+    ctx.restore();
+  }
+  FM._drawOdometerText = drawOdometerText;  // focused wheel-rendering regression
   // Smooth deterministic pseudo-noise in ~[-1,1] (sum of incommensurate sines) — same at a given
   // time every render, so wiggle is flicker-free and exports identically.
   function wnoise(u) { return Math.sin(u * 6.283) * 0.5 + Math.sin(u * 14.77 + 1.3) * 0.3 + Math.sin(u * 28.6 + 2.7) * 0.2; }
@@ -15638,6 +15728,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       src = te.text;
       if (textSpacingOK().letter) c.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) c.wordSpacing = (te.wordSpacing || 0) + 'px';
+      if (te.odometer && src === te.odometer.display && !FM.textHasAnim(layer) && Math.abs(te.curve || 0) <= 0.5)
+        return { w: odometerMetrics(c, te.odometer, te.letterSpacing).width, h: layer.fontSize || 96 };
       const lines = FM.textLines(c, layer, src);
       const fs = layer.fontSize || 96, lh = fs * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
       let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, c.measureText(l).width); });
@@ -17924,6 +18016,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       textSrc = _tEff.text;
       if (textSpacingOK().letter) ctx.letterSpacing = _tEff.letterSpacing + 'px';
       if (textSpacingOK().word) ctx.wordSpacing = (_tEff.wordSpacing || 0) + 'px';
+      const _isOdometer = !!(_tEff.odometer && textSrc === _tEff.odometer.display && !FM.textHasAnim(layer) && Math.abs(_tEff.curve || 0) <= 0.5);
       // AFTER applyTextEffects: Count Up, Randomizer and friends change the string, so wrapping the
       // pre-effect text would break the lines in the wrong places on every frame but the first.
       const lines = FM.textLines(ctx, layer, textSrc);
@@ -17933,7 +18026,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (layer.captionBg && String(textSrc).trim()) {
         const fs = layer.fontSize || 96;
         let maxW = 0;
-        for (const ln of lines) { const w2 = ctx.measureText(ln).width; if (w2 > maxW) maxW = w2; }
+        for (const ln of lines) { const w2 = _isOdometer ? odometerMetrics(ctx, _tEff.odometer, _tEff.letterSpacing).width : ctx.measureText(ln).width; if (w2 > maxW) maxW = w2; }
         const padX = fs * 0.4, padY = fs * 0.24, align = layer.align || 'center';
         const bx0 = align === 'center' ? -maxW / 2 - padX : align === 'right' ? -maxW - padX : -padX;
         const bw = maxW + 2 * padX, bh = total + fs + 2 * padY, by0 = -bh / 2;
@@ -17950,7 +18043,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // The curve the EFFECTS resolved, not the layer's raw field (queue 664) — resolved ONCE here so the animated
       // path gets it too; it used to be computed inside the static branch only (queue 904, textcurve).
       const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
-      if (FM.textHasAnim(layer)) {
+      if (_isOdometer) {
+        const stk = layer.stroke;
+        const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;
+        const bpos = (stk && stk.position) || 'outside';
+        const bcol = stk ? (FM.evalProp(stk.color, t) || '#000') : '#000';
+        const m = odometerMetrics(ctx, _tEff.odometer, _tEff.letterSpacing);
+        if (FM.layerHasGradient(layer)) {
+          const bx = layer.align === 'right' ? -m.width : layer.align === 'left' ? 0 : -m.width / 2;
+          ctx.fillStyle = buildGradient(ctx, layer.fillGradient, { x: bx, y: -(layer.fontSize || 96) / 2, w: m.width, h: layer.fontSize || 96 }, t);
+        }
+        drawOdometerText(ctx, layer, _tEff.odometer, _tEff.letterSpacing, t, !!(stk && stk.enabled && bw > 0), bw, bcol, bpos);
+      } else if (FM.textHasAnim(layer)) {
         drawAnimatedText(ctx, layer, t, lines, lh, total, curve);
       } else {
         const stk = layer.stroke;
@@ -19672,6 +19776,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // pattern as _ckCanvas / _lkCanvas / _grCanvas above. (#123)
       const c = measureCtx();
       c.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
+      if (layer.effects && layer.effects.some(e => e.type === 'odometer' && e.enabled !== false)) {
+        const src = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, FM.time) || '') : (layer.text || '');
+        const te = FM.applyTextEffects(layer, src, layer.letterSpacing || 0, FM.time || 0, FM.scene);
+        if (te.odometer && te.text === te.odometer.display && !FM.textHasAnim(layer) && Math.abs(te.curve || 0) <= 0.5)
+          return { w: odometerMetrics(c, te.odometer, te.letterSpacing).width, h: layer.fontSize || 96 };
+      }
       // A caption track sets layer.text='' and moves the visible text into layer.captions, so measuring
       // layer.text alone gives a 10px box that the hit-test/selection/align all read wrong. Measure the
       // widest caption (and its line count) instead, falling back to layer.text when there are none. (#4)
