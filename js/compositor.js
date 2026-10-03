@@ -7809,8 +7809,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!isFinite(fr_spd)) fr_spd = 0;
       var fr_dxv = p.driftX == null ? 0 : FM.evalProp(p.driftX, t);
       var fr_dyv = p.driftY == null ? 0 : FM.evalProp(p.driftY, t);
-      var fr_dx = (isFinite(fr_dxv) ? fr_dxv : 0) * t * fr_ps;   // px/s -> plate px at this instant
-      var fr_dy = (isFinite(fr_dyv) ? fr_dyv : 0) * t * fr_ps;
+      // Speed and Drift are rates. Integrate keyframes so slowing one to zero holds the texture
+      // where it reached; keep the original rate × time path for every unanimated saved effect.
+      function fr_travel(raw, rate) {
+        if (!FM.isAnimated(raw)) return rate * t;
+        return FM.integrateProp(raw, 0, t, function (u) {
+          var value = FM.evalProp(raw, u);
+          return isFinite(value) ? value : 0;           // same non-finite fallback as the static path
+        });
+      }
+      var fr_dx = fr_travel(p.driftX, isFinite(fr_dxv) ? fr_dxv : 0) * fr_ps;
+      var fr_dy = fr_travel(p.driftY, isFinite(fr_dyv) ? fr_dyv : 0) * fr_ps;
       var fr_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0);
       /* `p.color ? hexToRGB(...) : default`, NOT `hexToRGB(p.color) || default` — hexToRGB coerces an
        * absent value to '#000000' and hands back [0,0,0], which is a truthy array, so the `||` form
@@ -7842,7 +7851,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * actually moves" means for noise, and it costs three hoisted adds per row, not per pixel.
        * The offsets are in CELLS rather than pixels so the churn follows Scale instead of crawling
        * at scale 120 and boiling at scale 8. */
-      var fr_ph = fr_spd * t;
+      var fr_ph = fr_travel(p.speed, fr_spd);
       var fr_cell = [fr_sc, fr_sc / 2, fr_sc / 4];
       var fr_wt = [0.5, 0.3, 0.2];
       var fr_ex = [fr_ph * 0.9, fr_ph * -1.3, fr_ph * 1.7];
