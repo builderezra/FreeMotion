@@ -118971,4 +118971,18 @@
     if (!unmixed.every((v, i) => v === original[i])) throw new Error('Zero Mix changed Sony footage');
   });
 
+  test('690 Apple Log/BT.2020 grade maps reference grey and applies its gamut', { item: 'TBD' }, function () {
+    const def = FM.fxRegistry.get('logtonormal'), fn = FM._FX_TABLES.PIXEL_FX.logtonormal;
+    if (!def || !fn || !def.params.some(p => p.key === 'profile' && p.options.some(o => o[1].includes('Apple Log'))))
+      throw new Error('Apple Log profile is not selectable');
+    const original = new Uint8ClampedArray([125, 125, 125, 255, 155, 125, 125, 255, 80, 90, 100, 0]);
+    const graded = original.slice(); fn(graded, 3, 1, { profile: 2 }, 0);
+    if (!(graded[0] >= 101 && graded[0] <= 110 && graded[0] === graded[1] && graded[1] === graded[2]))
+      throw new Error('Apple Log 18% reference grey did not map to neutral Rec.709 grey: ' + Array.from(graded.slice(0, 3)));
+    if (!(graded[4] > graded[5] && graded[5] < 135)) throw new Error('BT.2020 matrix did not separate a warm colour');
+    if (!graded.slice(8).every((v, i) => v === original[i + 8])) throw new Error('Transparent pixel changed');
+    const unmixed = original.slice(); fn(unmixed, 3, 1, { profile: 2, mix: 0 }, 0);
+    if (!unmixed.every((v, i) => v === original[i])) throw new Error('Zero Mix changed Apple Log footage');
+  });
+
 })();

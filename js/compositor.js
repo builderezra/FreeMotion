@@ -764,8 +764,8 @@ window.FM = window.FM || {};
       { key: 'smooth', label: 'Temporal smoothing', min: 0, max: 2, step: 0.05, def: 0.25, unit: 's' },
       { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
-    { type: 'logtonormal', label: 'Log to Rec.709', desc: 'Convert footage recorded as Panasonic V-Log/V-Gamut or Sony S-Log3/S-Gamut3.Cine. Select the exact recording profile; this does not auto-detect it.', params: [
-      { key: 'profile', label: 'Camera profile', options: [[0, 'Panasonic V-Log / V-Gamut'], [1, 'Sony S-Log3 / S-Gamut3.Cine']], def: 0 },
+    { type: 'logtonormal', label: 'Log to Rec.709', desc: 'Convert footage recorded as Panasonic V-Log/V-Gamut, Sony S-Log3/S-Gamut3.Cine, or Apple Log/BT.2020. Select the exact recording profile; this does not auto-detect it.', params: [
+      { key: 'profile', label: 'Camera profile', options: [[0, 'Panasonic V-Log / V-Gamut'], [1, 'Sony S-Log3 / S-Gamut3.Cine'], [2, 'Apple Log / BT.2020']], def: 0 },
       { key: 'exposure', label: 'Exposure', min: -4, max: 4, step: 0.1, def: 0, unit: 'stops' },
       { key: 'rolloff', label: 'Highlight roll-off', min: 0, max: 100, step: 1, def: 20, unit: '%' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
@@ -5372,9 +5372,11 @@ window.FM = window.FM || {};
   let fractalNoiseScratch = null;
   let _autoGradeCache = new WeakMap(), _autoGradeExportState = !!FM._exporting;
   let _deflickerCache = new WeakMap(), _deflickerExportState = !!FM._exporting;
-  // Panasonic/Sony published inverse curves and BT.709's published output curve.
+  // Published Panasonic/Sony curves, the OpenColorIO Apple Log curve, and BT.709 output.
   // Tables are shared across frames; the per-pixel grade only does a matrix and lookups.
-  const _vlogDecode = new Float32Array(256), _slog3Decode = new Float32Array(256), _rec709Encode = new Float32Array(4097);
+  const _vlogDecode = new Float32Array(256), _slog3Decode = new Float32Array(256);
+  const _appleLogDecode = new Float32Array(256), _rec709Encode = new Float32Array(4097);
+  const _appleLogBreak = 47.28711236 * Math.pow(0.01 + 0.05641088, 2);
   for (let i = 0; i < 256; i++) {
     const x = i / 255;
     _vlogDecode[i] = x < 0.181 ? (x - 0.125) / 5.6 : Math.pow(10, (x - 0.598206) / 0.241514) - 0.00873;
@@ -5382,6 +5384,9 @@ window.FM = window.FM || {};
     _slog3Decode[i] = code >= 171.2102946929
       ? Math.pow(10, (code - 420) / 261.5) * 0.19 - 0.01
       : (code - 95) * 0.01125 / (171.2102946929 - 95);
+    _appleLogDecode[i] = x >= _appleLogBreak
+      ? Math.pow(2, (x - 0.69336945) / 0.08550479) - 0.00964052
+      : Math.sqrt(x / 47.28711236) - 0.05641088;
   }
   for (let i = 0; i <= 4096; i++) {
     const x = i / 4096;
@@ -5500,13 +5505,17 @@ window.FM = window.FM || {};
     logtonormal: function (d, W, H, p, t) {
       const mix = clamp01(fparam(p, 'mix', 100, t) / 100);
       if (!mix) return;
-      const sonyCine = Math.round(fparam(p, 'profile', 0, t)) === 1;
-      const decode = sonyCine ? _slog3Decode : _vlogDecode;
+      const profile = Math.round(fparam(p, 'profile', 0, t));
+      const decode = profile === 1 ? _slog3Decode : profile === 2 ? _appleLogDecode : _vlogDecode;
       // Select the gamut once per frame, outside the pixel loop.
-      const m = sonyCine
+      const m = profile === 1
         ? [1.626856400320, -0.536988636554, -0.089867763767,
            -0.179109430449, 1.420863041443, -0.241753610994,
            -0.044166477895, -0.201519200616, 1.245685678512]
+        : profile === 2
+        ? [1.660491002108, -0.587641138789, -0.072849863320,
+           -0.124550474522, 1.132899897126, -0.008349422604,
+           -0.018150763355, -0.100578898008, 1.118729661363]
         : [1.806576, -0.695697, -0.110879,
            -0.170090, 1.305955, -0.135865,
            -0.025206, -0.154468, 1.179674];
@@ -5520,8 +5529,9 @@ window.FM = window.FM || {};
       for (let i = 0; i < d.length; i += 4) {
         if (!d[i + 3]) continue;
         const r = decode[d[i]] * exposure, g = decode[d[i + 1]] * exposure, b = decode[d[i + 2]] * exposure;
-        // Sony matrix = inverse(ACES Rec.709->AP0) * (S-Gamut3.Cine->AP0), from ASWF OpenColorIO.
-        // Panasonic's V-Gamut->BT.709 matrix is published directly in its reference manual.
+        // Sony: inverse(Rec.709->AP0) * S-Gamut3.Cine->AP0 (ASWF OpenColorIO).
+        // Apple: BT.2020->BT.709 from ITU primaries, both with D65 white.
+        // Panasonic: direct V-Gamut->BT.709 matrix from its reference manual.
         const nr = output(m[0] * r + m[1] * g + m[2] * b);
         const ng = output(m[3] * r + m[4] * g + m[5] * b);
         const nb = output(m[6] * r + m[7] * g + m[8] * b);

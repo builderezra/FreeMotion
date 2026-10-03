@@ -326,7 +326,7 @@ window.FM = window.FM || {};
     bwmixer: 'Choose how reds, yellows, greens, cyans, blues and magentas turn into light or dark grey.',
     channelmixer: 'Mix red, green and blue into each output colour, with a separate constant per output.',
     autograde: 'Sets levels, contrast or colour balance from the picture and smooths changes while it plays.',
-    logtonormal: 'Converts Panasonic V-Log/V-Gamut or Sony S-Log3/S-Gamut3.Cine footage to Rec.709 with exposure and highlight controls.',
+    logtonormal: 'Converts Panasonic V-Log/V-Gamut, Sony S-Log3/S-Gamut3.Cine, or Apple Log/BT.2020 footage to Rec.709 with exposure and highlight controls.',
     deflicker: 'Steadies changing exposure over adjacent frames while resetting on a detected scene change.',
     spillsuppressor: 'Reduces the screen-colour cast after a key. Use Whole subject or limit it to soft alpha edges.',
     sepia: 'Warm monochrome — the old-photograph tone.',
