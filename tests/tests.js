@@ -119042,4 +119042,23 @@
       throw new Error('Backdrop Clone measured text at the active project FPS instead of the rendered scene FPS: expected ' + shown + ', saw ' + JSON.stringify(seen));
   });
 
+  test('690 Light Glow and Soft Glow bloom beyond transparent text edges', { item: 'TBD' }, function () {
+    const W = 25, H = 25, original = new Uint8ClampedArray(W * H * 4);
+    for (let y = 10; y < 15; y++) for (let x = 10; x < 15; x++) {
+      const i = (y * W + x) * 4; original[i] = original[i + 1] = original[i + 2] = original[i + 3] = 255;
+    }
+    for (const type of ['lightglow', 'softglow']) {
+      const fn = FM._FX_TABLES.PIXEL_FX[type];
+      if (!fn) throw new Error(type + ' is unavailable');
+      const d = original.slice(); fn(d, W, H, { amount: 0.8, color: '#ff8844' }, 0);
+      const halo = (12 * W + 17) * 4, core = (12 * W + 12) * 4;
+      if (!(d[halo + 3] > 0 && d[halo] === 255 && d[halo + 1] === 136 && d[halo + 2] === 68))
+        throw new Error(type + ' did not produce a coloured transparent-edge halo: ' + Array.from(d.slice(halo, halo + 4)));
+      if (d[core + 3] !== 255 || d[3] !== 0)
+        throw new Error(type + ' changed the opaque source alpha or distant transparent pixels');
+      const off = original.slice(); fn(off, W, H, { amount: 0.8, threshold: 100 }, 0);
+      if (off[halo + 3] !== 0) throw new Error(type + ' bloomed when the threshold excluded the source');
+    }
+  });
+
 })();
