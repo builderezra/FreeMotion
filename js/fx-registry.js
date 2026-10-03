@@ -117,6 +117,7 @@ window.FM = window.FM || {};
     radiowaves: 'proc',
     cartoon: 'stylize',
     oilpaint: 'stylize',
+    bwmixer: 'color',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -317,6 +318,7 @@ window.FM = window.FM || {};
     vibrance: 'Boosts the muted colours and leaves already-vivid ones alone — kinder to skin than Saturation.',
     hue: 'Rotates every colour around the wheel.',
     grayscale: 'Removes colour entirely.',
+    bwmixer: 'Choose how reds, yellows, greens, cyans, blues and magentas turn into light or dark grey.',
     sepia: 'Warm monochrome — the old-photograph tone.',
     invert: 'Flips every colour to its opposite, like a film negative.',
     gamma: 'Reshapes the midtones without moving black or white.',

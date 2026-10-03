@@ -709,6 +709,18 @@ window.FM = window.FM || {};
       { key: 'levels', label: 'Colour levels', min: 0, max: 32, step: 1, def: 0, note: '0 keeps smooth colour' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    { type: 'bwmixer', label: 'Black & White Mixer', desc: 'Choose how each original colour becomes light or dark in a monochrome image.', color: true, defColor: '#808080', colorLabel: 'Tint colour', params: [
+      { key: 'preset', label: 'Colour filter', options: [[0, 'Neutral'], [1, 'Red'], [2, 'Orange'], [3, 'Yellow'], [4, 'Green'], [5, 'Blue'], [6, 'Infrared']], def: 0 },
+      { key: 'reds', label: 'Reds', min: -200, max: 300, step: 1, def: 40, unit: '%' },
+      { key: 'yellows', label: 'Yellows', min: -200, max: 300, step: 1, def: 60, unit: '%' },
+      { key: 'greens', label: 'Greens', min: -200, max: 300, step: 1, def: 40, unit: '%' },
+      { key: 'cyans', label: 'Cyans', min: -200, max: 300, step: 1, def: 60, unit: '%' },
+      { key: 'blues', label: 'Blues', min: -200, max: 300, step: 1, def: 20, unit: '%' },
+      { key: 'magentas', label: 'Magentas', min: -200, max: 300, step: 1, def: 80, unit: '%' },
+      { key: 'tint', label: 'Tint amount', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3763,7 +3775,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -5198,6 +5210,51 @@ window.FM = window.FM || {};
     return _oilPaintScratch;
   }
   const PIXEL_FX = {
+    bwmixer: function (d, W, H, p, t) {
+      var mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
+      if (!mix) return;
+      var defaults = [40, 60, 40, 60, 20, 80];
+      var keys = ['reds', 'yellows', 'greens', 'cyans', 'blues', 'magentas'];
+      // Preset shifts are relative to the displayed neutral sliders, so a creator can still refine each range.
+      var presets = [null, [90, 75, 25, 15, 0, 65], [75, 90, 45, 30, 5, 60],
+        [55, 90, 75, 40, 10, 65], [25, 35, 85, 75, 10, 45], [25, 30, 35, 75, 95, 60],
+        [150, 100, -40, -30, -60, 100]];
+      var preset = Math.max(0, Math.min(6, Math.round(fparam(p, 'preset', 0, t))));
+      var weights = new Float32Array(6);
+      for (var k = 0; k < 6; k++) {
+        var user = Math.max(-200, Math.min(300, fparam(p, keys[k], defaults[k], t)));
+        weights[k] = (user + (presets[preset] ? presets[preset][k] - defaults[k] : 0)) / 100;
+      }
+      var contrast = Math.max(0, Math.min(2, fparam(p, 'contrast', 100, t) / 100));
+      var tint = Math.max(0, Math.min(1, fparam(p, 'tint', 0, t) / 100));
+      var tintRGB = tint ? hexToRGB(p.color == null ? '#808080' : FM.evalProp(p.color, t)) : null;
+      for (var i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        var r = d[i], g = d[i + 1], b = d[i + 2];
+        var high = Math.max(r, g, b), low = Math.min(r, g, b), chroma = high - low;
+        var neutral = r * 0.2126 + g * 0.7152 + b * 0.0722;
+        var gray = neutral;
+        if (chroma > 0) {
+          var hue;
+          if (high === r) hue = ((g - b) / chroma + 6) % 6;
+          else if (high === g) hue = (b - r) / chroma + 2;
+          else hue = (r - g) / chroma + 4;
+          var band = Math.floor(hue), part = hue - band;
+          var weight = weights[band] * (1 - part) + weights[(band + 1) % 6] * part;
+          gray += (high * weight - neutral) * chroma / Math.max(1, high);
+        }
+        gray = Math.max(0, Math.min(255, (gray - 128) * contrast + 128));
+        var outR = gray, outG = gray, outB = gray;
+        if (tintRGB) {
+          outR = gray * (1 + (tintRGB[0] - 128) / 128 * tint);
+          outG = gray * (1 + (tintRGB[1] - 128) / 128 * tint);
+          outB = gray * (1 + (tintRGB[2] - 128) / 128 * tint);
+        }
+        d[i] = r + (outR - r) * mix;
+        d[i + 1] = g + (outG - g) * mix;
+        d[i + 2] = b + (outB - b) * mix;
+      }
+    },
     oilpaint: function (d, W, H, p, t, ps) {
       var mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
       if (mix <= 0 || W < 1 || H < 1) return;

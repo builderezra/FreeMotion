@@ -118465,5 +118465,23 @@
       if (out[i] !== src[i]) throw new Error('Oil Paint changed source transparency');
   });
 
+  test('690 Black & White Mixer varies colour ranges and preserves zero mix', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('bwmixer'), fn = FM._pixelFx.bwmixer;
+    if (!reg || reg.category !== 'color' || !fn || !FM._postFxTypes().includes('bwmixer'))
+      throw new Error('Black & White Mixer is not registered and routed');
+    const src = new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 200, 0, 0, 255, 255]);
+    const neutral = src.slice(); fn(neutral, 3, 1, { mix: 0 }, 0);
+    if (neutral.some((v, i) => v !== src[i])) throw new Error('Zero mix changed the image');
+    const out = src.slice(); fn(out, 3, 1, {}, 0);
+    for (let i = 0; i < out.length; i += 4)
+      if (out[i] !== out[i + 1] || out[i] !== out[i + 2] || out[i + 3] !== src[i + 3])
+        throw new Error('Monochrome output or alpha is wrong');
+    if (!(out[0] > out[8] && out[4] > out[8])) throw new Error('Colour ranges had no independent weights');
+    const shifted = src.slice(); fn(shifted, 3, 1, { reds: 100, preset: 1 }, 0);
+    if (shifted[0] <= out[0] || shifted[4] === out[4]) throw new Error('Range slider or filter preset had no effect');
+    const tinted = src.slice(); fn(tinted, 3, 1, { tint: 50, color: '#ff0000' }, 0);
+    if (tinted[0] <= tinted[1] || tinted[1] !== tinted[2]) throw new Error('Tint did not colour the grey result');
+  });
+
 
 })();
