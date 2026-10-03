@@ -119243,4 +119243,28 @@
       throw new Error('Sharing glow planes changed the result on a later frame');
   });
 
+  test('690 Dark Glow clears and reuses its luminance planes', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
+    if (!P.darkglow || !P.lightglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
+    const W = 17, H = 13;
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < W * H; i++) {
+        const v = i % 7 === 0 ? 30 : 160, j = i * 4;
+        d[j] = d[j + 1] = d[j + 2] = v; d[j + 3] = 255;
+      }
+      return d;
+    }
+    const base = source(), first = source();
+    P.darkglow(first, W, H, { amount: 0.8, radius: 4, threshold: 40 }, 0);
+    const warmed = info();
+    const between = source(); P.lightglow(between, W, H, { amount: 0.8, radius: 4 }, 0);
+    const again = source(); P.darkglow(again, W, H, { amount: 0.8, radius: 4, threshold: 40 }, 0);
+    const end = info();
+    if (end.uses !== warmed.uses + 2 || end.allocations !== warmed.allocations)
+      throw new Error('Dark Glow allocated new full-frame planes after warm-up');
+    if (first.every((value, i) => value === base[i]) || first.some((value, i) => value !== again[i]))
+      throw new Error('Dark Glow failed to darken or retained luminance from the intervening glow');
+  });
+
 })();
