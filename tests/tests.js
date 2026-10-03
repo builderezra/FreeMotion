@@ -118438,4 +118438,34 @@
     if (same(run(stopped, 2), run(0, 0))) throw new Error('Speed zero returned to the first-frame pattern');
   });
 
+  test('690 Electric Edges Speed ramp advances by accumulated rate and holds at zero', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!P || !P.electricedges) throw new Error('Electric Edges kernel is unavailable');
+    const W = 48, H = 32;
+    const source = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, v = x >= 12 && x < 36 && y >= 8 && y < 24 ? 190 : 40;
+        a[i] = a[i + 1] = a[i + 2] = v; a[i + 3] = 255;
+      }
+      return a;
+    };
+    const kf = (pairs) => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    const render = (speed, t) => {
+      const d = source();
+      P.electricedges(d, W, H, { amount: 1, speed, color: '#7df9ff', soft: 70 }, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const slow = render(4, 2), fast = render(8, 2);
+    if (same(slow, fast)) throw new Error('control: the fixture cannot distinguish two crackle frames');
+    if (!same(render(kf([[0, 0], [2, 8]]), 2), slow))
+      throw new Error('a linear 0-to-8 ramp over two seconds should travel eight crackle frames, like steady Speed 4');
+    const stopped = kf([[0, 4], [1, 4], [2, 0]]);
+    if (!same(render(stopped, 2), render(stopped, 3)))
+      throw new Error('Electric Edges changes its crackle after Speed reaches zero');
+    if (same(render(stopped, 2), render(stopped, 0)))
+      throw new Error('Speed zero rewinds Electric Edges to its first crackle frame');
+  });
+
 })();
