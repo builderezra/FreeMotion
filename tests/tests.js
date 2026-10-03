@@ -118856,4 +118856,31 @@
       throw new Error('Soft-edge mode changed the opaque interior');
   });
 
+  test('690 Deflicker steadies exposure but resets at cuts and export starts', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('deflicker'), fn = FM._FX_TABLES.PIXEL_FX.deflicker;
+    if (!reg || reg.category !== 'blur' || !fn || !FM._postFxTypes().includes('deflicker'))
+      throw new Error('Deflicker is not available in Blur');
+    const frame = (left, right) => {
+      const d = new Uint8ClampedArray(16 * 16 * 4);
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+        const i = (y * 16 + x) * 4, v = x < 8 ? left : right;
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+      }
+      return d;
+    };
+    const fx = {}, p = { smooth: 0.5, strength: 100, limit: 1 };
+    const first = frame(40, 80); fn(first, 16, 16, p, 0, 1, null, null, null, fx);
+    if (first[0] !== 40) throw new Error('First frame was graded without history');
+    const pulse = frame(80, 160); fn(pulse, 16, 16, p, 1 / 30, 1, null, null, null, fx);
+    if (!(pulse[0] < 60 && pulse[(8 * 4)] < 120)) throw new Error('Exposure pulse was not steadied');
+    const cut = frame(160, 80); fn(cut, 16, 16, p, 2 / 30, 1, null, null, null, fx);
+    if (cut[0] !== 160 || cut[8 * 4] !== 80) throw new Error('Scene cut kept the old exposure');
+    const wasExporting = FM._exporting;
+    try {
+      FM._exporting = true;
+      const exportStart = frame(80, 160); fn(exportStart, 16, 16, p, 1 / 30, 1, null, null, null, fx);
+      if (exportStart[0] !== 80) throw new Error('Export inherited preview history');
+    } finally { FM._exporting = wasExporting; }
+  });
+
 })();

@@ -764,6 +764,11 @@ window.FM = window.FM || {};
       { key: 'smooth', label: 'Temporal smoothing', min: 0, max: 2, step: 0.05, def: 0.25, unit: 's' },
       { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
+    { type: 'deflicker', label: 'Deflicker', desc: 'Evens out frame-to-frame exposure flicker. Scene changes reset the correction; preview and export each start with fresh history.', params: [
+      { key: 'smooth', label: 'Smoothing', min: 0.1, max: 2, step: 0.05, def: 0.5, unit: 's' },
+      { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'limit', label: 'Maximum correction', min: 0.25, max: 2, step: 0.05, def: 1, unit: 'stops' },
+    ] },
     { type: 'spillsuppressor', label: 'Spill Suppressor', desc: 'Reduce a screen-colour cast after keying, without changing the matte. Put it after the key in the effect stack.', color: true, defColor: '#00c23c', colorLabel: 'Screen colour', params: [
       { key: 'amount', label: 'Remove spill', min: 0, max: 100, step: 1, def: 60, unit: '%' },
       { key: 'range', label: 'Hue range', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -3923,7 +3928,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, autograde: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, autograde: 1, deflicker: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, spillsuppressor: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -5360,7 +5365,54 @@ window.FM = window.FM || {};
   }
   let fractalNoiseScratch = null;
   let _autoGradeCache = new WeakMap(), _autoGradeExportState = !!FM._exporting;
+  let _deflickerCache = new WeakMap(), _deflickerExportState = !!FM._exporting;
   const PIXEL_FX = {
+    deflicker: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
+      const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
+      if (!strength || !fx || W < 1 || H < 1) return;
+      const smooth = Math.max(0.1, Math.min(2, fparam(p, 'smooth', 0.5, t)));
+      const maxGain = Math.pow(2, Math.max(0.25, Math.min(2, fparam(p, 'limit', 1, t))));
+      const totals = new Float32Array(64), counts = new Uint16Array(64);
+      const stride = Math.max(1, Math.floor(Math.sqrt(W * H / 4096)));
+      let total = 0, count = 0;
+      for (let y = 0; y < H; y += stride) for (let x = 0; x < W; x += stride) {
+        const i = (y * W + x) * 4;
+        if (d[i + 3] < 32) continue;
+        const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+        const cell = Math.min(7, Math.floor(y * 8 / H)) * 8 + Math.min(7, Math.floor(x * 8 / W));
+        totals[cell] += lum; counts[cell]++; total += lum; count++;
+      }
+      if (count < 8) return;
+      const mean = total / count;
+      if (mean < 3) return;
+      const pattern = new Float32Array(64);
+      for (let cell = 0; cell < 64; cell++) if (counts[cell]) pattern[cell] = (totals[cell] / counts[cell]) / mean;
+      const exporting = !!FM._exporting;
+      if (exporting !== _deflickerExportState) { _deflickerCache = new WeakMap(); _deflickerExportState = exporting; }
+      const prev = _deflickerCache.get(fx);
+      let target = mean;
+      if (prev && prev.w === W && prev.h === H) {
+        const dt = t - prev.t;
+        if (Math.abs(dt) <= 0.0001) {
+          if (Math.abs(mean - prev.mean) < 0.5) target = prev.target;
+        } else if (dt > 0 && dt <= 0.35) {
+          let change = 0, paired = 0;
+          for (let cell = 0; cell < 64; cell++) if (pattern[cell] && prev.pattern[cell]) {
+            change += Math.abs(pattern[cell] - prev.pattern[cell]); paired++;
+          }
+          // A changed picture is a cut, not an exposure pulse. Reset before grading that frame.
+          if (paired >= 8 && change / paired < 0.45)
+            target = prev.target + (mean - prev.target) * (1 - Math.exp(-dt / smooth));
+        }
+      }
+      _deflickerCache.set(fx, { t: t, w: W, h: H, mean: mean, target: target, pattern: pattern });
+      const gain = Math.max(1 / maxGain, Math.min(maxGain, Math.pow(target / mean, strength)));
+      if (Math.abs(gain - 1) < 0.001) return;
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        d[i] *= gain; d[i + 1] *= gain; d[i + 2] *= gain;
+      }
+    },
     autograde: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
       const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
       if (!strength || W < 1 || H < 1) return;
