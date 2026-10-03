@@ -4765,6 +4765,8 @@ window.FM = window.FM || {};
   FM.replaceMedia = function (id) {
     const layer = FM.layerById(FM.scene, id);
     if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return Promise.resolve(false);
+    const projectId = FM.projects && FM.projects.currentId ? FM.projects.currentId() : null;
+    const stillCurrent = () => (!FM.projects || FM.projects.currentId() === projectId) && FM.layerById(FM.scene, id) === layer;
     /* ⚠️ queue 690 (HUNT-a): A SONG IS REPLACED BY A SONG. A song is a video layer with no picture, so the ⋯ menu offers
        it Replace media… like any clip (and a template's Insert your Media lists it as a slot) — but this picker asked
        for video/*,image/* only, which on his iPhone greys out every song in Files, and a song that reached it anyway
@@ -4781,6 +4783,7 @@ window.FM = window.FM || {};
     const swap = async () => {
       const file = input.files && input.files[0]; input.remove();
       if (!file) return false;
+      if (!stillCurrent()) { if (FM.toast) FM.toast('Media was not replaced — the project changed while the picker was open'); return false; }
       const kind = mediaKind(file);
       let nrec = null;
       try {
@@ -4792,6 +4795,10 @@ window.FM = window.FM || {};
         else nrec = await FM.loadImageFile(file);   // an image, or a name nothing recognises (the old fall-through)
       } catch (e) { nrec = null; }
       if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return false; }
+      // Decoding a phone video or photo can outlive the project it was picked in.
+      // A stale replacement must not be applied to the project now on screen.
+      const stale = () => { if (FM._releaseMediaRecord) FM._releaseMediaRecord(nrec); if (FM.toast) FM.toast('Media was not replaced — the project changed while it was opening'); return false; };
+      if (!stillCurrent()) return stale();
       /* queue 829: keep the outgoing file BEFORE anything replaces it. The next save writes the new blob
          over the same key, so without this the original is gone from the registry, from IndexedDB and
          from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
@@ -4799,9 +4806,9 @@ window.FM = window.FM || {};
       if (outgoing && outgoing.file && FM.storage && FM.storage.stashPrevMedia) {
         try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {}
       }
-      FM.replaceMediaWith(id, nrec);
+      if (!stillCurrent()) return stale();
+      if (!FM.replaceMediaWith(id, nrec)) return stale();
       fitReplacedMedia(FM.layerById(FM.scene, id), outgoing, nrec);   // queue 690 (HUNT-a): same place, same size — before the commit, so undo puts the old scale back
-      if (layer.reversed && FM.ensureReverseCache) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
       /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.
        *
        * A replace only changes out-of-history state — the media registry and the IDB blob. On an
@@ -4828,6 +4835,9 @@ window.FM = window.FM || {};
         FM.mediaLib.list().filter(e => e.key === id).forEach(e => FM.mediaLib.remove(e.mid));
         FM.mediaLib.add(nrec, id);
       }
+      // The swap is already saved before this potentially long frame build. A project switch
+      // during it can no longer leave the replacement half-committed.
+      if (layer.reversed && FM.ensureReverseCache && stillCurrent()) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
       return true;
     };
     input.addEventListener('cancel', () => { input.remove(); settle(false); });

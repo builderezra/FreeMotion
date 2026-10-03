@@ -119765,4 +119765,44 @@
       throw new Error('Constant and flat-keyframe Breathe instances changed their legacy phase');
   });
 
+  test('690 Replace media cancels a decoded file when its project was switched', { item: 'TBD', budgetMs: 60000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [], said = [];
+    const realLoad = FM.loadImageFile, realToast = FM.toast, realClick = HTMLInputElement.prototype.click;
+    let release = null, loaded = null, layerId = null;
+    const held = new Promise(resolve => { release = resolve; });
+    try {
+      if (wasOpen) FM.home.close();
+      const other = await FM.projects.create({ name: 'Replace switch B', width: 320, height: 240 }); made.push(other);
+      const mine = await FM.projects.create({ name: 'Replace switch A', width: 320, height: 240 }); made.push(mine);
+      const oldFile = await q915aPng('replace-switch-old', '#b24d4d');
+      const newFile = await q915aPng('replace-switch-new', '#4db2a0');
+      FM.addMediaLayer(await realLoad(oldFile));
+      layerId = FM.scene.selectedId;
+      await FM.storage.settled();
+      FM.toast = function (message) { said.push(String(message)); return realToast.apply(this, arguments); };
+      FM.loadImageFile = async function (file) { await held; loaded = await realLoad(file); return loaded; };
+      HTMLInputElement.prototype.click = function () {}; // only the OS picker sheet is stood in for
+      const pending = FM.replaceMedia(layerId);
+      HTMLInputElement.prototype.click = realClick;
+      const inp = Array.from(document.querySelectorAll('input[type=file]')).find(i => i.accept === 'video/*,image/*' && i.parentNode === document.body);
+      if (!inp) throw new Error('Replace media did not open its picker');
+      const dt = new DataTransfer(); dt.items.add(newFile); inp.files = dt.files;
+      inp.dispatchEvent(new Event('change'));
+      if ((await FM.projects.open(other, { confirmed: true })) !== true) throw new Error('Could not switch projects during decode');
+      release(); release = null;
+      const result = await pending;
+      if (result !== false) throw new Error('The obsolete Replace media operation claimed success');
+      if (FM.projects.currentId() !== other || FM.scene.layers.some(l => l.id === layerId)) throw new Error('The replacement landed in the other project');
+      const saved = await FM.storage.readMedia(layerId);
+      if (!saved || !saved.file || saved.file.name !== oldFile.name) throw new Error('The original project lost its original media');
+      if (!loaded || !loaded._released || FM.media.get(layerId)) throw new Error('The abandoned decoded media stayed in memory');
+      if (!said.some(m => /not replaced.*project changed/i.test(m))) throw new Error('The user was not told that the replacement was cancelled');
+    } finally {
+      if (release) release();
+      FM.loadImageFile = realLoad; FM.toast = realToast; HTMLInputElement.prototype.click = realClick;
+      if (layerId) hfDropTiles(layerId);
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
