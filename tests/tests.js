@@ -119295,4 +119295,33 @@
     if (zero.some((v, i) => v !== noFx[i])) throw new Error('Zero softness changed the matte');
   });
 
+  test('690 shared template file names clips that exceed the embed limit', { item: 'TBD' }, async function () {
+    const getPack = FM.templates.getPack, list = FM.templates.list;
+    const createURL = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
+    let saved;
+    try {
+      FM.templates.getPack = async () => ({
+        project: { name: 'Source', width: 320, height: 240, duration: 2 },
+        layers: [{ id: 'big', type: 'video', name: 'Main clip' }, { id: 'small', type: 'video', name: 'Intro' }],
+        media: {
+          big: { kind: 'video', file: { name: 'long.mp4', size: 6 * 1048576 + 1 } },
+          small: { kind: 'video', file: new File([new Uint8Array([1])], 'short.mp4', { type: 'video/mp4' }) }
+        }
+      });
+      FM.templates.list = () => [{ id: 'probe', name: 'Shareable' }];
+      URL.createObjectURL = blob => { saved = blob; return 'blob:template-test'; };
+      HTMLAnchorElement.prototype.click = function () {};
+      const result = await FM.templates.exportFile('probe');
+      const obj = JSON.parse(await saved.text());
+      if (!result || result.omitted.length !== 1 || result.omitted[0].file !== 'long.mp4')
+        throw new Error('Sender did not receive the missing clip name');
+      if (!obj.omitted || obj.omitted.length !== 1 || obj.omitted[0].file !== 'long.mp4')
+        throw new Error('Shared file did not record its omitted clip');
+      if (obj.media.big || !obj.media.small) throw new Error('Template embedded the wrong media');
+    } finally {
+      FM.templates.getPack = getPack; FM.templates.list = list;
+      URL.createObjectURL = createURL; HTMLAnchorElement.prototype.click = click;
+    }
+  });
+
 })();

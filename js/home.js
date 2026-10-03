@@ -2000,8 +2000,17 @@ window.FM = window.FM || {};
         // the same .fmotion.json a project saves, so whoever you send it to can already open it.
         { label: 'Save template file…', action: async () => {
           if (FM.toast) FM.toast('Packing…', 1200);
-          const ok = await FM.templates.exportFile(t.id);
-          if (FM.toast) FM.toast(ok ? 'Template file saved — send it to anyone' : 'Could not save that template file');
+          const result = await FM.templates.exportFile(t.id);
+          if (FM.toast) {
+            const missing = result && result.omitted || [];
+            if (!result) FM.toast('Could not save that template file');
+            else if (missing.length) FM.toast('Template file saved WITHOUT ' + missing.length +
+              (missing.length === 1 ? ' clip — ' : ' clips — ') +
+              missing.slice(0, 2).map(m => m.file + ' (' + m.mb + ' MB)').join(', ') +
+              (missing.length > 2 ? ' and more' : '') +
+              '. Replace missing media after import or use a smaller clip.', 12000);
+            else FM.toast('Template file saved — send it to anyone');
+          }
         } },
         pinMenuItem('templates', t.id),
         { sep: true },

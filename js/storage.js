@@ -3151,23 +3151,17 @@ window.FM = window.FM || {};
       const pack = await this.getPack(tid);
       if (!pack || !pack.layers) return false;
       const meta = this.list().find(t => t.id === tid) || {};
-      const media = {};
-      for (const lid in pack.media) {
-        const rec = pack.media[lid];
-        if (rec && rec.file && rec.file.size <= EMBED_LIMIT) {
-          const durl = await fileToDataURL(rec.file);
-          if (durl) media[lid] = { kind: rec.kind, name: rec.file.name, dataURL: durl };
-        }
-      }
       const project = Object.assign({}, pack.project, { name: meta.name || pack.project.name || 'Template' });
-      const obj = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
+      // Share the project file's embedding and named-omission rules: a template with a
+      // large clip must tell its sender and recipient which footage is missing.
+      const obj = await serializeWith({ project: project, layers: pack.layers }, lid => pack.media && pack.media[lid]);
       const safe = String(project.name).replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'template';
       const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      return true;
+      return { omitted: obj.omitted };
     },
     async remove(tid) {
       writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));
