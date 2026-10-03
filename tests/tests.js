@@ -119267,4 +119267,19 @@
       throw new Error('Dark Glow failed to darken or retained luminance from the intervening glow');
   });
 
+  test('690 glow scratch releases its largest frame after rendering stops', { item: 'TBD' }, function () {
+    const info = FM._glowScratchInfo, release = FM._releaseGlowScratch;
+    if (!info || !release) throw new Error('Glow idle-release controls are unavailable');
+    const W = 9, H = 9, d = new Uint8ClampedArray(W * H * 4);
+    const i = (4 * W + 4) * 4; d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 255;
+    try {
+      FM._FX_TABLES.PIXEL_FX.lightglow(d, W, H, { amount: 0.8, radius: 3 }, 0);
+      if (info().pixels < W * H || !info().releasePending)
+        throw new Error('Glow did not schedule an idle release for its cached frame');
+      release();
+      if (info().pixels !== 0 || info().releasePending)
+        throw new Error('The largest glow frame stayed pinned after idle release');
+    } finally { release(); }
+  });
+
 })();

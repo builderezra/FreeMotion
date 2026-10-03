@@ -4810,16 +4810,28 @@ window.FM = window.FM || {};
 
   // Glow kernels run synchronously and fill both planes before reading them; Dark Glow
   // clears its sparse first plane. Sharing avoids 8 bytes of allocation per plate pixel.
-  let _glowScratch = null, _glowScratchUses = 0, _glowScratchAllocations = 0;
+  let _glowScratch = null, _glowScratchUses = 0, _glowScratchAllocations = 0, _glowScratchReleaseTimer = null;
+  function releaseGlowScratch() {
+    if (_glowScratchReleaseTimer !== null && typeof clearTimeout === 'function') clearTimeout(_glowScratchReleaseTimer);
+    _glowScratchReleaseTimer = null;
+    _glowScratch = null;
+  }
   function glowScratch(n) {
     _glowScratchUses++;
+    // An export can grow these planes to 4K. Keep them warm during playback, then
+    // release the largest frame after rendering has been idle for five seconds.
+    if (typeof setTimeout === 'function') {
+      if (_glowScratchReleaseTimer !== null) clearTimeout(_glowScratchReleaseTimer);
+      _glowScratchReleaseTimer = setTimeout(releaseGlowScratch, 5000);
+    }
     if (!_glowScratch || _glowScratch[0].length < n) {
       _glowScratch = [new Float32Array(n), new Float32Array(n)];
       _glowScratchAllocations++;
     }
     return _glowScratch;
   }
-  FM._glowScratchInfo = function () { return { pixels: _glowScratch ? _glowScratch[0].length : 0, uses: _glowScratchUses, allocations: _glowScratchAllocations }; };
+  FM._glowScratchInfo = function () { return { pixels: _glowScratch ? _glowScratch[0].length : 0, uses: _glowScratchUses, allocations: _glowScratchAllocations, releasePending: _glowScratchReleaseTimer !== null }; };
+  FM._releaseGlowScratch = releaseGlowScratch;
 
   /* ONE PIXEL, ONE BLEND MODE (queue 537). The eight modes Ezra's ask implies — "screen for glows,
      multiply for burns, overlay/soft-light for a colour cast, hard-light for a look".
