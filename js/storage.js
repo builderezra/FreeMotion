@@ -1722,6 +1722,7 @@ window.FM = window.FM || {};
     FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : []).map(id => re.map[id]).filter(Boolean);
     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
     if (FM.fonts && obj.fonts) await FM.fonts.applyEmbedded(obj.fonts);   // register any fonts carried in the file
+    const hydratedMediaIds = new Set();
     if (obj.media) {
       for (const id of Object.keys(obj.media)) {
         const md = obj.media[id], nid = re.map[id];
@@ -1730,20 +1731,20 @@ window.FM = window.FM || {};
           const file = await dataURLToFile(md.dataURL, md.name);
           if (!file) continue;   // non-data: URL was rejected → layer loads media-less (relink via Replace media…)
           const rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file);
-          if (rec) { FM.media.set(nid, rec); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
+          if (rec) { FM.media.set(nid, rec); hydratedMediaIds.add(id); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
         } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }
       }
     }
-    /* ⚠️ AND SAY WHICH LAYERS CAME BACK EMPTY (queue 888). The loop above only ever walks obj.media,
-     * so a video whose file was too big to embed is restored as a layer that is present, correctly
+    /* ⚠️ AND SAY WHICH LAYERS CAME BACK EMPTY (queue 888). An absent or corrupt embed
+     * restores a layer that is present, correctly
      * timed, correctly keyframed and completely BLANK — and nothing anywhere said so. That silence is
      * the dangerous half: the project LOOKS like it opened fine, which is exactly what someone checks
-     * before deleting the original. A video or image layer with no media entry is unambiguous, so it
+     * before deleting the original. A video or image layer with no restored media is unambiguous, so it
      * can be named. Read from the file's own `omitted` list when it has one (written since v16.33) and
      * worked out from the layers otherwise, so files saved BEFORE this fix still get the warning. */
     try {
       const want = (obj.layers || []).filter(l => l && (l.type === 'video' || l.type === 'image'));
-      const blank = want.filter(l => !(obj.media && obj.media[l.id])).map(l => l.name || l.type);
+      const blank = want.filter(l => !hydratedMediaIds.has(l.id)).map(l => l.name || l.type);
       if (blank.length) {
         const om = obj.omitted || [];
         const named = om.slice(0, 2).map(o => o.file).join(', ');
