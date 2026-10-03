@@ -111,6 +111,12 @@ window.FM = window.FM || {};
     const g = ctx.createGain(); env(g.gain, at, [[0, 0.85 * power], [0.07, 0.22 * power], [0.14, 0]]);
     n.connect(hp); hp.connect(g); g.connect(out); n.start(at); n.stop(at + 0.15);
   }
+  function foleyClick(ctx, at, out, hz, power, length) {
+    const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, length, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = hz; bp.Q.value = 1.3;
+    const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.003, power], [length, 0]]);
+    n.connect(bp); bp.connect(g); g.connect(out); n.start(at); n.stop(at + length);
+  }
 
   /* ---- the catalogue ---------------------------------------------------------------------------
    * Each entry renders itself into an OfflineAudioContext. `dur` is the whole tail, so a clip lands in
@@ -695,6 +701,58 @@ window.FM = window.FM || {};
         const hum = ctx.createOscillator(); hum.type = 'sine'; hum.frequency.value = 60;
         const hg = ctx.createGain(); env(hg.gain, t0, [[0, 0], [0.25, 0.008], [d - 0.25, 0.008], [d, 0]]);
         hum.connect(hg); hg.connect(out); hum.start(t0); hum.stop(t0 + d);
+      } },
+    // Everyday sounds use short, varied events rather than replaying one identical sample.
+    { id: 'foley-knock', name: 'Door knock', cat: 'Foley', dur: 0.72, level: 0.68,
+      render(ctx, t0, d, out) {
+        [0.04, 0.3].forEach((at, i) => {
+          foleyClick(ctx, t0 + at, out, 650 - i * 80, 0.55, 0.095);
+          const wood = ctx.createOscillator(); wood.type = 'triangle'; wood.frequency.value = 160 - i * 10;
+          const g = ctx.createGain(); env(g.gain, t0 + at, [[0, 0.42], [0.13, 0]]);
+          wood.connect(g); g.connect(out); wood.start(t0 + at); wood.stop(t0 + at + 0.13);
+        });
+      } },
+    { id: 'foley-footsteps', name: 'Footsteps', cat: 'Foley', dur: 1.8, level: 0.58,
+      render(ctx, t0, d, out) {
+        for (let i = 0; i < 5; i++) {
+          const at = t0 + 0.08 + i * 0.34, power = i % 2 ? 0.43 : 0.58;
+          const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.16, 'brown');
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500 + (i % 3) * 100;
+          const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.014, power], [0.16, 0]]);
+          n.connect(lp); lp.connect(g); g.connect(out); n.start(at); n.stop(at + 0.16);
+          foleyClick(ctx, at, out, 1200 + (i % 3) * 170, power * 0.25, 0.055);
+        }
+      } },
+    { id: 'foley-clock', name: 'Tick-tock', cat: 'Foley', dur: 2, level: 0.43,
+      render(ctx, t0, d, out) {
+        for (let i = 0; i < 4; i++) {
+          const at = t0 + 0.12 + i * 0.46;
+          foleyClick(ctx, at, out, i % 2 ? 1250 : 2100, i % 2 ? 0.34 : 0.48, 0.055);
+        }
+      } },
+    { id: 'foley-vibrate', name: 'Phone vibrate', cat: 'Foley', dur: 1.05, level: 0.48,
+      render(ctx, t0, d, out) {
+        [0.04, 0.35, 0.66].forEach((at, i) => {
+          const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 145 + i * 5;
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 650;
+          const g = ctx.createGain(); env(g.gain, t0 + at, [[0, 0], [0.018, 0.25], [0.19, 0.23], [0.22, 0]]);
+          o.connect(lp); lp.connect(g); g.connect(out); o.start(t0 + at); o.stop(t0 + at + 0.22);
+        });
+      } },
+    { id: 'foley-typing', name: 'Typing', cat: 'Foley', dur: 1.65, level: 0.45,
+      render(ctx, t0, d, out) {
+        [0.08, 0.2, 0.35, 0.46, 0.59, 0.77, 0.88, 1.03, 1.17, 1.3, 1.42].forEach((at, i) => {
+          foleyClick(ctx, t0 + at, out, 1900 + (i % 4) * 370, 0.28 + (i % 3) * 0.05, 0.045);
+        });
+      } },
+    { id: 'foley-kaching', name: 'Ka-ching', cat: 'Foley', dur: 1.4, level: 0.65,
+      render(ctx, t0, d, out) {
+        foleyClick(ctx, t0 + 0.02, out, 1400, 0.6, 0.08);
+        [870, 1340, 2050].forEach((hz, i) => {
+          const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = hz;
+          const g = ctx.createGain(); env(g.gain, t0 + 0.14, [[0, 0], [0.008, 0.26 - i * 0.05], [0.45, 0.12 - i * 0.025], [1.2, 0]]);
+          o.connect(g); g.connect(out); o.start(t0 + 0.14); o.stop(t0 + 1.34);
+        });
       } },
   ];
 

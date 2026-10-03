@@ -118523,5 +118523,20 @@
     }
   });
 
+  test('690 Everyday Foley renders six bounded sounds', { item: 'TBD' }, async function () {
+    const ids = ['foley-knock', 'foley-footsteps', 'foley-clock', 'foley-vibrate', 'foley-typing', 'foley-kaching'];
+    for (const id of ids) {
+      const def = FM.sfx.byId(id);
+      if (!def || def.cat !== 'Foley') throw new Error(id + ' is missing from Foley');
+      const buffer = await FM.sfx.renderBuffer(def), samples = buffer.getChannelData(0);
+      if (buffer.duration < def.dur) throw new Error(id + ' was cut short');
+      let peak = 0, power = 0;
+      for (let i = 0; i < samples.length; i++) {
+        peak = Math.max(peak, Math.abs(samples[i])); power += samples[i] * samples[i];
+      }
+      if (!(peak > 0.08 && peak < 0.7 && power > 0.01)) throw new Error(id + ' is silent or clipped');
+    }
+  });
+
 
 })();
