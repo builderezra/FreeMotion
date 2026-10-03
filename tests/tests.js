@@ -119083,4 +119083,22 @@
       throw new Error('Colour protection left a cyan fringe or changed alpha: ' + Array.from(safe.slice(at, at + 4)));
   });
 
+  test('690 Overdrive keeps bright neutral edges free of colour fringes', { item: 'TBD' }, function () {
+    const box = FM.filters.makeInstance('overdrive');
+    const sharpen = box && box.effects.find(e => e.type === 'unsharpmask');
+    if (!sharpen || sharpen.params.coloursafe !== 100)
+      throw new Error('Overdrive does not enable colour protection on its Unsharp Mask');
+    const W = 5, H = 5, d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = x < 2 ? 255 : 180;
+      d[i + 1] = d[i + 2] = x < 2 ? 0 : 180;
+      d[i + 3] = 255;
+    }
+    FM._FX_TABLES.PIXEL_FX.unsharpmask(d, W, H, sharpen.params, 0);
+    const at = (2 * W + 2) * 4;
+    if (d[at] !== d[at + 1] || d[at + 1] !== d[at + 2] || d[at + 3] !== 255)
+      throw new Error('Overdrive left a coloured fringe on neutral detail: ' + Array.from(d.slice(at, at + 4)));
+  });
+
 })();
