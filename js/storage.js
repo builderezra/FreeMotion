@@ -3748,6 +3748,7 @@ window.FM = window.FM || {};
   // A text layer references a font by its generated `css` token ('FMF<id>, sans-serif'); the token is
   // machine-generated (alnum only), so splicing it straight into ctx.font carries no injection risk.
   const FONT_INDEX = 'fm.fonts', FONT_EMBED_LIMIT = 4 * 1024 * 1024;
+  const _fontSources = new Map();   // loaded immutable files for captured background exports
   const _fontReg = new Set();   // ids already handed to document.fonts (keeps rehydrate idempotent)
   function fontFileOk(file) {
     if (!file) return false;
@@ -3757,12 +3758,14 @@ window.FM = window.FM || {};
   async function registerFace(family, file) {
     if (!file || !window.FontFace) return false;
     try { const ff = new FontFace(family, await file.arrayBuffer()); await ff.load(); document.fonts.add(ff);
+      _fontSources.set(family, Object.freeze({family, file}));
       FM.fonts.faceLoaded();
       return true; }
     catch (e) { return false; }
   }
 
   FM.fonts = {
+    loadedSource(family) { return _fontSources.get(family) || null; },
     /* EVERY LINE BREAK MEASURED BEFORE A FACE ARRIVES WAS MEASURED IN THE FALLBACK FONT, and
      * FM.textLines caches wraps under a key built from ctx.font — which is the SAME STRING before and
      * after the real face loads. Only measureText changes, so the key could not tell the two apart and

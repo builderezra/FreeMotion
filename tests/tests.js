@@ -120479,4 +120479,120 @@
     }
   });
 
+  async function workerProbePage(page, count) {
+    if (typeof VideoEncoder === 'undefined') return;
+    if (!FM.exportWorker) throw new Error('Export worker client is missing');
+    // Own app instance: integration controls interrupt encodes and resume stored chunks. Keep their
+    // scene, Worker instrumentation and exporting flags out of this runner.
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + Math.min(innerWidth, top.innerWidth) + 'px;height:760px';
+    frame.src = new URL('tests/' + page, location.href).href;
+    document.body.appendChild(frame);
+    try {
+      const deadline = performance.now() + 100000;
+      while (performance.now() < deadline) {
+        const result = frame.contentWindow && frame.contentWindow.__workerCanvasResult;
+        if (result) {
+          if (!result.ok) throw new Error(result.error || 'Worker integration failed');
+          if (result.checks.length < count) throw new Error('Worker checks did not all run');
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error('Worker integration did not finish');
+    } finally { frame.remove(); }
+  }
+  test('47 — worker MP4 exports preserve frames, fallback, cancel and resume', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-export.html', 18);
+  });
+  test('47 — worker effects match the app for defaults, animation, duplicates and mixed stacks', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-effects.html', 184);
+  });
+
+  test('47 — worker geometry preserves curves, holes, rounded corners and animated borders', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-shapes.html', 1108);
+  });
+
+  test('47 — background exports preserve native blends across plain and flattened groups', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-blends.html', 2);
+  });
+
+  test('47 — background exports preserve nested group opacity and effects', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-group-effects.html', 2);
+  });
+
+  test('47 — background exports retain group/controller motion and captured group audio visibility', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-groups.html', 2);
+  });
+
+  test('47 — background exports preserve animated gradients, outlines and curved typography', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-typography.html', 2);
+  });
+
+  test('47 — background exports retain moving video through live replacement and startup failure', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-video.html', 2);
+  });
+
+  test('47 — background exports retain system and imported text through live edits', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-text.html', 2);
+  });
+
+  test('47 — background exports retain oriented and transparent still images through replacement', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-images.html', 2);
+  });
+
+  test('47 — background exports retain their soundtrack through live media replacement', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-audio.html', 2);
+  });
+
+  test('47 — one export snapshot survives asynchronous setup and main-renderer fallback', { item: '47', budgetMs: 120000 }, async function () {
+    await workerProbePage('worker-snapshot.html', 6);
+  });
+
+  test('47 — Home metadata and bundled Inter faces retain worker render parity', { item: 'TBD', budgetMs: 120000 }, async function () {
+    if (typeof Worker !== 'function' || typeof OffscreenCanvas !== 'function') return;
+    const prior = { scene:FM.scene, media:FM.media, isolate:FM.isolate, order:FM._dragOrderIds,
+      exporting:FM._exporting, transparent:FM._exportTransparent, time:FM.time };
+    let captured, renderer;
+    try {
+      const doc = FM.newScene();
+      Object.assign(doc.project, { width:240, height:160, fps:10, duration:1,
+        background:'#102030', sizePicked:true, thumbPinned:false, notes:'Home-only note' });
+      const regular = FM.makeLayer('text', { name:'Regular', x:120, y:48, duration:1 });
+      Object.assign(regular, { text:'Free Motion', fontFamily:'Inter, sans-serif', fontSize:29,
+        color:'#f3cd74', align:'center', wrapWidth:220 });
+      const bold = FM.makeLayer('text', { name:'Bold', x:120, y:112, duration:1 });
+      Object.assign(bold, { text:'Make a story', fontFamily:'Inter, sans-serif', fontSize:27,
+        bold:true, color:'#8ccfff', align:'center', wrapWidth:220 });
+      bold.transform.x = { kf:[{ t:0, v:120 }, { t:1, v:150 }] };
+      doc.layers = [regular, bold];
+      FM.scene = doc; FM.media = new Map(); FM.isolate = null; FM._dragOrderIds = null;
+      FM._exporting = true; FM._exportTransparent = false;
+      await FM.studioFonts.forScene(doc);
+      if (!FM.exportWorker.eligible(doc)) throw new Error('An ordinary Home project with bundled text was excluded');
+      captured = FM.exportWorker.capture(doc, { time:0 });
+      if (!captured || captured.fonts.length !== 2 || captured.document.project.sizePicked !== undefined ||
+          captured.document.project.notes !== undefined)
+        throw new Error('Worker snapshot lost bundled font weights or retained Home metadata');
+      renderer = await FM.exportWorker.create(doc, { capture:captured, time:0 });
+      if (!renderer) throw new Error('Bundled Inter did not start the export worker');
+      for (const time of [0, .5]) {
+        FM.time = time;
+        const page = offscreen(240, 160), worker = offscreen(240, 160);
+        FM.renderScene(page.getContext('2d'), doc, time);
+        await renderer.render(worker.getContext('2d'), time);
+        const a = page.getContext('2d').getImageData(0, 0, 240, 160).data;
+        const b = worker.getContext('2d').getImageData(0, 0, 240, 160).data;
+        let max = 0;
+        for (let i = 0; i < a.length; i++) max = Math.max(max, Math.abs(a[i] - b[i]));
+        if (max) throw new Error('Bundled Inter worker frame differs at ' + time + 's; maximum channel error ' + max);
+      }
+    } finally {
+      if (renderer) renderer.dispose();
+      if (captured) FM.exportWorker.release(captured);
+      FM.scene = prior.scene; FM.media = prior.media; FM.isolate = prior.isolate;
+      FM._dragOrderIds = prior.order; FM._exporting = prior.exporting;
+      FM._exportTransparent = prior.transparent; FM.time = prior.time;
+    }
+  });
 })();

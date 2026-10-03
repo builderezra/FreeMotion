@@ -1,0 +1,131 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FreeMotion #47: geometry in the actual export worker</title>
+<style>body{font:15px system-ui;background:#111;color:#eee;margin:24px}pre{white-space:pre-wrap}iframe{position:fixed;left:-10000px;top:0;height:760px}</style>
+<h1>Worker geometry: exact pixels, outlines and holes</h1>
+<pre id="result">Loading…</pre><iframe id="app"></iframe>
+<script>
+(async function(){
+  const checks=[],frame=document.getElementById('app'),out=document.getElementById('result');
+  const assert=(value,why)=>{if(!value)throw new Error(why);};
+  const clone=value=>JSON.parse(JSON.stringify(value));
+  const animated=(a,b)=>({kf:[{t:0,v:a,e:'linear'},{t:1,v:b,e:'easeInOut',bez:[.42,0,.58,1]}]});
+  let renderer;
+  try{
+    const loaded=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
+    frame.style.width=Math.min(900,innerWidth)+'px';frame.src='../index.html';await loaded;
+    const w=frame.contentWindow,FM=w.FM;
+    assert(w.innerWidth===Math.min(900,innerWidth),'Actual app viewport differs from probe width');
+    assert(FM.exportWorker,'Worker not loaded');
+    const shapes='rect ellipse line arc pie semicircle ring polygon star triangle heart plus arrow chevron trapezoid parallelogram speech moon snowflake shield droplet cloud play spiral sparkle bolt puzzle pushpin flag paperplane house laurel bookmark flame banner ribbon wreath diamond plane umbrella bomb boat magnifier sun person rocket woman stamp check thumbsup pointhand envelope key car squircle cross pin lock gear crown eye note starburst clock'.split(' ');
+    const library='triangle heart plus arrow chevron trapezoid parallelogram speech moon snowflake shield droplet cloud play spiral sparkle bolt puzzle pushpin flag paperplane house laurel bookmark flame banner ribbon wreath diamond plane umbrella bomb boat magnifier sun person rocket woman stamp check thumbsup pointhand envelope key car squircle cross pin lock gear crown eye note starburst clock'.split(' ');
+    // Newer app versions may add shapes after this worker fixture was written. Keep those on the
+    // existing renderer until their page/worker pixels have been checked instead of failing this
+    // proof for the older, explicitly admitted library.
+    const added=Object.keys(FM.SHAPE_POLYS).filter(name=>!library.includes(name));
+    for(const name of added){
+      const doc=FM.newScene();Object.assign(doc.project,{width:160,height:120,duration:1,fps:10});
+      doc.layers=[FM.makeLayer('shape',{shape:name,duration:1})];
+      assert(!FM.exportWorker.eligible(doc),name+': new, unverified shape was admitted to the worker');
+    }
+    for(const name of library)assert(FM.SHAPE_POLYS[name],name+': library fixture is missing');
+    const cases=[];
+    for(const shape of shapes){
+      cases.push({name:shape+' plain',shape});
+      for(const position of ['inside','center','outside'])cases.push({name:shape+' '+position+' animated border',shape,stroke:{enabled:true,width:animated(0,12),color:animated('#0cf','#ff60bb'),position}});
+    }
+    cases.push(
+      {name:'rounded rect',shape:'rect',cornerRadius:18},
+      {name:'oversized radius',shape:'rect',cornerRadius:999},
+      {name:'triangle polygon',shape:'polygon',sides:3},
+      {name:'twelve-sided polygon',shape:'polygon',sides:12},
+      {name:'three-point star',shape:'star',sides:3},
+      {name:'twelve-point star',shape:'star',sides:12}
+    );
+    for(const shape of ['line','arc','spiral'])cases.push({name:shape+' zero width fallback',shape,stroke:{enabled:false,width:0,color:'#ffffff'}});
+    cases.push(
+      {name:'ring outline without fill',shape:'ring',fillMode:'none',stroke:{enabled:true,width:7,color:'#54caff',position:'outside'}},
+      {name:'outside border under alpha fill',shape:'rect',fill:'#eb649180',stroke:{enabled:true,width:10,color:'#31abff99',position:'outside'}},
+      {name:'ring border through blur and gamma',shape:'ring',stroke:{enabled:true,width:6,color:'#ed9d34',position:'inside'},effects:[{type:'blur',params:{radius:3}},{type:'gamma',params:{gamma:1.7}}]},
+      {name:'spiral border through blur and gamma',shape:'spiral',stroke:{enabled:true,width:6,color:'#ed9d34',position:'outside'},effects:[{type:'blur',params:{radius:3}},{type:'gamma',params:{gamma:1.7}}]},
+      {name:'rounded border through blur and gamma',shape:'rect',cornerRadius:15,stroke:{enabled:true,width:6,color:'#ed9d34',position:'center'},effects:[{type:'blur',params:{radius:3}},{type:'gamma',params:{gamma:1.7}}]}
+    );
+    // Preserve existing saved-project semantics; alpha-hex keyframes currently use the shared
+    // engine's legacy RGB interpolation. This asserts parity, not correct alpha interpolation.
+    cases.push({name:'legacy alpha-hex border animation',shape:'heart',stroke:{enabled:true,width:animated(2,12),color:animated('#0cf8','#ff60bbaa'),position:'outside'}});
+    for(const shape of ['line','arc','spiral']){
+      cases.push({name:shape+' ignores none fill mode',shape,fillMode:'none'});
+      cases.push({name:shape+' keeps line colour with gradient selected',shape,fillGradient:{enabled:true,type:'linear',c0:'#f0b',c1:'#2af',angle:25,ox:0,oy:0}});
+    }
+    const only=new URLSearchParams(location.search).get('only');
+    const selected=only?cases.filter(c=>c.name.includes(only)):cases;
+    assert(selected.length,'No geometry cases matched the requested filter');
+    let frames=0;
+    for(const size of [[160,120],[240,180]])for(const opacity of [1,.45])for(const spec of selected){
+      const scene=FM.newScene();Object.assign(scene.project,{width:size[0],height:size[1],duration:1,fps:10,background:opacity===1?'#182030':null});
+      FM.scene=scene;FM.time=0;FM._exporting=true;FM.isolate=null;FM._dragOrderIds=null;
+      const layer=FM.makeLayer('shape',{shape:spec.shape,x:size[0]*.4,y:size[1]*.5,shapeW:size[0]*.52,shapeH:size[1]*.57,fill:'#ec5269',duration:1});
+      for(const key of ['sides','cornerRadius','fill','fillMode','fillGradient','stroke','effects'])if(spec[key]!==undefined)layer[key]=clone(spec[key]);
+      layer.transform.x=animated(size[0]*.3,size[0]*.65);layer.transform.rotation=animated(-20,30);layer.transform.opacity=opacity;
+      layer.transform.anchorX=.35;layer.transform.anchorY=.6;
+      const back=FM.makeLayer('shape',{shape:'ellipse',x:size[0]*.53,y:size[1]*.43,shapeW:size[0]*.25,shapeH:size[1]*.3,fill:'#42a790',duration:1});
+      back.transform.opacity=.7;scene.layers=[layer,back];
+      const inside=layer.stroke.enabled&&layer.stroke.position==='inside'&&!['line','arc','spiral'].includes(layer.shape);
+      if(inside){
+        assert(!FM.exportWorker.eligible(scene),spec.name+': unverified clipped border reached worker eligibility');
+        assert(await FM.exportWorker.create(scene,{time:.37})===null,spec.name+': clipped border did not select the existing renderer');
+        const a=w.document.createElement('canvas'),b=w.document.createElement('canvas');a.width=b.width=size[0];a.height=b.height=size[1];
+        const ac=a.getContext('2d'),bc=b.getContext('2d');FM.scene=scene;FM.time=.37;FM.renderScene(ac,scene,.37);
+        const center=clone(scene);center.layers[0].stroke.position='center';FM.scene=center;FM.renderScene(bc,center,.37);
+        const original=ac.getImageData(0,0,...size).data,control=bc.getImageData(0,0,...size).data;
+        assert(original.some((v,i)=>v!==control[i]),spec.name+': inside-border control was inert');
+        checks.push(`${spec.name} ${size.join('×')} opacity=${opacity}: existing renderer selected; inside border differs from center`);
+        continue;
+      }
+      assert(FM.exportWorker.eligible(scene),spec.name+': scene rejected before reaching worker');
+      renderer=await FM.exportWorker.create(scene,{time:0});assert(renderer,spec.name+': worker failed initialization');
+      let geometryChanged=false,borderChanged=false,previous;
+      for(const time of [0,.37,.79]){
+        const page=w.document.createElement('canvas'),worker=w.document.createElement('canvas'),control=w.document.createElement('canvas');
+        page.width=worker.width=control.width=size[0];page.height=worker.height=control.height=size[1];
+        const ac=page.getContext('2d'),bc=worker.getContext('2d'),cc=control.getContext('2d');
+        FM.scene=scene;FM.time=time;FM.renderScene(ac,scene,time);await renderer.render(bc,time);
+        const a=ac.getImageData(0,0,...size).data,b=bc.getImageData(0,0,...size).data;
+        let changed=0,max=0;for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]);if(d)changed++;max=Math.max(max,d);}
+        if(changed){
+          window.__workerProbeImages={page:page.toDataURL(),worker:worker.toDataURL()};
+          const off=new w.OffscreenCanvas(...size),oc=off.getContext('2d');
+          FM.scene=scene;FM.time=time;FM.renderScene(oc,scene,time);
+          const od=oc.getImageData(0,0,...size).data;
+          const transferred=off.transferToImageBitmap();cc.clearRect(0,0,...size);cc.drawImage(transferred,0,0);transferred.close();
+          const td=cc.getImageData(0,0,...size).data;
+          const diff=(left,right)=>left.reduce((n,v,i)=>n+(v!==right[i]?1:0),0);
+          const backend={pageVsOffscreen:diff(a,od),workerVsOffscreen:diff(b,od),offscreenVsTransferred:diff(od,td)};
+          const sample=[];for(let i=0;i<a.length&&sample.length<6;i+=4)if(a.slice(i,i+4).some((v,j)=>v!==b[i+j]))sample.push({x:(i/4)%size[0],y:Math.floor(i/4/size[0]),page:Array.from(a.slice(i,i+4)),worker:Array.from(b.slice(i,i+4))});
+          throw new Error(`${spec.name} ${size} opacity=${opacity} t=${time}: ${changed} channels differ (max ${max}); `+JSON.stringify({backend,sample,stroke:layer.stroke,captured:renderer.document.layers[0].stroke,width:FM.evalProp(layer.stroke.width,time),color:FM.evalProp(layer.stroke.color,time)}));
+        }
+        if(previous)assert(a.some((v,i)=>v!==previous[i]),spec.name+': movement control never moved');previous=a.slice();
+        const wrong=clone(scene);wrong.layers[0].shape=spec.cornerRadius>0?'rect':spec.shape==='rect'?'ellipse':'rect';wrong.layers[0].cornerRadius=0;
+        FM.scene=wrong;FM.renderScene(cc,wrong,time);
+        const wrongPixels=cc.getImageData(0,0,...size).data;
+        if(a.some((v,i)=>v!==wrongPixels[i]))geometryChanged=true;
+        if(spec.stroke&&spec.stroke.enabled){
+          const bare=clone(scene);bare.layers[0].stroke.enabled=false;
+          FM.scene=bare;FM.renderScene(cc,bare,time);
+          const barePixels=cc.getImageData(0,0,...size).data;
+          if(a.some((v,i)=>v!==barePixels[i]))borderChanged=true;
+        }
+        frames++;
+      }
+      renderer.dispose();renderer=null;
+      assert(geometryChanged,spec.name+': geometry control was inert');
+      if(spec.stroke&&spec.stroke.enabled)assert(borderChanged,spec.name+': border control was inert');
+      checks.push(`${spec.name} ${size.join('×')} opacity=${opacity}: three exact frames and visible geometry/border controls`);
+      out.textContent=checks.length+' cases passed';
+    }
+    window.__workerCanvasResult={ok:true,frames,checks};
+  }catch(e){window.__workerCanvasResult={ok:false,error:e.stack||String(e),checks};}
+  finally{if(renderer)renderer.dispose();if(frame.contentWindow.FM)frame.contentWindow.FM._exporting=false;}
+  out.textContent=JSON.stringify(window.__workerCanvasResult,null,2);
+})();
+</script>

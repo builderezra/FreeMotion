@@ -1,0 +1,109 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FreeMotion worker canvas parity — #47 foundation</title>
+<style>body{font:16px system-ui;margin:24px;background:#111;color:#eee}pre{white-space:pre-wrap}canvas{max-width:300px;border:1px solid #666;margin:8px}</style>
+<h1>Shared compositor: page versus Worker</h1>
+<p>This tests the export-worker foundation. It does not enable worker export in the app.</p>
+<pre id="result">Running…</pre>
+<script src="../js/render-canvas.js"></script>
+<script src="../js/scene.js"></script>
+<script src="../js/eases.js"></script>
+<script src="../js/compositor.js"></script>
+<script>
+(async function () {
+  const result = document.getElementById('result');
+  let worker, blobURL;
+  const checks = [];
+  function assert(ok, why) { if (!ok) throw new Error(why); }
+  function matrix(m) { assert(m, 'transform matrix unavailable'); return [m.a,m.b,m.c,m.d,m.e,m.f]; }
+  const sourceURLs = Array.from(document.querySelectorAll('script[src]'), s => s.src);
+  const workerSource = `
+    self.onmessage = function (event) {
+      const {id, urls, scene, time} = event.data;
+      try {
+        if (urls) importScripts(...urls);
+        if (typeof document !== 'undefined' || typeof window !== 'undefined') throw new Error('control: worker has a fake DOM');
+        FM.scene = scene; FM.time = time; FM._exporting = true; FM.media = new Map();
+        const canvas = FM.createRenderCanvas(scene.project.width, scene.project.height);
+        if (!(canvas instanceof OffscreenCanvas)) throw new Error('control: worker did not allocate OffscreenCanvas');
+        const ctx = canvas.getContext('2d');
+        FM.renderScene(ctx, scene, time);
+        const pixels = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+        const m = FM._layerCTM(scene.layers[0],time,scene);
+        if (!m) throw new Error('worker matrix is null');
+        const bitmap = canvas.transferToImageBitmap();
+        self.postMessage({id,pixels,bitmap,matrix:[m.a,m.b,m.c,m.d,m.e,m.f],worker:true},[pixels.buffer,bitmap]);
+      } catch (e) { self.postMessage({id,error:e.stack || String(e)}); }
+    };`;
+  try {
+    assert(typeof Worker === 'function' && typeof OffscreenCanvas === 'function', 'Worker / OffscreenCanvas is unavailable');
+    blobURL = URL.createObjectURL(new Blob([workerSource], {type:'text/javascript'}));
+    worker = new Worker(blobURL);
+    let sequence = 0;
+    function send(scene,time) {
+      const id = ++sequence;
+      return new Promise((resolve,reject) => {
+        const timer = setTimeout(() => { cleanup(); reject(new Error('Worker render timed out')); },15000);
+        const cleanup = () => { clearTimeout(timer); worker.onmessage = worker.onerror = worker.onmessageerror = null; };
+        worker.onerror = e => { cleanup(); reject(new Error(e.message || 'Worker error')); };
+        worker.onmessageerror = () => { cleanup(); reject(new Error('Worker message decode failed')); };
+        worker.onmessage = e => {
+          if (e.data.id !== id) { if (e.data.bitmap) e.data.bitmap.close(); return; }
+          cleanup(); e.data.error ? reject(new Error(e.data.error)) : resolve(e.data);
+        };
+        worker.postMessage({id,urls:id===1?sourceURLs:null,scene,time});
+      });
+    }
+    for (const size of [[160,120],[320,240]]) {
+      for (const fill of ['solid','linear','radial']) {
+        const scene = FM.newScene();
+        Object.assign(scene.project,{width:size[0],height:size[1],duration:2,background:'#101820'});
+        FM.scene=scene; FM._exporting=true; FM.media=new Map();
+        const layer=FM.makeLayer('shape',{shape:'rect',fill:'#ff4050',x:size[0]*.35,y:size[1]*.4,shapeW:size[0]*.35,shapeH:size[1]*.5});
+        layer.transform.x={kf:[{t:0,v:size[0]*.25,e:'linear'},{t:1,v:size[0]*.65,e:'linear'}]};
+        layer.transform.rotation={kf:[{t:0,v:0,e:'linear'},{t:1,v:65,e:'linear'}]};
+        if(fill!=='solid') layer.fillGradient={enabled:true,type:fill,c0:'#ff4050',c1:'#30cfff',angle:35,ox:.1,oy:-.1};
+        const second=FM.makeLayer('shape',{shape:'ellipse',fill:'#33ff99',x:size[0]*.6,y:size[1]*.6,shapeW:size[0]*.4,shapeH:size[1]*.4});
+        second.transform.opacity=.45;
+        scene.layers=[layer,second];
+        let previous;
+        for (const time of [0,.5,1]) {
+          const snapshot=JSON.parse(JSON.stringify(scene,FM.jsonReplacer));
+          FM.scene=snapshot; FM.time=time;
+          const canvas=FM.createRenderCanvas(...size),ctx=canvas.getContext('2d');
+          assert(canvas instanceof HTMLCanvasElement,'control: page canvas changed backend');
+          FM.renderScene(ctx,snapshot,time);
+          const pixels=ctx.getImageData(0,0,...size).data;
+          assert(pixels.some((v,i)=>i%4!==3 && v>60),'control: page frame is blank');
+          if(previous) assert(pixels.some((v,i)=>v!==previous[i]),'control: animation never changed the frame');
+          previous=pixels.slice();
+          const reply=await send(JSON.parse(JSON.stringify(snapshot,FM.jsonReplacer)),time);
+          try {
+            assert(reply.worker && reply.bitmap,'control: no actual worker bitmap');
+            assert(reply.pixels.length===pixels.length,'pixel buffer size differs');
+            let max=0,changed=0;
+            for(let i=0;i<pixels.length;i++){const d=Math.abs(pixels[i]-reply.pixels[i]);max=Math.max(max,d);if(d)changed++;}
+            assert(changed===0,`${fill} ${size} t=${time}: ${changed} channels differ, max ${max}`);
+            const expectedMatrix=matrix(FM._layerCTM(snapshot.layers[0],time,snapshot));
+            assert(expectedMatrix.every((v,i)=>Math.abs(v-reply.matrix[i])<1e-9),'worker transform matrix differs');
+            const copy=FM.createRenderCanvas(...size),copyCtx=copy.getContext('2d');
+            copyCtx.drawImage(reply.bitmap,0,0);
+            const copied=copyCtx.getImageData(0,0,...size).data;
+            assert(copied.every((v,i)=>v===pixels[i]),'transferred bitmap differs from the rendered pixels');
+            checks.push(`${fill} ${size.join('×')} t=${time}: exact pixels, matrix and bitmap`);
+            if(time===.5 && size[0]===160){document.body.appendChild(canvas);document.body.appendChild(copy);}
+          } finally { reply.bitmap.close(); }
+        }
+      }
+    }
+    window.__workerCanvasResult={ok:true,checks};
+    result.textContent='PASS\n'+checks.join('\n');
+  } catch(e) {
+    window.__workerCanvasResult={ok:false,error:e.stack || String(e),checks};
+    result.textContent='FAIL\n'+window.__workerCanvasResult.error;
+  } finally {
+    if(worker) worker.terminate();
+    if(blobURL) URL.revokeObjectURL(blobURL);
+  }
+})();
+</script>

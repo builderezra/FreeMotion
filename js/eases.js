@@ -25,7 +25,7 @@
  *   an easing that does not land on its keyframes makes the layer jump at both ends.
  *   Finite everywhere. A NaN here propagates into transform.x and the layer vanishes.
  */
-window.FM = window.FM || {};
+globalThis.FM = globalThis.FM || {};
 (function (FM) {
   'use strict';
 
@@ -214,4 +214,4 @@ window.FM = window.FM || {};
     let y = P.fn(f, p);
     return Number.isFinite(y) ? y : null;
   };
-})(window.FM);
+})(globalThis.FM);

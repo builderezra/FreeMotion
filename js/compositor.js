@@ -3,9 +3,14 @@
  * live preview AND every exported frame, so what you see is what you get. This is also
  * the surface the AI agent will render to a still and "look at" for self-correction.
  */
-window.FM = window.FM || {};
+globalThis.FM = globalThis.FM || {};
 (function (FM) {
   'use strict';
+
+  // Existing pages keep DOM canvases; worker callers load render-canvas.js first.
+  function createCanvas() {
+    return FM.createRenderCanvas ? FM.createRenderCanvas() : document.createElement('canvas');
+  }
 
   /* How small a held video frame is captured (queue 125), and why it HALVES rather than scaling to a
    * flat cap. Measuring the obvious version is what saved this from being a pessimisation: capping the
@@ -42,6 +47,7 @@ window.FM = window.FM || {};
     'mask-include': 'destination-in',
     'mask-exclude': 'destination-out',
   };
+  FM.nativeBlendOperation = function (mode) { return Object.prototype.hasOwnProperty.call(BLEND, mode) ? BLEND[mode] : null; };
   // Both registries: the native gCO map AND the per-pixel modes in js/blend-modes.js.
   FM.BLEND_MODES = Object.keys(BLEND).concat(FM.BLEND_MANUAL ? Object.keys(FM.BLEND_MANUAL) : []);
 
@@ -1764,7 +1770,7 @@ window.FM = window.FM || {};
     soft = soft || 0; spill = spill || 0;
     const sl = slot > 0 ? slot | 0 : 0, _ckLast = _ckLasts[sl];
     if (_ckLast && _ckCanvases[sl] && _ckLast.tok === tok && _ckLast.w === w && _ckLast.h === h && _ckLast.key === keyHex && _ckLast.tol === tol && _ckLast.filter === filterStr && _ckLast.soft === soft && _ckLast.spill === spill) return _ckCanvases[sl];
-    if (!_ckCanvases[sl]) _ckCanvases[sl] = document.createElement('canvas');
+    if (!_ckCanvases[sl]) _ckCanvases[sl] = createCanvas();
     const oc = _ckCanvases[sl]; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
     octx.clearRect(0, 0, w, h);
@@ -1811,7 +1817,7 @@ window.FM = window.FM || {};
     if (soft <= 0) soft = 0.0001;   // a zero-wide ramp would divide by zero — normalised BEFORE the memo compare (queue 735: the stored 0.0001 never equalled an incoming 0, so Softness 0 recomputed every redraw)
     const sl = slot > 0 ? slot | 0 : 0, _lkLast = _lkLasts[sl];
     if (_lkLast && _lkCanvases[sl] && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode) return _lkCanvases[sl];
-    if (!_lkCanvases[sl]) _lkCanvases[sl] = document.createElement('canvas');
+    if (!_lkCanvases[sl]) _lkCanvases[sl] = createCanvas();
     const oc = _lkCanvases[sl]; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
     octx.clearRect(0, 0, w, h);
@@ -1881,7 +1887,7 @@ window.FM = window.FM || {};
   function gradeCanvas(src, w, h, lift, gamma, gain) {
     const tok = srcToken(src), sig = lift + '|' + gamma + '|' + gain;
     if (_grLast && _grCanvas && _grLast.tok === tok && _grLast.w === w && _grLast.h === h && _grLast.sig === sig) return _grCanvas;
-    if (!_grCanvas) _grCanvas = document.createElement('canvas');
+    if (!_grCanvas) _grCanvas = createCanvas();
     const oc = _grCanvas; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
     octx.clearRect(0, 0, w, h);
@@ -1899,7 +1905,7 @@ window.FM = window.FM || {};
   // Cross-dissolve two frames (smooth slow-mo / frame-blend). out = a*(1-frac) + b*frac.
   let _fbCanvas = null;
   function blendFrames(a, b, frac, w, h) {
-    if (!_fbCanvas) _fbCanvas = document.createElement('canvas');
+    if (!_fbCanvas) _fbCanvas = createCanvas();
     const oc = _fbCanvas; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
     octx.globalAlpha = 1; octx.clearRect(0, 0, w, h);
@@ -1960,11 +1966,11 @@ window.FM = window.FM || {};
     if (_ctxFilterOK !== null) return _ctxFilterOK;
     _ctxFilterOK = false;
     try {
-      const src = document.createElement('canvas'); src.width = src.height = 4;
+      const src = createCanvas(); src.width = src.height = 4;
       const sx = src.getContext('2d');
       if (!sx) return _ctxFilterOK;
       sx.fillStyle = '#ff0000'; sx.fillRect(0, 0, 4, 4);
-      const dst = document.createElement('canvas'); dst.width = dst.height = 4;
+      const dst = createCanvas(); dst.width = dst.height = 4;
       const dx = dst.getContext('2d');
       if (!dx || !('filter' in dx)) return _ctxFilterOK;
       dx.filter = 'grayscale(1)';
@@ -2061,7 +2067,7 @@ window.FM = window.FM || {};
     const k = r > 16 ? r / 16 : 1, rw = r / k;
     const pad = blur ? Math.ceil(rw * 3) + 2 : 0;
     const ww = Math.max(1, Math.ceil(dw / k) + 2 * pad), wh = Math.max(1, Math.ceil(dh / k) + 2 * pad);
-    if (!_nbA) _nbA = document.createElement('canvas');
+    if (!_nbA) _nbA = createCanvas();
     if (_nbA.width !== ww || _nbA.height !== wh) { _nbA.width = ww; _nbA.height = wh; }
     const g = _nbA.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
@@ -2088,7 +2094,7 @@ window.FM = window.FM || {};
   function drawBlurredDrawNoFilter(dc, r, draw) {
     const cv = dc.canvas, W = cv.width, H = cv.height;
     if (!(W > 0) || !(H > 0)) return;
-    if (!_nbS) _nbS = document.createElement('canvas');
+    if (!_nbS) _nbS = createCanvas();
     if (_nbS.width !== W || _nbS.height !== H) { _nbS.width = W; _nbS.height = H; }
     const g = _nbS.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
@@ -2117,7 +2123,7 @@ window.FM = window.FM || {};
     if (_spacingOK !== null) return _spacingOK;
     _spacingOK = { letter: false, word: false };
     try {
-      const c = document.createElement('canvas').getContext('2d');
+      const c = createCanvas().getContext('2d');
       if (!c) return _spacingOK;
       c.font = '40px sans-serif';
       if ('letterSpacing' in c) {
@@ -2316,7 +2322,7 @@ window.FM = window.FM || {};
       if (h.length === 8) a = parseInt(h.slice(6, 8), 16) / 255;
     } else {
       try {
-        if (!_gcCtx) { const cv = document.createElement('canvas'); cv.width = cv.height = 1; _gcCtx = cv.getContext('2d'); }
+        if (!_gcCtx) { const cv = createCanvas(); cv.width = cv.height = 1; _gcCtx = cv.getContext('2d'); }
         _gcCtx.fillStyle = '#ffffff'; _gcCtx.fillStyle = s;
         const n = String(_gcCtx.fillStyle);
         const mm = /^#([0-9a-f]{6})$/i.exec(n), mr = /^rgba?\(([^)]+)\)$/i.exec(n);
@@ -2466,7 +2472,7 @@ window.FM = window.FM || {};
     let hexes = null;
     try {
       const N = 6;                                   // 36 samples across the picture — plenty, and cheap
-      const c = document.createElement('canvas'); c.width = c.height = N;
+      const c = createCanvas(); c.width = c.height = N;
       const g = c.getContext('2d', { willReadFrequently: true });
       g.drawImage(el, 0, 0, N, N);
       const d = g.getImageData(0, 0, N, N).data;
@@ -2504,8 +2510,8 @@ window.FM = window.FM || {};
   let _fcA = null, _fcB = null;
   function throughFilter(hex, filter) {
     if (!_fcA) {
-      _fcA = document.createElement('canvas'); _fcA.width = _fcA.height = 1;
-      _fcB = document.createElement('canvas'); _fcB.width = _fcB.height = 1;
+      _fcA = createCanvas(); _fcA.width = _fcA.height = 1;
+      _fcB = createCanvas(); _fcB.width = _fcB.height = 1;
     }
     const a = _fcA.getContext('2d', { willReadFrequently: true });
     a.filter = 'none'; a.clearRect(0, 0, 1, 1); a.fillStyle = hex; a.fillRect(0, 0, 1, 1);
@@ -3443,7 +3449,7 @@ window.FM = window.FM || {};
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    if (!_maskCv) _maskCv = document.createElement('canvas');
+    if (!_maskCv) _maskCv = createCanvas();
     const off = _maskCv; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
     off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;   // the nested drawLayer renders through baseT
     const octx = off.getContext('2d');
@@ -3521,7 +3527,7 @@ window.FM = window.FM || {};
    * having to be added to a list. */
   const _pmPool = []; let _pmDepth = 0;
   function pmSlot(d) {
-    if (!_pmPool[d]) _pmPool[d] = { plate: document.createElement('canvas'), mask: document.createElement('canvas') };
+    if (!_pmPool[d]) _pmPool[d] = { plate: createCanvas(), mask: createCanvas() };
     return _pmPool[d];
   }
   // `s` = project pixels per buffer pixel, so a reduced-preview plate gets a matching stencil rather
@@ -3588,7 +3594,7 @@ window.FM = window.FM || {};
       if (outlineFx) {
         const slot = pmSlot(d);
         if (shadowOn) {
-          if (!slot.aux) slot.aux = document.createElement('canvas');
+          if (!slot.aux) slot.aux = createCanvas();
           const aux = slot.aux; if (aux.width !== W || aux.height !== H) { aux.width = W; aux.height = H; }
           const x2 = aux.getContext('2d');
           x2.setTransform(1, 0, 0, 1, 0, 0); x2.globalAlpha = 1; x2.globalCompositeOperation = 'source-over'; x2.filter = 'none';
@@ -3779,7 +3785,7 @@ window.FM = window.FM || {};
     const EW = Math.max(1, Math.round((RW + 2 * m) * ps)), EH = Math.max(1, Math.round((RH + 2 * m) * ps));
     const d = _mbDepth++;
     try {
-      if (!_mbPool[d]) _mbPool[d] = { plate: document.createElement('canvas'), acc: document.createElement('canvas') };
+      if (!_mbPool[d]) _mbPool[d] = { plate: createCanvas(), acc: createCanvas() };
       const plate = _mbPool[d].plate, acc = _mbPool[d].acc;
       if (plate.width !== EW || plate.height !== EH) { plate.width = EW; plate.height = EH; }
       plate.__fmRS = ps; plate.__fmOX = RX - m; plate.__fmOY = RY - m;   // plate pixel (0,0) IS project (RX-m, RY-m) — (-m,-m) outside a camera
@@ -4497,7 +4503,7 @@ window.FM = window.FM || {};
   FM._cropStats = { crops: 0, cropBounded: 0, full: 0, lastRect: null };
   let _cropA = null, _cropB = null;
   function cropRectOf(src, W, H, pad) {
-    if (!_cropA) { _cropA = document.createElement('canvas'); _cropB = document.createElement('canvas'); }
+    if (!_cropA) { _cropA = createCanvas(); _cropB = createCanvas(); }
     let cur = src, cw = W, ch = H, dst = _cropA;
     for (let i = 0; i < 3; i++) {
       const nw = Math.max(1, Math.ceil(cw / 2)), nh = Math.max(1, Math.ceil(ch / 2));
@@ -4535,7 +4541,7 @@ window.FM = window.FM || {};
   FM._cropIdentity = function (type, data, W, H, params, t, ps) {
     const fn = PIXEL_FX[type]; if (!fn) return { same: null, why: 'no kernel' };
     const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cv = createCanvas(); cv.width = W; cv.height = H;
     const g = cv.getContext('2d', { willReadFrequently: true }); g.putImageData(new ImageData(new Uint8ClampedArray(data), W, H), 0, 0);
     const t0 = now(); const full = g.getImageData(0, 0, W, H).data; fn(full, W, H, params, t, ps); const tFull = now() - t0;
     const t1 = now(); const rect = cropRectOf(cv, W, H, cropMarginFor(type, params, t, ps));
@@ -4548,7 +4554,7 @@ window.FM = window.FM || {};
     /* Compare AFTER the canvas round trip the dispatcher performs (putImageData → drawImage): a canvas stores
        premultiplied pixels, so colour a kernel writes under zero alpha never survives it — it is neither on screen
        nor readable by the next effect. A raw byte compare would reject every grade for "dirt" that cannot exist. */
-    const norm = (buf) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const q = c.getContext('2d', { willReadFrequently: true }); q.putImageData(new ImageData(buf, W, H), 0, 0); return q.getImageData(0, 0, W, H).data; };
+    const norm = (buf) => { const c = createCanvas(); c.width = W; c.height = H; const q = c.getContext('2d', { willReadFrequently: true }); q.putImageData(new ImageData(buf, W, H), 0, 0); return q.getImageData(0, 0, W, H).data; };
     const a = norm(new Uint8ClampedArray(full)), b = norm(out);
     let diff = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diff++;
     return { same: diff === 0, diff: diff, rect: rect, area: rect ? rect.w * rect.h : 0, plate: W * H, tFull: tFull, tCrop: tCrop };
@@ -4566,7 +4572,7 @@ window.FM = window.FM || {};
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _pfDepth++;
     try {
-      if (!_pfPool[d]) _pfPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      if (!_pfPool[d]) _pfPool[d] = { A: createCanvas(), B: createCanvas() };
       const pA = _pfPool[d].A, pB = _pfPool[d].B;
       // Only resize when the comp dims actually change — reassigning width/height every frame reallocates
       // the backing buffer (full-res, per effect, per frame). A is cleared below; B is fully overwritten
@@ -4688,7 +4694,7 @@ window.FM = window.FM || {};
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _fcDepth++;
     try {
-      if (!_fcPool[d]) _fcPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas') };
+      if (!_fcPool[d]) _fcPool[d] = { A: createCanvas(), B: createCanvas(), M: createCanvas() };
       const P = _fcPool[d];
       ['A', 'B', 'M'].forEach(k => { if (P[k].width !== W || P[k].height !== H) { P[k].width = W; P[k].height = H; } });
       // Blend mode and opacity are neutralised on the plates and re-applied once on the blit, exactly
@@ -10015,7 +10021,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _wpDepth++;
     try {
-      if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      if (!_wpPool[d]) _wpPool[d] = { A: createCanvas(), B: createCanvas() };
       const wA = _wpPool[d].A, wB = _wpPool[d].B;
       if (wA.width !== W || wA.height !== H) { wA.width = W; wA.height = H; }
       if (wB.width !== W || wB.height !== H) { wB.width = W; wB.height = H; }
@@ -10218,7 +10224,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        once — two canvases cannot hold three things. Allocated lazily so a stack with no glow in it
        never pays for it. */
     const needC = () => {
-      if (!pool.C) pool.C = document.createElement('canvas');
+      if (!pool.C) pool.C = createCanvas();
       const wC = pool.C;
       if (wC.width !== W || wC.height !== H) { wC.width = W; wC.height = H; }
       const cx2 = wC.getContext('2d');
@@ -10289,7 +10295,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!(W > 0) || !(H > 0)) return false;
     const d = _wpDepth++;
     try {
-      if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      if (!_wpPool[d]) _wpPool[d] = { A: createCanvas(), B: createCanvas() };
       const wA = _wpPool[d].A;
       if (wA.width !== W || wA.height !== H) { wA.width = W; wA.height = H; }
       wA.__fmRS = ps; wA.__fmOX = OX; wA.__fmOY = OY;
@@ -10777,7 +10783,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
     const d = _sqDepth++;
     try {
-      const slot = _sqPool[d] || (_sqPool[d] = { E: document.createElement('canvas'), B: document.createElement('canvas') });
+      const slot = _sqPool[d] || (_sqPool[d] = { E: createCanvas(), B: createCanvas() });
       const eCv = slot.E, bCv = slot.B;
       // PER SIDE, not one symmetric margin: a layer hanging off the right needs nothing on the left,
       // and the plate is read back with getImageData every frame — the wasted half is the single
@@ -11023,7 +11029,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * every dimension below is the number it always was. */
   function dspSlot(W, H, ps) {
     const d = _dspLvl;
-    if (!_dspPool[d]) _dspPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas'), C: document.createElement('canvas'), q: document.createElement('canvas') };
+    if (!_dspPool[d]) _dspPool[d] = { A: createCanvas(), B: createCanvas(), M: createCanvas(), C: createCanvas(), q: createCanvas() };
     const s = _dspPool[d];
     if (s.A.width !== W || s.A.height !== H) { s.A.width = W; s.A.height = H; s.B.width = W; s.B.height = H; s.M.width = W; s.M.height = H; s.C.width = W; s.C.height = H; }
     const r = ps == null ? 1 : ps;
@@ -12551,7 +12557,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * 320×240 comp: true content 110..210, loose box 100..224, opaque box 112..208. */
   function alphaBBoxFast(srcCanvas, W, H, core) {
     const S = 4, w = Math.max(1, Math.ceil(W / S)), h = Math.max(1, Math.ceil(H / S));
-    if (!_bbScan) _bbScan = document.createElement('canvas');
+    if (!_bbScan) _bbScan = createCanvas();
     if (_bbScan.width !== w || _bbScan.height !== h) { _bbScan.width = w; _bbScan.height = h; }
     const g = _bbScan.getContext('2d', { willReadFrequently: true });
     baseT(g); g.clearRect(0, 0, w, h);
@@ -12667,7 +12673,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * re-enters drawCanvasEffect, which can call expand() again, and a second expanded plate would
      * otherwise overwrite the one the outer tiles() is still holding a reference to. */
     const _e = _expDepth;
-    if (!_expPool[_e]) _expPool[_e] = document.createElement('canvas');
+    if (!_expPool[_e]) _expPool[_e] = createCanvas();
     const _expC = _expPool[_e];
     if (_expC.width !== EW || _expC.height !== EH) { _expC.width = EW; _expC.height = EH; }
     _expC.__fmRS = ps; _expC.__fmOX = -mx; _expC.__fmOY = -my;   // plate pixel (0,0) IS project (-mx,-my)
@@ -12688,7 +12694,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function renderShiftedPlate(layer, fx, t, scene, ps, W, H, ox, oy) {
     FM._fxStats.plates++;
     const _e = _expDepth;
-    if (!_expPool[_e]) _expPool[_e] = document.createElement('canvas');
+    if (!_expPool[_e]) _expPool[_e] = createCanvas();
     const cv = _expPool[_e];
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     cv.__fmRS = ps; cv.__fmOX = ox; cv.__fmOY = oy;
@@ -12720,7 +12726,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const _d = _cfDepth++;
     try {
-    if (!_cfPool[_d]) _cfPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    if (!_cfPool[_d]) _cfPool[_d] = { A: createCanvas(), B: createCanvas() };
     const _cfA = _cfPool[_d].A, _cfB = _cfPool[_d].B;
     // resize only on change — assigning .width even to the same value frees+reallocates the ~8MB
     // backing store, and this runs per canvas-effect per FRAME (wiggle/3D/tiles… = constant churn)
@@ -12832,7 +12838,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _t3Depth++;
     try {
-    if (!_t3Pool[d]) _t3Pool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    if (!_t3Pool[d]) _t3Pool[d] = { A: createCanvas(), B: createCanvas() };
     const _t3A = _t3Pool[d].A, _t3B = _t3Pool[d].B;
     if (_t3A.width !== W || _t3A.height !== H) { _t3A.width = W; _t3A.height = H; }   // resize only on change — dodge the ~8MB per-frame realloc
     if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
@@ -12875,7 +12881,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function fparam(p, key, def, t) { return p[key] == null ? def : FM.evalProp(p[key], t); }
   // Crop the layer's alpha bounds out of the frame → the texture the solids wrap.
   function extractTex(src, bb) {
-    if (!_cfTex) _cfTex = document.createElement('canvas');
+    if (!_cfTex) _cfTex = createCanvas();
     _cfTex.width = bb.w; _cfTex.height = bb.h;
     const c = _cfTex.getContext('2d');
     baseT(c); c.clearRect(0, 0, bb.w, bb.h);
@@ -12886,7 +12892,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // The texture's own alpha in black — the (1 - shade) of coverage renderMesh adds back where ctx.filter cannot dim a face (#986 batch 2)
   let _meshBlk = null;
   function meshBlackTex(tex, tw, th) {
-    if (!_meshBlk) _meshBlk = document.createElement('canvas');
+    if (!_meshBlk) _meshBlk = createCanvas();
     const w = Math.max(1, tex.width || tw), h = Math.max(1, tex.height || th);
     if (_meshBlk.width !== w || _meshBlk.height !== h) { _meshBlk.width = w; _meshBlk.height = h; }
     const g = _meshBlk.getContext('2d');
@@ -13204,7 +13210,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!r) {
       const keys = Object.keys(_mflow);
       if (keys.length > 12) { let old = keys[0]; keys.forEach(k => { if (_mflow[k].at < _mflow[old].at) old = k; }); delete _mflow[old]; }   // bounded cache
-      r = _mflow[id] = { cv: document.createElement('canvas'), t: -1, at: 0, acc: null, prev: null, tPrev: -1 };
+      r = _mflow[id] = { cv: createCanvas(), t: -1, at: 0, acc: null, prev: null, tPrev: -1 };
     }
     /* `u` GOES WITH THEM (bug hunt, 21 Aug). Setting canvas.width WIPES the canvas, and this reset
      * already drops every other piece of history that referred to it — but Time Warp's progress marker
@@ -13218,7 +13224,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   function _mfGrayOf(cv, FW, FH, useB) {
     let sc = useB ? _mfSb : _mfSa;
-    if (!sc) { sc = document.createElement('canvas'); if (useB) _mfSb = sc; else _mfSa = sc; }
+    if (!sc) { sc = createCanvas(); if (useB) _mfSb = sc; else _mfSa = sc; }
     if (sc.width !== FW || sc.height !== FH) { sc.width = FW; sc.height = FH; }
     const c = sc.getContext('2d', { willReadFrequently: true });
     c.clearRect(0, 0, FW, FH);
@@ -13437,7 +13443,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       if (zoom > 1) {
         var depth = Math.max(0, _cfDepth - 1);
-        if (!_lensMagnifierPool[depth]) _lensMagnifierPool[depth] = document.createElement('canvas');
+        if (!_lensMagnifierPool[depth]) _lensMagnifierPool[depth] = createCanvas();
         var cv = _lensMagnifierPool[depth];
         if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
         var g = cv.getContext('2d');
@@ -13621,7 +13627,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const knee = Math.max(1, p.knee == null ? 2.4 : FM.evalProp(p.knee, t));
       const rgb = hexToRGB(p.color || '#ff3a14');
       const qw = Math.max(1, Math.round(W / 4)), qh = Math.max(1, Math.round(H / 4));
-      if (!_halC) _halC = document.createElement('canvas');
+      if (!_halC) _halC = createCanvas();
       if (_halC.width !== qw || _halC.height !== qh) { _halC.width = qw; _halC.height = qh; }
       const hc = _halC.getContext('2d', { willReadFrequently: true });
       hc.setTransform(1, 0, 0, 1, 0, 0);
@@ -13711,7 +13717,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       };
       if (!advance) { stash(); return; }                // first frame after a seek has nothing to average with
       const gw = 32, gh = Math.max(1, Math.round(32 * H / W)) || 1;
-      if (!_dnA) { _dnA = document.createElement('canvas'); _dnB = document.createElement('canvas'); _dnM = document.createElement('canvas'); }
+      if (!_dnA) { _dnA = createCanvas(); _dnB = createCanvas(); _dnM = createCanvas(); }
       if (_dnA.width !== gw || _dnA.height !== gh) { _dnA.width = gw; _dnA.height = gh; _dnB.width = gw; _dnB.height = gh; _dnM.width = gw; _dnM.height = gh; }
       const ga = _dnA.getContext('2d', { willReadFrequently: true }), gb = _dnB.getContext('2d', { willReadFrequently: true });
       ga.setTransform(1, 0, 0, 1, 0, 0); ga.clearRect(0, 0, gw, gh); ga.drawImage(A, 0, 0, gw, gh);
@@ -13729,7 +13735,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const gm = _dnM.getContext('2d');
       gm.setTransform(1, 0, 0, 1, 0, 0); gm.clearRect(0, 0, gw, gh); gm.putImageData(da, 0, 0);
       // the previous frame, cut to the static blocks, laid over at `strength`
-      if (!_dnC) _dnC = document.createElement('canvas');
+      if (!_dnC) _dnC = createCanvas();
       if (_dnC.width !== W || _dnC.height !== H) { _dnC.width = W; _dnC.height = H; }
       const cc = _dnC.getContext('2d');
       cc.setTransform(1, 0, 0, 1, 0, 0); cc.globalAlpha = 1; cc.globalCompositeOperation = 'source-over';
@@ -13772,8 +13778,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const reach = Math.max(0.5, (p.reach == null ? 18 : FM.evalProp(p.reach, t)) * s);
       const soft = Math.max(0, (p.radius == null ? 20 : FM.evalProp(p.radius, t)) * s);
       const add = Math.round(FM.evalProp(p.mode, t) || 0) === 1;
-      if (!_lwA) _lwA = document.createElement('canvas');
-      if (!_lwB) _lwB = document.createElement('canvas');
+      if (!_lwA) _lwA = createCanvas();
+      if (!_lwB) _lwB = createCanvas();
       if (_lwA.width !== W || _lwA.height !== H) { _lwA.width = W; _lwA.height = H; }
       if (_lwB.width !== W || _lwB.height !== H) { _lwB.width = W; _lwB.height = H; }
       // 1) the edge band
@@ -13943,7 +13949,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // erasing the picture — a destination-out punch straight into B would knock a hole in the
       // layer. Its own plate also lets Add mean "additive against the picture", which is what a
       // white light-streak version needs; drawing the ink into B first can only ever blend normally.
-      if (!_slC) _slC = document.createElement('canvas');
+      if (!_slC) _slC = createCanvas();
       if (_slC.width !== W || _slC.height !== H) { _slC.width = W; _slC.height = H; }
       const B2 = _slC.getContext('2d');
       B2.setTransform(1, 0, 0, 1, 0, 0);
@@ -14093,7 +14099,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       } else {
         const S = 32;
-        if (!_wxSprite) { _wxSprite = document.createElement('canvas'); _wxSprite.width = _wxSprite.height = S; }
+        if (!_wxSprite) { _wxSprite = createCanvas(); _wxSprite.width = _wxSprite.height = S; }
         if (_wxSpriteCol !== col) {
           const g = _wxSprite.getContext('2d');
           g.clearRect(0, 0, S, S);
@@ -14152,7 +14158,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // New quantum: the frame before it becomes the trail, this frame becomes the hold.
         if (mode === 2) {
           let spare = rec.prev;
-          if (!spare) spare = document.createElement('canvas');
+          if (!spare) spare = createCanvas();
           if (spare.width !== W || spare.height !== H) { spare.width = W; spare.height = H; }
           const pc = spare.getContext('2d');
           pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(0, 0, W, H); pc.drawImage(rec.cv, 0, 0);
@@ -14195,7 +14201,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const ref = advance ? rec.cv : (repaint ? rec.prev : null);
       const rotate = () => {   // cv→prev, A→cv (reuses the spare canvas — no per-frame allocation)
         let spare = rec.prev;
-        if (!spare) spare = document.createElement('canvas');
+        if (!spare) spare = createCanvas();
         if (spare.width !== W || spare.height !== H) { spare.width = W; spare.height = H; }
         rec.prev = rec.cv; rec.cv = spare;
         const c = rec.cv.getContext('2d'); c.clearRect(0, 0, W, H); c.drawImage(A, 0, 0);
@@ -14219,7 +14225,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         done(); return;
       }
       if (style === 2) {   // ECHO TRAILS — long-exposure feedback
-        if (!rec.acc) { rec.acc = document.createElement('canvas'); rec.acc.width = W; rec.acc.height = H; rec.accSeeded = false; }
+        if (!rec.acc) { rec.acc = createCanvas(); rec.acc.width = W; rec.acc.height = H; rec.accSeeded = false; }
         const ac = rec.acc.getContext('2d');
         // accSeeded: switching Style to Echo while PAUSED created an empty accumulator and the repaint
         // shortcut below handed that blank canvas straight out — the layer vanished until you scrubbed.
@@ -14242,7 +14248,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * handed it the same frame twice" is exactly this comparison. Cheap: 1 in ~4000 pixels. */
       try {
         const _dw = 40, _dh = Math.max(1, Math.round(40 * H / W));
-        if (!FM._mfDbgA) { FM._mfDbgA = document.createElement('canvas'); FM._mfDbgB = document.createElement('canvas'); }
+        if (!FM._mfDbgA) { FM._mfDbgA = createCanvas(); FM._mfDbgB = createCanvas(); }
         const _ca = FM._mfDbgA, _cb = FM._mfDbgB;
         if (_ca.width !== _dw) { _ca.width = _cb.width = _dw; _ca.height = _cb.height = _dh; }
         const _xa = _ca.getContext('2d'), _xb = _cb.getContext('2d');
@@ -14265,7 +14271,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         if (wsum < 0.5) { B.drawImage(A, 0, 0); done(); return; }
         gx = (gx / wsum) * (W / F.FW) * amount; gy = (gy / wsum) * (W / F.FW) * amount;
         if (Math.hypot(gx, gy) < 1.2) { B.drawImage(A, 0, 0); done(); return; }
-        if (!_mfMask) _mfMask = document.createElement('canvas');
+        if (!_mfMask) _mfMask = createCanvas();
         _mfMask.width = F.gw; _mfMask.height = F.gh;
         const mc = _mfMask.getContext('2d');
         const md = mc.createImageData(F.gw, F.gh);
@@ -14274,7 +14280,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           md.data[i * 4] = md.data[i * 4 + 1] = md.data[i * 4 + 2] = 255; md.data[i * 4 + 3] = Math.round(a * 255);
         }
         mc.putImageData(md, 0, 0);
-        if (!_mfMov) _mfMov = document.createElement('canvas');
+        if (!_mfMov) _mfMov = createCanvas();
         // Guarded: assigning .width even to the SAME value frees and reallocates the backing store,
         // and this runs every frame. Same rule every other scratch canvas here already follows.
         if (_mfMov.width !== W || _mfMov.height !== H) { _mfMov.width = W; _mfMov.height = H; }
@@ -14310,7 +14316,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
       // STYLE 0: PIXEL MOTION — per-pixel blur along the local flow vector, at a capped working res
       const WW = Math.min(FM._exporting ? 720 : 480, W), WH = Math.max(2, Math.round(H * WW / W));
-      if (!_mfW1) _mfW1 = document.createElement('canvas');
+      if (!_mfW1) _mfW1 = createCanvas();
       if (_mfW1.width !== WW || _mfW1.height !== WH) { _mfW1.width = WW; _mfW1.height = WH; }
       const wc = _mfW1.getContext('2d', { willReadFrequently: true });
       wc.clearRect(0, 0, WW, WH); wc.drawImage(A, 0, 0, WW, WH);
@@ -14490,7 +14496,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const dk = clamp01(fparam(p, 'darken', 0.55, t));
       const steps = Math.round(depth * PS);
       if (!steps) { B.drawImage(A, 0, 0); return; }
-      if (!_reC) _reC = document.createElement('canvas');
+      if (!_reC) _reC = createCanvas();
       _reC.width = W; _reC.height = H;
       const rctx = _reC.getContext('2d');
       baseT(rctx); rctx.clearRect(0, 0, W, H);
@@ -14531,7 +14537,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const C = hexToRGB(p.color || '#ffffff');
         const ang = fparam(p, 'angle', 135, t) * Math.PI / 180;
 
-        if (!_gA) { _gA = document.createElement('canvas'); _gB = document.createElement('canvas'); }
+        if (!_gA) { _gA = createCanvas(); _gB = createCanvas(); }
         if (_gA.width !== W || _gA.height !== H) { _gA.width = _gB.width = W; _gA.height = _gB.height = H; }
         const g1 = _gA.getContext('2d'), g2 = _gB.getContext('2d');
 
@@ -14922,7 +14928,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       }
       if (bw < 8 || bh < 8 || (bx === 0 && by === 0 && bw >= W && bh >= H)) { B.drawImage(A, 0, 0); return; }   // tiny content / already full-frame → nothing to extend
-      if (!_tileC) _tileC = document.createElement('canvas');
+      if (!_tileC) _tileC = createCanvas();
       if (_tileC.width !== bw || _tileC.height !== bh) { _tileC.width = bw; _tileC.height = bh; }
       const tc = _tileC.getContext('2d');
       baseT(tc); tc.clearRect(0, 0, bw, bh);
@@ -15450,8 +15456,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const dd = d > 0 ? Math.max(1, Math.round(d * ps)) : 0;   // a positive project-pixel shift must survive a reduced preview plate
     const pp = (fx && fx.params) || {};
     const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // an independent shift, including when Amount is zero
-    if (!_rgbA) _rgbA = document.createElement('canvas');
-    if (!_rgbB) _rgbB = document.createElement('canvas');
+    if (!_rgbA) _rgbA = createCanvas();
+    if (!_rgbB) _rgbB = createCanvas();
     if (_rgbA.width !== W || _rgbA.height !== H) { _rgbA.width = W; _rgbA.height = H; }
     if (_rgbB.width !== W || _rgbB.height !== H) { _rgbB.width = W; _rgbB.height = H; }
     _rgbA.__fmRS = ps; _rgbA.__fmOX = OX; _rgbA.__fmOY = OY;   // a nested effect inherits this scale
@@ -15519,8 +15525,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const q = Math.max(2, Math.round(levels));
-    if (!_psA) _psA = document.createElement('canvas');
-    if (!_psB) _psB = document.createElement('canvas');
+    if (!_psA) _psA = createCanvas();
+    if (!_psB) _psB = createCanvas();
     if (_psA.width !== W || _psA.height !== H) { _psA.width = W; _psA.height = H; }
     if (_psB.width !== W || _psB.height !== H) { _psB.width = W; _psB.height = H; }
     _psA.__fmRS = ps; _psA.__fmOX = OX; _psA.__fmOY = OY;
@@ -15562,7 +15568,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        panned. The wash is only a colour, with no geometry of its own, so there the plate takes the target's own grid. */
     const ext = !!ctx.canvas.__fmCamExt;
     const FW = ext ? ctx.canvas.width : W, FH = ext ? ctx.canvas.height : H;
-    if (!_fogA) _fogA = document.createElement('canvas');
+    if (!_fogA) _fogA = createCanvas();
     if (_fogA.width !== FW || _fogA.height !== FH) { _fogA.width = FW; _fogA.height = FH; }
     if (ext) { _fogA.__fmRS = ctx.canvas.__fmRS || 1; _fogA.__fmOX = ctx.canvas.__fmOX || 0; _fogA.__fmOY = ctx.canvas.__fmOY || 0; _fogA.__fmCamExt = true; }
     else { _fogA.__fmRS = undefined; _fogA.__fmOX = undefined; _fogA.__fmOY = undefined; _fogA.__fmCamExt = false; }   // the unstamped frame-sized plate it always was
@@ -15602,7 +15608,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!(W > 0) || !(H > 0) || _dfDepth > 6) return false;
     const d = _dfDepth++;
     try {
-      const P = _dfPool[d] || (_dfPool[d] = document.createElement('canvas'));
+      const P = _dfPool[d] || (_dfPool[d] = createCanvas());
       if (P.width !== W || P.height !== H) { P.width = W; P.height = H; }
       P.__fmRS = cv.__fmRS; P.__fmOX = cv.__fmOX; P.__fmOY = cv.__fmOY; P.__fmCamExt = cv.__fmCamExt;
       const a = P.getContext('2d');
@@ -15638,8 +15644,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const am = clamp01(amount), C = hexToRGB(colorHex || '#ff3366');
-    if (!_tiA) _tiA = document.createElement('canvas');
-    if (!_tiB) _tiB = document.createElement('canvas');
+    if (!_tiA) _tiA = createCanvas();
+    if (!_tiB) _tiB = createCanvas();
     if (_tiA.width !== W || _tiA.height !== H) { _tiA.width = W; _tiA.height = H; }
     if (_tiB.width !== W || _tiB.height !== H) { _tiB.width = W; _tiB.height = H; }
     _tiA.__fmRS = ps; _tiA.__fmOX = OX; _tiA.__fmOY = OY;
@@ -15673,8 +15679,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const cut = clamp01(level) * 255;
-    if (!_thA) _thA = document.createElement('canvas');
-    if (!_thB) _thB = document.createElement('canvas');
+    if (!_thA) _thA = createCanvas();
+    if (!_thB) _thB = createCanvas();
     if (_thA.width !== W || _thA.height !== H) { _thA.width = W; _thA.height = H; }
     if (_thB.width !== W || _thB.height !== H) { _thB.width = W; _thB.height = H; }
     _thA.__fmRS = ps; _thA.__fmOX = OX; _thA.__fmOY = OY;
@@ -15708,8 +15714,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const am = clamp01(amount), A = hexToRGB(shadowHex || '#241a52'), B = hexToRGB(hiHex || '#ff9e5e');
-    if (!_duA) _duA = document.createElement('canvas');
-    if (!_duB) _duB = document.createElement('canvas');
+    if (!_duA) _duA = createCanvas();
+    if (!_duB) _duB = createCanvas();
     if (_duA.width !== W || _duA.height !== H) { _duA.width = W; _duA.height = H; }
     if (_duB.width !== W || _duB.height !== H) { _duB.width = W; _duB.height = H; }
     _duA.__fmRS = ps; _duA.__fmOX = OX; _duA.__fmOY = OY;
@@ -15929,7 +15935,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const _d = _miDepth++;
     try {
-    if (!_miPool[_d]) _miPool[_d] = document.createElement('canvas');
+    if (!_miPool[_d]) _miPool[_d] = createCanvas();
     const _miA = _miPool[_d];
     if (_miA.width !== _np.W || _miA.height !== _np.H) { _miA.width = _np.W; _miA.height = _np.H; }   // cleared below
     _miA.__fmRS = ps; _miA.__fmOX = OX; _miA.__fmOY = OY;
@@ -16011,7 +16017,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     size = Math.max(1, Math.round(size));
     const _d = _pxDepth++;
     try {
-    if (!_pxPool[_d]) _pxPool[_d] = { A: document.createElement('canvas'), S: document.createElement('canvas') };
+    if (!_pxPool[_d]) _pxPool[_d] = { A: createCanvas(), S: createCanvas() };
     const _pxA = _pxPool[_d].A, _pxS = _pxPool[_d].S;
     if (_pxA.width !== W || _pxA.height !== H) { _pxA.width = W; _pxA.height = H; }   // cleared below
     _pxA.__fmRS = 1; _pxA.__fmOX = OX; _pxA.__fmOY = OY;   // identity scale, but the plate's own origin
@@ -16109,7 +16115,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (layer.type === 'text') {
       // Mirror the text branch's own measurement, effects and all — same font string, same
       // applyTextEffects pass, same line breaking, same total+fs height.
-      const c = document.createElement('canvas').getContext('2d');
+      const c = createCanvas().getContext('2d');
       c.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
       let src = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
       const te = FM.applyTextEffects(layer, src, (layer.letterSpacing || 0), t, FM.scene);
@@ -16278,13 +16284,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * Two things are load-bearing: the probe starts at IDENTITY (not baseT) so the matrix comes back in
    * pure project space, and `scene` MUST be passed — applyLayerTransform sizes z-perspective off
    * scene.project, so a probe without one would compute the perspective against a 1x1 comp. */
-  const _CTM_OK = (typeof DOMMatrix === 'function' && typeof CanvasRenderingContext2D !== 'undefined'
-    && typeof CanvasRenderingContext2D.prototype.getTransform === 'function');
+  // Worker contexts have a different constructor; test the actual context below.
+  const _CTM_OK = typeof DOMMatrix === 'function';
   let _ctmProbe = null;
   function layerCTM(layer, tau, scene) {
     if (!_CTM_OK) return null;
-    if (!_ctmProbe) { _ctmProbe = document.createElement('canvas'); _ctmProbe.width = _ctmProbe.height = 1; }
+    if (!_ctmProbe) { _ctmProbe = createCanvas(); _ctmProbe.width = _ctmProbe.height = 1; }
     const c = _ctmProbe.getContext('2d');
+    if (!c || typeof c.getTransform !== 'function') return null;
     c.setTransform(1, 0, 0, 1, 0, 0);
     try { applyLayerTransform(c, layer, tau, scene); } catch (e) { return null; }
     return c.getTransform();
@@ -17456,7 +17463,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const ax = anchorX(layer.transform);
     const ay = anchorY(layer.transform);
     const nscale = Math.min(1, (W * 0.92) / Math.max(1, sz.w), (H * 0.92) / Math.max(1, sz.h));   // fit content into the plate (constant per clip → transform-independent flow)
-    if (!_mbcA) _mbcA = document.createElement('canvas');
+    if (!_mbcA) _mbcA = createCanvas();
     if (_mbcA.width !== W || _mbcA.height !== H) { _mbcA.width = W; _mbcA.height = H; }
     const actx = _mbcA.getContext('2d');
     baseT(actx); actx.clearRect(0, 0, W, H);
@@ -17473,7 +17480,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // clip carrying BOTH blurs would smear twice on this path only (queue 335).
     const proxy = Object.assign({}, layer, { transform: ntr, parent: null, flipH: false, flipV: false, wiggle: null, behaviors: null, motionBlur: null, mask: feathered ? layer.mask : null, shadow: null, blendMode: 'normal', effects: (layer.effects || []).filter(e => e !== fx && !(e && e.type === 'objectblur')) });
     drawLayer(actx, proxy, t, scene);
-    if (!_mbcB) _mbcB = document.createElement('canvas');
+    if (!_mbcB) _mbcB = createCanvas();
     if (_mbcB.width !== W || _mbcB.height !== H) { _mbcB.width = W; _mbcB.height = H; }
     const bctx = _mbcB.getContext('2d');
     baseT(bctx); bctx.clearRect(0, 0, W, H);
@@ -17521,7 +17528,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * punched through the layer, and a zoom below 1 (or an anchor outside the frame) produces one. */
   let _cbZ = null;
   function magnifyPlate(snap, cw, ch, z, px, py) {
-    if (!_cbZ) _cbZ = document.createElement('canvas');
+    if (!_cbZ) _cbZ = createCanvas();
     if (_cbZ.width !== cw || _cbZ.height !== ch) { _cbZ.width = cw; _cbZ.height = ch; }
     const g = _cbZ.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cw, ch);
@@ -17559,7 +17566,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Copy Background misalign on ANY supersampled preview (a retina screen alone is enough — it does
     // not take zoom), while export, which renders at exactly 1:1, looked correct.
     const cw = ctx.canvas.width, ch = ctx.canvas.height;
-    if (!_cbA) _cbA = document.createElement('canvas');
+    if (!_cbA) _cbA = createCanvas();
     if (_cbA.width !== cw || _cbA.height !== ch) { _cbA.width = cw; _cbA.height = ch; }
     _cbA.__fmRS = ctx.canvas.__fmRS || 1;
     _cbA.__fmOX = ctx.canvas.__fmOX || 0; _cbA.__fmOY = ctx.canvas.__fmOY || 0;
@@ -17648,7 +17655,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the same reason. Normalising first fixes both with one change. */
     let _snapSrc = layer._bgSnap;
     if (_snapSrc && snapRegionDiffers(_snapSrc, _cbA) && cw > 0 && ch > 0) {   // a camera plate's snapshot, read from a frame-sized plate (queue 690)
-      if (!_cbNorm) _cbNorm = document.createElement('canvas');
+      if (!_cbNorm) _cbNorm = createCanvas();
       if (_cbNorm.width !== cw || _cbNorm.height !== ch) { _cbNorm.width = cw; _cbNorm.height = ch; }
       const nctx = _cbNorm.getContext('2d');
       nctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -17656,7 +17663,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       try { drawSnapInRegion(nctx, _snapSrc, _cbA); } catch (e) {}
       _snapSrc = _cbNorm;
     } else if (_snapSrc && (_snapSrc.width !== cw || _snapSrc.height !== ch) && cw > 0 && ch > 0) {
-      if (!_cbNorm) _cbNorm = document.createElement('canvas');
+      if (!_cbNorm) _cbNorm = createCanvas();
       if (_cbNorm.width !== cw || _cbNorm.height !== ch) { _cbNorm.width = cw; _cbNorm.height = ch; }
       const nctx = _cbNorm.getContext('2d');
       nctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -17759,8 +17766,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _fbDepth++;
     try {
-      if (!_fbPool[d]) _fbPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), C: document.createElement('canvas') };
-      if (!_fbPool[d].C) _fbPool[d].C = document.createElement('canvas');
+      if (!_fbPool[d]) _fbPool[d] = { A: createCanvas(), B: createCanvas(), C: createCanvas() };
+      if (!_fbPool[d].C) _fbPool[d].C = createCanvas();
       const pA = _fbPool[d].A, pB = _fbPool[d].B, pC = _fbPool[d].C;
       if (pA.width !== W || pA.height !== H) { pA.width = W; pA.height = H; }   // resize only on change — see drawPixelEffect
       pA.__fmRS = ps; pA.__fmOX = 0; pA.__fmOY = 0;
@@ -17918,7 +17925,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // back as rgb(8,8,8) for white text — the un-premultiply falls apart at low coverage. Sixty-
         // four samples weighted by their own alpha is still nothing to compute and is the actual
         // mean colour of the visible pixels.
-        if (!_fbAvg) { _fbAvg = document.createElement('canvas'); _fbAvg.width = _fbAvg.height = 8; }
+        if (!_fbAvg) { _fbAvg = createCanvas(); _fbAvg.width = _fbAvg.height = 8; }
         const av = _fbAvg.getContext('2d', { willReadFrequently: true });
         av.setTransform(1, 0, 0, 1, 0, 0); av.clearRect(0, 0, 8, 8); av.filter = 'none';
         av.drawImage(pA, sx, sy, sw, sh, 0, 0, 8, 8);
@@ -18043,7 +18050,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function drawManualBlendLayer(ctx, layer, t, scene) {
     const P = scene.project;
     const cw = ctx.canvas.width, ch = ctx.canvas.height;
-    if (!_manualCv) _manualCv = document.createElement('canvas');
+    if (!_manualCv) _manualCv = createCanvas();
     // The plate must match the TARGET's pixel grid, not the project's — the preview canvas is
     // supersampled when zoomed, and a project-sized plate would blend the wrong region against it.
     // Carrying the same __fmRS also means the layer rasterises sharp before it's blended.
@@ -18115,7 +18122,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const pill = layer.type === 'text' && !!layer.captionBg;
     const d = _olDepth++;
     try {
-      if (!_olPool[d]) _olPool[d] = document.createElement('canvas');
+      if (!_olPool[d]) _olPool[d] = createCanvas();
       const F = _olPool[d];
       if (F.width !== cw || F.height !== ch) { F.width = cw; F.height = ch; }   // cleared below
       F.__fmRS = ctx.canvas.__fmRS; F.__fmOX = ctx.canvas.__fmOX; F.__fmOY = ctx.canvas.__fmOY;   // the TARGET's grid, so the layer rasterises exactly as it would have on it
@@ -18228,7 +18235,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _bop = BLEND[layer.blendMode];
     if ((_bop === 'destination-in' || _bop === 'destination-out') && scene && (!_blendMaskCv || ctx.canvas !== _blendMaskCv)) {
       const P = scene.project;
-      if (!_blendMaskCv) _blendMaskCv = document.createElement('canvas');
+      if (!_blendMaskCv) _blendMaskCv = createCanvas();
       /* A camera plate that reaches past the frame (queue 690, fifth hunt): this plate cuts EVERYTHING under it
          that it does not cover, so a frame-sized one would wipe out all the camera can see past the frame edge.
          There it takes the target's own grid instead — the plate is only a stencil, it has no geometry of its own. */
@@ -18729,7 +18736,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
               const srcT = m.el.currentTime || 0;
               const stale = !m._lastFrame || m._lastFrame.width !== hw || m._lastFrame.height !== hh || m._lastFrameT !== srcT;
               if (stale) {
-                if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
+                if (!m._lastFrame) m._lastFrame = createCanvas();
                 if (m._lastFrame.width !== hw || m._lastFrame.height !== hh) { m._lastFrame.width = hw; m._lastFrame.height = hh; }
                 try {
                   const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, hw, hh); lx.drawImage(m.el, 0, 0, hw, hh);
@@ -18934,7 +18941,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const x0 = Math.floor(OX / bw), y0 = Math.floor(OY / bh);
     const nx = Math.max(1, Math.ceil((OX + cw / rs) / bw) - x0), ny = Math.max(1, Math.ceil((OY + ch / rs) / bh) - y0);
     const px = Math.ceil(bw * rs) + 2, py = Math.ceil(bh * rs) + 2;   // at most one block hangs past each edge
-    if (!_adjEdge) _adjEdge = document.createElement('canvas');
+    if (!_adjEdge) _adjEdge = createCanvas();
     const EW = cw + 2 * px, EH = ch + 2 * py;
     if (_adjEdge.width !== EW || _adjEdge.height !== EH) { _adjEdge.width = EW; _adjEdge.height = EH; }
     const e = _adjEdge.getContext('2d');
@@ -18946,7 +18953,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     e.drawImage(a.canvas, cw - 1, 0, 1, ch, px + cw, py, px, ch);    // right
     e.drawImage(_adjEdge, 0, py, EW, 1, 0, 0, EW, py);               // top (the row already carries its left/right)
     e.drawImage(_adjEdge, 0, py + ch - 1, EW, 1, 0, py + ch, EW, py);   // bottom
-    if (!_adjTmp) _adjTmp = document.createElement('canvas');
+    if (!_adjTmp) _adjTmp = createCanvas();
     _adjTmp.width = nx; _adjTmp.height = ny;
     const tctx = _adjTmp.getContext('2d');
     tctx.clearRect(0, 0, nx, ny); tctx.imageSmoothingEnabled = true;
@@ -18985,7 +18992,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   function adjFilterPlate(ctx, layer, t, scene, effs, depth) {
     const cw = ctx.canvas.width, ch = ctx.canvas.height;
-    if (!_adjFcPool[depth]) _adjFcPool[depth] = { A: document.createElement('canvas'), M: document.createElement('canvas') };
+    if (!_adjFcPool[depth]) _adjFcPool[depth] = { A: createCanvas(), M: createCanvas() };
     const P = _adjFcPool[depth];
     ['A', 'M'].forEach(k => { if (P[k].width !== cw || P[k].height !== ch) { P[k].width = cw; P[k].height = ch; } });
     let fi = -1, fs = 1;
@@ -19037,11 +19044,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) ops.matrix.push({ type: 'saturate', value: Math.max(0, cg.sat) });
     }
     if (!ops.matrix.length && !ops.blurs.length && !ops.glows.length) return null;
-    if (!_adjCssPool) _adjCssPool = { B: document.createElement('canvas') };
+    if (!_adjCssPool) _adjCssPool = { B: createCanvas() };
     let r = null;
     try { r = runCssOpsOnGPU(_adjCv, W, H, ops, S, _adjCssPool); } catch (e) { r = null; }
     if (!r || r === _adjCv) return null;
-    if (!_adjCssOut) _adjCssOut = document.createElement('canvas');
+    if (!_adjCssOut) _adjCssOut = createCanvas();
     if (_adjCssOut.width !== W || _adjCssOut.height !== H) { _adjCssOut.width = W; _adjCssOut.height = H; }
     const g = _adjCssOut.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.filter = 'none';
@@ -19115,7 +19122,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // export was always right, so preview and export disagreed exactly while you were judging a grade.
     // The zoomed/cropped preview (__fmRS up to 6, __fmOX/__fmOY non-zero) was broken the same way.
     const cw = ctx.canvas.width, ch = ctx.canvas.height, rs = ctx.canvas.__fmRS || 1;
-    if (!_adjCv) _adjCv = document.createElement('canvas');
+    if (!_adjCv) _adjCv = createCanvas();
     if (_adjCv.width !== cw || _adjCv.height !== ch) { _adjCv.width = cw; _adjCv.height = ch; }   // cleared below
     _adjCv.__fmRS = rs;
     _adjCv.__fmOX = ctx.canvas.__fmOX || 0; _adjCv.__fmOY = ctx.canvas.__fmOY || 0;
@@ -19172,7 +19179,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // device pixels — otherwise the blocks would change size with the quality tier, and on a
         // zoomed preview (where the plate is a crop) they would be wrong in the other direction.
         const sw = Math.max(1, Math.round((cw / rs) / size)), sh = Math.max(1, Math.round((ch / rs) / size));
-        if (!_adjTmp) _adjTmp = document.createElement('canvas');
+        if (!_adjTmp) _adjTmp = createCanvas();
         _adjTmp.width = sw; _adjTmp.height = sh;
         const tctx = _adjTmp.getContext('2d');
         tctx.clearRect(0, 0, sw, sh); tctx.imageSmoothingEnabled = true;
@@ -19442,7 +19449,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function buildGroupUnit(ctx, u, t, scene) {
     const P = scene.project;
     const _d = u.depth || 0;
-    if (!_mgPool[_d]) _mgPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    if (!_mgPool[_d]) _mgPool[_d] = { A: createCanvas(), B: createCanvas() };
     const _mgA = _mgPool[_d].A, _mgB = _mgPool[_d].B;
     /* THE PLATE LIVES ON THE TARGET'S PIXEL GRID, not the project's — the same rule the camera plate
      * follows a few lines into renderScene, and for the identical reason. These two were allocated at
@@ -19791,7 +19798,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       _camSlices = camBlurSlices(cam, t, scene, ctx, camAt);
       _camBox = camPlateBox(_camSlices || [camAt(t)], P, _camRs);   // null = the view is inside the frame: the frame-sized plate, as always
       const _cw = _camBox ? _camBox.pw : Math.max(1, Math.round(P.width * _camRs)), _ch = _camBox ? _camBox.ph : Math.max(1, Math.round(P.height * _camRs));
-      if (!_camCv) _camCv = document.createElement('canvas');
+      if (!_camCv) _camCv = createCanvas();
       if (_camCv.width !== _cw || _camCv.height !== _ch) { _camCv.width = _cw; _camCv.height = _ch; }   // cleared below
       if (_camBox) { _camCv.__fmRS = _camBox.rs; _camCv.__fmOX = _camBox.ox; _camCv.__fmOY = _camBox.oy; }
       else { _camCv.__fmRS = _camRs; _camCv.__fmOX = 0; _camCv.__fmOY = 0; }
@@ -19931,7 +19938,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else {
         if (FM.needsBgSnap(L) && FM.isLayerVisibleAt(L, t)) {   // grab the backdrop-so-far for Copy Background / Light Wrap
-          if (!L._bgSnap || typeof L._bgSnap.getContext !== 'function') L._bgSnap = document.createElement('canvas');
+          if (!L._bgSnap || typeof L._bgSnap.getContext !== 'function') L._bgSnap = createCanvas();
           const _tw = target.canvas.width, _th = target.canvas.height;   // match the TARGET's pixels (may be supersampled), else the snapshot is a downscale
           if (L._bgSnap.width !== _tw || L._bgSnap.height !== _th) { L._bgSnap.width = _tw; L._bgSnap.height = _th; }
           const bs = L._bgSnap.getContext('2d');
@@ -19997,7 +20004,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const slices = _camSlices;
       if (slices) {
         const aw = ctx.canvas.width, ah = ctx.canvas.height;
-        if (!_camAcc) _camAcc = document.createElement('canvas');
+        if (!_camAcc) _camAcc = createCanvas();
         if (_camAcc.width !== aw || _camAcc.height !== ah) { _camAcc.width = aw; _camAcc.height = ah; }
         _camAcc.__fmRS = ctx.canvas.__fmRS || 1; _camAcc.__fmOX = ctx.canvas.__fmOX || 0; _camAcc.__fmOY = ctx.canvas.__fmOY || 0;
         const ac = _camAcc.getContext('2d');
@@ -20136,7 +20143,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   let _measCanvas = null, _measCtx = null;
   function measureCtx() {
-    if (!_measCtx) { _measCanvas = document.createElement('canvas'); _measCtx = _measCanvas.getContext('2d'); }
+    if (!_measCtx) { _measCanvas = createCanvas(); _measCtx = _measCanvas.getContext('2d'); }
     return _measCtx;
   }
 
@@ -20503,4 +20510,4 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       try { ctx.drawImage(m.el, (W - dw) / 2, (H - dh) / 2, dw, dh); } catch (e) {}
     }
   };
-})(window.FM);
+})(globalThis.FM);

@@ -1,0 +1,132 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FreeMotion #47: effects in the actual export worker</title>
+<style>body{font:15px system-ui;background:#111;color:#eee;margin:24px}pre{white-space:pre-wrap}iframe{position:fixed;left:-10000px;top:0;height:760px}</style>
+<h1>Worker effects: exact pixels and visible-change controls</h1>
+<pre id="result">Loading…</pre><iframe id="app"></iframe>
+<script>
+(async function(){
+  const checks=[],frame=document.getElementById('app'),out=document.getElementById('result');
+  const assert=(value,why)=>{if(!value)throw new Error(why);};
+  const clone=value=>JSON.parse(JSON.stringify(value));
+  const animated=(from,to)=>({kf:[{t:0,v:from,e:'linear'},{t:1,v:to,e:'easeInOut',bez:[.42,0,.58,1]}]});
+  let renderer;
+  try{
+    const loaded=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
+    frame.style.width=Math.min(900,innerWidth)+'px';frame.src='../index.html';await loaded;
+    const w=frame.contentWindow,FM=w.FM;
+    assert(w.innerWidth===Math.min(900,innerWidth),'Actual app viewport differs from probe width');
+    assert(FM.exportWorker&&FM.fxRegistry,'Worker/registry not loaded');
+    assert(FM.ctxFilterOK(),'Page lacks working native canvas filters; CSS parity cannot be proved here');
+    // Live callers can share effect objects even though saved documents cannot. JSON cloning can
+    // split identity-sensitive recursion/default hydration; keep those scenes on the page renderer.
+    for(const kind of ['effect','params','cross-layer params']){
+      const scene=FM.newScene();Object.assign(scene.project,{width:160,height:120,duration:1,background:null});
+      const layer=FM.makeLayer('shape',{shape:'rect',x:55,y:60,shapeW:65,shapeH:70,fill:'#573b92',duration:1});
+      scene.layers=[layer];
+      if(kind==='effect'){
+        const fx={type:'gamma',params:{gamma:2}};layer.effects=[fx,fx];
+      }else{
+        const params={};layer.effects=[{type:'gamma',params}];
+        const second={type:'posterize',params};
+        if(kind==='params')layer.effects.push(second);
+        else{
+          const back=FM.makeLayer('shape',{shape:'rect',x:120,y:60,shapeW:55,shapeH:65,fill:'#573b92',duration:1});
+          back.effects=[second];scene.layers.push(back);
+        }
+      }
+      FM.scene=scene;FM.time=0;FM._exporting=true;FM.isolate=null;FM._dragOrderIds=null;
+      // Capture before render hydrates either shared object, exactly like export startup.
+      const split=clone(scene),a=w.document.createElement('canvas'),b=w.document.createElement('canvas');
+      a.width=b.width=160;a.height=b.height=120;
+      const ac=a.getContext('2d'),bc=b.getContext('2d');
+      // The split snapshot's defaults are filled layer-by-layer during worker creation.
+      split.layers.forEach(l=>FM._effectiveFx(l,0));
+      FM.renderScene(ac,scene,0);FM.scene=split;FM.renderScene(bc,split,0);
+      const expected=ac.getImageData(0,0,160,120).data,splitPixels=bc.getImageData(0,0,160,120).data;
+      assert(expected.some((v,i)=>v!==splitPixels[i]),kind+': alias counterexample is inert');
+      FM.scene=scene;
+      renderer=await FM.exportWorker.create(scene,{time:0});
+      assert(!renderer,kind+': worker accepted a scene whose object identity changes its rendering');
+    }
+    const cases=[
+      ['brightness sparse',[{type:'brightness'}]],
+      ['blur sparse',[{type:'blur'}]],
+      ['gamma sparse',[{type:'gamma'}]],
+      ['posterize sparse',[{type:'posterize'}]],
+      ['brightness animated',[{type:'brightness',params:{amount:animated(.4,1.7)}}]],
+      ['blur animated',[{type:'blur',params:{radius:animated(1,12)}}]],
+      ['gamma animated channels',[{type:'gamma',params:{gamma:animated(.65,2.3),red:1.2,green:.7,blue:1.6}}]],
+      ['posterize animated luma',[{type:'posterize',params:{levels:animated(3,10),mix:.65,channels:1,gamma:1.5}}]],
+      ['repeated gamma',[{type:'gamma',params:{gamma:.7}},{type:'gamma',params:{gamma:1.9,green:.8}}]],
+      ['repeated posterize',[{type:'posterize',params:{levels:8}},{type:'posterize',params:{levels:3,mix:.6}}]],
+      ['repeated CSS',[{type:'brightness',params:{amount:.8}},{type:'brightness',params:{amount:1.7}},{type:'blur',params:{radius:3}}]],
+      ['gamma then posterize',[{type:'gamma',params:{gamma:2}},{type:'posterize',params:{levels:4}}]],
+      ['posterize then gamma',[{type:'posterize',params:{levels:4}},{type:'gamma',params:{gamma:2}}]],
+      ['posterize gamma posterize',[{type:'posterize',params:{levels:7}},{type:'gamma',params:{gamma:1.8}},{type:'posterize',params:{levels:3,mix:.7}}]],
+      ['CSS/pixel mix',[{type:'posterize',params:{levels:6}},{type:'blur',params:{radius:4}},{type:'gamma',params:{gamma:1.4}},{type:'brightness',params:{amount:.75}}]],
+      ['disabled CSS with pixel',[{type:'blur',enabled:false},{type:'brightness',enabled:false},{type:'gamma',params:{gamma:2.2}}]]
+    ];
+    const colourCases={
+      contrast:{animated:{amount:animated(-.3,2)},repeat:[{amount:.65},{amount:1.8}]},
+      saturate:{animated:{amount:animated(-.2,2.7)},repeat:[{amount:.5},{amount:2.5}]},
+      hue:{animated:{deg:animated(-120,85)},repeat:[{deg:-110},{deg:70}]},
+      grayscale:{animated:{amount:animated(-.1,1.2)},repeat:[{amount:.4},{amount:.65}]},
+      sepia:{animated:{amount:animated(-.1,1.2)},repeat:[{amount:.3},{amount:.6}]},
+      invert:{animated:{amount:animated(-.1,1.15)},repeat:[{amount:.25},{amount:.55}]},
+      temperature:{animated:{amount:animated(-80,85),tint:animated(65,-50),preserve:100},repeat:[{amount:60,tint:-20},{amount:-20,preserve:80}]},
+      vibrance:{animated:{amount:animated(.3,3.5),skin:100,highlights:100},repeat:[{amount:2.1,skin:60},{amount:.6,highlights:100}]},
+      exposure:{animated:{stops:animated(-1,2),offset:-40,rolloff:90},repeat:[{stops:.6,offset:15},{stops:.4,rolloff:80}]}
+    };
+    for(const [type,options] of Object.entries(colourCases)){
+      cases.push([type+' sparse',[{type}]]);
+      cases.push([type+' animated',[{type,params:options.animated}]]);
+      cases.push([type+' repeated',options.repeat.map(params=>({type,params}))]);
+    }
+    cases.push(
+      ['colour chain CSS then pixels',[{type:'sepia',params:{amount:.4}},{type:'hue',params:{deg:-45}},{type:'temperature',params:{amount:40,tint:-50,preserve:100}},{type:'exposure',params:{stops:1.5,offset:-40,rolloff:90}},{type:'vibrance',params:{amount:2,skin:100,highlights:100}}]],
+      ['colour chain reversed',[{type:'vibrance',params:{amount:2,skin:100,highlights:100}},{type:'exposure',params:{stops:1.5,offset:-40,rolloff:90}},{type:'temperature',params:{amount:40,tint:-50,preserve:100}},{type:'hue',params:{deg:-45}},{type:'sepia',params:{amount:.4}}]],
+      ['colour chain with blur and quantization',[{type:'contrast',params:{amount:1.5}},{type:'grayscale',params:{amount:.3}},{type:'blur',params:{radius:3}},{type:'temperature',params:{tint:40}},{type:'posterize',params:{levels:7,mix:.6}},{type:'exposure',params:{stops:.7,rolloff:90}}]]
+    );
+    let frames=0;
+    for(const size of [[160,120],[240,180]])for(const opacity of [1,.45])for(const [name,effects] of cases){
+      const scene=FM.newScene();Object.assign(scene.project,{width:size[0],height:size[1],duration:1,fps:10,background:opacity===1?'#182030':null});
+      FM.scene=scene;FM.time=0;FM._exporting=true;FM.isolate=null;FM._dragOrderIds=null;
+      const layer=FM.makeLayer('shape',{shape:'rect',x:size[0]*.4,y:size[1]*.45,shapeW:size[0]*.5,shapeH:size[1]*.55,fill:'#663344',duration:1});
+      layer.fillGradient={enabled:true,type:'linear',c0:'#201739',c1:'#f3bb91',angle:25,ox:.1,oy:-.1};
+      layer.transform.x=animated(size[0]*.3,size[0]*.7);layer.transform.rotation=animated(0,45);layer.transform.opacity=opacity;
+      layer.effects=clone(effects);
+      const back=FM.makeLayer('shape',{shape:'ellipse',x:size[0]*.65,y:size[1]*.65,shapeW:size[0]*.3,shapeH:size[1]*.4,fill:'#42a790',duration:1});
+      back.transform.opacity=.7;scene.layers=[layer,back];
+      assert(FM.exportWorker.eligible(scene),name+': scene rejected before reaching worker');
+      renderer=await FM.exportWorker.create(scene,{time:0});
+      assert(renderer,name+': worker failed initialization');
+      let effectChanged=false,previous;
+      for(const time of [0,.23,.51,.88]){
+        const page=w.document.createElement('canvas'),worker=w.document.createElement('canvas'),control=w.document.createElement('canvas');
+        page.width=worker.width=control.width=size[0];page.height=worker.height=control.height=size[1];
+        const pageCtx=page.getContext('2d'),workerCtx=worker.getContext('2d'),controlCtx=control.getContext('2d');
+        FM.scene=scene;FM.time=time;FM.renderScene(pageCtx,scene,time);await renderer.render(workerCtx,time);
+        const a=pageCtx.getImageData(0,0,...size).data,b=workerCtx.getImageData(0,0,...size).data;
+        let changed=0,max=0;
+        for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]);if(d)changed++;max=Math.max(max,d);}
+        assert(!changed,`${name} ${size} opacity=${opacity} t=${time}: ${changed} channels differ (max ${max})`);
+        assert(a.some((v,i)=>i%4!==3&&v>50),name+': both pictures were blank');
+        if(previous)assert(a.some((v,i)=>v!==previous[i]),name+': animation control never moved');previous=a.slice();
+        const clean=clone(scene);clean.layers[0].effects=[];FM.scene=clean;FM.renderScene(controlCtx,clean,time);
+        const bare=controlCtx.getImageData(0,0,...size).data;
+        if(a.some((v,i)=>v!==bare[i]))effectChanged=true;
+        frames++;
+      }
+      renderer.dispose();renderer=null;
+      assert(effectChanged,name+': effect matched bypassed control at every time');
+      checks.push(`${name} ${size.join('×')} opacity=${opacity}: four exact animated frames; visible effect control`);
+      out.textContent=checks.length+' cases passed';
+    }
+    FM._exporting=false;
+    window.__workerCanvasResult={ok:true,frames,checks};
+  }catch(e){window.__workerCanvasResult={ok:false,error:e.stack||String(e),checks};}
+  finally{if(renderer)renderer.dispose();if(frame.contentWindow.FM)frame.contentWindow.FM._exporting=false;}
+  out.textContent=JSON.stringify(window.__workerCanvasResult,null,2);
+})();
+</script>

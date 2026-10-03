@@ -78,7 +78,7 @@ window.FM = window.FM || {};
     try { doc = JSON.stringify({ project: o.project, layers: o.layers }, FM.jsonReplacer); }
     catch (e) { doc = String(Math.random()); }   // unserialisable scene → never matches, so never resumes
     return [FORMAT, appVersion(), o.w, o.h, o.fps, o.bitrate, o.codec, round6(o.from), round6(o.to), o.frames,
-            o.audio ? 1 : 0, hash(doc)].join('|');
+            o.audio ? 1 : 0, hash(doc)].join('|') + (o.renderer ? '|renderer:' + o.renderer : '');
   }
   /* THE BUILD THAT RENDERED IT (queue 916, clause 9). The renderer is part of "everything that can change
    * a single output byte", and it was the one thing missing: an export killed on one version and

@@ -85,6 +85,15 @@
   FM.studioFonts = {
     list() { return catalogue.slice(); },
     has(css) { return byCss.has(css); },
+    // Export workers must load the same bundled face that the page uses, including its weight.
+    source(css, bold) {
+      const font = record(css);
+      if (!font) return null;
+      const heavy = !!bold && !!font.bold;
+      const path = heavy ? font.bold : font.regular;
+      return { family: font.family, url: new URL('../fonts/' + path + '?v=1', source).href,
+               weight: heavy ? '700' : '400' };
+    },
     load: load,
     usesScene(scene) { return neededForScene(scene).length > 0; },
     forScene: forScene,

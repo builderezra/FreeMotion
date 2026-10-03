@@ -1,0 +1,135 @@
+<!doctype html>
+<meta charset="utf-8"><title>FreeMotion #47: captured video frames</title>
+<style>body{background:#111;color:#eee;font:15px system-ui;margin:24px}pre{white-space:pre-wrap}iframe{position:fixed;left:-10000px;width:900px;height:760px}</style>
+<h1>Video in background exports</h1><pre id="result">Loading…</pre><iframe id="app"></iframe>
+<script>
+(async function(){
+  const checks=[],frame=document.getElementById('app'),output=document.getElementById('result');
+  const assert=(ok,message)=>{if(!ok)throw new Error(message);};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  async function waitFor(fn,message){const end=performance.now()+15000;while(performance.now()<end){if(fn())return;await sleep(20);}throw new Error(message);}
+  function pixels(source,doc=document){const c=doc.createElement('canvas');c.width=160;c.height=120;const ctx=c.getContext('2d');ctx.drawImage(source,0,0);return ctx.getImageData(0,0,160,120).data;}
+  function error(a,b){let total=0,max=0;for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]);total+=d;max=Math.max(max,d);}return {mean:total/a.length,max};}
+  function redPatch(data){let n=0,x=0;for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],b=data[i+2];if(r>100&&r>g*1.5&&r>b*1.5){n++;x+=(i/4)%160;}}return {count:n,x:n?x/n:NaN};}
+  async function digest(file){const hash=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());return Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('');}
+  async function seek(video,time){
+    video.pause();
+    await waitFor(()=>video.readyState>=2||video.error,'Video never produced its initial decoded frame');
+    assert(!video.error,'Video decoder failed before seeking');
+    const target=Math.min(Math.max(time,0),Math.max(0,video.duration-.001));
+    if(Math.abs(video.currentTime-target)>1e-5)video.currentTime=target;
+    await waitFor(()=>video.error||(!video.seeking&&video.readyState>=2&&Math.abs(video.currentTime-target)<1e-4),'Video did not reach '+target+'s');
+    assert(!video.error,'Video decoder failed during seek');
+  }
+  async function decodedFrame(blob,time){
+    const video=document.createElement('video'),url=URL.createObjectURL(blob);
+    try{video.muted=true;video.preload='auto';video.src=url;video.load();await seek(video,time);
+      assert(video.videoWidth===160&&video.videoHeight===120,'Exported MP4 dimensions differ');return pixels(video);
+    }finally{video.pause();video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
+  }
+  async function makeVideo(w,replacement){
+    // Native encoding deliberately bypasses FM.exporter: fixture generation cannot nest an export.
+    const canvas=w.document.createElement('canvas');canvas.width=160;canvas.height=120;const ctx=canvas.getContext('2d');
+    const target=new w.Mp4Muxer.ArrayBufferTarget();
+    const muxer=new w.Mp4Muxer.Muxer({target,video:{codec:'avc',width:160,height:120,frameRate:10},fastStart:'in-memory'});
+    let failure=null;
+    const encoder=new w.VideoEncoder({output(chunk,meta){try{const bytes=new w.Uint8Array(chunk.byteLength);chunk.copyTo(bytes);muxer.addVideoChunkRaw(bytes,chunk.type,chunk.timestamp,chunk.duration,meta);}catch(e){failure=e;}},error(e){failure=e;}});
+    try{
+      const config={codec:'avc1.42001f',width:160,height:120,framerate:10,bitrate:600000,avc:{format:'avc'}};
+      const supported=await w.VideoEncoder.isConfigSupported(config);assert(supported.supported,'Fixture H.264 encoder unavailable');encoder.configure(config);
+      for(let i=0;i<15;i++){
+        ctx.fillStyle=replacement?'#25b74c':'#1b3fa7';ctx.fillRect(0,0,160,120);
+        if(!replacement){ctx.fillStyle='#e93c36';ctx.fillRect(12+i*8,45,22,24);}
+        const vf=new w.VideoFrame(canvas,{timestamp:i*100000,duration:100000});
+        try{encoder.encode(vf,{keyFrame:i===0});}finally{vf.close();}
+      }
+      await encoder.flush();if(failure)throw failure;muxer.finalize();
+      return new w.File([target.buffer],replacement?'replacement-green.mp4':'moving-red.mp4',{type:'video/mp4'});
+    }finally{if(encoder.state!=='closed')encoder.close();}
+  }
+  try{
+    const loaded=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));frame.style.width=Math.min(900,innerWidth)+'px';frame.src='../index.html';await loaded;
+    const w=frame.contentWindow,FM=w.FM,NativeWorker=w.Worker,realRender=FM.renderScene,realCapture=FM.exportWorker.capture;
+    const realSupport=w.VideoEncoder.isConfigSupported,realSignature=FM.exportResume.signature,originalMedia=FM.media,RealVideoFrame=w.VideoFrame;
+    const sourceFile=await makeVideo(w,false),replacementFile=await makeVideo(w,true);
+    const expectedHash=await digest(sourceFile),replacementHash=await digest(replacementFile);
+    let mode='worker',jobs=[],raw=null,activeCapture=null,signed=null,injected=false;
+    FM.exportWorker.capture=function(...args){activeCapture=realCapture.apply(this,args);return activeCapture;};
+    FM.exportResume.signature=function(args){signed=args;return realSignature(args);};
+    w.Worker=class extends NativeWorker{
+      constructor(...args){super(...args);this.job={terminated:0,worker:this};jobs.push(this.job);
+        this.addEventListener('message',e=>{if(e.data.bitmap&&!raw)raw=pixels(e.data.bitmap,w.document);});}
+      terminate(){this.job.terminated++;return super.terminate();}
+    };
+    w.VideoFrame=class extends RealVideoFrame{
+      constructor(source,...args){
+        super(source,...args);
+        if(mode==='main'&&!injected&&source.tagName==='VIDEO'){
+          injected=true;jobs[jobs.length-1].worker.onerror({message:'VIDEO_STARTUP_FALLBACK',preventDefault(){}});
+        }
+      }
+    };
+    FM.renderScene=function(ctx,scene,time){const result=realRender.call(this,ctx,scene,time);if(FM._exporting&&activeCapture&&scene===activeCapture.document&&!raw)raw=ctx.getImageData(0,0,160,120).data;return result;};
+    try{
+      for(const backend of ['worker','main']){
+        mode=backend;raw=null;signed=null;activeCapture=null;injected=false;
+        const original=await FM.loadVideoFile(sourceFile),replacement=await FM.loadVideoFile(replacementFile);
+        const scene=FM.newScene();Object.assign(scene.project,{width:160,height:120,fps:10,duration:1.1,background:'#101820',markers:[]});
+        const clip=FM.makeLayer('video',{name:'Captured moving patch',x:80,y:67,scale:.82,duration:1.1});
+        clip.trimStart=.2;clip.speed=1;clip.crop={x:6.5,y:8.25,w:146.5,h:101.25};clip.transform.rotation=-7;
+        clip.effects=[{type:'gamma',params:{gamma:1.3}}];
+        const overlay=FM.makeLayer('shape',{name:'Overlay',shape:'rect',x:136,y:18,shapeW:18,shapeH:9,fill:'#ffffff',duration:1.1});
+        scene.layers=[clip,overlay];FM.scene=scene;FM.time=0;FM.isolate=null;FM._dragOrderIds=null;FM._exportTransparent=false;FM.media.set(clip.id,original);
+        let entered=false,release,ready,running=null,completed=false;
+        const gate=new Promise(resolve=>{release=resolve;}),before=jobs.length;
+        try{
+          assert(original.width===160&&original.height===120&&Math.abs(original.duration-1.5)<.11,'Generated source metadata differs');
+          await seek(original.el,.2);
+          assert(FM.exportWorker.eligible(scene),'Ordinary forward video was not admitted');
+          const reference=w.document.createElement('canvas');reference.width=160;reference.height=120;const ctx=reference.getContext('2d');
+          async function expectedAt(t){
+            // Independently seek the ORIGINAL imported element and render on an app-document canvas.
+            await seek(original.el,FM.layerLocalTime(clip,t));FM.time=t;FM._exporting=true;
+            try{realRender(ctx,scene,t);return ctx.getImageData(0,0,160,120).data;}finally{FM._exporting=false;}
+          }
+          const expectedEarly=await expectedAt(0),expectedLate=await expectedAt(.9);FM.time=0;
+          const referenceEarly=redPatch(expectedEarly),referenceLate=redPatch(expectedLate);
+          assert(referenceEarly.count>100&&referenceLate.count>100&&referenceLate.x-referenceEarly.x>35,'Fixture reference did not contain a moving red patch');
+          w.VideoEncoder.isConfigSupported=async function(config){if(!entered){entered=true;await gate;}return realSupport.call(this,config);};
+          running=FM.exporter.run({bitrate:600000,onReady:async result=>{ready=result;}});
+          await waitFor(()=>entered,'Video export never reached codec setup');
+          assert(activeCapture&&activeCapture.videos&&activeCapture.videos.includes(clip.id),'Video was not captured before asynchronous setup');
+          // Replacing the live record tears down the old element. Export must own its own decoder.
+          FM.media.set(clip.id,replacement);clip.transform.x=130;FM.time=.7;release();await running;completed=true;
+          assert(ready&&raw,'Video export did not deliver its first frame and MP4');
+          const parity=error(raw,expectedEarly);
+          if(parity.max){
+            const save=data=>{const c=w.document.createElement('canvas');c.width=160;c.height=120;c.getContext('2d').putImageData(new w.ImageData(new w.Uint8ClampedArray(data),160,120),0,0);return c.toDataURL();};
+            window.__workerProbeImages={page:save(expectedEarly),worker:save(raw)};
+          }
+          assert(parity.max===0,'Captured first frame differs from independently sought preview: '+JSON.stringify(parity));
+          const decodedEarly=await decodedFrame(ready.blob,.05),decodedLate=await decodedFrame(ready.blob,.95);
+          const earlyError=error(decodedEarly,expectedEarly),lateError=error(decodedLate,expectedLate);
+          assert(earlyError.mean<8&&lateError.mean<8,'Encoded early/late frames differ from original video: '+JSON.stringify({earlyError,lateError}));
+          const early=redPatch(decodedEarly),late=redPatch(decodedLate);
+          assert(early.count>100&&late.count>100&&late.x-early.x>35,'Finished MP4 lost source motion or used the green replacement');
+          assert(FM.scene===scene&&FM.media===originalMedia&&FM.media.get(clip.id)===replacement&&clip.transform.x===130&&FM.time===.7,'Export undid live video edits');
+          assert(signed&&typeof signed.renderer==='string'&&signed.renderer.includes(expectedHash)&&!signed.renderer.includes(replacementHash),'Renderer identity did not retain original video bytes');
+          assert(activeCapture.videos.every(id=>{const rec=activeCapture.media.get(id);return rec&&rec.el===null&&rec.url===null;}),'Export retained an owned video element or URL after release');
+          assert(jobs.length===before+1,'Incorrect video renderer selected');
+          assert(jobs[before].terminated===1,'Video Worker was not terminated exactly once');
+          checks.push(backend+': trimmed/cropped/gamma video matches its first preview frame, retains motion after live source replacement, hashes its original File and releases its decoder; '+JSON.stringify({parity,earlyError,lateError,motion:late.x-early.x}));
+        }finally{
+          release();if(running&&!completed){FM._exportCancel=true;try{await running;}catch(e){}}
+          w.VideoEncoder.isConfigSupported=realSupport;FM.media=originalMedia;FM.media.remove(clip.id);
+          // One of these records may never have entered FM.media if setup failed.
+          for(const rec of [original,replacement]){try{rec.el.pause();rec.el.removeAttribute('src');rec.el.load();URL.revokeObjectURL(rec.url);}catch(e){}}
+          await FM.exportResume.clear();FM._exportCancel=false;
+        }
+      }
+      assert(jobs.every(job=>job.terminated===1),'Video export leaked or repeatedly terminated a Worker');window.__workerCanvasResult={ok:true,checks};
+    }finally{w.VideoFrame=RealVideoFrame;w.Worker=NativeWorker;FM.renderScene=realRender;FM.exportWorker.capture=realCapture;FM.exportResume.signature=realSignature;w.VideoEncoder.isConfigSupported=realSupport;FM.media=originalMedia;FM._exporting=false;FM._exportCancel=false;}
+  }catch(e){window.__workerCanvasResult={ok:false,error:e.stack||String(e),checks};}
+  output.textContent=JSON.stringify(window.__workerCanvasResult,null,2);
+})();
+</script>
