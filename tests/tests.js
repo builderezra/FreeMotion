@@ -82488,6 +82488,32 @@
       throw new Error('A constant-speed VHS band changed its legacy position or zero-speed behavior');
   });
 
+  test('690 Glow Scan speed keyframes move the band by accumulated phase', { item: 'TBD' }, function () {
+    const kernel = FM._FX_TABLES.PIXEL_FX.glowscan, W = 8, H = 40;
+    if (!kernel) throw new Error('The Glow Scan production kernel is unavailable');
+    function peakAt(speed, time) {
+      const data = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = data[i + 1] = data[i + 2] = 64; data[i + 3] = 255;
+      }
+      kernel(data, W, H, { speed, width: 10, amount: 1, color: '#ffffff', direction: 0 }, time, 1);
+      let row = -1, value = -1;
+      for (let y = 0; y < H; y++) {
+        const v = data[(y * W + 4) * 4];
+        if (v > value) { value = v; row = y; }
+      }
+      return { row, value };
+    }
+    const speed = { kf: [{ t: 0, v: 1 }, { t: 0.5, v: 0 }] };
+    const before = peakAt(speed, 0.49), stopped = peakAt(speed, 0.5), after = peakAt(speed, 0.75);
+    if (stopped.value < 240 || Math.abs(stopped.row - 10) > 1 ||
+        Math.abs(stopped.row - before.row) > 1 || Math.abs(stopped.row - after.row) > 1)
+      throw new Error('Keyframed Glow Scan jumped instead of stopping around row 10: ' + JSON.stringify({ before, stopped, after }));
+    const constant = peakAt(1, 0.25), zero = peakAt(0, 0.75);
+    if (constant.row !== 10 || zero.row !== 0)
+      throw new Error('Constant-speed Glow Scan lost its legacy phase');
+  });
+
   test('effects: Tilt Shift and Matte Choker bound to the layer without changing it', { item: '692' }, async function () {
     /* #692, the next tier, measured on 1 Sep at each effect's DEFAULTS on a 180x150 subject in a
      * 1080x1920 plate — the shape of the lag, where the layer covers 1.3% of the frame:
