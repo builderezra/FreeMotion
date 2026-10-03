@@ -1,0 +1,11 @@
+# #690 B52 — Sony S-Log3/S-Gamut3.Cine to Rec.709 increment
+
+Starting commit: `8259b7675ac5e95c66653a62c4248c866c464888` on isolated `chatgpt/690-continuation`.
+
+The Log to Rec.709 effect now offers an explicit Sony S-Log3/S-Gamut3.Cine profile alongside Panasonic V-Log/V-Gamut. Existing saved effects still default to Panasonic. The Sony path uses [Sony's published inverse S-Log3 transfer](https://download.pro.sony/FNGP/protein/1237494271390/1237494271406.pdf), then an S-Gamut3.Cine-to-Rec.709 matrix composed from the [Academy Software Foundation's Sony-to-ACES matrix](https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES/blob/main/opencolorio_config_aces/clf/transforms/sony/input/Sony.Input.Linear_SGamut3Cine_to_ACES2065-1.clf) and its [linear Rec.709-to-ACES matrix](https://github.com/AcademySoftwareFoundation/OpenColorIO/blob/main/docs/configurations/ocio-v2_demo.ocio). The resulting matrix rows are `(1.62685640, -0.53698864, -0.08986776)`, `(-0.17910943, 1.42086304, -0.24175361)`, and `(-0.04416648, -0.20151920, 1.24568568)`. The existing [BT.709 output curve](https://www.itu.int/dms_pubrec/itu-r/rec/bt/r-rec-bt.709-6-201506-i%21%21pdf-e.pdf), exposure, roll-off and Mix controls remain shared by both profiles.
+
+Changed: `js/compositor.js`, `js/fx-registry.js`, `index.html` cache tags, one `{ item: 'TBD' }` regression in `tests/tests.js`, and this report. The production kernel has no frame allocation per pixel; it chooses the profile's transfer table and matrix once for each frame.
+
+Checks: JavaScriptCore loaded the production compositor and registry. Its focused kernel probe converted Sony's 18% grey input code 105/255 to neutral 105/255 Rec.709 output, applied the gamut matrix to a warm sample, and left transparent pixels unchanged. `git diff --check` and script syntax checks passed. Browser visual output, actual Sony camera footage, and browser video colour metadata behavior remain UNVERIFIED.
+
+Use only when the recording is specifically S-Log3 **and S-Gamut3.Cine**. S-Gamut3, Venice variants, limited-range transcodes, and other Sony gamuts need their own profiles. Apple Log, Canon Log3 and DJI D-Log M are still pending, so B52 remains partial.

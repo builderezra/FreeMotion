@@ -764,7 +764,8 @@ window.FM = window.FM || {};
       { key: 'smooth', label: 'Temporal smoothing', min: 0, max: 2, step: 0.05, def: 0.25, unit: 's' },
       { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
-    { type: 'logtonormal', label: 'V-Log to Rec.709', desc: 'Convert Panasonic V-Log/V-Gamut footage to Rec.709. Select this only for footage recorded in that camera profile.', params: [
+    { type: 'logtonormal', label: 'Log to Rec.709', desc: 'Convert footage recorded as Panasonic V-Log/V-Gamut or Sony S-Log3/S-Gamut3.Cine. Select the exact recording profile; this does not auto-detect it.', params: [
+      { key: 'profile', label: 'Camera profile', options: [[0, 'Panasonic V-Log / V-Gamut'], [1, 'Sony S-Log3 / S-Gamut3.Cine']], def: 0 },
       { key: 'exposure', label: 'Exposure', min: -4, max: 4, step: 0.1, def: 0, unit: 'stops' },
       { key: 'rolloff', label: 'Highlight roll-off', min: 0, max: 100, step: 1, def: 20, unit: '%' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
@@ -5371,12 +5372,16 @@ window.FM = window.FM || {};
   let fractalNoiseScratch = null;
   let _autoGradeCache = new WeakMap(), _autoGradeExportState = !!FM._exporting;
   let _deflickerCache = new WeakMap(), _deflickerExportState = !!FM._exporting;
-  // Panasonic's published V-Log inverse and BT.709's published output curve.
+  // Panasonic/Sony published inverse curves and BT.709's published output curve.
   // Tables are shared across frames; the per-pixel grade only does a matrix and lookups.
-  const _vlogDecode = new Float32Array(256), _rec709Encode = new Float32Array(4097);
+  const _vlogDecode = new Float32Array(256), _slog3Decode = new Float32Array(256), _rec709Encode = new Float32Array(4097);
   for (let i = 0; i < 256; i++) {
     const x = i / 255;
     _vlogDecode[i] = x < 0.181 ? (x - 0.125) / 5.6 : Math.pow(10, (x - 0.598206) / 0.241514) - 0.00873;
+    const code = x * 1023;
+    _slog3Decode[i] = code >= 171.2102946929
+      ? Math.pow(10, (code - 420) / 261.5) * 0.19 - 0.01
+      : (code - 95) * 0.01125 / (171.2102946929 - 95);
   }
   for (let i = 0; i <= 4096; i++) {
     const x = i / 4096;
@@ -5495,6 +5500,16 @@ window.FM = window.FM || {};
     logtonormal: function (d, W, H, p, t) {
       const mix = clamp01(fparam(p, 'mix', 100, t) / 100);
       if (!mix) return;
+      const sonyCine = Math.round(fparam(p, 'profile', 0, t)) === 1;
+      const decode = sonyCine ? _slog3Decode : _vlogDecode;
+      // Select the gamut once per frame, outside the pixel loop.
+      const m = sonyCine
+        ? [1.626856400320, -0.536988636554, -0.089867763767,
+           -0.179109430449, 1.420863041443, -0.241753610994,
+           -0.044166477895, -0.201519200616, 1.245685678512]
+        : [1.806576, -0.695697, -0.110879,
+           -0.170090, 1.305955, -0.135865,
+           -0.025206, -0.154468, 1.179674];
       const exposure = Math.pow(2, Math.max(-4, Math.min(4, fparam(p, 'exposure', 0, t))));
       const roll = clamp01(fparam(p, 'rolloff', 20, t) / 100);
       function output(x) {
@@ -5504,11 +5519,12 @@ window.FM = window.FM || {};
       }
       for (let i = 0; i < d.length; i += 4) {
         if (!d[i + 3]) continue;
-        const r = _vlogDecode[d[i]] * exposure, g = _vlogDecode[d[i + 1]] * exposure, b = _vlogDecode[d[i + 2]] * exposure;
-        // V-Gamut RGB to BT.709 RGB, from Panasonic's V-Log/V-Gamut reference manual.
-        const nr = output(1.806576 * r - 0.695697 * g - 0.110879 * b);
-        const ng = output(-0.170090 * r + 1.305955 * g - 0.135865 * b);
-        const nb = output(-0.025206 * r - 0.154468 * g + 1.179674 * b);
+        const r = decode[d[i]] * exposure, g = decode[d[i + 1]] * exposure, b = decode[d[i + 2]] * exposure;
+        // Sony matrix = inverse(ACES Rec.709->AP0) * (S-Gamut3.Cine->AP0), from ASWF OpenColorIO.
+        // Panasonic's V-Gamut->BT.709 matrix is published directly in its reference manual.
+        const nr = output(m[0] * r + m[1] * g + m[2] * b);
+        const ng = output(m[3] * r + m[4] * g + m[5] * b);
+        const nb = output(m[6] * r + m[7] * g + m[8] * b);
         d[i] += (nr - d[i]) * mix; d[i + 1] += (ng - d[i + 1]) * mix; d[i + 2] += (nb - d[i + 2]) * mix;
       }
     },
