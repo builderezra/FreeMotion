@@ -642,6 +642,60 @@ window.FM = window.FM || {};
         const cg = ctx.createGain(); env(cg.gain, t0, [[0, big ? 0.8 : 0.45], [Math.min(0.15, d * 0.11), 0]]);
         crack.connect(hp); hp.connect(cg); cg.connect(out); crack.start(t0); crack.stop(t0 + Math.min(0.16, d * 0.12));
       } },
+    // Long, synthesised atmosphere beds. Lower catalogue levels leave room for dialogue and music.
+    { id: 'amb-ocean', name: 'Ocean surf', cat: 'Ambience', dur: 8, level: 0.42,
+      render(ctx, t0, d, out) {
+        const low = ctx.createBufferSource(); low.buffer = noiseBuffer(ctx, d, 'brown');
+        const lowpass = ctx.createBiquadFilter(); lowpass.type = 'lowpass'; lowpass.frequency.value = 520;
+        const lg = ctx.createGain(); env(lg.gain, t0, [[0, 0], [0.7, 0.38], [2.5, 0.7], [4.2, 0.22], [6.4, 0.63], [d, 0]]);
+        low.connect(lowpass); lowpass.connect(lg); lg.connect(out); low.start(t0); low.stop(t0 + d);
+        const foam = ctx.createBufferSource(); foam.buffer = noiseBuffer(ctx, d, 'pink');
+        const band = ctx.createBiquadFilter(); band.type = 'bandpass'; band.Q.value = 0.6;
+        env(band.frequency, t0, [[0, 850], [2.2, 1800], [4.4, 700], [6.3, 2100], [d, 850]]);
+        const fg = ctx.createGain(); env(fg.gain, t0, [[0, 0], [0.8, 0.08], [2.4, 0.48], [4.2, 0.06], [6.4, 0.42], [d, 0]]);
+        foam.connect(band); band.connect(fg); fg.connect(out); foam.start(t0); foam.stop(t0 + d);
+      } },
+    { id: 'amb-crickets', name: 'Crickets at night', cat: 'Ambience', dur: 8, level: 0.35,
+      render(ctx, t0, d, out) {
+        const air = ctx.createBufferSource(); air.buffer = noiseBuffer(ctx, d, 'pink');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100;
+        const ag = ctx.createGain(); env(ag.gain, t0, [[0, 0], [0.25, 0.1], [d - 0.3, 0.1], [d, 0]]);
+        air.connect(lp); lp.connect(ag); ag.connect(out); air.start(t0); air.stop(t0 + d);
+        for (let i = 0; i < 28; i++) {
+          const at = 0.36 + i * 0.26 + (i % 4) * 0.035, len = 0.085 + (i % 3) * 0.018;
+          if (at + len >= d) break;
+          const o = ctx.createOscillator(); o.type = 'sine';
+          const hz = 3900 + (i % 5) * 170;
+          env(o.frequency, t0 + at, [[0, hz], [len, hz + 150]]);
+          const g = ctx.createGain(); env(g.gain, t0 + at, [[0, 0], [0.012, 0.18], [len * 0.65, 0.15], [len, 0]]);
+          o.connect(g); g.connect(out); o.start(t0 + at); o.stop(t0 + at + len);
+        }
+      } },
+    { id: 'amb-birds', name: 'Morning birds', cat: 'Ambience', dur: 8, level: 0.4,
+      render(ctx, t0, d, out) {
+        const air = ctx.createBufferSource(); air.buffer = noiseBuffer(ctx, d, 'pink');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 0.5;
+        const ag = ctx.createGain(); env(ag.gain, t0, [[0, 0], [0.3, 0.09], [d - 0.3, 0.09], [d, 0]]);
+        air.connect(bp); bp.connect(ag); ag.connect(out); air.start(t0); air.stop(t0 + d);
+        [0.45, 0.72, 1.65, 2.01, 2.38, 3.45, 3.76, 4.68, 5.01, 5.38, 6.22, 6.59, 7.13].forEach((at, i) => {
+          const len = 0.18 + (i % 3) * 0.07, base = 1700 + (i % 4) * 280;
+          const o = ctx.createOscillator(); o.type = 'sine';
+          env(o.frequency, t0 + at, [[0, base], [len * 0.35, base * 1.38], [len, base * 1.08]]);
+          const g = ctx.createGain(); env(g.gain, t0 + at, [[0, 0], [0.035, 0.23], [len * 0.6, 0.18], [len, 0]]);
+          o.connect(g); g.connect(out); o.start(t0 + at); o.stop(t0 + at + len);
+        });
+      } },
+    { id: 'amb-room', name: 'Room tone', cat: 'Ambience', dur: 8, level: 0.25,
+      render(ctx, t0, d, out) {
+        const air = ctx.createBufferSource(); air.buffer = noiseBuffer(ctx, d, 'pink');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 90;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [0.25, 0.2], [d - 0.25, 0.2], [d, 0]]);
+        air.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); air.start(t0); air.stop(t0 + d);
+        const hum = ctx.createOscillator(); hum.type = 'sine'; hum.frequency.value = 60;
+        const hg = ctx.createGain(); env(hg.gain, t0, [[0, 0], [0.25, 0.008], [d - 0.25, 0.008], [d, 0]]);
+        hum.connect(hg); hg.connect(out); hum.start(t0); hum.stop(t0 + d);
+      } },
   ];
 
   const variantOptions = new Map();

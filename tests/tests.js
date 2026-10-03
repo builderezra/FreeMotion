@@ -118508,5 +118508,20 @@
       throw new Error('Preset or output control did not change the rendered audio');
   });
 
+  test('690 Ambience pack renders four usable quiet beds', { item: 'TBD' }, async function () {
+    for (const id of ['amb-ocean', 'amb-crickets', 'amb-birds', 'amb-room']) {
+      const def = FM.sfx.byId(id);
+      if (!def || def.cat !== 'Ambience' || def.dur !== 8) throw new Error(id + ' is missing from Ambience');
+      const buffer = await FM.sfx.renderBuffer(def), samples = buffer.getChannelData(0);
+      if (buffer.duration < 8 || samples.length < 8 * 44100) throw new Error(id + ' was cut short');
+      let peak = 0, power = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const v = samples[i]; peak = Math.max(peak, Math.abs(v)); power += v * v;
+      }
+      if (!(peak > 0.05 && peak < 0.5 && Math.sqrt(power / samples.length) > 0.005))
+        throw new Error(id + ' rendered silent or too loud');
+    }
+  });
+
 
 })();
