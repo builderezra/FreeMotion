@@ -674,6 +674,16 @@ window.FM = window.FM || {};
       { key: 'spin', label: 'Spin', min: -360, max: 360, step: 1, def: 0, unit: '°/s' },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Screen'], [2, 'Add']], def: 1 },
     ] },
+    { type: 'lensmagnifier', label: 'Lens Magnifier', desc: 'Magnify this layer under a movable lens, with a feathered edge, border and shadow.', color: true, defColor: '#ffffff', colorLabel: 'Border', params: [
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'size', label: 'Size', min: 1, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'zoom', label: 'Zoom', min: 1, max: 8, step: 0.1, def: 2, unit: '×' },
+      { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square']], def: 0 },
+      { key: 'feather', label: 'Feather', min: 0, max: 100, step: 1, def: 8, unit: 'px' },
+      { key: 'border', label: 'Border width', min: 0, max: 40, step: 1, def: 3, unit: 'px' },
+      { key: 'shadow', label: 'Shadow', min: 0, max: 100, step: 1, def: 12, unit: 'px' },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3724,7 +3734,7 @@ window.FM = window.FM || {};
     pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
     wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
-    squeeze: 1, tiles: 1, motionflow: 1, particles: 1,
+    squeeze: 1, tiles: 1, lensmagnifier: 1, motionflow: 1, particles: 1,
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
@@ -12408,7 +12418,71 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let e = null; try { e = alphaBBoxWithin(_fx2d(A), bb); } catch (err) { e = null; }
     return e && e.w > 0 && e.h > 0 ? e : bb;
   }
+  const _lensMagnifierPool = [];
   const CANVAS_FX = {
+    lensmagnifier: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+      B.drawImage(A, 0, 0);
+      var scale = ps > 0 ? ps : 1;
+      var project = scene && scene.project;
+      var projectW = project ? project.width : W / scale;
+      var projectH = project ? project.height : H / scale;
+      var ox = A.__fmOX || 0, oy = A.__fmOY || 0;
+      var cx = (projectW * Math.max(0, Math.min(100, fparam(p, 'x', 50, t))) / 100 - ox) * scale;
+      var cy = (projectH * Math.max(0, Math.min(100, fparam(p, 'y', 50, t))) / 100 - oy) * scale;
+      var radius = Math.min(projectW, projectH) * Math.max(1, Math.min(100, fparam(p, 'size', 30, t))) * scale / 200;
+      var zoom = Math.max(1, Math.min(8, fparam(p, 'zoom', 2, t)));
+      var square = Math.round(fparam(p, 'shape', 0, t)) === 1;
+      var feather = Math.min(radius, Math.max(0, fparam(p, 'feather', 8, t) * scale));
+      var border = Math.max(0, Math.min(40, fparam(p, 'border', 3, t))) * scale;
+      var shadow = Math.max(0, Math.min(100, fparam(p, 'shadow', 12, t))) * scale;
+      if (zoom === 1 && border === 0 && shadow === 0) return;
+      if (radius <= 0 || cx + radius + shadow < 0 || cx - radius - shadow > W ||
+          cy + radius + shadow < 0 || cy - radius - shadow > H) return;
+      var outline = function (ctx, r) {
+        ctx.beginPath();
+        if (square) ctx.rect(cx - r, cy - r, r * 2, r * 2);
+        else ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      };
+      if (shadow > 0) {
+        B.save(); B.shadowColor = 'rgba(0,0,0,0.6)'; B.shadowBlur = shadow;
+        B.strokeStyle = 'rgba(0,0,0,0.55)'; B.lineWidth = Math.max(1, scale * 2);
+        outline(B, radius); B.stroke(); B.restore();
+      }
+      if (zoom > 1) {
+        var depth = Math.max(0, _cfDepth - 1);
+        if (!_lensMagnifierPool[depth]) _lensMagnifierPool[depth] = document.createElement('canvas');
+        var cv = _lensMagnifierPool[depth];
+        if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+        var g = cv.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+        g.drawImage(A, cx * (1 - zoom), cy * (1 - zoom), W * zoom, H * zoom);
+        g.globalCompositeOperation = 'destination-in';
+        if (feather <= 0) {
+          g.fillStyle = '#ffffff'; outline(g, radius); g.fill();
+        } else if (!square) {
+          var radial = g.createRadialGradient(cx, cy, Math.max(0, radius - feather), cx, cy, radius);
+          radial.addColorStop(0, 'rgba(255,255,255,1)'); radial.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = radial; outline(g, radius); g.fill();
+        } else {
+          var edge = feather / (radius * 2);
+          var gx = g.createLinearGradient(cx - radius, 0, cx + radius, 0);
+          gx.addColorStop(0, 'rgba(255,255,255,0)'); gx.addColorStop(edge, 'rgba(255,255,255,1)');
+          gx.addColorStop(1 - edge, 'rgba(255,255,255,1)'); gx.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = gx; g.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+          var gy = g.createLinearGradient(0, cy - radius, 0, cy + radius);
+          gy.addColorStop(0, 'rgba(255,255,255,0)'); gy.addColorStop(edge, 'rgba(255,255,255,1)');
+          gy.addColorStop(1 - edge, 'rgba(255,255,255,1)'); gy.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = gy; g.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+        }
+        g.globalCompositeOperation = 'source-over';
+        B.drawImage(cv, 0, 0);
+      }
+      if (border > 0) {
+        B.save(); B.strokeStyle = p.color || '#ffffff'; B.lineWidth = border;
+        outline(B, Math.max(0, radius - border * 0.5)); B.stroke(); B.restore();
+      }
+    },
     radiowaves: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       B.drawImage(A, 0, 0);
       var rate = Math.max(0, Math.min(8, fparam(p, 'rate', 2, t)));

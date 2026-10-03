@@ -118369,5 +118369,28 @@
       throw new Error('A zoomed viewport moved the wave origin');
   });
 
+  test('690 Lens Magnifier enlarges a local detail without changing the surrounding frame', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('lensmagnifier');
+    const fn = FM._FX_TABLES.CANVAS_FX.lensmagnifier;
+    if (!reg || reg.category !== 'distort' || !fn || !FM._postFxTypes().includes('lensmagnifier'))
+      throw new Error('Lens Magnifier is not registered and routed');
+    const W = 80, H = 80, a = document.createElement('canvas'), b = document.createElement('canvas');
+    a.width = b.width = W; a.height = b.height = H;
+    const ac = a.getContext('2d'), bc = b.getContext('2d');
+    ac.fillStyle = '#000000'; ac.fillRect(0, 0, W, H);
+    ac.fillStyle = '#ffffff'; ac.fillRect(48, 0, 1, H);
+    const params = { x: 50, y: 50, size: 50, zoom: 2, shape: 0, feather: 0, border: 0, shadow: 0 };
+    fn(a, bc, W, H, { x: 0, y: 0, w: W, h: H }, params, 0, 0, {}, 1, null,
+       { project: { width: W, height: H } });
+    const pixel = (x, y) => bc.getImageData(x, y, 1, 1).data[0];
+    if (pixel(44, 40) < 200 || pixel(48, 40) > 40 || pixel(48, 5) < 200)
+      throw new Error('The lens did not enlarge the source at its centre while keeping the outside');
+    bc.clearRect(0, 0, W, H);
+    fn(a, bc, W, H, { x: 0, y: 0, w: W, h: H }, { ...params, zoom: 1 }, 0, 0, {}, 1, null,
+       { project: { width: W, height: H } });
+    const actual = bc.getImageData(0, 0, W, H).data, original = ac.getImageData(0, 0, W, H).data;
+    if (actual.some((v, i) => v !== original[i])) throw new Error('A plain 1× lens changed the frame');
+  });
+
 
 })();

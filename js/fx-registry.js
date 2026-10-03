@@ -70,7 +70,7 @@ window.FM = window.FM || {};
     // batch 23 (move / transform)
     wiggle: 'move', shake: 'move', swing: 'move', spin: 'move', pulse: 'move', drift: 'move', orbit: 'move',
     // batch 24
-    squeeze: 'distort', tiles: 'repeat',
+    squeeze: 'distort', tiles: 'repeat', lensmagnifier: 'distort',
     motionflow: 'blur',   // content-aware motion blur (temporal)
     objectblur: 'blur',   // the layer's OWN movement, was layer.motionBlur (queue 335)
     copybg: 'stylize',    // copy the backdrop below into this layer
@@ -456,6 +456,7 @@ window.FM = window.FM || {};
     radialwipe: 'The same, but the line sweeps around like a clock hand.',
     venetianblinds: 'Reveals the layer in parallel slats. Stagger opens the slats one after another.',
     radiowaves: 'Repeated coloured rings expand from one point, with circle and polygon shapes.',
+    lensmagnifier: 'Magnifies this layer under a movable round or square lens with a soft edge, border and shadow.',
     solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
     mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
     mattefringe: 'Draws a coloured band along the layer’s edge.',
