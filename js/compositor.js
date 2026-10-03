@@ -694,6 +694,14 @@ window.FM = window.FM || {};
       { key: 'spiral', label: 'Spiral', min: -100, max: 200, step: 1, def: 0, unit: '%' },
       { key: 'fade', label: 'Fade across copies', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
+    { type: 'cartoon', label: 'Cartoon', desc: 'Smooth small texture, simplify colour shading and draw clean ink edges around subjects.', color: true, defColor: '#101018', colorLabel: 'Edge colour', params: [
+      { key: 'smoothing', label: 'Smoothing', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'steps', label: 'Shading steps', min: 2, max: 12, step: 1, def: 6 },
+      { key: 'edgewidth', label: 'Edge width', min: 0, max: 8, step: 1, def: 2, unit: 'px' },
+      { key: 'threshold', label: 'Edge threshold', min: 0, max: 255, step: 1, def: 40 },
+      { key: 'saturation', label: 'Saturation', min: -100, max: 100, step: 1, def: 15, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3748,7 +3756,7 @@ window.FM = window.FM || {};
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
     timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
@@ -5166,7 +5174,115 @@ window.FM = window.FM || {};
     return clarityScratch;
   }
 
+  let _cartoonScratch = null;
+  function cartoonScratch(n) {
+    if (!_cartoonScratch || _cartoonScratch.n < n) _cartoonScratch = {
+      n: n, source: new Uint8ClampedArray(n * 4), smooth: new Uint8ClampedArray(n * 4), styled: new Uint8ClampedArray(n * 4),
+      luma: new Float32Array(n), edges: new Uint8Array(n), temp: new Uint8Array(n)
+    };
+    return _cartoonScratch;
+  }
   const PIXEL_FX = {
+    cartoon: function (d, W, H, p, t, ps) {
+      var mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
+      if (mix <= 0 || W < 1 || H < 1) return;
+      var smoothAmount = Math.max(0, Math.min(100, fparam(p, 'smoothing', 40, t)));
+      var steps = Math.max(2, Math.min(12, Math.round(fparam(p, 'steps', 6, t))));
+      // Two-by-two working pixels keep this spatial look usable on a phone's reduced preview plate.
+      var sample = W * H > 50000 ? 2 : 1;
+      var SW = Math.ceil(W / sample), SH = Math.ceil(H / sample);
+      var edgeWidth = Math.max(0, Math.min(8, fparam(p, 'edgewidth', 2, t))) * (ps > 0 ? ps : 1) / sample;
+      var threshold = Math.max(0, Math.min(255, fparam(p, 'threshold', 40, t)));
+      var saturation = Math.max(0, Math.min(2, 1 + fparam(p, 'saturation', 15, t) / 100));
+      var ink = p.color ? hexToRGB(p.color) : [16, 16, 24];
+      var n = SW * SH, scratch = cartoonScratch(n), source = scratch.source, work = scratch.smooth, styled = scratch.styled;
+      var luma = scratch.luma, edges = scratch.edges, temp = scratch.temp;
+      if (sample === 1) source.set(d);
+      else for (var sy = 0; sy < SH; sy++) for (var sx = 0; sx < SW; sx++) {
+        var red = 0, green = 0, blue = 0, weight = 0;
+        for (var yy = sy * sample; yy < Math.min(H, (sy + 1) * sample); yy++)
+          for (var xx = sx * sample; xx < Math.min(W, (sx + 1) * sample); xx++) {
+            var i = (yy * W + xx) * 4, a = d[i + 3] / 255;
+            red += d[i] * a; green += d[i + 1] * a; blue += d[i + 2] * a; weight += a;
+          }
+        var k = (sy * SW + sx) * 4;
+        source[k] = weight ? red / weight : 0;
+        source[k + 1] = weight ? green / weight : 0;
+        source[k + 2] = weight ? blue / weight : 0;
+        source[k + 3] = weight ? 255 : 0;
+      }
+      work.set(source.subarray(0, n * 4));
+      for (var j = 0, i = 0; j < n; j++, i += 4)
+        luma[j] = source[i] * 0.299 + source[i + 1] * 0.587 + source[i + 2] * 0.114;
+      if (smoothAmount > 0) {
+        var range = 8 + smoothAmount * 2;
+        for (var y = 0; y < SH; y++) for (var x = 0; x < SW; x++) {
+          var k = y * SW + x, dst = k * 4;
+          if (!source[dst + 3]) continue;
+          var r = 0, g = 0, b = 0, total = 0;
+          for (var yy = Math.max(0, y - 1); yy <= Math.min(SH - 1, y + 1); yy++)
+            for (var xx = Math.max(0, x - 1); xx <= Math.min(SW - 1, x + 1); xx++) {
+              var q = yy * SW + xx, qi = q * 4;
+              if (!source[qi + 3]) continue;
+              var weight = Math.max(0, 1 - Math.abs(luma[q] - luma[k]) / range);
+              if (xx !== x && yy !== y) weight *= 0.7;
+              r += source[qi] * weight; g += source[qi + 1] * weight; b += source[qi + 2] * weight; total += weight;
+            }
+          work[dst] = r / total; work[dst + 1] = g / total; work[dst + 2] = b / total; work[dst + 3] = source[dst + 3];
+        }
+      }
+      for (var j = 0, i = 0; j < n; j++, i += 4)
+        luma[j] = work[i] * 0.299 + work[i + 1] * 0.587 + work[i + 2] * 0.114;
+      if (edgeWidth > 0) {
+        edges.fill(0, 0, n);
+        for (var y = 1; y < SH - 1; y++) for (var x = 1; x < SW - 1; x++) {
+          var k = y * SW + x;
+          if (!source[k * 4 + 3]) continue;
+          var gx = luma[k - SW + 1] + 2 * luma[k + 1] + luma[k + SW + 1] - luma[k - SW - 1] - 2 * luma[k - 1] - luma[k + SW - 1];
+          var gy = luma[k + SW - 1] + 2 * luma[k + SW] + luma[k + SW + 1] - luma[k - SW - 1] - 2 * luma[k - SW] - luma[k - SW + 1];
+          if (Math.hypot(gx, gy) * 0.25 >= threshold) edges[k] = 1;
+        }
+        var spread = Math.max(0, Math.round(edgeWidth) - 1);
+        if (spread > 0) {
+          for (var y = 0; y < SH; y++) for (var x = 0; x < SW; x++) {
+            var found = 0;
+            for (var xx = Math.max(0, x - spread); xx <= Math.min(SW - 1, x + spread); xx++)
+              if (edges[y * SW + xx]) { found = 1; break; }
+            temp[y * SW + x] = found;
+          }
+          for (var y = 0; y < SH; y++) for (var x = 0; x < SW; x++) {
+            var found = 0;
+            for (var yy = Math.max(0, y - spread); yy <= Math.min(SH - 1, y + spread); yy++)
+              if (temp[yy * SW + x]) { found = 1; break; }
+            edges[y * SW + x] = found;
+          }
+        }
+      }
+      for (var j = 0, si = 0; j < n; j++, si += 4) {
+        var value = Math.max(work[si], work[si + 1], work[si + 2]);
+        var quant = Math.round(value * (steps - 1) / 255) * 255 / (steps - 1);
+        var gain = value ? quant / value : 0;
+        var r = work[si] * gain, g = work[si + 1] * gain, b = work[si + 2] * gain;
+        var grey = r * 0.299 + g * 0.587 + b * 0.114;
+        r = grey + (r - grey) * saturation; g = grey + (g - grey) * saturation; b = grey + (b - grey) * saturation;
+        if (edgeWidth > 0 && edges[j]) { r = ink[0]; g = ink[1]; b = ink[2]; }
+        styled[si] = r; styled[si + 1] = g; styled[si + 2] = b;
+      }
+      for (var y = 0; y < H; y++) {
+        var smallRow = Math.floor(y / sample) * SW;
+        for (var x = 0; x < W; x++) {
+          var i = (y * W + x) * 4;
+          if (!d[i + 3]) continue;
+          var si = (smallRow + Math.floor(x / sample)) * 4;
+          if (mix === 1) { d[i] = styled[si]; d[i + 1] = styled[si + 1]; d[i + 2] = styled[si + 2]; }
+          else {
+            d[i] += (styled[si] - d[i]) * mix;
+            d[i + 1] += (styled[si + 1] - d[i + 1]) * mix;
+            d[i + 2] += (styled[si + 2] - d[i + 2]) * mix;
+          }
+        }
+      }
+    },
     claritydehaze: function (d, W, H, p, t) {
       const value = (key) => { const n = fparam(p, key, 0, t); return isFinite(n) ? Math.max(-100, Math.min(100, n)) : 0; };
       const clarity = value('clarity') / 100, texture = value('texture') / 100, dehaze = value('dehaze') / 100;

@@ -118414,5 +118414,35 @@
       throw new Error('Copies did not land around the ring or scale/fade as requested');
   });
 
+  test('690 Cartoon simplifies shading, inks an edge and preserves transparency', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('cartoon'), fn = FM._pixelFx.cartoon;
+    if (!reg || reg.category !== 'stylize' || !fn || !FM._postFxTypes().includes('cartoon'))
+      throw new Error('Cartoon is not registered and routed');
+    const W = 24, H = 24, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      src[i] = src[i + 1] = src[i + 2] = (x < 12 ? 80 : 210) + ((x + y) % 2 ? 5 : -5);
+      src[i + 3] = x === 0 ? 127 : 255;
+    }
+    const params = { smoothing: 60, steps: 4, edgewidth: 1, threshold: 20,
+                     saturation: 0, mix: 100, color: '#000000' };
+    const neutral = src.slice(); fn(neutral, W, H, { ...params, mix: 0 }, 0, 1);
+    if (neutral.some((v, i) => v !== src[i])) throw new Error('Zero mix changed the image');
+    const out = src.slice(); fn(out, W, H, params, 0, 1);
+    const at = (x, y) => out[(y * W + x) * 4];
+    if (at(11, 12) > 20 || at(12, 12) > 20 || at(18, 12) === src[(12 * W + 18) * 4])
+      throw new Error('The subject edge or shading was not cartooned');
+    for (let i = 3; i < src.length; i += 4)
+      if (out[i] !== src[i]) throw new Error('Cartoon changed transparency');
+    const large = new Uint8ClampedArray(240 * 240 * 4);
+    for (let y = 0; y < 240; y++) for (let x = 0; x < 240; x++) {
+      const i = (y * 240 + x) * 4, v = x < 120 ? 80 : 210;
+      large[i] = large[i + 1] = large[i + 2] = v; large[i + 3] = 255;
+    }
+    fn(large, 240, 240, params, 0, 1);
+    if (large[(120 * 240 + 119) * 4] > 20 || large[(120 * 240 + 120) * 4] > 20)
+      throw new Error('The phone-sized working-plate path lost the subject edge');
+  });
+
 
 })();
