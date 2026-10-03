@@ -82461,6 +82461,33 @@
     if (!greenDiff || !redDiff) throw new Error('A per-layer RGB Split lost its green-only or small positive red shift on the reduced plate');
   });
 
+  test('690 VHS Tape tracking band pauses in place when keyframed speed reaches zero', { item: 'TBD' }, function () {
+    const kernel = FM._FX_TABLES.PIXEL_FX.vhstape, W = 20, H = 40;
+    if (!kernel) throw new Error('The VHS Tape production kernel is unavailable');
+    function peakAt(trackspeed, time) {
+      const data = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = data[i + 1] = data[i + 2] = 128; data[i + 3] = 255;
+      }
+      kernel(data, W, H, { amount: 1, chromableed: 0, halo: 0, wobble: 0,
+        tracking: 1, trackspeed, headswitch: 0 }, time, 1);
+      let row = -1, value = -1;
+      for (let y = 0; y < H; y++) {
+        const v = data[(y * W + 10) * 4];
+        if (v > value) { value = v; row = y; }
+      }
+      return { row, value };
+    }
+    const speed = { kf: [{ t: 0, v: 0.4 }, { t: 3, v: 0 }] };
+    const before = peakAt(speed, 2.99), stopped = peakAt(speed, 3), after = peakAt(speed, 3.01);
+    if (stopped.value < 150 || Math.abs(stopped.row - 28) > 2 ||
+        Math.abs(stopped.row - before.row) > 1 || Math.abs(stopped.row - after.row) > 1)
+      throw new Error('The keyframed tracking band jumped or vanished instead of stopping near row 28: ' + JSON.stringify({ before, stopped, after }));
+    const constant = peakAt(0.4, 1), disabled = peakAt(0, 3);
+    if (Math.abs(constant.row - 12) > 2 || constant.value < 150 || disabled.value > 130)
+      throw new Error('A constant-speed VHS band changed its legacy position or zero-speed behavior');
+  });
+
   test('effects: Tilt Shift and Matte Choker bound to the layer without changing it', { item: '692' }, async function () {
     /* #692, the next tier, measured on 1 Sep at each effect's DEFAULTS on a 180x150 subject in a
      * 1080x1920 plate — the shape of the lag, where the layer covers 1.3% of the frame:

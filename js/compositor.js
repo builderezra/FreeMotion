@@ -6276,6 +6276,11 @@ window.FM = window.FM || {};
       const wob = (p.wobble == null ? 3 : FM.evalProp(p.wobble, t)) * s * amt;
       const trk = clamp01(p.tracking == null ? 0.5 : FM.evalProp(p.tracking, t)) * amt;
       const trkSpd = p.trackspeed == null ? 0.4 : FM.evalProp(p.trackspeed, t);
+      const animatedTrack = p.trackspeed != null && FM.isAnimated(p.trackspeed);
+      const trkPhase = animatedTrack ? FM.integrateProp(p.trackspeed, 0, t, (u) => {
+        const speed = FM.evalProp(p.trackspeed, u);
+        return isFinite(speed) ? Math.max(0, Math.min(3, speed)) : 0;
+      }) : t * trkSpd;
       const head = clamp01(p.headswitch == null ? 0.6 : FM.evalProp(p.headswitch, t)) * amt;
       const src = fxSrc(d);
       const Y = new Float32Array(W), Cb = new Float32Array(W), Cr = new Float32Array(W);
@@ -6289,7 +6294,7 @@ window.FM = window.FM || {};
       // The tracking band scrolls down and wraps well past the frame, so it is off-screen most of
       // the time — a band that is always visible reads as a stripe painted on, not as a fault.
       const cycle = H * 1.9;
-      const bandC = trkSpd === 0 ? -1e9 : ((t * trkSpd * cycle) % cycle) - H * 0.45;
+      const bandC = !animatedTrack && trkSpd === 0 ? -1e9 : ((trkPhase * cycle) % cycle) - H * 0.45;
       const bandH = Math.max(2, H * 0.055);
       const headY = H - Math.max(2, H * 0.028);
       for (let y = 0; y < H; y++) {
