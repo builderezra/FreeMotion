@@ -1197,6 +1197,11 @@ window.FM = window.FM || {};
       const totalFrames = Math.max(1, Math.round((end - start) * fps));
       FM._exportCancel = false;
       resetSeekWatch();
+      if (FM.studioFonts && FM.studioFonts.usesScene(scene)) {
+        if (opts.onProgress) opts.onProgress(0, 'Loading fonts…', true);
+        await FM.studioFonts.forScene(scene); // no fallback-font frames in the export
+        if (FM._exportCancel) throw new Error('CANCELLED');
+      }
       /* ⚠️ v14.35 — AND THE REPORT COULD LIE, WHICH MATTERS MORE THAN ANY OF THE MESSAGES, BECAUSE THE
        * REPORT IS THE ARTIFACT THIS ENTRY SAYS DECIDES THE CASE. `FM._audioTrackDropped` had no
        * per-run reset. Its only clear is inside `if (mix)` and is guarded `!== 'mix-silent'`, so:
@@ -1685,6 +1690,11 @@ window.FM = window.FM || {};
       const totalFrames = Math.max(1, Math.round((end - start) * fps));
       FM._exportCancel = false;
       resetSeekWatch();
+      if (FM.studioFonts && FM.studioFonts.usesScene(scene)) {
+        if (opts.onProgress) opts.onProgress(0, 'Loading fonts…', true);
+        await FM.studioFonts.forScene(scene);
+        if (FM._exportCancel) throw new Error('CANCELLED');
+      }
 
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
@@ -1762,6 +1772,11 @@ window.FM = window.FM || {};
       }
       FM._exportCancel = false;
       resetSeekWatch();
+      if (FM.studioFonts && FM.studioFonts.usesScene(scene)) {
+        if (opts.onProgress) opts.onProgress(0, 'Loading fonts…', true);
+        await FM.studioFonts.forScene(scene);
+        if (FM._exportCancel) throw new Error('CANCELLED');
+      }
 
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;

@@ -596,7 +596,7 @@ window.FM = window.FM || {};
     body.appendChild(group(
       toggleRow('Demo mode', 'Hides your photo and video previews (and their filenames) in the Add menu — so a screen recording never shows your camera roll.', 'demoMode'),
       toggleRow('Show touches', 'Draws a ring where you tap. Screen recordings don’t capture taps on their own.', 'showTouches'),
-      toggleRow('Show system fonts', 'Off = the text font picker lists only fonts you imported.', 'systemFonts'),
+      toggleRow('Show system fonts', 'Off = the text font picker lists FreeMotion and imported fonts only.', 'systemFonts'),
       selectRow('Default layer duration', 'How long a new photo, text, shape or drawing lasts. Video clips always use their own length.', 'layerDuration', DURATIONS, v => (v < 1 ? v + 's' : v + 's')),
       shapeColorRow(),   // sits with layer duration: both answer "what is a NEW layer like?"
     ));

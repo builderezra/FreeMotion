@@ -1,0 +1,9 @@
+# Font catalogue integrated with local implementation branch
+
+Starting commit: `b69c57953a8ad6b7f2e6c16e8f3f6d101f206e30` on `chatgpt/690-all-local`; font branch: `d7274642efb832ea2f1743d9664f2f694c14f14e`. Work is in `/private/tmp/freemotion-all-local-20261004` only.
+
+The local font catalogue adds two original FreeMotion families and eleven openly licensed families to the text and caption picker. It bundles each font and its licence, waits for selected faces before rendering/exporting, and retains a saved font choice when its file is unavailable. The follow-up supplies the actual pinned Fraunces Regular face and makes the original-font generator publish to the directory loaded by the app. This is a useful first catalogue, not completion of the request for many distinct original designs.
+
+Changed application files in this merge: `index.html`, `styles.css`, `js/app.js`, `js/exporter.js`, `js/inspector.js`, `js/settings.js`, `js/storage.js`, `js/studio-fonts.js`, `js/text-edit.js`, plus bundled font assets and source, `tests/tests.js`, and the two font reports. Script and CSS cache tags were advanced after merging with the older #690 fixes.
+
+Checks: JavaScriptCore parsed the eight changed JS files. Five focused browser regressions for font loading, Fraunces weight distinction, PNG render order, unavailable-font preservation, and the phone catalogue passed together (5/5). Three import/share controls for corrupt fonts and omitted media/fonts passed together (3/3) on retry; the first attempt stopped at the test harness's app-frame boot guard before any selected test ran. Code and report changes passed `git diff --cached --check` excluding unmodified upstream licence text, whose original trailing spaces and line endings were kept verbatim. Full-suite and installed-iPhone visual checks remain unverified. No push, PR, deployment, or edit to Claude's checkout.

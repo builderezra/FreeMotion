@@ -5824,7 +5824,12 @@ window.FM = window.FM || {};
     const styr = el('div', 'prop-row'); styr.appendChild(el('label', null, 'Style'));
     const sseg = el('div', 'seg');
     const bB = el('button', 'seg-btn' + (layer.bold ? ' on' : ''), 'B'); bB.style.fontWeight = '700';
-    bB.addEventListener('click', () => { layer.bold = !layer.bold; bB.classList.toggle('on', layer.bold); FM.requestRender(); commitH(); });
+    bB.addEventListener('click', () => {
+      layer.bold = !layer.bold; bB.classList.toggle('on', layer.bold); FM.requestRender(); commitH();
+      if (FM.studioFonts && FM.studioFonts.has(layer.fontFamily)) FM.studioFonts.load(layer.fontFamily, layer.bold).catch(() => {
+        if (FM.toast) FM.toast('That font style is unavailable offline. Reconnect before exporting.');
+      });
+    });
     const iB = el('button', 'seg-btn' + (layer.italic ? ' on' : ''), 'I'); iB.style.fontStyle = 'italic';
     iB.addEventListener('click', () => { layer.italic = !layer.italic; iB.classList.toggle('on', layer.italic); FM.requestRender(); commitH(); });
     sseg.append(bB, iB); styr.appendChild(sseg); body.appendChild(styr);

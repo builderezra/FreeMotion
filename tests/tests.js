@@ -120121,4 +120121,112 @@
     }
   });
 
+  test('Bundled font catalogue loads original and open faces before text render', { item: 'TBD', budgetMs: 30000 }, async function () {
+    if (!FM.studioFonts) throw new Error('the bundled font catalogue is missing');
+    const list = FM.studioFonts.list();
+    const original = list.find(f => f.name === 'FM Aster Round');
+    const display = list.find(f => f.name === 'FM Circuit Sans');
+    const open = list.find(f => f.name === 'Space Grotesk');
+    if (list.length < 13 || !original || !display || !open) throw new Error('the original and free font families are not in the catalogue');
+    await FM.studioFonts.forScene({ layers: [
+      { type: 'text', fontFamily: original.css, bold: true },
+      { type: 'caption', fontFamily: open.css, bold: false },
+    ] });
+    const loaded = (family, weight) => Array.from(document.fonts).some(f => f.family.replace(/^"|"$/g, '') === family && f.weight === weight && f.status === 'loaded');
+    if (!loaded(original.family, '700') || !loaded(open.family, '400')) throw new Error('a selected text or caption face was not loaded');
+    await FM.studioFonts.load(original.css, false);
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.font = '48px ' + original.css;
+    const drawn = ctx.measureText('Aster title 2026').width;
+    ctx.font = '48px sans-serif';
+    const fallback = ctx.measureText('Aster title 2026').width;
+    if (Math.abs(drawn - fallback) < 2) throw new Error('the original face rendered like the device fallback');
+  });
+
+  test('Fraunces Regular and Bold load as distinct bundled faces', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const font = FM.studioFonts.list().find(f => f.name === 'Fraunces 72pt Soft');
+    if (!font || !/Fraunces72ptSoft-Regular\.ttf$/.test(font.regular) || !/Fraunces72ptSoft-Bold\.ttf$/.test(font.bold)) {
+      throw new Error('Fraunces must use the upstream Regular and Bold files');
+    }
+    await Promise.all([FM.studioFonts.load(font.css, false), FM.studioFonts.load(font.css, true)]);
+    const loaded = weight => Array.from(document.fonts).some(face => face.family.replace(/^"|"$/g, '') === font.family && face.weight === weight && face.status === 'loaded');
+    if (!loaded('400') || !loaded('700')) throw new Error('both Fraunces weights did not load');
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.font = '400 64px ' + font.css;
+    const regularWidth = ctx.measureText('MMMMmmmm 2026').width;
+    ctx.font = '700 64px ' + font.css;
+    const boldWidth = ctx.measureText('MMMMmmmm 2026').width;
+    if (Math.abs(regularWidth - boldWidth) < 0.1) throw new Error('the two Fraunces weights rendered with the same metrics');
+  });
+
+  test('This-frame PNG waits for its project font before drawing', { item: 'TBD' }, async function () {
+    if (!FM.snapshotPNG || !FM.studioFonts) throw new Error('the frame exporter or font catalogue is missing');
+    const realUses = FM.studioFonts.usesScene, realLoad = FM.studioFonts.forScene;
+    const realRender = FM.renderScene, realBlob = HTMLCanvasElement.prototype.toBlob;
+    let release, renders = 0;
+    try {
+      FM.studioFonts.usesScene = () => true;
+      FM.studioFonts.forScene = () => new Promise(resolve => { release = resolve; });
+      FM.renderScene = () => { renders++; };
+      HTMLCanvasElement.prototype.toBlob = function (cb) { cb(null); };
+      const finished = FM.snapshotPNG();
+      if (renders || !release) throw new Error('the PNG drew before its font was ready');
+      release(); await finished;
+      if (renders !== 1) throw new Error('the PNG did not draw once after its font became ready');
+    } finally {
+      FM.studioFonts.usesScene = realUses; FM.studioFonts.forScene = realLoad;
+      FM.renderScene = realRender; HTMLCanvasElement.prototype.toBlob = realBlob;
+    }
+  });
+
+  test('An unavailable bundled font never replaces the saved text choice', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const saved = FM.scene.layers.slice(), selected = FM.scene.selectedId;
+    const realLoad = FM.studioFonts.load;
+    const t = FM.makeLayer('text', { text: 'Font choice', x: 60, y: 50, fontFamily: 'Inter, sans-serif' });
+    try {
+      FM.scene.layers.push(t); FM.selectLayer(t.id); FM.refreshAll();
+      FM.textEdit.start(t.id);
+      const button = document.querySelector('.te-font');
+      if (!button) throw new Error('the font picker button is missing');
+      button.click();
+      const card = Array.from(document.querySelectorAll('.te-font-card')).find(c => c.textContent.indexOf('FM Aster Round') >= 0);
+      if (!card) throw new Error('the original font card is missing');
+      FM.studioFonts.load = () => Promise.reject(new Error('offline'));
+      card.click();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      if (t.fontFamily !== 'Inter, sans-serif') throw new Error('failed loading changed the layer font and can be autosaved');
+    } finally {
+      FM.studioFonts.load = realLoad;
+      if (FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(selected || null); FM.refreshAll();
+    }
+  });
+
+  test('Included font catalogue stays one swipeable row on a phone', { item: 'TBD', budgetMs: 30000 }, async function () {
+    await atPhoneWidth(async function () {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const saved = FM.scene.layers.slice(), selected = FM.scene.selectedId;
+      const t = FM.makeLayer('text', { text: 'Title', x: 60, y: 50 });
+      try {
+        FM.scene.layers.push(t); FM.selectLayer(t.id); FM.refreshAll();
+        FM.textEdit.start(t.id);
+        const button = document.querySelector('.te-font');
+        if (!button) throw new Error('the phone font picker button is missing');
+        button.click();
+        await new Promise(resolve => setTimeout(resolve, 450)); // measure after the popover's hinge animation
+        const rail = document.querySelector('.te-font-rail');
+        if (!rail) throw new Error('the phone font catalogue did not open');
+        const cards = Array.from(rail.querySelectorAll('.te-font-card'));
+        const tops = new Set(cards.map(c => Math.round(c.getBoundingClientRect().top)));
+        if (cards.length < 13 || tops.size !== 1) throw new Error('the included faces no longer fit in one swipeable phone row (' + cards.length + ' cards, ' + tops.size + ' rows)');
+        if (rail.scrollWidth <= rail.clientWidth) throw new Error('the phone catalogue cannot be swiped to later fonts');
+      } finally {
+        if (FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+        FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l));
+        FM.selectLayer(selected || null); FM.refreshAll();
+      }
+    }, 390);
+  });
+
 })();
