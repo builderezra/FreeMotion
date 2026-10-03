@@ -131,7 +131,7 @@ window.FM = window.FM || {};
     };
     var d = polys.map(sub).join(' ');
     var body = (open || outline)
-      ? '<path d="' + d + '" fill="none" stroke="currentColor" stroke-width="' + (outline ? 1.8 : 1.4) + '" stroke-linejoin="round"/>'
+      ? '<path d="' + d + '" fill="none" stroke="currentColor" stroke-width="' + (outline ? 1.8 : 1.4) + '" stroke-linejoin="round" stroke-linecap="round"/>'
       : '<path d="' + d + '" fill="currentColor" stroke="none"/>';
     return '<svg viewBox="0 0 24 24">' + body + '</svg>';
   }
@@ -348,12 +348,9 @@ window.FM = window.FM || {};
       { label: 'Ellipse', icon: ico('<circle cx="12" cy="12" r="8"/>'), add: shp('ellipse') },
       { label: 'Triangle', icon: ico('<path d="M12 4l8 16H4z"/>'), add: shp('triangle') },
       { label: 'Star', icon: ico('<path d="M12 3l2.5 6 6.5.5-5 4.2 1.6 6.3L12 17l-5.6 3 1.6-6.3-5-4.2 6.5-.5z"/>'), add: shp('star') },
-      // GENERATED from the shipped geometry, not redrawn: FM.traceShapePath run into a recording
-      // proxy over a 19x19 box in the 24x24 viewBox (IoU 0.9975 against what the app renders).
-      // The old path claimed to be "traced from the same eight anchors" and had stopped being
-      // true — it was squatter (aspect 1.077 vs 1.0), 4% lower in the waist and had a deeper V.
-      // Regenerate this the same way if S.heart moves again.
-      { label: 'Heart', icon: ico('<path d="M12 21.5C12 21.5 5.45 15.61 5.45 15.04C5.45 14.47 2.5 11.56 2.5 8.14C2.5 4.72 5.01 2.5 8.14 2.5C11.28 2.5 12 5.92 12 5.92C12 5.92 12.72 2.5 15.86 2.5C18.99 2.5 21.5 4.72 21.5 8.14C21.5 11.56 18.56 14.47 18.56 15.04C18.56 15.61 12 21.5 12 21.5Z"/>'), add: shp('heart') },
+      // Read the live shape after compositor.js has initialized it, so the preview follows
+      // the same outline when Heart geometry is edited again.
+      { label: 'Heart', get icon() { return icoPoly('heart', true); }, add: shp('heart') },
       { label: 'Hexagon', icon: ico('<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/>'), add: shp('polygon', { name: 'Hexagon', extra: { sides: 6 } }) },
       { label: 'Pentagon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/>'), add: shp('polygon', { name: 'Pentagon', extra: { sides: 5 } }) },
       { label: 'Diamond', icon: ico('<path d="M12 3l8 9-8 9-8-9z"/>'), add: shp('polygon', { name: 'Diamond', extra: { sides: 4 } }) },
@@ -361,13 +358,17 @@ window.FM = window.FM || {};
       { label: 'Pie', icon: ico('<path d="M12 12V3a9 9 0 1 1-9 9 9 9 0 0 1 2.6-6.4z"/>'), add: shp('pie') },
       { label: 'Semicircle', icon: ico('<path d="M3 16a9 9 0 0 1 18 0z"/>'), add: shp('semicircle') },
       { label: 'Arc', icon: ico('<path d="M18.5 17.5A8.5 8.5 0 1 0 5 16"/>'), add: shp('arc') },
-      { label: 'Ring', icon: ico('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>'), add: shp('ring') },
+      // A filled band with a transparent centre, like the actual ring; two stroked circles
+      // looked like a target and advertised a much thinner shape than the one the canvas adds.
+      { label: 'Ring', icon: ico('<path d="M12 3A9 9 0 1 0 12 21A9 9 0 1 0 12 3Z M12 7.05A4.95 4.95 0 1 1 12 16.95A4.95 4.95 0 1 1 12 7.05Z" fill="currentColor" fill-rule="evenodd" stroke="none"/>'), add: shp('ring') },
       { label: 'Arrow', icon: ico('<path d="M3 10h9V6l8 6-8 6v-4H3z"/>'), add: shp('arrow') },
       { label: 'Chevron', icon: ico('<path d="M4 4h7l8 8-8 8H4l7-8z"/>'), add: shp('chevron') },
       { label: 'Trapezoid', icon: ico('<path d="M7.5 5h9L21 19H3z"/>'), add: shp('trapezoid') },
       { label: 'Parallelogram', icon: ico('<path d="M8 5h13l-5 14H3z"/>'), add: shp('parallelogram') },
       { label: 'Line', icon: ico('<path d="M4 12h16"/>'), add: shp('line') },
-      { label: 'Polygon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/><circle cx="12" cy="12" r="1.6"/>'), add: shp('polygon') },
+      // The nearby Hexagon had no centre circle; this Polygon preview did. Show the
+      // default five-sided shape plainly, without a dot the real shape never has.
+      { label: 'Polygon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/>'), add: shp('polygon') },
     ].concat(LIB_SHAPES.map(function (s) {
       /* A GETTER, or #159 never reaches the menu (queue 962). This array is built when addmenu.js loads, and index.html loads
          addmenu.js BEFORE app.js — which is where FM.SHAPE_ASPECT is defined — so icoPoly read undefined, fell back to [1, 1],
