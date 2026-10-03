@@ -923,6 +923,55 @@ window.FM = window.FM || {};
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { width: w.gain } });
     },
   }, {
+    type: 'channelutility', label: 'Channel Utility', category: 'space',
+    params: [
+      Object.assign(P('mode', 'Channels', 0, 4, 1, 0, '', false), { options: [
+        [0, 'Stereo'], [1, 'Mono'], [2, 'Left → both'], [3, 'Right → both'], [4, 'Swap']
+      ] }),
+      Object.assign(P('invertL', 'Invert left', 0, 1, 1, 0, '', false), { options: [[0, 'Off'], [1, 'On']] }),
+      Object.assign(P('invertR', 'Invert right', 0, 1, 1, 0, '', false), { options: [[0, 'Off'], [1, 'On']] }),
+      P('balance', 'Balance', -1, 1, 0.01, 0, '', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = s.splitter(2), merge = s.merger(2);
+      const ll = s.gain(0), rl = s.gain(0), lr = s.gain(0), rr = s.gain(0);
+      input.connect(split);
+      split.connect(ll, 0); split.connect(lr, 0);
+      split.connect(rl, 1); split.connect(rr, 1);
+      ll.connect(merge, 0, 0); rl.connect(merge, 0, 0);
+      lr.connect(merge, 0, 1); rr.connect(merge, 0, 1);
+      merge.connect(out);
+      let mode = Math.round(initNum(inst, 'mode', 0, 0, 4));
+      let invertL = Math.round(initNum(inst, 'invertL', 0, 0, 1));
+      let invertR = Math.round(initNum(inst, 'invertR', 0, 0, 1));
+      let balance = initNum(inst, 'balance', 0, -1, 1);
+      const matrix = function () {
+        const m = [[1, 0, 0, 1], [0.5, 0.5, 0.5, 0.5], [1, 0, 1, 0], [0, 1, 0, 1], [0, 1, 1, 0]][mode];
+        const left = (invertL ? -1 : 1) * (balance > 0 ? 1 - balance : 1);
+        const right = (invertR ? -1 : 1) * (balance < 0 ? 1 + balance : 1);
+        return [m[0] * left, m[1] * left, m[2] * right, m[3] * right];
+      };
+      const aps = [ll.gain, rl.gain, lr.gain, rr.gain];
+      const initial = matrix();
+      for (let i = 0; i < 4; i++) aps[i].value = initial[i];
+      const update = function (when, ramp) {
+        const values = matrix();
+        for (let i = 0; i < 4; i++) {
+          if (ramp) aps[i].linearRampToValueAtTime(values[i], when);
+          else aps[i].setTargetAtTime(values[i], when, 0.005); // smooth a live channel/phase switch
+        }
+      };
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          mode: function (v, when, ramp) { const next = Math.round(v); if (next !== mode) { mode = next; update(when, ramp); } },
+          invertL: function (v, when, ramp) { const next = Math.round(v); if (next !== invertL) { invertL = next; update(when, ramp); } },
+          invertR: function (v, when, ramp) { const next = Math.round(v); if (next !== invertR) { invertR = next; update(when, ramp); } },
+          balance: function (v, when, ramp) { if (v !== balance) { balance = v; update(when, ramp); } },
+        } });
+    },
+  }, {
     type: 'pan', label: 'Pan', category: 'space',
     params: [P('pan', 'Pan', -1, 1, 0.05, 0, '', true)],
     build: function (ctx) {
@@ -1669,6 +1718,7 @@ window.FM = window.FM || {};
     delay: ['repeat', 'echo'],
     pingpong: ['bounce', 'left right', 'stereo echo'],
     width: ['wide', 'stereo', 'mono', 'narrow'],
+    channelutility: ['mono', 'swap channels', 'left channel', 'right channel', 'phase invert', 'balance'],
     pan: ['left', 'right', 'balance'],
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
     gain: ['louder', 'quieter', 'volume', 'boost'],

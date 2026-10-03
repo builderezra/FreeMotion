@@ -118707,4 +118707,33 @@
       throw new Error('Sibilance and low-band balance are wrong: ' + JSON.stringify({ sDry, sWet, lowDry, lowWet }));
   });
 
+  test('690 Channel Utility routes stereo, mono, channel copies, swap, phase and balance', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('channelutility');
+    if (!def || def.category !== 'space' || def.params.length !== 4) throw new Error('Channel Utility is missing');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = 4800;
+    async function sample(params) {
+      const ctx = new OAC(2, N, SR), buf = ctx.createBuffer(2, N, SR);
+      buf.getChannelData(0).fill(0.4); buf.getChannelData(1).fill(0.2);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('channelutility'); Object.assign(fx.params, params);
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('Channel Utility signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.1); src.start(0);
+      const out = await ctx.startRendering(); chain.dispose();
+      return [out.getChannelData(0)[N - 1], out.getChannelData(1)[N - 1]];
+    }
+    const cases = [
+      [{}, [0.4, 0.2]], [{ mode: 1 }, [0.3, 0.3]], [{ mode: 2 }, [0.4, 0.4]],
+      [{ mode: 3 }, [0.2, 0.2]], [{ mode: 4 }, [0.2, 0.4]],
+      [{ invertL: 1 }, [-0.4, 0.2]], [{ balance: 1 }, [0, 0.2]],
+    ];
+    for (const [params, expected] of cases) {
+      const got = await sample(params);
+      if (got.some((v, i) => Math.abs(v - expected[i]) > 0.01))
+        throw new Error('Wrong channel routing for ' + JSON.stringify(params) + ': ' + JSON.stringify(got));
+    }
+  });
+
 })();
