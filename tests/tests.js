@@ -74297,6 +74297,30 @@
     if (!(at(up, 40, 22) > at(up, 40, 57) + 20)) throw new Error('Light from 90° (above) does not light the top edge');
   });
 
+  test('690 Smooth Bevel shallow Depth still changes the reduced phone preview', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.smoothbevel;
+    if (!K || !FM._pxToPlate) throw new Error('The real Smooth Bevel renderer or plate conversion is unavailable');
+    const draw = (size, ps, depth) => {
+      const d = new Uint8ClampedArray(size * size * 4);
+      const left = Math.round(size * 0.25), right = Math.round(size * 0.75);
+      for (let y = left; y < right; y++) for (let x = left; x < right; x++) {
+        const i = (y * size + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = 128; d[i + 3] = 255;
+      }
+      const fx = { type: 'smoothbevel' }, p = { depth, strength: 1, angle: 315 };
+      K(d, size, size, FM._pxToPlate(fx, p, 0, ps, K), 0, ps);
+      return d;
+    };
+    const changed = (a, b) => a.reduce((n, v, i) => n + (v !== b[i] ? 1 : 0), 0);
+    const exportThin = draw(100, 1, 1), exportWide = draw(100, 1, 4);
+    if (changed(exportThin, exportWide) < 10) throw new Error('Control: full-resolution Depth 1 and 4 do not give different bevels');
+    const previewThin = draw(28, 0.28, 1), previewWide = draw(28, 0.28, 4);
+    if (changed(previewThin, previewWide) < 4) throw new Error('At 28% playback resolution Depth 1 and 4 collapse to the same bevel, although the export distinguishes them');
+    const highResThin = draw(100, 2, 1), fullScaleTwo = draw(100, 1, 2);
+    if (changed(highResThin, fullScaleTwo) !== 0 || changed(highResThin, exportThin) < 10)
+      throw new Error('At 2x plate resolution, Depth 1 did not cover the same two plate pixels as Depth 2 at 1x');
+  });
+
   /* ═══ 904: Turbulent Displace gets a Boil speed (0 freezes it) and a Pattern. Both absent = the old boil exactly, and the fast
      prepped lattice must agree with the direct kernel for the new controls too (they share one phase helper). */
   test('904: Turbulent Displace boil can be slowed, frozen and reshuffled', { item: '904' }, function () {
