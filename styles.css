@@ -7006,6 +7006,21 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   body.hm-selecting #home-screen .hm-scroll { padding-bottom: 160px; }
   #home-screen .hm-scroll:has(> .hm-grid > .hm-empty:only-child) { padding-bottom: 0; }
 }
+/* On a PC the phone-sized header and label-only tabs looked too small in the 700px card column.
+   Keep that established column and the existing top bar, but give the artwork and navigation enough
+   weight for a wide screen. The icons are already in the tab markup for the phone dock. */
+@media (min-width: 701px) {
+  #home-screen .hm-top > .hm-brand { width: 160px; }
+  #home-screen .hm-brand-img { height: 28px; }
+  #home-screen .hm-tabs .hm-tab { display: flex; align-items: center; justify-content: center;
+    gap: 8px; min-height: 46px; font-size: 14px; }
+  #home-screen .hm-tab-ico { display: block; width: 18px; height: 18px; flex: none; }
+  #home-screen .hm-empty-title { font-size: 22px; letter-spacing: 0; }
+  #home-screen .hm-empty-mark { font-size: 34px; }
+  #home-screen .hm-name { font-size: 16px; }
+  #home-screen .hm-meta { font-size: 12.5px; }
+  #home-screen .hm-sub { font-size: 12px; }
+}
 
 /* ---------------- Home backdrop (v4.88) ----------------
  * Ezra: the home screen "is a bit boring… might be nice to stylise it a bit with fitting colour

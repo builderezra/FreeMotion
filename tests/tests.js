@@ -119412,6 +119412,38 @@
     }
   });
 
+  test('Home PC keeps the reference header and readable navigation in both looks', { item: 'TBD' }, async function () {
+    if (innerWidth <= 700) return;
+    const wasOpen = FM.home.isOpen(), html = document.documentElement, priorLook = html.getAttribute('data-home');
+    try {
+      if (!wasOpen) { FM.home.open(); await new Promise(resolve => setTimeout(resolve, 300)); }
+      for (const look of ['dark', 'light']) {
+        html.setAttribute('data-home', look);
+        const home = document.getElementById('home-screen').getBoundingClientRect();
+        const brand = document.querySelector('#home-screen .hm-brand').getBoundingClientRect();
+        const tabs = Array.from(document.querySelectorAll('#home-screen .hm-tabs .hm-tab'));
+        if (Math.abs((brand.left + brand.right) / 2 - (home.left + home.right) / 2) > 2 || brand.width < 155)
+          throw new Error(look + ' PC Home wordmark is small or off-centre');
+        if (tabs.length !== 4 || tabs.some(b => {
+          const icon = b.querySelector('.hm-tab-ico');
+          return !icon || getComputedStyle(icon).display === 'none' || b.scrollWidth > b.clientWidth + 1;
+        })) throw new Error(look + ' PC Home tabs lost an icon or clip their labels');
+        const first = tabs[0].getBoundingClientRect(), last = tabs[3].getBoundingClientRect();
+        if (last.right - first.left > 702 || first.left < home.left || last.right > home.right)
+          throw new Error(look + ' PC Home navigation no longer shares the card column');
+        const title = document.querySelector('#home-screen .hm-empty-title');
+        if (title && parseFloat(getComputedStyle(title).fontSize) < 21)
+          throw new Error(look + ' PC Home empty heading is still phone-sized');
+        const cardName = document.querySelector('#home-screen .hm-card .hm-name');
+        if (cardName && parseFloat(getComputedStyle(cardName).fontSize) < 16)
+          throw new Error(look + ' PC project names are still phone-sized');
+      }
+    } finally {
+      if (priorLook == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', priorLook);
+      if (!wasOpen && FM.home.isOpen()) FM.home.close();
+    }
+  });
+
   test('Home portrait stays local, persists, and can be removed', { item: 'TBD' }, async function () {
     const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
     const waitFor = async fn => { for (let i = 0; i < 30; i++) { if (fn()) return; await pause(100); } throw new Error('Home portrait did not update'); };
