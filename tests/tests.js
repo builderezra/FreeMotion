@@ -118999,4 +118999,20 @@
     if (!unmixed.every((v, i) => v === original[i])) throw new Error('Zero Mix changed Canon footage');
   });
 
+  test('690 Shake smear uses the scene being rendered for its frame interval', { item: 'TBD' }, function () {
+    const shake = FM._FX_TABLES.CANVAS_FX.shake, active = FM.scene;
+    if (!shake || !active) throw new Error('Shake or active project is unavailable');
+    const count = fps => {
+      let draws = 0;
+      const B = { globalAlpha: 1, save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, drawImage() { draws++; } };
+      shake({}, B, 240, 160, { x: 20, y: 20, w: 80, h: 60 },
+        { amount: 60, speed: 14, twist: 0, zoom: 0, jitter: 1, smear: 1 },
+        0.31, 0.31, null, 1, null, { project: { width: 240, height: 160, fps: fps } });
+      return draws;
+    };
+    const shortFrame = count(60), longFrame = count(24);
+    if (shortFrame !== 1 || longFrame <= 1)
+      throw new Error('Shake smear followed the active project instead of the rendered scene: ' + shortFrame + '/' + longFrame);
+  });
+
 })();

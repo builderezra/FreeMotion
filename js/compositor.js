@@ -15013,7 +15013,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // violent frame reads as a smeared hit instead of a clean teleport. Deterministic — the previous
       // displacement is recomputed from the same noise, no cross-frame state.
       if (smear > 0) {
-        const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
+        // Thumbnail/template renders can pass a scene other than the editor's active FM.scene.
+        const fps = (scene && scene.project && scene.project.fps) || 30;
         const d1 = disp((tl - 1 / fps) * spd);   // the same pattern (it lives in `noise`) one frame ago
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
