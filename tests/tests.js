@@ -119184,4 +119184,23 @@
     }
   });
 
+  test('690 deeply nested project files are rejected before creating a project', { item: 'TBD' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      const layer = { id: 'old', type: 'shape' };
+      let tail = layer;
+      for (let i = 0; i < 80; i++) { tail.deep = {}; tail = tail.deep; }
+      const file = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers: [layer] };
+      if (!/nested too deeply/.test(FM.storage.sceneFileProblem(file) || ''))
+        throw new Error('Deeply nested layer passed validation');
+      if (await FM.storage.importObject(file) !== false || await FM.storage.applyScene(file) !== false || created)
+        throw new Error('Deeply nested layer reached project creation or scene application');
+      const ordinary = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers: [{ id: 'okay', type: 'shape', transform: { opacity: { kf: [{ t: 0, v: 1 }] } } }] };
+      if (FM.storage.sceneFileProblem(ordinary)) throw new Error('An ordinary animated layer was rejected');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
 })();

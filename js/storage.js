@@ -1660,6 +1660,22 @@ window.FM = window.FM || {};
   function hasInvalidLayerEntries(layers) {
     return layers.some(l => !l || typeof l !== 'object' || Array.isArray(l));
   }
+  function hasUnsafeSceneNesting(project, layers) {
+    const pending = [[project, 0, false], [layers, 0, false]], active = new WeakSet();
+    while (pending.length) {
+      const [node, depth, leaving] = pending.pop();
+      if (!node || typeof node !== 'object') continue;
+      if (leaving) { active.delete(node); continue; }
+      if (depth > 64 || active.has(node)) return true;
+      active.add(node);
+      pending.push([node, depth, true]);
+      for (const key of Object.keys(node)) {
+        const child = node[key];
+        if (child && typeof child === 'object') pending.push([child, depth + 1, false]);
+      }
+    }
+    return false;
+  }
   // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a
   // re-implementation of it in the test (which would only ever agree with itself).
   FM.storage._sanitizeEffects = sanitizeEffects;
@@ -1705,6 +1721,7 @@ window.FM = window.FM || {};
   FM.storage.applyScene = async function (obj) {
     if (!obj || !obj.project || typeof obj.project !== 'object' || Array.isArray(obj.project) || !Array.isArray(obj.layers) || hasInvalidLayerEntries(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
+    if (hasUnsafeSceneNesting(obj.project, obj.layers)) return false;
     clampProjectDims(obj.project);
     sanitizeImportedLayers(obj.layers);
     // Re-id EVERY imported layer. An exported file carries the ids of the project it came from —
@@ -1991,6 +2008,7 @@ window.FM = window.FM || {};
     if (!Array.isArray(obj.layers)) return 'That project file has no layers list — it may be truncated or only half-downloaded.';
     if (obj.layers.length > 2000) return 'That project has ' + obj.layers.length + ' layers, which is more than FreeMotion will open.';
     if (hasInvalidLayerEntries(obj.layers)) return 'That project file has an invalid layer — it may be corrupt or only half-downloaded.';
+    if (hasUnsafeSceneNesting(obj.project, obj.layers)) return 'That project file is nested too deeply to open safely.';
     return null;
   };
 
