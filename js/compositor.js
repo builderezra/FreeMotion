@@ -12409,15 +12409,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return e && e.w > 0 && e.h > 0 ? e : bb;
   }
   const CANVAS_FX = {
-    radiowaves: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+    radiowaves: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       B.drawImage(A, 0, 0);
       var rate = Math.max(0, Math.min(8, fparam(p, 'rate', 2, t)));
       var life = Math.max(0.1, Math.min(8, fparam(p, 'lifetime', 2, t)));
       var speed = Math.max(0, Math.min(800, fparam(p, 'speed', 160, t))) * (ps > 0 ? ps : 1);
       var width = Math.max(1, Math.min(60, fparam(p, 'width', 6, t))) * (ps > 0 ? ps : 1);
       var fade = Math.max(0, Math.min(1, fparam(p, 'fade', 70, t) / 100));
-      var x = W * Math.max(0, Math.min(100, fparam(p, 'x', 50, t))) / 100;
-      var y = H * Math.max(0, Math.min(100, fparam(p, 'y', 50, t))) / 100;
+      var project = scene && scene.project;
+      var x = project ? (project.width * Math.max(0, Math.min(100, fparam(p, 'x', 50, t))) / 100 - (A.__fmOX || 0)) * (ps > 0 ? ps : 1) : W * Math.max(0, Math.min(100, fparam(p, 'x', 50, t))) / 100;
+      var y = project ? (project.height * Math.max(0, Math.min(100, fparam(p, 'y', 50, t))) / 100 - (A.__fmOY || 0)) * (ps > 0 ? ps : 1) : H * Math.max(0, Math.min(100, fparam(p, 'y', 50, t))) / 100;
       var shape = Math.round(fparam(p, 'shape', 0, t));
       var sides = shape === 1 ? 4 : Math.max(3, Math.min(16, Math.round(fparam(p, 'sides', 6, t))));
       var spin = fparam(p, 'spin', 0, t) * Math.PI / 180;

@@ -118342,7 +118342,7 @@
     const paths = [];
     const ctx = {
       drawImage() {}, save() {}, restore() {}, beginPath() { paths.push({ points: [], alpha: this.globalAlpha }); },
-      arc(x, y, r) { paths[paths.length - 1].radius = r; },
+      arc(x, y, r) { const path = paths[paths.length - 1]; path.centreX = x; path.centreY = y; path.radius = r; },
       moveTo(x, y) { paths[paths.length - 1].points.push([x, y]); },
       lineTo(x, y) { paths[paths.length - 1].points.push([x, y]); },
       closePath() {}, stroke() {},
@@ -118359,6 +118359,14 @@
          fade: 0, shape: 2, sides: 6, spin: 90, blend: 0 }, 0.75, 0.75, {}, 1);
     if (paths.length !== 1 || paths[0].points.length !== 6 || paths[0].radius !== undefined)
       throw new Error('Polygon shape or zero-rate single ring is wrong');
+    paths.length = 0;
+    const cropped = { __fmOX: 50, __fmOY: 20 };
+    fn(cropped, ctx, 100, 60, { x: 0, y: 0, w: 100, h: 60 },
+       { x: 50, y: 50, rate: 0, speed: 100, lifetime: 2, width: 4,
+         fade: 0, shape: 0, sides: 6, spin: 0, blend: 0 }, 0.75, 0.75, {}, 1, null,
+       { project: { width: 200, height: 100 } });
+    if (paths.length !== 1 || paths[0].centreX !== 50 || paths[0].centreY !== 30)
+      throw new Error('A zoomed viewport moved the wave origin');
   });
 
 
