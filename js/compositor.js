@@ -6636,7 +6636,14 @@ window.FM = window.FM || {};
       // speed 0 FREEZES the static — the one thing it could never do, and why animated noise strobed
       // under a keyframed opacity. 24 reproduces the old hardcoded frame rate exactly.
       const spd = p.speed == null ? 24 : FM.evalProp(p.speed, t);
-      const frame = Math.floor(t * spd) | 0;
+      // Keyframed Speed is a rate: accumulate frames so a ramp to zero holds its last grain pattern.
+      // Keep the original multiplication for saved, unanimated effects.
+      const frame = FM.isAnimated(p.speed)
+        ? (Math.floor(FM.integrateProp(p.speed, 0, t, function (u) {
+            const rate = FM.evalProp(p.speed, u);
+            return rate > 0 ? (rate < 60 ? rate : 60) : 0;
+          })) | 0)
+        : (Math.floor(t * spd) | 0);
       const size = p.size == null ? 1 : Math.max(1, FM.evalProp(p.size, t));
       const chroma = (p.color == null ? 0 : FM.evalProp(p.color, t)) / 100;
       const one = size === 1;   // at size 1 the cell IS the pixel — keep the old index exactly

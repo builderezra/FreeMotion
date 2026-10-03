@@ -120229,4 +120229,27 @@
     }, 390);
   });
 
+  test('690 Noise keyframed Speed accumulates frames and holds its pattern at zero', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
+    if (!K || !FM.integrateProp) throw new Error('the Noise kernel or shared rate integrator is missing');
+    const W = 48, H = 32;
+    const kf = (...pairs) => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    const run = (speed, t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 100; d[i + 3] = 255; }
+      const p = Object.assign({}, FM.fxRegistry.makeInstance('noise').params, { amount: 100, speed });
+      K(d, W, H, p, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    if (same(run(8, 2), run(16, 2))) throw new Error('control: the fixture cannot distinguish two grain frames');
+    if (!same(run(24, 0.75), run(undefined, 0.75)))
+      throw new Error('the saved default Speed differs from the implicit 24 Hz Noise grain');
+    if (!same(run(kf([0, 0], [2, 16]), 2), run(8, 2)))
+      throw new Error('a linear Speed ramp did not accumulate the same frames as its average steady rate');
+    const stopped = kf([1, 8], [2, 0]);
+    if (!same(run(stopped, 2), run(stopped, 3))) throw new Error('Speed zero kept changing or rewound the grain');
+    if (same(run(stopped, 2), run(0, 0))) throw new Error('Speed zero returned to the first-frame grain');
+  });
+
 })();
