@@ -8,6 +8,8 @@ and brotli (for WOFF2). Run: .venv/bin/python build_fonts.py
 from __future__ import annotations
 
 import math
+import os
+import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,8 +24,10 @@ from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "fonts"
-OUT.mkdir(exist_ok=True)
+OUT = ROOT.parent  # WOFF2 files loaded by the app live here.
+PREVIEW_TTFS = ROOT / "fonts"
+# Mac-epoch timestamp of the originally shipped faces. Keep rebuilds stable.
+ORIGINAL_CREATED = 3873903662
 
 
 def L(*points):
@@ -302,7 +306,7 @@ def glyph_name(char):
     return 'uni%04X'%ord(char)
 
 
-def build(family, slug, style, xs, weight, bold):
+def build(family, slug, style, xs, weight, bold, stage):
     style_name='Bold' if bold else 'Regular'
     family_name=family
     full_name=f'{family_name} {style_name}'
@@ -348,6 +352,9 @@ def build(family, slug, style, xs, weight, bold):
     fb.setupMaxp()
     font=fb.font
     font['head'].macStyle=1 if bold else 0
+    font['head'].created=ORIGINAL_CREATED
+    font['head'].modified=ORIGINAL_CREATED
+    font.recalcTimestamp=False
     # Small but useful pair set. FeatureCompiler makes GPOS pairs available to
     # web renderers and graphic editors that honor font kerning.
     pairs=[('A','V',-65),('A','W',-52),('A','Y',-62),('A','T',-35),
@@ -361,8 +368,8 @@ def build(family, slug, style, xs, weight, bold):
     feature='feature kern {\n'+''.join(f'  pos {a} {b} {round(v*xs)};\n' for a,b,v in pairs)+'} kern;\n'
     addOpenTypeFeaturesFromString(font,feature)
     stem=f'{slug}-{style_name.lower()}'
-    ttf=OUT/f'{stem}.ttf'
-    woff=OUT/f'{stem}.woff2'
+    ttf=stage/f'{stem}.ttf'
+    woff=stage/f'{stem}.woff2'
     font.save(ttf)
     font.flavor='woff2'
     font.save(woff)
@@ -370,10 +377,24 @@ def build(family, slug, style, xs, weight, bold):
 
 
 def main():
-    for family,slug,style,xs,regular,bold in FAMILIES:
-        for wt,is_bold in ((regular,False),(bold,True)):
-            ttf,woff=build(family,slug,style,xs,wt,is_bold)
-            print(ttf.name,ttf.stat().st_size,'bytes;',woff.name,woff.stat().st_size,'bytes')
+    # Build every weight before replacing a shipped file. A failed build leaves
+    # the currently bundled WOFF2 set intact; the TrueType files are retained
+    # only as local inputs for the specimen renderers.
+    with tempfile.TemporaryDirectory(prefix='.font-build-', dir=OUT) as stage_dir:
+        stage = Path(stage_dir)
+        built = []
+        for family,slug,style,xs,regular,bold in FAMILIES:
+            for wt,is_bold in ((regular,False),(bold,True)):
+                ttf,woff=build(family,slug,style,xs,wt,is_bold,stage)
+                if not ttf.stat().st_size or not woff.stat().st_size:
+                    raise RuntimeError(f'Empty generated face: {woff.name}')
+                built.append((ttf,woff))
+        PREVIEW_TTFS.mkdir(exist_ok=True)
+        for ttf,woff in built:
+            ttf_bytes,woff_bytes=ttf.stat().st_size,woff.stat().st_size
+            os.replace(ttf,PREVIEW_TTFS/ttf.name)
+            os.replace(woff,OUT/woff.name)
+            print(ttf.name,ttf_bytes,'bytes;',woff.name,woff_bytes,'bytes')
     print('Total characters per font:',len(GLYPHS))
 
 if __name__=='__main__': main()

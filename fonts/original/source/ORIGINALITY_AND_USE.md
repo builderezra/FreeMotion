@@ -11,4 +11,4 @@ Each file maps 287 Unicode characters: A–Z, a–z, digits, common punctuation,
 
 These are display fonts intended for FreeMotion titles, labels, and graphics. `preview.png` shows the full samples; `preview-32-48.png` checks sentence readability at actual 32 px and 48 px sizes. Keep a fallback font for scripts and symbols outside the 287-character coverage. FreeMotion can set its own distribution terms for these generated assets.
 
-To regenerate: install `requirements.txt`, run `python build_fonts.py`, then run the two `render_*.py` scripts. `fonts.css` shows the browser family names and weights.
+To regenerate: install `requirements.txt`, run `python build_fonts.py`, then run the two `render_*.py` scripts. The generator stages all four faces before updating the WOFF2 files in `fonts/original/` that the app actually loads. Its TrueType intermediates remain in `source/fonts/` for the specimen renderers. `fonts.css` shows the browser family names and weights.

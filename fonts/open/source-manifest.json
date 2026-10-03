@@ -1,7 +1,7 @@
 {
   "selection_count": 11,
-  "font_file_count": 17,
-  "total_font_bytes": 1741596,
+  "font_file_count": 18,
+  "total_font_bytes": 1805532,
   "families": [
     {
       "name": "Inter",
@@ -302,6 +302,7 @@
       "commit": "d6d385783609ceb11ac0f220f3abd9f1631c8a36",
       "license": "OFL.txt",
       "fonts": [
+        "fonts/static/ttf/Fraunces72ptSoft-Regular.ttf",
         "fonts/static/ttf/Fraunces72ptSoft-Bold.ttf"
       ],
       "license_copy": {
@@ -314,8 +315,32 @@
       "copyright_header": "Copyright 2018 The Fraunces Project Authors (https://github.com/undercasetype/Fraunces)",
       "license_url": "https://github.com/undercasetype/Fraunces/blob/d6d385783609ceb11ac0f220f3abd9f1631c8a36/OFL.txt",
       "source_repo_url": "https://github.com/undercasetype/Fraunces",
-      "total_font_bytes": 65084,
+      "total_font_bytes": 129020,
       "font_copies": [
+        {
+          "path": "open/fraunces-72pt-soft/Fraunces72ptSoft-Regular.ttf",
+          "filename": "Fraunces72ptSoft-Regular.ttf",
+          "source_url": "https://raw.githubusercontent.com/undercasetype/Fraunces/d6d385783609ceb11ac0f220f3abd9f1631c8a36/fonts/static/ttf/Fraunces72ptSoft-Regular.ttf",
+          "sha256": "855fd0759e5a8ac74c2dcf969e42f516e66b719fa4e1d6b3142c6eb257d3548b",
+          "bytes": 63936,
+          "validation": {
+            "family": "Fraunces 72pt Soft",
+            "style": "Regular",
+            "weight": 400,
+            "embedding_flags": 0,
+            "is_variable": false,
+            "unicode_codepoints": 624,
+            "cmap_counts": {
+              "basic_latin_letters": 52,
+              "latin_extended": 190,
+              "greek": 0,
+              "cyrillic": 0,
+              "vietnamese_precomposed": 90
+            },
+            "uppercase_az": true,
+            "lowercase_az": true
+          }
+        },
         {
           "path": "open/fraunces-72pt-soft/Fraunces72ptSoft-Bold.ttf",
           "filename": "Fraunces72ptSoft-Bold.ttf",
@@ -341,7 +366,7 @@
           }
         }
       ],
-      "style_scope": "single-style display"
+      "style_scope": "regular-and-bold"
     },
     {
       "name": "Cormorant Garamond",

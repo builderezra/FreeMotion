@@ -118436,6 +118436,22 @@
     if (Math.abs(drawn - fallback) < 2) throw new Error('the original face rendered like the device fallback');
   });
 
+  test('Fraunces Regular and Bold load as distinct bundled faces', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const font = FM.studioFonts.list().find(f => f.name === 'Fraunces 72pt Soft');
+    if (!font || !/Fraunces72ptSoft-Regular\.ttf$/.test(font.regular) || !/Fraunces72ptSoft-Bold\.ttf$/.test(font.bold)) {
+      throw new Error('Fraunces must use the upstream Regular and Bold files');
+    }
+    await Promise.all([FM.studioFonts.load(font.css, false), FM.studioFonts.load(font.css, true)]);
+    const loaded = weight => Array.from(document.fonts).some(face => face.family.replace(/^"|"$/g, '') === font.family && face.weight === weight && face.status === 'loaded');
+    if (!loaded('400') || !loaded('700')) throw new Error('both Fraunces weights did not load');
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.font = '400 64px ' + font.css;
+    const regularWidth = ctx.measureText('MMMMmmmm 2026').width;
+    ctx.font = '700 64px ' + font.css;
+    const boldWidth = ctx.measureText('MMMMmmmm 2026').width;
+    if (Math.abs(regularWidth - boldWidth) < 0.1) throw new Error('the two Fraunces weights rendered with the same metrics');
+  });
+
   test('This-frame PNG waits for its project font before drawing', { item: 'TBD' }, async function () {
     if (!FM.snapshotPNG || !FM.studioFonts) throw new Error('the frame exporter or font catalogue is missing');
     const realUses = FM.studioFonts.usesScene, realLoad = FM.studioFonts.forScene;
