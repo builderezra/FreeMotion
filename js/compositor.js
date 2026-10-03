@@ -9800,7 +9800,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
       // blown out; the tint lives in the glow around it, which is what this keeps.
       const core = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
-      const phase = flick > 0 ? Math.floor(t * flick) : 0;   // quantised so a frame's bolt holds still
+      // Flicker is strikes per second. A keyed rate accumulates its strikes, so easing it to zero
+      // holds the last bolt instead of jumping back to the first; plain rates keep their old phase.
+      const phase = FM.isAnimated(p.flicker)
+        ? Math.floor(FM.integrateProp(p.flicker, 0, t, u => {
+          const rate = FM.evalProp(p.flicker, u);
+          return Number.isFinite(rate) ? Math.max(0, Math.min(24, rate)) : 8;
+        }))
+        : (flick > 0 ? Math.floor(t * flick) : 0);
 
       /* Hashed, not random. Same integer mix the noise effect uses. */
       const rnd = (a, b) => {

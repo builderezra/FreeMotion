@@ -120681,4 +120681,28 @@
     // 0.6 cycles traveled in the first second equals static Drift 0.3 for two seconds.
     if (!same(atStop, render(0.3, 2))) throw new Error('Iridescence multiplied the current rate by elapsed time');
   });
+
+  test('690 Lightning keyframed Flicker holds its last bolt when stopped', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!P || !P.lightning || !FM.integrateProp) throw new Error('Lightning kernel or rate integrator is unavailable');
+    const W = 96, H = 64;
+    const render = (flicker, time) => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 48;
+        pixels[i + 3] = 255;
+      }
+      P.lightning(pixels, W, H, { count:2, intensity:1, flicker, seed:7 }, time);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, i) => value === b[i]);
+    const stopped = { kf:[{ t:0, v:8 }, { t:1, v:0, e:'hold' }] };
+    const lastBolt = render(stopped, 1.25);
+    if (same(lastBolt, render(stopped, 0))) throw new Error('Control: Flicker never changed the bolt');
+    if (!same(lastBolt, render(stopped, 2))) throw new Error('Lightning changed after Flicker reached zero');
+    // Eight strikes in one second must select the same bolt as four strikes/s for two seconds.
+    if (!same(lastBolt, render(4, 2))) throw new Error('Lightning used its current Flicker rate for all elapsed time');
+    const ramp = { kf:[{ t:0, v:8 }, { t:2, v:0, e:'linear' }] };
+    if (!same(render(ramp, 2), render(4, 2))) throw new Error('Lightning did not accumulate a Flicker ramp');
+  });
 })();
