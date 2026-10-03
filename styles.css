@@ -7848,6 +7848,17 @@ body.fm-pushing #toast { z-index: 213; }
 .sfx-star.on { color: #ffd08a; text-shadow: 0 0 8px rgba(255, 190, 110, .5); }
 @media (prefers-reduced-motion: reduce) { .sfx-star { transition: none; } }
 .sfx-add { flex: none; padding: 6px 12px; }
+.sfx-variant-card { border: 1px solid var(--line); border-radius: 10px; margin: 4px 0; }
+.sfx-variant-controls { display: flex; align-items: center; gap: 8px; padding: 2px 8px 9px 45px; }
+.sfx-variant-controls select { min-width: 0; max-width: 110px; padding: 5px; border: 1px solid var(--line); border-radius: 6px;
+  color: var(--text); background: var(--panel-2); font: inherit; font-size: 11px; }
+.sfx-variant-controls input[type="range"] { flex: 1; min-width: 60px; accent-color: var(--accent); }
+.sfx-length-label { font-size: 11px; color: var(--text-dim); }
+@media (max-width: 700px) {
+  .sfx-variant-controls { gap: 5px; padding-left: 9px; }
+  .sfx-variant-controls select { max-width: 90px; }
+  .sfx-variant-controls input[type="range"] { min-width: 42px; }
+}
 .sfx-actions { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
 @media (prefers-reduced-motion: reduce) { .sfx-row { transition: none; } }
 

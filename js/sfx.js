@@ -220,6 +220,21 @@ window.FM = window.FM || {};
         }
         drumSnare(ctx, t0 + 1.1, out, 1);
       } },
+    // Size, length and variation are set in the picker. Each setting combination
+    // gets its own render-cache key, so the preview is the WAV Add will insert.
+    { id: 'explosion', name: 'Explosion', cat: 'Impact', dur: 2.2, variant: true,
+      render(ctx, t0, d, out, options) {
+        options = options || { size: 'big', variation: 1 };
+        const big = options.size === 'big', v = options.variation;
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = (big ? 650 : 1400) + v * 95;
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0.95], [Math.min(0.08, d * 0.08), 0.8], [d * 0.42, 0.4], [d, 0]]);
+        n.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        const sub = ctx.createOscillator(); sub.type = 'sine';
+        expTo(sub.frequency, t0, big ? 95 + v * 4 : 150 + v * 8, big ? 28 : 50, Math.min(d * 0.7, 1.5));
+        const sg = ctx.createGain(); env(sg.gain, t0, [[0, big ? 0.8 : 0.45], [d * 0.6, 0.18], [d, 0]]);
+        sub.connect(sg); sg.connect(out); sub.start(t0); sub.stop(t0 + d);
+      } },
     // ---------- build ----------
     {
       id: 'riser', name: 'Riser', cat: 'Build', dur: 2.2,
@@ -613,7 +628,35 @@ window.FM = window.FM || {};
         });
       },
     },
+    { id: 'thunder', name: 'Thunder', cat: 'Nature', dur: 3, variant: true,
+      render(ctx, t0, d, out, options) {
+        options = options || { size: 'big', variation: 1 };
+        const big = options.size === 'big', v = options.variation;
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = (big ? 460 : 850) + v * 65;
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [d * 0.08, 0.8], [d * (0.25 + v * 0.035), 0.45], [d * 0.62, 0.58], [d, 0]]);
+        n.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        const crack = ctx.createBufferSource(); crack.buffer = noiseBuffer(ctx, Math.min(0.16, d * 0.12), 'white');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200 + v * 210;
+        const cg = ctx.createGain(); env(cg.gain, t0, [[0, big ? 0.8 : 0.45], [Math.min(0.15, d * 0.11), 0]]);
+        crack.connect(hp); hp.connect(cg); cg.connect(out); crack.start(t0); crack.stop(t0 + Math.min(0.16, d * 0.12));
+      } },
   ];
+
+  const variantOptions = new Map();
+  function variantOf(def, input) {
+    if (!def || !def.variant) return def;
+    input = input || {};
+    const size = input.size === 'small' ? 'small' : 'big';
+    const length = Math.max(0.8, Math.min(5, Math.round((Number(input.length) || def.dur) * 10) / 10));
+    const variation = Math.max(1, Math.min(4, Math.round(Number(input.variation) || 1)));
+    return Object.assign({}, def, {
+      id: def.id + ':' + size + ':' + length.toFixed(1) + ':' + variation,
+      baseId: def.id, dur: length, variant: false,
+      render(ctx, t0, d, out) { def.render(ctx, t0, d, out, { size, variation }); },
+    });
+  }
 
   // ---- render + encode --------------------------------------------------------------------------
   /* A little headroom, applied to EVERY effect through one node rather than by hand-tuning sixteen
@@ -769,7 +812,7 @@ window.FM = window.FM || {};
   }
   function markRow(def, on) {   // every row of this sound in the open sheet
     document.querySelectorAll('.sfx-row .sfx-star[data-sfxid]').forEach(star => {
-      const row = star.dataset.sfxid === def.id && star.closest('.sfx-row');
+      const row = star.dataset.sfxid === (def.baseId || def.id) && star.closest('.sfx-row');
       if (row) paintRow(row, on, def);
     });
   }
@@ -823,7 +866,7 @@ window.FM = window.FM || {};
     if (me.src) { try { me.src.stop(); } catch (e) {} try { me.src.disconnect(); } catch (e) {} }
     markRow(me.def, false);
   }
-  function previewing() { return _cur ? _cur.def.id : null; }   // suite seam: which sound is playing, if any
+  function previewing() { return _cur ? (_cur.def.baseId || _cur.def.id) : null; }   // suite seam: which sound is playing, if any
 
   // ---- add to the project -----------------------------------------------------------------------
   async function add(def) {
@@ -908,7 +951,8 @@ window.FM = window.FM || {};
       name.type = 'button';
       const secs = el('span', 'sfx-dur', def.dur.toFixed(2).replace(/0$/, '') + 's');
       // Tap = hear it; tap a row of the sound that is playing = stop it (queue 986). preview() owns the highlight now.
-      const hear = () => { if (_cur && _cur.def.id === def.id) { stopPreview(); return; } preview(def); };
+      const chosen = () => variantOf(def, variantOptions.get(def.id));
+      const hear = () => { if (_cur && (_cur.def.baseId || _cur.def.id) === def.id) { stopPreview(); return; } preview(chosen()); };
       play.addEventListener('click', hear);
       name.addEventListener('click', hear);
       const star = el('button', 'sfx-star' + (isFav(def.id) ? ' on' : ''), '★');
@@ -932,12 +976,40 @@ window.FM = window.FM || {};
       addBtn.type = 'button';
       addBtn.addEventListener('click', async () => {
         addBtn.disabled = true; addBtn.textContent = '…';
-        try { await add(def); close(); }
+        try { await add(chosen()); close(); }
         catch (e) { addBtn.disabled = false; addBtn.textContent = 'Add'; if (FM.toast) FM.toast('Could not add that sound'); }
       });
       row.append(play, name, secs, star, addBtn);
-      if (_cur && _cur.def.id === def.id) paintRow(row, true, def);   // rebuilt (the ★) while it plays: still lit, still Stop
-      return row;
+      if (_cur && (_cur.def.baseId || _cur.def.id) === def.id) paintRow(row, true, def);   // rebuilt (the ★) while it plays: still lit, still Stop
+      if (!def.variant) return row;
+      const opts = variantOptions.get(def.id) || { size: 'big', length: def.dur, variation: 1 };
+      variantOptions.set(def.id, opts);
+      secs.textContent = opts.length.toFixed(1) + 's';
+      const card = el('div', 'sfx-variant-card'); card.dataset.sfxid = def.id;
+      const controls = el('div', 'sfx-variant-controls');
+      const size = document.createElement('select'); size.className = 'sfx-size'; size.setAttribute('aria-label', def.name + ' size');
+      [['small', 'Small'], ['big', 'Big']].forEach(([value, label]) => { const o = document.createElement('option'); o.value = value; o.textContent = label; size.appendChild(o); });
+      size.value = opts.size;
+      const length = document.createElement('input'); length.className = 'sfx-length'; length.type = 'range'; length.min = '0.8'; length.max = '5'; length.step = '0.1'; length.value = String(opts.length);
+      length.setAttribute('aria-label', def.name + ' length in seconds');
+      const variation = document.createElement('select'); variation.className = 'sfx-variation'; variation.setAttribute('aria-label', def.name + ' variation');
+      for (let n = 1; n <= 4; n++) { const o = document.createElement('option'); o.value = String(n); o.textContent = 'Variation ' + n; variation.appendChild(o); }
+      variation.value = String(opts.variation);
+      const update = () => {
+        opts.size = size.value; opts.length = Number(length.value); opts.variation = Number(variation.value);
+        document.querySelectorAll('.sfx-variant-card').forEach(copy => {
+          if (copy.dataset.sfxid !== def.id) return;
+          copy.querySelector('.sfx-size').value = opts.size;
+          copy.querySelector('.sfx-length').value = String(opts.length);
+          copy.querySelector('.sfx-variation').value = String(opts.variation);
+          copy.querySelector('.sfx-dur').textContent = opts.length.toFixed(1) + 's';
+        });
+        if (_cur && (_cur.def.baseId || _cur.def.id) === def.id) stopPreview();
+      };
+      size.addEventListener('change', update); length.addEventListener('input', update); variation.addEventListener('change', update);
+      controls.append(size, el('span', 'sfx-length-label', 'Length'), length, variation);
+      card.append(row, controls);
+      return card;
     }
     function fillList() {
       body.innerHTML = '';
@@ -980,6 +1052,7 @@ window.FM = window.FM || {};
     isFav: isFav, toggleFav: toggleFav, favs: readFavs,   // seams: the suite drives the real store
     categories: categoriesOf,
     byId: byId,
+    variantOf: variantOf,
     renderBuffer: renderBuffer,   // exposed so the suite can measure what each recipe actually makes
     encodeWav: encodeWav,
     preview: preview,

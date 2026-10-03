@@ -118206,5 +118206,22 @@
     }
   });
 
+  test('690 Explosion and Thunder options produce bounded distinct sound variants', { item: 'TBD' }, async function () {
+    for (const id of ['explosion', 'thunder']) {
+      const base = FM.sfx.byId(id);
+      if (!base || !base.variant) throw new Error(id + ' sound is missing');
+      const small = FM.sfx.variantOf(base, { size: 'small', length: 0.9, variation: 1 });
+      const big = FM.sfx.variantOf(base, { size: 'big', length: 1.8, variation: 3 });
+      if (small.id === big.id || small.baseId !== id || big.baseId !== id || small.dur !== 0.9 || big.dur !== 1.8)
+        throw new Error(id + ' options did not produce independent bounded cache keys and lengths');
+      const a = await FM.sfx.renderBuffer(small), b = await FM.sfx.renderBuffer(big);
+      if (a.length < 0.9 * a.sampleRate || b.length < 1.8 * b.sampleRate)
+        throw new Error(id + ' rendered audio was cut short');
+      const samples = a.getChannelData(0);
+      let peak = 0; for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+      if (peak < 0.1 || peak > 1) throw new Error(id + ' small variant is silent or clipped');
+    }
+  });
+
 
 })();
