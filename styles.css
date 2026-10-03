@@ -6943,6 +6943,12 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
    count; actions have their own row, keeping every touch target large and inside the screen. */
 .hm-selbreak { display: none; }
 @media (max-width: 700px) {
+  /* Keep the iPhone status area native while placing the three header circles where the phone
+     reference has them. The controls retain 44px touch targets; only their spacing changes. */
+  #home-screen .hm-top { padding-left: 11px; padding-right: 11px; border-bottom: 0; box-shadow: none; }
+  #home-screen .hm-top > .hm-brand { width: min(128px, calc(100vw - 220px)); }
+  #home-screen .hm-empty-title { font-size: 15px; letter-spacing: 0; }
+  #home-screen .hm-empty { transform: translateY(clamp(0px, 2vh, 16px)); }
   /* The reference's four destinations sit in a dock around the existing New orb. The DOM stays
      navigation-first for keyboard users; flex order places the scroller above that dock on phones. */
   #home-screen .hm-scroll { order: 2; }

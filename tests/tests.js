@@ -119344,6 +119344,8 @@
           throw new Error('Home wordmark is not centred on the screen at ' + width + 'px');
         if ([cog, search, profile].some(r => r.width < 44 || r.height < 44 || r.left < home.left || r.right > home.right))
           throw new Error('Home header has a clipped or small control at ' + width + 'px');
+        if (getComputedStyle(document.querySelector('#home-screen .hm-top')).borderBottomWidth !== '0px')
+          throw new Error('Phone header still has a divider across the reference layout');
         const tabs = document.querySelector('.hm-tabs').getBoundingClientRect();
         const sc = document.querySelector('.hm-scroll').getBoundingClientRect();
         if (!(tabs.top >= sc.bottom - 1)) throw new Error('Phone destinations are not below the project list');
