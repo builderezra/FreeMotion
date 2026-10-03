@@ -1,0 +1,9 @@
+# Remove Vocals track follows its source clock
+
+Starting commit: `517bfa1adf38591c373495966237ccff5d8303cd` (`chatgpt/690-karaoke-speed-sync` in `/private/tmp/freemotion-karaoke-speed-20261004`). Local only; nothing pushed.
+
+`REQUESTS.md:27375-27386` keeps #690 open to find bugs. `js/audio-tools.js:180-184` says the instrumental must share the source's trim/speed mapping or it drifts, but those fields were copied only when Remove Vocals created the twin. Change Speed % on the original later and the muted picture became shorter while the instrumental kept its old timing, in both preview and export. This is a code-path finding; physical playback was not tested.
+
+**Changed:** `js/audio-tools.js` reconciles a still-linked twin against the prior history snapshot whenever its source clock changes. The same pre-commit pass catches the Speed slider, speed-to-playhead buttons, speed ramps, reset, and other committed timing edits. The twin's own volume/effect keyframes move proportionally with its new window, and its speed ramp is deep-cloned. A twin whose timing was independently changed before or during the edit is left alone. `js/history.js` runs this before taking the edit's snapshot, preserving one undo step. `tests/tests.js` adds one `{ item: 'TBD' }` regression for static speed, ramp, Undo/Redo, and independent timing. `index.html` bumps the changed script tags: history `37→38`, audio-tools `7→8`.
+
+**Checks run:** a focused JavaScriptCore execution of the actual audio-tools and history modules passed the static-speed, volume-keyframe, Undo/Redo, ramp, and independent-retime cases. JavaScriptCore parsed both changed scripts and `tests/tests.js`; `git diff --check` passed. The browser regression, live collaboration, and iPhone audio playback remain unverified. Replacing the source media while Remove Vocals is active is a separate stale-instrumental case and is not addressed here.

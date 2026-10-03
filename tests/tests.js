@@ -120065,4 +120065,60 @@
       throw new Error('Speed zero rewinds Electric Edges to its first crackle frame');
   });
 
+  test('690 Remove Vocals instrumental follows source Speed while retaining one undo step and independent retimes', { item: 'TBD' }, function () {
+    var original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice();
+    var seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
+    try {
+      // The pair has the same clock that toggleKaraoke gives it; its volume curve
+      // is independent and must follow the new clip window rather than be erased.
+      var source = FM.makeLayer('video', { name: 'Song' });
+      source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
+      var twin = FM.makeLayer('video', { name: 'Song (no vocals)' });
+      twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
+      twin.volume = { kf: [{ t: 1, v: 0.2, e: 'linear' }, { t: 3, v: 0.8, e: 'linear' }] };
+      FM.scene.layers.push(source, twin);
+      FM.scene.selectedId = source.id; FM.scene.selectedIds = [source.id];
+      FM.seekVideosToTime = function () {};
+      if (FM.timeline) FM.timeline.rebuild = function () {};
+      FM.requestRender = function () {};
+      FM.history.reset();
+      var before = FM.history._steps();
+
+      // The Speed % control makes these two source writes and one history commit.
+      source.speed = 2; source.duration = 2;
+      FM.history.commit();
+      var after = FM.history._steps();
+      if (after.len !== before.len + 1) throw new Error('source and instrumental took more than one undo step');
+      if (twin.speed !== 2 || twin.duration !== 2 || twin.start !== 1 || twin.trimStart !== 0.5)
+        throw new Error('the muted picture re-timed to 2x but its instrumental stayed at the old mapping');
+      if (Math.abs(twin.volume.kf[1].t - 2) > 1e-6) throw new Error('the instrumental lost its own volume animation timing');
+
+      FM.history.undo();
+      var restored = FM.layerById(FM.scene, twin.id);
+      if (!restored || restored.speed !== 1 || restored.duration !== 4) throw new Error('one Undo did not restore both clocks');
+      FM.history.redo();
+      source = FM.layerById(FM.scene, source.id); twin = FM.layerById(FM.scene, twin.id);
+      if (source.speed !== 2 || twin.speed !== 2 || twin.duration !== 2) throw new Error('Redo lost the aligned instrumental');
+
+      source.speed = { kf: [{ t: 1, v: 2, e: 'linear' }, { t: 3, v: 4, e: 'linear' }] };
+      FM.history.commit();
+      if (JSON.stringify(twin.speed) !== JSON.stringify(source.speed) || twin.speed === source.speed)
+        throw new Error('a new source speed ramp was not copied independently to the instrumental');
+
+      // An intentional offset makes this track independent; subsequent source
+      // speed edits must not stamp over that user's timing choice.
+      twin.start += 0.5; FM.history.commit();
+      source.speed = 4; source.duration = 1; FM.history.commit();
+      if (twin.start !== 1.5 || !FM.isAnimated(twin.speed) || twin.duration !== 2)
+        throw new Error('a separately retimed instrumental was overwritten');
+    } finally {
+      FM.seekVideosToTime = seek;
+      if (FM.timeline) FM.timeline.rebuild = rebuild;
+      FM.requestRender = render;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, original);
+      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
+      FM.history.reset();
+    }
+  });
+
 })();

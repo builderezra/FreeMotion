@@ -275,6 +275,18 @@ window.FM = window.FM || {};
     commit() {
       if (suppress) return;
       if (muteDepth > 0) return;
+      // A Remove Vocals track copied its source clock when it was made. Reconcile
+      // an untouched twin against the previous snapshot before this edit becomes
+      // the next snapshot; no second commit or undo step is created.
+      if (index >= 0 && FM.syncKaraokeTimingFrom && FM.scene.layers.some(l => l && l.karaokeOf)) {
+        try {
+          if (FM.syncKaraokeTimingFrom(JSON.parse(stack[index]).layers)) {
+            if (FM.seekVideosToTime) FM.seekVideosToTime();
+            if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+            if (FM.requestRender) FM.requestRender();
+          }
+        } catch (e) { console.warn('Could not synchronize vocal-removed track', e); }
+      }
       /* ═══ THE TWO COLLAB SEAMS (queue 921 S0, spec §9) ════════════════════════════════════════════
        * beforeSnap runs the derived-value normalisation and the diff, so the snapshot taken on the next
        * line already contains everything the diff sent — otherwise an undo would restore a state the

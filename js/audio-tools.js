@@ -106,6 +106,51 @@ window.FM = window.FM || {};
     return FM.karaokeTwinOf(layer) ? 'on' : 'off';
   };
 
+  /* Keep an untouched Remove Vocals track on the same source clock as its original.
+   * The previous history snapshot supplies the clock BEFORE a Speed %, speed-ramp,
+   * reset, trim or move edit. A twin that was retimed separately, or changed in the
+   * same edit, is independent and must not be overwritten. This runs before the
+   * current edit is snapshotted, so source + twin remain one undo step. */
+  function karaokeClock(layer) {
+    return [layer.start || 0, layer.duration || 0, layer.trimStart || 0,
+      !!layer.reversed, JSON.stringify(layer.speed == null ? 1 : layer.speed)];
+  }
+  function sameClock(a, b) { return a.every((v, i) => v === b[i]); }
+  FM.syncKaraokeTimingFrom = function (previousLayers) {
+    if (!FM.scene || !Array.isArray(previousLayers) || !Array.isArray(FM.scene.layers)) return 0;
+    const before = new Map(previousLayers.filter(l => l && l.id).map(l => [l.id, l]));
+    const current = new Map(FM.scene.layers.filter(l => l && l.id).map(l => [l.id, l]));
+    let changed = 0;
+    FM.scene.layers.forEach(twin => {
+      if (!twin || !twin.karaokeOf) return;
+      const source = current.get(twin.karaokeOf), oldSource = before.get(twin.karaokeOf), oldTwin = before.get(twin.id);
+      if (!source || source.type !== 'video' || twin.type !== 'video' || !oldSource || !oldTwin ||
+          !Number.isFinite(source.start) || !Number.isFinite(source.duration) || !(source.duration > 0)) return;
+      const oldClock = karaokeClock(oldSource);
+      if (sameClock(karaokeClock(source), oldClock) || !sameClock(karaokeClock(oldTwin), oldClock) ||
+          !sameClock(karaokeClock(twin), karaokeClock(oldTwin))) return;
+
+      // Map this track's independent volume/effect keyframes onto its new window.
+      // The speed track is replaced below with a CLONE of the source's new ramp.
+      const oldStart = twin.start || 0, oldDur = twin.duration || 0;
+      const newStart = source.start || 0;
+      const ratio = oldDur > 0 ? source.duration / oldDur : 1;
+      if (FM.animatedProps && Number.isFinite(ratio) && ratio > 0) {
+        FM.animatedProps(twin).forEach(prop => {
+          if (prop === twin.speed) return;
+          prop.kf.forEach(k => { k.t = newStart + (k.t - oldStart) * ratio; });
+        });
+      }
+      twin.start = source.start;
+      twin.duration = source.duration;
+      twin.trimStart = source.trimStart || 0;
+      twin.reversed = !!source.reversed;
+      twin.speed = JSON.parse(JSON.stringify(source.speed == null ? 1 : source.speed));
+      changed++;
+    });
+    return changed;
+  };
+
   /* Karaoke TOGGLE — never permanent.
    *   OFF → ON : add a vocals-removed track (tagged karaokeOf) and mute the source.
    *   ON  → OFF: drop that track and unmute the source. Works pressed from EITHER layer. */
