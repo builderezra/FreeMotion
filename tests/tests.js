@@ -118249,5 +118249,30 @@
       throw new Error('Voice tone was over-suppressed');
   });
 
+  test('690 Auto-duck maps trimmed voice timing and writes reversible volume keyframes', { item: 'TBD' }, function () {
+    if (!FM.autoDuckTimelineSegments || !FM.autoDuckKeyframes) throw new Error('Auto-duck tool is missing');
+    const voice = { start: 4, duration: 3, trimStart: 1, speed: 2, reversed: false };
+    const segments = FM.autoDuckTimelineSegments(voice, [{ start: 2, end: 3 }]);
+    if (segments.length !== 1 || Math.abs(segments[0].start - 4.5) > 1e-4 ||
+        Math.abs(segments[0].end - 5) > 1e-4) throw new Error('Trimmed or sped-up speech mapped to the wrong project time');
+    const opts = { amount: 12, attack: 0.2, release: 0.6, padding: 0.15 };
+    const keys = FM.autoDuckKeyframes(0.8, segments, opts, 2, 10);
+    if (!keys || !FM.isAnimated(keys)) throw new Error('No ducking keyframes generated');
+    const before = FM.evalProp(keys, 4), under = FM.evalProp(keys, 4.7), after = FM.evalProp(keys, 6);
+    if (Math.abs(before - 0.8) > 1e-4 || under >= 0.23 || Math.abs(after - 0.8) > 1e-4)
+      throw new Error('Ducking did not reach the requested level and recover');
+    const music = { volume: keys, autoDuck: { base: 0.8 } };
+    const oldReconcile = FM.reconcileAudio, oldTimeline = FM.timeline, oldInspector = FM.inspector;
+    const oldHistory = FM.history, oldRender = FM.requestRender;
+    try {
+      FM.reconcileAudio = null; FM.timeline = null; FM.inspector = null; FM.history = null; FM.requestRender = null;
+      FM.autoDuckClear(music);
+    } finally {
+      FM.reconcileAudio = oldReconcile; FM.timeline = oldTimeline; FM.inspector = oldInspector;
+      FM.history = oldHistory; FM.requestRender = oldRender;
+    }
+    if (music.volume !== 0.8 || music.autoDuck) throw new Error('Original volume was not restored');
+  });
+
 
 })();

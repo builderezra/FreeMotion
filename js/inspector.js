@@ -5739,7 +5739,58 @@ window.FM = window.FM || {};
       else { noiseOptions.hidden = !noiseOptions.hidden; noiseOptions.style.display = noiseOptions.hidden ? 'none' : 'grid'; }
     });
     noiseOptions.style.display = 'none';
-    tools.append(wavBtn, karBtn, noiseBtn, noiseOptions, afxBtn, arBtn);
+    const duckBtn = el('button', 'vol-tool-btn' + (layer.autoDuck ? ' on' : ''), 'Auto-duck music…');
+    duckBtn.title = 'Generate volume keyframes under speech in another clip';
+    const duckOptions = el('div', 'vol-duck-options');
+    duckOptions.hidden = true;
+    duckOptions.style.cssText = 'padding:10px 0;display:none;gap:8px';
+    const duckSettings = Object.assign({ sourceId: 'any', amount: 12, attack: 0.2, release: 0.6, padding: 0.15 }, layer.autoDuck || {});
+    const sourceLabel = el('label', '', 'Voice source ');
+    const sourceSelect = document.createElement('select'); sourceSelect.setAttribute('aria-label', 'Voice source');
+    const any = document.createElement('option'); any.value = 'any'; any.textContent = 'Any speech in other clips'; sourceSelect.appendChild(any);
+    (FM.captions && FM.captions.audioSources ? FM.captions.audioSources() : [])
+      .filter(candidate => candidate.id !== layer.id && !candidate.muted && !candidate.hidden)
+      .forEach(candidate => {
+        const option = document.createElement('option'); option.value = candidate.id;
+        option.textContent = candidate.name || 'Audio clip'; sourceSelect.appendChild(option);
+      });
+    sourceSelect.value = duckSettings.sourceId;
+    if (!sourceSelect.value) { sourceSelect.value = 'any'; duckSettings.sourceId = 'any'; }
+    sourceSelect.addEventListener('change', () => { duckSettings.sourceId = sourceSelect.value; });
+    sourceLabel.appendChild(sourceSelect); duckOptions.appendChild(sourceLabel);
+    const duckRange = (key, label, min, max, step) => {
+      const row = el('label', '', label + ': ');
+      const value = el('span', '', String(duckSettings[key]));
+      const input = document.createElement('input');
+      input.type = 'range'; input.min = min; input.max = max; input.step = step; input.value = duckSettings[key];
+      input.setAttribute('aria-label', label);
+      input.addEventListener('input', () => { duckSettings[key] = +input.value; value.textContent = input.value; });
+      row.append(value, input); duckOptions.appendChild(row);
+    };
+    duckRange('amount', 'Duck (dB)', 0, 30, 1);
+    duckRange('attack', 'Attack (s)', 0.05, 1, 0.05);
+    duckRange('release', 'Release (s)', 0.1, 2, 0.05);
+    duckRange('padding', 'Speech padding (s)', 0, 0.5, 0.05);
+    const generateDuck = el('button', 'vol-tool-btn', layer.autoDuck ? 'Update ducking keyframes' : 'Generate ducking keyframes');
+    generateDuck.addEventListener('click', async () => {
+      if (generateDuck.disabled) return;
+      generateDuck.disabled = true;
+      if (FM.toast) FM.toast('Finding speech and shaping volume…', 0);
+      try { await FM.autoDuckGenerate(layer, duckSettings); }
+      catch (e) { if (FM.toast) FM.toast(e.message || 'Could not generate ducking', 4000); }
+      finally { generateDuck.disabled = false; }
+    });
+    duckOptions.appendChild(generateDuck);
+    if (layer.autoDuck) {
+      const clearDuck = el('button', 'vol-tool-btn', 'Restore original volume');
+      clearDuck.addEventListener('click', () => FM.autoDuckClear(layer));
+      duckOptions.appendChild(clearDuck);
+    }
+    duckBtn.addEventListener('click', () => {
+      duckOptions.hidden = !duckOptions.hidden;
+      duckOptions.style.display = duckOptions.hidden ? 'none' : 'grid';
+    });
+    tools.append(wavBtn, karBtn, noiseBtn, noiseOptions, duckBtn, duckOptions, afxBtn, arBtn);
     control.appendChild(tools);
 
     panel.append(left, center);
