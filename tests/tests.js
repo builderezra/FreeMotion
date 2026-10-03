@@ -119061,4 +119061,26 @@
     }
   });
 
+  test('690 Unsharp Mask protects neutral detail from coloured edge fringes', { item: 'TBD' }, function () {
+    const fn = FM._FX_TABLES.PIXEL_FX.unsharpmask;
+    const fresh = FM.fxRegistry.makeInstance('unsharpmask');
+    if (!fn || !fresh || fresh.params.coloursafe !== 100)
+      throw new Error('New Unsharp Mask instances do not enable colour protection');
+    const W = 5, H = 5, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      src[i] = x < 2 ? 255 : 180;
+      src[i + 1] = src[i + 2] = x < 2 ? 0 : 180;
+      src[i + 3] = 255;
+    }
+    const render = params => { const d = src.slice(); fn(d, W, H, params, 0); return d; };
+    const old = render({ amount: 2, radius: 1 });
+    const zero = render({ amount: 2, radius: 1, coloursafe: 0 });
+    if (!old.every((v, i) => v === zero[i])) throw new Error('Existing Unsharp Mask instances changed');
+    const safe = render({ amount: 2, radius: 1, coloursafe: 100 });
+    const at = (2 * W + 2) * 4;
+    if (!(old[at] < old[at + 2] && safe[at] === safe[at + 1] && safe[at + 1] === safe[at + 2] && safe[at + 3] === 255))
+      throw new Error('Colour protection left a cyan fringe or changed alpha: ' + Array.from(safe.slice(at, at + 4)));
+  });
+
 })();
