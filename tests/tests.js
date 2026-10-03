@@ -119749,4 +119749,20 @@
     }
   });
 
+  test('690 Breathe speed keyframes advance by accumulated phase', { item: 'TBD' }, function () {
+    const breathe = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.pulseopacity;
+    if (!breathe) throw new Error('Breathe pixel kernel is missing');
+    const alphaAt = speed => {
+      const d = new Uint8ClampedArray([100, 120, 140, 255]);
+      breathe(d, 1, 1, { speed, depth: 0.7, phase: 0 }, 2);
+      return d[3];
+    };
+    const ramp = alphaAt({ kf: [{ t: 1, v: 1 }, { t: 2, v: 2 }] });
+    if (ramp < 75 || ramp > 78)
+      throw new Error('A 1→2 Hz ramp reached alpha ' + ramp + '; 2.5 accumulated cycles should be near 77, not the old 255');
+    const constant = alphaAt(1), flatTrack = alphaAt({ kf: [{ t: 0, v: 1 }, { t: 2, v: 1 }] });
+    if (constant !== 255 || flatTrack !== constant || alphaAt(2) !== 255)
+      throw new Error('Constant and flat-keyframe Breathe instances changed their legacy phase');
+  });
+
 })();
