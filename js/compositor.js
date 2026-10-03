@@ -870,6 +870,16 @@ window.FM = window.FM || {};
       { key: 'driftX', label: 'Drift X', min: -200, max: 200, step: 5, def: 0, legacy: 0, unit: 'px/s' },
       { key: 'driftY', label: 'Drift Y', min: -200, max: 200, step: 5, def: 0, legacy: 0, unit: 'px/s' },
     ] },
+    { type: 'fractalnoise', label: 'Fractal Noise', desc: 'Layered noise for clouds, smoke and organic masks, with four texture shapes and animated evolution.', color: true, defColor: '#000000', colorLabel: 'Dark', color2: true, defColor2: '#ffffff', color2Label: 'Light', params: [
+      { key: 'pattern', label: 'Pattern', options: [[0, 'Basic'], [1, 'Turbulent'], [2, 'Smooth'], [3, 'Ridged']], def: 0 },
+      { key: 'scale', label: 'Scale', min: 16, max: 400, step: 1, def: 100, unit: 'px' },
+      { key: 'octaves', label: 'Octaves', min: 1, max: 6, step: 1, def: 4 },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 300, step: 1, def: 100, unit: '%' },
+      { key: 'evolution', label: 'Evolution', min: -4, max: 4, step: 0.1, def: 0.5, unit: '/s' },
+      { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay']], def: 0 },
+      { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'smoothbevel', label: 'Smooth Bevel', /* queue 904: Light from — the key light was welded; measured, it lights the BOTTOM-RIGHT edges, i.e. 315° */ params: [{ key: 'depth', label: 'Depth', min: 1, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'strength', label: 'Light Strength', min: 0, max: 2, step: 0.05, def: 1 }, { key: 'angle', label: 'Light from', min: 0, max: 360, step: 1, def: 315, unit: '°' }] },
     // ---- batch 18: Blur / Proc / Distort / Drawing ----
     { type: 'zoomstreaks', label: 'Zoom Streaks', params: [
@@ -3773,7 +3783,7 @@ window.FM = window.FM || {};
     wipe: 1, radialwipe: 1, venetianblinds: 1, radiowaves: 1, laserbeam: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
     gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1, circlearray: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
-    electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
+    electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, fractalnoise: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, lightleak: 1, letterbox: 1, border: 1,
     faded: 1, nightvision: 1, sketch: 1, roundcorners: 1, liquidglass: 1,
@@ -5219,6 +5229,7 @@ window.FM = window.FM || {};
     }
     return _oilPaintScratch;
   }
+  let fractalNoiseScratch = null;
   const PIXEL_FX = {
     bwmixer: function (d, W, H, p, t) {
       var mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
@@ -8580,6 +8591,77 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           d[fr_i] = d[fr_i] + (fr_cr - d[fr_i]) * fr_amt;
           d[fr_i + 1] = d[fr_i + 1] + (fr_cg - d[fr_i + 1]) * fr_amt;
           d[fr_i + 2] = d[fr_i + 2] + (fr_cb - d[fr_i + 2]) * fr_amt;
+        }
+      }
+    },
+    fractalnoise: function (d, W, H, p, t, ps) {
+      var amt = Math.max(0, Math.min(1, fparam(p, 'amount', 100, t) / 100));
+      if (!amt || !W || !H) return;
+      var pattern = Math.max(0, Math.min(3, Math.round(fparam(p, 'pattern', 0, t))));
+      var octaves = Math.max(1, Math.min(6, Math.round(fparam(p, 'octaves', 4, t))));
+      var scale = Math.max(16, Math.min(400, fparam(p, 'scale', 100, t)));
+      var contrast = Math.max(0, Math.min(3, fparam(p, 'contrast', 100, t) / 100));
+      var speed = Math.max(-4, Math.min(4, fparam(p, 'evolution', 0.5, t)));
+      var phase = FM.isAnimated(p.evolution) ? FM.integrateProp(p.evolution, 0, t, function (u) {
+        return Math.max(-4, Math.min(4, FM.evalProp(p.evolution, u)));
+      }) : speed * t;
+      var seed = Math.round(fparam(p, 'seed', 0, t)) | 0;
+      var blend = Math.max(0, Math.min(3, Math.round(fparam(p, 'blend', 0, t))));
+      var lo = p.color ? hexToRGB(p.color) : [0, 0, 0];
+      var hi = p.color2 ? hexToRGB(p.color2) : [255, 255, 255];
+      var plateScale = ps > 0 ? ps : 1;
+      // At most 320 samples on the long edge; reuse the grid across frames to avoid per-frame GC.
+      var reduction = Math.min(1, 320 / Math.max(W, H));
+      var gw = Math.max(1, Math.round(W * reduction)), gh = Math.max(1, Math.round(H * reduction));
+      var n = gw * gh;
+      if (!fractalNoiseScratch || fractalNoiseScratch.length < n) fractalNoiseScratch = new Float32Array(n);
+      var grid = fractalNoiseScratch;
+      function hash(ix, iy, octave) {
+        var h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed + octave * 1013, 1274126177);
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+      }
+      function noise(x, y, octave) {
+        var ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+        fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+        var a = hash(ix, iy, octave), b = hash(ix + 1, iy, octave);
+        var c = hash(ix, iy + 1, octave), e = hash(ix + 1, iy + 1, octave);
+        return (a + (b - a) * fx) * (1 - fy) + (c + (e - c) * fx) * fy;
+      }
+      var weightBase = pattern === 2 ? 0.25 : 0.5;
+      for (var gy = 0; gy < gh; gy++) {
+        var py = (gh > 1 ? gy * (H - 1) / (gh - 1) : 0) / plateScale;
+        for (var gx = 0; gx < gw; gx++) {
+          var px = (gw > 1 ? gx * (W - 1) / (gw - 1) : 0) / plateScale;
+          var sum = 0, weight = 1, total = 0, cell = scale;
+          for (var o = 0; o < octaves; o++) {
+            var v = noise(px / cell + phase * (0.7 + o * 0.21), py / cell - phase * (0.9 + o * 0.17), o);
+            if (pattern === 1) v = Math.abs(v * 2 - 1);
+            else if (pattern === 3) v = 1 - Math.abs(v * 2 - 1);
+            sum += v * weight; total += weight; weight *= weightBase; cell *= 0.5;
+          }
+          var value = (sum / total - 0.5) * contrast + 0.5;
+          grid[gy * gw + gx] = value < 0 ? 0 : (value > 1 ? 1 : value);
+        }
+      }
+      for (var y = 0; y < H; y++) {
+        var fy = H > 1 ? y * (gh - 1) / (H - 1) : 0, y0 = Math.floor(fy), y1 = Math.min(y0 + 1, gh - 1);
+        fy -= y0;
+        for (var x = 0; x < W; x++) {
+          var i = (y * W + x) * 4;
+          if (!d[i + 3]) continue;
+          var fx = W > 1 ? x * (gw - 1) / (W - 1) : 0, x0 = Math.floor(fx), x1 = Math.min(x0 + 1, gw - 1);
+          fx -= x0;
+          var top = grid[y0 * gw + x0] + (grid[y0 * gw + x1] - grid[y0 * gw + x0]) * fx;
+          var bot = grid[y1 * gw + x0] + (grid[y1 * gw + x1] - grid[y1 * gw + x0]) * fx;
+          var v = top + (bot - top) * fy;
+          for (var c = 0; c < 3; c++) {
+            var source = d[i + c], tone = lo[c] + (hi[c] - lo[c]) * v;
+            if (blend === 1) tone = source * tone / 255;
+            else if (blend === 2) tone = 255 - (255 - source) * (255 - tone) / 255;
+            else if (blend === 3) tone = source < 128 ? 2 * source * tone / 255 : 255 - 2 * (255 - source) * (255 - tone) / 255;
+            d[i + c] = source + (tone - source) * amt;
+          }
         }
       }
     },

@@ -118561,5 +118561,22 @@
     if (strokes.length) throw new Error('Zero intensity still drew a beam');
   });
 
+  test('690 Fractal Noise patterns, evolution and neutral controls', { item: 'TBD' }, function () {
+    const fx = FM._FX_TABLES.PIXEL_FX.fractalnoise;
+    if (!fx || !FM._postFxTypes().includes('fractalnoise') || FM.fxRegistry.get('fractalnoise')?.category !== 'proc')
+      throw new Error('Fractal Noise is not registered and routed');
+    const make = () => { const d = new Uint8ClampedArray(40 * 40 * 4); for (let i = 0; i < d.length; i += 4) d.set([80, 120, 160, 255], i); return d; };
+    const draw = (p, t = 0) => { const d = make(); fx(d, 40, 40, p, t, 1); return d; };
+    const base = { scale: 22, octaves: 4, contrast: 100, evolution: 1, amount: 100, seed: 7 };
+    const looks = [0, 1, 2, 3].map(pattern => draw({ ...base, pattern }));
+    if (looks.some((d, i) => d[3] !== 255 || d[0] === 80 || (i && d.every((v, k) => v === looks[0][k]))))
+      throw new Error('Noise patterns are missing, identical, or changed alpha');
+    const still = draw({ ...base, evolution: 0 }), heldLater = draw({ ...base, evolution: 0 }, 2);
+    if (!still.every((v, i) => v === heldLater[i])) throw new Error('Zero evolution changed a held texture');
+    if (draw(base, 2).every((v, i) => v === looks[0][i])) throw new Error('Evolution did not animate');
+    const original = make();
+    if (!draw({ ...base, amount: 0 }).every((v, i) => v === original[i])) throw new Error('Zero amount changed the source');
+  });
+
 
 })();

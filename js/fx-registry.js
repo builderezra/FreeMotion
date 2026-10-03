@@ -52,7 +52,7 @@ window.FM = window.FM || {};
     // batch 16 (other / color / proc / drawing)
     channelremap: 'color', gradientoverlay: 'color', lensflare: 'proc', roughenedges: 'drawing', hexarray: 'proc',
     // batch 17 (drawing / blur / proc)
-    electricedges: 'drawing', glowscan: 'drawing', spinstreaks: 'blur', fractalridges: 'proc', smoothbevel: 'drawing',
+    electricedges: 'drawing', glowscan: 'drawing', spinstreaks: 'blur', fractalridges: 'proc', fractalnoise: 'proc', smoothbevel: 'drawing',
     // batch 18 (blur / proc / distort / drawing)
     zoomstreaks: 'blur', innerblur: 'blur', contourstrips: 'proc', innerpinch: 'distort', crosshatch: 'drawing',
     // batch 19 (text)
@@ -433,6 +433,7 @@ window.FM = window.FM || {};
     lensflare: 'A lens flare from a light you position, with the streaks and ghosts a real one throws.',
     hexarray: 'A honeycomb of hexagons over the frame.',
     fractalridges: 'Ridged fractal noise that churns in place — rock, cloth or turbulence, depending on Scale and Sharpness. Colour it flat, tinted, as a two-stop gradient or a full spectrum, and Overlay decides whether it sits on the picture or replaces it.',
+    fractalnoise: 'Layered noise with Basic, Turbulent, Smooth and Ridged patterns. Adjust its detail, colours and evolution for clouds, smoke or an organic mask.',
     contourstrips: 'Slices the brightness range into flat bands and colours them, like a topographic map.',
     voronoi: 'Breaks the frame into organic cells, the pattern of cracked mud or a giraffe’s coat.',
     lightning: 'Draws branching lightning bolts across the layer.',
