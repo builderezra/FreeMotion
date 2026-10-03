@@ -114,6 +114,7 @@ window.FM = window.FM || {};
     colourwheels: 'color',
     hslmixer: 'color',
     claritydehaze: 'color',
+    radiowaves: 'proc',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -454,6 +455,7 @@ window.FM = window.FM || {};
     wipe: 'Reveals or hides the layer behind a straight line at any angle. Keyframe Progress to run it.',
     radialwipe: 'The same, but the line sweeps around like a clock hand.',
     venetianblinds: 'Reveals the layer in parallel slats. Stagger opens the slats one after another.',
+    radiowaves: 'Repeated coloured rings expand from one point, with circle and polygon shapes.',
     solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
     mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
     mattefringe: 'Draws a coloured band along the layer’s edge.',

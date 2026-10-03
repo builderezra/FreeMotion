@@ -661,6 +661,19 @@ window.FM = window.FM || {};
       { key: 'stagger', label: 'Stagger', min: -100, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'fit', label: 'Fit slats to', options: [[0, 'Frame'], [1, 'Visible layer']], def: 0 },
     ] },
+    { type: 'radiowaves', label: 'Radio Waves', desc: 'Send repeated coloured rings from a point. Unlike Shockwave, new rings keep appearing while the layer plays.', color: true, defColor: '#6bdcff', colorLabel: 'Waves', params: [
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'rate', label: 'Waves per second', min: 0, max: 8, step: 0.1, def: 2, unit: 'Hz' },
+      { key: 'speed', label: 'Travel speed', min: 0, max: 800, step: 1, def: 160, unit: 'px/s' },
+      { key: 'lifetime', label: 'Lifetime', min: 0.1, max: 8, step: 0.1, def: 2, unit: 's' },
+      { key: 'width', label: 'Line width', min: 1, max: 60, step: 1, def: 6, unit: 'px' },
+      { key: 'fade', label: 'Fade at end', min: 0, max: 100, step: 1, def: 70, unit: '%' },
+      { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square'], [2, 'Polygon']], def: 0 },
+      { key: 'sides', label: 'Polygon sides', min: 3, max: 16, step: 1, def: 6, overriddenBy: 'shape', liveWhen: 2 },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 1, def: 0, unit: '°/s' },
+      { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Screen'], [2, 'Add']], def: 1 },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -3700,7 +3713,7 @@ window.FM = window.FM || {};
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
-    wipe: 1, radialwipe: 1, venetianblinds: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
+    wipe: 1, radialwipe: 1, venetianblinds: 1, radiowaves: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
     gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
@@ -11638,7 +11651,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      expanded-plate cost off frames where the layer is nowhere near an edge — and the full-frame placeholder this list
      hands them made `near` always true, so all three rendered a second full plate every frame. They get the fast
      alpha scan like everything else; pixels unchanged, one drawLayer per frame again. */
-  const CFX_NO_BBOX = { vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, radiowaves: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   Object.setPrototypeOf(CFX_NO_BBOX, null);   // own keys only — see POSTFX
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
@@ -12396,6 +12409,49 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return e && e.w > 0 && e.h > 0 ? e : bb;
   }
   const CANVAS_FX = {
+    radiowaves: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      B.drawImage(A, 0, 0);
+      var rate = Math.max(0, Math.min(8, fparam(p, 'rate', 2, t)));
+      var life = Math.max(0.1, Math.min(8, fparam(p, 'lifetime', 2, t)));
+      var speed = Math.max(0, Math.min(800, fparam(p, 'speed', 160, t))) * (ps > 0 ? ps : 1);
+      var width = Math.max(1, Math.min(60, fparam(p, 'width', 6, t))) * (ps > 0 ? ps : 1);
+      var fade = Math.max(0, Math.min(1, fparam(p, 'fade', 70, t) / 100));
+      var x = W * Math.max(0, Math.min(100, fparam(p, 'x', 50, t))) / 100;
+      var y = H * Math.max(0, Math.min(100, fparam(p, 'y', 50, t))) / 100;
+      var shape = Math.round(fparam(p, 'shape', 0, t));
+      var sides = shape === 1 ? 4 : Math.max(3, Math.min(16, Math.round(fparam(p, 'sides', 6, t))));
+      var spin = fparam(p, 'spin', 0, t) * Math.PI / 180;
+      var blend = Math.round(fparam(p, 'blend', 1, t));
+      var time = Math.max(0, tl == null ? t : tl);
+      var color = p.color || '#6bdcff';
+      B.save();
+      B.globalCompositeOperation = blend === 2 ? 'lighter' : blend === 1 ? 'screen' : 'source-over';
+      B.strokeStyle = color; B.lineWidth = width; B.lineJoin = 'round';
+      // A zero rate holds one ring. Otherwise cap the active count at rate*lifetime + one birth.
+      var first = rate > 0 ? Math.max(0, Math.ceil((time - life) * rate)) : 0;
+      var last = rate > 0 ? Math.floor(time * rate) : 0;
+      for (var n = first; n <= last; n++) {
+        var age = time - (rate > 0 ? n / rate : 0);
+        if (age < 0 || age >= life) continue;
+        var radius = speed * age;
+        if (radius < width * 0.5) continue;
+        var alpha = fade > 0 ? Math.min(1, (1 - age / life) / fade) : 1;
+        if (alpha <= 0) continue;
+        B.globalAlpha = alpha; B.beginPath();
+        if (shape === 0) B.arc(x, y, radius, 0, Math.PI * 2);
+        else {
+          var rotation = spin * age - Math.PI / 2 + (shape === 1 ? Math.PI / 4 : 0);
+          for (var k = 0; k < sides; k++) {
+            var a = rotation + k * Math.PI * 2 / sides;
+            var px = x + Math.cos(a) * radius, py = y + Math.sin(a) * radius;
+            if (k === 0) B.moveTo(px, py); else B.lineTo(px, py);
+          }
+          B.closePath();
+        }
+        B.stroke();
+      }
+      B.restore();
+    },
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
      * There were two. A video or photo drew an inline black radial gradient over its clip rect inside the media draw:
      * only the FIRST vignette counted (a second was a live-looking row that did nothing), and it painted black over a

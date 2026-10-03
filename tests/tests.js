@@ -118334,5 +118334,32 @@
     }
   });
 
+  test('690 Radio Waves emits multiple timed rings with shape and fade controls', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('radiowaves');
+    const fn = FM._FX_TABLES.CANVAS_FX.radiowaves;
+    if (!reg || reg.category !== 'proc' || !fn || !FM._FX_TABLES.CFX_NO_BBOX.radiowaves ||
+        !FM._postFxTypes().includes('radiowaves')) throw new Error('Radio Waves is not registered and routed');
+    const paths = [];
+    const ctx = {
+      drawImage() {}, save() {}, restore() {}, beginPath() { paths.push({ points: [], alpha: this.globalAlpha }); },
+      arc(x, y, r) { paths[paths.length - 1].radius = r; },
+      moveTo(x, y) { paths[paths.length - 1].points.push([x, y]); },
+      lineTo(x, y) { paths[paths.length - 1].points.push([x, y]); },
+      closePath() {}, stroke() {},
+    };
+    fn({}, ctx, 200, 100, { x: 0, y: 0, w: 200, h: 100 },
+       { x: 50, y: 50, rate: 2, speed: 100, lifetime: 2, width: 4,
+         fade: 100, shape: 0, sides: 6, spin: 0, blend: 1, color: '#ffffff' }, 0.75, 0.75, {}, 1);
+    if (paths.length !== 2 || Math.abs(paths[0].radius - 75) > 1e-6 ||
+        Math.abs(paths[1].radius - 25) > 1e-6 || !(paths[0].alpha < paths[1].alpha))
+      throw new Error('Timed rings, travel speed or age fade is wrong');
+    paths.length = 0;
+    fn({}, ctx, 200, 100, { x: 0, y: 0, w: 200, h: 100 },
+       { x: 50, y: 50, rate: 0, speed: 100, lifetime: 2, width: 4,
+         fade: 0, shape: 2, sides: 6, spin: 90, blend: 0 }, 0.75, 0.75, {}, 1);
+    if (paths.length !== 1 || paths[0].points.length !== 6 || paths[0].radius !== undefined)
+      throw new Error('Polygon shape or zero-rate single ring is wrong');
+  });
+
 
 })();
