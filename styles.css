@@ -6968,10 +6968,14 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
     border-color: color-mix(in srgb, var(--hm-profile-color) 65%, #647887); }
   html[data-home="light"] #home-screen .hm-top .hm-search-btn::before { background: rgba(255, 255, 255, .82);
     border-color: rgba(16, 30, 52, .12); }
+  html[data-home="light"] #home-screen .hm-top .hm-search-btn.on::before {
+    background: linear-gradient(180deg, #7ad6f2, var(--accent)); border-color: rgba(16, 30, 52, .18); }
   html[data-home="light"] #home-screen #hm-profile-btn.has-profile::before { background: color-mix(in srgb, var(--hm-profile-color) 55%, #16232c);
     border-color: color-mix(in srgb, var(--hm-profile-color) 65%, #647887); }
   html[data-home="dark"][data-theme="glass"] #home-screen .hm-top { background: transparent;
     -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html[data-home="light"] #home-screen .hm-top { background: transparent; border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0; -webkit-backdrop-filter: none; backdrop-filter: none; }
   /* The reference's four destinations sit in a dock around the existing New orb. The DOM stays
      navigation-first for keyboard users; flex order places the scroller above that dock on phones. */
   #home-screen .hm-scroll { order: 2; }

@@ -119351,6 +119351,21 @@
             throw new Error('Phone wordmark or New disc is larger than the saved reference');
           if (getComputedStyle(document.getElementById('hm-profile-btn'), '::before').top !== '4px')
             throw new Error('Profile disc lost its small painted circle inside the 44px hit area');
+          const html = document.documentElement, priorLook = html.getAttribute('data-home');
+          const searchButton = document.getElementById('hm-search-btn'), wasSearching = searchButton.classList.contains('on');
+          try {
+            html.setAttribute('data-home', 'light');
+            const lightTop = getComputedStyle(document.querySelector('#home-screen .hm-top'));
+            if (lightTop.backgroundImage !== 'none' || lightTop.backgroundColor !== 'rgba(0, 0, 0, 0)' ||
+                lightTop.borderBottomLeftRadius !== '0px' || lightTop.backdropFilter !== 'none')
+              throw new Error('Light Home still has a rounded, painted header band');
+            searchButton.classList.add('on');
+            if (!getComputedStyle(searchButton, '::before').backgroundImage.includes('gradient'))
+              throw new Error('Light Home search has no visible active disc');
+          } finally {
+            searchButton.classList.toggle('on', wasSearching);
+            if (priorLook == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', priorLook);
+          }
         }
         const tabs = document.querySelector('.hm-tabs').getBoundingClientRect();
         const sc = document.querySelector('.hm-scroll').getBoundingClientRect();
