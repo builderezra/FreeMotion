@@ -118655,4 +118655,30 @@
       throw new Error('Digit columns did not roll across 09 to 10: ' + JSON.stringify(marks));
   });
 
+  test('690 Hum Remover cuts selected mains hum and leaves other tones audible', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('humremove');
+    if (!def || def.category !== 'eq' || !def.params.some(p => p.key === 'harmonics'))
+      throw new Error('Hum Remover is not registered');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR;
+    async function level(hz, params) {
+      const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR), d = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) d[i] = 0.2 * Math.sin(2 * Math.PI * hz * i / SR);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('humremove'); Object.assign(fx.params, params);
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('Hum Remover signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 1); src.start(0);
+      const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+      let sum = 0; for (let i = N / 2; i < N; i++) sum += out[i] * out[i];
+      return Math.sqrt(sum / (N / 2));
+    }
+    const hum50 = await level(60, { base: 50, harmonics: 1 });
+    const hum60 = await level(60, { base: 60, harmonics: 1 });
+    const voice = await level(440, { base: 60, harmonics: 1 });
+    if (!(hum60 < hum50 * 0.25 && voice > hum50 * 0.7))
+      throw new Error('60 Hz setting missed mains hum or cut unrelated audio: ' + JSON.stringify({ hum50, hum60, voice }));
+  });
+
 })();

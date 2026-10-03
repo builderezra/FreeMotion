@@ -554,6 +554,52 @@ window.FM = window.FM || {};
         params: { output: out.gain }, xf: { output: dbToLin }, custom: custom });
     },
   },
+  {
+    type: 'humremove', label: 'Hum Remover', category: 'eq',
+    hint: 'Cuts mains hum and its harmonics. Choose 50 Hz in Australia and most of Europe, or 60 Hz in North America.',
+    params: [
+      Object.assign(P('base', 'Mains', 50, 60, 10, 50, 'Hz', false), { options: [[50, '50 Hz'], [60, '60 Hz']] }),
+      P('harmonics', 'Harmonics', 1, 8, 1, 4, '', false),
+      P('width', 'Notch width', 0.5, 20, 0.5, 2, 'Hz', true),
+      P('amount', 'Amount', 0, 1, 0.01, 1, '', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      const wd = wetDry(s, inst, 'amount', 1);
+      let base = initNum(inst, 'base', 50, 50, 60), width = initNum(inst, 'width', 2, 0.5, 20);
+      let count = Math.round(initNum(inst, 'harmonics', 4, 1, 8));
+      const filters = [], switches = [];
+      let prev = input;
+      for (let i = 1; i <= 8; i++) {
+        const hz = Math.min(base * i, ctx.sampleRate * 0.45);
+        const notch = s.biquad('notch', hz, Math.max(0.1, hz / width));
+        const pair = bypassPair(s, prev, notch, notch, i <= count && base * i < ctx.sampleRate * 0.45);
+        filters.push(notch); switches.push(pairTargets(pair, v => i <= Math.round(v) && base * i < ctx.sampleRate * 0.45)[0]);
+        prev = pair.out;
+      }
+      input.connect(wd.dry); wd.dry.connect(out);
+      prev.connect(wd.wet); wd.wet.connect(out);
+      const set = (ap, v, when, ramp) => { if (ramp) ap.linearRampToValueAtTime(v, when); else ap.setValueAtTime(v, when); };
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          base: function (v, when, ramp) {
+            base = v;
+            for (let i = 0; i < 8; i++) {
+              const hz = Math.min(base * (i + 1), ctx.sampleRate * 0.45);
+              set(filters[i].frequency, hz, when, ramp);
+              set(filters[i].Q, Math.max(0.1, hz / width), when, ramp);
+              switches[i](count, when, ramp);
+            }
+          },
+          harmonics: function (v, when, ramp) { count = Math.round(v); for (let i = 0; i < 8; i++) switches[i](count, when, ramp); },
+          width: function (v, when, ramp) {
+            width = v;
+            for (let i = 0; i < 8; i++) set(filters[i].Q, Math.max(0.1, Math.min(base * (i + 1), ctx.sampleRate * 0.45) / width), when, ramp);
+          },
+          amount: wd.set,
+        } });
+    },
+  },
     filterDef('lowpass', 'Low-Pass', 'lowpass', 40, 20000, 8000, 0.1, 20, 1),
     filterDef('highpass', 'High-Pass', 'highpass', 20, 12000, 200, 0.1, 20, 1),
     filterDef('bandpass', 'Band-Pass', 'bandpass', 60, 12000, 1200, 0.1, 20, 2),
@@ -1565,6 +1611,7 @@ window.FM = window.FM || {};
     highpass: ['thin', 'rumble', 'cut bass', 'wind noise'],
     bandpass: ['focus', 'narrow'],
     notch: ['hum', 'buzz', 'remove hum'],
+    humremove: ['mains hum', 'electrical hum', '50 hz', '60 hz', 'buzz', 'power line'],
     telephone: ['phone', 'phone call', 'radio', 'walkie', 'walkie talkie', 'megaphone', 'call'],
     reverb: ['room', 'hall', 'church', 'cave', 'cathedral', 'echo'],
     delay: ['repeat', 'echo'],
