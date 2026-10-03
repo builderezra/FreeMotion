@@ -17454,7 +17454,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * was cut out in the shape of the placeholder somebody typed months ago, at a completely
        * different width. Spacing and line height come from the same pass for the same reason: they
        * change where the glyphs land, and a footprint that disagrees is a visible mis-cut. */
-      const te = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, FM.scene);
+      const te = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, scene);
       textSrc = te.text;
       if (textSpacingOK().letter) a.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) a.wordSpacing = (te.wordSpacing || 0) + 'px';

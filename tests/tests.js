@@ -119015,4 +119015,31 @@
       throw new Error('Shake smear followed the active project instead of the rendered scene: ' + shortFrame + '/' + longFrame);
   });
 
+  test('690 Backdrop Clone uses the rendered scene FPS for a Timecode text footprint', { item: 'TBD' }, function () {
+    const active = FM.scene.project, T = 0.31;
+    const layer = FM.makeLayer('text', { name: 'Timecode backdrop', text: 'placeholder',
+      x: active.width / 2, y: active.height / 2, fontSize: 60 });
+    layer.start = 0; layer.duration = 2; layer.wrapWidth = 0;
+    layer.effects = [{ type: 'timecode', enabled: true, params: {} }, { type: 'copybg', enabled: true, params: {} }];
+    const plate = FM.makeLayer('shape', { name: 'Backdrop', shape: 'rect',
+      x: active.width / 2, y: active.height / 2, shapeW: active.width, shapeH: active.height });
+    plate.start = 0; plate.duration = 2;
+    let scene, shown;
+    for (const fps of [24, 60, 120]) {
+      scene = { project: Object.assign({}, active, { fps: fps }), layers: [layer, plate] };
+      shown = FM.applyTextEffects(layer, layer.text, 0, T, scene).text;
+      if (shown !== FM.applyTextEffects(layer, layer.text, 0, T, FM.scene).text) break;
+    }
+    if (shown === FM.applyTextEffects(layer, layer.text, 0, T, FM.scene).text)
+      throw new Error('Timecode strings did not differ between scene frame rates');
+    const seen = [], old = FM.textLines;
+    try {
+      FM.textLines = function (ctx, l, src) { seen.push(String(src)); return old.apply(this, arguments); };
+      const cv = document.createElement('canvas'); cv.width = active.width; cv.height = active.height;
+      FM.renderScene(cv.getContext('2d', { willReadFrequently: true }), scene, T);
+    } finally { FM.textLines = old; }
+    if (!seen.includes(shown))
+      throw new Error('Backdrop Clone measured text at the active project FPS instead of the rendered scene FPS: expected ' + shown + ', saw ' + JSON.stringify(seen));
+  });
+
 })();
