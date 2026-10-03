@@ -120252,4 +120252,41 @@
     if (same(run(stopped, 2), run(0, 0))) throw new Error('Speed zero returned to the first-frame grain');
   });
 
+  test('690 Glitch Re-roll ramp accumulates tears and holds the last pattern at zero', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.glitch;
+    if (!K || !FM.integrateProp) throw new Error('the Glitch kernel or rate integrator is missing');
+    const W = 64, H = 48;
+    const source = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = (x * 7 + y * 3) & 255;
+        d[i + 1] = (x * 2 + y * 11) & 255;
+        d[i + 2] = (x * 13 + y * 5) & 255;
+        d[i + 3] = 255;
+      }
+      return d;
+    };
+    const render = (speed, t, dir) => {
+      const d = source();
+      const p = Object.assign({}, FM.fxRegistry.makeInstance('glitch').params,
+        { amount: 1, bands: 8, speed, split: 0, jitter: 40, blocks: 0.25, dir });
+      K(d, W, H, p, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const kf = pairs => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    for (const dir of [0, 1]) {
+      if (same(render(4, 2, dir), render(8, 2, dir))) throw new Error('control: re-roll frames are indistinguishable');
+      // 0→8 Hz over 2 s travels eight rolls, the same phase as a steady 4 Hz.
+      if (!same(render(kf([[0, 0], [2, 8]]), 2, dir), render(4, 2, dir)))
+        throw new Error('Re-roll ramp uses its last rate for the entire clip in direction ' + dir);
+      const stopped = kf([[0, 8], [1, 8], [2, 0]]);
+      if (!same(render(stopped, 2, dir), render(stopped, 3, dir)))
+        throw new Error('Re-roll changed after Speed reached zero in direction ' + dir);
+      if (same(render(stopped, 2, dir), render(stopped, 0, dir)))
+        throw new Error('Re-roll reset to the first tear in direction ' + dir);
+    }
+  });
+
 })();

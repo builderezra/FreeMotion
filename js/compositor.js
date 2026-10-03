@@ -7243,13 +7243,19 @@ window.FM = window.FM || {};
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = (y * W + x) * 4, b = (x * H + y) * 4; d[a] = T[b]; d[a + 1] = T[b + 1]; d[a + 2] = T[b + 2]; d[a + 3] = T[b + 3]; }
         return;
       }
-      // BANDS is the slice count, SPEED the re-roll rate in Hz — 0 freezes the pattern on frame 0, which
-      // is how you get a single held tear instead of a permanent 10 Hz stutter. SPLIT scales the RGB
+      // BANDS is the slice count, SPEED the re-roll rate in Hz — a constant 0 freezes the first pattern;
+      // a keyframed 0 holds the pattern reached so far. SPLIT scales the RGB
       // fringe on its own; it used to be welded to Amount, so a big displacement forced a big fringe.
       const bands = p.bands == null ? 14 : Math.max(2, Math.round(FM.evalProp(p.bands, t)));
       const speed = p.speed == null ? 10 : FM.evalProp(p.speed, t);
       const split = p.split == null ? 1 : FM.evalProp(p.split, t);
-      const s = d.slice(), bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(t * speed);
+      // A keyframed Re-roll is a rate: slowing it to zero holds the current tear instead of
+      // multiplying zero by the whole elapsed time and jumping back to the first pattern.
+      // Keep the numeric path unchanged for projects saved without speed keyframes.
+      const roll = FM.isAnimated(p.speed)
+        ? FM.integrateProp(p.speed, 0, t, (u) => { const rate = FM.evalProp(p.speed, u); return Number.isFinite(rate) && rate > 0 ? rate : 0; })
+        : t * speed;
+      const s = d.slice(), bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(roll);
       /* #482 polish 2.7. PATTERN salts every hash after the band/frame mix, so 0 is the old tear. UNEVEN SLICES moves each
          inner slice edge by up to half a slice (hashed per re-roll), and the uneven slices are measured as a share of the
          whole height, so the phone's smaller preview plate tears in the same places as the export. EDGES says what a
