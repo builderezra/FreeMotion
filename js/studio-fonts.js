@@ -10,6 +10,7 @@
     { id: 'fm-aster-round', name: 'FM Aster Round', family: 'FM Aster Round', css: '"FM Aster Round", sans-serif', regular: 'original/fm-aster-round-regular.woff2', bold: 'original/fm-aster-round-bold.woff2', group: 'original' },
     { id: 'fm-circuit-sans', name: 'FM Circuit Sans', family: 'FM Circuit Sans', css: '"FM Circuit Sans", sans-serif', regular: 'original/fm-circuit-sans-regular.woff2', bold: 'original/fm-circuit-sans-bold.woff2', group: 'original' },
     { id: 'fm-meridian-serif', name: 'FM Meridian Serif', family: 'FM Meridian Serif', css: '"FM Meridian Serif", serif', regular: 'original/fm-meridian-serif-regular.woff2', bold: 'original/fm-meridian-serif-bold.woff2', group: 'original' },
+    { id: 'fm-lilt-marker', name: 'FM Lilt Marker', family: 'FM Lilt Marker', css: '"FM Lilt Marker", cursive', regular: 'original/fm-lilt-marker-regular.woff2', bold: 'original/fm-lilt-marker-bold.woff2', group: 'original' },
     { id: 'inter', name: 'Inter', family: 'Inter', css: 'Inter, sans-serif', regular: 'open/inter/Inter-Regular.woff2', bold: 'open/inter/Inter-Bold.woff2', group: 'open' },
     { id: 'outfit', name: 'Outfit', family: 'Outfit', css: '"Outfit", sans-serif', regular: 'open/outfit/Outfit-Regular.woff2', bold: 'open/outfit/Outfit-Bold.woff2', group: 'open' },
     { id: 'space-grotesk', name: 'Space Grotesk', family: 'Space Grotesk', css: '"Space Grotesk", sans-serif', regular: 'open/space-grotesk/SpaceGrotesk-Regular.woff2', bold: 'open/space-grotesk/SpaceGrotesk-Bold.woff2', group: 'open' },
