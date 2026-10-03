@@ -3426,6 +3426,9 @@ window.FM = window.FM || {};
     // this line, which several callers depend on.
     close(opts) {
       if (!root) return;
+      // Keyboard activation of a card has no outside pointerdown to dismiss its ⋯ menu.
+      // The menu lives under body, so hiding Home alone leaves it over the editor.
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
       const push = !!(opts && opts.push) && !root.classList.contains('hidden');
       document.getElementById('hm-dialog').classList.add('hidden');
       document.body.classList.remove('home-open');

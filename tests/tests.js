@@ -119805,4 +119805,27 @@
     }
   });
 
+  test('690 Home project menu closes when a card opens the editor by keyboard', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    try {
+      const first = await FM.projects.create({ name: 'Menu keyboard A', width: 320, height: 240 }); made.push(first);
+      const second = await FM.projects.create({ name: 'Menu keyboard B', width: 320, height: 240 }); made.push(second);
+      FM.home.open();
+      const cardA = document.querySelector('#home-screen .hm-card[data-pid="' + first + '"]');
+      const cardB = document.querySelector('#home-screen .hm-card[data-pid="' + second + '"]');
+      if (!cardA || !cardB) throw new Error('The two project cards did not render');
+      cardA.querySelector('.hm-card-more').click();
+      if (!FM.contextMenu.isOpen()) throw new Error('The project actions menu did not open');
+      cardB.focus();
+      cardB.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      cardB.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+      for (let i = 0; i < 80 && FM.home.isOpen(); i++) await sleep(20);
+      if (FM.home.isOpen()) throw new Error('Enter did not open the selected project');
+      if (FM.contextMenu.isOpen()) throw new Error('The previous project’s actions menu stayed over the editor');
+    } finally {
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
