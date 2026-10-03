@@ -117,6 +117,7 @@ window.FM = window.FM || {};
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
   const WAH_RECTIFY = curveFrom(x => Math.abs(x), 2049);
   const WAH_ENVELOPE_LIMIT = curveFrom(x => clamp(x, 0, 1), 2049);
+  const GATE_STEP = curveFrom(x => x >= 0.5 ? 1 : 0, 16385);
 
   /* ---- reverb impulse ---- */
   // Deterministic noise: a Math.random IR would differ between the preview build and the export build,
@@ -1098,6 +1099,61 @@ window.FM = window.FM || {};
         xf: { output: dbToLin }, custom: { mix: wd.set } });
     },
   }, {
+    type: 'noisegate', label: 'Noise Gate', category: 'dyn',
+    hint: 'Mutes room noise between sounds. A higher Threshold closes sooner; Hysteresis stops it chattering near that level.',
+    params: [
+      P('threshold', 'Threshold', -60, 0, 0.5, -40, 'dB', true),
+      P('floor', 'Floor', 0, 100, 1, 0, '%', true),
+      P('release', 'Release', 0.02, 1, 0.01, 0.15, 's', true),
+      P('lookahead', 'Lookahead', 0, 20, 1, 5, 'ms', true),
+      P('hysteresis', 'Hysteresis', 0, 12, 0.5, 6, 'dB', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      const audioLag = s.delay(0.05), gate = s.gain(0);
+      const detector = s.gain(1);
+      detector.channelCount = 1; detector.channelCountMode = 'explicit'; detector.channelInterpretation = 'speakers';
+      const rect = s.shaper(WAH_RECTIFY), envelope = s.biquad('lowpass', 120, BUTTERWORTH_DB);
+      const threshold = s.gain(0.5 / dbToLin(-40)), sum = s.gain(1);
+      const compare = s.shaper(GATE_STEP);
+      const stateLag = s.delay(0.01), hysteresis = s.gain(0);
+      stateLag.delayTime.value = 128 / ctx.sampleRate;
+      input.connect(detector); detector.connect(rect); rect.connect(envelope);
+      envelope.connect(threshold); threshold.connect(sum); sum.connect(compare);
+      // A one-render-quantum feedback path is a Schmitt trigger: open at Threshold,
+      // stay open until the envelope falls by Hysteresis. Delay breaks the graph cycle.
+      compare.connect(stateLag); stateLag.connect(hysteresis); hysteresis.connect(sum);
+      const fast = s.biquad('lowpass', 200, BUTTERWORTH_DB);
+      const slow = s.biquad('lowpass', 1 / (2 * Math.PI * 0.15), BUTTERWORTH_DB);
+      compare.connect(fast); compare.connect(slow);
+      // max(fast, slow) gives a fast opening and a slow release without a timer or worklet.
+      const halfFast = s.gain(0.5), halfSlow = s.gain(0.5);
+      const negSlow = s.gain(-1), difference = s.gain(1), absolute = s.shaper(WAH_RECTIFY);
+      const halfAbs = s.gain(0.5), max = s.gain(1), cap = s.shaper(WAH_ENVELOPE_LIMIT);
+      fast.connect(halfFast); halfFast.connect(max);
+      slow.connect(halfSlow); halfSlow.connect(max);
+      fast.connect(difference); slow.connect(negSlow); negSlow.connect(difference);
+      difference.connect(absolute); absolute.connect(halfAbs); halfAbs.connect(max);
+      max.connect(cap);
+      const control = s.gain(1); cap.connect(control); control.connect(gate.gain);
+      input.connect(audioLag); audioLag.connect(gate); gate.connect(out);
+      const set = (ap, v, when, ramp) => {
+        if (ramp) ap.linearRampToValueAtTime(v, when); else ap.setValueAtTime(v, when);
+      };
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { lookahead: audioLag.delayTime }, xf: { lookahead: v => v / 1000 },
+        custom: {
+          threshold: (v, when, ramp) => set(threshold.gain, 0.5 / dbToLin(v), when, ramp),
+          floor: (v, when, ramp) => {
+            const f = clamp(v / 100, 0, 1);
+            set(gate.gain, f, when, ramp); set(control.gain, 1 - f, when, ramp);
+          },
+          release: (v, when, ramp) => set(slow.frequency, 1 / (2 * Math.PI * v), when, ramp),
+          hysteresis: (v, when, ramp) => set(hysteresis.gain, 0.5 * (1 - dbToLin(-v)), when, ramp),
+        },
+      });
+    },
+  }, {
     type: 'deesser', label: 'De-esser', category: 'dyn',
     hint: 'Compresses the high-frequency sibilance band only. Listen isolates that band while you tune it.',
     params: [
@@ -1825,6 +1881,7 @@ window.FM = window.FM || {};
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
     gain: ['louder', 'quieter', 'volume', 'boost'],
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
+    noisegate: ['noise gate', 'room noise', 'hiss', 'background noise', 'silence'],
     deesser: ['sibilance', 'ess', 'harsh s', 'sharp voice', 'reduce s'],
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
     tremolo: ['wobble', 'pulse', 'throb'],

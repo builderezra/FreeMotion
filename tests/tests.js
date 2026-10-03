@@ -118883,4 +118883,32 @@
     } finally { FM._exporting = wasExporting; }
   });
 
+  test('690 Noise Gate closes on quiet room tone and opens for speech-level audio', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('noisegate');
+    if (!def || def.category !== 'dyn' || !['floor', 'release', 'lookahead', 'hysteresis'].every(k => def.params.some(p => p.key === k)))
+      throw new Error('Noise Gate controls are missing');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR * 0.6;
+    const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR), data = buf.getChannelData(0);
+    for (let i = 0; i < N; i++) {
+      const a = i < SR * 0.2 || i >= SR * 0.4 ? 0.002 : 0.3;
+      data[i] = a * Math.sin(2 * Math.PI * 440 * i / SR);
+    }
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const fx = FM.audioFxRegistry.makeInstance('noisegate');
+    const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+    if (!chain) throw new Error('Noise Gate graph did not build');
+    src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.6); src.start(0);
+    const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+    const rms = (start, end) => {
+      let power = 0, n = 0;
+      for (let i = Math.round(start * SR); i < Math.round(end * SR); i++) { power += out[i] * out[i]; n++; }
+      return Math.sqrt(power / n);
+    };
+    const closed = { quiet: rms(0.1, 0.18), loud: rms(0.26, 0.35) };
+    if (!(closed.quiet < 0.0001 && closed.loud > 0.1))
+      throw new Error('Gate failed to separate quiet and loud audio: ' + JSON.stringify(closed));
+  });
+
 })();
