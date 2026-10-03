@@ -118150,5 +118150,25 @@
     }
   });
 
+  test('690 Colour Wheels grades tonal ranges on layers and adjustment layers', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('colourwheels');
+    if (!reg || reg.category !== 'color' || !FM.fxRegistry.gates().adjOk.includes('colourwheels'))
+      throw new Error('Colour Wheels is missing from Colouring or adjustment layers');
+    const effect = FM.fxRegistry.makeInstance('colourwheels');
+    const original = new Uint8ClampedArray([40, 40, 40, 231, 128, 128, 128, 232, 220, 220, 220, 233]);
+    const neutral = original.slice();
+    FM._pixelFx.colourwheels(neutral, 3, 1, effect.params, 0);
+    if (neutral.some((v, i) => v !== original[i])) throw new Error('Neutral Colour Wheels changed pixels');
+    Object.assign(effect.params, { shadowHue: 0, shadowAmount: 80, midBrightness: 20, highBrightness: -20 });
+    const layer = original.slice(), adjustment = original.slice();
+    FM._pixelFx.colourwheels(layer, 3, 1, effect.params, 0);
+    FM._applyPixelFx(adjustment, effect, 0, 3, 1);
+    if (layer.some((v, i) => v !== adjustment[i])) throw new Error('Layer and adjustment grade differ');
+    if (layer[0] <= layer[1] || layer[4] <= original[4] || layer[8] >= original[8])
+      throw new Error('Tonal controls did not affect their intended range');
+    if (layer[3] !== 231 || layer[7] !== 232 || layer[11] !== 233)
+      throw new Error('Colour Wheels changed alpha');
+  });
+
 
 })();

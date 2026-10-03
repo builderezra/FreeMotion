@@ -111,6 +111,7 @@ window.FM = window.FM || {};
     // the NEW row (FX_FEATURED reads it backwards), so the newest effect never appeared there (queue 913).
     weather: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
+    colourwheels: 'color',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -170,7 +171,7 @@ window.FM = window.FM || {};
      not crop (compositor FM.adjNeedsFrame, app.js previewCrop). */
   const ADJ_OK = {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
-    posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1,
+    posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1, colourwheels: 1,
     exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1,

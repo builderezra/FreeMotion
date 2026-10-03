@@ -1811,6 +1811,42 @@ window.FM = window.FM || {};
          he asked for. Deleting 190-odd strings would have thrown away the thing he asked to keep. */
       const colourRows = {};   // colour rows by key, so a colour that follows another can listen to it (#482 polish 1.2)
       const rangeRows = {};    // …and slider rows, for a slider that follows another (#482 polish 2.1)
+      if (fx.type === 'colourwheels') {
+        // The three PC pucks set hue by angle and amount by distance. The ordinary
+        // sliders below remain the keyboard, screen-reader and phone controls.
+        const wheels = el('div', 'fx-colour-wheels');
+        [['Shadows', 'shadow'], ['Midtones', 'mid'], ['Highlights', 'high']].forEach(([name, key]) => {
+          const wrap = el('div', 'fx-colour-wheel-wrap');
+          const puck = el('div', 'fx-colour-wheel');
+          puck.setAttribute('aria-hidden', 'true');
+          const dot = el('span', 'fx-colour-wheel-dot'); puck.appendChild(dot);
+          const hueKey = key + 'Hue', amountKey = key + 'Amount';
+          const defaults = { shadow: 220, mid: 30, high: 45 };
+          const mark = (hue, amount) => {
+            const angle = hue * Math.PI / 180, radius = Math.max(0, Math.min(100, amount)) * 0.42;
+            dot.style.left = (50 + Math.sin(angle) * radius) + '%';
+            dot.style.top = (50 - Math.cos(angle) * radius) + '%';
+          };
+          mark(FM.evalProp(fx.params[hueKey] == null ? defaults[key] : fx.params[hueKey], FM.time),
+            FM.evalProp(fx.params[amountKey] == null ? 0 : fx.params[amountKey], FM.time));
+          let dragging = false, changed = false;
+          const move = e => {
+            const r = puck.getBoundingClientRect();
+            const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+            const hue = Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
+            const amount = Math.round(Math.min(100, Math.hypot(dx, dy) / (Math.min(r.width, r.height) * 0.42) * 100));
+            FM.setProp(fx.params, hueKey, hue, FM.time);
+            FM.setProp(fx.params, amountKey, amount, FM.time);
+            mark(hue, amount); changed = true; FM.requestRender();
+          };
+          puck.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); dragging = true; puck.setPointerCapture(e.pointerId); move(e); });
+          puck.addEventListener('pointermove', e => { if (dragging) { e.stopPropagation(); move(e); } });
+          const finish = e => { if (!dragging) return; e.stopPropagation(); dragging = false; if (changed) afterFx(); };
+          puck.addEventListener('pointerup', finish); puck.addEventListener('pointercancel', finish);
+          wrap.appendChild(puck); wrap.appendChild(el('span', 'fx-colour-wheel-name', name)); wheels.appendChild(wrap);
+        });
+        body.appendChild(wheels);
+      }
       reg.params.forEach(p => {
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);
