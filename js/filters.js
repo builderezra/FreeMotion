@@ -226,7 +226,7 @@ window.FM = window.FM || {};
     { id: 'overdrive', name: 'Overdrive', section: 'tuff',
       desc: 'Over-clarified and blooming — the look of an edit that has been pushed on purpose.',
       effects: [e('brightness', { amount: 0.92 }), e('contrast', { amount: 1.26 }), e('saturate', { amount: 1.2 }),
-                e('unsharpmask', { amount: 1.8, radius: 2 }),
+                e('unsharpmask', { amount: 1.8, radius: 2, coloursafe: 100 }),
                 e('lightglow', { amount: 0.6, radius: 12, threshold: 60 }),
                 e('vignette', { amount: 0.35, size: 38 }),
                 e('flashdark', { amount: 0.3, speed: 14, soft: 0.15, floor: 0.35 })] },

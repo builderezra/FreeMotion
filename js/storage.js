@@ -966,7 +966,15 @@ window.FM = window.FM || {};
     for (const layer of scene.layers) {
       if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
       const m = await mediaOf(layer.id);
-      if (!m || !m.file) continue;                     // nothing loaded for this layer — not an omission
+      if (!m || !m.file) {
+        // A video/image layer still exists in the file, but its footage does not. The full backup
+        // names this case too; a single project or template file must not claim a clean save.
+        if (layer.type === 'video' || layer.type === 'image') {
+          const name = layer.name || (layer.type === 'video' ? 'a clip' : 'a photo');
+          omitted.push({ layer: name, file: name, mb: 0, missing: true });
+        }
+        continue;
+      }
       if (m.file.size > EMBED_LIMIT) {
         omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
         continue;
@@ -975,8 +983,8 @@ window.FM = window.FM || {};
       if (dataURL) media[layer.id] = { kind: m.kind, name: m.file.name, dataURL: dataURL };
       else omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
     }
-    const fonts = await embedFonts(scene.layers);
-    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts, omitted: omitted };
+    const fontPack = await embedFonts(scene.layers);
+    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fontPack.fonts, omitted: omitted, omittedFonts: fontPack.omitted };
   }
 
   /* Embed the custom fonts the text layers actually use, so the file still renders correctly when it is
@@ -985,16 +993,32 @@ window.FM = window.FM || {};
      these eight lines would have been the easy move and the wrong one: the two would drift, and the way
      they would drift is that the newer path silently stops embedding fonts, which nobody notices until
      someone else opens the file and the type is wrong. */
-  async function embedFonts(layers) {
-    const fonts = {};
-    if (!FM.fonts) return fonts;
+  async function embedFonts(layers, limit = FONT_EMBED_LIMIT) {
+    const fonts = {}, omitted = [];
+    if (!FM.fonts) return { fonts, omitted };
     const used = new Set((layers || []).filter(l => l.type === 'text' && l.fontFamily).map(l => l.fontFamily));
     for (const f of FM.fonts.list()) {
+      if (!f || typeof f.css !== 'string') continue;
       if (!used.has(f.css)) continue;
+      used.delete(f.css);
       const file = await FM.fonts.getFile(f.id);
-      if (file && file.size <= FONT_EMBED_LIMIT) { const durl = await fileToDataURL(file); if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl }; }
+      if (!file) { omitted.push({ name: f.name, css: f.css, missing: true }); continue; }
+      if (file.size > limit) { omitted.push({ name: f.name, css: f.css, mb: Math.round(file.size / 1048576), tooBig: true }); continue; }
+      let durl = null;
+      try { durl = await fileToDataURL(file); } catch (e) {}
+      if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl };
+      else omitted.push({ name: f.name, css: f.css, unreadable: true });
     }
-    return fonts;
+    // A saved layer can still name a custom font after its index entry was lost.
+    for (const css of used) if (/^FMF[a-z0-9]+(?:,|$)/i.test(css)) omitted.push({ name: css.split(',')[0], css, missing: true });
+    return { fonts, omitted };
+  }
+  function omittedFontSummary(fonts) {
+    const names = fonts.slice(0, 2).map(f =>
+      ((typeof f.name === 'string' ? f.name : typeof f.css === 'string' ? f.css : 'Custom font').slice(0, 80)) +
+      (f.tooBig ? ' (too big)' : f.missing ? ' (not stored)' : ' (could not be read)')).join(', ');
+    return fonts.length + (fonts.length === 1 ? ' custom font' : ' custom fonts') + ' — ' + names +
+      (fonts.length > 2 ? ' and more' : '');
   }
 
   // Clamp untrusted project dimensions to sane bounds. An imported/AI/hand-crafted .fmotion.json with
@@ -1003,17 +1027,25 @@ window.FM = window.FM || {};
   // ai-ops already clamps AI-set dims to [16,7680]; the human-import path must too.
   function clampProjectDims(p) {
     if (!p) return;
-    const ev = n => Math.max(16, Math.min(7680, Math.round((+n || 0) / 2) * 2));
-    if (p.width != null) p.width = ev(p.width) || 1080;
-    if (p.height != null) p.height = ev(p.height) || 1920;
+    // A malformed file can carry objects or non-numeric strings here. Coercing them through
+    // `+n || 0` made a recoverable project 16px wide, and an object with unusable conversion
+    // methods could throw before the rest of the document was repaired.
+    const numeric = n => (typeof n === 'number' || (typeof n === 'string' && n.trim())) ? Number(n) : NaN;
+    const ev = (n, fallback) => {
+      const v = numeric(n);
+      return isFinite(v) && v > 0 ? Math.max(16, Math.min(7680, Math.round(v / 2) * 2)) : fallback;
+    };
+    if (p.width != null) p.width = ev(p.width, 1080);
+    if (p.height != null) p.height = ev(p.height, 1920);
     if (!(p.width >= 16)) p.width = 1080;
     if (!(p.height >= 16)) p.height = 1920;
     // fps: an integer 1–120, the same range the editor's own Canvas settings and the New project
     // dialog offer. (This used to be a 24/25/30/50/60 WHITELIST, which silently reset every other
     // value to 30 — including 120, every Custom fps, and any 48fps project round-tripped through
     // an export/import. The bound is what protects us; the whitelist was just lossy.)
-    p.fps = Math.max(1, Math.min(120, Math.round(+p.fps) || 30));
-    p.duration = Math.max(0, Math.min(3600, +p.duration || 0));
+    const fps = numeric(p.fps), duration = numeric(p.duration);
+    p.fps = Math.max(1, Math.min(120, Math.round(fps) || 30));
+    p.duration = Math.max(0, Math.min(3600, duration || 0));
     sanitizeProjectFields(p);
   }
   /* ⚠️ THE REST OF THE PROJECT'S KEYS HAVE SHAPES THE APP ASSUMES (queue 921 S8 review). Only the four numbers
@@ -1649,6 +1681,25 @@ window.FM = window.FM || {};
       sanitizeKeyframes(l, 0);
     });
   }
+  function hasInvalidLayerEntries(layers) {
+    return layers.some(l => !l || typeof l !== 'object' || Array.isArray(l));
+  }
+  function hasUnsafeSceneNesting(project, layers) {
+    const pending = [[project, 0, false], [layers, 0, false]], active = new WeakSet();
+    while (pending.length) {
+      const [node, depth, leaving] = pending.pop();
+      if (!node || typeof node !== 'object') continue;
+      if (leaving) { active.delete(node); continue; }
+      if (depth > 64 || active.has(node)) return true;
+      active.add(node);
+      pending.push([node, depth, true]);
+      for (const key of Object.keys(node)) {
+        const child = node[key];
+        if (child && typeof child === 'object') pending.push([child, depth + 1, false]);
+      }
+    }
+    return false;
+  }
   // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a
   // re-implementation of it in the test (which would only ever agree with itself).
   FM.storage._sanitizeEffects = sanitizeEffects;
@@ -1691,9 +1742,10 @@ window.FM = window.FM || {};
       return ks.filter(function (k) { return typeof k === 'string' && k.indexOf(p) === 0; }).sort();
     } catch (e) { return []; }
   };
-  FM.storage.applyScene = async function (obj) {
-    if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
+  FM.storage.applyScene = async function (obj, importWarnings) {
+    if (!obj || !obj.project || typeof obj.project !== 'object' || Array.isArray(obj.project) || !Array.isArray(obj.layers) || hasInvalidLayerEntries(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
+    if (hasUnsafeSceneNesting(obj.project, obj.layers)) return false;
     clampProjectDims(obj.project);
     sanitizeImportedLayers(obj.layers);
     // Re-id EVERY imported layer. An exported file carries the ids of the project it came from —
@@ -1710,7 +1762,17 @@ window.FM = window.FM || {};
     FM.scene.selectedId = (obj.selectedId && re.map[obj.selectedId]) || (re.layers[0] ? re.layers[0].id : null);
     FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : []).map(id => re.map[id]).filter(Boolean);
     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
-    if (FM.fonts && obj.fonts) await FM.fonts.applyEmbedded(obj.fonts);   // register any fonts carried in the file
+    if (FM.fonts && obj.fonts) {
+      let missingFonts = 0;
+      try { missingFonts = await FM.fonts.applyEmbedded(obj.fonts); }
+      catch (e) { missingFonts = 1; }
+      if (missingFonts) {
+        const warning = missingFonts + (missingFonts === 1 ? ' embedded font could' : ' embedded fonts could') + ' not be restored — text may use a fallback font.';
+        if (Array.isArray(importWarnings)) importWarnings.push(warning);
+        else if (FM.toast) FM.toast(warning, 7000);
+      }
+    }
+    const hydratedMediaIds = new Set();
     if (obj.media) {
       for (const id of Object.keys(obj.media)) {
         const md = obj.media[id], nid = re.map[id];
@@ -1719,30 +1781,44 @@ window.FM = window.FM || {};
           const file = await dataURLToFile(md.dataURL, md.name);
           if (!file) continue;   // non-data: URL was rejected → layer loads media-less (relink via Replace media…)
           const rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file);
-          if (rec) { FM.media.set(nid, rec); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
+          if (rec) { FM.media.set(nid, rec); hydratedMediaIds.add(id); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
         } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }
       }
     }
-    /* ⚠️ AND SAY WHICH LAYERS CAME BACK EMPTY (queue 888). The loop above only ever walks obj.media,
-     * so a video whose file was too big to embed is restored as a layer that is present, correctly
+    /* ⚠️ AND SAY WHICH LAYERS CAME BACK EMPTY (queue 888). An absent or corrupt embed
+     * restores a layer that is present, correctly
      * timed, correctly keyframed and completely BLANK — and nothing anywhere said so. That silence is
      * the dangerous half: the project LOOKS like it opened fine, which is exactly what someone checks
-     * before deleting the original. A video or image layer with no media entry is unambiguous, so it
+     * before deleting the original. A video or image layer with no restored media is unambiguous, so it
      * can be named. Read from the file's own `omitted` list when it has one (written since v16.33) and
      * worked out from the layers otherwise, so files saved BEFORE this fix still get the warning. */
+    let missingMediaWarning = '';
     try {
       const want = (obj.layers || []).filter(l => l && (l.type === 'video' || l.type === 'image'));
-      const blank = want.filter(l => !(obj.media && obj.media[l.id])).map(l => l.name || l.type);
+      const blank = want.filter(l => !hydratedMediaIds.has(l.id)).map(l => l.name || l.type);
       if (blank.length) {
         const om = obj.omitted || [];
-        const named = om.slice(0, 2).map(o => o.file).join(', ');
-        const omMany = om.length > 1;
-        if (FM.toast) FM.toast(blank.length + (blank.length === 1 ? ' layer has' : ' layers have') + ' no footage in this file' +
-          (named ? ' (' + named + (om.length > 2 ? ' and more' : '') + (omMany ? ' were' : ' was') + ' too big to embed)' : '') +
+        const absent = om.filter(o => o.missing);
+        const oversized = om.filter(o => !o.missing);
+        const details = [];
+        if (absent.length) details.push(absent.slice(0, 2).map(o => o.layer || o.file).join(', ') +
+          (absent.length > 2 ? ' and more' : '') + ' not stored when saved');
+        if (oversized.length) details.push(oversized.slice(0, 2).map(o => o.file).join(', ') +
+          (oversized.length > 2 ? ' and more' : '') + ' too big to embed');
+        missingMediaWarning = blank.length + (blank.length === 1 ? ' layer has' : ' layers have') + ' no footage in this file' +
+          (details.length ? ' (' + details.join('; ') + ')' : '') +
           ' — ' + blank.slice(0, 3).join(', ') + (blank.length > 3 ? ' and more' : '') +
-          '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.', 12000);
+          '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.';
       }
     } catch (e) {}                                    // a warning must never break an import
+    const missingFonts = Array.isArray(obj.omittedFonts) ? obj.omittedFonts.slice(0, 100).filter(f => f && typeof f === 'object') : [];
+    const missingContentWarning = missingMediaWarning +
+      (missingMediaWarning && missingFonts.length ? ' ' : '') +
+      (missingFonts.length ? 'This file is also missing ' + omittedFontSummary(missingFonts) + '. Text may use a fallback font.' : '');
+    if (missingContentWarning) {
+      if (Array.isArray(importWarnings)) importWarnings.push(missingContentWarning);
+      else if (FM.toast) FM.toast(missingContentWarning, 12000);
+    }
 
     if (FM.resizeCanvas) FM.resizeCanvas();
     if (FM.refreshAll) FM.refreshAll();
@@ -1803,12 +1879,25 @@ window.FM = window.FM || {};
        of nothing. Naming the clips is the whole fix: a file that says what it is missing can be
        trusted, and one that does not cannot. */
     const miss = obj.omitted || [];
-    if (!miss.length) { if (FM.toast) FM.toast('Project file saved'); return; }
+    const fontMiss = Array.isArray(obj.omittedFonts) ? obj.omittedFonts : [];
+    const fontNote = fontMiss.length ? 'WITHOUT ' + omittedFontSummary(fontMiss) + '. Text may use a fallback on another device.' : '';
+    if (!miss.length) { if (FM.toast) FM.toast(fontMiss.length ? 'Project file saved ' + fontNote : 'Project file saved', fontMiss.length ? 12000 : undefined); return; }
+    const absent = miss.filter(m => m.missing);
+    if (absent.length) {
+      const names = absent.concat(miss.filter(m => !m.missing)).slice(0, 2).map(m =>
+        m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
+      const large = miss.length - absent.length;
+      if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (miss.length === 1 ? ' media file — ' : ' media files — ') +
+        names + (miss.length > 2 ? ' and more' : '') + '. ' + absent.length +
+        (absent.length === 1 ? ' source file is' : ' source files are') + ' no longer stored on this device. Re-import or replace missing media before relying on this file.' +
+        (large ? ' Use Settings → Back up every project to keep oversized clips.' : '') + (fontNote ? ' Also ' + fontNote : ''), 12000);
+      return;
+    }
     const names = miss.slice(0, 2).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
     const many = miss.length > 1;
     if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (many ? ' clips — ' : ' clip — ') +
       names + (miss.length > 2 ? ' and more' : '') + (many ? ' are' : ' is') +
-      ' too big to fit in a project file. Use Settings → Back up every project to keep the footage.', 12000);
+      ' too big to fit in a project file. Use Settings → Back up every project to keep the footage.' + (fontNote ? ' Also ' + fontNote : ''), 12000);
   }
 
   /* ═══ BACK UP EVERY PROJECT TO ONE FILE (queue 869) ═══════════════════════════════════════════
@@ -1836,7 +1925,7 @@ window.FM = window.FM || {};
 
   FM.storage.buildBackup = async function (onProgress) {
     const idx = (FM.projects && FM.projects.list()) || [];
-    const projects = [], skippedProjects = [], skippedMedia = [];
+    const projects = [], skippedProjects = [], skippedMedia = [], skippedFonts = [];
     let drafts = 0;
     for (let i = 0; i < idx.length; i++) {
       const p = idx[i];
@@ -1873,7 +1962,10 @@ window.FM = window.FM || {};
       /* The INDEX's name wins over the packed project's, for the same reason templates.exportFile
          gives: the doc's own name can be stale ("Untitled 3") while the card he recognises is right. */
       const project = Object.assign({}, pack.project, { name: p.name || pack.project.name || 'Untitled' });
-      const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
+      // Whole-library backups carry fonts of any size; the small sharing-file limit does not apply.
+      const fontPack = await embedFonts(pack.layers, Infinity);
+      fontPack.omitted.forEach(f => skippedFonts.push(Object.assign({ project: project.name }, f)));
+      const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: fontPack.fonts, omittedFonts: fontPack.omitted };
       /* ⚠️ queue 915 clause 8: SAY WHICH ONES ARE WORKSPACES. list() includes the hidden element and
          template drafts, and restoring them through create() with no flag turned each into an ordinary
          project — the Projects-list clutter queue 340 removed. Kept IN the file rather than skipped: a
@@ -1890,7 +1982,7 @@ window.FM = window.FM || {};
       projects: projects,
       /* Written INTO the file, not only shown once in a toast he may not be looking at. A year from
          now the file has to be able to answer "is my video in here" by itself. */
-      notIncluded: { projects: skippedProjects, media: skippedMedia },
+      notIncluded: { projects: skippedProjects, media: skippedMedia, fonts: skippedFonts },
       count: projects.length,
       drafts: drafts,   // queue 915: of `count`, how many are element/template workspaces rather than projects
     };
@@ -1975,8 +2067,11 @@ window.FM = window.FM || {};
     if (!obj || typeof obj !== 'object') return 'That file is not a FreeMotion project.';
     if (obj.app !== 'freemotion') return 'That is not a FreeMotion project file.';
     if (!obj.project) return 'That project file is missing its canvas settings — it may be truncated or only half-downloaded.';
+    if (typeof obj.project !== 'object' || Array.isArray(obj.project)) return 'That project file has invalid canvas settings — it may be corrupt or only half-downloaded.';
     if (!Array.isArray(obj.layers)) return 'That project file has no layers list — it may be truncated or only half-downloaded.';
     if (obj.layers.length > 2000) return 'That project has ' + obj.layers.length + ' layers, which is more than FreeMotion will open.';
+    if (hasInvalidLayerEntries(obj.layers)) return 'That project file has an invalid layer — it may be corrupt or only half-downloaded.';
+    if (hasUnsafeSceneNesting(obj.project, obj.layers)) return 'That project file is nested too deeply to open safely.';
     return null;
   };
 
@@ -1997,7 +2092,8 @@ window.FM = window.FM || {};
          file INTO whatever is open, so going on would put the import over the very work he just chose to keep. */
       if (!pid) return false;
     }
-    const ok = await FM.storage.applyScene(obj);
+    const importWarnings = opts && opts.quiet ? null : [];
+    const ok = await FM.storage.applyScene(obj, importWarnings);
     if (!ok) {
       /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
          two ever disagree the user must still be told rather than left in an empty project. */
@@ -2007,7 +2103,7 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.reset();
     FM.storage.markDirty(); FM.storage.save();
     if (FM.projects) FM.projects.touchCurrent(true);
-    if (FM.toast && !(opts && opts.quiet)) FM.toast('Project imported');
+    if (FM.toast && !(opts && opts.quiet)) FM.toast(importWarnings.length ? 'Project imported. ' + importWarnings.join(' ') : 'Project imported', importWarnings.length ? 12000 : undefined);
     if (onDone) onDone();
     return true;
   };
@@ -3114,23 +3210,17 @@ window.FM = window.FM || {};
       const pack = await this.getPack(tid);
       if (!pack || !pack.layers) return false;
       const meta = this.list().find(t => t.id === tid) || {};
-      const media = {};
-      for (const lid in pack.media) {
-        const rec = pack.media[lid];
-        if (rec && rec.file && rec.file.size <= EMBED_LIMIT) {
-          const durl = await fileToDataURL(rec.file);
-          if (durl) media[lid] = { kind: rec.kind, name: rec.file.name, dataURL: durl };
-        }
-      }
       const project = Object.assign({}, pack.project, { name: meta.name || pack.project.name || 'Template' });
-      const obj = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
+      // Share the project file's embedding and named-omission rules: a template with a
+      // large clip must tell its sender and recipient which footage is missing.
+      const obj = await serializeWith({ project: project, layers: pack.layers }, lid => pack.media && pack.media[lid]);
       const safe = String(project.name).replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'template';
       const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      return true;
+      return { omitted: obj.omitted, omittedFonts: obj.omittedFonts };
     },
     async remove(tid) {
       writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));
@@ -3740,22 +3830,28 @@ window.FM = window.FM || {};
     // Register fonts embedded in an imported .fmotion.json so its text renders on this device too.
     // Adds only fonts the library doesn't already have, keyed by their (stable) family token.
     async applyEmbedded(fontsObj) {
-      if (!fontsObj) return;
+      if (!fontsObj) return 0;
+      if (typeof fontsObj !== 'object' || Array.isArray(fontsObj)) return 1;
       const idx = this.list();
       const haveFam = new Set(idx.map(f => f.family));
+      let failed = 0, added = 0;
       for (const key of Object.keys(fontsObj)) {
         const fd = fontsObj[key];
-        if (!fd || !fd.family || haveFam.has(fd.family)) continue;
-        const file = await dataURLToFile(fd.dataURL, fd.name || 'font');   // rejects non-data: URLs
-        if (!file || !await registerFace(fd.family, file)) continue;
+        if (!fd || typeof fd.family !== 'string' || !fd.family) { failed++; continue; }
+        if (haveFam.has(fd.family)) continue;
+        let file = null;
+        try { file = await dataURLToFile(fd.dataURL, fd.name || 'font'); } catch (e) {}
+        if (!file || !await registerFace(fd.family, file)) { failed++; continue; }
         const nid = newId('f'); _fontReg.add(nid);
         let put = false;   // queue 915 clause 2: registered for this session either way, but only a stored font is listed
         try { const db = await openDB(); put = await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
-        if (!put) { _fontReg.delete(nid); continue; }
+        if (!put) { _fontReg.delete(nid); failed++; continue; }
         idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
         haveFam.add(fd.family);
+        added++;
       }
-      writeJSON(FONT_INDEX, idx);
+      if (added && !writeJSON(FONT_INDEX, idx)) failed += added;
+      return failed;
     },
   };
 

@@ -28,6 +28,7 @@ window.FM = window.FM || {};
     if (m.audioBuffer !== undefined) return m.audioBuffer || null;
     return (await FM.decodeAudio(m.file)) || null;
   }
+  FM.layerAudioBuffer = layerAudioBuffer;
 
   /* AudioBuffer → 16-bit PCM WAV Blob (interleaved). Playable everywhere, no encoder library. */
   FM.audioBufferToWav = function (ab) {

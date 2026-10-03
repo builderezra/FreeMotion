@@ -3475,6 +3475,53 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  // A filter needs an empty adjustment layer. Put it immediately over the frontmost
+  // picture at the playhead, then open that layer's Filters side for the first pick.
+  FM.addFilterLayer = function () {
+    const scene = FM.scene, P = scene.project;
+    const time = Math.max(0, Math.min(Number.isFinite(FM.time) ? FM.time : 0, P.duration || 0));
+    const targetIndex = scene.layers.findIndex(l => {
+      if (!l || l.visible === false || (l.type !== 'image' && l.type !== 'video')) return false;
+      if (FM.groupContext && l.parent !== FM.groupContext) return false;
+      if (l.type === 'video') {
+        const media = FM.media && FM.media.get && FM.media.get(l.id);
+        if (!media || !(media.width > 0 && media.height > 0)) return false; // an audio-only clip has no picture to filter
+      }
+      const start = Number.isFinite(l.start) ? l.start : 0;
+      const duration = Number.isFinite(l.duration) ? l.duration : 0;
+      return duration > 0 && time >= start && time < start + duration;
+    });
+    const clip = targetIndex >= 0 ? scene.layers[targetIndex] : null;
+    const layer = FM.makeLayer('adjustment', {
+      name: 'Filter layer', x: P.width / 2, y: P.height / 2,
+      start: clip ? clip.start : time,
+      duration: clip ? clip.duration : FM.defaultLayerDuration(),
+    });
+    // The ordinary Adjustment tile deliberately starts with brightness and saturation.
+    // A Filter layer starts neutral so its first chosen look is exactly the chosen recipe.
+    layer.effects = [];
+    if (clip) {
+      const marker = FM.addAt;
+      try {
+        if (!FM.groupContext) FM.addAt = targetIndex;
+        FM.insertLayer(layer);
+        if (FM.groupContext) {
+          // Group insertion starts at the top of the flat array. Move this new
+          // child next to the matched child without disturbing its siblings.
+          scene.layers.splice(scene.layers.indexOf(layer), 1);
+          scene.layers.splice(scene.layers.indexOf(clip), 0, layer);
+        }
+      }
+      finally { FM.addAt = marker; }
+    } else FM.insertLayer(layer);
+    scene.selectedId = layer.id;
+    scene.selectedIds = [layer.id];
+    refreshAll();
+    if (FM.history) FM.history.commit();
+    if (FM.inspector && FM.inspector.openFxTab) FM.inspector.openFxTab('filters');
+    return layer;
+  };
+
   FM.addCaptionLayer = function () {
     const P = FM.scene.project;
     const dur = P.duration || 5;   // empty project → a usable 5s track (was duration 0 = invisible)
@@ -4718,6 +4765,8 @@ window.FM = window.FM || {};
   FM.replaceMedia = function (id) {
     const layer = FM.layerById(FM.scene, id);
     if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return Promise.resolve(false);
+    const projectId = FM.projects && FM.projects.currentId ? FM.projects.currentId() : null;
+    const stillCurrent = () => (!FM.projects || FM.projects.currentId() === projectId) && FM.layerById(FM.scene, id) === layer;
     /* ⚠️ queue 690 (HUNT-a): A SONG IS REPLACED BY A SONG. A song is a video layer with no picture, so the ⋯ menu offers
        it Replace media… like any clip (and a template's Insert your Media lists it as a slot) — but this picker asked
        for video/*,image/* only, which on his iPhone greys out every song in Files, and a song that reached it anyway
@@ -4734,6 +4783,7 @@ window.FM = window.FM || {};
     const swap = async () => {
       const file = input.files && input.files[0]; input.remove();
       if (!file) return false;
+      if (!stillCurrent()) { if (FM.toast) FM.toast('Media was not replaced — the project changed while the picker was open'); return false; }
       const kind = mediaKind(file);
       let nrec = null;
       try {
@@ -4745,6 +4795,10 @@ window.FM = window.FM || {};
         else nrec = await FM.loadImageFile(file);   // an image, or a name nothing recognises (the old fall-through)
       } catch (e) { nrec = null; }
       if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return false; }
+      // Decoding a phone video or photo can outlive the project it was picked in.
+      // A stale replacement must not be applied to the project now on screen.
+      const stale = () => { if (FM._releaseMediaRecord) FM._releaseMediaRecord(nrec); if (FM.toast) FM.toast('Media was not replaced — the project changed while it was opening'); return false; };
+      if (!stillCurrent()) return stale();
       /* queue 829: keep the outgoing file BEFORE anything replaces it. The next save writes the new blob
          over the same key, so without this the original is gone from the registry, from IndexedDB and
          from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
@@ -4752,9 +4806,9 @@ window.FM = window.FM || {};
       if (outgoing && outgoing.file && FM.storage && FM.storage.stashPrevMedia) {
         try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {}
       }
-      FM.replaceMediaWith(id, nrec);
+      if (!stillCurrent()) return stale();
+      if (!FM.replaceMediaWith(id, nrec)) return stale();
       fitReplacedMedia(FM.layerById(FM.scene, id), outgoing, nrec);   // queue 690 (HUNT-a): same place, same size — before the commit, so undo puts the old scale back
-      if (layer.reversed && FM.ensureReverseCache) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
       /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.
        *
        * A replace only changes out-of-history state — the media registry and the IDB blob. On an
@@ -4781,6 +4835,9 @@ window.FM = window.FM || {};
         FM.mediaLib.list().filter(e => e.key === id).forEach(e => FM.mediaLib.remove(e.mid));
         FM.mediaLib.add(nrec, id);
       }
+      // The swap is already saved before this potentially long frame build. A project switch
+      // during it can no longer leave the replacement half-committed.
+      if (layer.reversed && FM.ensureReverseCache && stillCurrent()) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
       return true;
     };
     input.addEventListener('cancel', () => { input.remove(); settle(false); });
@@ -6932,6 +6989,7 @@ window.FM = window.FM || {};
         { label: 'Ellipse', action: () => FM.addShapeLayer && FM.addShapeLayer('ellipse') },
         { label: 'Camera', action: () => FM.addCameraLayer && FM.addCameraLayer() },
         { label: 'Adjustment layer', action: () => FM.addAdjustmentLayer && FM.addAdjustmentLayer() },
+        { label: 'Filter layer', action: () => FM.addFilterLayer && FM.addFilterLayer() },
         { label: 'Controller (rig control)', action: () => FM.addNullLayer && FM.addNullLayer() },
       ];
       if (FM.contextMenu) FM.contextMenu.show(r.left, r.bottom + 4, items);

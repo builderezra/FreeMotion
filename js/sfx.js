@@ -84,6 +84,40 @@ window.FM = window.FM || {};
     param.exponentialRampToValueAtTime(Math.max(1e-4, to), t0 + secs);
   }
 
+  // Short drum voices reused by the one-shots and the two fills below. Every
+  // voice is scheduled inside its own OfflineAudioContext, so Hear and Add agree.
+  function drumKick(ctx, at, out, power) {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    expTo(o.frequency, at, 150, 47, 0.28);
+    const g = ctx.createGain(); env(g.gain, at, [[0, 0.95 * power], [0.13, 0.55 * power], [0.43, 0]]);
+    o.connect(g); g.connect(out); o.start(at); o.stop(at + 0.44);
+    const click = ctx.createBufferSource(); click.buffer = noiseBuffer(ctx, 0.018, 'white');
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+    const cg = ctx.createGain(); env(cg.gain, at, [[0, 0.23 * power], [0.017, 0]]);
+    click.connect(hp); hp.connect(cg); cg.connect(out); click.start(at); click.stop(at + 0.018);
+  }
+  function drumSnare(ctx, at, out, power) {
+    const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.24, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2100; bp.Q.value = 0.8;
+    const ng = ctx.createGain(); env(ng.gain, at, [[0, 0.85 * power], [0.04, 0.55 * power], [0.23, 0]]);
+    n.connect(bp); bp.connect(ng); ng.connect(out); n.start(at); n.stop(at + 0.24);
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = 175;
+    const og = ctx.createGain(); env(og.gain, at, [[0, 0.27 * power], [0.08, 0]]);
+    o.connect(og); og.connect(out); o.start(at); o.stop(at + 0.08);
+  }
+  function drumHat(ctx, at, out, power) {
+    const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.15, 'white');
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6800;
+    const g = ctx.createGain(); env(g.gain, at, [[0, 0.85 * power], [0.07, 0.22 * power], [0.14, 0]]);
+    n.connect(hp); hp.connect(g); g.connect(out); n.start(at); n.stop(at + 0.15);
+  }
+  function foleyClick(ctx, at, out, hz, power, length) {
+    const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, length, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = hz; bp.Q.value = 1.3;
+    const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.003, power], [length, 0]]);
+    n.connect(bp); bp.connect(g); g.connect(out); n.start(at); n.stop(at + length);
+  }
+
   /* ---- the catalogue ---------------------------------------------------------------------------
    * Each entry renders itself into an OfflineAudioContext. `dur` is the whole tail, so a clip lands in
    * the timeline at its real length — a whoosh cut off by its own clip length is the first thing that
@@ -164,6 +198,49 @@ window.FM = window.FM || {};
         o.start(t0); o.stop(t0 + d);
       },
     },
+    // ---------- drums ----------
+    { id: 'drum-kick', name: 'Kick', cat: 'Drums', level: 0.85, dur: 0.48,
+      render(ctx, t0, d, out) { drumKick(ctx, t0, out, 1); } },
+    { id: 'drum-snare', name: 'Snare', cat: 'Drums', level: 0.8, dur: 0.3,
+      render(ctx, t0, d, out) { drumSnare(ctx, t0, out, 1); } },
+    { id: 'drum-clap', name: 'Clap', cat: 'Drums', level: 0.75, dur: 0.38,
+      render(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.65;
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0.75], [0.02, 0], [0.035, 0.6], [0.06, 0], [0.075, 0.9], [0.13, 0.45], [d, 0]]);
+        n.connect(bp); bp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+      } },
+    { id: 'drum-hat', name: 'Hi-hat', cat: 'Drums', level: 0.5, dur: 0.2,
+      render(ctx, t0, d, out) { drumHat(ctx, t0, out, 1); } },
+    { id: 'drum-rimshot', name: 'Ba-dum-tss', cat: 'Drums', level: 0.82, dur: 0.9,
+      render(ctx, t0, d, out) {
+        drumKick(ctx, t0, out, 0.65); drumKick(ctx, t0 + 0.23, out, 0.85);
+        drumHat(ctx, t0 + 0.53, out, 1.1);
+      } },
+    { id: 'drum-roll', name: 'Drumroll', cat: 'Drums', level: 0.82, dur: 1.55,
+      render(ctx, t0, d, out) {
+        for (let i = 0; i < 12; i++) {
+          const at = i * 0.105 - i * i * 0.0025;
+          drumSnare(ctx, t0 + at, out, 0.3 + i * 0.045);
+        }
+        drumSnare(ctx, t0 + 1.1, out, 1);
+      } },
+    // Size, length and variation are set in the picker. Each setting combination
+    // gets its own render-cache key, so the preview is the WAV Add will insert.
+    { id: 'explosion', name: 'Explosion', cat: 'Impact', dur: 2.2, variant: true,
+      render(ctx, t0, d, out, options) {
+        options = options || { size: 'big', variation: 1 };
+        const big = options.size === 'big', v = options.variation;
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = (big ? 650 : 1400) + v * 95;
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0.95], [Math.min(0.08, d * 0.08), 0.8], [d * 0.42, 0.4], [d, 0]]);
+        n.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        const sub = ctx.createOscillator(); sub.type = 'sine';
+        expTo(sub.frequency, t0, big ? 95 + v * 4 : 150 + v * 8, big ? 28 : 50, Math.min(d * 0.7, 1.5));
+        const sg = ctx.createGain(); env(sg.gain, t0, [[0, big ? 0.8 : 0.45], [d * 0.6, 0.18], [d, 0]]);
+        sub.connect(sg); sg.connect(out); sub.start(t0); sub.stop(t0 + d);
+      } },
     // ---------- build ----------
     {
       id: 'riser', name: 'Riser', cat: 'Build', dur: 2.2,
@@ -557,7 +634,141 @@ window.FM = window.FM || {};
         });
       },
     },
+    { id: 'thunder', name: 'Thunder', cat: 'Nature', dur: 3, variant: true,
+      render(ctx, t0, d, out, options) {
+        options = options || { size: 'big', variation: 1 };
+        const big = options.size === 'big', v = options.variation;
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = (big ? 460 : 850) + v * 65;
+        const g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [d * 0.08, 0.8], [d * (0.25 + v * 0.035), 0.45], [d * 0.62, 0.58], [d, 0]]);
+        n.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        const crack = ctx.createBufferSource(); crack.buffer = noiseBuffer(ctx, Math.min(0.16, d * 0.12), 'white');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200 + v * 210;
+        const cg = ctx.createGain(); env(cg.gain, t0, [[0, big ? 0.8 : 0.45], [Math.min(0.15, d * 0.11), 0]]);
+        crack.connect(hp); hp.connect(cg); cg.connect(out); crack.start(t0); crack.stop(t0 + Math.min(0.16, d * 0.12));
+      } },
+    // Long, synthesised atmosphere beds. Lower catalogue levels leave room for dialogue and music.
+    { id: 'amb-ocean', name: 'Ocean surf', cat: 'Ambience', dur: 8, level: 0.42,
+      render(ctx, t0, d, out) {
+        const low = ctx.createBufferSource(); low.buffer = noiseBuffer(ctx, d, 'brown');
+        const lowpass = ctx.createBiquadFilter(); lowpass.type = 'lowpass'; lowpass.frequency.value = 520;
+        const lg = ctx.createGain(); env(lg.gain, t0, [[0, 0], [0.7, 0.38], [2.5, 0.7], [4.2, 0.22], [6.4, 0.63], [d, 0]]);
+        low.connect(lowpass); lowpass.connect(lg); lg.connect(out); low.start(t0); low.stop(t0 + d);
+        const foam = ctx.createBufferSource(); foam.buffer = noiseBuffer(ctx, d, 'pink');
+        const band = ctx.createBiquadFilter(); band.type = 'bandpass'; band.Q.value = 0.6;
+        env(band.frequency, t0, [[0, 850], [2.2, 1800], [4.4, 700], [6.3, 2100], [d, 850]]);
+        const fg = ctx.createGain(); env(fg.gain, t0, [[0, 0], [0.8, 0.08], [2.4, 0.48], [4.2, 0.06], [6.4, 0.42], [d, 0]]);
+        foam.connect(band); band.connect(fg); fg.connect(out); foam.start(t0); foam.stop(t0 + d);
+      } },
+    { id: 'amb-crickets', name: 'Crickets at night', cat: 'Ambience', dur: 8, level: 0.35,
+      render(ctx, t0, d, out) {
+        const air = ctx.createBufferSource(); air.buffer = noiseBuffer(ctx, d, 'pink');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100;
+        const ag = ctx.createGain(); env(ag.gain, t0, [[0, 0], [0.25, 0.1], [d - 0.3, 0.1], [d, 0]]);
+        air.connect(lp); lp.connect(ag); ag.connect(out); air.start(t0); air.stop(t0 + d);
+        for (let i = 0; i < 28; i++) {
+          const at = 0.36 + i * 0.26 + (i % 4) * 0.035, len = 0.085 + (i % 3) * 0.018;
+          if (at + len >= d) break;
+          const o = ctx.createOscillator(); o.type = 'sine';
+          const hz = 3900 + (i % 5) * 170;
+          env(o.frequency, t0 + at, [[0, hz], [len, hz + 150]]);
+          const g = ctx.createGain(); env(g.gain, t0 + at, [[0, 0], [0.012, 0.18], [len * 0.65, 0.15], [len, 0]]);
+          o.connect(g); g.connect(out); o.start(t0 + at); o.stop(t0 + at + len);
+        }
+      } },
+    { id: 'amb-birds', name: 'Morning birds', cat: 'Ambience', dur: 8, level: 0.4,
+      render(ctx, t0, d, out) {
+        const air = ctx.createBufferSource(); air.buffer = noiseBuffer(ctx, d, 'pink');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 0.5;
+        const ag = ctx.createGain(); env(ag.gain, t0, [[0, 0], [0.3, 0.09], [d - 0.3, 0.09], [d, 0]]);
+        air.connect(bp); bp.connect(ag); ag.connect(out); air.start(t0); air.stop(t0 + d);
+        [0.45, 0.72, 1.65, 2.01, 2.38, 3.45, 3.76, 4.68, 5.01, 5.38, 6.22, 6.59, 7.13].forEach((at, i) => {
+          const len = 0.18 + (i % 3) * 0.07, base = 1700 + (i % 4) * 280;
+          const o = ctx.createOscillator(); o.type = 'sine';
+          env(o.frequency, t0 + at, [[0, base], [len * 0.35, base * 1.38], [len, base * 1.08]]);
+          const g = ctx.createGain(); env(g.gain, t0 + at, [[0, 0], [0.035, 0.23], [len * 0.6, 0.18], [len, 0]]);
+          o.connect(g); g.connect(out); o.start(t0 + at); o.stop(t0 + at + len);
+        });
+      } },
+    { id: 'amb-room', name: 'Room tone', cat: 'Ambience', dur: 8, level: 0.25,
+      render(ctx, t0, d, out) {
+        const air = ctx.createBufferSource(); air.buffer = noiseBuffer(ctx, d, 'pink');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 90;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [0.25, 0.2], [d - 0.25, 0.2], [d, 0]]);
+        air.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); air.start(t0); air.stop(t0 + d);
+        const hum = ctx.createOscillator(); hum.type = 'sine'; hum.frequency.value = 60;
+        const hg = ctx.createGain(); env(hg.gain, t0, [[0, 0], [0.25, 0.008], [d - 0.25, 0.008], [d, 0]]);
+        hum.connect(hg); hg.connect(out); hum.start(t0); hum.stop(t0 + d);
+      } },
+    // Everyday sounds use short, varied events rather than replaying one identical sample.
+    { id: 'foley-knock', name: 'Door knock', cat: 'Foley', dur: 0.72, level: 0.68,
+      render(ctx, t0, d, out) {
+        [0.04, 0.3].forEach((at, i) => {
+          foleyClick(ctx, t0 + at, out, 650 - i * 80, 0.55, 0.095);
+          const wood = ctx.createOscillator(); wood.type = 'triangle'; wood.frequency.value = 160 - i * 10;
+          const g = ctx.createGain(); env(g.gain, t0 + at, [[0, 0.42], [0.13, 0]]);
+          wood.connect(g); g.connect(out); wood.start(t0 + at); wood.stop(t0 + at + 0.13);
+        });
+      } },
+    { id: 'foley-footsteps', name: 'Footsteps', cat: 'Foley', dur: 1.8, level: 0.58,
+      render(ctx, t0, d, out) {
+        for (let i = 0; i < 5; i++) {
+          const at = t0 + 0.08 + i * 0.34, power = i % 2 ? 0.43 : 0.58;
+          const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.16, 'brown');
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500 + (i % 3) * 100;
+          const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.014, power], [0.16, 0]]);
+          n.connect(lp); lp.connect(g); g.connect(out); n.start(at); n.stop(at + 0.16);
+          foleyClick(ctx, at, out, 1200 + (i % 3) * 170, power * 0.25, 0.055);
+        }
+      } },
+    { id: 'foley-clock', name: 'Tick-tock', cat: 'Foley', dur: 2, level: 0.43,
+      render(ctx, t0, d, out) {
+        for (let i = 0; i < 4; i++) {
+          const at = t0 + 0.12 + i * 0.46;
+          foleyClick(ctx, at, out, i % 2 ? 1250 : 2100, i % 2 ? 0.34 : 0.48, 0.055);
+        }
+      } },
+    { id: 'foley-vibrate', name: 'Phone vibrate', cat: 'Foley', dur: 1.05, level: 0.48,
+      render(ctx, t0, d, out) {
+        [0.04, 0.35, 0.66].forEach((at, i) => {
+          const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 145 + i * 5;
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 650;
+          const g = ctx.createGain(); env(g.gain, t0 + at, [[0, 0], [0.018, 0.25], [0.19, 0.23], [0.22, 0]]);
+          o.connect(lp); lp.connect(g); g.connect(out); o.start(t0 + at); o.stop(t0 + at + 0.22);
+        });
+      } },
+    { id: 'foley-typing', name: 'Typing', cat: 'Foley', dur: 1.65, level: 0.45,
+      render(ctx, t0, d, out) {
+        [0.08, 0.2, 0.35, 0.46, 0.59, 0.77, 0.88, 1.03, 1.17, 1.3, 1.42].forEach((at, i) => {
+          foleyClick(ctx, t0 + at, out, 1900 + (i % 4) * 370, 0.28 + (i % 3) * 0.05, 0.045);
+        });
+      } },
+    { id: 'foley-kaching', name: 'Ka-ching', cat: 'Foley', dur: 1.4, level: 0.65,
+      render(ctx, t0, d, out) {
+        foleyClick(ctx, t0 + 0.02, out, 1400, 0.6, 0.08);
+        [870, 1340, 2050].forEach((hz, i) => {
+          const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = hz;
+          const g = ctx.createGain(); env(g.gain, t0 + 0.14, [[0, 0], [0.008, 0.26 - i * 0.05], [0.45, 0.12 - i * 0.025], [1.2, 0]]);
+          o.connect(g); g.connect(out); o.start(t0 + 0.14); o.stop(t0 + 1.34);
+        });
+      } },
   ];
+
+  const variantOptions = new Map();
+  function variantOf(def, input) {
+    if (!def || !def.variant) return def;
+    input = input || {};
+    const size = input.size === 'small' ? 'small' : 'big';
+    const length = Math.max(0.8, Math.min(5, Math.round((Number(input.length) || def.dur) * 10) / 10));
+    const variation = Math.max(1, Math.min(4, Math.round(Number(input.variation) || 1)));
+    return Object.assign({}, def, {
+      id: def.id + ':' + size + ':' + length.toFixed(1) + ':' + variation,
+      baseId: def.id, dur: length, variant: false,
+      render(ctx, t0, d, out) { def.render(ctx, t0, d, out, { size, variation }); },
+    });
+  }
 
   // ---- render + encode --------------------------------------------------------------------------
   /* A little headroom, applied to EVERY effect through one node rather than by hand-tuning sixteen
@@ -713,7 +924,7 @@ window.FM = window.FM || {};
   }
   function markRow(def, on) {   // every row of this sound in the open sheet
     document.querySelectorAll('.sfx-row .sfx-star[data-sfxid]').forEach(star => {
-      const row = star.dataset.sfxid === def.id && star.closest('.sfx-row');
+      const row = star.dataset.sfxid === (def.baseId || def.id) && star.closest('.sfx-row');
       if (row) paintRow(row, on, def);
     });
   }
@@ -767,7 +978,7 @@ window.FM = window.FM || {};
     if (me.src) { try { me.src.stop(); } catch (e) {} try { me.src.disconnect(); } catch (e) {} }
     markRow(me.def, false);
   }
-  function previewing() { return _cur ? _cur.def.id : null; }   // suite seam: which sound is playing, if any
+  function previewing() { return _cur ? (_cur.def.baseId || _cur.def.id) : null; }   // suite seam: which sound is playing, if any
 
   // ---- add to the project -----------------------------------------------------------------------
   async function add(def) {
@@ -852,7 +1063,8 @@ window.FM = window.FM || {};
       name.type = 'button';
       const secs = el('span', 'sfx-dur', def.dur.toFixed(2).replace(/0$/, '') + 's');
       // Tap = hear it; tap a row of the sound that is playing = stop it (queue 986). preview() owns the highlight now.
-      const hear = () => { if (_cur && _cur.def.id === def.id) { stopPreview(); return; } preview(def); };
+      const chosen = () => variantOf(def, variantOptions.get(def.id));
+      const hear = () => { if (_cur && (_cur.def.baseId || _cur.def.id) === def.id) { stopPreview(); return; } preview(chosen()); };
       play.addEventListener('click', hear);
       name.addEventListener('click', hear);
       const star = el('button', 'sfx-star' + (isFav(def.id) ? ' on' : ''), '★');
@@ -876,12 +1088,40 @@ window.FM = window.FM || {};
       addBtn.type = 'button';
       addBtn.addEventListener('click', async () => {
         addBtn.disabled = true; addBtn.textContent = '…';
-        try { await add(def); close(); }
+        try { await add(chosen()); close(); }
         catch (e) { addBtn.disabled = false; addBtn.textContent = 'Add'; if (FM.toast) FM.toast('Could not add that sound'); }
       });
       row.append(play, name, secs, star, addBtn);
-      if (_cur && _cur.def.id === def.id) paintRow(row, true, def);   // rebuilt (the ★) while it plays: still lit, still Stop
-      return row;
+      if (_cur && (_cur.def.baseId || _cur.def.id) === def.id) paintRow(row, true, def);   // rebuilt (the ★) while it plays: still lit, still Stop
+      if (!def.variant) return row;
+      const opts = variantOptions.get(def.id) || { size: 'big', length: def.dur, variation: 1 };
+      variantOptions.set(def.id, opts);
+      secs.textContent = opts.length.toFixed(1) + 's';
+      const card = el('div', 'sfx-variant-card'); card.dataset.sfxid = def.id;
+      const controls = el('div', 'sfx-variant-controls');
+      const size = document.createElement('select'); size.className = 'sfx-size'; size.setAttribute('aria-label', def.name + ' size');
+      [['small', 'Small'], ['big', 'Big']].forEach(([value, label]) => { const o = document.createElement('option'); o.value = value; o.textContent = label; size.appendChild(o); });
+      size.value = opts.size;
+      const length = document.createElement('input'); length.className = 'sfx-length'; length.type = 'range'; length.min = '0.8'; length.max = '5'; length.step = '0.1'; length.value = String(opts.length);
+      length.setAttribute('aria-label', def.name + ' length in seconds');
+      const variation = document.createElement('select'); variation.className = 'sfx-variation'; variation.setAttribute('aria-label', def.name + ' variation');
+      for (let n = 1; n <= 4; n++) { const o = document.createElement('option'); o.value = String(n); o.textContent = 'Variation ' + n; variation.appendChild(o); }
+      variation.value = String(opts.variation);
+      const update = () => {
+        opts.size = size.value; opts.length = Number(length.value); opts.variation = Number(variation.value);
+        document.querySelectorAll('.sfx-variant-card').forEach(copy => {
+          if (copy.dataset.sfxid !== def.id) return;
+          copy.querySelector('.sfx-size').value = opts.size;
+          copy.querySelector('.sfx-length').value = String(opts.length);
+          copy.querySelector('.sfx-variation').value = String(opts.variation);
+          copy.querySelector('.sfx-dur').textContent = opts.length.toFixed(1) + 's';
+        });
+        if (_cur && (_cur.def.baseId || _cur.def.id) === def.id) stopPreview();
+      };
+      size.addEventListener('change', update); length.addEventListener('input', update); variation.addEventListener('change', update);
+      controls.append(size, el('span', 'sfx-length-label', 'Length'), length, variation);
+      card.append(row, controls);
+      return card;
     }
     function fillList() {
       body.innerHTML = '';
@@ -924,6 +1164,7 @@ window.FM = window.FM || {};
     isFav: isFav, toggleFav: toggleFav, favs: readFavs,   // seams: the suite drives the real store
     categories: categoriesOf,
     byId: byId,
+    variantOf: variantOf,
     renderBuffer: renderBuffer,   // exposed so the suite can measure what each recipe actually makes
     encodeWav: encodeWav,
     preview: preview,

@@ -82497,6 +82497,94 @@
     }
   });
 
+  test('690 RGB Split keeps a green-only shift and a small positive Amount on reduced previews', { item: 'TBD' }, function () {
+    const W = 40, H = 8, original = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, value = x < 20 ? 30 : 225;
+      original[i] = original[i + 1] = original[i + 2] = value; original[i + 3] = 255;
+    }
+    const greenOnly = original.slice();
+    FM._applyPixelFx(greenOnly, { type: 'rgbsplit', params: { amount: 0, angle: 0, radial: 0, green: 8 } }, 0, W, H, 0.25);
+    const at = (data, x, channel) => data[(4 * W + x) * 4 + channel];
+    if (at(greenOnly, 19, 1) === at(original, 19, 1) ||
+        at(greenOnly, 19, 0) !== at(original, 19, 0) || at(greenOnly, 19, 2) !== at(original, 19, 2))
+      throw new Error('An adjustment RGB Split with Amount 0 did not independently shift only green');
+    const smallAmount = original.slice();
+    FM._applyPixelFx(smallAmount, { type: 'rgbsplit', params: { amount: 1, angle: 0, radial: 0, green: 0 } }, 0, W, H, 0.25);
+    if (at(smallAmount, 19, 0) === at(original, 19, 0))
+      throw new Error('A positive Amount vanished when the preview plate was one quarter size');
+
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 20, shapeW: 20, shapeH: 20, fill: '#ffffff' });
+    const s = scene([layer], { project: { width: 40, height: 40, fps: 30, duration: 1, background: '#000000' } });
+    const render = (effect) => {
+      layer.effects = effect ? [{ type: 'rgbsplit', enabled: true, params: effect }] : [];
+      const canvas = offscreen(10, 10), ctx = canvas.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, s, 0);
+      return ctx.getImageData(0, 0, 10, 10).data;
+    };
+    const clean = render(null), green = render({ amount: 0, angle: 0, radial: 0, green: 8 });
+    const red = render({ amount: 1, angle: 0, radial: 0, green: 0 });
+    let greenDiff = 0, redDiff = 0;
+    for (let i = 0; i < clean.length; i += 4) {
+      if (green[i + 1] !== clean[i + 1]) greenDiff++;
+      if (red[i] !== clean[i]) redDiff++;
+    }
+    if (!greenDiff || !redDiff) throw new Error('A per-layer RGB Split lost its green-only or small positive red shift on the reduced plate');
+  });
+
+  test('690 VHS Tape tracking band pauses in place when keyframed speed reaches zero', { item: 'TBD' }, function () {
+    const kernel = FM._FX_TABLES.PIXEL_FX.vhstape, W = 20, H = 40;
+    if (!kernel) throw new Error('The VHS Tape production kernel is unavailable');
+    function peakAt(trackspeed, time) {
+      const data = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = data[i + 1] = data[i + 2] = 128; data[i + 3] = 255;
+      }
+      kernel(data, W, H, { amount: 1, chromableed: 0, halo: 0, wobble: 0,
+        tracking: 1, trackspeed, headswitch: 0 }, time, 1);
+      let row = -1, value = -1;
+      for (let y = 0; y < H; y++) {
+        const v = data[(y * W + 10) * 4];
+        if (v > value) { value = v; row = y; }
+      }
+      return { row, value };
+    }
+    const speed = { kf: [{ t: 0, v: 0.4 }, { t: 3, v: 0 }] };
+    const before = peakAt(speed, 2.99), stopped = peakAt(speed, 3), after = peakAt(speed, 3.01);
+    if (stopped.value < 150 || Math.abs(stopped.row - 28) > 2 ||
+        Math.abs(stopped.row - before.row) > 1 || Math.abs(stopped.row - after.row) > 1)
+      throw new Error('The keyframed tracking band jumped or vanished instead of stopping near row 28: ' + JSON.stringify({ before, stopped, after }));
+    const constant = peakAt(0.4, 1), disabled = peakAt(0, 3);
+    if (Math.abs(constant.row - 12) > 2 || constant.value < 150 || disabled.value > 130)
+      throw new Error('A constant-speed VHS band changed its legacy position or zero-speed behavior');
+  });
+
+  test('690 Glow Scan speed keyframes move the band by accumulated phase', { item: 'TBD' }, function () {
+    const kernel = FM._FX_TABLES.PIXEL_FX.glowscan, W = 8, H = 40;
+    if (!kernel) throw new Error('The Glow Scan production kernel is unavailable');
+    function peakAt(speed, time) {
+      const data = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = data[i + 1] = data[i + 2] = 64; data[i + 3] = 255;
+      }
+      kernel(data, W, H, { speed, width: 10, amount: 1, color: '#ffffff', direction: 0 }, time, 1);
+      let row = -1, value = -1;
+      for (let y = 0; y < H; y++) {
+        const v = data[(y * W + 4) * 4];
+        if (v > value) { value = v; row = y; }
+      }
+      return { row, value };
+    }
+    const speed = { kf: [{ t: 0, v: 1 }, { t: 0.5, v: 0 }] };
+    const before = peakAt(speed, 0.49), stopped = peakAt(speed, 0.5), after = peakAt(speed, 0.75);
+    if (stopped.value < 240 || Math.abs(stopped.row - 10) > 1 ||
+        Math.abs(stopped.row - before.row) > 1 || Math.abs(stopped.row - after.row) > 1)
+      throw new Error('Keyframed Glow Scan jumped instead of stopping around row 10: ' + JSON.stringify({ before, stopped, after }));
+    const constant = peakAt(1, 0.25), zero = peakAt(0, 0.75);
+    if (constant.row !== 10 || zero.row !== 0)
+      throw new Error('Constant-speed Glow Scan lost its legacy phase');
+  });
+
   test('effects: Tilt Shift and Matte Choker bound to the layer without changing it', { item: '692' }, async function () {
     /* #692, the next tier, measured on 1 Sep at each effect's DEFAULTS on a 180x150 subject in a
      * 1080x1920 plate — the shape of the lag, where the layer covers 1.3% of the frame:
@@ -85418,7 +85506,11 @@
     var said = [], toast0 = FM.toast;
     FM.toast = function (m) { said.push(String(m)); };
     function bigFile(name) { return new File([new Blob([new Uint8Array(7 * 1024 * 1024)], { type: 'video/mp4' })], name, { type: 'video/mp4' }); }
-    function tinyFile(name) { return new File([new Blob([new Uint8Array(64)], { type: 'image/png' })], name, { type: 'image/png' }); }
+    function tinyFile(name) {
+      var canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+      var bytes = atob(canvas.toDataURL('image/png').split(',')[1]);
+      return new File([Uint8Array.from(bytes, function (c) { return c.charCodeAt(0); })], name, { type: 'image/png' });
+    }
     try {
       // ── a project holding one clip that fits and one that does not
       FM.scene.layers.length = 0;
@@ -85464,6 +85556,34 @@
     } finally {
       FM.toast = toast0;
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+  });
+
+  test('690 project file names a video whose source media is no longer stored', { item: 'TBD' }, async function () {
+    const before = FM.scene.layers.slice(), project = FM.scene.project, selected = FM.scene.selectedId;
+    const selectedIds = FM.scene.selectedIds, toast = FM.toast, said = [];
+    try {
+      const missing = FM.makeLayer('video', { start: 0, duration: 2 });
+      missing.name = 'Missing camera clip';
+      const shape = FM.makeLayer('shape', { start: 0, duration: 2 });
+      FM.scene.layers = [missing, shape];
+      if (FM.media.get(missing.id)) throw new Error('The fixture video already has media');
+      const obj = await FM.storage.serializeScene(FM.scene);
+      if (Object.keys(obj.media).length || obj.omitted.length !== 1 ||
+          obj.omitted[0].layer !== missing.name || obj.omitted[0].missing !== true)
+        throw new Error('A media-less video was not named as missing in the project file');
+      FM.toast = message => said.push(String(message));
+      await FM.storage.exportFile();
+      if (!said.some(message => message.includes(missing.name) && message.includes('not stored') && !message.includes('too big')))
+        throw new Error('Saving a project file still claims a clean save when its video source is gone: ' + said.join(' | '));
+      said.length = 0;
+      await FM.storage.applyScene(JSON.parse(JSON.stringify(obj)));
+      if (!said.some(message => message.includes(missing.name) && message.includes('not stored') && !message.includes('too big')))
+        throw new Error('Importing the same file fails to identify its missing source: ' + said.join(' | '));
+    } finally {
+      FM.toast = toast;
+      FM.scene.project = project; FM.scene.layers = before; FM.scene.selectedId = selected; FM.scene.selectedIds = selectedIds;
       FM.refreshAll();
     }
   });
@@ -118205,6 +118325,1374 @@
     }
   });
 
+  test('690 Filter layer starts neutral over the visible clip at the playhead and opens Filters', { item: 'TBD' }, function () {
+    if (!FM.addFilterLayer) throw new Error('Filter layer creator is missing');
+    const old = { project: FM.scene.project, layers: FM.scene.layers.slice(), selectedId: FM.scene.selectedId,
+      selectedIds: FM.scene.selectedIds, time: FM.time, addAt: FM.addAt, groupContext: FM.groupContext };
+    const title = FM.makeLayer('text', { name: 'Title', start: 0, duration: 10 });
+    const sound = FM.makeLayer('video', { name: 'Sound', start: 0, duration: 10 });
+    const front = FM.makeLayer('image', { name: 'Front', start: 2, duration: 3 });
+    const back = FM.makeLayer('image', { name: 'Back', start: 0, duration: 9 });
+    if (FM.history && FM.history.mute) FM.history.mute();
+    try {
+      FM.scene.project = Object.assign({}, old.project, { width: 320, height: 240, duration: 10 });
+      FM.scene.layers.splice(0, FM.scene.layers.length, title, sound, front, back);
+      FM.media.set(sound.id, { width: 0, height: 0 });
+      FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.groupContext = null;
+      FM.time = 3; FM.addAt = 4; // the Add marker is deliberately below the clip
+      const made = FM.addFilterLayer();
+      if (!made || made.type !== 'adjustment' || made.start !== 2 || made.duration !== 3)
+        throw new Error('Filter layer did not inherit the visible clip timing');
+      if (FM.scene.layers[2] !== made || FM.scene.layers[3] !== front)
+        throw new Error('Filter layer did not land immediately above the visible clip');
+      if (made.effects.length || FM.scene.selectedId !== made.id)
+        throw new Error('Filter layer did not start neutral and selected');
+      const active = document.querySelector('#inspector .fxmode-btn.on');
+      if (FM.inspector.currentView() !== 'effects' || !active || active.textContent.trim() !== 'Filters')
+        throw new Error('The selected Filter layer did not open the Filters tab');
+      if (FM.addAt !== 4) throw new Error('Filter layer permanently moved the Add marker');
+    } finally {
+      FM.media.remove(sound.id);
+      FM.scene.project = old.project;
+      FM.scene.layers.splice(0, FM.scene.layers.length, ...old.layers);
+      FM.scene.selectedId = old.selectedId; FM.scene.selectedIds = old.selectedIds;
+      FM.time = old.time; FM.addAt = old.addAt; FM.groupContext = old.groupContext;
+      if (FM.history && FM.history.unmute) FM.history.unmute();
+      FM.refreshAll();
+    }
+  });
+
+  test('690 Colour Wheels grades tonal ranges on layers and adjustment layers', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('colourwheels');
+    if (!reg || reg.category !== 'color' || !FM.fxRegistry.gates().adjOk.includes('colourwheels'))
+      throw new Error('Colour Wheels is missing from Colouring or adjustment layers');
+    const effect = FM.fxRegistry.makeInstance('colourwheels');
+    const original = new Uint8ClampedArray([40, 40, 40, 231, 128, 128, 128, 232, 220, 220, 220, 233]);
+    const neutral = original.slice();
+    FM._pixelFx.colourwheels(neutral, 3, 1, effect.params, 0);
+    if (neutral.some((v, i) => v !== original[i])) throw new Error('Neutral Colour Wheels changed pixels');
+    Object.assign(effect.params, { shadowHue: 0, shadowAmount: 80, midBrightness: 20, highBrightness: -20 });
+    const layer = original.slice(), adjustment = original.slice();
+    FM._pixelFx.colourwheels(layer, 3, 1, effect.params, 0);
+    FM._applyPixelFx(adjustment, effect, 0, 3, 1);
+    if (layer.some((v, i) => v !== adjustment[i])) throw new Error('Layer and adjustment grade differ');
+    if (layer[0] <= layer[1] || layer[4] <= original[4] || layer[8] >= original[8])
+      throw new Error('Tonal controls did not affect their intended range');
+    if (layer[3] !== 231 || layer[7] !== 232 || layer[11] !== 233)
+      throw new Error('Colour Wheels changed alpha');
+  });
+
+  test('690 HSL Mixer changes independent colour bands and preserves neutrals', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('hslmixer');
+    if (!reg || reg.category !== 'color' || reg.params.filter(p => p.type === 'range').length !== 24 ||
+        !FM.fxRegistry.gates().adjOk.includes('hslmixer')) throw new Error('HSL Mixer registration is incomplete');
+    const fx = FM.fxRegistry.makeInstance('hslmixer');
+    const original = new Uint8ClampedArray([255, 0, 0, 201, 0, 255, 0, 202, 0, 0, 255, 203, 100, 100, 100, 204]);
+    const neutral = original.slice();
+    FM._pixelFx.hslmixer(neutral, 4, 1, fx.params, 0);
+    if (neutral.some((v, i) => v !== original[i])) throw new Error('Neutral HSL Mixer changed pixels');
+    Object.assign(fx.params, { hRed: 60, lGreen: 60, sBlue: -100 });
+    const result = original.slice(), adjustment = original.slice();
+    FM._pixelFx.hslmixer(result, 4, 1, fx.params, 0);
+    FM._applyPixelFx(adjustment, fx, 0, 4, 1);
+    if (result.some((v, i) => v !== adjustment[i])) throw new Error('HSL Mixer differs on an adjustment layer');
+    if (result[1] <= 0 || result[4] <= 0 || result[6] <= 0 || result[8] === 0 && result[10] === 255)
+      throw new Error('Hue, luminance or saturation view failed to change its colour band');
+    if (result[12] !== 100 || result[13] !== 100 || result[14] !== 100 ||
+        result[3] !== 201 || result[7] !== 202 || result[11] !== 203 || result[15] !== 204)
+      throw new Error('HSL Mixer changed neutral RGB or alpha');
+  });
+
+  test('690 Drums category renders six distinct playable sounds', { item: 'TBD' }, async function () {
+    const ids = ['drum-kick', 'drum-snare', 'drum-clap', 'drum-hat', 'drum-rimshot', 'drum-roll'];
+    for (const id of ids) {
+      const def = FM.sfx.byId(id);
+      if (!def || def.cat !== 'Drums') throw new Error(id + ' is missing from Drums');
+      const buffer = await FM.sfx.renderBuffer(def);
+      if (!buffer || buffer.length < def.dur * buffer.sampleRate)
+        throw new Error(id + ' did not render its complete clip');
+      const samples = buffer.getChannelData(0);
+      let peak = 0;
+      for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+      if (peak < 0.1 || peak > 1) throw new Error(id + ' is silent or clipped (' + peak + ')');
+    }
+  });
+
+  test('690 Explosion and Thunder options produce bounded distinct sound variants', { item: 'TBD' }, async function () {
+    for (const id of ['explosion', 'thunder']) {
+      const base = FM.sfx.byId(id);
+      if (!base || !base.variant) throw new Error(id + ' sound is missing');
+      const small = FM.sfx.variantOf(base, { size: 'small', length: 0.9, variation: 1 });
+      const big = FM.sfx.variantOf(base, { size: 'big', length: 1.8, variation: 3 });
+      if (small.id === big.id || small.baseId !== id || big.baseId !== id || small.dur !== 0.9 || big.dur !== 1.8)
+        throw new Error(id + ' options did not produce independent bounded cache keys and lengths');
+      const a = await FM.sfx.renderBuffer(small), b = await FM.sfx.renderBuffer(big);
+      if (a.length < 0.9 * a.sampleRate || b.length < 1.8 * b.sampleRate)
+        throw new Error(id + ' rendered audio was cut short');
+      const samples = a.getChannelData(0);
+      let peak = 0; for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+      if (peak < 0.1 || peak > 1) throw new Error(id + ' small variant is silent or clipped');
+    }
+  });
+
+  test('690 Reduce Noise suppresses a learned hum while keeping a voiced tone', { item: 'TBD' }, async function () {
+    if (!FM.reduceNoiseBuffer) throw new Error('Reduce Noise tool is missing');
+    const rate = 16384, length = rate, context = FM.audioCtx();
+    const input = context.createBuffer(1, length, rate), src = input.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+      const t = i / rate;
+      src[i] = 0.22 * Math.sin(2 * Math.PI * 192 * t) +
+        (i >= length / 2 ? 0.35 * Math.sin(2 * Math.PI * 1024 * t) : 0);
+    }
+    const detector = FM.detectSpeech;
+    FM.detectSpeech = async () => ({ segments: [{ start: 0.5, end: 1 }] });
+    let cleaned;
+    try { cleaned = await FM.reduceNoiseBuffer(input, { amount: 1, reduction: 24, sensitivity: 0.7, keepVoice: true }); }
+    finally { FM.detectSpeech = detector; }
+    const output = cleaned.getChannelData(0);
+    const amplitude = (data, hz) => {
+      let sum = 0;
+      for (let i = length / 2; i < length; i++) sum += data[i] * Math.sin(2 * Math.PI * hz * i / rate);
+      return 4 * Math.abs(sum) / length;
+    };
+    if (amplitude(output, 192) >= amplitude(src, 192) * 0.85)
+      throw new Error('Learned hum was not reduced');
+    if (amplitude(output, 1024) <= amplitude(src, 1024) * 0.7)
+      throw new Error('Voice tone was over-suppressed');
+  });
+
+  test('690 Auto-duck maps trimmed voice timing and writes reversible volume keyframes', { item: 'TBD' }, function () {
+    if (!FM.autoDuckTimelineSegments || !FM.autoDuckKeyframes) throw new Error('Auto-duck tool is missing');
+    const voice = { start: 4, duration: 3, trimStart: 1, speed: 2, reversed: false };
+    const segments = FM.autoDuckTimelineSegments(voice, [{ start: 2, end: 3 }]);
+    if (segments.length !== 1 || Math.abs(segments[0].start - 4.5) > 1e-4 ||
+        Math.abs(segments[0].end - 5) > 1e-4) throw new Error('Trimmed or sped-up speech mapped to the wrong project time');
+    const opts = { amount: 12, attack: 0.2, release: 0.6, padding: 0.15 };
+    const keys = FM.autoDuckKeyframes(0.8, segments, opts, 2, 10);
+    if (!keys || !FM.isAnimated(keys)) throw new Error('No ducking keyframes generated');
+    const before = FM.evalProp(keys, 4), under = FM.evalProp(keys, 4.7), after = FM.evalProp(keys, 6);
+    if (Math.abs(before - 0.8) > 1e-4 || under >= 0.23 || Math.abs(after - 0.8) > 1e-4)
+      throw new Error('Ducking did not reach the requested level and recover');
+    const music = { volume: keys, autoDuck: { base: 0.8 } };
+    const oldReconcile = FM.reconcileAudio, oldTimeline = FM.timeline, oldInspector = FM.inspector;
+    const oldHistory = FM.history, oldRender = FM.requestRender;
+    try {
+      FM.reconcileAudio = null; FM.timeline = null; FM.inspector = null; FM.history = null; FM.requestRender = null;
+      FM.autoDuckClear(music);
+    } finally {
+      FM.reconcileAudio = oldReconcile; FM.timeline = oldTimeline; FM.inspector = oldInspector;
+      FM.history = oldHistory; FM.requestRender = oldRender;
+    }
+    if (music.volume !== 0.8 || music.autoDuck) throw new Error('Original volume was not restored');
+  });
+
+  test('690 Clarity and Dehaze controls change detail and haze without changing alpha', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('claritydehaze');
+    if (!reg || reg.category !== 'color' || reg.params.length !== 4 || !FM._pixelFx.claritydehaze)
+      throw new Error('Clarity & Dehaze is missing from Colouring');
+    const W = 32, H = 32, source = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = (x < 16 ? 135 : 205) + ((x + y) % 2 ? 8 : -8);
+      source[i] = source[i + 1] = source[i + 2] = v;
+      source[i + 3] = x === 0 ? 127 : 255;
+    }
+    const neutral = source.slice();
+    FM._pixelFx.claritydehaze(neutral, W, H, { clarity: 0, texture: 0, dehaze: 0, radius: 60 }, 0);
+    if (neutral.some((v, i) => v !== source[i])) throw new Error('Neutral controls changed the image');
+    for (const key of ['clarity', 'texture', 'dehaze']) {
+      const result = source.slice(), params = { clarity: 0, texture: 0, dehaze: 0, radius: 60 };
+      params[key] = 75;
+      FM._pixelFx.claritydehaze(result, W, H, params, 0);
+      let changed = 0;
+      for (let i = 0; i < result.length; i += 4) {
+        if (result[i] !== source[i]) changed++;
+        if (result[i + 3] !== source[i + 3]) throw new Error(key + ' changed alpha');
+      }
+      if (changed < 50) throw new Error(key + ' had no visible effect');
+    }
+  });
+
+  test('690 Venetian Blinds fits and staggers its slats while preserving colour', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('venetianblinds');
+    if (!reg || reg.category !== 'matte' || reg.params.length !== 6 || !FM._pixelFx.venetianblinds)
+      throw new Error('Venetian Blinds is missing from Keying');
+    const W = 40, H = 20;
+    const source = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      source[i] = 120; source[i + 1] = 80; source[i + 2] = 40;
+      source[i + 3] = x >= 10 && x < 30 ? 255 : 0;
+    }
+    const render = (params) => { const data = source.slice(); FM._pixelFx.venetianblinds(data, W, H, params, 0); return data; };
+    const alphaAt = (data, x) => data[(10 * W + x) * 4 + 3];
+    const base = { progress: 0.5, count: 2, angle: 0, softness: 0, stagger: 0, fit: 1 };
+    const fitted = render(base);
+    if (alphaAt(fitted, 12) !== 255 || alphaAt(fitted, 18) !== 0 ||
+        alphaAt(fitted, 22) !== 255 || alphaAt(fitted, 28) !== 0)
+      throw new Error('Slats did not fit the visible layer with matching half-open bars');
+    const staggered = render({ ...base, stagger: 100 });
+    if (alphaAt(staggered, 18) !== 255 || alphaAt(staggered, 22) !== 0)
+      throw new Error('Stagger did not make the first slat lead the second');
+    const feathered = render({ ...base, softness: 4 });
+    if (alphaAt(feathered, 15) <= 0 || alphaAt(feathered, 15) >= 255)
+      throw new Error('The slat edge was not softened');
+    for (const progress of [0, 1]) {
+      const data = render({ ...base, progress });
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] !== source[i] || data[i + 1] !== source[i + 1] || data[i + 2] !== source[i + 2] ||
+            data[i + 3] !== (progress ? source[i + 3] : 0))
+          throw new Error('An endpoint changed colour or left alpha in the wrong state');
+      }
+    }
+  });
+
+  test('690 Radio Waves emits multiple timed rings with shape and fade controls', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('radiowaves');
+    const fn = FM._FX_TABLES.CANVAS_FX.radiowaves;
+    if (!reg || reg.category !== 'proc' || !fn || !FM._FX_TABLES.CFX_NO_BBOX.radiowaves ||
+        !FM._postFxTypes().includes('radiowaves')) throw new Error('Radio Waves is not registered and routed');
+    const paths = [];
+    const ctx = {
+      drawImage() {}, save() {}, restore() {}, beginPath() { paths.push({ points: [], alpha: this.globalAlpha }); },
+      arc(x, y, r) { const path = paths[paths.length - 1]; path.centreX = x; path.centreY = y; path.radius = r; },
+      moveTo(x, y) { paths[paths.length - 1].points.push([x, y]); },
+      lineTo(x, y) { paths[paths.length - 1].points.push([x, y]); },
+      closePath() {}, stroke() {},
+    };
+    fn({}, ctx, 200, 100, { x: 0, y: 0, w: 200, h: 100 },
+       { x: 50, y: 50, rate: 2, speed: 100, lifetime: 2, width: 4,
+         fade: 100, shape: 0, sides: 6, spin: 0, blend: 1, color: '#ffffff' }, 0.75, 0.75, {}, 1);
+    if (paths.length !== 2 || Math.abs(paths[0].radius - 75) > 1e-6 ||
+        Math.abs(paths[1].radius - 25) > 1e-6 || !(paths[0].alpha < paths[1].alpha))
+      throw new Error('Timed rings, travel speed or age fade is wrong');
+    paths.length = 0;
+    fn({}, ctx, 200, 100, { x: 0, y: 0, w: 200, h: 100 },
+       { x: 50, y: 50, rate: 0, speed: 100, lifetime: 2, width: 4,
+         fade: 0, shape: 2, sides: 6, spin: 90, blend: 0 }, 0.75, 0.75, {}, 1);
+    if (paths.length !== 1 || paths[0].points.length !== 6 || paths[0].radius !== undefined)
+      throw new Error('Polygon shape or zero-rate single ring is wrong');
+    paths.length = 0;
+    const cropped = { __fmOX: 50, __fmOY: 20 };
+    fn(cropped, ctx, 100, 60, { x: 0, y: 0, w: 100, h: 60 },
+       { x: 50, y: 50, rate: 0, speed: 100, lifetime: 2, width: 4,
+         fade: 0, shape: 0, sides: 6, spin: 0, blend: 0 }, 0.75, 0.75, {}, 1, null,
+       { project: { width: 200, height: 100 } });
+    if (paths.length !== 1 || paths[0].centreX !== 50 || paths[0].centreY !== 30)
+      throw new Error('A zoomed viewport moved the wave origin');
+  });
+
+  test('690 Lens Magnifier enlarges a local detail without changing the surrounding frame', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('lensmagnifier');
+    const fn = FM._FX_TABLES.CANVAS_FX.lensmagnifier;
+    if (!reg || reg.category !== 'distort' || !fn || !FM._postFxTypes().includes('lensmagnifier'))
+      throw new Error('Lens Magnifier is not registered and routed');
+    const W = 80, H = 80, a = document.createElement('canvas'), b = document.createElement('canvas');
+    a.width = b.width = W; a.height = b.height = H;
+    const ac = a.getContext('2d'), bc = b.getContext('2d');
+    ac.fillStyle = '#000000'; ac.fillRect(0, 0, W, H);
+    ac.fillStyle = '#ffffff'; ac.fillRect(48, 0, 1, H);
+    const params = { x: 50, y: 50, size: 50, zoom: 2, shape: 0, feather: 0, border: 0, shadow: 0 };
+    fn(a, bc, W, H, { x: 0, y: 0, w: W, h: H }, params, 0, 0, {}, 1, null,
+       { project: { width: W, height: H } });
+    const pixel = (x, y) => bc.getImageData(x, y, 1, 1).data[0];
+    if (pixel(44, 40) < 200 || pixel(48, 40) > 40 || pixel(48, 5) < 200)
+      throw new Error('The lens did not enlarge the source at its centre while keeping the outside');
+    bc.clearRect(0, 0, W, H);
+    fn(a, bc, W, H, { x: 0, y: 0, w: W, h: H }, { ...params, zoom: 1 }, 0, 0, {}, 1, null,
+       { project: { width: W, height: H } });
+    const actual = bc.getImageData(0, 0, W, H).data, original = ac.getImageData(0, 0, W, H).data;
+    if (actual.some((v, i) => v !== original[i])) throw new Error('A plain 1× lens changed the frame');
+  });
+
+  test('690 Circle Array places whole copies around a ring with scale and fade', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('circlearray'), fn = FM._FX_TABLES.CANVAS_FX.circlearray;
+    if (!reg || reg.category !== 'repeat' || !fn || !FM._postFxTypes().includes('circlearray'))
+      throw new Error('Circle Array is not registered and routed');
+    const calls = [];
+    const ctx = {
+      save() { calls.push({}); }, restore() {}, translate(x, y) { calls[calls.length - 1].position = [x, y]; },
+      rotate(r) { calls[calls.length - 1].rotation = r; },
+      scale(x, y) { calls[calls.length - 1].scale = x; },
+      drawImage() { calls[calls.length - 1].alpha = this.globalAlpha; },
+    };
+    fn({}, ctx, 100, 100, { x: 48, y: 48, w: 4, h: 4 },
+       { count: 4, radius: 40, start: 0, facecenter: 0, scalestep: 50,
+         spin: 0, spiral: 0, fade: 50 }, 0, 0, null, 1, null, null);
+    if (calls.length !== 4 || Math.abs(calls[0].position[0] - 70) > 1e-6 ||
+        Math.abs(calls[1].position[1] - 70) > 1e-6 ||
+        Math.abs(calls[2].position[0] - 30) > 1e-6 ||
+        Math.abs(calls[3].position[1] - 30) > 1e-6 ||
+        Math.abs(calls[3].scale - 1.5) > 1e-6 || Math.abs(calls[3].alpha - 0.5) > 1e-6)
+      throw new Error('Copies did not land around the ring or scale/fade as requested');
+  });
+
+  test('690 Cartoon simplifies shading, inks an edge and preserves transparency', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('cartoon'), fn = FM._pixelFx.cartoon;
+    if (!reg || reg.category !== 'stylize' || !fn || !FM._postFxTypes().includes('cartoon'))
+      throw new Error('Cartoon is not registered and routed');
+    const W = 24, H = 24, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      src[i] = src[i + 1] = src[i + 2] = (x < 12 ? 80 : 210) + ((x + y) % 2 ? 5 : -5);
+      src[i + 3] = x === 0 ? 127 : 255;
+    }
+    const params = { smoothing: 60, steps: 4, edgewidth: 1, threshold: 20,
+                     saturation: 0, mix: 100, color: '#000000' };
+    const neutral = src.slice(); fn(neutral, W, H, { ...params, mix: 0 }, 0, 1);
+    if (neutral.some((v, i) => v !== src[i])) throw new Error('Zero mix changed the image');
+    const out = src.slice(); fn(out, W, H, params, 0, 1);
+    const at = (x, y) => out[(y * W + x) * 4];
+    if (at(11, 12) > 20 || at(12, 12) > 20 || at(18, 12) === src[(12 * W + 18) * 4])
+      throw new Error('The subject edge or shading was not cartooned');
+    for (let i = 3; i < src.length; i += 4)
+      if (out[i] !== src[i]) throw new Error('Cartoon changed transparency');
+    const large = new Uint8ClampedArray(240 * 240 * 4);
+    for (let y = 0; y < 240; y++) for (let x = 0; x < 240; x++) {
+      const i = (y * 240 + x) * 4, v = x < 120 ? 80 : 210;
+      large[i] = large[i + 1] = large[i + 2] = v; large[i + 3] = 255;
+    }
+    fn(large, 240, 240, params, 0, 1);
+    if (large[(120 * 240 + 119) * 4] > 20 || large[(120 * 240 + 120) * 4] > 20)
+      throw new Error('The phone-sized working-plate path lost the subject edge');
+  });
+
+  test('690 Oil Paint smooths textured regions without washing out their shared edge', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('oilpaint'), fn = FM._pixelFx.oilpaint;
+    if (!reg || reg.category !== 'stylize' || !fn || !FM._postFxTypes().includes('oilpaint'))
+      throw new Error('Oil Paint is not registered and routed');
+    const W = 32, H = 32, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = (x < 16 ? 75 : 205) + ((x + y) % 2 ? 10 : -10);
+      src[i] = src[i + 1] = src[i + 2] = v;
+      src[i + 3] = x === 0 ? 128 : 255;
+    }
+    const params = { brush: 6, sharpness: 100, detail: 8, levels: 0, mix: 100 };
+    const neutral = src.slice(); fn(neutral, W, H, { ...params, mix: 0 }, 0, 1);
+    if (neutral.some((v, i) => v !== src[i])) throw new Error('Zero mix changed pixels');
+    const out = src.slice(); fn(out, W, H, params, 0, 1);
+    const at = (x, y) => out[(y * W + x) * 4];
+    if (at(15, 16) >= 120 || at(16, 16) <= 160 || Math.abs(at(8, 8) - at(9, 8)) >= 15)
+      throw new Error('Texture was not smoothed while retaining the colour edge');
+    for (let i = 3; i < src.length; i += 4)
+      if (out[i] !== src[i]) throw new Error('Oil Paint changed source transparency');
+  });
+
+  test('690 Black & White Mixer varies colour ranges and preserves zero mix', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('bwmixer'), fn = FM._pixelFx.bwmixer;
+    if (!reg || reg.category !== 'color' || !fn || !FM._postFxTypes().includes('bwmixer'))
+      throw new Error('Black & White Mixer is not registered and routed');
+    const src = new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 200, 0, 0, 255, 255]);
+    const neutral = src.slice(); fn(neutral, 3, 1, { mix: 0 }, 0);
+    if (neutral.some((v, i) => v !== src[i])) throw new Error('Zero mix changed the image');
+    const out = src.slice(); fn(out, 3, 1, {}, 0);
+    for (let i = 0; i < out.length; i += 4)
+      if (out[i] !== out[i + 1] || out[i] !== out[i + 2] || out[i + 3] !== src[i + 3])
+        throw new Error('Monochrome output or alpha is wrong');
+    if (!(out[0] > out[8] && out[4] > out[8])) throw new Error('Colour ranges had no independent weights');
+    const shifted = src.slice(); fn(shifted, 3, 1, { reds: 100, preset: 1 }, 0);
+    if (shifted[0] <= out[0] || shifted[4] === out[4]) throw new Error('Range slider or filter preset had no effect');
+    const tinted = src.slice(); fn(tinted, 3, 1, { tint: 50, color: '#ff0000' }, 0);
+    if (tinted[0] <= tinted[1] || tinted[1] !== tinted[2]) throw new Error('Tint did not colour the grey result');
+  });
+
+  test('690 Graphic EQ presets and output change a rendered tone', { item: 'TBD' }, async function () {
+    const reg = FM.audioFxRegistry.get('graphicEq');
+    if (!reg || reg.category !== 'eq' || reg.params.filter(p => /^band\d+$/.test(p.key)).length !== 10 ||
+        !reg.params.find(p => p.key === 'preset' && p.options && p.options.length === 6))
+      throw new Error('Graphic EQ controls are not registered');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR / 2;
+    async function level(params) {
+      const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR), samples = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) samples[i] = Math.sin(2 * Math.PI * 125 * i / SR) * 0.25;
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const inst = FM.audioFxRegistry.makeInstance('graphicEq'); Object.assign(inst.params, params);
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [inst] }, 0);
+      if (!chain) throw new Error('Graphic EQ signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.5); src.start(0);
+      const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+      let power = 0; for (let i = N / 2; i < N; i++) power += out[i] * out[i];
+      return Math.sqrt(power / (N / 2));
+    }
+    const flat = await level({}), bass = await level({ preset: 1 }), quiet = await level({ output: -6 });
+    if (!(bass > flat * 1.15 && quiet < flat * 0.55 && quiet > flat * 0.45))
+      throw new Error('Preset or output control did not change the rendered audio');
+  });
+
+  test('690 Ambience pack renders four usable quiet beds', { item: 'TBD' }, async function () {
+    for (const id of ['amb-ocean', 'amb-crickets', 'amb-birds', 'amb-room']) {
+      const def = FM.sfx.byId(id);
+      if (!def || def.cat !== 'Ambience' || def.dur !== 8) throw new Error(id + ' is missing from Ambience');
+      const buffer = await FM.sfx.renderBuffer(def), samples = buffer.getChannelData(0);
+      if (buffer.duration < 8 || samples.length < 8 * 44100) throw new Error(id + ' was cut short');
+      let peak = 0, power = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const v = samples[i]; peak = Math.max(peak, Math.abs(v)); power += v * v;
+      }
+      if (!(peak > 0.05 && peak < 0.5 && Math.sqrt(power / samples.length) > 0.005))
+        throw new Error(id + ' rendered silent or too loud');
+    }
+  });
+
+  test('690 Everyday Foley renders six bounded sounds', { item: 'TBD' }, async function () {
+    const ids = ['foley-knock', 'foley-footsteps', 'foley-clock', 'foley-vibrate', 'foley-typing', 'foley-kaching'];
+    for (const id of ids) {
+      const def = FM.sfx.byId(id);
+      if (!def || def.cat !== 'Foley') throw new Error(id + ' is missing from Foley');
+      const buffer = await FM.sfx.renderBuffer(def), samples = buffer.getChannelData(0);
+      if (buffer.duration < def.dur) throw new Error(id + ' was cut short');
+      let peak = 0, power = 0;
+      for (let i = 0; i < samples.length; i++) {
+        peak = Math.max(peak, Math.abs(samples[i])); power += samples[i] * samples[i];
+      }
+      if (!(peak > 0.08 && peak < 0.7 && power > 0.01)) throw new Error(id + ' is silent or clipped');
+    }
+  });
+
+  test('690 Laser Beam draws between project points across a cropped plate', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('laserbeam'), tables = FM._FX_TABLES;
+    const fn = tables && tables.CANVAS_FX.laserbeam;
+    if (!reg || reg.category !== 'proc' || !fn || !FM._postFxTypes().includes('laserbeam') || !tables.CFX_NO_BBOX.laserbeam)
+      throw new Error('Laser Beam is not registered and routed');
+    const strokes = [], ctx = {
+      drawImage() {}, save() {}, restore() {}, beginPath() {},
+      moveTo(x, y) { this.start = [x, y]; }, lineTo(x, y) { this.end = [x, y]; },
+      stroke() { strokes.push({ start: this.start, end: this.end, width: this.lineWidth, alpha: this.globalAlpha }); },
+    };
+    const canvas = { __fmOX: 10, __fmOY: 20 };
+    const scene = { project: { width: 100, height: 100 } };
+    const p = { x1: 10, y1: 20, x2: 90, y2: 80, width: 6, glow: 100, intensity: 100, pulse: 0, color: '#ff4055' };
+    fn(canvas, ctx, 100, 100, null, p, 0, 0, {}, 1, null, scene);
+    if (strokes.length !== 4 || strokes.some(s => s.start[0] !== 0 || s.start[1] !== 0 || s.end[0] !== 80 || s.end[1] !== 60))
+      throw new Error('Beam missed project points after viewport offset');
+    if (!(strokes[0].width > strokes[2].width && strokes[3].width < strokes[2].width))
+      throw new Error('Glow and core widths are not distinct');
+    strokes.length = 0;
+    fn(canvas, ctx, 100, 100, null, { ...p, intensity: 0 }, 0, 0, {}, 1, null, scene);
+    if (strokes.length) throw new Error('Zero intensity still drew a beam');
+  });
+
+  test('690 Fractal Noise patterns, evolution and neutral controls', { item: 'TBD' }, function () {
+    const fx = FM._FX_TABLES.PIXEL_FX.fractalnoise;
+    if (!fx || !FM._postFxTypes().includes('fractalnoise') || FM.fxRegistry.get('fractalnoise')?.category !== 'proc')
+      throw new Error('Fractal Noise is not registered and routed');
+    const make = () => { const d = new Uint8ClampedArray(40 * 40 * 4); for (let i = 0; i < d.length; i += 4) d.set([80, 120, 160, 255], i); return d; };
+    const draw = (p, t = 0) => { const d = make(); fx(d, 40, 40, p, t, 1); return d; };
+    const base = { scale: 22, octaves: 4, contrast: 100, evolution: 1, amount: 100, seed: 7 };
+    const looks = [0, 1, 2, 3].map(pattern => draw({ ...base, pattern }));
+    if (looks.some((d, i) => d[3] !== 255 || d[0] === 80 || (i && d.every((v, k) => v === looks[0][k]))))
+      throw new Error('Noise patterns are missing, identical, or changed alpha');
+    const still = draw({ ...base, evolution: 0 }), heldLater = draw({ ...base, evolution: 0 }, 2);
+    if (!still.every((v, i) => v === heldLater[i])) throw new Error('Zero evolution changed a held texture');
+    if (draw(base, 2).every((v, i) => v === looks[0][i])) throw new Error('Evolution did not animate');
+    const original = make();
+    if (!draw({ ...base, amount: 0 }).every((v, i) => v === original[i])) throw new Error('Zero amount changed the source');
+  });
+
+  test('690 Gradient Wipe follows a chosen map and has exact progress endpoints', { item: 'TBD' }, function () {
+    const fx = FM.fxRegistry.makeInstance('gradientwipe');
+    if (!fx || FM.fxRegistry.get('gradientwipe')?.category !== 'matte' || !FM._postFxTypes().includes('gradientwipe'))
+      throw new Error('Gradient Wipe is not registered and routed');
+    const target = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 100, shapeH: 100, fill: '#ff0000' });
+    const map = FM.makeLayer('shape', { shape: 'rect', x: 25, y: 50, shapeW: 50, shapeH: 100, fill: '#ffffff' });
+    target.start = map.start = 0; target.duration = map.duration = 4;
+    map.transform.opacity = 0; fx.params.source = map.id; fx.params.softness = 0;
+    target.effects = [fx];
+    const sc = scene([target, map], { project: { width: 100, height: 100, fps: 30, duration: 4, background: '#000000' } });
+    const render = progress => {
+      fx.params.progress = progress;
+      const c = offscreen(100, 100), ctx = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, sc, 0);
+      return [px(ctx, 25, 50)[0], px(ctx, 75, 50)[0]];
+    };
+    const start = render(0), middle = render(0.5), end = render(1);
+    if (start[0] > 20 || start[1] > 20 || middle[0] < 220 || middle[1] > 20 || end[0] < 220 || end[1] < 220)
+      throw new Error('The map did not wipe the correct half, or Progress endpoints are wrong: ' + JSON.stringify({ start, middle, end }));
+    const a = FM._gradientWipeAlpha;
+    if (a(0.5, 0.5, 0.2, false) !== 0.5 || a(0.8, 0.5, 0, true) !== 0 || a(0, 1, 0.2, false) !== 1)
+      throw new Error('Softness or Invert changed the expected threshold');
+  });
+
+  test('690 Title Warp uses the visible title bounds and all ten shapes move', { item: 'TBD' }, function () {
+    const fn = FM._FX_TABLES.WARP_FX.titlewarp, instance = FM.fxRegistry.makeInstance('titlewarp');
+    if (!fn || !fn.needsBounds || !instance || FM.fxRegistry.get('titlewarp')?.category !== 'distort' || !FM._postFxTypes().includes('titlewarp'))
+      throw new Error('Title Warp is not registered and routed');
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 30, y: 50, shapeW: 30, shapeH: 20, fill: '#ffffff' });
+    L.start = 0; L.duration = 3; L.effects = [instance];
+    const original = fn.prep, bounds = [];
+    fn.prep = function (...args) { bounds.push(args[8]); return original.apply(this, args); };
+    try {
+      const c = offscreen(100, 100);
+      FM.renderScene(c.getContext('2d'), scene([L], { project: { width: 100, height: 100, fps: 30, duration: 3, background: '#000000' } }), 0);
+    } finally { fn.prep = original; }
+    if (!bounds.length || !bounds[0] || bounds[0].w < 25 || bounds[0].w > 35 || bounds[0].h < 15 || bounds[0].h > 25)
+      throw new Error('Warp driver measured the frame instead of the title: ' + JSON.stringify(bounds[0]));
+    const bb = { x: 15, y: 40, w: 30, h: 20 }, signatures = new Set();
+    for (let style = 0; style < 10; style++) {
+      const p = { style, amount: 60, phase: 40 }, C = original(100, 100, 50, 50, 70, p, 0, 1, bb);
+      const points = [[37, 55], [23, 44], [30, 51]].map(q => fn(q[0], q[1], 100, 100, 50, 50, 70, p, 0, 1, C));
+      if (points.every((q, i) => q[0] === [[37, 55], [23, 44], [30, 51]][i][0] && q[1] === [[37, 55], [23, 44], [30, 51]][i][1]))
+        throw new Error('Shape ' + style + ' does not bend');
+      if (points.some(q => !isFinite(q[0]) || !isFinite(q[1]))) throw new Error('Shape ' + style + ' returned an invalid pixel');
+      signatures.add(JSON.stringify(points));
+    }
+    if (signatures.size !== 10) throw new Error('Two Title Warp shapes map to the same geometry');
+    const zero = { style: 9, amount: 0 }, neutral = original(100, 100, 50, 50, 70, zero, 0, 1, bb);
+    if (fn(37, 55, 100, 100, 50, 50, 70, zero, 0, 1, neutral).some((v, i) => v !== [37, 55][i]))
+      throw new Error('Zero Bend changed the title');
+  });
+
+
+  test('690 Odometer Roll keeps label text and rolls both columns through a carry', { item: 'TBD' }, function () {
+    const def = FM.fxRegistry.get('odometer'), fx = FM.fxRegistry.makeInstance('odometer');
+    if (!def || def.category !== 'text' || def.appliesTo !== 'text' || !fx || !FM._FX_TABLES.TEXT_FX.odometer)
+      throw new Error('Odometer Roll is missing from the text effect browser');
+    const layer = FM.makeLayer('text', { text: 'Score: 0%', fontSize: 40 });
+    layer.effects = [fx];
+    Object.assign(fx.params, { from: 0, to: 10, progress: 0.95, digits: 2, decimals: 0, group: 0, wrap: 1 });
+    const state = FM.applyTextEffects(layer, layer.text, 0, 0, { project: { fps: 30 } });
+    if (state.text !== 'Score: 10%' || !state.odometer || state.odometer.value !== 9.5)
+      throw new Error('Label or progress was lost: ' + JSON.stringify(state));
+    const marks = [], ctx = {
+      globalAlpha: 1, textAlign: 'left', textBaseline: 'alphabetic', letterSpacing: '0px',
+      save() {}, restore() {}, beginPath() {}, rect() {}, clip() {},
+      measureText(s) { return { width: String(s).length * 10 }; },
+      fillText(s, x, y) { marks.push([s, x, y]); }, strokeText() {},
+    };
+    FM._drawOdometerText(ctx, layer, state.odometer, 0, 0, false, 0, '#000', 'outside');
+    const has = (char, sign) => marks.some(m => m[0] === char && (sign < 0 ? m[2] < -1 : m[2] > 1));
+    if (!marks.some(m => m[0] === 'Score: ') || !marks.some(m => m[0] === '%') ||
+        !has('0', -1) || !has('1', 1) || !has('9', -1) || !has('0', 1))
+      throw new Error('Digit columns did not roll across 09 to 10: ' + JSON.stringify(marks));
+  });
+
+  test('690 Hum Remover cuts selected mains hum and leaves other tones audible', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('humremove');
+    if (!def || def.category !== 'eq' || !def.params.some(p => p.key === 'harmonics'))
+      throw new Error('Hum Remover is not registered');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR;
+    async function level(hz, params) {
+      const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR), d = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) d[i] = 0.2 * Math.sin(2 * Math.PI * hz * i / SR);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('humremove'); Object.assign(fx.params, params);
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('Hum Remover signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 1); src.start(0);
+      const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+      let sum = 0; for (let i = N / 2; i < N; i++) sum += out[i] * out[i];
+      return Math.sqrt(sum / (N / 2));
+    }
+    const hum50 = await level(60, { base: 50, harmonics: 1 });
+    const hum60 = await level(60, { base: 60, harmonics: 1 });
+    const voice = await level(440, { base: 60, harmonics: 1 });
+    if (!(hum60 < hum50 * 0.25 && voice > hum50 * 0.7))
+      throw new Error('60 Hz setting missed mains hum or cut unrelated audio: ' + JSON.stringify({ hum50, hum60, voice }));
+  });
+
+  test('690 De-esser reduces strong sibilance while preserving lower voice tones', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('deesser');
+    if (!def || def.category !== 'dyn' || !def.params.some(p => p.key === 'listen'))
+      throw new Error('De-esser controls are missing');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR / 2;
+    async function level(hz, reduction) {
+      const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR), d = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) d[i] = 0.4 * Math.sin(2 * Math.PI * hz * i / SR);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('deesser');
+      Object.assign(fx.params, { frequency: 5000, threshold: -30, reduction, listen: 0, mix: 1 });
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('De-esser signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.5); src.start(0);
+      const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+      let sum = 0; for (let i = N / 2; i < N; i++) sum += out[i] * out[i];
+      return Math.sqrt(sum / (N / 2));
+    }
+    const sDry = await level(7000, 0), sWet = await level(7000, 100);
+    const lowDry = await level(500, 0), lowWet = await level(500, 100);
+    if (!(sWet < sDry * 0.6 && lowWet > lowDry * 0.9 && lowWet < lowDry * 1.1))
+      throw new Error('Sibilance and low-band balance are wrong: ' + JSON.stringify({ sDry, sWet, lowDry, lowWet }));
+  });
+
+  test('690 Channel Utility routes stereo, mono, channel copies, swap, phase and balance', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('channelutility');
+    if (!def || def.category !== 'space' || def.params.length !== 4) throw new Error('Channel Utility is missing');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = 4800;
+    async function sample(params) {
+      const ctx = new OAC(2, N, SR), buf = ctx.createBuffer(2, N, SR);
+      buf.getChannelData(0).fill(0.4); buf.getChannelData(1).fill(0.2);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('channelutility'); Object.assign(fx.params, params);
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('Channel Utility signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.1); src.start(0);
+      const out = await ctx.startRendering(); chain.dispose();
+      return [out.getChannelData(0)[N - 1], out.getChannelData(1)[N - 1]];
+    }
+    const cases = [
+      [{}, [0.4, 0.2]], [{ mode: 1 }, [0.3, 0.3]], [{ mode: 2 }, [0.4, 0.4]],
+      [{ mode: 3 }, [0.2, 0.2]], [{ mode: 4 }, [0.2, 0.4]],
+      [{ invertL: 1 }, [-0.4, 0.2]], [{ balance: 1 }, [0, 0.2]],
+    ];
+    for (const [params, expected] of cases) {
+      const got = await sample(params);
+      if (got.some((v, i) => Math.abs(v - expected[i]) > 0.01))
+        throw new Error('Wrong channel routing for ' + JSON.stringify(params) + ': ' + JSON.stringify(got));
+    }
+  });
+
+  test('690 Stereoizer widens mono without changing its fold-down in safe mode', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('stereoizer');
+    if (!def || def.category !== 'space' || !def.params.some(p => p.key === 'monoSafe'))
+      throw new Error('Stereoizer is not registered');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR / 2;
+    async function render(amount) {
+      const ctx = new OAC(2, N, SR), buf = ctx.createBuffer(1, N, SR), source = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) source[i] = 0.3 * Math.sin(2 * Math.PI * 900 * i / SR);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('stereoizer');
+      Object.assign(fx.params, { amount, delay: 12, monoSafe: 1, lowcut: 150 });
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('Stereoizer signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.5); src.start(0);
+      const out = await ctx.startRendering(); chain.dispose();
+      return { source, left: out.getChannelData(0), right: out.getChannelData(1) };
+    }
+    const dry = await render(0), wide = await render(1);
+    let foldError = 0, sidePower = 0, drySide = 0;
+    for (let i = N / 2; i < N; i++) {
+      const mid = (wide.left[i] + wide.right[i]) / 2;
+      foldError += Math.abs(mid - wide.source[i]);
+      sidePower += Math.pow(wide.left[i] - wide.right[i], 2);
+      drySide += Math.pow(dry.left[i] - dry.right[i], 2);
+    }
+    if (foldError / (N / 2) > 0.001 || Math.sqrt(sidePower / (N / 2)) < 0.03 || drySide > 0.0001)
+      throw new Error('Safe widening did not preserve mono or produce stereo separation');
+  });
+
+  test('690 Auto-Wah envelope follows level while LFO ignores level', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('autowah');
+    if (!def || def.category !== 'char' || !def.params.some(p => p.key === 'mode'))
+      throw new Error('Auto-Wah is not registered');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR / 2;
+    async function level(amplitude, mode) {
+      const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < N; i++) d[i] = amplitude * Math.sin(2 * Math.PI * 500 * i / SR);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const fx = FM.audioFxRegistry.makeInstance('autowah');
+      Object.assign(fx.params, { mode, base: 500, range: 2500, resonance: 5, sensitivity: 4, mix: 1 });
+      const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+      if (!chain) throw new Error('Auto-Wah signal chain was not built');
+      src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.5); src.start(0);
+      const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+      let power = 0, count = 0;
+      for (let i = SR / 4; i < N; i++) { power += out[i] * out[i]; count++; }
+      return Math.sqrt(power / count) / amplitude;
+    }
+    const quietEnv = await level(0.005, 1), loudEnv = await level(0.5, 1);
+    const quietLfo = await level(0.005, 0), loudLfo = await level(0.5, 0);
+    if (!(quietEnv > loudEnv * 3)) throw new Error('Envelope mode did not follow input level');
+    if (Math.abs(quietLfo - loudLfo) > quietLfo * 0.05)
+      throw new Error('LFO mode changed its sweep with input level');
+  });
+
+  test('690 Channel Mixer keeps identity, mixes all three outputs and ignores the output picker when drawing', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('channelmixer'), fn = FM._FX_TABLES.PIXEL_FX.channelmixer;
+    if (!reg || reg.category !== 'color' || !fn || !FM._postFxTypes().includes('channelmixer') ||
+        !FM.fxRegistry.gates().adjOk.includes('channelmixer'))
+      throw new Error('Channel Mixer is not registered for layers and adjustments');
+    const make = () => new Uint8ClampedArray([100, 50, 20, 255, 90, 40, 10, 0]);
+    const original = make(), identity = make();
+    fn(identity, 2, 1, {}, 0);
+    if (!identity.every((v, i) => v === original[i])) throw new Error('Default matrix changed the image');
+    const p = { redR: 0, redB: 100, greenR: 50, blueOffset: -30, mix: 50 };
+    const mixed = make(); fn(mixed, 2, 1, p, 0);
+    if (mixed[0] !== 60 || mixed[1] !== 75 || mixed[2] !== 10 || mixed[3] !== 255 ||
+        !mixed.slice(4).every((v, i) => v === original[i + 4]))
+      throw new Error('Matrix, mix or alpha handling is wrong: ' + Array.from(mixed));
+    const otherPicker = make(); fn(otherPicker, 2, 1, { ...p, out: 2 }, 0);
+    if (!mixed.every((v, i) => v === otherPicker[i])) throw new Error('Output picker changed the rendered grade');
+  });
+
+  test('690 Auto Grade measures contrast and steadies changing frames without stale seek history', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('autograde'), fn = FM._FX_TABLES.PIXEL_FX.autograde;
+    if (!reg || reg.category !== 'color' || !fn || !FM._postFxTypes().includes('autograde'))
+      throw new Error('Auto Grade is not registered and routed');
+    const frame = (low, high) => {
+      const d = new Uint8ClampedArray(16 * 16 * 4);
+      for (let i = 0; i < d.length; i += 4) {
+        const v = i < d.length / 2 ? low : high;
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+      }
+      return d;
+    };
+    const p = { mode: 1, clip: 0, smooth: 0.25, strength: 100 }, fx = {};
+    const first = frame(40, 180); fn(first, 16, 16, p, 0, 1, null, null, null, fx);
+    if (first[0] > 1 || first[first.length - 4] < 254) throw new Error('Auto Contrast did not set black and white');
+    const moving = frame(100, 220); fn(moving, 16, 16, p, 1 / 30, 1, null, null, null, fx);
+    const fresh = frame(100, 220); fn(fresh, 16, 16, p, 1 / 30, 1, null, null, null, {});
+    if (!(moving[0] > fresh[0] + 40)) throw new Error('Temporal smoothing did not steady the grade');
+    const seek = frame(100, 220); fn(seek, 16, 16, p, 2, 1, null, null, null, fx);
+    if (seek[0] !== fresh[0]) throw new Error('Seek reused a stale temporal grade');
+  });
+
+  test('690 Spill Suppressor targets the selected screen hue and preserves matte', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('spillsuppressor'), fn = FM._FX_TABLES.PIXEL_FX.spillsuppressor;
+    if (!reg || reg.category !== 'matte' || !fn || !FM._postFxTypes().includes('spillsuppressor'))
+      throw new Error('Spill Suppressor is not available in Keying');
+    const source = [30, 150, 40, 128, 180, 70, 30, 255, 20, 40, 180, 128, 0, 180, 0, 0];
+    const green = new Uint8ClampedArray(source);
+    fn(green, 4, 1, { color: '#00c23c', amount: 100, range: 0 }, 0);
+    if (!(green[1] < source[1]) || green[0] !== source[0] || green[4] !== source[4] ||
+        green[10] !== source[10] || green[12] !== source[12] || green[3] !== 128 || green[7] !== 255)
+      throw new Error('Green spill removal changed unrelated colour or alpha');
+    const blue = new Uint8ClampedArray(source);
+    fn(blue, 4, 1, { color: '#1e3cff', amount: 100, range: 0 }, 0);
+    if (!(blue[10] < source[10]) || blue[1] !== source[1] || blue[11] !== 128)
+      throw new Error('Blue screen did not target blue spill');
+    const edges = new Uint8ClampedArray(source);
+    fn(edges, 4, 1, { color: '#00c23c', amount: 100, range: 0, area: 1 }, 0);
+    if (!(edges[1] < source[1]) || edges[5] !== source[5])
+      throw new Error('Soft-edge mode changed the opaque interior');
+  });
+
+  test('690 Deflicker steadies exposure but resets at cuts and export starts', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('deflicker'), fn = FM._FX_TABLES.PIXEL_FX.deflicker;
+    if (!reg || reg.category !== 'blur' || !fn || !FM._postFxTypes().includes('deflicker'))
+      throw new Error('Deflicker is not available in Blur');
+    const frame = (left, right) => {
+      const d = new Uint8ClampedArray(16 * 16 * 4);
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+        const i = (y * 16 + x) * 4, v = x < 8 ? left : right;
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+      }
+      return d;
+    };
+    const fx = {}, p = { smooth: 0.5, strength: 100, limit: 1 };
+    const first = frame(40, 80); fn(first, 16, 16, p, 0, 1, null, null, null, fx);
+    if (first[0] !== 40) throw new Error('First frame was graded without history');
+    const pulse = frame(80, 160); fn(pulse, 16, 16, p, 1 / 30, 1, null, null, null, fx);
+    if (!(pulse[0] < 60 && pulse[(8 * 4)] < 120)) throw new Error('Exposure pulse was not steadied');
+    const cut = frame(160, 80); fn(cut, 16, 16, p, 2 / 30, 1, null, null, null, fx);
+    if (cut[0] !== 160 || cut[8 * 4] !== 80) throw new Error('Scene cut kept the old exposure');
+    const wasExporting = FM._exporting;
+    try {
+      FM._exporting = true;
+      const exportStart = frame(80, 160); fn(exportStart, 16, 16, p, 1 / 30, 1, null, null, null, fx);
+      if (exportStart[0] !== 80) throw new Error('Export inherited preview history');
+    } finally { FM._exporting = wasExporting; }
+  });
+
+  test('690 Noise Gate closes on quiet room tone and opens for speech-level audio', { item: 'TBD' }, async function () {
+    const def = FM.audioFxRegistry.get('noisegate');
+    if (!def || def.category !== 'dyn' || !['floor', 'release', 'lookahead', 'hysteresis'].every(k => def.params.some(p => p.key === k)))
+      throw new Error('Noise Gate controls are missing');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR * 0.6;
+    const ctx = new OAC(1, N, SR), buf = ctx.createBuffer(1, N, SR), data = buf.getChannelData(0);
+    for (let i = 0; i < N; i++) {
+      const a = i < SR * 0.2 || i >= SR * 0.4 ? 0.002 : 0.3;
+      data[i] = a * Math.sin(2 * Math.PI * 440 * i / SR);
+    }
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const fx = FM.audioFxRegistry.makeInstance('noisegate');
+    const chain = FM.buildAudioFxChain(ctx, { audioFx: [fx] }, 0);
+    if (!chain) throw new Error('Noise Gate graph did not build');
+    src.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 0.6); src.start(0);
+    const out = (await ctx.startRendering()).getChannelData(0); chain.dispose();
+    const rms = (start, end) => {
+      let power = 0, n = 0;
+      for (let i = Math.round(start * SR); i < Math.round(end * SR); i++) { power += out[i] * out[i]; n++; }
+      return Math.sqrt(power / n);
+    };
+    const closed = { quiet: rms(0.1, 0.18), loud: rms(0.26, 0.35) };
+    if (!(closed.quiet < 0.0001 && closed.loud > 0.1))
+      throw new Error('Gate failed to separate quiet and loud audio: ' + JSON.stringify(closed));
+  });
+
+  test('690 Loudness Match measures and renders a target level with a peak guard', { item: 'TBD' }, async function () {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('OfflineAudioContext is unavailable');
+    const SR = 48000, N = SR, ctx = new OAC(1, N, SR);
+    const buffer = ctx.createBuffer(1, N, SR), samples = buffer.getChannelData(0);
+    for (let i = 0; i < N; i++) samples[i] = 0.5 * Math.sin(2 * Math.PI * 997 * i / SR);
+    const fx = FM.audioFxRegistry.makeInstance('loudnessmatch');
+    const layer = { id: 'loudness-test', type: 'video', start: 0, duration: 1, trimStart: 0, speed: 1, audioFx: [fx] };
+    const media = { audioBuffer: buffer, file: null };
+    const oldGet = FM.media.get;
+    try {
+      FM.media.get = id => id === layer.id ? media : oldGet.call(FM.media, id);
+      const result = await FM.prepareLoudness(layer, media);
+      if (!result || Math.abs(result.lufs - (-9.03)) > 0.35 || Math.abs(result.peak - 0.5) > 0.001)
+        throw new Error('K-weighted measurement is incorrect: ' + JSON.stringify(result));
+      const source = ctx.createBufferSource(); source.buffer = buffer;
+      const chain = FM.buildAudioFxChain(ctx, layer, 0);
+      if (!chain) throw new Error('Loudness Match graph did not build');
+      source.connect(chain.input); chain.output.connect(ctx.destination); chain.schedule(0, 1); source.start(0);
+      const rendered = (await ctx.startRendering()).getChannelData(0);
+      let power = 0, peak = 0;
+      for (let i = 0; i < N; i++) { power += rendered[i] * rendered[i]; peak = Math.max(peak, Math.abs(rendered[i])); }
+      const rms = Math.sqrt(power / N);
+      if (!(rms > 0.145 && rms < 0.17 && peak <= Math.pow(10, -1 / 20) + 0.001))
+        throw new Error('Matched render has wrong level or peak: ' + JSON.stringify({ rms: rms, peak: peak }));
+      chain.dispose();
+    } finally { FM.media.get = oldGet; }
+  });
+
+  test('690 Panasonic V-Log grade maps reference grey and preserves zero Mix and alpha', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('logtonormal'), fn = FM._FX_TABLES.PIXEL_FX.logtonormal;
+    if (!reg || reg.category !== 'color' || !fn || !FM._postFxTypes().includes('logtonormal') ||
+        !FM.fxRegistry.gates().adjOk.includes('logtonormal'))
+      throw new Error('V-Log grade is missing from layer or adjustment routing');
+    const original = new Uint8ClampedArray([108, 108, 108, 255, 150, 108, 108, 255, 75, 80, 85, 0]);
+    const unchanged = original.slice(); fn(unchanged, 3, 1, { mix: 0 }, 0);
+    if (!unchanged.every((v, i) => v === original[i])) throw new Error('Zero Mix changed the input');
+    const graded = original.slice(); fn(graded, 3, 1, {}, 0);
+    if (!(graded[0] >= 100 && graded[0] <= 109 && graded[0] === graded[1] && graded[1] === graded[2]))
+      throw new Error('Panasonic reference grey did not map to Rec.709 grey: ' + Array.from(graded.slice(0, 3)));
+    if (!(graded[4] > graded[5] && graded[5] < 115)) throw new Error('V-Gamut matrix did not separate a warm colour');
+    if (!graded.slice(8).every((v, i) => v === original[i + 8])) throw new Error('Transparent pixel changed');
+    const brighter = original.slice(); fn(brighter, 3, 1, { exposure: 1 }, 0);
+    if (!(brighter[0] > graded[0])) throw new Error('Exposure control had no effect');
+  });
+
+  test('690 Sony S-Log3/S-Gamut3.Cine grade maps reference grey and applies its gamut', { item: 'TBD' }, function () {
+    const def = FM.fxRegistry.get('logtonormal'), fn = FM._FX_TABLES.PIXEL_FX.logtonormal;
+    if (!def || !fn || !def.params.some(p => p.key === 'profile' && p.options.some(o => o[1].includes('S-Gamut3.Cine'))))
+      throw new Error('Sony S-Log3 profile is not selectable');
+    const original = new Uint8ClampedArray([105, 105, 105, 255, 160, 105, 105, 255, 80, 90, 100, 0]);
+    const graded = original.slice(); fn(graded, 3, 1, { profile: 1 }, 0);
+    if (!(graded[0] >= 100 && graded[0] <= 110 && graded[0] === graded[1] && graded[1] === graded[2]))
+      throw new Error('Sony 18% reference grey did not map to neutral Rec.709 grey: ' + Array.from(graded.slice(0, 3)));
+    if (!(graded[4] > graded[5] && graded[5] < 130)) throw new Error('S-Gamut3.Cine matrix did not separate a warm colour');
+    if (!graded.slice(8).every((v, i) => v === original[i + 8])) throw new Error('Transparent pixel changed');
+    const unmixed = original.slice(); fn(unmixed, 3, 1, { profile: 1, mix: 0 }, 0);
+    if (!unmixed.every((v, i) => v === original[i])) throw new Error('Zero Mix changed Sony footage');
+  });
+
+  test('690 Apple Log/BT.2020 grade maps reference grey and applies its gamut', { item: 'TBD' }, function () {
+    const def = FM.fxRegistry.get('logtonormal'), fn = FM._FX_TABLES.PIXEL_FX.logtonormal;
+    if (!def || !fn || !def.params.some(p => p.key === 'profile' && p.options.some(o => o[1].includes('Apple Log'))))
+      throw new Error('Apple Log profile is not selectable');
+    const original = new Uint8ClampedArray([125, 125, 125, 255, 155, 125, 125, 255, 80, 90, 100, 0]);
+    const graded = original.slice(); fn(graded, 3, 1, { profile: 2 }, 0);
+    if (!(graded[0] >= 101 && graded[0] <= 110 && graded[0] === graded[1] && graded[1] === graded[2]))
+      throw new Error('Apple Log 18% reference grey did not map to neutral Rec.709 grey: ' + Array.from(graded.slice(0, 3)));
+    if (!(graded[4] > graded[5] && graded[5] < 135)) throw new Error('BT.2020 matrix did not separate a warm colour');
+    if (!graded.slice(8).every((v, i) => v === original[i + 8])) throw new Error('Transparent pixel changed');
+    const unmixed = original.slice(); fn(unmixed, 3, 1, { profile: 2, mix: 0 }, 0);
+    if (!unmixed.every((v, i) => v === original[i])) throw new Error('Zero Mix changed Apple Log footage');
+  });
+
+  test('690 Canon Log 3/Cinema Gamut grade maps reference grey and applies its gamut', { item: 'TBD' }, function () {
+    const def = FM.fxRegistry.get('logtonormal'), fn = FM._FX_TABLES.PIXEL_FX.logtonormal;
+    if (!def || !fn || !def.params.some(p => p.key === 'profile' && p.options.some(o => o[1].includes('Canon Log 3'))))
+      throw new Error('Canon Log 3 profile is not selectable');
+    const original = new Uint8ClampedArray([88, 88, 88, 255, 125, 88, 88, 255, 80, 90, 100, 0]);
+    const graded = original.slice(); fn(graded, 3, 1, { profile: 3 }, 0);
+    if (!(graded[0] >= 100 && graded[0] <= 110 && graded[0] === graded[1] && graded[1] === graded[2]))
+      throw new Error('Canon 18% reference grey did not map to neutral Rec.709 grey: ' + Array.from(graded.slice(0, 3)));
+    if (!(graded[4] > graded[5] && graded[5] < 110)) throw new Error('Canon Cinema Gamut matrix did not separate a warm colour');
+    if (!graded.slice(8).every((v, i) => v === original[i + 8])) throw new Error('Transparent pixel changed');
+    const unmixed = original.slice(); fn(unmixed, 3, 1, { profile: 3, mix: 0 }, 0);
+    if (!unmixed.every((v, i) => v === original[i])) throw new Error('Zero Mix changed Canon footage');
+  });
+
+  test('690 Shake smear uses the scene being rendered for its frame interval', { item: 'TBD' }, function () {
+    const shake = FM._FX_TABLES.CANVAS_FX.shake, active = FM.scene;
+    if (!shake || !active) throw new Error('Shake or active project is unavailable');
+    const count = fps => {
+      let draws = 0;
+      const B = { globalAlpha: 1, save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, drawImage() { draws++; } };
+      shake({}, B, 240, 160, { x: 20, y: 20, w: 80, h: 60 },
+        { amount: 60, speed: 14, twist: 0, zoom: 0, jitter: 1, smear: 1 },
+        0.31, 0.31, null, 1, null, { project: { width: 240, height: 160, fps: fps } });
+      return draws;
+    };
+    const shortFrame = count(60), longFrame = count(24);
+    if (shortFrame !== 1 || longFrame <= 1)
+      throw new Error('Shake smear followed the active project instead of the rendered scene: ' + shortFrame + '/' + longFrame);
+  });
+
+  test('690 Backdrop Clone uses the rendered scene FPS for a Timecode text footprint', { item: 'TBD' }, function () {
+    const active = FM.scene.project, T = 0.31;
+    const layer = FM.makeLayer('text', { name: 'Timecode backdrop', text: 'placeholder',
+      x: active.width / 2, y: active.height / 2, fontSize: 60 });
+    layer.start = 0; layer.duration = 2; layer.wrapWidth = 0;
+    layer.effects = [{ type: 'timecode', enabled: true, params: {} }, { type: 'copybg', enabled: true, params: {} }];
+    const plate = FM.makeLayer('shape', { name: 'Backdrop', shape: 'rect',
+      x: active.width / 2, y: active.height / 2, shapeW: active.width, shapeH: active.height });
+    plate.start = 0; plate.duration = 2;
+    let scene, shown;
+    for (const fps of [24, 60, 120]) {
+      scene = { project: Object.assign({}, active, { fps: fps }), layers: [layer, plate] };
+      shown = FM.applyTextEffects(layer, layer.text, 0, T, scene).text;
+      if (shown !== FM.applyTextEffects(layer, layer.text, 0, T, FM.scene).text) break;
+    }
+    if (shown === FM.applyTextEffects(layer, layer.text, 0, T, FM.scene).text)
+      throw new Error('Timecode strings did not differ between scene frame rates');
+    const seen = [], old = FM.textLines;
+    try {
+      FM.textLines = function (ctx, l, src) { seen.push(String(src)); return old.apply(this, arguments); };
+      const cv = document.createElement('canvas'); cv.width = active.width; cv.height = active.height;
+      FM.renderScene(cv.getContext('2d', { willReadFrequently: true }), scene, T);
+    } finally { FM.textLines = old; }
+    if (!seen.includes(shown))
+      throw new Error('Backdrop Clone measured text at the active project FPS instead of the rendered scene FPS: expected ' + shown + ', saw ' + JSON.stringify(seen));
+  });
+
+  test('690 Light Glow and Soft Glow bloom beyond transparent text edges', { item: 'TBD' }, function () {
+    const W = 25, H = 25, original = new Uint8ClampedArray(W * H * 4);
+    for (let y = 10; y < 15; y++) for (let x = 10; x < 15; x++) {
+      const i = (y * W + x) * 4; original[i] = original[i + 1] = original[i + 2] = original[i + 3] = 255;
+    }
+    for (const type of ['lightglow', 'softglow']) {
+      const fn = FM._FX_TABLES.PIXEL_FX[type];
+      if (!fn) throw new Error(type + ' is unavailable');
+      const d = original.slice(); fn(d, W, H, { amount: 0.8, color: '#ff8844' }, 0);
+      const halo = (12 * W + 17) * 4, core = (12 * W + 12) * 4;
+      if (!(d[halo + 3] > 0 && d[halo] === 255 && d[halo + 1] === 136 && d[halo + 2] === 68))
+        throw new Error(type + ' did not produce a coloured transparent-edge halo: ' + Array.from(d.slice(halo, halo + 4)));
+      if (d[core + 3] !== 255 || d[3] !== 0)
+        throw new Error(type + ' changed the opaque source alpha or distant transparent pixels');
+      const off = original.slice(); fn(off, W, H, { amount: 0.8, threshold: 100 }, 0);
+      if (off[halo + 3] !== 0) throw new Error(type + ' bloomed when the threshold excluded the source');
+    }
+  });
+
+  test('690 Unsharp Mask protects neutral detail from coloured edge fringes', { item: 'TBD' }, function () {
+    const fn = FM._FX_TABLES.PIXEL_FX.unsharpmask;
+    const fresh = FM.fxRegistry.makeInstance('unsharpmask');
+    if (!fn || !fresh || fresh.params.coloursafe !== 100)
+      throw new Error('New Unsharp Mask instances do not enable colour protection');
+    const W = 5, H = 5, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      src[i] = x < 2 ? 255 : 180;
+      src[i + 1] = src[i + 2] = x < 2 ? 0 : 180;
+      src[i + 3] = 255;
+    }
+    const render = params => { const d = src.slice(); fn(d, W, H, params, 0); return d; };
+    const old = render({ amount: 2, radius: 1 });
+    const zero = render({ amount: 2, radius: 1, coloursafe: 0 });
+    if (!old.every((v, i) => v === zero[i])) throw new Error('Existing Unsharp Mask instances changed');
+    const safe = render({ amount: 2, radius: 1, coloursafe: 100 });
+    const at = (2 * W + 2) * 4;
+    if (!(old[at] < old[at + 2] && safe[at] === safe[at + 1] && safe[at + 1] === safe[at + 2] && safe[at + 3] === 255))
+      throw new Error('Colour protection left a cyan fringe or changed alpha: ' + Array.from(safe.slice(at, at + 4)));
+  });
+
+  test('690 Overdrive keeps bright neutral edges free of colour fringes', { item: 'TBD' }, function () {
+    const box = FM.filters.makeInstance('overdrive');
+    const sharpen = box && box.effects.find(e => e.type === 'unsharpmask');
+    if (!sharpen || sharpen.params.coloursafe !== 100)
+      throw new Error('Overdrive does not enable colour protection on its Unsharp Mask');
+    const W = 5, H = 5, d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = x < 2 ? 255 : 180;
+      d[i + 1] = d[i + 2] = x < 2 ? 0 : 180;
+      d[i + 3] = 255;
+    }
+    FM._FX_TABLES.PIXEL_FX.unsharpmask(d, W, H, sharpen.params, 0);
+    const at = (2 * W + 2) * 4;
+    if (d[at] !== d[at + 1] || d[at + 1] !== d[at + 2] || d[at + 3] !== 255)
+      throw new Error('Overdrive left a coloured fringe on neutral detail: ' + Array.from(d.slice(at, at + 4)));
+  });
+
+  test('690 Unsharp Mask keeps its pixels while using less frame memory', { item: 'TBD' }, function () {
+    const W = 7, H = 7, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = 90 + x * 12 + (y === 3 ? 10 : 0);
+      src[i] = v; src[i + 1] = v - 7; src[i + 2] = v - 14;
+      src[i + 3] = (x === 0 && y === 0) ? 0 : 255;
+    }
+    for (const [params, expected] of [
+      [{ amount: 1.2, radius: 2, threshold: 0, coloursafe: 0 }, 29982],
+      [{ amount: 1.2, radius: 2, threshold: 12, coloursafe: 100 }, 29997]
+    ]) {
+      const d = src.slice();
+      FM._FX_TABLES.PIXEL_FX.unsharpmask(d, W, H, params, 0);
+      const sum = d.reduce((n, v) => n + v, 0), center = (3 * W + 3) * 4;
+      if (sum !== expected || d[center + 3] !== 255 || d[3] !== 0)
+        throw new Error('Unsharp Mask changed its output: ' + JSON.stringify({ params, sum, center: Array.from(d.slice(center, center + 4)) }));
+    }
+  });
+
+  test('690 malformed project dimensions recover to a usable canvas', { item: 'TBD' }, function () {
+    const hostile = { toString: 0, valueOf: 0 };
+    const p = { width: 'not a width', height: hostile, fps: hostile, duration: hostile };
+    FM.storage._clampProjectDims(p);
+    if (p.width !== 1080 || p.height !== 1920 || p.fps !== 30 || p.duration !== 0)
+      throw new Error('Malformed project fields did not recover: ' + JSON.stringify(p));
+    const valid = { width: '1279', height: 720, fps: 48, duration: 12 };
+    FM.storage._clampProjectDims(valid);
+    if (valid.width !== 1280 || valid.height !== 720 || valid.fps !== 48 || valid.duration !== 12)
+      throw new Error('Valid project fields were damaged: ' + JSON.stringify(valid));
+  });
+
+  test('690 invalid project object is refused before import creates a project', { item: 'TBD' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      for (const project of ['broken', []]) {
+        const file = { app: 'freemotion', project, layers: [] };
+        if (!FM.storage.sceneFileProblem(file) || await FM.storage.importObject(file) !== false)
+          throw new Error('Invalid canvas settings passed import validation');
+        if (await FM.storage.applyScene(file) !== false)
+          throw new Error('Direct scene import accepted invalid canvas settings');
+      }
+      if (created) throw new Error('Import created ' + created + ' junk projects');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
+  test('690 invalid layer entry is refused before import creates a project', { item: 'TBD' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      for (const layers of [[null], [42], [[]]]) {
+        const file = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers };
+        if (!FM.storage.sceneFileProblem(file) || await FM.storage.importObject(file) !== false)
+          throw new Error('Invalid layer passed import validation');
+        if (await FM.storage.applyScene(file) !== false)
+          throw new Error('Direct scene import accepted an invalid layer');
+      }
+      if (created) throw new Error('Import created ' + created + ' junk projects');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
+  test('690 a corrupt embedded clip is named as missing on project import', { item: 'TBD' }, async function () {
+    const oldScene = FM.scene, oldToast = FM.toast, said = [];
+    try {
+      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
+      const layer = FM.makeLayer('image', { name: 'Broken holiday clip', start: 0, duration: 2 });
+      layer.name = 'Broken holiday clip';
+      FM.toast = function (message) { said.push(String(message)); };
+      const file = { project: Object.assign({}, FM.scene.project), layers: [layer], media: {} };
+      file.media[layer.id] = { kind: 'image', name: 'holiday.png', dataURL: 'not-an-embedded-file' };
+      if (await FM.storage.applyScene(file) !== true) throw new Error('Import failed before the missing-footage check');
+      if (!said.some(message => message.includes('Broken holiday clip') && message.includes('no footage')))
+        throw new Error('A present but corrupt media entry left a blank clip without a warning');
+    } finally {
+      FM.scene = oldScene; FM.toast = oldToast;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('690 the completed import keeps its missing-footage warning visible', { item: 'TBD' }, async function () {
+    const priorId = FM.projects.currentId(), oldToast = FM.toast, said = [], made = [];
+    try {
+      FM.toast = function (message) { said.push(String(message)); };
+      const clip = FM.makeLayer('video', { name: 'Unpacked holiday clip', start: 0, duration: 2 });
+      clip.name = 'Unpacked holiday clip';
+      const project = { name: 'FX690 MISSING IMPORT', width: 320, height: 240, duration: 2, fps: 30 };
+      if (await FM.storage.importObject({ app: 'freemotion', project, layers: [clip], media: {} }) !== true)
+        throw new Error('Valid media-less project did not import');
+      made.push(FM.projects.currentId());
+      const finalWarning = said[said.length - 1] || '';
+      if (!finalWarning.includes('Unpacked holiday clip') || !finalWarning.includes('no footage'))
+        throw new Error('Import success replaced the missing-footage warning: ' + finalWarning);
+      said.length = 0;
+      if (await FM.storage.importObject({ app: 'freemotion', project: Object.assign({}, project, { name: 'FX690 CLEAN IMPORT' }), layers: [] }) !== true)
+        throw new Error('Valid clean project did not import');
+      made.push(FM.projects.currentId());
+      if (said[said.length - 1] !== 'Project imported')
+        throw new Error('Clean import did not keep its ordinary success message: ' + said[said.length - 1]);
+    } finally {
+      FM.toast = oldToast;
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
+    }
+  });
+
+  test('690 deeply nested project files are rejected before creating a project', { item: 'TBD' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      const layer = { id: 'old', type: 'shape' };
+      let tail = layer;
+      for (let i = 0; i < 80; i++) { tail.deep = {}; tail = tail.deep; }
+      const file = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers: [layer] };
+      if (!/nested too deeply/.test(FM.storage.sceneFileProblem(file) || ''))
+        throw new Error('Deeply nested layer passed validation');
+      if (await FM.storage.importObject(file) !== false || await FM.storage.applyScene(file) !== false || created)
+        throw new Error('Deeply nested layer reached project creation or scene application');
+      const ordinary = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers: [{ id: 'okay', type: 'shape', transform: { opacity: { kf: [{ t: 0, v: 1 }] } } }] };
+      if (FM.storage.sceneFileProblem(ordinary)) throw new Error('An ordinary animated layer was rejected');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
+  test('690 corrupt embedded font does not abort project import silently', { item: 'TBD' }, async function () {
+    const oldScene = FM.scene, oldToast = FM.toast, said = [];
+    try {
+      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
+      FM.toast = function (message) { said.push(String(message)); };
+      const file = { project: Object.assign({}, FM.scene.project), layers: [], fonts: {
+        bad: { family: 'FMFcorruptImportTest', name: 'broken.ttf', dataURL: 'not-an-embedded-font' }
+      } };
+      if (await FM.storage.applyScene(file) !== true) throw new Error('A corrupt font aborted the whole project import');
+      if (!said.some(message => message.includes('embedded font') && message.includes('fallback')))
+        throw new Error('A corrupt font was skipped without explaining the text fallback');
+    } finally {
+      FM.scene = oldScene; FM.toast = oldToast;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('690 shared files name oversized fonts while whole backups keep them', { item: 'TBD' }, async function () {
+    const priorId = FM.projects.currentId(), list = FM.fonts.list, getFile = FM.fonts.getFile;
+    const toast = FM.toast, said = [];
+    let madeId = null;
+    try {
+      await FM.projects.create({ name: 'FX690 FONT SHARE', width: 320, height: 240 });
+      madeId = FM.projects.currentId();
+      const big = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'large.ttf', { type: 'font/ttf' });
+      const small = new File([new Uint8Array(16)], 'small.ttf', { type: 'font/ttf' });
+      const records = [
+        { id: 'big690font', name: 'Large test', family: 'FMFbig690font', css: 'FMFbig690font, sans-serif' },
+        { id: 'small690font', name: 'Small test', family: 'FMFsmall690font', css: 'FMFsmall690font, sans-serif' }
+      ];
+      FM.fonts.list = () => records;
+      FM.fonts.getFile = async id => id === records[0].id ? big : small;
+      FM.toast = message => said.push(String(message));
+      const largeText = FM.makeLayer('text', { text: 'large font' }); largeText.fontFamily = records[0].css;
+      const smallText = FM.makeLayer('text', { text: 'small font' }); smallText.fontFamily = records[1].css;
+      FM.scene.layers = [largeText, smallText];
+      FM.storage.markDirty();
+      await FM.storage.save();
+      const shared = await FM.storage.serializeScene(FM.scene);
+      if (!shared.omittedFonts.some(f => f.name === 'Large test' && f.tooBig) ||
+          !shared.fonts.small690font || shared.fonts.big690font)
+        throw new Error('A shared file did not distinguish the oversized font from the embedded small font');
+      said.length = 0;
+      await FM.storage.exportFile();
+      if (!said.some(message => message.includes('Large test') && message.includes('custom font')))
+        throw new Error('The shared project file claimed a clean save without its large custom font');
+      said.length = 0;
+      await FM.storage.applyScene(JSON.parse(JSON.stringify(shared)));
+      if (!said.some(message => message.includes('Large test') && message.includes('fallback')))
+        throw new Error('Import did not identify the omitted font and possible fallback');
+      const backup = await FM.storage.buildBackup();
+      const entry = backup.projects.find(p => p.project.name === 'FX690 FONT SHARE');
+      if (!entry || !entry.fonts.big690font || !entry.fonts.small690font ||
+          (backup.notIncluded.fonts || []).some(f => f.project === 'FX690 FONT SHARE'))
+        throw new Error('The whole-library backup still applied the sharing-file font limit');
+    } finally {
+      FM.fonts.list = list; FM.fonts.getFile = getFile; FM.toast = toast;
+      if (madeId) { try { await FM.projects.remove(madeId); } catch (e) {} }
+      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
+    }
+  });
+
+  test('690 Light Glow and Soft Glow reuse their luminance planes across frames', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
+    if (!P.lightglow || !P.softglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
+    const W = 19, H = 13, params = { amount: 0.8, radius: 6, threshold: 35, color: '#ff8844' };
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 3; y < 10; y++) for (let x = 5; x < 14; x++) {
+        const i = (y * W + x) * 4; d[i] = 240; d[i + 1] = 180; d[i + 2] = 120; d[i + 3] = 255;
+      }
+      return d;
+    }
+    const start = info();
+    const first = source(); P.lightglow(first, W, H, params, 0);
+    const warmed = info();
+    const middle = source(); P.softglow(middle, W, H, params, 0);
+    const again = source(); P.lightglow(again, W, H, params, 0);
+    const end = info();
+    if (warmed.pixels < W * H || end.uses !== start.uses + 3 || end.allocations !== warmed.allocations)
+      throw new Error('Glow reallocated its full-frame planes after they were warmed');
+    if (first.some((value, i) => value !== again[i]))
+      throw new Error('Sharing glow planes changed the result on a later frame');
+  });
+
+  test('690 Dark Glow clears and reuses its luminance planes', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
+    if (!P.darkglow || !P.lightglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
+    const W = 17, H = 13;
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < W * H; i++) {
+        const v = i % 7 === 0 ? 30 : 160, j = i * 4;
+        d[j] = d[j + 1] = d[j + 2] = v; d[j + 3] = 255;
+      }
+      return d;
+    }
+    const base = source(), first = source();
+    P.darkglow(first, W, H, { amount: 0.8, radius: 4, threshold: 40 }, 0);
+    const warmed = info();
+    const between = source(); P.lightglow(between, W, H, { amount: 0.8, radius: 4 }, 0);
+    const again = source(); P.darkglow(again, W, H, { amount: 0.8, radius: 4, threshold: 40 }, 0);
+    const end = info();
+    if (end.uses !== warmed.uses + 2 || end.allocations !== warmed.allocations)
+      throw new Error('Dark Glow allocated new full-frame planes after warm-up');
+    if (first.every((value, i) => value === base[i]) || first.some((value, i) => value !== again[i]))
+      throw new Error('Dark Glow failed to darken or retained luminance from the intervening glow');
+  });
+
+  test('690 glow scratch releases its largest frame after rendering stops', { item: 'TBD' }, function () {
+    const info = FM._glowScratchInfo, release = FM._releaseGlowScratch;
+    if (!info || !release) throw new Error('Glow idle-release controls are unavailable');
+    const W = 9, H = 9, d = new Uint8ClampedArray(W * H * 4);
+    const i = (4 * W + 4) * 4; d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 255;
+    try {
+      FM._FX_TABLES.PIXEL_FX.lightglow(d, W, H, { amount: 0.8, radius: 3 }, 0);
+      if (info().pixels < W * H || !info().releasePending)
+        throw new Error('Glow did not schedule an idle release for its cached frame');
+      release();
+      if (info().pixels !== 0 || info().releasePending)
+        throw new Error('The largest glow frame stayed pinned after idle release');
+    } finally { release(); }
+  });
+
+  test('690 Smooth Edges keeps a one-pixel feather visible on reduced preview plates', { item: 'TBD' }, function () {
+    const W = 12, H = 12, make = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 4; y < 8; y++) for (let x = 4; x < 8; x++) d[(y * W + x) * 4 + 3] = 255;
+      return d;
+    };
+    const noFx = make(), feather = make(), zero = make();
+    FM._applyPixelFx(feather, { type: 'smoothedges', params: { radius: 1 } }, 0, W, H, 0.25);
+    FM._applyPixelFx(zero, { type: 'smoothedges', params: { radius: 0 } }, 0, W, H, 0.25);
+    if (feather[(5 * W + 3) * 4 + 3] <= 0) throw new Error('Small positive softness vanished in reduced preview');
+    if (zero.some((v, i) => v !== noFx[i])) throw new Error('Zero softness changed the matte');
+  });
+
+  test('690 shared template file names clips that exceed the embed limit', { item: 'TBD' }, async function () {
+    const getPack = FM.templates.getPack, list = FM.templates.list;
+    const createURL = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
+    let saved;
+    try {
+      FM.templates.getPack = async () => ({
+        project: { name: 'Source', width: 320, height: 240, duration: 2 },
+        layers: [{ id: 'big', type: 'video', name: 'Main clip' }, { id: 'small', type: 'video', name: 'Intro' }],
+        media: {
+          big: { kind: 'video', file: { name: 'long.mp4', size: 6 * 1048576 + 1 } },
+          small: { kind: 'video', file: new File([new Uint8Array([1])], 'short.mp4', { type: 'video/mp4' }) }
+        }
+      });
+      FM.templates.list = () => [{ id: 'probe', name: 'Shareable' }];
+      URL.createObjectURL = blob => { saved = blob; return 'blob:template-test'; };
+      HTMLAnchorElement.prototype.click = function () {};
+      const result = await FM.templates.exportFile('probe');
+      const obj = JSON.parse(await saved.text());
+      if (!result || result.omitted.length !== 1 || result.omitted[0].file !== 'long.mp4')
+        throw new Error('Sender did not receive the missing clip name');
+      if (!obj.omitted || obj.omitted.length !== 1 || obj.omitted[0].file !== 'long.mp4')
+        throw new Error('Shared file did not record its omitted clip');
+      if (obj.media.big || !obj.media.small) throw new Error('Template embedded the wrong media');
+    } finally {
+      FM.templates.getPack = getPack; FM.templates.list = list;
+      URL.createObjectURL = createURL; HTMLAnchorElement.prototype.click = click;
+    }
+  });
+
+  test('690 Linear Streaks keeps short positive trails in reduced preview', { item: 'TBD' }, function () {
+    const W = 8, H = 2, source = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = x === 1 ? 255 : 0;
+        d[i + 3] = 255;
+      }
+      return d;
+    };
+    const trail = source(), zero = source(), base = source();
+    FM._applyPixelFx(trail, { type: 'linstreaks', params: { length: 3, angle: 0, samples: 8 } }, 0, W, H, 0.25);
+    FM._applyPixelFx(zero, { type: 'linstreaks', params: { length: 0, angle: 0, samples: 8 } }, 0, W, H, 0.25);
+    if (!trail[(0 * W + 2) * 4]) throw new Error('Short Linear Streaks trail vanished at quarter-scale preview');
+    if (zero.some((v, i) => v !== base[i])) throw new Error('Zero-length trail changed the image');
+  });
+
+  test('690 Roughen Edges scales project-pixel controls on preview plates', { item: 'TBD' }, function () {
+    const W = 32, H = 32, make = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+        d[(y * W + x) * 4 + 3] = (x + y) % 3 === 0 ? 255 : 0;
+      return d;
+    };
+    const params = { amount: 8, scale: 2 }, direct = make(), dispatched = make();
+    FM._FX_TABLES.PIXEL_FX.roughenedges(direct, W, H, params, 0, 0.25);
+    FM._applyPixelFx(dispatched, { type: 'roughenedges', params }, 0, W, H, 0.25);
+    if (direct.some((v, i) => v !== dispatched[i]))
+      throw new Error('Reduced-preview dispatch changed Roughen Edges scale or displacement');
+  });
+
+  test('690 Breathe speed keyframes advance by accumulated phase', { item: 'TBD' }, function () {
+    const breathe = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.pulseopacity;
+    if (!breathe) throw new Error('Breathe pixel kernel is missing');
+    const alphaAt = speed => {
+      const d = new Uint8ClampedArray([100, 120, 140, 255]);
+      breathe(d, 1, 1, { speed, depth: 0.7, phase: 0 }, 2);
+      return d[3];
+    };
+    const ramp = alphaAt({ kf: [{ t: 1, v: 1 }, { t: 2, v: 2 }] });
+    if (ramp < 75 || ramp > 78)
+      throw new Error('A 1→2 Hz ramp reached alpha ' + ramp + '; 2.5 accumulated cycles should be near 77, not the old 255');
+    const constant = alphaAt(1), flatTrack = alphaAt({ kf: [{ t: 0, v: 1 }, { t: 2, v: 1 }] });
+    if (constant !== 255 || flatTrack !== constant || alphaAt(2) !== 255)
+      throw new Error('Constant and flat-keyframe Breathe instances changed their legacy phase');
+  });
+
+  test('690 Replace media cancels a decoded file when its project was switched', { item: 'TBD', budgetMs: 60000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [], said = [];
+    const realLoad = FM.loadImageFile, realToast = FM.toast, realClick = HTMLInputElement.prototype.click;
+    let release = null, loaded = null, layerId = null;
+    const held = new Promise(resolve => { release = resolve; });
+    try {
+      if (wasOpen) FM.home.close();
+      const other = await FM.projects.create({ name: 'Replace switch B', width: 320, height: 240 }); made.push(other);
+      const mine = await FM.projects.create({ name: 'Replace switch A', width: 320, height: 240 }); made.push(mine);
+      const oldFile = await q915aPng('replace-switch-old', '#b24d4d');
+      const newFile = await q915aPng('replace-switch-new', '#4db2a0');
+      FM.addMediaLayer(await realLoad(oldFile));
+      layerId = FM.scene.selectedId;
+      await FM.storage.settled();
+      FM.toast = function (message) { said.push(String(message)); return realToast.apply(this, arguments); };
+      FM.loadImageFile = async function (file) { await held; loaded = await realLoad(file); return loaded; };
+      HTMLInputElement.prototype.click = function () {}; // only the OS picker sheet is stood in for
+      const pending = FM.replaceMedia(layerId);
+      HTMLInputElement.prototype.click = realClick;
+      const inp = Array.from(document.querySelectorAll('input[type=file]')).find(i => i.accept === 'video/*,image/*' && i.parentNode === document.body);
+      if (!inp) throw new Error('Replace media did not open its picker');
+      const dt = new DataTransfer(); dt.items.add(newFile); inp.files = dt.files;
+      inp.dispatchEvent(new Event('change'));
+      if ((await FM.projects.open(other, { confirmed: true })) !== true) throw new Error('Could not switch projects during decode');
+      release(); release = null;
+      const result = await pending;
+      if (result !== false) throw new Error('The obsolete Replace media operation claimed success');
+      if (FM.projects.currentId() !== other || FM.scene.layers.some(l => l.id === layerId)) throw new Error('The replacement landed in the other project');
+      const saved = await FM.storage.readMedia(layerId);
+      if (!saved || !saved.file || saved.file.name !== oldFile.name) throw new Error('The original project lost its original media');
+      if (!loaded || !loaded._released || FM.media.get(layerId)) throw new Error('The abandoned decoded media stayed in memory');
+      if (!said.some(m => /not replaced.*project changed/i.test(m))) throw new Error('The user was not told that the replacement was cancelled');
+    } finally {
+      if (release) release();
+      FM.loadImageFile = realLoad; FM.toast = realToast; HTMLInputElement.prototype.click = realClick;
+      if (layerId) hfDropTiles(layerId);
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
 
   test('Home reference: centred header, profile Join, card Select and scrolling fade on a phone', { item: 'TBD' }, async function () {
     const pause = ms => new Promise(resolve => setTimeout(resolve, ms));

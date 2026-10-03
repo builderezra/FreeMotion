@@ -205,6 +205,11 @@ window.FM = window.FM || {};
       { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
       { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' },   // queue 904: welded to the horizontal/vertical axes
     ] },
+    { type: 'titlewarp', label: 'Title Warp', desc: 'Bend a title around its own visible bounds, with ten arc, wave and shape presets. Also works on shapes and images.', params: [
+      { key: 'style', label: 'Shape', options: [[0, 'Arc'], [1, 'Arch'], [2, 'Bulge'], [3, 'Flag'], [4, 'Wave'], [5, 'Fish'], [6, 'Rise'], [7, 'Inflate'], [8, 'Squeeze'], [9, 'Twist']], def: 0 },
+      { key: 'amount', label: 'Bend', min: -100, max: 100, step: 1, def: 35, unit: '%' },
+      { key: 'phase', label: 'Wave phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+    ] },
     { type: 'ripple', label: 'Circular Ripple', params: [
       { key: 'amount', label: 'Height', min: 0, max: 480, step: 1, def: 22, unit: 'px' },
       { key: 'wavelength', label: 'Spacing', min: 4, max: 200, step: 1, def: 20, unit: 'px' },
@@ -605,7 +610,7 @@ window.FM = window.FM || {};
          100 makes the description true; `legacy: 0` keeps every saved instance the uniform shift it was. */
       { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },
     { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
-    { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has
+    { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },   // saved/filter instances remain on the original per-channel path
     { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
     { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 8, unit: ' taps' }] },
     // ---- batch 13: Opacity / Visibility (time-based alpha) ----
@@ -653,6 +658,128 @@ window.FM = window.FM || {};
        old step could hold is still exactly representable. */
     { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the edge was a hard 1-bit cut
     { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
+    { type: 'gradientwipe', label: 'Gradient Wipe', layer: true, layerLabel: 'Wipe map', desc: 'Reveal this layer in the brightness order of another layer. Use a gradient, noise or image as the map; keyframe Progress to animate the wipe.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
+      { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 10, unit: '%' },
+      { key: 'channel', label: 'Read', options: [[0, 'Luma'], [1, 'Alpha'], [2, 'Red'], [3, 'Green'], [4, 'Blue']], def: 0 },
+      { key: 'invert', label: 'Invert', options: [[0, 'Off'], [1, 'On']], def: 0 },
+    ] },
+    { type: 'venetianblinds', label: 'Venetian Blinds', desc: 'Reveal a layer in parallel slats. Keyframe Progress to open them; Stagger makes each slat follow the previous one.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
+      { key: 'count', label: 'Slats', min: 2, max: 60, step: 1, def: 10 },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 100, step: 1, def: 0, unit: 'px' },
+      { key: 'stagger', label: 'Stagger', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'fit', label: 'Fit slats to', options: [[0, 'Frame'], [1, 'Visible layer']], def: 0 },
+    ] },
+    { type: 'radiowaves', label: 'Radio Waves', desc: 'Send repeated coloured rings from a point. Unlike Shockwave, new rings keep appearing while the layer plays.', color: true, defColor: '#6bdcff', colorLabel: 'Waves', params: [
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'rate', label: 'Waves per second', min: 0, max: 8, step: 0.1, def: 2, unit: 'Hz' },
+      { key: 'speed', label: 'Travel speed', min: 0, max: 800, step: 1, def: 160, unit: 'px/s' },
+      { key: 'lifetime', label: 'Lifetime', min: 0.1, max: 8, step: 0.1, def: 2, unit: 's' },
+      { key: 'width', label: 'Line width', min: 1, max: 60, step: 1, def: 6, unit: 'px' },
+      { key: 'fade', label: 'Fade at end', min: 0, max: 100, step: 1, def: 70, unit: '%' },
+      { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square'], [2, 'Polygon']], def: 0 },
+      { key: 'sides', label: 'Polygon sides', min: 3, max: 16, step: 1, def: 6, overriddenBy: 'shape', liveWhen: 2 },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 1, def: 0, unit: '°/s' },
+      { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Screen'], [2, 'Add']], def: 1 },
+    ] },
+    { type: 'laserbeam', label: 'Laser Beam', desc: 'Draw a straight glowing beam between two movable points, with a bright core and optional pulse.', color: true, defColor: '#ff4055', colorLabel: 'Beam colour', params: [
+      { key: 'x1', label: 'Start X', min: 0, max: 100, step: 1, def: 10, unit: '%' },
+      { key: 'y1', label: 'Start Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'x2', label: 'End X', min: 0, max: 100, step: 1, def: 90, unit: '%' },
+      { key: 'y2', label: 'End Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'width', label: 'Beam width', min: 1, max: 60, step: 1, def: 6, unit: 'px' },
+      { key: 'glow', label: 'Glow', min: 0, max: 100, step: 1, def: 70, unit: '%' },
+      { key: 'intensity', label: 'Intensity', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'pulse', label: 'Pulse', min: 0, max: 10, step: 0.1, def: 0, unit: 'Hz' },
+    ] },
+    { type: 'lensmagnifier', label: 'Lens Magnifier', desc: 'Magnify this layer under a movable lens, with a feathered edge, border and shadow.', color: true, defColor: '#ffffff', colorLabel: 'Border', params: [
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'size', label: 'Size', min: 1, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'zoom', label: 'Zoom', min: 1, max: 8, step: 0.1, def: 2, unit: '×' },
+      { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square']], def: 0 },
+      { key: 'feather', label: 'Feather', min: 0, max: 100, step: 1, def: 8, unit: 'px' },
+      { key: 'border', label: 'Border width', min: 0, max: 40, step: 1, def: 3, unit: 'px' },
+      { key: 'shadow', label: 'Shadow', min: 0, max: 100, step: 1, def: 12, unit: 'px' },
+    ] },
+    { type: 'circlearray', label: 'Circle Array', desc: 'Arrange whole copies of a layer around a circle or spiral. Ring Array folds the picture into wedges instead.', params: [
+      { key: 'count', label: 'Copies', min: 2, max: 36, step: 1, def: 8 },
+      { key: 'radius', label: 'Radius', min: 0, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'start', label: 'Start angle', min: -360, max: 360, step: 1, def: -90, unit: '°' },
+      { key: 'facecenter', label: 'Face centre', options: [[0, 'Off'], [1, 'On']], def: 0 },
+      { key: 'scalestep', label: 'Scale step', min: -90, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 1, def: 0, unit: '°/s' },
+      { key: 'spiral', label: 'Spiral', min: -100, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'fade', label: 'Fade across copies', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ] },
+    { type: 'cartoon', label: 'Cartoon', desc: 'Smooth small texture, simplify colour shading and draw clean ink edges around subjects.', color: true, defColor: '#101018', colorLabel: 'Edge colour', params: [
+      { key: 'smoothing', label: 'Smoothing', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'steps', label: 'Shading steps', min: 2, max: 12, step: 1, def: 6 },
+      { key: 'edgewidth', label: 'Edge width', min: 0, max: 8, step: 1, def: 2, unit: 'px' },
+      { key: 'threshold', label: 'Edge threshold', min: 0, max: 255, step: 1, def: 40 },
+      { key: 'saturation', label: 'Saturation', min: -100, max: 100, step: 1, def: 15, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'oilpaint', label: 'Oil Paint', desc: 'Blend nearby colour into directional brush patches while keeping strong edges intact.', params: [
+      { key: 'brush', label: 'Brush size', min: 2, max: 16, step: 1, def: 6, unit: 'px' },
+      { key: 'sharpness', label: 'Edge sharpness', min: 0, max: 100, step: 1, def: 80, unit: '%' },
+      { key: 'detail', label: 'Brush directions', options: [[4, 'Four'], [8, 'Eight']], def: 4 },
+      { key: 'levels', label: 'Colour levels', min: 0, max: 32, step: 1, def: 0, note: '0 keeps smooth colour' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'bwmixer', label: 'Black & White Mixer', desc: 'Choose how each original colour becomes light or dark in a monochrome image.', color: true, defColor: '#808080', colorLabel: 'Tint colour', params: [
+      { key: 'preset', label: 'Colour filter', options: [[0, 'Neutral'], [1, 'Red'], [2, 'Orange'], [3, 'Yellow'], [4, 'Green'], [5, 'Blue'], [6, 'Infrared']], def: 0 },
+      { key: 'reds', label: 'Reds', min: -200, max: 300, step: 1, def: 40, unit: '%' },
+      { key: 'yellows', label: 'Yellows', min: -200, max: 300, step: 1, def: 60, unit: '%' },
+      { key: 'greens', label: 'Greens', min: -200, max: 300, step: 1, def: 40, unit: '%' },
+      { key: 'cyans', label: 'Cyans', min: -200, max: 300, step: 1, def: 60, unit: '%' },
+      { key: 'blues', label: 'Blues', min: -200, max: 300, step: 1, def: 20, unit: '%' },
+      { key: 'magentas', label: 'Magentas', min: -200, max: 300, step: 1, def: 80, unit: '%' },
+      { key: 'tint', label: 'Tint amount', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'channelmixer', label: 'Channel Mixer', desc: 'Build each output colour from red, green, blue and a constant. Select an output to edit its four controls.', params: [
+      { key: 'out', label: 'Output', options: [[0, 'Red'], [1, 'Green'], [2, 'Blue']], def: 0 },
+      { key: 'redR', label: 'Red from red', min: -200, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'redG', label: 'Red from green', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'redB', label: 'Red from blue', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'redOffset', label: 'Red constant', min: -255, max: 255, step: 1, def: 0 },
+      { key: 'greenR', label: 'Green from red', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'greenG', label: 'Green from green', min: -200, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'greenB', label: 'Green from blue', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'greenOffset', label: 'Green constant', min: -255, max: 255, step: 1, def: 0 },
+      { key: 'blueR', label: 'Blue from red', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'blueG', label: 'Blue from green', min: -200, max: 200, step: 1, def: 0, unit: '%' },
+      { key: 'blueB', label: 'Blue from blue', min: -200, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'blueOffset', label: 'Blue constant', min: -255, max: 255, step: 1, def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'autograde', label: 'Auto Grade', desc: 'Automatically set levels, contrast or colour balance from this frame. Temporal smoothing steadies the grade across a playing clip.', params: [
+      { key: 'mode', label: 'Correct', options: [[0, 'Levels'], [1, 'Contrast'], [2, 'Colour']], def: 0 },
+      { key: 'clip', label: 'Clip ends', min: 0, max: 10, step: 0.1, def: 1, unit: '%' },
+      { key: 'smooth', label: 'Temporal smoothing', min: 0, max: 2, step: 0.05, def: 0.25, unit: 's' },
+      { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'logtonormal', label: 'Log to Rec.709', desc: 'Convert footage recorded as Panasonic V-Log/V-Gamut, Sony S-Log3/S-Gamut3.Cine, Apple Log/BT.2020, or Canon Log 3/Cinema Gamut. Select the exact recording profile; this does not auto-detect it.', params: [
+      { key: 'profile', label: 'Camera profile', options: [[0, 'Panasonic V-Log / V-Gamut'], [1, 'Sony S-Log3 / S-Gamut3.Cine'], [2, 'Apple Log / BT.2020'], [3, 'Canon Log 3 / Cinema Gamut']], def: 0 },
+      { key: 'exposure', label: 'Exposure', min: -4, max: 4, step: 0.1, def: 0, unit: 'stops' },
+      { key: 'rolloff', label: 'Highlight roll-off', min: 0, max: 100, step: 1, def: 20, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'deflicker', label: 'Deflicker', desc: 'Evens out frame-to-frame exposure flicker. Scene changes reset the correction; preview and export each start with fresh history.', params: [
+      { key: 'smooth', label: 'Smoothing', min: 0.1, max: 2, step: 0.05, def: 0.5, unit: 's' },
+      { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'limit', label: 'Maximum correction', min: 0.25, max: 2, step: 0.05, def: 1, unit: 'stops' },
+    ] },
+    { type: 'spillsuppressor', label: 'Spill Suppressor', desc: 'Reduce a screen-colour cast after keying, without changing the matte. Put it after the key in the effect stack.', color: true, defColor: '#00c23c', colorLabel: 'Screen colour', params: [
+      { key: 'amount', label: 'Remove spill', min: 0, max: 100, step: 1, def: 60, unit: '%' },
+      { key: 'range', label: 'Hue range', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'area', label: 'Area', options: [[0, 'Whole subject'], [1, 'Soft edges only']], def: 0 },
+    ] },
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -792,6 +919,16 @@ window.FM = window.FM || {};
       { key: 'driftX', label: 'Drift X', min: -200, max: 200, step: 5, def: 0, legacy: 0, unit: 'px/s' },
       { key: 'driftY', label: 'Drift Y', min: -200, max: 200, step: 5, def: 0, legacy: 0, unit: 'px/s' },
     ] },
+    { type: 'fractalnoise', label: 'Fractal Noise', desc: 'Layered noise for clouds, smoke and organic masks, with four texture shapes and animated evolution.', color: true, defColor: '#000000', colorLabel: 'Dark', color2: true, defColor2: '#ffffff', color2Label: 'Light', params: [
+      { key: 'pattern', label: 'Pattern', options: [[0, 'Basic'], [1, 'Turbulent'], [2, 'Smooth'], [3, 'Ridged']], def: 0 },
+      { key: 'scale', label: 'Scale', min: 16, max: 400, step: 1, def: 100, unit: 'px' },
+      { key: 'octaves', label: 'Octaves', min: 1, max: 6, step: 1, def: 4 },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 300, step: 1, def: 100, unit: '%' },
+      { key: 'evolution', label: 'Evolution', min: -4, max: 4, step: 0.1, def: 0.5, unit: '/s' },
+      { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay']], def: 0 },
+      { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
     { type: 'smoothbevel', label: 'Smooth Bevel', /* queue 904: Light from — the key light was welded; measured, it lights the BOTTOM-RIGHT edges, i.e. 315° */ params: [{ key: 'depth', label: 'Depth', min: 1, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'strength', label: 'Light Strength', min: 0, max: 2, step: 0.05, def: 1 }, { key: 'angle', label: 'Light from', min: 0, max: 360, step: 1, def: 315, unit: '°' }] },
     // ---- batch 18: Blur / Proc / Distort / Drawing ----
     { type: 'zoomstreaks', label: 'Zoom Streaks', params: [
@@ -838,6 +975,15 @@ window.FM = window.FM || {};
     { type: 'counter', label: 'Number Roll', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: -100000, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: -100000, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 },
       { key: 'group', label: 'Thousands', def: 1, legacy: 0, options: [[0, '1234'], [1, '1,234'], [2, '1 234'], [3, '1.234']] },
       { key: 'wrap', label: 'Your text', def: 1, legacy: 0, options: [[0, 'Replace'], [1, 'Keep'] ], note: 'Keep: type e.g. $0 or 0% or Subscribers: 0 — the number rolls in place of the 0' }] },   // queue 904: could not go negative, no separator, and the layer's own text was thrown away
+    { type: 'odometer', label: 'Odometer Roll', desc: 'Roll each digit vertically like a mechanical counter. Higher columns turn as the lower column carries.', params: [
+      { key: 'from', label: 'From', min: -99999999, max: 99999999, step: 1, def: 0 },
+      { key: 'to', label: 'To', min: -99999999, max: 99999999, step: 1, def: 100 },
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0 },
+      { key: 'digits', label: 'Minimum digits', min: 1, max: 8, step: 1, def: 4 },
+      { key: 'decimals', label: 'Decimals', min: 0, max: 2, step: 1, def: 0 },
+      { key: 'group', label: 'Thousands', def: 0, options: [[0, 'Off'], [1, 'Commas']] },
+      { key: 'wrap', label: 'Your text', def: 1, options: [[0, 'Replace'], [1, 'Keep']] },
+    ] },
     { type: 'textprogress', label: 'Type-On', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 },
       { key: 'unit', label: 'Reveal by', def: 0, options: [[0, 'Letter'], [1, 'Word'], [2, 'Line']] },
@@ -1333,6 +1479,34 @@ window.FM = window.FM || {};
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1 },
       { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0 },
       { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255 },
+    ] },
+    { type: 'colourwheels', label: 'Colour Wheels', desc: 'Tint and brighten shadows, midtones and highlights separately. All three ranges blend smoothly.', params: [
+      { key: 'shadowHue', label: 'Shadows hue', min: 0, max: 360, step: 1, def: 220, unit: '°' },
+      { key: 'shadowAmount', label: 'Shadows amount', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'shadowBrightness', label: 'Shadows brightness', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'midHue', label: 'Midtones hue', min: 0, max: 360, step: 1, def: 30, unit: '°' },
+      { key: 'midAmount', label: 'Midtones amount', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'midBrightness', label: 'Midtones brightness', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'highHue', label: 'Highlights hue', min: 0, max: 360, step: 1, def: 45, unit: '°' },
+      { key: 'highAmount', label: 'Highlights amount', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'highBrightness', label: 'Highlights brightness', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'blending', label: 'Blending', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'keepBrightness', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+    { type: 'hslmixer', label: 'HSL Mixer', desc: 'Retune all eight colour ranges separately in Hue, Saturation and Luminance views.', params: (() => {
+      const bands = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
+      const params = [{ key: 'view', label: 'View', options: [[0, 'Hue'], [1, 'Saturation'], [2, 'Luminance']], def: 0 }];
+      [['h', 'Hue', '°'], ['s', 'Saturation', '%'], ['l', 'Luminance', '%']].forEach(([prefix, label, unit]) => {
+        bands.forEach(band => params.push({ key: prefix + band, label: band, min: -100, max: 100, step: 1, def: 0, unit }));
+      });
+      return params;
+    })() },
+    { type: 'claritydehaze', label: 'Clarity & Dehaze', desc: 'Recover local contrast, fine detail and depth in hazy footage.', params: [
+      { key: 'clarity', label: 'Clarity', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'texture', label: 'Texture', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'dehaze', label: 'Dehaze', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'radius', label: 'Radius', min: 10, max: 200, step: 1, def: 60, unit: 'px' },
     ] },
     // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
@@ -2507,6 +2681,27 @@ window.FM = window.FM || {};
         st.text = m ? src.slice(0, m.index) + num + src.slice(m.index + m[0].length) : num; return; }   // no number in the layer's text to keep a place for: the number is the text, as before
       st.text = num;
     },
+    odometer: function (st, p, t) {
+      const safe = (key, def) => { const n = Number(fparam(p, key, def, t)); return isFinite(n) ? n : def; };
+      const from = Math.max(-99999999, Math.min(99999999, safe('from', 0)));
+      const to = Math.max(-99999999, Math.min(99999999, safe('to', 100)));
+      const progress = clamp01(safe('progress', 0));
+      const decimals = Math.max(0, Math.min(2, Math.round(safe('decimals', 0))));
+      const wanted = Math.max(1, Math.min(8, Math.round(safe('digits', 4))));
+      const digits = Math.max(wanted, String(Math.floor(Math.max(Math.abs(from), Math.abs(to)))).length);
+      const value = from + (to - from) * progress;
+      const signSlot = from < 0 || to < 0;
+      const grouped = Math.round(safe('group', 0)) === 1;
+      const keep = Math.round(safe('wrap', 1)) === 1;
+      const source = st.text || '', match = keep ? /-?\d[\d,.\u202f ]*\d|-?\d/.exec(source) : null;
+      const prefix = match ? source.slice(0, match.index) : '', suffix = match ? source.slice(match.index + match[0].length) : '';
+      const body = Math.abs(value).toFixed(decimals).split('.');
+      let integer = body[0].padStart(digits, '0');
+      if (grouped) integer = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      const display = prefix + (value < 0 ? '−' : '') + integer + (decimals ? '.' + body[1] : '') + suffix;
+      st.text = display;
+      st.odometer = { value: value, digits: digits, decimals: decimals, signSlot: signSlot, grouped: grouped, prefix: prefix, suffix: suffix, display: display };
+    },
     textprogress: function (st, p, t) {
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
       // A typewriter that could only run left-to-right one code unit at a time, with no caret.
@@ -2687,6 +2882,66 @@ window.FM = window.FM || {};
     }
     return st;
   };
+  function odometerMetrics(ctx, state, spacing) {
+    const old = ('letterSpacing' in ctx) ? ctx.letterSpacing : null;
+    if (old != null) ctx.letterSpacing = '0px';
+    let col = 1;
+    for (let n = 0; n < 10; n++) col = Math.max(col, ctx.measureText(String(n)).width);
+    const sign = state.signSlot ? ctx.measureText('−').width : 0;
+    const dot = state.decimals ? ctx.measureText('.').width : 0;
+    const comma = state.grouped ? ctx.measureText(',').width : 0;
+    const prefix = state.prefix ? ctx.measureText(state.prefix).width : 0;
+    const suffix = state.suffix ? ctx.measureText(state.suffix).width : 0;
+    if (old != null) ctx.letterSpacing = old;
+    const gap = isFinite(spacing) ? spacing : 0;
+    const commas = state.grouped ? Math.floor((state.digits - 1) / 3) : 0;
+    const slots = state.digits + state.decimals + (state.decimals ? 1 : 0) + (state.signSlot ? 1 : 0) + commas + (state.prefix ? 1 : 0) + (state.suffix ? 1 : 0);
+    return { col: col, sign: sign, dot: dot, comma: comma, prefix: prefix, suffix: suffix, gap: gap,
+             width: (state.digits + state.decimals) * col + sign + dot + commas * comma + prefix + suffix + Math.max(0, slots - 1) * gap };
+  }
+  function drawOdometerText(ctx, layer, state, spacing, t, drawStroke, bw, bcol, bpos) {
+    const m = odometerMetrics(ctx, state, spacing), fs = layer.fontSize || 96;
+    const align = layer.align || 'center';
+    let x = align === 'right' ? -m.width : align === 'center' ? -m.width / 2 : 0;
+    const scaled = Math.abs(state.value) * Math.pow(10, state.decimals);
+    const fillA = textFillAlpha(layer);
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    function glyph(char, px, py) {
+      if (drawStroke) {
+        ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+        ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol;
+        ctx.strokeText(char, px, py); ctx.restore();
+      }
+      fillTextA(ctx, char, px, py, fillA);
+    }
+    if (state.prefix) { glyph(state.prefix, x + m.prefix / 2, 0); x += m.prefix + m.gap; }
+    if (state.signSlot) { if (state.value < 0) glyph('−', x + m.sign / 2, 0); x += m.sign + m.gap; }
+    const count = state.digits + state.decimals;
+    for (let j = 0; j < count; j++) {
+      if (state.decimals && j === state.digits) { glyph('.', x + m.dot / 2, fs * 0.12); x += m.dot + m.gap; }
+      const place = Math.pow(10, count - j - 1);
+      const v = scaled / place, whole = Math.floor(v + 1e-9), frac = Math.max(0, Math.min(1, v - whole));
+      const digit = whole % 10, roll = place === 1 ? frac : Math.max(0, Math.min(1, (frac - 0.9) * 10));
+      const center = x + m.col / 2;
+      if (roll <= 0.001) glyph(String(digit), center, 0);
+      else {
+        const step = fs * 1.16;
+        ctx.save(); ctx.beginPath(); ctx.rect(x - bw, -fs * 0.58, m.col + bw * 2, fs * 1.16); ctx.clip();
+        glyph(String(digit), center, -roll * step);
+        glyph(String((digit + 1) % 10), center, (1 - roll) * step);
+        ctx.restore();
+      }
+      x += m.col + m.gap;
+      if (state.grouped && j < state.digits - 1 && (state.digits - j - 1) % 3 === 0) {
+        glyph(',', x + m.comma / 2, fs * 0.1); x += m.comma + m.gap;
+      }
+    }
+    if (state.suffix) glyph(state.suffix, x + m.suffix / 2, 0);
+    ctx.restore();
+  }
+  FM._drawOdometerText = drawOdometerText;  // focused wheel-rendering regression
   // Smooth deterministic pseudo-noise in ~[-1,1] (sum of incommensurate sines) — same at a given
   // time every render, so wiggle is flicker-free and exports identically.
   function wnoise(u) { return Math.sin(u * 6.283) * 0.5 + Math.sin(u * 14.77 + 1.3) * 0.3 + Math.sin(u * 28.6 + 2.7) * 0.2; }
@@ -3660,14 +3915,14 @@ window.FM = window.FM || {};
     mosaic: 1, lensblur: 1, dots: 1, polarcoords: 1, bend: 1, glass: 1,
     lightglow: 1, longshadow: 1, halftonelines: 1, clouds: 1, rays: 1, stripes: 1,
     darkglow: 1, stroke: 1, smoothedges: 1, blocknoise: 1, starfield: 1, curl: 1, filmgrain: 1,
-    bumpmap: 1, edgeglow: 1, contourlines: 1, grunge: 1, iridescence: 1, fractalwarp: 1,
+    bumpmap: 1, edgeglow: 1, contourlines: 1, grunge: 1, iridescence: 1, fractalwarp: 1, titlewarp: 1,
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
-    wipe: 1, radialwipe: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
-    gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1,
+    wipe: 1, radialwipe: 1, gradientwipe: 1, venetianblinds: 1, radiowaves: 1, laserbeam: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
+    gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1, circlearray: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
-    electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
+    electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, fractalnoise: 1, smoothbevel: 1,
     zoomstreaks: 1, innerblur: 1, contourstrips: 1, innerpinch: 1, crosshatch: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, lightleak: 1, letterbox: 1, border: 1,
     faded: 1, nightvision: 1, sketch: 1, roundcorners: 1, liquidglass: 1,
@@ -3675,12 +3930,12 @@ window.FM = window.FM || {};
     pyramid3d: 1, octahedron3d: 1, hexprism3d: 1, starprism3d: 1, starpoly3d: 1, heart3d: 1,
     hollowbox3d: 1, axiscross3d: 1, pagecurl: 1, fliplayer: 1, rasterextrude: 1,
     wiggle: 1, shake: 1, swing: 1, spin: 1, pulse: 1, drift: 1, orbit: 1,
-    squeeze: 1, tiles: 1, motionflow: 1, particles: 1,
+    squeeze: 1, tiles: 1, lensmagnifier: 1, motionflow: 1, particles: 1,
     softglow: 1, replacecolor: 1, spotcolor: 1, fourcolor: 1, spectralmap: 1, radialshadow: 1, voronoi: 1, tunnel: 1,
     turbulentdisplace: 1, stretchseg: 1, tileshift: 1, tilerotate: 1, wrapshift: 1, palettemap: 1, lightning: 1,
     displacemap: 1, polardisplace: 1,
-    touchup: 1, levels: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
-    timewarp: 1, chromakeypro: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
+    touchup: 1, levels: 1, colourwheels: 1, hslmixer: 1, claritydehaze: 1, cartoon: 1, oilpaint: 1, bwmixer: 1, channelmixer: 1, autograde: 1, logtonormal: 1, deflicker: 1, halation: 1, framestutter: 1, shockwave: 1, speedlines: 1, weather: 1, hslbands: 1,
+    timewarp: 1, chromakeypro: 1, spillsuppressor: 1, lightwrap: 1, dispersion: 1, vhstape: 1, compresscrunch: 1, temporaldenoise: 1, lensdistort: 1, pixelsort: 1, lumamatte: 1, compoundblur: 1, matchgrade: 1 };
   // Bracket lookups below are bare (POSTFX[type]), so an inherited key like 'toString' would read as
   // a truthy hit and route a junk effect into the pixel path. Cut the prototype off — own keys only.
   Object.setPrototypeOf(POSTFX, null);
@@ -3771,6 +4026,7 @@ window.FM = window.FM || {};
     if (fx.type === 'squish') return drawSquish(ctx, layer, t, scene, fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
+    if (fx.type === 'gradientwipe') return drawGradientWipe(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
     if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
@@ -4223,7 +4479,7 @@ window.FM = window.FM || {};
   /* chromaticaberration LEFT this list in v15.83 (queue 798): its offset now grows from the FRAME centre (the lens is the
      frame, so a layer in the corner fringes more than one in the middle), and a centre-based kernel cannot draw the same
      picture on a cropped plate — test 692 says so, and said so. It renders on the full plate, like bulge and fisheye. */
-  const CROP_FX = Object.assign(Object.create(null), { levels: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
+  const CROP_FX = Object.assign(Object.create(null), { levels: 1, colourwheels: 1, hslmixer: 1, chromakeypro: 1, hslbands: 1, solarize: 1, gamma: 1, temperature: 1, vibrance: 1, sharpen: 1, thermal: 1, edge: 1, emboss: 1, exposure: 1, gradientmap: 1, colorize: 1, lightglow: 1, longshadow: 1, darkglow: 1, stroke: 1, smoothedges: 1, bumpmap: 1, contourlines: 1, colorbalance: 1, highlightsshadows: 1, innerglow: 1, unsharpmask: 1, linstreaks: 1, blink: 1, flicker: 1, flashdark: 1, pulseopacity: 1, solidmatte: 1, mattefringe: 1, channelremap: 1, channelmixer: 1, logtonormal: 1, smoothbevel: 1, contourstrips: 1, bleachbypass: 1, tealorange: 1, crossprocess: 1, replacecolor: 1, spotcolor: 1, spectralmap: 1, palettemap: 1, faded: 1 });
   FM._cropFx = CROP_FX;
   /* BOUNDED kernels that can ALSO take the cropped readback (#692 round 7). A bounded kernel needs its box, so on the
    * crop path it gets the box measured on the cropped buffer (fxBounds on a buffer 1/50th the size). Only kernels whose
@@ -4340,7 +4596,7 @@ window.FM = window.FM || {};
           const sub = actx.getImageData(rect.x, rect.y, rect.w, rect.h);
           // a bounded kernel gets its box measured on the cropped buffer — the same scan, 1/50th of the pixels
           const bb2 = bounded ? fxBounds(sub.data, rect.w, rect.h) : null;
-          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2, layer, scene);   // layer, scene: the few kernels on the clip's own clock and the project's frame rate (Flash (darken)'s rhythms, #482 2.3)
+          if (!bounded || bb2) fn(sub.data, rect.w, rect.h, pars, t, ps, bb2, layer, scene, fx);   // layer, scene: the few kernels on the clip's own clock and the project's frame rate (Flash (darken)'s rhythms, #482 2.3)
           bctx.putImageData(sub, rect.x, rect.y);
         }
         ctx.save();
@@ -4365,7 +4621,7 @@ window.FM = window.FM || {};
        * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
        * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
       // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
-      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene, fx);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -4551,6 +4807,31 @@ window.FM = window.FM || {};
     return _fxScratch;
   }
   FM._fxScratchInfo = function () { return { bytes: _fxScratch ? _fxScratch.length : 0 }; };   // suite seam
+
+  // Glow kernels run synchronously and fill both planes before reading them; Dark Glow
+  // clears its sparse first plane. Sharing avoids 8 bytes of allocation per plate pixel.
+  let _glowScratch = null, _glowScratchUses = 0, _glowScratchAllocations = 0, _glowScratchReleaseTimer = null;
+  function releaseGlowScratch() {
+    if (_glowScratchReleaseTimer !== null && typeof clearTimeout === 'function') clearTimeout(_glowScratchReleaseTimer);
+    _glowScratchReleaseTimer = null;
+    _glowScratch = null;
+  }
+  function glowScratch(n) {
+    _glowScratchUses++;
+    // An export can grow these planes to 4K. Keep them warm during playback, then
+    // release the largest frame after rendering has been idle for five seconds.
+    if (typeof setTimeout === 'function') {
+      if (_glowScratchReleaseTimer !== null) clearTimeout(_glowScratchReleaseTimer);
+      _glowScratchReleaseTimer = setTimeout(releaseGlowScratch, 5000);
+    }
+    if (!_glowScratch || _glowScratch[0].length < n) {
+      _glowScratch = [new Float32Array(n), new Float32Array(n)];
+      _glowScratchAllocations++;
+    }
+    return _glowScratch;
+  }
+  FM._glowScratchInfo = function () { return { pixels: _glowScratch ? _glowScratch[0].length : 0, uses: _glowScratchUses, allocations: _glowScratchAllocations, releasePending: _glowScratchReleaseTimer !== null }; };
+  FM._releaseGlowScratch = releaseGlowScratch;
 
   /* ONE PIXEL, ONE BLEND MODE (queue 537). The eight modes Ezra's ask implies — "screen for glows,
      multiply for burns, overlay/soft-light for a colour cast, hard-light for a look".
@@ -5028,7 +5309,606 @@ window.FM = window.FM || {};
     }
   }
 
+  // Separable quarter-resolution filters for Clarity & Dehaze. Their cost is linear in image area,
+  // even at Radius 200; a naive two-dimensional neighbourhood would grow quadratically with it.
+  function quarterBox(src, W, H, radius, tmp, out) {
+    const r = Math.max(1, radius | 0);
+    for (let y = 0; y < H; y++) {
+      let sum = 0, row = y * W;
+      for (let x = 0; x <= r && x < W; x++) sum += src[row + x];
+      for (let x = 0; x < W; x++) {
+        if (x) { if (x + r < W) sum += src[row + x + r]; if (x - r - 1 >= 0) sum -= src[row + x - r - 1]; }
+        tmp[row + x] = sum / (Math.min(W - 1, x + r) - Math.max(0, x - r) + 1);
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      let sum = 0;
+      for (let y = 0; y <= r && y < H; y++) sum += tmp[y * W + x];
+      for (let y = 0; y < H; y++) {
+        if (y) { if (y + r < H) sum += tmp[(y + r) * W + x]; if (y - r - 1 >= 0) sum -= tmp[(y - r - 1) * W + x]; }
+        out[y * W + x] = sum / (Math.min(H - 1, y + r) - Math.max(0, y - r) + 1);
+      }
+    }
+    return out;
+  }
+  function quarterMin(src, W, H, radius, tmp, out, q) {
+    const r = Math.max(1, radius | 0);
+    for (let y = 0; y < H; y++) {
+      let head = 0, tail = 0, right = -1;
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        const limit = Math.min(W - 1, x + r);
+        while (right < limit) {
+          right++;
+          while (tail > head && src[row + q[tail - 1]] >= src[row + right]) tail--;
+          q[tail++] = right;
+        }
+        while (q[head] < x - r) head++;
+        tmp[row + x] = src[row + q[head]];
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      let head = 0, tail = 0, bottom = -1;
+      for (let y = 0; y < H; y++) {
+        const limit = Math.min(H - 1, y + r);
+        while (bottom < limit) {
+          bottom++;
+          while (tail > head && tmp[q[tail - 1] * W + x] >= tmp[bottom * W + x]) tail--;
+          q[tail++] = bottom;
+        }
+        while (q[head] < y - r) head++;
+        out[y * W + x] = tmp[q[head] * W + x];
+      }
+    }
+    return out;
+  }
+  function quarterSample(map, width, x0, x1, y0, y1, fx, fy) {
+    const a = map[y0 * width + x0] * (1 - fx) + map[y0 * width + x1] * fx;
+    const b = map[y1 * width + x0] * (1 - fx) + map[y1 * width + x1] * fx;
+    return a * (1 - fy) + b * fy;
+  }
+  let clarityScratch = null;
+  function getClarityScratch(size, edge) {
+    if (!clarityScratch || clarityScratch.size < size || clarityScratch.edge < edge) {
+      const arr = () => new Float32Array(size);
+      clarityScratch = { size, edge, weighted: arr(), coverage: arr(), dark: arr(), tmp: arr(),
+        wideW: arr(), wideC: arr(), fineW: arr(), fineC: arr(), delta: arr(), transmission: arr(), min: arr(),
+        deque: new Int32Array(edge) };
+    }
+    return clarityScratch;
+  }
+
+  let _cartoonScratch = null;
+  function cartoonScratch(n) {
+    if (!_cartoonScratch || _cartoonScratch.n < n) _cartoonScratch = {
+      n: n, source: new Uint8ClampedArray(n * 4), smooth: new Uint8ClampedArray(n * 4), styled: new Uint8ClampedArray(n * 4),
+      luma: new Float32Array(n), edges: new Uint8Array(n), temp: new Uint8Array(n)
+    };
+    return _cartoonScratch;
+  }
+  let _oilPaintScratch = null;
+  function oilPaintScratch(n, satN) {
+    if (!_oilPaintScratch || _oilPaintScratch.n < n || _oilPaintScratch.satN < satN) {
+      _oilPaintScratch = { n: n, satN: satN, source: new Uint8ClampedArray(n * 4), styled: new Uint8ClampedArray(n * 4), sat: [] };
+      for (var i = 0; i < 6; i++) _oilPaintScratch.sat.push(new Float32Array(satN));
+    }
+    return _oilPaintScratch;
+  }
+  let fractalNoiseScratch = null;
+  let _autoGradeCache = new WeakMap(), _autoGradeExportState = !!FM._exporting;
+  let _deflickerCache = new WeakMap(), _deflickerExportState = !!FM._exporting;
+  // Published Panasonic/Sony curves, OpenColorIO Apple/Canon curves, and BT.709 output.
+  // Tables are shared across frames; the per-pixel grade only does a matrix and lookups.
+  const _vlogDecode = new Float32Array(256), _slog3Decode = new Float32Array(256);
+  const _appleLogDecode = new Float32Array(256), _canonLog3Decode = new Float32Array(256);
+  const _rec709Encode = new Float32Array(4097);
+  const _appleLogBreak = 47.28711236 * Math.pow(0.01 + 0.05641088, 2);
+  for (let i = 0; i < 256; i++) {
+    const x = i / 255;
+    _vlogDecode[i] = x < 0.181 ? (x - 0.125) / 5.6 : Math.pow(10, (x - 0.598206) / 0.241514) - 0.00873;
+    const code = x * 1023;
+    _slog3Decode[i] = code >= 171.2102946929
+      ? Math.pow(10, (code - 420) / 261.5) * 0.19 - 0.01
+      : (code - 95) * 0.01125 / (171.2102946929 - 95);
+    _appleLogDecode[i] = x >= _appleLogBreak
+      ? Math.pow(2, (x - 0.69336945) / 0.08550479) - 0.00964052
+      : Math.sqrt(x / 47.28711236) - 0.05641088;
+    _canonLog3Decode[i] = 0.9 * (x < 0.097465473
+      ? -(Math.pow(10, (0.12783901 - x) / 0.36726845) - 1) / 14.98325
+      : x <= 0.15277891 ? (x - 0.12512219) / 1.9754798
+      : (Math.pow(10, (x - 0.12240537) / 0.36726845) - 1) / 14.98325);
+  }
+  for (let i = 0; i <= 4096; i++) {
+    const x = i / 4096;
+    _rec709Encode[i] = x < 0.018 ? 4.5 * x : 1.099 * Math.pow(x, 0.45) - 0.099;
+  }
   const PIXEL_FX = {
+    deflicker: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
+      const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
+      if (!strength || !fx || W < 1 || H < 1) return;
+      const smooth = Math.max(0.1, Math.min(2, fparam(p, 'smooth', 0.5, t)));
+      const maxGain = Math.pow(2, Math.max(0.25, Math.min(2, fparam(p, 'limit', 1, t))));
+      const totals = new Float32Array(64), counts = new Uint16Array(64);
+      const stride = Math.max(1, Math.floor(Math.sqrt(W * H / 4096)));
+      let total = 0, count = 0;
+      for (let y = 0; y < H; y += stride) for (let x = 0; x < W; x += stride) {
+        const i = (y * W + x) * 4;
+        if (d[i + 3] < 32) continue;
+        const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+        const cell = Math.min(7, Math.floor(y * 8 / H)) * 8 + Math.min(7, Math.floor(x * 8 / W));
+        totals[cell] += lum; counts[cell]++; total += lum; count++;
+      }
+      if (count < 8) return;
+      const mean = total / count;
+      if (mean < 3) return;
+      const pattern = new Float32Array(64);
+      for (let cell = 0; cell < 64; cell++) if (counts[cell]) pattern[cell] = (totals[cell] / counts[cell]) / mean;
+      const exporting = !!FM._exporting;
+      if (exporting !== _deflickerExportState) { _deflickerCache = new WeakMap(); _deflickerExportState = exporting; }
+      const prev = _deflickerCache.get(fx);
+      let target = mean;
+      if (prev && prev.w === W && prev.h === H) {
+        const dt = t - prev.t;
+        if (Math.abs(dt) <= 0.0001) {
+          if (Math.abs(mean - prev.mean) < 0.5) target = prev.target;
+        } else if (dt > 0 && dt <= 0.35) {
+          let change = 0, paired = 0;
+          for (let cell = 0; cell < 64; cell++) if (pattern[cell] && prev.pattern[cell]) {
+            change += Math.abs(pattern[cell] - prev.pattern[cell]); paired++;
+          }
+          // A changed picture is a cut, not an exposure pulse. Reset before grading that frame.
+          if (paired >= 8 && change / paired < 0.45)
+            target = prev.target + (mean - prev.target) * (1 - Math.exp(-dt / smooth));
+        }
+      }
+      _deflickerCache.set(fx, { t: t, w: W, h: H, mean: mean, target: target, pattern: pattern });
+      const gain = Math.max(1 / maxGain, Math.min(maxGain, Math.pow(target / mean, strength)));
+      if (Math.abs(gain - 1) < 0.001) return;
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        d[i] *= gain; d[i + 1] *= gain; d[i + 2] *= gain;
+      }
+    },
+    autograde: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
+      const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
+      if (!strength || W < 1 || H < 1) return;
+      const mode = Math.max(0, Math.min(2, Math.round(fparam(p, 'mode', 0, t))));
+      const clip = Math.max(0, Math.min(0.1, fparam(p, 'clip', 1, t) / 100));
+      const smooth = Math.max(0, Math.min(2, fparam(p, 'smooth', 0.25, t)));
+      const hist = new Uint32Array(1024), sums = [0, 0, 0];
+      const stride = Math.max(1, Math.floor(Math.sqrt(W * H / 4096)));
+      let count = 0;
+      for (let y = 0; y < H; y += stride) for (let x = 0; x < W; x += stride) {
+        const i = (y * W + x) * 4;
+        if (d[i + 3] < 8) continue;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        hist[r]++; hist[256 + g]++; hist[512 + b]++;
+        hist[768 + Math.max(0, Math.min(255, Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b)))]++;
+        sums[0] += r; sums[1] += g; sums[2] += b; count++;
+      }
+      if (count < 8) return;
+      const quantile = function (offset, target) {
+        let n = 0;
+        for (let v = 0; v < 256; v++) { n += hist[offset + v]; if (n > target) return v; }
+        return 255;
+      };
+      const cut = Math.floor(count * clip);
+      const raw = new Array(9);
+      const mean = (sums[0] + sums[1] + sums[2]) / (3 * count);
+      for (let ch = 0; ch < 3; ch++) {
+        const off = mode === 0 ? ch * 256 : 768;
+        raw[ch * 2] = quantile(off, cut);
+        raw[ch * 2 + 1] = quantile(off, count - cut - 1);
+        raw[6 + ch] = mode === 2 ? Math.max(0.5, Math.min(2, mean / Math.max(1, sums[ch] / count))) : 1;
+      }
+      // Effect identity owns the history; a second Auto Grade on this layer has its own.
+      // An export starts afresh even if the editor previewed other frames first.
+      const exporting = !!FM._exporting;
+      if (exporting !== _autoGradeExportState) { _autoGradeCache = new WeakMap(); _autoGradeExportState = exporting; }
+      let stats = raw;
+      if (fx && typeof fx === 'object') {
+        const prev = _autoGradeCache.get(fx);
+        if (prev && prev.mode === mode && prev.w === W && prev.h === H) {
+          const dt = t - prev.t;
+          if (dt > 0.0001 && dt <= 0.35 && smooth > 0) {
+            const a = 1 - Math.exp(-dt / smooth);
+            stats = raw.map((v, i) => prev.stats[i] + (v - prev.stats[i]) * a);
+          } else if (Math.abs(dt) <= 0.0001 && raw.every((v, i) => v === prev.raw[i])) stats = prev.stats;
+        }
+        _autoGradeCache.set(fx, { t: t, mode: mode, w: W, h: H, raw: raw, stats: stats });
+      }
+      const black = [0, 0, 0], gain = [1, 1, 1];
+      for (let ch = 0; ch < 3; ch++) {
+        const lo = stats[ch * 2], hi = stats[ch * 2 + 1];
+        if (hi - lo >= 16) { black[ch] = lo; gain[ch] = Math.min(4, 255 / (hi - lo)); }
+      }
+      const lut = [new Uint8ClampedArray(256), new Uint8ClampedArray(256), new Uint8ClampedArray(256)];
+      for (let ch = 0; ch < 3; ch++) for (let v = 0; v < 256; v++) {
+        const corrected = Math.max(0, Math.min(255, (v * stats[6 + ch] - black[ch]) * gain[ch]));
+        lut[ch][v] = v + (corrected - v) * strength;
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        d[i] = lut[0][d[i]]; d[i + 1] = lut[1][d[i + 1]]; d[i + 2] = lut[2][d[i + 2]];
+      }
+    },
+    logtonormal: function (d, W, H, p, t) {
+      const mix = clamp01(fparam(p, 'mix', 100, t) / 100);
+      if (!mix) return;
+      const profile = Math.round(fparam(p, 'profile', 0, t));
+      const decode = profile === 1 ? _slog3Decode : profile === 2 ? _appleLogDecode
+        : profile === 3 ? _canonLog3Decode : _vlogDecode;
+      // Select the gamut once per frame, outside the pixel loop.
+      const m = profile === 1
+        ? [1.626856400320, -0.536988636554, -0.089867763767,
+           -0.179109430449, 1.420863041443, -0.241753610994,
+           -0.044166477895, -0.201519200616, 1.245685678512]
+        : profile === 2
+        ? [1.660491002108, -0.587641138789, -0.072849863320,
+           -0.124550474522, 1.132899897126, -0.008349422604,
+           -0.018150763355, -0.100578898008, 1.118729661363]
+        : profile === 3
+        ? [1.923861295899, -0.798760663248, -0.125100632650,
+           -0.204310848201, 1.495898509751, -0.291587661550,
+           -0.023685020970, -0.420127011030, 1.443812032001]
+        : [1.806576, -0.695697, -0.110879,
+           -0.170090, 1.305955, -0.135865,
+           -0.025206, -0.154468, 1.179674];
+      const exposure = Math.pow(2, Math.max(-4, Math.min(4, fparam(p, 'exposure', 0, t))));
+      const roll = clamp01(fparam(p, 'rolloff', 20, t) / 100);
+      function output(x) {
+        // A pivot-preserving highlight shoulder: 18% grey stays at 18%.
+        if (x > 0.18) x = 0.18 + (x - 0.18) / (1 + roll * (x - 0.18));
+        return _rec709Encode[Math.round(clamp01(x) * 4096)] * 255;
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const r = decode[d[i]] * exposure, g = decode[d[i + 1]] * exposure, b = decode[d[i + 2]] * exposure;
+        // Sony: inverse(Rec.709->AP0) * S-Gamut3.Cine->AP0 (ASWF OpenColorIO).
+        // Apple: BT.2020->BT.709 from ITU primaries, both with D65 white.
+        // Canon: Cinema Gamut->BT.709 from OpenColorIO Canon primaries (both D65).
+        // Panasonic: direct V-Gamut->BT.709 matrix from its reference manual.
+        const nr = output(m[0] * r + m[1] * g + m[2] * b);
+        const ng = output(m[3] * r + m[4] * g + m[5] * b);
+        const nb = output(m[6] * r + m[7] * g + m[8] * b);
+        d[i] += (nr - d[i]) * mix; d[i + 1] += (ng - d[i + 1]) * mix; d[i + 2] += (nb - d[i + 2]) * mix;
+      }
+    },
+    channelmixer: function (d, W, H, p, t) {
+      const mix = clamp01(fparam(p, 'mix', 100, t) / 100);
+      if (!mix) return;
+      // Read once per frame. "out" changes only which row the inspector displays;
+      // all three rows always render, so switching the selector cannot alter the grade.
+      const rr = fparam(p, 'redR', 100, t) / 100, rg = fparam(p, 'redG', 0, t) / 100;
+      const rb = fparam(p, 'redB', 0, t) / 100, ro = fparam(p, 'redOffset', 0, t);
+      const gr = fparam(p, 'greenR', 0, t) / 100, gg = fparam(p, 'greenG', 100, t) / 100;
+      const gb = fparam(p, 'greenB', 0, t) / 100, go = fparam(p, 'greenOffset', 0, t);
+      const br = fparam(p, 'blueR', 0, t) / 100, bg = fparam(p, 'blueG', 0, t) / 100;
+      const bb = fparam(p, 'blueB', 100, t) / 100, bo = fparam(p, 'blueOffset', 0, t);
+      if (rr === 1 && rg === 0 && rb === 0 && ro === 0 &&
+          gr === 0 && gg === 1 && gb === 0 && go === 0 &&
+          br === 0 && bg === 0 && bb === 1 && bo === 0) return;
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const nr = Math.max(0, Math.min(255, r * rr + g * rg + b * rb + ro));
+        const ng = Math.max(0, Math.min(255, r * gr + g * gg + b * gb + go));
+        const nb = Math.max(0, Math.min(255, r * br + g * bg + b * bb + bo));
+        d[i] = r + (nr - r) * mix;
+        d[i + 1] = g + (ng - g) * mix;
+        d[i + 2] = b + (nb - b) * mix;
+      }
+    },
+    bwmixer: function (d, W, H, p, t) {
+      var mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
+      if (!mix) return;
+      var defaults = [40, 60, 40, 60, 20, 80];
+      var keys = ['reds', 'yellows', 'greens', 'cyans', 'blues', 'magentas'];
+      // Preset shifts are relative to the displayed neutral sliders, so a creator can still refine each range.
+      var presets = [null, [90, 75, 25, 15, 0, 65], [75, 90, 45, 30, 5, 60],
+        [55, 90, 75, 40, 10, 65], [25, 35, 85, 75, 10, 45], [25, 30, 35, 75, 95, 60],
+        [150, 100, -40, -30, -60, 100]];
+      var preset = Math.max(0, Math.min(6, Math.round(fparam(p, 'preset', 0, t))));
+      var weights = new Float32Array(6);
+      for (var k = 0; k < 6; k++) {
+        var user = Math.max(-200, Math.min(300, fparam(p, keys[k], defaults[k], t)));
+        weights[k] = (user + (presets[preset] ? presets[preset][k] - defaults[k] : 0)) / 100;
+      }
+      var contrast = Math.max(0, Math.min(2, fparam(p, 'contrast', 100, t) / 100));
+      var tint = Math.max(0, Math.min(1, fparam(p, 'tint', 0, t) / 100));
+      var tintRGB = tint ? hexToRGB(p.color == null ? '#808080' : FM.evalProp(p.color, t)) : null;
+      for (var i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        var r = d[i], g = d[i + 1], b = d[i + 2];
+        var high = Math.max(r, g, b), low = Math.min(r, g, b), chroma = high - low;
+        var neutral = r * 0.2126 + g * 0.7152 + b * 0.0722;
+        var gray = neutral;
+        if (chroma > 0) {
+          var hue;
+          if (high === r) hue = ((g - b) / chroma + 6) % 6;
+          else if (high === g) hue = (b - r) / chroma + 2;
+          else hue = (r - g) / chroma + 4;
+          var band = Math.floor(hue), part = hue - band;
+          var weight = weights[band] * (1 - part) + weights[(band + 1) % 6] * part;
+          gray += (high * weight - neutral) * chroma / Math.max(1, high);
+        }
+        gray = Math.max(0, Math.min(255, (gray - 128) * contrast + 128));
+        var outR = gray, outG = gray, outB = gray;
+        if (tintRGB) {
+          outR = gray * (1 + (tintRGB[0] - 128) / 128 * tint);
+          outG = gray * (1 + (tintRGB[1] - 128) / 128 * tint);
+          outB = gray * (1 + (tintRGB[2] - 128) / 128 * tint);
+        }
+        d[i] = r + (outR - r) * mix;
+        d[i + 1] = g + (outG - g) * mix;
+        d[i + 2] = b + (outB - b) * mix;
+      }
+    },
+    oilpaint: function (d, W, H, p, t, ps) {
+      var mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
+      if (mix <= 0 || W < 1 || H < 1) return;
+      var sample = W * H > 50000 ? 2 : 1, SW = Math.ceil(W / sample), SH = Math.ceil(H / sample);
+      var n = SW * SH, stride = SW + 1, satN = stride * (SH + 1);
+      var S = oilPaintScratch(n, satN), source = S.source, styled = S.styled;
+      var R = S.sat[0], G = S.sat[1], B = S.sat[2], L = S.sat[3], L2 = S.sat[4], A = S.sat[5];
+      if (sample === 1) source.set(d);
+      else for (var sy = 0; sy < SH; sy++) for (var sx = 0; sx < SW; sx++) {
+        var red = 0, green = 0, blue = 0, weight = 0, cells = 0;
+        for (var yy = sy * sample; yy < Math.min(H, (sy + 1) * sample); yy++)
+          for (var xx = sx * sample; xx < Math.min(W, (sx + 1) * sample); xx++) {
+            var i = (yy * W + xx) * 4, a = d[i + 3] / 255;
+            red += d[i] * a; green += d[i + 1] * a; blue += d[i + 2] * a; weight += a; cells++;
+          }
+        var k = (sy * SW + sx) * 4;
+        source[k] = weight ? red / weight : 0;
+        source[k + 1] = weight ? green / weight : 0;
+        source[k + 2] = weight ? blue / weight : 0;
+        source[k + 3] = weight / cells * 255;
+      }
+      // Six summed-area tables make every directional region a fixed number of reads, independent of Brush size.
+      R.fill(0, 0, satN); G.fill(0, 0, satN); B.fill(0, 0, satN);
+      L.fill(0, 0, satN); L2.fill(0, 0, satN); A.fill(0, 0, satN);
+      for (var y = 1; y <= SH; y++) {
+        var rr = 0, gg = 0, bb = 0, ll = 0, ll2 = 0, aa = 0;
+        for (var x = 1; x <= SW; x++) {
+          var si = ((y - 1) * SW + x - 1) * 4, a = source[si + 3] / 255;
+          var lum = source[si] * 0.299 + source[si + 1] * 0.587 + source[si + 2] * 0.114;
+          rr += source[si] * a; gg += source[si + 1] * a; bb += source[si + 2] * a;
+          ll += lum * a; ll2 += lum * lum * a; aa += a;
+          var idx = y * stride + x, up = idx - stride;
+          R[idx] = R[up] + rr; G[idx] = G[up] + gg; B[idx] = B[up] + bb;
+          L[idx] = L[up] + ll; L2[idx] = L2[up] + ll2; A[idx] = A[up] + aa;
+        }
+      }
+      var brush = Math.max(2, Math.min(16, fparam(p, 'brush', 6, t)));
+      var rad = Math.max(1, Math.round(brush * (ps > 0 ? ps : 1) / sample));
+      var half = Math.max(1, Math.ceil(rad / 2));
+      var sharp = Math.max(0, Math.min(1, fparam(p, 'sharpness', 80, t) / 100));
+      var detail = Math.round(fparam(p, 'detail', 4, t)) === 8 ? 8 : 4;
+      var levels = Math.max(0, Math.min(32, Math.round(fparam(p, 'levels', 0, t))));
+      var sum = function (table, ia, ib, ic, id) { return table[id] - table[ib] - table[ic] + table[ia]; };
+      for (var y = 0; y < SH; y++) for (var x = 0; x < SW; x++) {
+        var pi = (y * SW + x) * 4;
+        if (!source[pi + 3]) { styled[pi] = styled[pi + 1] = styled[pi + 2] = 0; continue; }
+        var best = Infinity, bestR = 0, bestG = 0, bestB = 0;
+        var avgR = 0, avgG = 0, avgB = 0, valid = 0;
+        for (var sector = 0; sector < detail; sector++) {
+          var x0, x1, y0, y1;
+          if (sector === 0) { x0 = x - rad; x1 = x; y0 = y - rad; y1 = y; }
+          else if (sector === 1) { x0 = x; x1 = x + rad; y0 = y - rad; y1 = y; }
+          else if (sector === 2) { x0 = x - rad; x1 = x; y0 = y; y1 = y + rad; }
+          else if (sector === 3) { x0 = x; x1 = x + rad; y0 = y; y1 = y + rad; }
+          else if (sector === 4) { x0 = x - half; x1 = x + half; y0 = y - rad; y1 = y; }
+          else if (sector === 5) { x0 = x - half; x1 = x + half; y0 = y; y1 = y + rad; }
+          else if (sector === 6) { x0 = x - rad; x1 = x; y0 = y - half; y1 = y + half; }
+          else { x0 = x; x1 = x + rad; y0 = y - half; y1 = y + half; }
+          x0 = Math.max(0, x0); x1 = Math.min(SW - 1, x1);
+          y0 = Math.max(0, y0); y1 = Math.min(SH - 1, y1);
+          var ia = y0 * stride + x0, ib = y0 * stride + x1 + 1;
+          var ic = (y1 + 1) * stride + x0, id = (y1 + 1) * stride + x1 + 1;
+          var weight = sum(A, ia, ib, ic, id);
+          if (weight <= 1e-5) continue;
+          var mr = sum(R, ia, ib, ic, id) / weight;
+          var mg = sum(G, ia, ib, ic, id) / weight;
+          var mb = sum(B, ia, ib, ic, id) / weight;
+          var meanL = sum(L, ia, ib, ic, id) / weight;
+          var variance = Math.max(0, sum(L2, ia, ib, ic, id) / weight - meanL * meanL);
+          avgR += mr; avgG += mg; avgB += mb; valid++;
+          if (variance < best) { best = variance; bestR = mr; bestG = mg; bestB = mb; }
+        }
+        if (!valid) { bestR = source[pi]; bestG = source[pi + 1]; bestB = source[pi + 2]; valid = 1; avgR = bestR; avgG = bestG; avgB = bestB; }
+        var r = avgR / valid * (1 - sharp) + bestR * sharp;
+        var g = avgG / valid * (1 - sharp) + bestG * sharp;
+        var b = avgB / valid * (1 - sharp) + bestB * sharp;
+        if (levels >= 2) {
+          r = Math.round(r * (levels - 1) / 255) * 255 / (levels - 1);
+          g = Math.round(g * (levels - 1) / 255) * 255 / (levels - 1);
+          b = Math.round(b * (levels - 1) / 255) * 255 / (levels - 1);
+        }
+        styled[pi] = r; styled[pi + 1] = g; styled[pi + 2] = b;
+      }
+      for (var y = 0; y < H; y++) {
+        var smallRow = Math.floor(y / sample) * SW;
+        for (var x = 0; x < W; x++) {
+          var i = (y * W + x) * 4;
+          if (!d[i + 3]) continue;
+          var si = (smallRow + Math.floor(x / sample)) * 4;
+          if (mix === 1) { d[i] = styled[si]; d[i + 1] = styled[si + 1]; d[i + 2] = styled[si + 2]; }
+          else {
+            d[i] += (styled[si] - d[i]) * mix;
+            d[i + 1] += (styled[si + 1] - d[i + 1]) * mix;
+            d[i + 2] += (styled[si + 2] - d[i + 2]) * mix;
+          }
+        }
+      }
+    },
+    cartoon: function (d, W, H, p, t, ps) {
+      var mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
+      if (mix <= 0 || W < 1 || H < 1) return;
+      var smoothAmount = Math.max(0, Math.min(100, fparam(p, 'smoothing', 40, t)));
+      var steps = Math.max(2, Math.min(12, Math.round(fparam(p, 'steps', 6, t))));
+      // Two-by-two working pixels keep this spatial look usable on a phone's reduced preview plate.
+      var sample = W * H > 50000 ? 2 : 1;
+      var SW = Math.ceil(W / sample), SH = Math.ceil(H / sample);
+      var edgeWidth = Math.max(0, Math.min(8, fparam(p, 'edgewidth', 2, t))) * (ps > 0 ? ps : 1) / sample;
+      var threshold = Math.max(0, Math.min(255, fparam(p, 'threshold', 40, t)));
+      var saturation = Math.max(0, Math.min(2, 1 + fparam(p, 'saturation', 15, t) / 100));
+      var ink = p.color ? hexToRGB(p.color) : [16, 16, 24];
+      var n = SW * SH, scratch = cartoonScratch(n), source = scratch.source, work = scratch.smooth, styled = scratch.styled;
+      var luma = scratch.luma, edges = scratch.edges, temp = scratch.temp;
+      if (sample === 1) source.set(d);
+      else for (var sy = 0; sy < SH; sy++) for (var sx = 0; sx < SW; sx++) {
+        var red = 0, green = 0, blue = 0, weight = 0;
+        for (var yy = sy * sample; yy < Math.min(H, (sy + 1) * sample); yy++)
+          for (var xx = sx * sample; xx < Math.min(W, (sx + 1) * sample); xx++) {
+            var i = (yy * W + xx) * 4, a = d[i + 3] / 255;
+            red += d[i] * a; green += d[i + 1] * a; blue += d[i + 2] * a; weight += a;
+          }
+        var k = (sy * SW + sx) * 4;
+        source[k] = weight ? red / weight : 0;
+        source[k + 1] = weight ? green / weight : 0;
+        source[k + 2] = weight ? blue / weight : 0;
+        source[k + 3] = weight ? 255 : 0;
+      }
+      work.set(source.subarray(0, n * 4));
+      for (var j = 0, i = 0; j < n; j++, i += 4)
+        luma[j] = source[i] * 0.299 + source[i + 1] * 0.587 + source[i + 2] * 0.114;
+      if (smoothAmount > 0) {
+        var range = 8 + smoothAmount * 2;
+        for (var y = 0; y < SH; y++) for (var x = 0; x < SW; x++) {
+          var k = y * SW + x, dst = k * 4;
+          if (!source[dst + 3]) continue;
+          var r = 0, g = 0, b = 0, total = 0;
+          for (var yy = Math.max(0, y - 1); yy <= Math.min(SH - 1, y + 1); yy++)
+            for (var xx = Math.max(0, x - 1); xx <= Math.min(SW - 1, x + 1); xx++) {
+              var q = yy * SW + xx, qi = q * 4;
+              if (!source[qi + 3]) continue;
+              var weight = Math.max(0, 1 - Math.abs(luma[q] - luma[k]) / range);
+              if (xx !== x && yy !== y) weight *= 0.7;
+              r += source[qi] * weight; g += source[qi + 1] * weight; b += source[qi + 2] * weight; total += weight;
+            }
+          work[dst] = r / total; work[dst + 1] = g / total; work[dst + 2] = b / total; work[dst + 3] = source[dst + 3];
+        }
+      }
+      for (var j = 0, i = 0; j < n; j++, i += 4)
+        luma[j] = work[i] * 0.299 + work[i + 1] * 0.587 + work[i + 2] * 0.114;
+      if (edgeWidth > 0) {
+        edges.fill(0, 0, n);
+        for (var y = 1; y < SH - 1; y++) for (var x = 1; x < SW - 1; x++) {
+          var k = y * SW + x;
+          if (!source[k * 4 + 3]) continue;
+          var gx = luma[k - SW + 1] + 2 * luma[k + 1] + luma[k + SW + 1] - luma[k - SW - 1] - 2 * luma[k - 1] - luma[k + SW - 1];
+          var gy = luma[k + SW - 1] + 2 * luma[k + SW] + luma[k + SW + 1] - luma[k - SW - 1] - 2 * luma[k - SW] - luma[k - SW + 1];
+          if (Math.hypot(gx, gy) * 0.25 >= threshold) edges[k] = 1;
+        }
+        var spread = Math.max(0, Math.round(edgeWidth) - 1);
+        if (spread > 0) {
+          for (var y = 0; y < SH; y++) for (var x = 0; x < SW; x++) {
+            var found = 0;
+            for (var xx = Math.max(0, x - spread); xx <= Math.min(SW - 1, x + spread); xx++)
+              if (edges[y * SW + xx]) { found = 1; break; }
+            temp[y * SW + x] = found;
+          }
+          for (var y = 0; y < SH; y++) for (var x = 0; x < SW; x++) {
+            var found = 0;
+            for (var yy = Math.max(0, y - spread); yy <= Math.min(SH - 1, y + spread); yy++)
+              if (temp[yy * SW + x]) { found = 1; break; }
+            edges[y * SW + x] = found;
+          }
+        }
+      }
+      for (var j = 0, si = 0; j < n; j++, si += 4) {
+        var value = Math.max(work[si], work[si + 1], work[si + 2]);
+        var quant = Math.round(value * (steps - 1) / 255) * 255 / (steps - 1);
+        var gain = value ? quant / value : 0;
+        var r = work[si] * gain, g = work[si + 1] * gain, b = work[si + 2] * gain;
+        var grey = r * 0.299 + g * 0.587 + b * 0.114;
+        r = grey + (r - grey) * saturation; g = grey + (g - grey) * saturation; b = grey + (b - grey) * saturation;
+        if (edgeWidth > 0 && edges[j]) { r = ink[0]; g = ink[1]; b = ink[2]; }
+        styled[si] = r; styled[si + 1] = g; styled[si + 2] = b;
+      }
+      for (var y = 0; y < H; y++) {
+        var smallRow = Math.floor(y / sample) * SW;
+        for (var x = 0; x < W; x++) {
+          var i = (y * W + x) * 4;
+          if (!d[i + 3]) continue;
+          var si = (smallRow + Math.floor(x / sample)) * 4;
+          if (mix === 1) { d[i] = styled[si]; d[i + 1] = styled[si + 1]; d[i + 2] = styled[si + 2]; }
+          else {
+            d[i] += (styled[si] - d[i]) * mix;
+            d[i + 1] += (styled[si + 1] - d[i + 1]) * mix;
+            d[i + 2] += (styled[si + 2] - d[i + 2]) * mix;
+          }
+        }
+      }
+    },
+    claritydehaze: function (d, W, H, p, t) {
+      const value = (key) => { const n = fparam(p, key, 0, t); return isFinite(n) ? Math.max(-100, Math.min(100, n)) : 0; };
+      const clarity = value('clarity') / 100, texture = value('texture') / 100, dehaze = value('dehaze') / 100;
+      if ((!clarity && !texture && !dehaze) || !W || !H) return; // neutral default is byte-identical
+      const rawRadius = fparam(p, 'radius', 60, t);
+      const radius = isFinite(rawRadius) ? Math.max(10, Math.min(200, rawRadius)) : 60;
+      const Q = 4, qw = Math.ceil(W / Q), qh = Math.ceil(H / Q), size = qw * qh;
+      const scratch = getClarityScratch(size, Math.max(qw, qh));
+      const weighted = scratch.weighted, coverage = scratch.coverage, dark = scratch.dark;
+      weighted.fill(0, 0, size); coverage.fill(0, 0, size); dark.fill(255, 0, size);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, alpha = d[i + 3] / 255;
+        if (alpha <= 0) continue;
+        const j = ((y / Q) | 0) * qw + ((x / Q) | 0);
+        weighted[j] += (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) * alpha;
+        coverage[j] += alpha;
+        if (dehaze) dark[j] = Math.min(dark[j], d[i], d[i + 1], d[i + 2]);
+      }
+      let atmospheric = 240, darkestHigh = -1;
+      if (dehaze > 0) for (let j = 0; j < size; j++) {
+        if (coverage[j] <= 0 || dark[j] < darkestHigh) continue;
+        darkestHigh = dark[j]; atmospheric = Math.max(160, Math.min(255, weighted[j] / coverage[j]));
+      }
+      const delta = (clarity || texture) ? scratch.delta : null;
+      if (delta) {
+        delta.fill(0, 0, size);
+        const wideR = Math.max(1, Math.round(radius / Q));
+        const blurW = quarterBox(weighted, qw, qh, wideR, scratch.tmp, scratch.wideW);
+        const blurC = quarterBox(coverage, qw, qh, wideR, scratch.tmp, scratch.wideC);
+        const fineR = Math.max(1, Math.min(3, Math.round(radius / 32)));
+        const fineW = texture ? quarterBox(weighted, qw, qh, fineR, scratch.tmp, scratch.fineW) : null;
+        const fineC = texture ? quarterBox(coverage, qw, qh, fineR, scratch.tmp, scratch.fineC) : null;
+        for (let j = 0; j < size; j++) {
+          if (coverage[j] <= 0) continue;
+          const local = weighted[j] / coverage[j];
+          const mid = Math.max(0, 1 - Math.abs(local - 128) / 128);
+          if (clarity && blurC[j] > 0) delta[j] += (local - blurW[j] / blurC[j]) * clarity * 1.6 * mid;
+          if (texture && fineC[j] > 0) delta[j] += (local - fineW[j] / fineC[j]) * texture * 1.4;
+        }
+      }
+      const transmission = dehaze > 0 ? scratch.transmission : null;
+      if (transmission) {
+        const patch = quarterMin(dark, qw, qh, Math.max(1, Math.round(radius / (Q * 2))), scratch.tmp, scratch.min, scratch.deque);
+        for (let j = 0; j < size; j++) {
+          const tr = 1 - 0.85 * dehaze * patch[j] / atmospheric;
+          transmission[j] = 1 / Math.max(0.25, Math.min(1, tr));
+        }
+      }
+      for (let y = 0; y < H; y++) {
+        const gy = Math.max(0, Math.min(qh - 1, (y + 0.5) / Q - 0.5));
+        const y0 = gy | 0, y1 = Math.min(qh - 1, y0 + 1), fy = gy - y0;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (d[i + 3] <= 0) continue;
+          const gx = Math.max(0, Math.min(qw - 1, (x + 0.5) / Q - 0.5));
+          const x0 = gx | 0, x1 = Math.min(qw - 1, x0 + 1), fx = gx - x0;
+          const lift = delta ? quarterSample(delta, qw, x0, x1, y0, y1, fx, fy) : 0;
+          const gain = transmission ? quarterSample(transmission, qw, x0, x1, y0, y1, fx, fy) : 1;
+          for (let c = 0; c < 3; c++) {
+            let v = d[i + c];
+            if (dehaze > 0) v = atmospheric + (v - atmospheric) * gain;
+            else if (dehaze < 0) v = v * (1 + 0.42 * dehaze) + atmospheric * (-0.42 * dehaze);
+            d[i + c] = v + lift;
+          }
+        }
+      }
+    },
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
       const inB = p.inblack == null ? 14 : FM.evalProp(p.inblack, t);
@@ -5044,6 +5924,97 @@ window.FM = window.FM || {};
         // own black point where the cast actually starts.
         const o = ch - 1;
         for (let i = o; i < d.length; i += 4) d[i] = lut[d[i]];
+      }
+    },
+    colourwheels: function (d, W, H, p, t) {
+      const value = (key, fallback) => p[key] == null ? fallback : FM.evalProp(p[key], t);
+      const ranges = [
+        [value('shadowHue', 220), value('shadowAmount', 0), value('shadowBrightness', 0)],
+        [value('midHue', 30), value('midAmount', 0), value('midBrightness', 0)],
+        [value('highHue', 45), value('highAmount', 0), value('highBrightness', 0)],
+      ];
+      if (ranges.every(r => r[1] === 0 && r[2] === 0)) return;
+      const pivot = 0.5 + Math.max(-100, Math.min(100, value('balance', 0))) * 0.002;
+      const width = 0.1 + clamp01(value('blending', 50) / 100) * 0.4;
+      const keep = clamp01(value('keepBrightness', 100) / 100);
+      const hueRGB = h => {
+        const c = n => {
+          const k = (n + ((h % 360 + 360) % 360) / 30) % 12;
+          return 0.5 - 0.5 * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+        };
+        return [c(0), c(8), c(4)];
+      };
+      const tint = ranges.map(r => {
+        const rgb = hueRGB(r[0]), lum = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+        const strength = Math.max(0, Math.min(100, r[1])) * 0.8;
+        return [strength * (rgb[0] - lum * keep), strength * (rgb[1] - lum * keep), strength * (rgb[2] - lum * keep)];
+      });
+      const table = [new Float32Array(256), new Float32Array(256), new Float32Array(256)];
+      for (let y = 0; y < 256; y++) {
+        const x = y / 255;
+        const shadow = clamp01((pivot - x) / width), high = clamp01((x - pivot) / width);
+        const weights = [shadow, 1 - Math.max(shadow, high), high];
+        const bright = weights[0] * Math.max(-100, Math.min(100, ranges[0][2]))
+          + weights[1] * Math.max(-100, Math.min(100, ranges[1][2]))
+          + weights[2] * Math.max(-100, Math.min(100, ranges[2][2]));
+        for (let c = 0; c < 3; c++) table[c][y] = bright + weights[0] * tint[0][c] + weights[1] * tint[1][c] + weights[2] * tint[2][c];
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const y = Math.max(0, Math.min(255, Math.round(d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722)));
+        d[i] += table[0][y]; d[i + 1] += table[1][y]; d[i + 2] += table[2][y];
+      }
+    },
+    hslmixer: function (d, W, H, p, t) {
+      const names = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
+      const centres = [0, 30, 60, 120, 180, 240, 280, 320];
+      const values = [[], [], []], prefix = ['h', 's', 'l'];
+      let active = false;
+      for (let mode = 0; mode < 3; mode++) for (let band = 0; band < 8; band++) {
+        const raw = p[prefix[mode] + names[band]];
+        const v = raw == null ? 0 : Math.max(-100, Math.min(100, FM.evalProp(raw, t)));
+        values[mode][band] = v;
+        if (v !== 0) active = true;
+      }
+      if (!active) return;
+      const lut = [new Float32Array(360), new Float32Array(360), new Float32Array(360)];
+      for (let degree = 0; degree < 360; degree++) {
+        let sum = 0, h = 0, s = 0, l = 0;
+        for (let band = 0; band < 8; band++) {
+          const delta = Math.abs(degree - centres[band]);
+          const distance = Math.min(delta, 360 - delta);
+          const edge = Math.max(0, 1 - distance / 50);
+          const weight = edge * edge;
+          sum += weight;
+          h += weight * values[0][band]; s += weight * values[1][band]; l += weight * values[2][band];
+        }
+        if (sum > 0) { lut[0][degree] = h / sum; lut[1][degree] = s / sum; lut[2][degree] = l / sum; }
+      }
+      const offsets = [0, 8, 4];
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b), chroma = max - min;
+        if (chroma === 0) continue;  // a grey pixel belongs to no colour range
+        let hue;
+        if (max === r) hue = 60 * (((g - b) / chroma) % 6);
+        else if (max === g) hue = 60 * ((b - r) / chroma + 2);
+        else hue = 60 * ((r - g) / chroma + 4);
+        if (hue < 0) hue += 360;
+        let light = (max + min) / 2;
+        let sat = chroma / (1 - Math.abs(2 * light - 1));
+        const gate = clamp01(sat * 4); // low-saturation skin and neutrals are less affected
+        const lookup = Math.round(hue) % 360;
+        const dh = lut[0][lookup] * gate, ds = lut[1][lookup] * gate, dl = lut[2][lookup] * gate;
+        if (dh === 0 && ds === 0 && dl === 0) continue;
+        hue = (hue + dh + 360) % 360;
+        sat = clamp01(sat * (1 + ds / 100));
+        light = clamp01(light + dl / 200);
+        const amp = sat * Math.min(light, 1 - light), turn = hue / 30;
+        for (let c = 0; c < 3; c++) {
+          const k = (offsets[c] + turn) % 12;
+          d[i + c] = (light - amp * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255;
+        }
       }
     },
     /* Lens Distortion — the real thing: a radial polynomial r' = r(1 + k1·r² + k2·r⁴), sampled
@@ -5305,6 +6276,11 @@ window.FM = window.FM || {};
       const wob = (p.wobble == null ? 3 : FM.evalProp(p.wobble, t)) * s * amt;
       const trk = clamp01(p.tracking == null ? 0.5 : FM.evalProp(p.tracking, t)) * amt;
       const trkSpd = p.trackspeed == null ? 0.4 : FM.evalProp(p.trackspeed, t);
+      const animatedTrack = p.trackspeed != null && FM.isAnimated(p.trackspeed);
+      const trkPhase = animatedTrack ? FM.integrateProp(p.trackspeed, 0, t, (u) => {
+        const speed = FM.evalProp(p.trackspeed, u);
+        return isFinite(speed) ? Math.max(0, Math.min(3, speed)) : 0;
+      }) : t * trkSpd;
       const head = clamp01(p.headswitch == null ? 0.6 : FM.evalProp(p.headswitch, t)) * amt;
       const src = fxSrc(d);
       const Y = new Float32Array(W), Cb = new Float32Array(W), Cr = new Float32Array(W);
@@ -5318,7 +6294,7 @@ window.FM = window.FM || {};
       // The tracking band scrolls down and wraps well past the frame, so it is off-screen most of
       // the time — a band that is always visible reads as a stripe painted on, not as a fault.
       const cycle = H * 1.9;
-      const bandC = trkSpd === 0 ? -1e9 : ((t * trkSpd * cycle) % cycle) - H * 0.45;
+      const bandC = !animatedTrack && trkSpd === 0 ? -1e9 : ((trkPhase * cycle) % cycle) - H * 0.45;
       const bandH = Math.max(2, H * 0.055);
       const headY = H - Math.max(2, H * 0.028);
       for (let y = 0; y < H; y++) {
@@ -5368,6 +6344,34 @@ window.FM = window.FM || {};
      * subject. This converts to YCbCr and throws Y away: chroma-only distance means a dark green and
      * a hot green are the same colour, which is the entire point. Despill fixes the green rim that
      * every key leaves behind, and edge-desaturate takes the remaining fringe toward neutral. */
+    spillsuppressor: function (d, W, H, p, t) {
+      const amount = clamp01((p.amount == null ? 60 : FM.evalProp(p.amount, t)) / 100);
+      if (amount <= 0) return;
+      const key = hexToRGB(p.color == null ? '#00c23c' : FM.evalProp(p.color, t));
+      const kc = key[1] >= key[0] && key[1] >= key[2] ? 1 : (key[2] >= key[0] ? 2 : 0);
+      const other1 = (kc + 1) % 3, other2 = (kc + 2) % 3;
+      const keyCb = -0.169 * key[0] - 0.331 * key[1] + 0.5 * key[2];
+      const keyCr = 0.5 * key[0] - 0.419 * key[1] - 0.081 * key[2];
+      const keyLength = Math.hypot(keyCb, keyCr);
+      if (keyLength < 1) return;
+      const range = clamp01((p.range == null ? 50 : FM.evalProp(p.range, t)) / 100) * 0.98;
+      const edgesOnly = Math.round(p.area == null ? 0 : FM.evalProp(p.area, t)) === 1;
+      for (let i = 0; i < d.length; i += 4) {
+        const alpha = d[i + 3];
+        if (!alpha) continue;
+        const excess = d[i + kc] - Math.max(d[i + other1], d[i + other2]);
+        if (excess <= 0) continue;
+        const cb = -0.169 * d[i] - 0.331 * d[i + 1] + 0.5 * d[i + 2];
+        const cr = 0.5 * d[i] - 0.419 * d[i + 1] - 0.081 * d[i + 2];
+        const length = Math.hypot(cb, cr);
+        if (length < 1) continue;
+        const similarity = (cb * keyCb + cr * keyCr) / (length * keyLength);
+        if (similarity <= range) continue;
+        let weight = amount * Math.min(1, (similarity - range) / (1 - range));
+        if (edgesOnly) weight *= Math.min(1, 2 * (1 - alpha / 255));
+        d[i + kc] -= excess * weight;
+      }
+    },
     chromakeypro: function (d, W, H, p, t) {
       const k = hexToRGB(p.color || '#00c23c');
       const kcb = -0.169 * k[0] - 0.331 * k[1] + 0.5 * k[2];
@@ -6639,7 +7643,7 @@ window.FM = window.FM || {};
       } } },
     // ---- batch 8 (pixel) ----
     lightglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904): it was hardcoded white. A missing colour is WHITE, not hexToRGB(undefined) — that
-       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
+       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgScratch=glowScratch(lgN), lgBright=lgScratch[0], lgTmp=lgScratch[1], lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(d[lgp4+3]===0){ d[lgp4]=lgWh?255:lgC[0]; d[lgp4+1]=lgWh?255:lgC[1]; d[lgp4+2]=lgWh?255:lgC[2]; d[lgp4+3]=lgGlow; continue; } if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
     longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
        shadow is byte-identical; any other angle marches back from each empty pixel along the throw, up to Length steps, and is
        shadowed if it meets the layer — the same rule the walk applies, in any direction. */
@@ -6748,7 +7752,7 @@ window.FM = window.FM || {};
         var stp_v=stp_dir===1?(stp_x-stp_y):(stp_dir===2?stp_y:(stp_dir===3?stp_x:(stp_x+stp_y)));
         var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
     // ---- batch 9 (pixel) ----
-    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
+    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); var dgN=W*H, dgScratch=glowScratch(dgN), dgDark=dgScratch[0]; dgDark.fill(0,0,dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=dgScratch[1]; var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
     stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>60)st_w=60; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0;
       // POSITION / SHAPE / SOFTNESS. Outside + Square + hard runs the ORIGINAL box dilation below,
       // untouched, so every existing stroke in every project is byte-for-byte what it was. Anything
@@ -6788,7 +7792,7 @@ window.FM = window.FM || {};
         return;
       }
       var st_h=new Uint8Array(st_N); for(st_y=0;st_y<H;st_y++){ var st_row=st_y*W; var st_acc=0; var st_lo,st_hi; for(st_x=0;st_x<W;st_x++){ st_lo=st_x-st_w; if(st_lo<0)st_lo=0; st_hi=st_x+st_w; if(st_hi>W-1)st_hi=W-1; if(st_x===0){ st_acc=0; for(var st_k=st_lo;st_k<=st_hi;st_k++)st_acc+=st_src[st_row+st_k]; } else { var st_addH=st_x+st_w; if(st_addH<=W-1)st_acc+=st_src[st_row+st_addH]; var st_remH=st_x-st_w-1; if(st_remH>=0)st_acc-=st_src[st_row+st_remH]; } st_h[st_row+st_x]=st_acc>0?1:0; } } var st_dil=new Uint8Array(st_N); for(st_x=0;st_x<W;st_x++){ var st_accV=0; var st_loV,st_hiV; for(st_y=0;st_y<H;st_y++){ st_loV=st_y-st_w; if(st_loV<0)st_loV=0; st_hiV=st_y+st_w; if(st_hiV>H-1)st_hiV=H-1; if(st_y===0){ st_accV=0; for(var st_kv=st_loV;st_kv<=st_hiV;st_kv++)st_accV+=st_h[st_kv*W+st_x]; } else { var st_addV=st_y+st_w; if(st_addV<=H-1)st_accV+=st_h[st_addV*W+st_x]; var st_remV=st_y-st_w-1; if(st_remV>=0)st_accV-=st_h[st_remV*W+st_x]; } st_dil[st_y*W+st_x]=st_accV>0?1:0; } } for(st_i=0;st_i<st_N;st_i++){ if(st_dil[st_i]===1 && st_src[st_i]===0){ var st_o=st_i*4; d[st_o]=st_col[0]; d[st_o+1]=st_col[1]; d[st_o+2]=st_col[2]; d[st_o+3]=255; } } },
-    smoothedges: function(d,W,H,p,t){ var seR=Math.round(FM.evalProp(p.radius,t)); if(seR==null||isNaN(seR))seR=4; if(seR<1)return; if(seR>20)seR=20; var seW=W,seH=H,seN=seW*seH; var seA=new Float32Array(seN),seTmp=new Float32Array(seN); var sei,sex,sey; for(sei=0;sei<seN;sei++){ seA[sei]=d[sei*4+3]; } 
+    smoothedges: function(d,W,H,p,t){ var seR=FM.evalProp(p.radius,t); if(seR==null||isNaN(seR))seR=4; if(seR<=0)return; seR=Math.max(1,Math.round(seR)); if(seR>20)seR=20; var seW=W,seH=H,seN=seW*seH; var seA=new Float32Array(seN),seTmp=new Float32Array(seN); var sei,sex,sey; for(sei=0;sei<seN;sei++){ seA[sei]=d[sei*4+3]; }
       /* Feathering ran as ONE symmetric box blur on alpha, so the matte always shrank INTO the artwork
          as you softened it, and a single box is a straight ramp — visibly banded on a big soft edge.
          CHOKE pushes the edge back out (or further in) by remapping alpha around the halfway point
@@ -7314,7 +8318,37 @@ window.FM = window.FM || {};
       for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>=255) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; if(dsa===0){ d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } else { dsFa=dsa/255; dsSa=dsoa/255*(1-dsFa); dsOa2=dsFa+dsSa; d[dsidx]=(s[dsidx]*dsFa+dsCr*dsSa)/dsOa2; d[dsidx+1]=(s[dsidx+1]*dsFa+dsCg*dsSa)/dsOa2; d[dsidx+2]=(s[dsidx+2]*dsFa+dsCb*dsSa)/dsOa2; d[dsidx+3]=dsOa2*255; } } } },
     chromaticaberration: function(d,W,H,p,t){ var caAmt = fparam(p, 'amount', 8, t); caAmt=Math.max(0,Math.min(30,caAmt)); var caAng = fparam(p, 'angle', 0, t); var caRad=caAng*Math.PI/180; var caCos=Math.cos(caRad), caSin=Math.sin(caRad); var caDx=caCos*caAmt, caDy=caSin*caAmt; if(caAmt===0)return; var caQ=Math.max(0,Math.min(1,fparam(p, 'radial', 0, t)/100)); /* 0 = the uniform shift every saved instance had (legacy); 1 = radial, nothing at the centre */ var caCx=W/2, caCy=H/2, caNorm=1/Math.max(1,Math.hypot(caCx,caCy)); var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; if(caQ>0){ var caPx=caX-caCx, caPy=caY-caCy, caR=Math.hypot(caPx,caPy), caRn=caR*caNorm; var caUx=caR>0?caPx/caR:0, caUy=caR>0?caPy/caR:0; /* radial unit vector rotated by the angle, blended with the uniform direction; magnitude blended the same way */ var caVx=(1-caQ)*caCos+caQ*(caUx*caCos-caUy*caSin), caVy=(1-caQ)*caSin+caQ*(caUx*caSin+caUy*caCos); var caMag=caAmt*((1-caQ)+caQ*caRn); caDx=caVx*caMag; caDy=caVy*caMag; } var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
     innerglow: function(d,W,H,p,t){ var igRad = fparam(p, 'radius', 10, t); igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt = fparam(p, 'intensity', 1, t); igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI; for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2]; d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
-    unsharpmask: function(d,W,H,p,t){ var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} /* THRESHOLD (queue 904) — Sharpen's 'Skip flat areas': a pixel whose brightness differs from its blur by less than this is left alone, so grain in sky and skin is not hardened as hard as an edge. 0 is the old behaviour. */ var umThr=p.threshold==null?0:FM.evalProp(p.threshold,t); if(umThr<0)umThr=0; if(umThr>64)umThr=64; var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlur=new Float32Array(umN*3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){ var umAcc0v=0,umAcc1v=0,umAcc2v=0; for(c=0;c<=umR;c++){ umP=(Math.min(H-1,c)*W+x)*3; umAcc0v+=umTmp[umP]; umAcc1v+=umTmp[umP+1]; umAcc2v+=umTmp[umP+2]; } umP=x*3; umAcc0v+=umTmp[umP]*umR; umAcc1v+=umTmp[umP+1]*umR; umAcc2v+=umTmp[umP+2]*umR; for(y=0;y<H;y++){ umP=(y*W+x)*3; umBlur[umP]=umAcc0v/umDiv; umBlur[umP+1]=umAcc1v/umDiv; umBlur[umP+2]=umAcc2v/umDiv; var umAddY=Math.min(H-1,y+umR+1); var umSubY=Math.max(0,y-umR); var umAddP=(umAddY*W+x)*3; var umSubP=(umSubY*W+x)*3; umAcc0v+=umTmp[umAddP]-umTmp[umSubP]; umAcc1v+=umTmp[umAddP+1]-umTmp[umSubP+1]; umAcc2v+=umTmp[umAddP+2]-umTmp[umSubP+2]; } } for(y=0;y<H;y++){ for(x=0;x<W;x++){ umI=(y*W+x)*4; if(umS[umI+3]<=0)continue; umP=(y*W+x)*3; if(umThr>0&&Math.abs((umS[umI]-umBlur[umP])*0.299+(umS[umI+1]-umBlur[umP+1])*0.587+(umS[umI+2]-umBlur[umP+2])*0.114)<umThr)continue; for(c=0;c<3;c++){ var umOrig=umS[umI+c]; var umVal=umOrig+(umOrig-umBlur[umP+c])*umAmt; if(umVal<0)umVal=0; else if(umVal>255)umVal=255; d[umI+c]=umVal; } } } },
+    /* Finish each column as its blur is calculated; avoid a second 3-channel frame allocation. */
+    unsharpmask: function(d,W,H,p,t){ var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} /* THRESHOLD (queue 904) — Sharpen's 'Skip flat areas': a pixel whose brightness differs from its blur by less than this is left alone, so grain in sky and skin is not hardened as hard as an edge. 0 is the old behaviour. */ var umThr=p.threshold==null?0:FM.evalProp(p.threshold,t); if(umThr<0)umThr=0; if(umThr>64)umThr=64; var umSafe=p.coloursafe==null?0:FM.evalProp(p.coloursafe,t)/100; umSafe=Math.max(0,Math.min(1,umSafe)); var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlurPix=new Float32Array(3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){
+      var umAcc0v=0,umAcc1v=0,umAcc2v=0;
+      for(c=0;c<=umR;c++){
+        umP=(Math.min(H-1,c)*W+x)*3;
+        umAcc0v+=umTmp[umP]; umAcc1v+=umTmp[umP+1]; umAcc2v+=umTmp[umP+2];
+      }
+      umP=x*3;
+      umAcc0v+=umTmp[umP]*umR; umAcc1v+=umTmp[umP+1]*umR; umAcc2v+=umTmp[umP+2]*umR;
+      for(y=0;y<H;y++){
+        umP=(y*W+x)*3;
+        umBlurPix[0]=umAcc0v/umDiv; umBlurPix[1]=umAcc1v/umDiv; umBlurPix[2]=umAcc2v/umDiv;
+        var umAddY=Math.min(H-1,y+umR+1), umSubY=Math.max(0,y-umR);
+        var umAddP=(umAddY*W+x)*3, umSubP=(umSubY*W+x)*3;
+        umAcc0v+=umTmp[umAddP]-umTmp[umSubP];
+        umAcc1v+=umTmp[umAddP+1]-umTmp[umSubP+1];
+        umAcc2v+=umTmp[umAddP+2]-umTmp[umSubP+2];
+        umI=(y*W+x)*4;
+        if(umS[umI+3]<=0)continue;
+        if(umThr>0&&Math.abs((umS[umI]-umBlurPix[0])*0.299+(umS[umI+1]-umBlurPix[1])*0.587+(umS[umI+2]-umBlurPix[2])*0.114)<umThr)continue;
+        var umLuma=umSafe>0?((umS[umI]-umBlurPix[0])*0.299+(umS[umI+1]-umBlurPix[1])*0.587+(umS[umI+2]-umBlurPix[2])*0.114)*umAmt:0;
+        for(c=0;c<3;c++){
+          var umOrig=umS[umI+c];
+          var umVal=umOrig+(umOrig-umBlurPix[c])*umAmt;
+          if(umSafe>0)umVal=umOrig+(umVal-umOrig)*(1-umSafe)+umLuma*umSafe;
+          if(umVal<0)umVal=0; else if(umVal>255)umVal=255;
+          d[umI+c]=umVal;
+        }
+      }
+    }
+    },
     /* NOTE the named 7th parameter here, where the other bounded kernels read `arguments[6]`: this one
        ALREADY declares `ps` and scales its own tile size, so pxToPlate skips it either way and naming
        the bbox costs nothing. The others cannot — their arity has to stay below the slot pxToPlate
@@ -7328,7 +8362,7 @@ window.FM = window.FM || {};
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
       for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
-    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
+    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<=0)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
     // ---- batch 13 (opacity / visibility) ----
     blink: function(d, W, H, p, t) { var blkRate = FM.evalProp(p.rate, t); if (blkRate == null || !isFinite(blkRate)) blkRate = 2; if (blkRate < 0.5) blkRate = 0.5; if (blkRate > 12) blkRate = 12; var blkTime = (typeof t === 'number' && isFinite(t)) ? t : 0; if (blkTime < 0) blkTime = 0; 
       // Every blink in every project was the same hard 50/50 square wave locked to t=0. DUTY makes a
@@ -7461,7 +8495,7 @@ window.FM = window.FM || {};
         d[fdI] = d[fdI] * fdK; d[fdI + 1] = d[fdI + 1] * fdK; d[fdI + 2] = d[fdI + 2] * fdK;   // alpha (fdI+3) deliberately untouched
       }
     },
-    pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180; /* PHASE (queue 904); 0 = the old curve exactly */ var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_speed*po_tt + po_ph); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
+    pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180; /* PHASE (queue 904); 0 = the old curve exactly */ var po_clock = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, 0, po_tt, function(u){ var k=FM.evalProp(p.speed,u); return k==null||isNaN(k)?1:(k<0.1?0.1:(k>8?8:k)); }) : po_speed*po_tt; var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_clock + po_ph); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
     dissolve: function(d,W,H,p,t){ var dsAmt = fparam(p, 'amount', 0.5, t); if(dsAmt<0)dsAmt=0; if(dsAmt>1)dsAmt=1; if(dsAmt<=0)return;
       /* One static salt-and-pepper pattern, identical in every project and every instance: it ate the
          frame uniformly, the holes had hard binary edges and it never moved. DIRECTION biases the
@@ -7519,6 +8553,48 @@ window.FM = window.FM || {};
           var rq_sd = rq_f <= rw_prog ? Math.min(rq_f, rw_prog - rq_f) : -Math.min(rq_f - rw_prog, 1 - rq_f);
           var rq_c = rq_sd*rq_arc/rw_sf + 0.5; if(rq_c >= 1) continue; var rq_i = (rq_y*W + rq_x)*4 + 3; d[rq_i] = rq_c <= 0 ? 0 : d[rq_i]*rq_c; } } return; }
       for(var rw_y=0; rw_y<H; rw_y++){ var rw_dy = rw_y - rw_cy; var rw_row = rw_y*W; for(var rw_x=0; rw_x<W; rw_x++){ var rw_dx = rw_x - rw_cx; var rw_ang = Math.atan2(rw_dy, rw_dx); var rw_frac = (rw_ang - rw_startRad) % rw_TAU; if(rw_frac<0) rw_frac += rw_TAU; rw_frac = rw_frac / rw_TAU; if(rw_frac > rw_prog){ d[(rw_row + rw_x)*4 + 3] = 0; } } } },
+    venetianblinds: function(d, W, H, p, t){
+      var progress = p.progress == null ? 0.5 : FM.evalProp(p.progress, t);
+      if (!isFinite(progress)) progress = 0.5;
+      if (progress >= 1) return;
+      if (progress <= 0) { for (var z = 3; z < d.length; z += 4) d[z] = 0; return; }
+      var count = p.count == null ? 10 : Math.round(FM.evalProp(p.count, t));
+      count = isFinite(count) ? Math.max(2, Math.min(60, count)) : 10;
+      var angle = p.angle == null ? 0 : FM.evalProp(p.angle, t);
+      if (!isFinite(angle)) angle = 0;
+      var dx = Math.cos(angle * Math.PI / 180), dy = Math.sin(angle * Math.PI / 180);
+      var x0 = 0, y0 = 0, x1 = W, y1 = H;
+      if (p.fit != null && Math.round(FM.evalProp(p.fit, t)) === 1) {
+        var minX = W, minY = H, maxX = -1, maxY = -1;
+        for (var sy = 0; sy < H; sy++) for (var sx = 0; sx < W; sx++) {
+          if (!d[(sy * W + sx) * 4 + 3]) continue;
+          if (sx < minX) minX = sx; if (sx > maxX) maxX = sx;
+          if (sy < minY) minY = sy; if (sy > maxY) maxY = sy;
+        }
+        if (maxX < 0) return;
+        x0 = minX; y0 = minY; x1 = maxX + 1; y1 = maxY + 1;
+      }
+      // Project the chosen bounds onto the slat normal; the count always fits that span exactly.
+      var min = (dx >= 0 ? x0 : x1) * dx + (dy >= 0 ? y0 : y1) * dy;
+      var max = (dx >= 0 ? x1 : x0) * dx + (dy >= 0 ? y1 : y0) * dy;
+      var pitch = Math.max(1e-6, (max - min) / count);
+      var softness = p.softness == null ? 0 : FM.evalProp(p.softness, t);
+      softness = isFinite(softness) ? Math.max(0, softness) : 0;
+      var stagger = p.stagger == null ? 0 : FM.evalProp(p.stagger, t);
+      stagger = isFinite(stagger) ? Math.max(-1, Math.min(1, stagger / 100)) : 0;
+      var spread = Math.abs(stagger), sweep = progress * (1 + spread);
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+        var i = (y * W + x) * 4 + 3;
+        if (!d[i]) continue;
+        var position = ((x + 0.5) * dx + (y + 0.5) * dy - min) / pitch;
+        var strip = Math.max(0, Math.min(count - 1, Math.floor(position)));
+        var along = (position - strip) * pitch;
+        var order = stagger >= 0 ? strip / (count - 1) : 1 - strip / (count - 1);
+        var opening = Math.max(0, Math.min(1, sweep - spread * order)) * pitch;
+        var coverage = softness > 0 ? Math.max(0, Math.min(1, (opening - along) / softness + 0.5)) : (along < opening ? 1 : 0);
+        if (coverage < 1) d[i] *= coverage;
+      }
+    },
     solidmatte: function(d,W,H,p,t){ var sm_amt = fparam(p, 'amount', 1, t); if(sm_amt<0) sm_amt=0; if(sm_amt>1) sm_amt=1; var sm_col=hexToRGB(p.color); var sm_cr=sm_col[0], sm_cg=sm_col[1], sm_cb=sm_col[2]; var sm_n=W*H, sm_i=0; for(var sm_k=0; sm_k<sm_n; sm_k++){ if(d[sm_i+3]>0){ d[sm_i]=d[sm_i]+(sm_cr-d[sm_i])*sm_amt; d[sm_i+1]=d[sm_i+1]+(sm_cg-d[sm_i+1])*sm_amt; d[sm_i+2]=d[sm_i+2]+(sm_cb-d[sm_i+2])*sm_amt; } sm_i+=4; } },
     mattechoker: function(d,W,H,p,t){ var mcBB=arguments[6];
       /* Erode/dilate ran on whole pixels with a hard square kernel and no post-softening, so a choked
@@ -7668,7 +8744,7 @@ window.FM = window.FM || {};
       }
     },
     lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
-    roughenedges: function(d,W,H,p,t){ var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
+    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
     /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
        catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
        and silently drop the scaling (#691). Clamping at a flat 8 turned the default 24 (6.72 plate px at the 28%
@@ -7692,7 +8768,9 @@ window.FM = window.FM || {};
    amount and flicker that left a lift of about 4% of full scale. The gain restores the intended
    look; nothing visible is lost by changing it, because at a p95 of 2 there was nothing to see. */
 var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var eeSr=255-(255-d[eei])*(255-eeR*eeAdd)/255; var eeSg=255-(255-d[eei+1])*(255-eeG*eeAdd)/255; var eeSb=255-(255-d[eei+2])*(255-eeB*eeAdd)/255; d[eei]=eeSr; d[eei+1]=eeSg; d[eei+2]=eeSb; } } },
-    glowscan: function(d,W,H,p,t){ var gsPs=arguments[5]>0?arguments[5]:1; /* queue 913: the 10..200 clamp is in plate px — see hexarray */ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10*gsPs)gsWidth=10*gsPs; if(gsWidth>200*gsPs)gsWidth=200*gsPs; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4;
+    glowscan: function(d,W,H,p,t){ var gsPs=arguments[5]>0?arguments[5]:1; /* queue 913: the 10..200 clamp is in plate px — see hexarray */ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10*gsPs)gsWidth=10*gsPs; if(gsWidth>200*gsPs)gsWidth=200*gsPs; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma;
+      var gsClock=FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,t,function(u){ var speed=FM.evalProp(p.speed,u); return isFinite(speed)?Math.max(0,Math.min(8,speed)):0; }):t*gsSpeed;
+      var gsPhase=gsClock%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4;
       /* DIRECTION (queue 904): every Glow Scan swept top to bottom, so a scan across a wide title, or upward, was out of reach.
          Down is the loop below, untouched — a saved scan is byte-identical. Up runs the same line backwards; Right and Left are
          the same maths along COLUMNS, with the same wrap-around distance. */
@@ -7955,6 +9033,77 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           d[fr_i] = d[fr_i] + (fr_cr - d[fr_i]) * fr_amt;
           d[fr_i + 1] = d[fr_i + 1] + (fr_cg - d[fr_i + 1]) * fr_amt;
           d[fr_i + 2] = d[fr_i + 2] + (fr_cb - d[fr_i + 2]) * fr_amt;
+        }
+      }
+    },
+    fractalnoise: function (d, W, H, p, t, ps) {
+      var amt = Math.max(0, Math.min(1, fparam(p, 'amount', 100, t) / 100));
+      if (!amt || !W || !H) return;
+      var pattern = Math.max(0, Math.min(3, Math.round(fparam(p, 'pattern', 0, t))));
+      var octaves = Math.max(1, Math.min(6, Math.round(fparam(p, 'octaves', 4, t))));
+      var scale = Math.max(16, Math.min(400, fparam(p, 'scale', 100, t)));
+      var contrast = Math.max(0, Math.min(3, fparam(p, 'contrast', 100, t) / 100));
+      var speed = Math.max(-4, Math.min(4, fparam(p, 'evolution', 0.5, t)));
+      var phase = FM.isAnimated(p.evolution) ? FM.integrateProp(p.evolution, 0, t, function (u) {
+        return Math.max(-4, Math.min(4, FM.evalProp(p.evolution, u)));
+      }) : speed * t;
+      var seed = Math.round(fparam(p, 'seed', 0, t)) | 0;
+      var blend = Math.max(0, Math.min(3, Math.round(fparam(p, 'blend', 0, t))));
+      var lo = p.color ? hexToRGB(p.color) : [0, 0, 0];
+      var hi = p.color2 ? hexToRGB(p.color2) : [255, 255, 255];
+      var plateScale = ps > 0 ? ps : 1;
+      // At most 320 samples on the long edge; reuse the grid across frames to avoid per-frame GC.
+      var reduction = Math.min(1, 320 / Math.max(W, H));
+      var gw = Math.max(1, Math.round(W * reduction)), gh = Math.max(1, Math.round(H * reduction));
+      var n = gw * gh;
+      if (!fractalNoiseScratch || fractalNoiseScratch.length < n) fractalNoiseScratch = new Float32Array(n);
+      var grid = fractalNoiseScratch;
+      function hash(ix, iy, octave) {
+        var h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed + octave * 1013, 1274126177);
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+      }
+      function noise(x, y, octave) {
+        var ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+        fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+        var a = hash(ix, iy, octave), b = hash(ix + 1, iy, octave);
+        var c = hash(ix, iy + 1, octave), e = hash(ix + 1, iy + 1, octave);
+        return (a + (b - a) * fx) * (1 - fy) + (c + (e - c) * fx) * fy;
+      }
+      var weightBase = pattern === 2 ? 0.25 : 0.5;
+      for (var gy = 0; gy < gh; gy++) {
+        var py = (gh > 1 ? gy * (H - 1) / (gh - 1) : 0) / plateScale;
+        for (var gx = 0; gx < gw; gx++) {
+          var px = (gw > 1 ? gx * (W - 1) / (gw - 1) : 0) / plateScale;
+          var sum = 0, weight = 1, total = 0, cell = scale;
+          for (var o = 0; o < octaves; o++) {
+            var v = noise(px / cell + phase * (0.7 + o * 0.21), py / cell - phase * (0.9 + o * 0.17), o);
+            if (pattern === 1) v = Math.abs(v * 2 - 1);
+            else if (pattern === 3) v = 1 - Math.abs(v * 2 - 1);
+            sum += v * weight; total += weight; weight *= weightBase; cell *= 0.5;
+          }
+          var value = (sum / total - 0.5) * contrast + 0.5;
+          grid[gy * gw + gx] = value < 0 ? 0 : (value > 1 ? 1 : value);
+        }
+      }
+      for (var y = 0; y < H; y++) {
+        var fy = H > 1 ? y * (gh - 1) / (H - 1) : 0, y0 = Math.floor(fy), y1 = Math.min(y0 + 1, gh - 1);
+        fy -= y0;
+        for (var x = 0; x < W; x++) {
+          var i = (y * W + x) * 4;
+          if (!d[i + 3]) continue;
+          var fx = W > 1 ? x * (gw - 1) / (W - 1) : 0, x0 = Math.floor(fx), x1 = Math.min(x0 + 1, gw - 1);
+          fx -= x0;
+          var top = grid[y0 * gw + x0] + (grid[y0 * gw + x1] - grid[y0 * gw + x0]) * fx;
+          var bot = grid[y1 * gw + x0] + (grid[y1 * gw + x1] - grid[y1 * gw + x0]) * fx;
+          var v = top + (bot - top) * fy;
+          for (var c = 0; c < 3; c++) {
+            var source = d[i + c], tone = lo[c] + (hi[c] - lo[c]) * v;
+            if (blend === 1) tone = source * tone / 255;
+            else if (blend === 2) tone = 255 - (255 - source) * (255 - tone) / 255;
+            else if (blend === 3) tone = source < 128 ? 2 * source * tone / 255 : 255 - 2 * (255 - source) * (255 - tone) / 255;
+            d[i + c] = source + (tone - source) * amt;
+          }
         }
       }
     },
@@ -8383,7 +9532,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
-    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
+    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; var sgN=W*H, sgScratch=glowScratch(sgN), sgB=sgScratch[0], sgT=sgScratch[1], sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(d[sg4+3]===0){ d[sg4]=sgWh?255:sgC[0]; d[sg4+1]=sgWh?255:sgC[1]; d[sg4+2]=sgWh?255:sgC[2]; d[sg4+3]=sgG; continue; } if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
@@ -8922,7 +10071,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       } else {
         plate([fx]);
       }
-      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
+      let warpSource = null, warpBounds = null;
+      if (mapFn.needsBounds) {
+        warpSource = actx.getImageData(0, 0, W, H).data;
+        warpBounds = alphaBBoxExact(warpSource, W, H);
+      }
+      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps, warpBounds) : null;
       /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
        * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
        * further kernel tuning closes it. A kernel that carries a `.glsl` twin runs as a fragment shader
@@ -8946,7 +10100,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {});
       }
       if (!warped) {
-        const src = actx.getImageData(0, 0, W, H).data;
+        const src = warpSource || actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
         for (let y = 0; y < H; y++) {
           for (let x = 0; x < W; x++) {
@@ -9944,6 +11098,73 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } finally { _dspLvl--; }
   }
 
+  function gradientWipeAlpha(value, progress, softness, invert) {
+    if (progress <= 0) return 0;
+    if (progress >= 1) return 1;
+    const v = invert ? 1 - value : value;
+    const edge = 1 - progress;
+    if (softness <= 0) return v >= edge ? 1 : 0;
+    const a = (v - edge) / softness + 0.5;
+    return a <= 0 ? 0 : (a >= 1 ? 1 : a);
+  }
+  FM._gradientWipeAlpha = gradientWipeAlpha;
+
+  function drawGradientWipe(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    const PW = proj.width, PH = proj.height;
+    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
+    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
+    const p = fx.params || {};
+    const srcId = p.source;
+    const mapLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    if (!mapLayer || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
+    const progress = clamp01(p.progress == null ? 0.5 : FM.evalProp(p.progress, t));
+    if (progress >= 1) { drawLayer(ctx, clean, t, scene); return; }
+    if (progress <= 0) return;
+    const slot = dspSlot(W, H, ps);
+    _dspLvl++;
+    try {
+      const softness = Math.max(0, Math.min(1, (p.softness == null ? 10 : FM.evalProp(p.softness, t)) / 100));
+      const channel = Math.max(0, Math.min(4, Math.round(FM.evalProp(p.channel, t) || 0)));
+      const invert = Math.round(FM.evalProp(p.invert, t) || 0) === 1;
+      const actx = slot.A.getContext('2d');
+      baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
+      const mctx = slot.M.getContext('2d');
+      baseT(mctx); mctx.clearRect(OX, OY, PWp, PHp);
+      mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
+      drawLayer(mctx, Object.assign({}, mapLayer, { blendMode: 'normal', effects: (mapLayer.effects || []).filter(e => e.type !== 'gradientwipe'), transform: Object.assign({}, mapLayer.transform, { opacity: 1 }) }), t, scene);
+      let target, map;
+      try { target = actx.getImageData(0, 0, W, H); map = mctx.getImageData(0, 0, W, H).data; }
+      catch (e) { drawLayer(ctx, clean, t, scene); return; }
+      const d = target.data;
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        const ma = map[i + 3] / 255;
+        let v;
+        if (channel === 1) v = ma;
+        else if (channel === 2) v = map[i] / 255 * ma;
+        else if (channel === 3) v = map[i + 1] / 255 * ma;
+        else if (channel === 4) v = map[i + 2] / 255 * ma;
+        else v = (0.299 * map[i] + 0.587 * map[i + 1] + 0.114 * map[i + 2]) / 255 * ma;
+        d[i + 3] *= gradientWipeAlpha(v, progress, softness, invert);
+      }
+      actx.setTransform(1, 0, 0, 1, 0, 0);
+      actx.putImageData(target, 0, 0);
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(slot.A, OX, OY, PWp, PHp);
+      ctx.restore();
+    } finally { _dspLvl--; }
+  }
+
   /* Compound Blur — blur THIS layer by how bright another layer is. A depth map makes a real
    * rack-focus; a soft-edged shape makes a vignette blur; a gradient makes a tilt-shift that follows
    * whatever line you draw. No blur here can do that: they all apply one radius to the whole layer.
@@ -10229,6 +11450,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const a1 = amp * Math.sin(yr / wl + ph), a2 = amp * cross * Math.sin(xr / wl2 + ph);
         return [x + a1 * ca - a2 * sa, y + a1 * sa + a2 * ca]; }
       return [x + amp * Math.sin(y / wl + ph), y + amp * cross * Math.sin(x / wl2 + ph)];
+    },
+    titlewarp: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
+      const C = pre || WARP_FX.titlewarp.prep(W, H, cx, cy, maxR, p, t, ps, null);
+      if (!C.a) return [x, y];
+      const u = (x - C.x) / C.w, v = (y - C.y) / C.h;
+      const qx = 2 * u - 1, qy = 2 * v - 1;
+      const xFall = Math.max(0, 1 - qx * qx), yFall = Math.max(0, 1 - qy * qy);
+      if (C.style === 0) return [x, y + C.a * C.h * 0.5 * xFall];                       // Arc
+      if (C.style === 1) return [x, y + C.a * C.h * 0.5 * Math.sqrt(xFall)];      // Arch
+      if (C.style === 2) return [C.cx + (x - C.cx) / (1 + C.a * 0.8 * yFall), y]; // Bulge
+      if (C.style === 3) return [x, y + C.a * C.h * (0.1 + 0.25 * u) * Math.sin(2 * Math.PI * 1.4 * u + C.phase)]; // Flag
+      if (C.style === 4) return [x, y + C.a * C.h * 0.3 * Math.sin(2 * Math.PI * 1.2 * u + C.phase)]; // Wave
+      if (C.style === 5) return [C.cx + (x - C.cx) / (1 + C.a * 0.65 * yFall), C.cy + (y - C.cy) / (1 - C.a * 0.25 * xFall)]; // Fish
+      if (C.style === 6) return [x, y + C.a * C.h * 0.7 * (u - 0.5)];            // Rise
+      if (C.style === 7) {                                                        // Inflate
+        const r = Math.sqrt(qx * qx + qy * qy), f = Math.max(0, 1 - r / 1.41421356237);
+        const k = 1 + C.a * 0.8 * f;
+        return [C.cx + (x - C.cx) / k, C.cy + (y - C.cy) / k];
+      }
+      if (C.style === 8) return [C.cx + (x - C.cx) * (1 + C.a * 0.8 * yFall), y]; // Squeeze
+      const angle = C.a * qy * 1.2, ca = Math.cos(angle), sa = Math.sin(angle);    // Twist
+      const dx = x - C.cx, dy = y - C.cy;
+      return [C.cx + dx * ca + dy * sa, C.cy - dx * sa + dy * ca];
     },
     /* PREPPED (shape 1 — hoist only, exact). Centre, amplitude, wavelength and phase were per-pixel. */
     ripple: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
@@ -11062,6 +12306,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              i29: 1 / (29 * fwS), i53: 1 / (53 * fwS), i35: 1 / (35 * fwS), i27: 1 / (27 * fwS),
              i15: 1 / (15 * fwS), i19: 1 / (19 * fwS), i13: 1 / (13 * fwS), i21: 1 / (21 * fwS) };
   };
+  WARP_FX.titlewarp.needsBounds = true;
+  WARP_FX.titlewarp.prep = function (W, H, cx, cy, maxR, p, t, ps, bb) {
+    const b = bb || { x: 0, y: 0, w: W, h: H };
+    const a = Math.max(-1, Math.min(1, fparam(p, 'amount', 35, t) / 100));
+    const style = Math.max(0, Math.min(9, Math.round(fparam(p, 'style', 0, t))));
+    const phase = fparam(p, 'phase', 0, t) * Math.PI / 180;
+    return { x: b.x, y: b.y, w: Math.max(1, b.w - 1), h: Math.max(1, b.h - 1),
+             cx: b.x + (b.w - 1) / 2, cy: b.y + (b.h - 1) / 2, a: a, style: style, phase: phase };
+  };
 
   WARP_FX.tunnel.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     var tnA = fparam(p, 'amount', 0.5, t); if (tnA < 0) tnA = 0; if (tnA > 1) tnA = 1;
@@ -11342,7 +12595,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      expanded-plate cost off frames where the layer is nowhere near an edge — and the full-frame placeholder this list
      hands them made `near` always true, so all three rendered a second full plate every frame. They get the fast
      alpha scan like everything else; pixels unchanged, one drawLayer per frame again. */
-  const CFX_NO_BBOX = { vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, radiowaves: 1, laserbeam: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   Object.setPrototypeOf(CFX_NO_BBOX, null);   // own keys only — see POSTFX
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
@@ -12099,7 +13352,179 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let e = null; try { e = alphaBBoxWithin(_fx2d(A), bb); } catch (err) { e = null; }
     return e && e.w > 0 && e.h > 0 ? e : bb;
   }
+  const _lensMagnifierPool = [];
   const CANVAS_FX = {
+    circlearray: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+      var count = Math.max(2, Math.min(36, Math.round(fparam(p, 'count', 8, t))));
+      var frame = scene && scene.project;
+      var s = ps > 0 ? ps : 1;
+      var shortSide = frame ? Math.min(frame.width, frame.height) * s : Math.min(W, H);
+      var radius = shortSide * Math.max(0, Math.min(100, fparam(p, 'radius', 30, t))) / 200;
+      var start = fparam(p, 'start', -90, t) * Math.PI / 180;
+      var spin = fparam(p, 'spin', 0, t) * (tl == null ? t : tl) * Math.PI / 180;
+      var face = Math.round(fparam(p, 'facecenter', 0, t)) === 1;
+      var step = Math.max(-0.9, Math.min(2, fparam(p, 'scalestep', 0, t) / 100));
+      var spiral = Math.max(-1, Math.min(2, fparam(p, 'spiral', 0, t) / 100));
+      var fade = Math.max(0, Math.min(1, fparam(p, 'fade', 0, t) / 100));
+      var sourceBox = layer && scene ? layerAABB(layer, t, scene) : null;
+      var sourceX = sourceBox ? ((sourceBox.x0 + sourceBox.x1) * 0.5 - (A.__fmOX || 0)) * s : bb.x + bb.w * 0.5;
+      var sourceY = sourceBox ? ((sourceBox.y0 + sourceBox.y1) * 0.5 - (A.__fmOY || 0)) * s : bb.y + bb.h * 0.5;
+      var copies = [], matrices = [];
+      for (var i = 0; i < count; i++) {
+        var f = i / (count - 1);
+        var angle = start + spin + i * Math.PI * 2 / count;
+        var r = Math.max(0, radius * (1 + spiral * f));
+        var x = sourceX + Math.cos(angle) * r, y = sourceY + Math.sin(angle) * r;
+        var size = Math.max(0.1, 1 + step * f);
+        var rotation = face ? angle - Math.PI / 2 : 0;
+        var opacity = 1 - fade * f;
+        if (opacity <= 0.004) continue;
+        copies.push([x, y, size, rotation, opacity]);
+        if (expand && typeof DOMMatrix !== 'undefined') matrices.push(new DOMMatrix().translateSelf(x, y).rotateSelf(rotation * 180 / Math.PI).scaleSelf(size).translateSelf(-sourceX, -sourceY));
+      }
+      // Reuse the expanded-plate path when a moved copy needs pixels outside the frame.
+      var src = matrices.length ? moverSource(A, W, H, ps, expand, layer, t, scene, matrices) : { cv: A, x: 0, y: 0 };
+      for (var k = 0; k < copies.length; k++) {
+        var q = copies[k];
+        B.save(); B.globalAlpha = q[4];
+        B.translate(q[0], q[1]); B.rotate(q[3]); B.scale(q[2], q[2]);
+        B.drawImage(src.cv, src.x - sourceX, src.y - sourceY);
+        B.restore();
+      }
+    },
+    lensmagnifier: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+      B.drawImage(A, 0, 0);
+      var scale = ps > 0 ? ps : 1;
+      var project = scene && scene.project;
+      var projectW = project ? project.width : W / scale;
+      var projectH = project ? project.height : H / scale;
+      var ox = A.__fmOX || 0, oy = A.__fmOY || 0;
+      var cx = (projectW * Math.max(0, Math.min(100, fparam(p, 'x', 50, t))) / 100 - ox) * scale;
+      var cy = (projectH * Math.max(0, Math.min(100, fparam(p, 'y', 50, t))) / 100 - oy) * scale;
+      var radius = Math.min(projectW, projectH) * Math.max(1, Math.min(100, fparam(p, 'size', 30, t))) * scale / 200;
+      var zoom = Math.max(1, Math.min(8, fparam(p, 'zoom', 2, t)));
+      var square = Math.round(fparam(p, 'shape', 0, t)) === 1;
+      var feather = Math.min(radius, Math.max(0, fparam(p, 'feather', 8, t) * scale));
+      var border = Math.max(0, Math.min(40, fparam(p, 'border', 3, t))) * scale;
+      var shadow = Math.max(0, Math.min(100, fparam(p, 'shadow', 12, t))) * scale;
+      if (zoom === 1 && border === 0 && shadow === 0) return;
+      if (radius <= 0 || cx + radius + shadow < 0 || cx - radius - shadow > W ||
+          cy + radius + shadow < 0 || cy - radius - shadow > H) return;
+      var outline = function (ctx, r) {
+        ctx.beginPath();
+        if (square) ctx.rect(cx - r, cy - r, r * 2, r * 2);
+        else ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      };
+      if (shadow > 0) {
+        B.save(); B.shadowColor = 'rgba(0,0,0,0.6)'; B.shadowBlur = shadow;
+        B.strokeStyle = 'rgba(0,0,0,0.55)'; B.lineWidth = Math.max(1, scale * 2);
+        outline(B, radius); B.stroke(); B.restore();
+      }
+      if (zoom > 1) {
+        var depth = Math.max(0, _cfDepth - 1);
+        if (!_lensMagnifierPool[depth]) _lensMagnifierPool[depth] = document.createElement('canvas');
+        var cv = _lensMagnifierPool[depth];
+        if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+        var g = cv.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+        g.drawImage(A, cx * (1 - zoom), cy * (1 - zoom), W * zoom, H * zoom);
+        g.globalCompositeOperation = 'destination-in';
+        if (feather <= 0) {
+          g.fillStyle = '#ffffff'; outline(g, radius); g.fill();
+        } else if (!square) {
+          var radial = g.createRadialGradient(cx, cy, Math.max(0, radius - feather), cx, cy, radius);
+          radial.addColorStop(0, 'rgba(255,255,255,1)'); radial.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = radial; outline(g, radius); g.fill();
+        } else {
+          var edge = feather / (radius * 2);
+          var gx = g.createLinearGradient(cx - radius, 0, cx + radius, 0);
+          gx.addColorStop(0, 'rgba(255,255,255,0)'); gx.addColorStop(edge, 'rgba(255,255,255,1)');
+          gx.addColorStop(1 - edge, 'rgba(255,255,255,1)'); gx.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = gx; g.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+          var gy = g.createLinearGradient(0, cy - radius, 0, cy + radius);
+          gy.addColorStop(0, 'rgba(255,255,255,0)'); gy.addColorStop(edge, 'rgba(255,255,255,1)');
+          gy.addColorStop(1 - edge, 'rgba(255,255,255,1)'); gy.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = gy; g.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+        }
+        g.globalCompositeOperation = 'source-over';
+        B.drawImage(cv, 0, 0);
+      }
+      if (border > 0) {
+        B.save(); B.strokeStyle = p.color || '#ffffff'; B.lineWidth = border;
+        outline(B, Math.max(0, radius - border * 0.5)); B.stroke(); B.restore();
+      }
+    },
+    radiowaves: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+      B.drawImage(A, 0, 0);
+      var rate = Math.max(0, Math.min(8, fparam(p, 'rate', 2, t)));
+      var life = Math.max(0.1, Math.min(8, fparam(p, 'lifetime', 2, t)));
+      var speed = Math.max(0, Math.min(800, fparam(p, 'speed', 160, t))) * (ps > 0 ? ps : 1);
+      var width = Math.max(1, Math.min(60, fparam(p, 'width', 6, t))) * (ps > 0 ? ps : 1);
+      var fade = Math.max(0, Math.min(1, fparam(p, 'fade', 70, t) / 100));
+      var project = scene && scene.project;
+      var x = project ? (project.width * Math.max(0, Math.min(100, fparam(p, 'x', 50, t))) / 100 - (A.__fmOX || 0)) * (ps > 0 ? ps : 1) : W * Math.max(0, Math.min(100, fparam(p, 'x', 50, t))) / 100;
+      var y = project ? (project.height * Math.max(0, Math.min(100, fparam(p, 'y', 50, t))) / 100 - (A.__fmOY || 0)) * (ps > 0 ? ps : 1) : H * Math.max(0, Math.min(100, fparam(p, 'y', 50, t))) / 100;
+      var shape = Math.round(fparam(p, 'shape', 0, t));
+      var sides = shape === 1 ? 4 : Math.max(3, Math.min(16, Math.round(fparam(p, 'sides', 6, t))));
+      var spin = fparam(p, 'spin', 0, t) * Math.PI / 180;
+      var blend = Math.round(fparam(p, 'blend', 1, t));
+      var time = Math.max(0, tl == null ? t : tl);
+      var color = p.color || '#6bdcff';
+      B.save();
+      B.globalCompositeOperation = blend === 2 ? 'lighter' : blend === 1 ? 'screen' : 'source-over';
+      B.strokeStyle = color; B.lineWidth = width; B.lineJoin = 'round';
+      // A zero rate holds one ring. Otherwise cap the active count at rate*lifetime + one birth.
+      var first = rate > 0 ? Math.max(0, Math.ceil((time - life) * rate)) : 0;
+      var last = rate > 0 ? Math.floor(time * rate) : 0;
+      for (var n = first; n <= last; n++) {
+        var age = time - (rate > 0 ? n / rate : 0);
+        if (age < 0 || age >= life) continue;
+        var radius = speed * age;
+        if (radius < width * 0.5) continue;
+        var alpha = fade > 0 ? Math.min(1, (1 - age / life) / fade) : 1;
+        if (alpha <= 0) continue;
+        B.globalAlpha = alpha; B.beginPath();
+        if (shape === 0) B.arc(x, y, radius, 0, Math.PI * 2);
+        else {
+          var rotation = spin * age - Math.PI / 2 + (shape === 1 ? Math.PI / 4 : 0);
+          for (var k = 0; k < sides; k++) {
+            var a = rotation + k * Math.PI * 2 / sides;
+            var px = x + Math.cos(a) * radius, py = y + Math.sin(a) * radius;
+            if (k === 0) B.moveTo(px, py); else B.lineTo(px, py);
+          }
+          B.closePath();
+        }
+        B.stroke();
+      }
+      B.restore();
+    },
+    laserbeam: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+      B.drawImage(A, 0, 0);
+      var intensity = Math.max(0, Math.min(1, fparam(p, 'intensity', 100, t) / 100));
+      if (!intensity) return;
+      var scale = ps > 0 ? ps : 1, project = scene && scene.project;
+      var pw = project ? project.width : W / scale, ph = project ? project.height : H / scale;
+      var x1 = (pw * fparam(p, 'x1', 10, t) / 100 - (A.__fmOX || 0)) * scale;
+      var y1 = (ph * fparam(p, 'y1', 50, t) / 100 - (A.__fmOY || 0)) * scale;
+      var x2 = (pw * fparam(p, 'x2', 90, t) / 100 - (A.__fmOX || 0)) * scale;
+      var y2 = (ph * fparam(p, 'y2', 50, t) / 100 - (A.__fmOY || 0)) * scale;
+      var width = Math.max(1, Math.min(60, fparam(p, 'width', 6, t))) * scale;
+      var glow = Math.max(0, Math.min(1, fparam(p, 'glow', 70, t) / 100));
+      var pulse = Math.max(0, Math.min(10, fparam(p, 'pulse', 0, t)));
+      var clock = Math.max(0, tl == null ? t : tl);
+      var strength = intensity * (pulse ? 0.7 + 0.3 * Math.sin(clock * pulse * Math.PI * 2) : 1);
+      var color = p.color || '#ff4055';
+      B.save(); B.globalCompositeOperation = 'lighter'; B.lineCap = 'round';
+      function stroke(w, alpha, c) {
+        B.globalAlpha = alpha * strength; B.strokeStyle = c; B.lineWidth = w;
+        B.beginPath(); B.moveTo(x1, y1); B.lineTo(x2, y2); B.stroke();
+      }
+      if (glow) { stroke(width * 6, glow * 0.08, color); stroke(width * 2.6, glow * 0.22, color); }
+      stroke(width, 0.8, color);
+      stroke(Math.max(1, width * 0.22), 0.95, '#ffffff');
+      B.restore();
+    },
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
      * There were two. A video or photo drew an inline black radial gradient over its clip rect inside the media draw:
      * only the FIRST vignette counted (a second was a live-looking row that did nothing), and it painted black over a
@@ -13659,7 +15084,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // violent frame reads as a smeared hit instead of a clean teleport. Deterministic — the previous
       // displacement is recomputed from the same noise, no cross-frame state.
       if (smear > 0) {
-        const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
+        // Thumbnail/template renders can pass a scene other than the editor's active FM.scene.
+        const fps = (scene && scene.project && scene.project.fps) || 30;
         const d1 = disp((tl - 1 / fps) * spd);   // the same pattern (it lives in `noise`) one frame ago
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
@@ -14006,7 +15432,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    const dd = Math.round(Math.max(0, d) * ps);   // offset is PROJECT px, indexes the plate; × 1 on every export
+    const dd = d > 0 ? Math.max(1, Math.round(d * ps)) : 0;   // a positive project-pixel shift must survive a reduced preview plate
+    const pp = (fx && fx.params) || {};
+    const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // an independent shift, including when Amount is zero
     if (!_rgbA) _rgbA = document.createElement('canvas');
     if (!_rgbB) _rgbB = document.createElement('canvas');
     if (_rgbA.width !== W || _rgbA.height !== H) { _rgbA.width = W; _rgbA.height = H; }
@@ -14018,17 +15446,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // render the layer with the rgbsplit effect removed (full opacity, normal blend) — keeps other fx/mask/blur
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'rgbsplit'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
-    if (dd <= 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, OX, OY, PWp, PHp); ctx.restore(); return; }
+    if (dd <= 0 && gsh === 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, OX, OY, PWp, PHp); ctx.restore(); return; }
     const src = actx.getImageData(0, 0, W, H).data;
     const bctx = _rgbB.getContext('2d'); const out = bctx.createImageData(W, H); const o = out.data;
     // Same three additions as the adjustment-layer path: an ANGLE so the tear isn't stuck horizontal,
     // RADIAL so the offset can grow toward the edge like real lens fringing, and a GREEN shift that
     // was welded at zero. At angle 0 / radial 0 / green 0 the sampling reduces to the original
     // left-right offsets exactly, so existing projects don't move.
-    const pp = (fx && fx.params) || {};
     const ang = (pp.angle == null ? 0 : FM.evalProp(pp.angle, t)) * Math.PI / 180;
     const radl = (pp.radial == null ? 0 : FM.evalProp(pp.radial, t)) / 100;
-    const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // PROJECT px → plate px
     const plain = (ang === 0 && radl === 0 && gsh === 0);
     const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
     const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
@@ -14053,7 +15479,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (gsh !== 0) gi = idx(x + ux * gsh * k, y + uy * gsh * k);
         }
         o[i] = src[ri]; o[i + 1] = src[gi + 1]; o[i + 2] = src[bi + 2];
-        o[i + 3] = Math.max(src[i + 3], src[ri + 3], src[bi + 3]);
+        o[i + 3] = Math.max(src[i + 3], src[ri + 3], src[bi + 3], src[gi + 3]);
       }
     }
     bctx.putImageData(out, 0, 0);
@@ -14675,6 +16101,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       src = te.text;
       if (textSpacingOK().letter) c.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) c.wordSpacing = (te.wordSpacing || 0) + 'px';
+      if (te.odometer && src === te.odometer.display && !FM.textHasAnim(layer) && Math.abs(te.curve || 0) <= 0.5)
+        return { w: odometerMetrics(c, te.odometer, te.letterSpacing).width, h: layer.fontSize || 96 };
       const lines = FM.textLines(c, layer, src);
       const fs = layer.fontSize || 96, lh = fs * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
       let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, c.measureText(l).width); });
@@ -16129,7 +17557,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * was cut out in the shape of the placeholder somebody typed months ago, at a completely
        * different width. Spacing and line height come from the same pass for the same reason: they
        * change where the glyphs land, and a footprint that disagrees is a visible mis-cut. */
-      const te = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, FM.scene);
+      const te = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, scene);
       textSrc = te.text;
       if (textSpacingOK().letter) a.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) a.wordSpacing = (te.wordSpacing || 0) + 'px';
@@ -16961,6 +18389,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       textSrc = _tEff.text;
       if (textSpacingOK().letter) ctx.letterSpacing = _tEff.letterSpacing + 'px';
       if (textSpacingOK().word) ctx.wordSpacing = (_tEff.wordSpacing || 0) + 'px';
+      const _isOdometer = !!(_tEff.odometer && textSrc === _tEff.odometer.display && !FM.textHasAnim(layer) && Math.abs(_tEff.curve || 0) <= 0.5);
       // AFTER applyTextEffects: Count Up, Randomizer and friends change the string, so wrapping the
       // pre-effect text would break the lines in the wrong places on every frame but the first.
       const lines = FM.textLines(ctx, layer, textSrc);
@@ -16970,7 +18399,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (layer.captionBg && String(textSrc).trim()) {
         const fs = layer.fontSize || 96;
         let maxW = 0;
-        for (const ln of lines) { const w2 = ctx.measureText(ln).width; if (w2 > maxW) maxW = w2; }
+        for (const ln of lines) { const w2 = _isOdometer ? odometerMetrics(ctx, _tEff.odometer, _tEff.letterSpacing).width : ctx.measureText(ln).width; if (w2 > maxW) maxW = w2; }
         const padX = fs * 0.4, padY = fs * 0.24, align = layer.align || 'center';
         const bx0 = align === 'center' ? -maxW / 2 - padX : align === 'right' ? -maxW - padX : -padX;
         const bw = maxW + 2 * padX, bh = total + fs + 2 * padY, by0 = -bh / 2;
@@ -16987,7 +18416,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // The curve the EFFECTS resolved, not the layer's raw field (queue 664) — resolved ONCE here so the animated
       // path gets it too; it used to be computed inside the static branch only (queue 904, textcurve).
       const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
-      if (FM.textHasAnim(layer)) {
+      if (_isOdometer) {
+        const stk = layer.stroke;
+        const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;
+        const bpos = (stk && stk.position) || 'outside';
+        const bcol = stk ? (FM.evalProp(stk.color, t) || '#000') : '#000';
+        const m = odometerMetrics(ctx, _tEff.odometer, _tEff.letterSpacing);
+        if (FM.layerHasGradient(layer)) {
+          const bx = layer.align === 'right' ? -m.width : layer.align === 'left' ? 0 : -m.width / 2;
+          ctx.fillStyle = buildGradient(ctx, layer.fillGradient, { x: bx, y: -(layer.fontSize || 96) / 2, w: m.width, h: layer.fontSize || 96 }, t);
+        }
+        drawOdometerText(ctx, layer, _tEff.odometer, _tEff.letterSpacing, t, !!(stk && stk.enabled && bw > 0), bw, bcol, bpos);
+      } else if (FM.textHasAnim(layer)) {
         drawAnimatedText(ctx, layer, t, lines, lh, total, curve);
       } else {
         const stk = layer.stroke;
@@ -17329,10 +18769,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Per-pixel post-fx that an adjustment layer can also apply to everything beneath it (matching
   // the layer-level draw* math exactly). Geometric post-fx (pixelate/mirror/rgbsplit) aren't done
   // here — they need a geometry pass, so they only apply per-layer for now.
-  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1,
+  const PIXEL_ADJ = { posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, levels: 1, colourwheels: 1, hslmixer: 1,
     /* #482 polish 5.1 — the PIXEL_FX colour grades that are point ops (fx-registry ADJ_OK says which and why the rest wait).
        applyPixelFx hands each straight to its PIXEL_FX kernel over the snapshot, the very function the clip itself runs. */
-    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1, channelmixer: 1, logtonormal: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1 };
   // Own keys only — see POSTFX. Missed with TEXT_FX when the others were cut off. Milder than that one
@@ -17400,15 +18840,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
     if (fx.type === 'rgbsplit') {
-      const dd = Math.round((FM.evalProp(p.amount, t) || 0) * S);   // project px → plate px (#691)
-      if (dd > 0 && W && H) {
+      const amount = FM.evalProp(p.amount, t) || 0;
+      const dd = amount > 0 ? Math.max(1, Math.round(amount * S)) : 0;   // project px → plate px (#691); preserve small positive preview shifts
+      const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;
+      if ((dd > 0 || gsh !== 0) && W && H) {
         // ANGLE frees the split from the horizontal axis (a vertical or diagonal tear was impossible),
         // RADIAL grows the offset toward the frame edge the way real lens fringing does, and GREEN
         // lets the third channel move at all — it was welded to zero. Defaults reproduce the old
         // horizontal-only shift exactly: angle 0 gives cos/sin of 1/0, radial 0 skips the scaling.
         const ang = (p.angle == null ? 0 : FM.evalProp(p.angle, t)) * Math.PI / 180;
         const rad = (p.radial == null ? 0 : FM.evalProp(p.radial, t)) / 100;
-        const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;   // …and the green channel's own offset
         const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
         const src = d.slice();
         const cx = geo ? geo.cx : W / 2, cy = geo ? geo.cy : H / 2, maxR = (geo ? geo.maxR : Math.hypot(cx, cy)) || 1;
@@ -18709,6 +20150,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // pattern as _ckCanvas / _lkCanvas / _grCanvas above. (#123)
       const c = measureCtx();
       c.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
+      if (layer.effects && layer.effects.some(e => e.type === 'odometer' && e.enabled !== false)) {
+        const src = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, FM.time) || '') : (layer.text || '');
+        const te = FM.applyTextEffects(layer, src, layer.letterSpacing || 0, FM.time || 0, FM.scene);
+        if (te.odometer && te.text === te.odometer.display && !FM.textHasAnim(layer) && Math.abs(te.curve || 0) <= 0.5)
+          return { w: odometerMetrics(c, te.odometer, te.letterSpacing).width, h: layer.fontSize || 96 };
+      }
       // A caption track sets layer.text='' and moves the visible text into layer.captions, so measuring
       // layer.text alone gives a 10px box that the hit-test/selection/align all read wrong. Measure the
       // widest caption (and its line count) instead, falling back to layer.text when there are none. (#4)

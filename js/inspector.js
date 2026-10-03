@@ -1811,8 +1811,46 @@ window.FM = window.FM || {};
          he asked for. Deleting 190-odd strings would have thrown away the thing he asked to keep. */
       const colourRows = {};   // colour rows by key, so a colour that follows another can listen to it (#482 polish 1.2)
       const rangeRows = {};    // …and slider rows, for a slider that follows another (#482 polish 2.1)
+      if (fx.type === 'colourwheels') {
+        // The three PC pucks set hue by angle and amount by distance. The ordinary
+        // sliders below remain the keyboard, screen-reader and phone controls.
+        const wheels = el('div', 'fx-colour-wheels');
+        [['Shadows', 'shadow'], ['Midtones', 'mid'], ['Highlights', 'high']].forEach(([name, key]) => {
+          const wrap = el('div', 'fx-colour-wheel-wrap');
+          const puck = el('div', 'fx-colour-wheel');
+          puck.setAttribute('aria-hidden', 'true');
+          const dot = el('span', 'fx-colour-wheel-dot'); puck.appendChild(dot);
+          const hueKey = key + 'Hue', amountKey = key + 'Amount';
+          const defaults = { shadow: 220, mid: 30, high: 45 };
+          const mark = (hue, amount) => {
+            const angle = hue * Math.PI / 180, radius = Math.max(0, Math.min(100, amount)) * 0.42;
+            dot.style.left = (50 + Math.sin(angle) * radius) + '%';
+            dot.style.top = (50 - Math.cos(angle) * radius) + '%';
+          };
+          mark(FM.evalProp(fx.params[hueKey] == null ? defaults[key] : fx.params[hueKey], FM.time),
+            FM.evalProp(fx.params[amountKey] == null ? 0 : fx.params[amountKey], FM.time));
+          let dragging = false, changed = false;
+          const move = e => {
+            const r = puck.getBoundingClientRect();
+            const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+            const hue = Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
+            const amount = Math.round(Math.min(100, Math.hypot(dx, dy) / (Math.min(r.width, r.height) * 0.42) * 100));
+            FM.setProp(fx.params, hueKey, hue, FM.time);
+            FM.setProp(fx.params, amountKey, amount, FM.time);
+            mark(hue, amount); changed = true; FM.requestRender();
+          };
+          puck.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); dragging = true; puck.setPointerCapture(e.pointerId); move(e); });
+          puck.addEventListener('pointermove', e => { if (dragging) { e.stopPropagation(); move(e); } });
+          const finish = e => { if (!dragging) return; e.stopPropagation(); dragging = false; if (changed) afterFx(); };
+          puck.addEventListener('pointerup', finish); puck.addEventListener('pointercancel', finish);
+          wrap.appendChild(puck); wrap.appendChild(el('span', 'fx-colour-wheel-name', name)); wheels.appendChild(wrap);
+        });
+        body.appendChild(wheels);
+      }
       reg.params.forEach(p => {
         if (p.type === 'range') {
+          if (fx.type === 'hslmixer' && p.key[0] !== 'hsl'[Math.max(0, Math.min(2, Math.round(Number(fx.params.view) || 0)))]) return;
+          if (fx.type === 'channelmixer' && p.key !== 'mix' && !p.key.startsWith(['red', 'green', 'blue'][Math.max(0, Math.min(2, Math.round(Number(fx.params.out) || 0)))])) return;
           const row = fxScrubber(fx, p, layer, idx);
           rangeRows[p.key] = row;
           const leadR = p.follows && rangeRows[p.follows];
@@ -2379,7 +2417,22 @@ window.FM = window.FM || {};
     // overriddenBy/deadAt ride along since the #482 3.6 review: this bridge used to drop them, so no audio row could say
     // "Not used when Bass is 0" however the effect declared it.
     return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, unit: p.unit, keyframable: p.keyframable,
-      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt };
+      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, options: p.options };
+  }
+  function afxChoice(fx, p) {
+    const row = el('div', 'prop-row afx-choice-row');
+    row.appendChild(el('label', null, p.label));
+    const sel = document.createElement('select');
+    sel.setAttribute('aria-label', p.label);
+    const value = fx.params[p.key] == null ? p.def : fx.params[p.key];
+    p.options.forEach(opt => {
+      const item = document.createElement('option');
+      item.value = opt[0]; item.textContent = opt[1]; item.selected = Number(value) === Number(opt[0]);
+      sel.appendChild(item);
+    });
+    sel.addEventListener('change', () => { fx.params[p.key] = Number(sel.value); afterAudioFx(); });
+    row.appendChild(sel);
+    return row;
   }
   /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
      only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break
@@ -2556,7 +2609,7 @@ window.FM = window.FM || {};
       // the controller's label and default, so it gets the bridged descriptors, not the audio registry's own.
       const areg = { params: reg.params.map(afxParam) }, rows = {};
       reg.params.forEach(p => {
-        const ap = afxParam(p), row = fxScrubber(fx, ap, layer, idx);
+        const ap = afxParam(p), row = p.options ? afxChoice(fx, p) : fxScrubber(fx, ap, layer, idx);
         rows[p.key] = row;
         markOverridden(row, fx, ap, areg);
         body.appendChild(row);
@@ -5657,7 +5710,103 @@ window.FM = window.FM || {};
     const arBtn = el('button', 'vol-tool-btn', 'Audio → keyframes…');
     arBtn.title = 'Drive scale, opacity, rotation or position from this clip’s loudness';
     arBtn.addEventListener('click', () => { if (FM.audioReact) FM.audioReact.openSheet(layer); });
-    tools.append(wavBtn, karBtn, afxBtn, arBtn);
+    const noiseState = FM.noiseState ? FM.noiseState(layer) : 'off';
+    const noiseBtn = el('button', 'vol-tool-btn' + (noiseState === 'off' ? '' : ' on'),
+      noiseState === 'off' ? 'Reduce noise…' : 'Restore original audio');
+    noiseBtn.title = 'On-device noise reduction for mono or stereo clips up to two minutes';
+    const noiseOptions = el('div', 'vol-noise-options');
+    noiseOptions.hidden = true;
+    noiseOptions.style.cssText = 'padding:10px 0;display:grid;gap:8px';
+    const settings = { amount: 0.6, reduction: 12, sensitivity: 0.5, keepVoice: true };
+    const noiseRange = (key, label, min, max, step) => {
+      const row = el('label', '', label + ': ');
+      const value = el('span', '', String(settings[key]));
+      const input = document.createElement('input');
+      input.type = 'range'; input.min = min; input.max = max; input.step = step; input.value = settings[key];
+      input.setAttribute('aria-label', label);
+      input.addEventListener('input', () => { settings[key] = +input.value; value.textContent = input.value; });
+      row.append(value, input); noiseOptions.appendChild(row);
+    };
+    noiseRange('amount', 'Amount', 0, 1, 0.05);
+    noiseRange('reduction', 'Reduction (dB)', 0, 30, 1);
+    noiseRange('sensitivity', 'Sensitivity', 0, 1, 0.05);
+    const voice = el('label', '', 'Keep voice ');
+    const voiceCheck = document.createElement('input'); voiceCheck.type = 'checkbox'; voiceCheck.checked = true;
+    voiceCheck.addEventListener('change', () => { settings.keepVoice = voiceCheck.checked; });
+    voice.appendChild(voiceCheck); noiseOptions.appendChild(voice);
+    const listen = el('button', 'vol-tool-btn', 'Listen to removed noise');
+    listen.addEventListener('click', async () => {
+      if (listen.disabled) return;
+      listen.disabled = true;
+      try { await FM.previewRemovedNoise(layer, settings); }
+      catch (e) { if (FM.toast) FM.toast(e.message || 'Could not preview removed noise'); }
+      finally { listen.disabled = false; }
+    });
+    const applyNoise = el('button', 'vol-tool-btn', 'Apply noise reduction');
+    applyNoise.addEventListener('click', async () => {
+      if (applyNoise.disabled) return;
+      applyNoise.disabled = true;
+      try { FM.stopRemovedNoisePreview(); await FM.toggleNoiseReduction(layer, settings); }
+      finally { applyNoise.disabled = false; if (FM.inspector) FM.inspector.refresh(); }
+    });
+    noiseOptions.append(listen, applyNoise);
+    noiseBtn.addEventListener('click', async () => {
+      if (noiseState !== 'off') { await FM.toggleNoiseReduction(layer); if (FM.inspector) FM.inspector.refresh(); }
+      else { noiseOptions.hidden = !noiseOptions.hidden; noiseOptions.style.display = noiseOptions.hidden ? 'none' : 'grid'; }
+    });
+    noiseOptions.style.display = 'none';
+    const duckBtn = el('button', 'vol-tool-btn' + (layer.autoDuck ? ' on' : ''), 'Auto-duck music…');
+    duckBtn.title = 'Generate volume keyframes under speech in another clip';
+    const duckOptions = el('div', 'vol-duck-options');
+    duckOptions.hidden = true;
+    duckOptions.style.cssText = 'padding:10px 0;display:none;gap:8px';
+    const duckSettings = Object.assign({ sourceId: 'any', amount: 12, attack: 0.2, release: 0.6, padding: 0.15 }, layer.autoDuck || {});
+    const sourceLabel = el('label', '', 'Voice source ');
+    const sourceSelect = document.createElement('select'); sourceSelect.setAttribute('aria-label', 'Voice source');
+    const any = document.createElement('option'); any.value = 'any'; any.textContent = 'Any speech in other clips'; sourceSelect.appendChild(any);
+    (FM.captions && FM.captions.audioSources ? FM.captions.audioSources() : [])
+      .filter(candidate => candidate.id !== layer.id && !candidate.muted && !candidate.hidden)
+      .forEach(candidate => {
+        const option = document.createElement('option'); option.value = candidate.id;
+        option.textContent = candidate.name || 'Audio clip'; sourceSelect.appendChild(option);
+      });
+    sourceSelect.value = duckSettings.sourceId;
+    if (!sourceSelect.value) { sourceSelect.value = 'any'; duckSettings.sourceId = 'any'; }
+    sourceSelect.addEventListener('change', () => { duckSettings.sourceId = sourceSelect.value; });
+    sourceLabel.appendChild(sourceSelect); duckOptions.appendChild(sourceLabel);
+    const duckRange = (key, label, min, max, step) => {
+      const row = el('label', '', label + ': ');
+      const value = el('span', '', String(duckSettings[key]));
+      const input = document.createElement('input');
+      input.type = 'range'; input.min = min; input.max = max; input.step = step; input.value = duckSettings[key];
+      input.setAttribute('aria-label', label);
+      input.addEventListener('input', () => { duckSettings[key] = +input.value; value.textContent = input.value; });
+      row.append(value, input); duckOptions.appendChild(row);
+    };
+    duckRange('amount', 'Duck (dB)', 0, 30, 1);
+    duckRange('attack', 'Attack (s)', 0.05, 1, 0.05);
+    duckRange('release', 'Release (s)', 0.1, 2, 0.05);
+    duckRange('padding', 'Speech padding (s)', 0, 0.5, 0.05);
+    const generateDuck = el('button', 'vol-tool-btn', layer.autoDuck ? 'Update ducking keyframes' : 'Generate ducking keyframes');
+    generateDuck.addEventListener('click', async () => {
+      if (generateDuck.disabled) return;
+      generateDuck.disabled = true;
+      if (FM.toast) FM.toast('Finding speech and shaping volume…', 0);
+      try { await FM.autoDuckGenerate(layer, duckSettings); }
+      catch (e) { if (FM.toast) FM.toast(e.message || 'Could not generate ducking', 4000); }
+      finally { generateDuck.disabled = false; }
+    });
+    duckOptions.appendChild(generateDuck);
+    if (layer.autoDuck) {
+      const clearDuck = el('button', 'vol-tool-btn', 'Restore original volume');
+      clearDuck.addEventListener('click', () => FM.autoDuckClear(layer));
+      duckOptions.appendChild(clearDuck);
+    }
+    duckBtn.addEventListener('click', () => {
+      duckOptions.hidden = !duckOptions.hidden;
+      duckOptions.style.display = duckOptions.hidden ? 'none' : 'grid';
+    });
+    tools.append(wavBtn, karBtn, noiseBtn, noiseOptions, duckBtn, duckOptions, afxBtn, arBtn);
     control.appendChild(tools);
 
     panel.append(left, center);

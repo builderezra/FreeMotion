@@ -22,7 +22,7 @@ window.FM = window.FM || {};
     vibrance: 'color', thermal: 'color',
     sharpen: 'blur', dither: 'stylize', halftone: 'drawing',
     // batch 3 — geometric warps
-    wave: 'distort', ripple: 'distort', twirl: 'distort', bulge: 'distort',
+    wave: 'distort', titlewarp: 'distort', ripple: 'distort', twirl: 'distort', bulge: 'distort',
     // batch 4
     edge: 'drawing', emboss: 'drawing', exposure: 'color', fisheye: 'distort',
     // batch 5
@@ -46,17 +46,17 @@ window.FM = window.FM || {};
     blink: 'opacity', flicker: 'opacity', pulseopacity: 'opacity', dissolve: 'opacity', blockdissolve: 'opacity',
     flashdark: 'opacity',   // queue 349 — sits with its family, though it is the only one that leaves alpha alone
     // batch 14 (matte / mask / key)
-    wipe: 'matte', radialwipe: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
+    wipe: 'matte', radialwipe: 'matte', gradientwipe: 'matte', venetianblinds: 'matte', solidmatte: 'matte', mattechoker: 'matte', mattefringe: 'matte',
     // batch 15 (repeat / tiling)
-    gridrepeat: 'repeat', linearrepeat: 'repeat', radialrepeat: 'repeat', mirrortile: 'repeat', scatterarray: 'repeat',
+    gridrepeat: 'repeat', linearrepeat: 'repeat', radialrepeat: 'repeat', mirrortile: 'repeat', scatterarray: 'repeat', circlearray: 'repeat',
     // batch 16 (other / color / proc / drawing)
     channelremap: 'color', gradientoverlay: 'color', lensflare: 'proc', roughenedges: 'drawing', hexarray: 'proc',
     // batch 17 (drawing / blur / proc)
-    electricedges: 'drawing', glowscan: 'drawing', spinstreaks: 'blur', fractalridges: 'proc', smoothbevel: 'drawing',
+    electricedges: 'drawing', glowscan: 'drawing', spinstreaks: 'blur', fractalridges: 'proc', fractalnoise: 'proc', smoothbevel: 'drawing',
     // batch 18 (blur / proc / distort / drawing)
     zoomstreaks: 'blur', innerblur: 'blur', contourstrips: 'proc', innerpinch: 'distort', crosshatch: 'drawing',
     // batch 19 (text)
-    counter: 'text', textprogress: 'text', textrandomizer: 'text', textspacing: 'text', texttransform: 'text', timecode: 'text',
+    counter: 'text', odometer: 'text', textprogress: 'text', textrandomizer: 'text', textspacing: 'text', texttransform: 'text', timecode: 'text',
     textcurve: 'text', textreverse: 'text', textrepeat: 'text', textpad: 'text',
     // batch 20 (cinematic grades + framing)
     bleachbypass: 'color', tealorange: 'color', crossprocess: 'color', lightleak: 'color', letterbox: 'stylize', border: 'drawing',
@@ -70,7 +70,7 @@ window.FM = window.FM || {};
     // batch 23 (move / transform)
     wiggle: 'move', shake: 'move', swing: 'move', spin: 'move', pulse: 'move', drift: 'move', orbit: 'move',
     // batch 24
-    squeeze: 'distort', tiles: 'repeat',
+    squeeze: 'distort', tiles: 'repeat', lensmagnifier: 'distort',
     motionflow: 'blur',   // content-aware motion blur (temporal)
     objectblur: 'blur',   // the layer's OWN movement, was layer.motionBlur (queue 335)
     copybg: 'stylize',    // copy the backdrop below into this layer
@@ -96,7 +96,7 @@ window.FM = window.FM || {};
     // batch 33 (manga lines + the HSL panel)
     speedlines: 'proc', hslbands: 'color',
     // batch 34 (the scan bar + a key that survives bad lighting)
-    timewarp: 'stylize', chromakeypro: 'matte',
+    timewarp: 'stylize', chromakeypro: 'matte', spillsuppressor: 'matte',
     // batch 35 (the compositing shot)
     lightwrap: 'matte',
     // batch 36 (disintegrate + tape damage)
@@ -111,6 +111,18 @@ window.FM = window.FM || {};
     // the NEW row (FX_FEATURED reads it backwards), so the newest effect never appeared there (queue 913).
     weather: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
+    colourwheels: 'color',
+    hslmixer: 'color',
+    claritydehaze: 'color',
+    radiowaves: 'proc',
+    laserbeam: 'proc',
+    cartoon: 'stylize',
+    oilpaint: 'stylize',
+    bwmixer: 'color',
+    channelmixer: 'color',
+    autograde: 'color',
+    logtonormal: 'color',
+    deflicker: 'blur',
   };
 
   // Display order + labels. Only categories that currently have effects are listed (no empty banners).
@@ -154,7 +166,7 @@ window.FM = window.FM || {};
   // add-flow gate would now block a working effect.)
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
-  const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
+  const TEXT_ONLY = { counter: 1, odometer: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
                       textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
@@ -170,8 +182,8 @@ window.FM = window.FM || {};
      not crop (compositor FM.adjNeedsFrame, app.js previewCrop). */
   const ADJ_OK = {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
-    posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1,
-    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
+    posterize: 1, tint: 1, threshold: 1, duotone: 1, rgbsplit: 1, pixelate: 1, levels: 1, colourwheels: 1, hslmixer: 1,
+    exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1, channelmixer: 1, logtonormal: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1,
   };
@@ -311,6 +323,12 @@ window.FM = window.FM || {};
     vibrance: 'Boosts the muted colours and leaves already-vivid ones alone — kinder to skin than Saturation.',
     hue: 'Rotates every colour around the wheel.',
     grayscale: 'Removes colour entirely.',
+    bwmixer: 'Choose how reds, yellows, greens, cyans, blues and magentas turn into light or dark grey.',
+    channelmixer: 'Mix red, green and blue into each output colour, with a separate constant per output.',
+    autograde: 'Sets levels, contrast or colour balance from the picture and smooths changes while it plays.',
+    logtonormal: 'Converts Panasonic V-Log/V-Gamut, Sony S-Log3/S-Gamut3.Cine, Apple Log/BT.2020, or Canon Log 3/Cinema Gamut footage to Rec.709 with exposure and highlight controls.',
+    deflicker: 'Steadies changing exposure over adjacent frames while resetting on a detected scene change.',
+    spillsuppressor: 'Reduces the screen-colour cast after a key. Use Whole subject or limit it to soft alpha edges.',
     sepia: 'Warm monochrome — the old-photograph tone.',
     invert: 'Flips every colour to its opposite, like a film negative.',
     gamma: 'Reshapes the midtones without moving black or white.',
@@ -352,6 +370,7 @@ window.FM = window.FM || {};
     mirror: 'Reflects one half of the frame onto the other.',
     kaleidoscope: 'Repeats a wedge of the image around a centre.',
     wave: 'Ripples the image along a sine wave.',
+    titlewarp: 'Bends a title inside its own visible bounds. Choose from ten arc, wave and shape warps.',
     ripple: 'Rings spreading from a centre, like a drop in water.',
     twirl: 'Spirals the image around a centre point.',
     bulge: 'Pushes the middle out or sucks it in.',
@@ -424,6 +443,7 @@ window.FM = window.FM || {};
     lensflare: 'A lens flare from a light you position, with the streaks and ghosts a real one throws.',
     hexarray: 'A honeycomb of hexagons over the frame.',
     fractalridges: 'Ridged fractal noise that churns in place — rock, cloth or turbulence, depending on Scale and Sharpness. Colour it flat, tinted, as a two-stop gradient or a full spectrum, and Overlay decides whether it sits on the picture or replaces it.',
+    fractalnoise: 'Layered noise with Basic, Turbulent, Smooth and Ridged patterns. Adjust its detail, colours and evolution for clouds, smoke or an organic mask.',
     contourstrips: 'Slices the brightness range into flat bands and colours them, like a topographic map.',
     voronoi: 'Breaks the frame into organic cells, the pattern of cracked mud or a giraffe’s coat.',
     lightning: 'Draws branching lightning bolts across the layer.',
@@ -450,6 +470,13 @@ window.FM = window.FM || {};
     // Matte / mask / key
     wipe: 'Reveals or hides the layer behind a straight line at any angle. Keyframe Progress to run it.',
     radialwipe: 'The same, but the line sweeps around like a clock hand.',
+    gradientwipe: 'Reveals this layer according to another layer’s brightness or alpha. Keyframe Progress for a custom-shaped wipe.',
+    venetianblinds: 'Reveals the layer in parallel slats. Stagger opens the slats one after another.',
+    radiowaves: 'Repeated coloured rings expand from one point, with circle and polygon shapes.',
+    laserbeam: 'A straight beam between two points, with coloured glow, a white-hot core and optional pulse.',
+    lensmagnifier: 'Magnifies this layer under a movable round or square lens with a soft edge, border and shadow.',
+    cartoon: 'Simplifies shading and texture into broad colour regions, then draws ink along subject edges.',
+    oilpaint: 'Blends nearby colour into directional brush patches while keeping strong edges intact.',
     solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
     mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
     mattefringe: 'Draws a coloured band along the layer’s edge.',
@@ -460,6 +487,7 @@ window.FM = window.FM || {};
     linearrepeat: 'Repeats the layer in a line.',
     scatterarray: 'Scatters loose copies of the layer around it, each one nudged, turned and resized a little. Every other repeat here is a neat grid or line \u2014 this is the untidy one. Change Seed to re-roll the arrangement.',
     radialrepeat: 'Repeats the layer in a ring around the centre.',
+    circlearray: 'Places separate whole copies around a circle or spiral, with scale, facing and fade controls.',
     mirrortile: 'Tiles the frame with alternating mirrored copies, so the joins are seamless.',
 
     // Opacity / visibility
@@ -479,6 +507,7 @@ window.FM = window.FM || {};
 
     // Text
     counter: 'Counts a number up or down. Keyframe Progress and it animates between the two ends.',
+    odometer: 'Rolls each digit vertically as the number changes, like a mechanical counter.',
     textprogress: 'Types the text on, character by character, as Progress runs.',
     textrandomizer: 'Scrambles the characters and resolves them into the real text.',
     textspacing: 'Widens or tightens the gaps between letters. Also carries Line height.',
@@ -552,6 +581,7 @@ window.FM = window.FM || {};
     wrapshift:         ['offset', 'wrap around', 'loop shift'],
     objectblur:        ['echo keyframes', 'ghost trail', 'motion trail'],
     chromakeypro:      ['advanced chroma key', 'green screen', 'key spill'],
+    spillsuppressor:   ['despill', 'green spill', 'blue spill'],
     smoothedges:       ['feather', 'soften edge'],
     stretchseg:        ['stretch axis'],
     shake:             ['auto shake', 'camera shake'],

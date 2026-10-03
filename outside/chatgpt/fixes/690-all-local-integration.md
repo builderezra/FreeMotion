@@ -1,0 +1,9 @@
+# #690 — Consolidated local implementation branch
+
+Starting commits: current public `main` `f771657683ae61e4aff657e4beab8fac248e8dfe`, seven-fix effects branch `517bfa1adf38591c373495966237ccff5d8303cd`, and older local continuation branch `e7232077ad8164a7f1425da4a371f65b5f1bdce4`. This merge is in the isolated `/private/tmp/freemotion-all-local-20261004` checkout on `chatgpt/690-all-local`.
+
+The older continuation branch contains 66 product commits absent from the public `main`, covering effects, audio tools, media/import safeguards, and related UI. The merge retains those changes and the seven newer effect fixes. It preserves the released v17.22 Home layout and keyboard/menu behavior, keeps both Fractal Noise and the newer reduced-preview Smooth Bevel kernel, and removes five duplicate Home tests introduced by merging overlapping Home histories. The obsolete test for Join beside Select is intentionally replaced by the current profile-menu Join test.
+
+Changed application files: `index.html`, `styles.css`, `js/addmenu.js`, `js/app.js`, `js/audio-fx-live.js`, `js/audio-fx.js`, `js/audio-tools.js`, `js/auto-duck.js`, `js/compositor.js`, `js/exporter.js`, `js/filters.js`, `js/fx-registry.js`, `js/home.js`, `js/inspector.js`, `js/noise-reduction.js`, `js/settings.js`, `js/sfx.js`, and `js/storage.js`; `tests/tests.js` and the older fix reports are included. Every changed script or stylesheet has an advanced `index.html` cache tag; compositor is `v=248`, CSS `v=754`, Home `v=202`.
+
+Checks: JavaScriptCore parsed all 17 changed JS files; `git diff --cached --check` passed; ten focused Chrome regressions passed together (the seven newer effects, Fractal Noise, Home keyboard Join/Select, and phone Home reference layout). A full suite, installed-iPhone playback, and direct user testing remain unverified. This is local only; nothing was pushed, deployed, or written to Claude's checkout.

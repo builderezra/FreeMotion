@@ -115,6 +115,9 @@ window.FM = window.FM || {};
     return curveFrom(x => { const q = Math.round(x / step) * step; return k < 1e-3 ? q : Math.tanh(k * q) / norm; }, 8192);
   }
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
+  const WAH_RECTIFY = curveFrom(x => Math.abs(x), 2049);
+  const WAH_ENVELOPE_LIMIT = curveFrom(x => clamp(x, 0, 1), 2049);
+  const GATE_STEP = curveFrom(x => x >= 0.5 ? 1 : 0, 16385);
 
   /* ---- reverb impulse ---- */
   // Deterministic noise: a Math.random IR would differ between the preview build and the export build,
@@ -363,6 +366,101 @@ window.FM = window.FM || {};
     return clamp(v, lo, hi);
   }
 
+  // BS.1770 K weighting. The bilinear forms reproduce the ITU 48 kHz coefficient table
+  // and move both poles correctly when decodeAudioData supplies a different sample rate.
+  function loudnessFilters(rate) {
+    function shelf() {
+      const k = Math.tan(Math.PI * 1681.974450955533 / rate), q = 0.7071752369554196;
+      const h = Math.pow(10, 3.999843853973347 / 20), b = Math.pow(h, 0.4996667741545416);
+      const a = 1 + k / q + k * k;
+      return [(h + b * k / q + k * k) / a, 2 * (k * k - h) / a,
+        (h - b * k / q + k * k) / a, 2 * (k * k - 1) / a, (1 - k / q + k * k) / a];
+    }
+    function highpass() {
+      const k = Math.tan(Math.PI * 38.13547087602444 / rate), q = 0.5003270373238773;
+      const a = 1 + k / q + k * k;
+      return [1, -2, 1, 2 * (k * k - 1) / a, (1 - k / q + k * k) / a];
+    }
+    return [shelf(), highpass()];
+  }
+  function loudnessKey(layer) {
+    return [layer.trimStart || 0, layer.duration || 0,
+      FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, layer.duration || 0) : (layer.duration || 0) * (layer.speed || 1),
+      JSON.stringify(layer.speed || 1)].join('|');
+  }
+  FM.measureLoudness = function (buffer, layer) {
+    if (!buffer || !buffer.sampleRate || !buffer.getChannelData) return null;
+    const rate = buffer.sampleRate, start = Math.max(0, Math.floor((layer.trimStart || 0) * rate));
+    const advance = FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, layer.duration || 0) : (layer.duration || 0) * (layer.speed || 1);
+    const end = Math.min(buffer.length, Math.ceil(((layer.trimStart || 0) + Math.max(0, advance)) * rate));
+    if (end <= start) return null;
+    if (end - start > rate * 600) return null; // never scan an hour-long decoded file on the UI thread
+    const qLen = Math.max(1, Math.round(rate * 0.1)), n = end - start;
+    const sums = new Float64Array(Math.ceil(n / qLen));
+    const filters = loudnessFilters(rate);
+    const weights = buffer.numberOfChannels === 4 ? [1, 1, 1.41, 1.41]
+      : buffer.numberOfChannels === 5 ? [1, 1, 1, 1.41, 1.41]
+      : [1, 1, 1, 0, 1.41, 1.41, 1.41, 1.41];
+    let peak = 0;
+    for (let ch = 0; ch < Math.min(buffer.numberOfChannels, 8); ch++) {
+      const data = buffer.getChannelData(ch), weight = buffer.numberOfChannels <= 2 ? 1 : weights[ch];
+      if (!weight) continue; // LFE is not part of the BS.1770 sum.
+      const state = filters.map(() => [0, 0, 0, 0]);
+      for (let i = start; i < end; i++) {
+        const x = data[i] || 0;
+        peak = Math.max(peak, Math.abs(x));
+        let y = x;
+        for (let f = 0; f < 2; f++) {
+          const c = filters[f], s = state[f], out = c[0] * y + c[1] * s[0] + c[2] * s[1] - c[3] * s[2] - c[4] * s[3];
+          s[1] = s[0]; s[0] = y; s[3] = s[2]; s[2] = out; y = out;
+        }
+        sums[Math.floor((i - start) / qLen)] += weight * y * y;
+      }
+    }
+    const blocks = [];
+    for (let i = 0; i + 4 * qLen <= n; i += qLen) {
+      const k = i / qLen;
+      blocks.push((sums[k] + sums[k + 1] + sums[k + 2] + sums[k + 3]) / (4 * qLen));
+    }
+    // BS.1770 has no complete 400 ms block for a shorter sound. Use its entire
+    // available window so short UI sounds can still be matched.
+    if (!blocks.length) blocks.push(sums.reduce((a, b) => a + b, 0) / n);
+    const loud = z => -0.691 + 10 * Math.log10(z);
+    const absolute = blocks.filter(z => z > 0 && loud(z) >= -70);
+    if (!absolute.length) return { lufs: null, peak: peak };
+    const first = absolute.reduce((a, b) => a + b, 0) / absolute.length;
+    const relativeGate = loud(first) - 10;
+    const final = absolute.filter(z => loud(z) >= relativeGate);
+    const energy = final.reduce((a, b) => a + b, 0) / final.length;
+    return { lufs: loud(energy), peak: peak };
+  };
+  FM.prepareLoudness = function (layer, media) {
+    if (!layer || !media || !layer.audioFx || !layer.audioFx.some(f => f && f.type === 'loudnessmatch' && f.enabled !== false)) return Promise.resolve(null);
+    const key = loudnessKey(layer), file = media.file;
+    if (media._loudFile === file && media._loudKey === key && media._loudness) return Promise.resolve(media._loudness);
+    if (media._loudFile === file && media._loudKey === key && media._loudPending) return media._loudPending;
+    media._loudFile = file; media._loudKey = key; media._loudness = null;
+    // Keep a second full decode off a phone for long files. An export's already decoded
+    // buffer can still be analysed without allocating another copy.
+    const canDecode = file && file.size <= 64 * 1024 * 1024 && (layer.duration || 0) <= 180;
+    const work = async () => {
+      const buffer = media.audioBuffer || (canDecode ? await FM.decodeAudio(file, { rate: 24000 }) : null);
+      const result = buffer ? FM.measureLoudness(buffer, layer) : null;
+      if (media._loudFile !== file || media._loudKey !== key) return null;
+      media._loudness = result || { lufs: null, peak: 0 };
+      Promise.resolve().then(() => {
+        if (FM.audioFxLive && FM.scene && FM.scene.layers && FM.scene.layers.includes(layer) && FM.media.get(layer.id) === media) {
+          media._afxSig = '';
+          FM.audioFxLive.sync(layer);
+          if (layer.reversed && FM.playing && FM.audioPlay) FM.audioPlay.start();
+        }
+      });
+      return media._loudness;
+    };
+    media._loudPending = work().finally(() => { if (media._loudKey === key) media._loudPending = null; });
+    return media._loudPending;
+  };
+
   // dry(1−mix) + wet(mix) summed into the output. Both are real AudioParams so `mix` schedules like any
   // other param — set/ramp just have to touch the pair.
   function wetDry(s, inst, key, dflt) {
@@ -500,6 +598,104 @@ window.FM = window.FM || {};
         params: { low: lo.gain, mid: mid.gain, high: hi.gain, midFreq: mid.frequency, midWidth: mid.Q, lowFreq: lo.frequency, highFreq: hi.frequency },
         xf: { midWidth: function (w) { return 1 / w; } },
       });
+    },
+  },
+  {
+    type: 'graphicEq', label: 'Graphic EQ', category: 'eq',
+    hint: 'Ten fixed frequency bands. Lower Output if boosted bands sound too loud.',
+    params: [Object.assign(P('preset', 'Preset', 0, 5, 1, 0, '', false), { options: [
+      [0, 'Flat'], [1, 'Bass lift'], [2, 'Voice clarity'], [3, 'Warm'], [4, 'Bright'], [5, 'Radio']
+    ] })].concat(
+      ['31 Hz', '63 Hz', '125 Hz', '250 Hz', '500 Hz', '1 kHz', '2 kHz', '4 kHz', '8 kHz', '16 kHz'].map((label, i) =>
+        P('band' + i, label, -12, 12, 0.5, 0, 'dB', true)),
+      [P('output', 'Output', -24, 12, 0.5, 0, 'dB', true)]
+    ),
+    build: function (ctx, inst) {
+      const s = shop(ctx);
+      const freq = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+      // Presets are dB offsets from the sliders, so selecting one never erases a custom curve.
+      const curves = [
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [5, 5, 4, 2, 0, 0, 0, 0, 0, 0],
+        [-5, -3, -2, 0, 1, 3, 4, 3, 1, 0],
+        [1, 2, 3, 3, 1, 0, -1, -1, -1, -2],
+        [-2, -1, 0, 0, 0, 1, 2, 3, 4, 4],
+        [-12, -12, -9, -4, 2, 4, 3, -2, -9, -12],
+      ];
+      const filters = freq.map((f, i) => s.biquad(i === 0 ? 'lowshelf' : (i === 9 ? 'highshelf' : 'peaking'),
+        Math.min(f, ctx.sampleRate * 0.45), i === 0 || i === 9 ? null : Math.SQRT2, 0));
+      const out = s.gain(1);
+      for (let i = 0; i < 9; i++) filters[i].connect(filters[i + 1]);
+      filters[9].connect(out);
+      const base = freq.map((_, i) => initNum(inst, 'band' + i, 0, -12, 12));
+      let preset = Math.round(initNum(inst, 'preset', 0, 0, 5));
+      for (let i = 0; i < 10; i++) filters[i].gain.value = clamp(base[i] + curves[preset][i], -24, 24);
+      const custom = {
+        preset: function (v, when, ramp) {
+          const next = Math.round(clamp(v, 0, 5));
+          if (next === preset) return;
+          preset = next;
+          for (let i = 0; i < 10; i++) {
+            const gain = clamp(base[i] + curves[preset][i], -24, 24);
+            if (ramp) filters[i].gain.linearRampToValueAtTime(gain, when);
+            else filters[i].gain.setValueAtTime(gain, when);
+          }
+        },
+      };
+      for (let i = 0; i < 10; i++) custom['band' + i] = function (v, when, ramp) {
+        base[i] = clamp(v, -12, 12);
+        const gain = clamp(base[i] + curves[preset][i], -24, 24);
+        if (ramp) filters[i].gain.linearRampToValueAtTime(gain, when);
+        else filters[i].gain.setValueAtTime(gain, when);
+      };
+      return unit({ input: filters[0], output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { output: out.gain }, xf: { output: dbToLin }, custom: custom });
+    },
+  },
+  {
+    type: 'humremove', label: 'Hum Remover', category: 'eq',
+    hint: 'Cuts mains hum and its harmonics. Choose 50 Hz in Australia and most of Europe, or 60 Hz in North America.',
+    params: [
+      Object.assign(P('base', 'Mains', 50, 60, 10, 50, 'Hz', false), { options: [[50, '50 Hz'], [60, '60 Hz']] }),
+      P('harmonics', 'Harmonics', 1, 8, 1, 4, '', false),
+      P('width', 'Notch width', 0.5, 20, 0.5, 2, 'Hz', true),
+      P('amount', 'Amount', 0, 1, 0.01, 1, '', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      const wd = wetDry(s, inst, 'amount', 1);
+      let base = initNum(inst, 'base', 50, 50, 60), width = initNum(inst, 'width', 2, 0.5, 20);
+      let count = Math.round(initNum(inst, 'harmonics', 4, 1, 8));
+      const filters = [], switches = [];
+      let prev = input;
+      for (let i = 1; i <= 8; i++) {
+        const hz = Math.min(base * i, ctx.sampleRate * 0.45);
+        const notch = s.biquad('notch', hz, Math.max(0.1, hz / width));
+        const pair = bypassPair(s, prev, notch, notch, i <= count && base * i < ctx.sampleRate * 0.45);
+        filters.push(notch); switches.push(pairTargets(pair, v => i <= Math.round(v) && base * i < ctx.sampleRate * 0.45)[0]);
+        prev = pair.out;
+      }
+      input.connect(wd.dry); wd.dry.connect(out);
+      prev.connect(wd.wet); wd.wet.connect(out);
+      const set = (ap, v, when, ramp) => { if (ramp) ap.linearRampToValueAtTime(v, when); else ap.setValueAtTime(v, when); };
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          base: function (v, when, ramp) {
+            base = v;
+            for (let i = 0; i < 8; i++) {
+              const hz = Math.min(base * (i + 1), ctx.sampleRate * 0.45);
+              set(filters[i].frequency, hz, when, ramp);
+              set(filters[i].Q, Math.max(0.1, hz / width), when, ramp);
+              switches[i](count, when, ramp);
+            }
+          },
+          harmonics: function (v, when, ramp) { count = Math.round(v); for (let i = 0; i < 8; i++) switches[i](count, when, ramp); },
+          width: function (v, when, ramp) {
+            width = v;
+            for (let i = 0; i < 8; i++) set(filters[i].Q, Math.max(0.1, Math.min(base * (i + 1), ctx.sampleRate * 0.45) / width), when, ramp);
+          },
+          amount: wd.set,
+        } });
     },
   },
     filterDef('lowpass', 'Low-Pass', 'lowpass', 40, 20000, 8000, 0.1, 20, 1),
@@ -825,6 +1021,102 @@ window.FM = window.FM || {};
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { width: w.gain } });
     },
   }, {
+    type: 'channelutility', label: 'Channel Utility', category: 'space',
+    params: [
+      Object.assign(P('mode', 'Channels', 0, 4, 1, 0, '', false), { options: [
+        [0, 'Stereo'], [1, 'Mono'], [2, 'Left → both'], [3, 'Right → both'], [4, 'Swap']
+      ] }),
+      Object.assign(P('invertL', 'Invert left', 0, 1, 1, 0, '', false), { options: [[0, 'Off'], [1, 'On']] }),
+      Object.assign(P('invertR', 'Invert right', 0, 1, 1, 0, '', false), { options: [[0, 'Off'], [1, 'On']] }),
+      P('balance', 'Balance', -1, 1, 0.01, 0, '', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = s.splitter(2), merge = s.merger(2);
+      const ll = s.gain(0), rl = s.gain(0), lr = s.gain(0), rr = s.gain(0);
+      input.connect(split);
+      split.connect(ll, 0); split.connect(lr, 0);
+      split.connect(rl, 1); split.connect(rr, 1);
+      ll.connect(merge, 0, 0); rl.connect(merge, 0, 0);
+      lr.connect(merge, 0, 1); rr.connect(merge, 0, 1);
+      merge.connect(out);
+      let mode = Math.round(initNum(inst, 'mode', 0, 0, 4));
+      let invertL = Math.round(initNum(inst, 'invertL', 0, 0, 1));
+      let invertR = Math.round(initNum(inst, 'invertR', 0, 0, 1));
+      let balance = initNum(inst, 'balance', 0, -1, 1);
+      const matrix = function () {
+        const m = [[1, 0, 0, 1], [0.5, 0.5, 0.5, 0.5], [1, 0, 1, 0], [0, 1, 0, 1], [0, 1, 1, 0]][mode];
+        const left = (invertL ? -1 : 1) * (balance > 0 ? 1 - balance : 1);
+        const right = (invertR ? -1 : 1) * (balance < 0 ? 1 + balance : 1);
+        return [m[0] * left, m[1] * left, m[2] * right, m[3] * right];
+      };
+      const aps = [ll.gain, rl.gain, lr.gain, rr.gain];
+      const initial = matrix();
+      for (let i = 0; i < 4; i++) aps[i].value = initial[i];
+      const update = function (when, ramp) {
+        const values = matrix();
+        for (let i = 0; i < 4; i++) {
+          if (ramp) aps[i].linearRampToValueAtTime(values[i], when);
+          else aps[i].setTargetAtTime(values[i], when, 0.005); // smooth a live channel/phase switch
+        }
+      };
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          mode: function (v, when, ramp) { const next = Math.round(v); if (next !== mode) { mode = next; update(when, ramp); } },
+          invertL: function (v, when, ramp) { const next = Math.round(v); if (next !== invertL) { invertL = next; update(when, ramp); } },
+          invertR: function (v, when, ramp) { const next = Math.round(v); if (next !== invertR) { invertR = next; update(when, ramp); } },
+          balance: function (v, when, ramp) { if (v !== balance) { balance = v; update(when, ramp); } },
+        } });
+    },
+  }, {
+    type: 'stereoizer', label: 'Stereoizer', category: 'space',
+    hint: 'Creates width from mono audio. Fold-down safe keeps the original centre when heard in mono; Haas is wider but can colour a mono mix.',
+    params: [
+      P('amount', 'Width', 0, 1, 0.01, 0.5, '', true),
+      P('delay', 'Delay', 1, 30, 0.5, 12, 'ms', true),
+      Object.assign(P('monoSafe', 'Fold-down safe', 0, 1, 1, 1, '', false), { options: [[0, 'Haas'], [1, 'Safe']] }),
+      P('lowcut', 'Side low cut', 20, 1000, 10, 150, 'Hz', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = s.splitter(2), safe = s.merger(2), haas = s.merger(2);
+      input.connect(split);
+      // Mid/side path: generated side is added to L and subtracted from R. The mono fold-down
+      // therefore equals the untouched mid signal at every sample, even when the input was mono.
+      const ml = s.gain(0.5), mr = s.gain(0.5), mid = s.gain(1);
+      const sl = s.gain(0.5), sr = s.gain(-0.5), side = s.gain(1);
+      split.connect(ml, 0); split.connect(mr, 1); ml.connect(mid); mr.connect(mid);
+      split.connect(sl, 0); split.connect(sr, 1); sl.connect(side); sr.connect(side);
+      const sf = s.biquad('highpass', 150, BUTTERWORTH_DB), sd = s.delay(0.05);
+      const add = s.gain(initNum(inst, 'amount', 0.5, 0, 1) * 0.5), wide = s.gain(1), opposite = s.gain(-1);
+      mid.connect(sf); sf.connect(sd); sd.connect(add); add.connect(wide);
+      side.connect(wide); wide.connect(opposite);
+      mid.connect(safe, 0, 0); wide.connect(safe, 0, 0);
+      mid.connect(safe, 0, 1); opposite.connect(safe, 0, 1);
+      // Optional Haas path moves only the high frequencies of the right channel, leaving bass
+      // centred. It is offered as an explicit choice because its mono fold-down can comb-filter.
+      const hf = s.biquad('highpass', 150, BUTTERWORTH_DB), hd = s.delay(0.05);
+      const amount = initNum(inst, 'amount', 0.5, 0, 1);
+      const subtract = s.gain(-amount), delayed = s.gain(amount);
+      split.connect(haas, 0, 0); split.connect(haas, 1, 1);
+      split.connect(hf, 1); hf.connect(subtract); subtract.connect(haas, 0, 1);
+      hf.connect(hd); hd.connect(delayed); delayed.connect(haas, 0, 1);
+      const ms = initNum(inst, 'monoSafe', 1, 0, 1) >= 0.5;
+      const gSafe = s.gain(ms ? 1 : 0), gHaas = s.gain(ms ? 0 : 1);
+      safe.connect(gSafe); haas.connect(gHaas); gSafe.connect(out); gHaas.connect(out);
+      const delay = initNum(inst, 'delay', 12, 1, 30) / 1000;
+      sd.delayTime.value = hd.delayTime.value = delay;
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          amount: multi([[add.gain, 0.5], [subtract.gain, -1], [delayed.gain, 1]]),
+          delay: multi([[sd.delayTime, 0.001], [hd.delayTime, 0.001]]),
+          monoSafe: pairTargets({ gOn: gSafe, gOff: gHaas }, v => v >= 0.5)[0],
+          lowcut: multi([[sf.frequency, null], [hf.frequency, null]]),
+        } });
+    },
+  }, {
     type: 'pan', label: 'Pan', category: 'space',
     params: [P('pan', 'Pan', -1, 1, 0.05, 0, '', true)],
     build: function (ctx) {
@@ -900,6 +1192,150 @@ window.FM = window.FM || {};
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
         params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee, output: out.gain },
         xf: { output: dbToLin }, custom: { mix: wd.set } });
+    },
+  }, {
+    type: 'noisegate', label: 'Noise Gate', category: 'dyn',
+    hint: 'Mutes room noise between sounds. A higher Threshold closes sooner; Hysteresis stops it chattering near that level.',
+    params: [
+      P('threshold', 'Threshold', -60, 0, 0.5, -40, 'dB', true),
+      P('floor', 'Floor', 0, 100, 1, 0, '%', true),
+      P('release', 'Release', 0.02, 1, 0.01, 0.15, 's', true),
+      P('lookahead', 'Lookahead', 0, 20, 1, 5, 'ms', true),
+      P('hysteresis', 'Hysteresis', 0, 12, 0.5, 6, 'dB', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      const audioLag = s.delay(0.05), gate = s.gain(0);
+      const detector = s.gain(1);
+      detector.channelCount = 1; detector.channelCountMode = 'explicit'; detector.channelInterpretation = 'speakers';
+      const rect = s.shaper(WAH_RECTIFY), envelope = s.biquad('lowpass', 120, BUTTERWORTH_DB);
+      const threshold = s.gain(0.5 / dbToLin(-40)), sum = s.gain(1);
+      const compare = s.shaper(GATE_STEP);
+      const stateLag = s.delay(0.01), hysteresis = s.gain(0);
+      stateLag.delayTime.value = 128 / ctx.sampleRate;
+      input.connect(detector); detector.connect(rect); rect.connect(envelope);
+      envelope.connect(threshold); threshold.connect(sum); sum.connect(compare);
+      // A one-render-quantum feedback path is a Schmitt trigger: open at Threshold,
+      // stay open until the envelope falls by Hysteresis. Delay breaks the graph cycle.
+      compare.connect(stateLag); stateLag.connect(hysteresis); hysteresis.connect(sum);
+      const fast = s.biquad('lowpass', 200, BUTTERWORTH_DB);
+      const slow = s.biquad('lowpass', 1 / (2 * Math.PI * 0.15), BUTTERWORTH_DB);
+      compare.connect(fast); compare.connect(slow);
+      // max(fast, slow) gives a fast opening and a slow release without a timer or worklet.
+      const halfFast = s.gain(0.5), halfSlow = s.gain(0.5);
+      const negSlow = s.gain(-1), difference = s.gain(1), absolute = s.shaper(WAH_RECTIFY);
+      const halfAbs = s.gain(0.5), max = s.gain(1), cap = s.shaper(WAH_ENVELOPE_LIMIT);
+      fast.connect(halfFast); halfFast.connect(max);
+      slow.connect(halfSlow); halfSlow.connect(max);
+      fast.connect(difference); slow.connect(negSlow); negSlow.connect(difference);
+      difference.connect(absolute); absolute.connect(halfAbs); halfAbs.connect(max);
+      max.connect(cap);
+      const control = s.gain(1); cap.connect(control); control.connect(gate.gain);
+      input.connect(audioLag); audioLag.connect(gate); gate.connect(out);
+      const set = (ap, v, when, ramp) => {
+        if (ramp) ap.linearRampToValueAtTime(v, when); else ap.setValueAtTime(v, when);
+      };
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { lookahead: audioLag.delayTime }, xf: { lookahead: v => v / 1000 },
+        custom: {
+          threshold: (v, when, ramp) => set(threshold.gain, 0.5 / dbToLin(v), when, ramp),
+          floor: (v, when, ramp) => {
+            const f = clamp(v / 100, 0, 1);
+            set(gate.gain, f, when, ramp); set(control.gain, 1 - f, when, ramp);
+          },
+          release: (v, when, ramp) => set(slow.frequency, 1 / (2 * Math.PI * v), when, ramp),
+          hysteresis: (v, when, ramp) => set(hysteresis.gain, 0.5 * (1 - dbToLin(-v)), when, ramp),
+        },
+      });
+    },
+  }, {
+    type: 'loudnessmatch', label: 'Loudness Match', category: 'dyn',
+    hint: 'Measures the clip before matching its average level. Peak guard may hold the result below Target to avoid clipping; it checks sample peaks, not true peaks. Files over 64 MB or clips over 3 minutes need an already decoded buffer; clips over 10 minutes stay unchanged.',
+    params: [
+      Object.assign(P('target', 'Target', 0, 3, 1, 1, '', false), { options: [[0, '−23 LUFS'], [1, '−16 LUFS'], [2, '−14 LUFS'], [3, '−9 LUFS']] }),
+      Object.assign(P('guard', 'Peak guard', 0, 1, 1, 1, '', false), { options: [[0, 'Off'], [1, 'On']] }),
+      P('ceiling', 'Peak ceiling', -6, 0, 0.5, -1, 'dB', false),
+    ],
+    build: function (ctx, inst, layer) {
+      const s = shop(ctx), input = s.gain(1), gain = s.gain(1), out = s.gain(1);
+      const limited = s.gain(1), direct = s.gain(0), pre = s.gain(1), post = s.gain(1);
+      const clip = s.shaper(HARD_CLIP);
+      input.connect(gain); gain.connect(pre); pre.connect(clip); clip.connect(post); post.connect(limited); limited.connect(out);
+      gain.connect(direct); direct.connect(out);
+      const media = layer && FM.media && FM.media.get(layer.id);
+      const measured = media && media._loudKey === loudnessKey(layer) ? media._loudness : null;
+      let target = initNum(inst, 'target', 1, 0, 3), guard = initNum(inst, 'guard', 1, 0, 1);
+      let ceiling = initNum(inst, 'ceiling', -1, -6, 0);
+      function update(when) {
+        const chosen = [-23, -16, -14, -9][Math.round(target)];
+        const ready = measured && Number.isFinite(measured.lufs);
+        const desired = ready ? dbToLin(chosen - measured.lufs) : 1;
+        const cap = dbToLin(ceiling);
+        const held = guard >= 0.5 && ready && measured.peak > 0 ? Math.min(desired, cap / measured.peak) : desired;
+        gain.gain.setValueAtTime(Math.min(64, Math.max(0, held)), when);
+        limited.gain.setValueAtTime(ready && guard >= 0.5 ? 1 : 0, when);
+        direct.gain.setValueAtTime(ready && guard >= 0.5 ? 0 : 1, when);
+        pre.gain.setValueAtTime(1 / cap, when);
+        post.gain.setValueAtTime(cap, when);
+      }
+      update(0);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: {
+        target: function (v, when) { target = v; update(when); },
+        guard: function (v, when) { guard = v; update(when); },
+        ceiling: function (v, when) { ceiling = v; update(when); },
+      } });
+    },
+  }, {
+    type: 'deesser', label: 'De-esser', category: 'dyn',
+    hint: 'Compresses the high-frequency sibilance band only. Listen isolates that band while you tune it.',
+    params: [
+      P('frequency', 'Sibilance at', 3000, 10000, 100, 6000, 'Hz', true),
+      P('threshold', 'Threshold', -60, 0, 0.5, -30, 'dB', true),
+      P('reduction', 'Reduction', 0, 100, 1, 50, '%', true),
+      Object.assign(P('listen', 'Listen', 0, 1, 1, 0, '', false), { options: [[0, 'Off'], [1, 'Sibilance']] }),
+      MIX(1),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      const hp = s.biquad('highpass', 6000, BUTTERWORTH_DB);
+      const c = s.comp();
+      let threshold = initNum(inst, 'threshold', -30, -60, 0);
+      let reduction = initNum(inst, 'reduction', 50, 0, 100);
+      const ratio = () => 1 + 19 * reduction / 100;
+      c.threshold.value = threshold; c.ratio.value = ratio(); c.knee.value = 0;
+      c.attack.value = 0.001; c.release.value = 0.08;
+      const trim = s.gain(hardKneeMakeupCancel(threshold, ratio()));
+      // The high-pass band is subtracted from a matching delayed copy of the full signal. Added
+      // back after compression, it changes only the sibilance band; at Reduction 0 the sum is unity.
+      const lagSec = Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate;
+      const fullLag = s.delay(0.05), highLag = s.delay(0.05), neg = s.gain(-1), low = s.gain(1);
+      fullLag.delayTime.value = highLag.delayTime.value = lagSec;
+      const wd = wetDry(s, inst, 'mix', 1), main = s.gain(1);
+      const listen = initNum(inst, 'listen', 0, 0, 1) >= 0.5;
+      const gListen = s.gain(listen ? 1 : 0), gMain = s.gain(listen ? 0 : 1);
+      input.connect(fullLag); input.connect(hp);
+      hp.connect(highLag); hp.connect(c); c.connect(trim);
+      fullLag.connect(low); highLag.connect(neg); neg.connect(low);
+      low.connect(wd.wet); trim.connect(wd.wet);
+      fullLag.connect(wd.dry);
+      wd.wet.connect(main); wd.dry.connect(main); main.connect(gMain); gMain.connect(out);
+      highLag.connect(gListen); gListen.connect(out);
+      const monitor = pairTargets({ gOn: gListen, gOff: gMain }, v => v >= 0.5)[0];
+      const set = (ap, v, when, ramp) => { if (ramp) ap.linearRampToValueAtTime(v, when); else ap.setValueAtTime(v, when); };
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { frequency: hp.frequency },
+        custom: {
+          threshold: function (v, when, ramp) {
+            threshold = v; set(c.threshold, v, when, ramp);
+            set(trim.gain, hardKneeMakeupCancel(v, ratio()), when, ramp);
+          },
+          reduction: function (v, when, ramp) {
+            reduction = v; set(c.ratio, ratio(), when, ramp);
+            set(trim.gain, hardKneeMakeupCancel(threshold, ratio()), when, ramp);
+          },
+          listen: monitor,
+          mix: wd.set,
+        } });
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
@@ -1231,6 +1667,58 @@ window.FM = window.FM || {};
       return unit({ input: d, output: d, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi([[amp.gain, 0.003]]) } });
     },
   }, {
+    type: 'autowah', label: 'Auto-Wah', category: 'char',
+    params: [
+      Object.assign(P('mode', 'Motion', 0, 1, 1, 0, '', false), { options: ['LFO', 'Envelope'] }),
+      P('base', 'Base', 200, 4000, 1, 500, 'Hz', true),
+      P('range', 'Range', 100, 5000, 1, 2500, 'Hz', true),
+      P('resonance', 'Resonance', 0.5, 15, 0.1, 5, '', true),
+      P('rate', 'Rate', 0.1, 8, 0.01, 2, 'Hz', true),
+      P('sensitivity', 'Sensitivity', 0.25, 10, 0.05, 4, '', true),
+      MIX(1),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx);
+      const input = s.gain(1), out = s.gain(1);
+      const wd = wetDry(s, inst, 'mix', 1);
+      const base = initNum(inst, 'base', 500, 200, 4000);
+      const wah = s.biquad('bandpass', base, initNum(inst, 'resonance', 5, 0.5, 15));
+      input.connect(wd.dry).connect(out);
+      input.connect(wah); wah.connect(wd.wet); wd.wet.connect(out);
+
+      // AudioParam modulation lets both preview and offline export follow the same envelope
+      // without a timer, ScriptProcessor or a different render path. Sum base + range * 0..1.
+      const envelopeMode = initNum(inst, 'mode', 0, 0, 1) >= 0.5;
+      const lfo = s.lfo(2, { key: 'rate', wave: 'win' });
+      const lfoRange = s.gain(initNum(inst, 'range', 2500, 100, 5000));
+      const lfoOn = s.gain(envelopeMode ? 0 : 1);
+      lfo.connect(lfoRange); lfoRange.connect(lfoOn); lfoOn.connect(wah.frequency);
+
+      // Explicit speaker downmix makes stereo left/right contribute to one detector.
+      const detector = s.gain(1);
+      detector.channelCount = 1;
+      detector.channelCountMode = 'explicit';
+      detector.channelInterpretation = 'speakers';
+      const rect = s.shaper(WAH_RECTIFY);
+      const smooth = s.biquad('lowpass', 12, BUTTERWORTH_DB);
+      const sensitivity = s.gain(initNum(inst, 'sensitivity', 4, 0.25, 10));
+      const limit = s.shaper(WAH_ENVELOPE_LIMIT);
+      const envRange = s.gain(initNum(inst, 'range', 2500, 100, 5000));
+      const envOn = s.gain(envelopeMode ? 1 : 0);
+      input.connect(detector); detector.connect(rect); rect.connect(smooth);
+      smooth.connect(sensitivity); sensitivity.connect(limit);
+      limit.connect(envRange); envRange.connect(envOn); envOn.connect(wah.frequency);
+      return unit({
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        params: { base: wah.frequency, resonance: wah.Q, rate: lfo.playbackRate, sensitivity: sensitivity.gain },
+        custom: {
+          mode: pairTargets({ gOn: envOn, gOff: lfoOn }, v => v >= 0.5)[0],
+          range: multi([[lfoRange.gain, null], [envRange.gain, null]]),
+          mix: wd.set,
+        },
+      });
+    },
+  }, {
     type: 'ringmod', label: 'Ring Mod', category: 'char',
     params: [P('freq', 'Frequency', 10, 2000, 1, 220, 'Hz', true), MIX(1)],
     build: function (ctx, inst) {
@@ -1508,19 +1996,26 @@ window.FM = window.FM || {};
   const TAGS = {
     bassTreble: ['bass boost', 'bass', 'treble', 'tone', 'warmer', 'brighter'],
     eq3: ['equaliser', 'equalizer', 'eq', 'tone', 'mids'],
+    graphicEq: ['equaliser', 'equalizer', '10 band', 'bass boost', 'voice clarity', 'tone curve'],
     lowpass: ['muffled', 'underwater', 'next room', 'through a wall', 'dull', 'dark'],
     highpass: ['thin', 'rumble', 'cut bass', 'wind noise'],
     bandpass: ['focus', 'narrow'],
     notch: ['hum', 'buzz', 'remove hum'],
+    humremove: ['mains hum', 'electrical hum', '50 hz', '60 hz', 'buzz', 'power line'],
     telephone: ['phone', 'phone call', 'radio', 'walkie', 'walkie talkie', 'megaphone', 'call'],
     reverb: ['room', 'hall', 'church', 'cave', 'cathedral', 'echo'],
     delay: ['repeat', 'echo'],
     pingpong: ['bounce', 'left right', 'stereo echo'],
     width: ['wide', 'stereo', 'mono', 'narrow'],
+    stereoizer: ['mono to stereo', 'haas', 'width', 'wide', 'fold down safe'],
+    channelutility: ['mono', 'swap channels', 'left channel', 'right channel', 'phase invert', 'balance'],
     pan: ['left', 'right', 'balance'],
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
     gain: ['louder', 'quieter', 'volume', 'boost'],
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
+    noisegate: ['noise gate', 'room noise', 'hiss', 'background noise', 'silence'],
+    loudnessmatch: ['loudness', 'lufs', 'normalise', 'normalize', 'podcast', 'voice level'],
+    deesser: ['sibilance', 'ess', 'harsh s', 'sharp voice', 'reduce s'],
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
     tremolo: ['wobble', 'pulse', 'throb'],
     distortion: ['fuzz', 'overdrive', 'crunch', 'guitar', 'distorted', 'blown out'],
@@ -1530,6 +2025,7 @@ window.FM = window.FM || {};
     flanger: ['jet', 'whoosh', 'sweep'],
     phaser: ['swirl', 'sweep', 'swoosh'],
     vibrato: ['warble', 'wobble', 'wavy'],
+    autowah: ['wah', 'guitar', 'sweep', 'envelope follower', 'filter sweep'],
     ringmod: ['robot', 'robot voice', 'dalek', 'metallic', 'alien'],
     vocalremove: ['karaoke', 'instrumental', 'acapella', 'a cappella', 'remove vocals', 'no vocals', 'backing track'],
     pitch: ['chipmunk', 'deep voice', 'helium', 'higher', 'lower', 'key', 'voice changer', 'fine tune', 'detune'],   // the last two: #482 3.5's Fine tune
@@ -1584,7 +2080,7 @@ window.FM = window.FM || {};
     list.forEach(inst => {
       const def = REG[inst.type];
       let u = null;
-      try { u = def.build(ctx, inst); } catch (e) { u = null; }   // one bad effect must not silence the clip
+      try { u = def.build(ctx, inst, layer); } catch (e) { u = null; }   // one bad effect must not silence the clip
       if (!u) return;
       prev.connect(u.input);
       prev = u.output;

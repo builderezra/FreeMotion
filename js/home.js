@@ -2006,8 +2006,26 @@ window.FM = window.FM || {};
         // the same .fmotion.json a project saves, so whoever you send it to can already open it.
         { label: 'Save template file…', action: async () => {
           if (FM.toast) FM.toast('Packing…', 1200);
-          const ok = await FM.templates.exportFile(t.id);
-          if (FM.toast) FM.toast(ok ? 'Template file saved — send it to anyone' : 'Could not save that template file');
+          const result = await FM.templates.exportFile(t.id);
+          if (FM.toast) {
+            const missing = result && result.omitted || [];
+            const fonts = result && result.omittedFonts || [];
+            const fontNote = fonts.length ? 'WITHOUT ' + fonts.length + (fonts.length === 1 ? ' custom font — ' : ' custom fonts — ') +
+              fonts.slice(0, 2).map(f => (f.name || 'Custom font') + (f.tooBig ? ' (too big)' : ' (not stored)')).join(', ') +
+              (fonts.length > 2 ? ' and more' : '') + '. Text may use a fallback on another device.' : '';
+            if (!result) FM.toast('Could not save that template file');
+            else if (missing.length) {
+              const absent = missing.filter(m => m.missing);
+              const names = absent.concat(missing.filter(m => !m.missing)).slice(0, 2).map(m =>
+                m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
+              FM.toast('Template file saved WITHOUT ' + missing.length +
+                (missing.length === 1 ? ' media file — ' : ' media files — ') + names +
+                (missing.length > 2 ? ' and more' : '') + '. ' +
+                (absent.length ? 'Re-import or replace missing source media. ' : '') +
+                (missing.length > absent.length ? 'Use a smaller clip for files that are too big.' : '') + (fontNote ? ' Also ' + fontNote : ''), 12000);
+            }
+            else FM.toast(fonts.length ? 'Template file saved ' + fontNote : 'Template file saved — send it to anyone', fonts.length ? 12000 : undefined);
+          }
         } },
         pinMenuItem('templates', t.id),
         { label: 'Select…', action: () => enterSelect(t.id) },
