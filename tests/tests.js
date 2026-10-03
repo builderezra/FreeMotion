@@ -120275,6 +120275,52 @@
     }
   });
 
+  test('Vector Mono loads both fixed-width faces and previews in the font picker', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const font = FM.studioFonts.list().find(f => f.name === 'FM Vector Mono');
+    if (!font || font.group !== 'original' || !font.regular.endsWith('fm-vector-mono-regular.woff2') || !font.bold.endsWith('fm-vector-mono-bold.woff2')) {
+      throw new Error('the original Vector Mono family or one of its weights is missing');
+    }
+    await FM.studioFonts.forScene({ layers: [
+      { type: 'text', fontFamily: font.css, bold: false },
+      { type: 'caption', fontFamily: font.css, bold: true },
+    ] });
+    const faceLoaded = weight => Array.from(document.fonts).some(face =>
+      face.family.replace(/^"|"$/g, '') === font.family && face.weight === weight && face.status === 'loaded');
+    if (!faceLoaded('400') || !faceLoaded('700')) throw new Error('Vector Mono did not load both weights');
+    const canvas = document.createElement('canvas'); canvas.width = 900; canvas.height = 110;
+    const ctx = canvas.getContext('2d');
+    const ink = weight => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = weight + ' 64px ' + font.css;
+      const digits = ctx.measureText('111111').width;
+      const capitals = ctx.measureText('WWWWWW').width;
+      if (Math.abs(digits - capitals) > .2) throw new Error('Vector Mono lost fixed-width spacing');
+      ctx.fillText('VECTOR 2026', 10, 78);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let alpha = 0;
+      for (let i = 3; i < pixels.length; i += 4) alpha += pixels[i];
+      return alpha;
+    };
+    if (!(ink('700') > ink('400') * 1.08)) throw new Error('Vector Mono Bold did not draw visibly heavier than Regular');
+
+    const saved = FM.scene.layers.slice(), selected = FM.scene.selectedId;
+    const layer = FM.makeLayer('text', { text: '01:23', x: 60, y: 50, fontFamily: font.css });
+    try {
+      FM.scene.layers.push(layer); FM.selectLayer(layer.id); FM.refreshAll();
+      FM.textEdit.start(layer.id);
+      const button = document.querySelector('.te-font');
+      if (!button) throw new Error('the font picker button is missing');
+      button.click();
+      const card = Array.from(document.querySelectorAll('.te-font-card')).find(c => c.textContent.includes('FM Vector Mono'));
+      const sample = card && card.querySelector('.te-font-abc');
+      if (!sample || sample.style.fontFamily !== font.css) throw new Error('Vector Mono has no live picker sample');
+    } finally {
+      if (FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0; saved.forEach(old => FM.scene.layers.push(old));
+      FM.selectLayer(selected || null); FM.refreshAll();
+    }
+  });
+
   test('Fraunces Regular and Bold load as distinct bundled faces', { item: 'TBD', budgetMs: 30000 }, async function () {
     const font = FM.studioFonts.list().find(f => f.name === 'Fraunces 72pt Soft');
     if (!font || !/Fraunces72ptSoft-Regular\.ttf$/.test(font.regular) || !/Fraunces72ptSoft-Bold\.ttf$/.test(font.bold)) {
