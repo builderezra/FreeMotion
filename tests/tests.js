@@ -119203,4 +119203,21 @@
     } finally { FM.projects = oldProjects; FM.toast = oldToast; }
   });
 
+  test('690 corrupt embedded font does not abort project import silently', { item: 'TBD' }, async function () {
+    const oldScene = FM.scene, oldToast = FM.toast, said = [];
+    try {
+      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
+      FM.toast = function (message) { said.push(String(message)); };
+      const file = { project: Object.assign({}, FM.scene.project), layers: [], fonts: {
+        bad: { family: 'FMFcorruptImportTest', name: 'broken.ttf', dataURL: 'not-an-embedded-font' }
+      } };
+      if (await FM.storage.applyScene(file) !== true) throw new Error('A corrupt font aborted the whole project import');
+      if (!said.some(message => message.includes('embedded font') && message.includes('fallback')))
+        throw new Error('A corrupt font was skipped without explaining the text fallback');
+    } finally {
+      FM.scene = oldScene; FM.toast = oldToast;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
 })();

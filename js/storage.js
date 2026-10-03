@@ -1738,7 +1738,12 @@ window.FM = window.FM || {};
     FM.scene.selectedId = (obj.selectedId && re.map[obj.selectedId]) || (re.layers[0] ? re.layers[0].id : null);
     FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : []).map(id => re.map[id]).filter(Boolean);
     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
-    if (FM.fonts && obj.fonts) await FM.fonts.applyEmbedded(obj.fonts);   // register any fonts carried in the file
+    if (FM.fonts && obj.fonts) {
+      let missingFonts = 0;
+      try { missingFonts = await FM.fonts.applyEmbedded(obj.fonts); }
+      catch (e) { missingFonts = 1; }
+      if (missingFonts && FM.toast) FM.toast(missingFonts + (missingFonts === 1 ? ' embedded font could' : ' embedded fonts could') + ' not be restored — text may use a fallback font.', 7000);
+    }
     const hydratedMediaIds = new Set();
     if (obj.media) {
       for (const id of Object.keys(obj.media)) {
@@ -3772,22 +3777,28 @@ window.FM = window.FM || {};
     // Register fonts embedded in an imported .fmotion.json so its text renders on this device too.
     // Adds only fonts the library doesn't already have, keyed by their (stable) family token.
     async applyEmbedded(fontsObj) {
-      if (!fontsObj) return;
+      if (!fontsObj) return 0;
+      if (typeof fontsObj !== 'object' || Array.isArray(fontsObj)) return 1;
       const idx = this.list();
       const haveFam = new Set(idx.map(f => f.family));
+      let failed = 0, added = 0;
       for (const key of Object.keys(fontsObj)) {
         const fd = fontsObj[key];
-        if (!fd || !fd.family || haveFam.has(fd.family)) continue;
-        const file = await dataURLToFile(fd.dataURL, fd.name || 'font');   // rejects non-data: URLs
-        if (!file || !await registerFace(fd.family, file)) continue;
+        if (!fd || typeof fd.family !== 'string' || !fd.family) { failed++; continue; }
+        if (haveFam.has(fd.family)) continue;
+        let file = null;
+        try { file = await dataURLToFile(fd.dataURL, fd.name || 'font'); } catch (e) {}
+        if (!file || !await registerFace(fd.family, file)) { failed++; continue; }
         const nid = newId('f'); _fontReg.add(nid);
         let put = false;   // queue 915 clause 2: registered for this session either way, but only a stored font is listed
         try { const db = await openDB(); put = await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
-        if (!put) { _fontReg.delete(nid); continue; }
+        if (!put) { _fontReg.delete(nid); failed++; continue; }
         idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
         haveFam.add(fd.family);
+        added++;
       }
-      writeJSON(FONT_INDEX, idx);
+      if (added && !writeJSON(FONT_INDEX, idx)) failed += added;
+      return failed;
     },
   };
 
