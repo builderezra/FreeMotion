@@ -118538,5 +118538,28 @@
     }
   });
 
+  test('690 Laser Beam draws between project points across a cropped plate', { item: 'TBD' }, function () {
+    const reg = FM.fxRegistry.get('laserbeam'), tables = FM._FX_TABLES;
+    const fn = tables && tables.CANVAS_FX.laserbeam;
+    if (!reg || reg.category !== 'proc' || !fn || !FM._postFxTypes().includes('laserbeam') || !tables.CFX_NO_BBOX.laserbeam)
+      throw new Error('Laser Beam is not registered and routed');
+    const strokes = [], ctx = {
+      drawImage() {}, save() {}, restore() {}, beginPath() {},
+      moveTo(x, y) { this.start = [x, y]; }, lineTo(x, y) { this.end = [x, y]; },
+      stroke() { strokes.push({ start: this.start, end: this.end, width: this.lineWidth, alpha: this.globalAlpha }); },
+    };
+    const canvas = { __fmOX: 10, __fmOY: 20 };
+    const scene = { project: { width: 100, height: 100 } };
+    const p = { x1: 10, y1: 20, x2: 90, y2: 80, width: 6, glow: 100, intensity: 100, pulse: 0, color: '#ff4055' };
+    fn(canvas, ctx, 100, 100, null, p, 0, 0, {}, 1, null, scene);
+    if (strokes.length !== 4 || strokes.some(s => s.start[0] !== 0 || s.start[1] !== 0 || s.end[0] !== 80 || s.end[1] !== 60))
+      throw new Error('Beam missed project points after viewport offset');
+    if (!(strokes[0].width > strokes[2].width && strokes[3].width < strokes[2].width))
+      throw new Error('Glow and core widths are not distinct');
+    strokes.length = 0;
+    fn(canvas, ctx, 100, 100, null, { ...p, intensity: 0 }, 0, 0, {}, 1, null, scene);
+    if (strokes.length) throw new Error('Zero intensity still drew a beam');
+  });
+
 
 })();

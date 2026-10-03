@@ -674,6 +674,16 @@ window.FM = window.FM || {};
       { key: 'spin', label: 'Spin', min: -360, max: 360, step: 1, def: 0, unit: '°/s' },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Screen'], [2, 'Add']], def: 1 },
     ] },
+    { type: 'laserbeam', label: 'Laser Beam', desc: 'Draw a straight glowing beam between two movable points, with a bright core and optional pulse.', color: true, defColor: '#ff4055', colorLabel: 'Beam colour', params: [
+      { key: 'x1', label: 'Start X', min: 0, max: 100, step: 1, def: 10, unit: '%' },
+      { key: 'y1', label: 'Start Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'x2', label: 'End X', min: 0, max: 100, step: 1, def: 90, unit: '%' },
+      { key: 'y2', label: 'End Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'width', label: 'Beam width', min: 1, max: 60, step: 1, def: 6, unit: 'px' },
+      { key: 'glow', label: 'Glow', min: 0, max: 100, step: 1, def: 70, unit: '%' },
+      { key: 'intensity', label: 'Intensity', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'pulse', label: 'Pulse', min: 0, max: 10, step: 0.1, def: 0, unit: 'Hz' },
+    ] },
     { type: 'lensmagnifier', label: 'Lens Magnifier', desc: 'Magnify this layer under a movable lens, with a feathered edge, border and shadow.', color: true, defColor: '#ffffff', colorLabel: 'Border', params: [
       { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -3760,7 +3770,7 @@ window.FM = window.FM || {};
     motionblur: 1, colorbalance: 1, highlightsshadows: 1, tiltshift: 1,   // motionblur ROUTES here still — but lands in CANVAS_FX now (GPU), its PIXEL_FX kernel is gone
     dropshadow: 1, chromaticaberration: 1, innerglow: 1, unsharpmask: 1, hextiles: 1, linstreaks: 1,
     blink: 1, flicker: 1, pulseopacity: 1, dissolve: 1, blockdissolve: 1, flashdark: 1,
-    wipe: 1, radialwipe: 1, venetianblinds: 1, radiowaves: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
+    wipe: 1, radialwipe: 1, venetianblinds: 1, radiowaves: 1, laserbeam: 1, solidmatte: 1, mattechoker: 1, mattefringe: 1,
     gridrepeat: 1, linearrepeat: 1, radialrepeat: 1, mirrortile: 1, scatterarray: 1, circlearray: 1,
     channelremap: 1, gradientoverlay: 1, lensflare: 1, roughenedges: 1, hexarray: 1,
     electricedges: 1, glowscan: 1, spinstreaks: 1, fractalridges: 1, smoothbevel: 1,
@@ -11957,7 +11967,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      expanded-plate cost off frames where the layer is nowhere near an edge — and the full-frame placeholder this list
      hands them made `near` always true, so all three rendered a second full plate every frame. They get the fast
      alpha scan like everything else; pixels unchanged, one drawLayer per frame again. */
-  const CFX_NO_BBOX = { vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, radiowaves: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, radiowaves: 1, laserbeam: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   Object.setPrototypeOf(CFX_NO_BBOX, null);   // own keys only — see POSTFX
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
@@ -12859,6 +12869,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         B.stroke();
       }
+      B.restore();
+    },
+    laserbeam: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+      B.drawImage(A, 0, 0);
+      var intensity = Math.max(0, Math.min(1, fparam(p, 'intensity', 100, t) / 100));
+      if (!intensity) return;
+      var scale = ps > 0 ? ps : 1, project = scene && scene.project;
+      var pw = project ? project.width : W / scale, ph = project ? project.height : H / scale;
+      var x1 = (pw * fparam(p, 'x1', 10, t) / 100 - (A.__fmOX || 0)) * scale;
+      var y1 = (ph * fparam(p, 'y1', 50, t) / 100 - (A.__fmOY || 0)) * scale;
+      var x2 = (pw * fparam(p, 'x2', 90, t) / 100 - (A.__fmOX || 0)) * scale;
+      var y2 = (ph * fparam(p, 'y2', 50, t) / 100 - (A.__fmOY || 0)) * scale;
+      var width = Math.max(1, Math.min(60, fparam(p, 'width', 6, t))) * scale;
+      var glow = Math.max(0, Math.min(1, fparam(p, 'glow', 70, t) / 100));
+      var pulse = Math.max(0, Math.min(10, fparam(p, 'pulse', 0, t)));
+      var clock = Math.max(0, tl == null ? t : tl);
+      var strength = intensity * (pulse ? 0.7 + 0.3 * Math.sin(clock * pulse * Math.PI * 2) : 1);
+      var color = p.color || '#ff4055';
+      B.save(); B.globalCompositeOperation = 'lighter'; B.lineCap = 'round';
+      function stroke(w, alpha, c) {
+        B.globalAlpha = alpha * strength; B.strokeStyle = c; B.lineWidth = w;
+        B.beginPath(); B.moveTo(x1, y1); B.lineTo(x2, y2); B.stroke();
+      }
+      if (glow) { stroke(width * 6, glow * 0.08, color); stroke(width * 2.6, glow * 0.22, color); }
+      stroke(width, 0.8, color);
+      stroke(Math.max(1, width * 0.22), 0.95, '#ffffff');
       B.restore();
     },
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
