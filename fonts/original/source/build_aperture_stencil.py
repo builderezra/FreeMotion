@@ -181,6 +181,7 @@ def design(weight):
         y=0 if kind=='cedilla' else height+67
         all_glyphs[ch]=(adv,unary_union([shape,mark(kind,adv/2,y,weight)]))
     all_glyphs['•']=(360,box(138,329,222,413))
+    all_glyphs['·']=(300,box(115,354,185,424))
     all_glyphs['–']=(660,strokes([[(74,353),(586,353)]],weight))
     all_glyphs['—']=(940,strokes([[(71,353),(869,353)]],weight))
     all_glyphs['“']=(455,strokes([[(135,520),(135,760)],[(320,520),(320,760)]],weight))

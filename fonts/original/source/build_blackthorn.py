@@ -228,6 +228,7 @@ def design(bold=False):
     put('“',381,line([(108,757),(82,550)],accent_width),line([(273,757),(247,550)],accent_width))
     put('”',381,line([(120,757),(94,550)],accent_width),line([(285,757),(259,550)],accent_width))
     put('•',319,diamond(159,271,61,63))
+    put('·',244,diamond(122,352,45,47))
     put('°',360,ring(104,256,513,740,accent_width))
     put('€',625,open_bowl(103,550,0,760),line([(87,476),(420,476)],accent_width),
         line([(87,270),(420,270)],accent_width))
