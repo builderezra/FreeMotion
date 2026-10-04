@@ -123058,6 +123058,27 @@
     }
   });
 
+  test('690 C23 all three glows add smooth passes without changing saved halos', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K) throw new Error('glow kernels unavailable');
+    const W = 21, H = 21, cx = 10, cy = 10;
+    const alpha = (d, dx) => d[((cy * W) + cx + dx) * 4 + 3];
+    for (const type of ['lightglow', 'softglow', 'darkglow']) {
+      const smoothness = FM.fxRegistry.paramsOf(type).find(p => p.key === 'passes');
+      if (!smoothness || smoothness.default !== 1) throw new Error(type + ' must default to one pass');
+      const make = () => { const d = new Uint8ClampedArray(W * H * 4);
+        const i = (cy * W + cx) * 4; d[i] = d[i+1] = d[i+2] = type === 'darkglow' ? 0 : 255; d[i+3] = 255;
+        return d; };
+      const base = { amount: 1, radius: type === 'softglow' ? 10 : 1, outside: 1 };
+      const run = p => { const d = make(); K[type](d, W, H, p, 0, 1); return d; };
+      const saved = run(base), one = run({ ...base, passes: 1 }), three = run({ ...base, passes: 3 });
+      for (let i = 0; i < saved.length; i++) if (saved[i] !== one[i])
+        throw new Error(type + ' changed saved output at byte ' + i);
+      if (alpha(one, 3) !== 0 || !(alpha(three, 1) > alpha(three, 2) && alpha(three, 2) > alpha(three, 3) && alpha(three, 3) > 0))
+        throw new Error(type + ' failed to extend a smoothly descending halo');
+    }
+  });
+
   test('690 C50 Vignette fits a 9:16 ellipse without changing saved circles', { item: 'TBD' }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
     if (!K || !K.vignette) throw new Error('Vignette canvas kernel unavailable');
