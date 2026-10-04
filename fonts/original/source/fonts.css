@@ -96,3 +96,17 @@
   font-weight: 700;
   font-display: swap;
 }
+@font-face {
+  font-family: 'FM Signal Pixel';
+  src: url('../fm-signal-pixel-regular.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'FM Signal Pixel';
+  src: url('../fm-signal-pixel-bold.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}

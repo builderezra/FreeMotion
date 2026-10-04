@@ -14,6 +14,7 @@
     { id: 'fm-vector-mono', name: 'FM Vector Mono', family: 'FM Vector Mono', css: '"FM Vector Mono", monospace', regular: 'original/fm-vector-mono-regular.woff2', bold: 'original/fm-vector-mono-bold.woff2', group: 'original' },
     { id: 'fm-foundry-slab', name: 'FM Foundry Slab', family: 'FM Foundry Slab', css: '"FM Foundry Slab", serif', regular: 'original/fm-foundry-slab-regular.woff2', bold: 'original/fm-foundry-slab-bold.woff2', group: 'original' },
     { id: 'fm-cloud-pop', name: 'FM Cloud Pop', family: 'FM Cloud Pop', css: '"FM Cloud Pop", sans-serif', regular: 'original/fm-cloud-pop-regular.woff2', bold: 'original/fm-cloud-pop-bold.woff2', group: 'original' },
+    { id: 'fm-signal-pixel', name: 'FM Signal Pixel', family: 'FM Signal Pixel', css: '"FM Signal Pixel", sans-serif', regular: 'original/fm-signal-pixel-regular.woff2', bold: 'original/fm-signal-pixel-bold.woff2', group: 'original' },
     { id: 'inter', name: 'Inter', family: 'Inter', css: 'Inter, sans-serif', regular: 'open/inter/Inter-Regular.woff2', bold: 'open/inter/Inter-Bold.woff2', group: 'open' },
     { id: 'outfit', name: 'Outfit', family: 'Outfit', css: '"Outfit", sans-serif', regular: 'open/outfit/Outfit-Regular.woff2', bold: 'open/outfit/Outfit-Bold.woff2', group: 'open' },
     { id: 'space-grotesk', name: 'Space Grotesk', family: 'Space Grotesk', css: '"Space Grotesk", sans-serif', regular: 'open/space-grotesk/SpaceGrotesk-Regular.woff2', bold: 'open/space-grotesk/SpaceGrotesk-Bold.woff2', group: 'open' },

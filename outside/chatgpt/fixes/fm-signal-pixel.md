@@ -1,0 +1,9 @@
+# FM Signal Pixel original font
+
+Starting commit: `a3f899b517e144267aed0ae479a57fed5dfcffa7` on isolated `codex/original-signal-pixel`.
+
+FM Signal Pixel adds a distinctly stepped, proportional pixel display face for retro titles, game overlays, counters and HUD labels. Its 7×9 character grids are hand-plotted in `fonts/original/source/build_signal_pixel.py`; the generator reads no third-party font or outline. Regular/Bold WOFF2 files each map 161 characters, including printable ASCII, common accents, Ł/ł and a bullet. The specimen `fonts/original/source/fm-signal-pixel-preview.png` was visually inspected at display, 48 px and 32 px sizes; a first draft's flat descenders and missing specimen characters were corrected before this checkpoint. The source/use note says the generated files can be bundled and used in users' videos without an external font-vendor fee.
+
+Changed files: `js/studio-fonts.js` adds the family; `index.html` advances its font script cache tag 8→9; `fonts/original/source/{build_signal_pixel.py,render_signal_pixel.py,fonts.css,ORIGINALITY_AND_USE.md,fm-signal-pixel-preview.png}` records source and preview; `fonts/original/fm-signal-pixel-{regular,bold}.woff2` are the shipped faces; `tests/tests.js` adds one focused `{ item: 'TBD' }` regression for both weights, canvas pixels and picker preview; this report records the isolated result.
+
+Checks: the generator produced both WOFF2 files; fontTools reopened them and verified 161 mapped characters, 400/700 weights and the specimen's accented text. The focused browser regression passed 1/1, loading both weights, rendering distinct canvas pixels and showing the live picker sample. JavaScriptCore parsed the changed JavaScript, Python compiled both source scripts, and `git diff --check` passed. Installed-iPhone text appearance and export remain unverified. Local only; no push, PR, deployment, protected-file edit or shared Claude checkout edit.
