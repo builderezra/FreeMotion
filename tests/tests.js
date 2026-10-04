@@ -124634,4 +124634,59 @@
     if (!FM.effectFilter({ effects: [fx] }, 0, 1).includes('blur(')) throw new Error('saved default Blur left its CSS path');
   });
 
+  test('690 C26 every geometric warp offers edge modes and optional smooth sampling', { item: 'TBD' }, function () {
+    const kernels = FM._warpFx;
+    if (!kernels || !FM._warpSample) throw new Error('shared warp sampling driver is missing');
+    const defs = FM.EFFECTS.filter(d => kernels[d.type]);
+    if (defs.length < 10) throw new Error('warp coverage is vacuous: ' + defs.length);
+    for (const d of defs) {
+      const edges = d.params.find(p => p.key === 'edges');
+      const smooth = d.params.find(p => p.key === 'smooth');
+      if (!edges || !smooth || edges.def !== 0 || smooth.def !== 0 || edges.options.length !== 4)
+        throw new Error(d.type + ' lacks backwards-compatible edge/smooth controls');
+    }
+    const src = new Uint8ClampedArray([
+      255, 0, 0, 255, 0, 0, 255, 255,
+      0, 255, 0, 255, 255, 255, 255, 255
+    ]), out = new Uint8ClampedArray(4);
+    const sample = (x, y, edges, smooth) => { FM._warpSample(src, 2, 2, x, y, edges, smooth, out, 0); return Array.from(out); };
+    if (sample(0.5, 0, 0, 0).join() !== '255,0,0,255') throw new Error('saved nearest sampling changed');
+    const middle = sample(0.5, 0, 0, 1);
+    if (!(middle[0] >= 126 && middle[0] <= 129 && middle[2] >= 126 && middle[2] <= 129 && middle[3] === 255))
+      throw new Error('smooth sampling did not interpolate a hard colour edge: ' + middle);
+    if (sample(-1, 0, 0, 0).join() !== '255,0,0,255' || sample(-1, 0, 1, 0)[3] !== 0 ||
+        sample(-1, 0, 2, 0).join() !== '0,0,255,255' || sample(-1, 0, 3, 0).join() !== '0,0,255,255')
+      throw new Error('Stretch/Transparent/Wrap/Mirror did not differ at the plate edge');
+    const translucent = sample(-0.5, 0, 1, 1);
+    if (translucent[0] !== 255 || translucent[3] < 126 || translucent[3] > 129)
+      throw new Error('transparent bilinear edge lost premultiplied colour: ' + translucent);
+
+    if (FM.glWarp && FM.glWarp.available && FM.glWarp.available()) {
+      const W = 240, H = 240, plate = document.createElement('canvas'); plate.width = W; plate.height = H;
+      const p = plate.getContext('2d'); p.fillStyle = '#ff0000'; p.fillRect(0, 0, 120, H);
+      p.fillStyle = '#0000ff'; p.fillRect(120, 0, 120, H);
+      const keep = FM._noGL; FM._noGL = false;
+      try {
+        const gpu = FM.glWarp.run(plate, W, H, 'return xy + vec2(0.5, 0.0);', { fmEdges: 0, fmSmooth: 1 });
+        if (!gpu) throw new Error('available GPU silently fell back on smooth warp');
+        const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        const c = cv.getContext('2d'); c.drawImage(gpu, 0, 0);
+        const px = c.getImageData(119, 100, 1, 1).data;
+        if (!(px[0] > 110 && px[0] < 145 && px[2] > 110 && px[2] < 145 && px[3] === 255))
+          throw new Error('GPU smooth warp failed to blend the same hard edge: ' + Array.from(px));
+        p.fillStyle = '#00ff00'; p.fillRect(1, 0, 1, H);
+        const edge = (mode, shift, smooth) => {
+          const result = FM.glWarp.run(plate, W, H, 'return xy + vec2(' + shift + ', 0.0);', { fmEdges: mode, fmSmooth: smooth });
+          if (!result) throw new Error('available GPU fell back at edge mode ' + mode);
+          c.clearRect(0, 0, W, H); c.drawImage(result, 0, 0);
+          return Array.from(c.getImageData(0, 100, 1, 1).data);
+        };
+        const trans = edge(1, -0.5, 1), wrap = edge(2, -1.0, 0), mirror = edge(3, -1.0, 0);
+        if (trans[0] < 250 || trans[3] < 125 || trans[3] > 130 ||
+            wrap[2] < 250 || wrap[3] !== 255 || mirror[1] < 250 || mirror[3] !== 255)
+          throw new Error('GPU transparent/wrap/mirror edge sampling differs: ' + JSON.stringify({ trans, wrap, mirror }));
+      } finally { FM._noGL = keep; }
+    }
+  });
+
 })();

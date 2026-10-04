@@ -148,6 +148,8 @@
       'uniform sampler2D src;',
       'uniform vec2 res;',
       'uniform float u_fmChainFlip;',
+      'uniform float u_fmEdges;',
+      'uniform float u_fmSmooth;',
       decls,
       PRELUDE,
       /* Two kernels read drawWarpEffect's RAW cx/cy/maxR arguments rather than their own prep, and
@@ -155,6 +157,14 @@
          cannot drift from what the CPU path was handed. */
       'vec2 fmC = res * 0.5;',
       'float fmCx = fmC.x, fmCy = fmC.y, fmMaxR = length(fmC);',
+      'vec4 fmTap(vec2 q){',
+      '  if (u_fmEdges > 0.5 && u_fmEdges < 1.5 && (q.x < 0.0 || q.y < 0.0 || q.x >= res.x || q.y >= res.y)) return vec4(0.0);',
+      '  if (u_fmEdges > 1.5 && u_fmEdges < 2.5) q = mod(mod(q, res) + res, res);',
+      '  else if (u_fmEdges > 2.5) q = vec2(reflectInto(q.x, res.x), reflectInto(q.y, res.y));',
+      '  else q = clamp(q, vec2(0.0), res - vec2(1.0));',
+      '  vec2 st = (q + vec2(0.5)) / res;',
+      '  return texture2D(src, vec2(st.x, abs(u_fmChainFlip - st.y)));',
+      '}',
       'vec2 fmWarp(vec2 xy){',
       body,
       '}',
@@ -168,8 +178,7 @@
          maps everything to a ring except the exact centre pixel, and the shader never visited the
          exact centre. MEASURED after this line: bulge's disagreement 0.125% -> 0.000%. */
       '  vec2 xy = floor(vec2(uv.x * res.x, (1.0 - uv.y) * res.y));',
-      '  vec2 s = floor(fmWarp(xy));',
-      '  s = clamp(s, vec2(0.0), res - vec2(1.0));',
+      '  vec2 mapped = fmWarp(xy);',
       /* ⚠️ WHERE ROW 0 OF THE SOURCE TEXTURE LIVES DEPENDS ON HOW IT GOT THERE, and getting this
          wrong flips the picture rather than breaking it — the failure looks like a wrong effect, not
          like a bug. A texture uploaded from a CANVAS (UNPACK_FLIP_Y false) stores canvas row 0 at
@@ -178,8 +187,13 @@
          `run` uploads a canvas and passes 0; `runChain` passes 1 for every pass after the first,
          because those read the previous pass's framebuffer texture. One uniform, set at the only two
          places that can know the answer. */
-      '  vec2 st = (s + vec2(0.5)) / res;',
-      '  gl_FragColor = texture2D(src, vec2(st.x, abs(u_fmChainFlip - st.y)));',
+      '  if (u_fmSmooth < 0.5) { gl_FragColor = fmTap(floor(mapped)); return; }',
+      '  vec2 base = floor(mapped), f = mapped - base;',
+      '  vec4 a = fmTap(base), b = fmTap(base + vec2(1.0, 0.0));',
+      '  vec4 c = fmTap(base + vec2(0.0, 1.0)), d = fmTap(base + vec2(1.0, 1.0));',
+      '  a.rgb *= a.a; b.rgb *= b.a; c.rgb *= c.a; d.rgb *= d.a;',
+      '  vec4 mixed = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);',
+      '  gl_FragColor = vec4(mixed.a > 0.0 ? mixed.rgb / mixed.a : vec3(0.0), mixed.a);',
       '}'
     ].join('\n');
     const prog = g.createProgram();
@@ -192,7 +206,8 @@
       throw new Error('warp link: ' + log);
     }
     const u = { res: g.getUniformLocation(prog, 'res'), src: g.getUniformLocation(prog, 'src'),
-                _flip: g.getUniformLocation(prog, 'u_fmChainFlip') };
+                _flip: g.getUniformLocation(prog, 'u_fmChainFlip'),
+                _edges: g.getUniformLocation(prog, 'u_fmEdges'), _smooth: g.getUniformLocation(prog, 'u_fmSmooth') };
     uNames.forEach(n => { u[n] = g.getUniformLocation(prog, 'u_' + n); });
     p = { prog: prog, u: u };
     _progs.set(key, p);
@@ -257,7 +272,7 @@
            sines directly, because on a GPU a sine is one instruction and a lookup table is not. */
         for (const k in uniforms) {
           const v = uniforms[k];
-          if (typeof v === 'boolean' || (typeof v === 'number' && isFinite(v))) names.push(k);
+          if (k !== 'fmEdges' && k !== 'fmSmooth' && (typeof v === 'boolean' || (typeof v === 'number' && isFinite(v)))) names.push(k);
         }
         names.sort();   // stable, so the same kernel always hits the same cached program
         const p = program(g, body, names);
@@ -277,6 +292,8 @@
            would give a correct picture until the first chained render and an upside-down one after
            — the worst kind of order-dependent bug. */
         g.uniform1f(p.u._flip, 0);
+        g.uniform1f(p.u._edges, uniforms.fmEdges || 0);
+        g.uniform1f(p.u._smooth, uniforms.fmSmooth || 0);
         for (let i = 0; i < names.length; i++) { const v = uniforms[names[i]]; g.uniform1f(p.u[names[i]], v === true ? 1 : v === false ? 0 : v); }
         g.viewport(0, 0, W, H);
         g.drawArrays(g.TRIANGLES, 0, 3);
@@ -320,7 +337,7 @@
           const uni = passes[i].uniforms || {}, names = [];
           for (const k in uni) {
             const v = uni[k];
-            if (typeof v === 'boolean' || (typeof v === 'number' && isFinite(v))) names.push(k);
+            if (k !== 'fmEdges' && k !== 'fmSmooth' && (typeof v === 'boolean' || (typeof v === 'number' && isFinite(v)))) names.push(k);
           }
           names.sort();
           const p = program(g, passes[i].body, names);
@@ -337,6 +354,8 @@
           g.uniform1i(p.u.src, 0);
           g.uniform2f(p.u.res, W, H);
           g.uniform1f(p.u._flip, i === 0 ? 0 : 1);   // see the shader — a framebuffer texture is upside down
+          g.uniform1f(p.u._edges, uni.fmEdges || 0);
+          g.uniform1f(p.u._smooth, uni.fmSmooth || 0);
           for (let n = 0; n < names.length; n++) {
             const v = uni[names[n]];
             g.uniform1f(p.u[names[n]], v === true ? 1 : v === false ? 0 : v);

@@ -10689,7 +10689,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
-  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling.
+  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Saved projects keep
+  // nearest/clamped sampling; optional edge and smooth controls are shared below.
   // Depth-indexed pool (like _pfPool): stacking two warps re-enters this fn (the inner warp runs
   // inside the outer's drawLayer). Shared singletons made the inner pass composite onto the SAME
   // canvas the outer then read as its source → an un-warped ghost of the layer bled through.
@@ -10708,6 +10709,36 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let q = ((v % m) + m) % m;
     return q > last ? m - q : q;
   }
+  // Shared CPU sampling rule for every geometric warp. Defaults preserve saved projects;
+  // the opt-in modes are evaluated after the kernel maps a destination pixel to source space.
+  function warpSample(src, W, H, x, y, edges, smooth, out, di) {
+    function coord(v, n) {
+      if (edges === 2) return ((v % n) + n) % n; // Wrap
+      if (edges === 3) return reflectInto(v, n); // Mirror
+      return Math.max(0, Math.min(n - 1, v));     // Stretch
+    }
+    function tap(ix, iy) {
+      if (edges === 1 && (ix < 0 || ix >= W || iy < 0 || iy >= H)) return -1;
+      return (coord(ix, W) + coord(iy, H) * W) * 4;
+    }
+    if (!smooth) {
+      const si = tap(x | 0, y | 0);
+      for (let c = 0; c < 4; c++) out[di + c] = si < 0 ? 0 : src[si + c];
+      return;
+    }
+    const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+    const taps = [tap(x0, y0), tap(x0 + 1, y0), tap(x0, y0 + 1), tap(x0 + 1, y0 + 1)];
+    const weights = [(1-fx)*(1-fy), fx*(1-fy), (1-fx)*fy, fx*fy];
+    let a = 0, r = 0, g = 0, b = 0;
+    for (let i = 0; i < 4; i++) {
+      const si = taps[i]; if (si < 0) continue;
+      const aw = src[si + 3] * weights[i]; a += aw;
+      r += src[si] * aw; g += src[si + 1] * aw; b += src[si + 2] * aw;
+    }
+    out[di] = a ? r / a : 0; out[di + 1] = a ? g / a : 0;
+    out[di + 2] = a ? b / a : 0; out[di + 3] = a;
+  }
+  FM._warpSample = warpSample; // focused CPU/GPU parity regression seam
   /* THE PROJECT BACKGROUND AS THE RENDERER SHOULD SEE IT (BUG-HUNT).
    * A transparent GIF/PNG export used to signal "no background" by writing `P.background = null` onto
    * FM.scene.project — the live, PERSISTED object that sceneDoc() serialises. Any autosave landing
@@ -10752,8 +10783,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       function uniformsFor(k, params) {
         /* glslPrep first, then prep, then nothing — the same three-way the single-effect path uses.
            A kernel with nothing worth hoisting has no prep at all, and that is not an error. */
-        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps)
-                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps) : null)) || {};
+        return Object.assign({}, (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps)
+                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps) : null)) || {},
+          { fmEdges: Math.max(0, Math.min(3, Math.round(FM.evalProp(params.edges == null ? 0 : params.edges, t) || 0))),
+            fmSmooth: FM.evalProp(params.smooth == null ? 0 : params.smooth, t) ? 1 : 0 });
       }
       /* ═══ A RUN OF WARPS GOES THROUGH THE GPU IN ONE GO (the oldest entry's own named next step) ══
        * *"A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer
@@ -10829,19 +10862,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          * CPU loop keeps exactly the shape that was measured — the finding above is not quietly undone
          * by the GPU port. */
         const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps) : pre;
-        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {});
+        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, Object.assign({}, gpre || {}, {
+          fmEdges: Math.max(0, Math.min(3, Math.round(FM.evalProp(pr.edges == null ? 0 : pr.edges, t) || 0))),
+          fmSmooth: FM.evalProp(pr.smooth == null ? 0 : pr.smooth, t) ? 1 : 0
+        }));
       }
       if (!warped) {
         const src = warpSource || actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
+        const edges = Math.max(0, Math.min(3, Math.round(FM.evalProp(pr.edges == null ? 0 : pr.edges, t) || 0)));
+        const smooth = !!FM.evalProp(pr.smooth == null ? 0 : pr.smooth, t);
         for (let y = 0; y < H; y++) {
           for (let x = 0; x < W; x++) {
             const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
-            let sx = m[0] | 0, sy = m[1] | 0;
-            if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-            if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-            const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-            o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+            const di = (y * W + x) * 4;
+            if (edges || smooth) {
+              warpSample(src, W, H, m[0], m[1], edges, smooth, o, di);
+            } else {
+              let sx = m[0] | 0, sy = m[1] | 0;
+              if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+              if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+              const si = (sy * W + sx) * 4;
+              o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+            }
           }
         }
         bctx.putImageData(outImg, 0, 0);
@@ -12628,6 +12671,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   delete WARP_FX._radialrepeatLegacy;
   delete WARP_FX._innerpinchLegacy;
   delete WARP_FX._rippleLegacy;
+  // Every registered geometric warp shares the same sampling controls. Register once so
+  // future warp kernels get the controls without a second list drifting from WARP_FX.
+  for (const def of FM.EFFECTS) {
+    if (!WARP_FX[def.type]) continue;
+    def.params.push(
+      { key: 'edges', label: 'Edges', def: 0, options: [[0, 'Stretch'], [1, 'Transparent'], [2, 'Wrap'], [3, 'Mirror']] },
+      { key: 'smooth', label: 'Smooth sampling', def: 0, options: [[0, 'Off'], [1, 'On']] }
+    );
+  }
   FM._warpRef = WARP_REF;
 
   FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
