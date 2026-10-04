@@ -121604,4 +121604,42 @@
       throw new Error('the legacy square frame changed when Smooth corners is On');
   });
 
+  test('690 Glow Scan can traverse its layer at an angle with independent timing', { item: 'TBD' }, function () {
+    const scan = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.glowscan;
+    if (!scan) throw new Error('the real Glow Scan kernel is unavailable');
+    const params = FM.fxRegistry.paramsOf('glowscan') || [];
+    const fresh = FM.fxRegistry.makeInstance('glowscan');
+    ['angle', 'span', 'pause', 'loop', 'phase'].forEach(key => {
+      if (!params.some(p => p.key === key) || !fresh || fresh.params[key] == null)
+        throw new Error('Glow Scan lacks the ' + key + ' control');
+    });
+    const W = 120, H = 120, base = { speed: 1, width: 10, amount: 1, color: '#ffffff', direction: 0 };
+    const render = (extra, time, whole) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+        if (whole || (x >= 45 && x < 75 && y >= 40 && y < 80)) d[(y * W + x) * 4 + 3] = 255;
+      scan(d, W, H, Object.assign({}, base, extra), time, 1);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const red = (d, x, y) => d[(y * W + x) * 4];
+    const legacy = render({}, 0.25), spelled = render({ angle: 0, span: 0, pause: 0, loop: 0, phase: 0 }, 0.25);
+    if (!same(legacy, spelled)) throw new Error('new default controls changed a placed Glow Scan');
+    const layer = render({ span: 1 }, 0.25);
+    if (red(layer, 60, 50) < red(legacy, 60, 50) + 100)
+      throw new Error('Layer span still follows the frame, missing the title in the first half-cycle');
+    const angle = render({ direction: 4, angle: 90 }, 0.5, true);
+    let rows = new Set(), cols = new Set();
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (red(angle, x, y) > 128) { rows.add(y); cols.add(x); }
+    if (rows.size < cols.size * 3) throw new Error('90° Angle did not turn the scan into a vertical band');
+    const waiting = render({ pause: 1 }, 1.25, true);
+    if (red(waiting, 60, 60) !== 0) throw new Error('the scan remains visible during Wait between sweeps');
+    if (red(render({ pause: 1 }, 0.75, true), 60, 90) < 100)
+      throw new Error('Wait between sweeps stopped the sweep instead of delaying its next pass');
+    if (red(render({ loop: 1 }, 1.25, true), 60, 30) !== 0)
+      throw new Error('Once restarted after its first pass');
+    if (same(render({ phase: 0 }, 0, true), render({ phase: 50 }, 0, true)))
+      throw new Error('Start offset still locks every Glow Scan to the same phase');
+  });
+
 })();

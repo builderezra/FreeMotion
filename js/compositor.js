@@ -887,7 +887,17 @@ globalThis.FM = globalThis.FM || {};
      the picture is gone under the band. Speed and Width move the band; nothing could turn it DOWN.
      Default 1 is exactly today's behaviour, so every saved project renders unchanged — the control
      only adds the half of the range that never existed. */
-    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }, { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left']] }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },   // direction: queue 904, it only ever swept down
+    { type: 'glowscan', label: 'Glow Scan', params: [
+      { key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' },
+      { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' },
+      { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left'], [4, 'Angle']] },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'direction', liveWhen: 4 },
+      { key: 'span', label: 'Sweeps across', def: 0, options: [[0, 'Frame'], [1, 'Layer']] },
+      { key: 'pause', label: 'Wait between sweeps', min: 0, max: 5, step: 0.1, def: 0, unit: 's' },
+      { key: 'loop', label: 'Repeats', def: 0, options: [[0, 'Loop'], [1, 'Once']] },
+      { key: 'phase', label: 'Start offset', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Scan' },   // direction: queue 904, Down is the byte-identical legacy path
     { type: 'spinstreaks', label: 'Spin Streaks', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -8880,6 +8890,61 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          Down is the loop below, untouched — a saved scan is byte-identical. Up runs the same line backwards; Right and Left are
          the same maths along COLUMNS, with the same wrap-around distance. */
       var gsDir=p.direction==null?0:(Math.round(FM.evalProp(p.direction,t))|0);
+      /* #690/C35: a scan can traverse its own layer, take a breather, run only once, start at a
+         different phase, or travel at an angle. All new controls at their defaults use the original
+         loops below, including animated Speed, so placed scans keep their exact pixels. */
+      var gsSpan=p.span==null?0:(Math.round(FM.evalProp(p.span,t))|0);
+      var gsPause=fparam(p,'pause',0,t); if(!(gsPause>0))gsPause=0; if(gsPause>5)gsPause=5;
+      var gsOnce=p.loop==null?0:(Math.round(FM.evalProp(p.loop,t))|0);
+      var gsOffset=fparam(p,'phase',0,t); if(!isFinite(gsOffset))gsOffset=0; if(gsOffset<0)gsOffset=0; if(gsOffset>100)gsOffset=100;
+      if(gsDir===4||gsSpan===1||gsPause>0||gsOnce===1||gsOffset!==0){
+        var gsCycle;
+        if(FM.isAnimated(p.speed)||FM.isAnimated(p.pause)){
+          gsCycle=FM.integrateProp([p.speed,p.pause],0,t,function(u){
+            var rate=p.speed==null?1.5:FM.evalProp(p.speed,u), wait=p.pause==null?0:FM.evalProp(p.pause,u);
+            if(!isFinite(rate))rate=0; if(!isFinite(wait))wait=0;
+            rate=Math.max(0,Math.min(8,rate)); wait=Math.max(0,Math.min(5,wait));
+            return rate/(1+rate*wait);
+          });
+        } else gsCycle=t*gsSpeed/(1+gsSpeed*gsPause);
+        gsCycle+=gsOffset/100;
+        if(gsOnce===1&&gsCycle>=1)return;
+        var gsPart=gsCycle%1; if(gsPart<0)gsPart+=1;
+        var gsMove=1/(1+gsSpeed*gsPause);
+        if(gsPart>=gsMove)return;                      // the band leaves the frame while it waits
+        gsPhase=gsPart/gsMove;
+        var gsBox=gsSpan===1?(arguments[6]||alphaBBox(d,W,H)):null;
+        var gsX0=gsBox?Math.max(0,Math.floor(gsBox.x)):0, gsY0=gsBox?Math.max(0,Math.floor(gsBox.y)):0;
+        var gsX1=gsBox?Math.min(W,Math.ceil(gsBox.x+gsBox.w)):W, gsY1=gsBox?Math.min(H,Math.ceil(gsBox.y+gsBox.h)):H;
+        if(gsX1<=gsX0||gsY1<=gsY0)return;
+        var gsVx=0, gsVy=1;
+        if(gsDir===1)gsVy=-1;
+        else if(gsDir===2){gsVx=1;gsVy=0;}
+        else if(gsDir===3){gsVx=-1;gsVy=0;}
+        else if(gsDir===4){ var gsAng=fparam(p,'angle',0,t)*Math.PI/180; gsVx=Math.sin(gsAng); gsVy=Math.cos(gsAng); }
+        if(Math.abs(gsVx)<1e-10)gsVx=0; if(Math.abs(gsVy)<1e-10)gsVy=0;
+        var gsP0=gsVx*gsX0+gsVy*gsY0, gsP1=gsVx*gsX1+gsVy*gsY0;
+        var gsP2=gsVx*gsX0+gsVy*gsY1, gsP3=gsVx*gsX1+gsVy*gsY1;
+        var gsMin=Math.min(gsP0,gsP1,gsP2,gsP3), gsMax=Math.max(gsP0,gsP1,gsP2,gsP3);
+        var gsRange=Math.max(1,gsMax-gsMin), gsPos=gsMin+gsPhase*gsRange;
+        var gsCut=Math.sqrt(-Math.log(0.002)*gsDen);
+        function gsWeight(q){ var dist=Math.abs(q-gsPos);
+          if(gsOnce!==1){var wrap=gsRange-dist;if(wrap<dist)dist=wrap;}
+          return dist>gsCut?0:Math.exp(-(dist*dist)/gsDen);
+        }
+        function gsPaint(i,band){ if(d[i+3]<=0)return;
+          d[i]=255-(255-d[i])*(255-gsCr*band)/255;
+          d[i+1]=255-(255-d[i+1])*(255-gsCg*band)/255;
+          d[i+2]=255-(255-d[i+2])*(255-gsCb*band)/255;
+        }
+        if(gsVx===0){ for(var ay=gsY0;ay<gsY1;ay++){var aw=gsWeight(gsVy*ay);if(aw<0.002)continue;
+            var ar=ay*gsW4;for(var ax=gsX0;ax<gsX1;ax++)gsPaint(ar+ax*4,aw); } }
+        else if(gsVy===0){ for(var ax=gsX0;ax<gsX1;ax++){var aw=gsWeight(gsVx*ax);if(aw<0.002)continue;
+            for(var ay=gsY0;ay<gsY1;ay++)gsPaint(ay*gsW4+ax*4,aw); } }
+        else { for(var ay=gsY0;ay<gsY1;ay++){var ar=ay*gsW4, yproj=gsVy*ay;
+            for(var ax=gsX0;ax<gsX1;ax++){var aw=gsWeight(gsVx*ax+yproj);if(aw>=0.002)gsPaint(ar+ax*4,aw); } } }
+        return;
+      }
       if(gsDir===1) gsScanY=(1-gsPhase)*H;
       if(gsDir===2||gsDir===3){ var gsScanX=(gsDir===2?gsPhase:1-gsPhase)*W, gsBx=new Float32Array(W);
         for(var gsXa=0;gsXa<W;gsXa++){ var gsDx=Math.abs(gsXa-gsScanX), gsAx=W-gsDx; if(gsAx<gsDx)gsDx=gsAx; gsBx[gsXa]=Math.exp(-(gsDx*gsDx)/gsDen); }
