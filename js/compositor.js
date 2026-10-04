@@ -14164,12 +14164,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   FM.timeWarpVideoPlans = function (scene, t, media, scale) {
     if (!scene || !scene.project || !scene.layers || !media || !Number.isFinite(t)) return [];
     // A camera, parent, crop, speed ramp or other active effect changes the source plate and needs
-    // its own historical-sampling proof. Constant forward speed uses layerLocalTime at each crossing.
+    // its own historical-sampling proof. Constant speed, including reversed playback, uses
+    // layerLocalTime at each crossing.
     if (scene.layers.some(l => l && l.type === 'camera' && l.visible !== false)) return [];
     const plans = [];
     for (const layer of scene.layers) {
       if (!layer || layer.type !== 'video' || layer.visible === false || !FM.isLayerVisibleAt(layer, t)
-          || layer.parent || layer.crop || layer.reversed || layer.frameBlend || layer.fxTimeOffset
+          || layer.parent || layer.crop || layer.frameBlend || layer.fxTimeOffset
           || layer._clipStart != null || layer.splitOf
           || (layer.speed != null && (typeof layer.speed !== 'number' || !Number.isFinite(layer.speed) || layer.speed <= 0))
           || layer.fillMode && layer.fillMode !== 'none'
