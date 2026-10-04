@@ -123101,6 +123101,33 @@
     }
   });
 
+  test('690 C23 Light and Soft Glow carry the source colour into their halos', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K) throw new Error('glow kernels unavailable');
+    const W = 31, H = 9, y = 4;
+    const make = () => { const d = new Uint8ClampedArray(W * H * 4);
+      const red = (y * W + 8) * 4, blue = (y * W + 22) * 4;
+      d[red] = d[blue + 2] = 255; d[red + 3] = d[blue + 3] = 255;
+      return d; };
+    const at = (d, x) => Array.from(d.subarray((y * W + x) * 4, (y * W + x) * 4 + 4));
+    for (const type of ['lightglow', 'softglow']) {
+      const from = FM.fxRegistry.paramsOf(type).find(p => p.key === 'from');
+      if (!from || from.default !== 0) throw new Error(type + ' must default to chosen colour');
+      const base = { amount: 1, radius: type === 'softglow' ? 10 : 2, threshold: 0 };
+      const run = p => { const d = make(); K[type](d, W, H, p, 0, 1); return d; };
+      const saved = run(base), chosen = run({ ...base, from: 0 });
+      for (let i = 0; i < saved.length; i++) if (saved[i] !== chosen[i])
+        throw new Error(type + ' changed saved chosen-colour output at byte ' + i);
+      const source = run({ ...base, from: 1 }), spread = run({ ...base, from: 1, passes: 3 });
+      const red = at(source, 7), blue = at(source, 23), white = at(chosen, 7);
+      const redSpread = at(spread, 6), blueSpread = at(spread, 24);
+      if (!(red[3] > 0 && blue[3] > 0 && red[0] > red[2] + 100 && blue[2] > blue[0] + 100 &&
+            white[0] === 255 && white[1] === 255 && white[2] === 255 &&
+            redSpread[3] > 0 && blueSpread[3] > 0 && redSpread[0] > redSpread[2] + 100 && blueSpread[2] > blueSpread[0] + 100))
+        throw new Error(type + ' failed to spread red/blue source colours without tint contamination');
+    }
+  });
+
   test('690 C50 Vignette fits a 9:16 ellipse without changing saved circles', { item: 'TBD' }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
     if (!K || !K.vignette) throw new Error('Vignette canvas kernel unavailable');
