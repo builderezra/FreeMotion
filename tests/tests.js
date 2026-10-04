@@ -120933,4 +120933,21 @@
     }
     if (Math.abs(beat(1, 0.25, 0) - beat(2, 0.125, 0)) > 1.01) throw new Error('Static Pulse no longer follows Speed times elapsed clip time');
   });
+
+  test('690 Flicker accumulates keyframed Speed instead of jumping patterns', { item: 'TBD' }, function () {
+    const flicker = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.flicker;
+    if (!flicker || !FM.integrateProp) throw new Error('Flicker kernel or shared rate integrator is unavailable');
+    const render = (speed, t) => {
+      const ink = new Uint8ClampedArray([80, 160, 200, 255]);
+      flicker(ink, 1, 1, { amount: 1, speed, seed: 3 }, t);
+      return ink[3];
+    };
+    const ramp = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 15, e: 'linear' }] };
+    if (render(8, 2) === render(15, 2)) throw new Error('Control: Flicker does not distinguish the expected patterns');
+    if (render(ramp, 2) !== render(8, 2)) throw new Error('Flicker used the final Speed for its entire two-second history');
+    const step = { kf: [{ t: 0, v: 8, e: 'hold' }, { t: 2, v: 20, e: 'hold' }] };
+    if (render(step, 2) !== render(8, 2)) throw new Error('Flicker jumped at a held Speed keyframe');
+    const steady = { kf: [{ t: 0, v: 8, e: 'linear' }, { t: 2, v: 8, e: 'linear' }] };
+    if (render(steady, 1.375) !== render(8, 1.375)) throw new Error('A constant keyframed Speed differs from the saved numeric Speed');
+  });
 })();
