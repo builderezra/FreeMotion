@@ -7,3 +7,5 @@ Radial Shadow now offers Quality (4–32 taps, default 10) and Opacity (0–100%
 Changed files: `js/compositor.js`, `index.html` (compositor cache tag 290→291), `tests/tests.js` (one focused `{ item: 'TBD' }` regression), and this report.
 
 Checks: the new focused browser regression passed 1/1 after a transient incomplete app-frame boot and one retry. It covers saved-instance byte identity, full-opacity output, changed 32-tap sampling and zero opacity. JavaScriptCore syntax and diff checks passed. No shared Claude/protected-file edit, push, PR, deployment or release.
+
+Integrated as `0876018f` on the reviewed local branch. Its tree is byte-identical to the checked isolated commit; the integrated diff check passed.
