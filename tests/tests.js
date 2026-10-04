@@ -121180,6 +121180,54 @@
     }
   });
 
+  test('Blackthorn loads both broad-pen faces for canvas, export and the picker', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const font = FM.studioFonts.list().find(f => f.name === 'FM Blackthorn');
+    if (!font || font.group !== 'original' || !font.regular.endsWith('fm-blackthorn-regular.woff2') || !font.bold.endsWith('fm-blackthorn-bold.woff2')) {
+      throw new Error('the original Blackthorn family or a bundled weight is missing');
+    }
+    await FM.studioFonts.forScene({ layers: [
+      { type: 'text', fontFamily: font.css, bold: false },
+      { type: 'caption', fontFamily: font.css, bold: true },
+    ] });
+    const loaded = weight => Array.from(document.fonts).some(face =>
+      face.family.replace(/^"|"$/g, '') === font.family && face.weight === weight && face.status === 'loaded');
+    if (!loaded('400') || !loaded('700')) throw new Error('Blackthorn did not load both faces');
+    const exportFace = FM.studioFonts.source(font.css, true);
+    if (!exportFace || exportFace.family !== font.family || exportFace.weight !== '700' || !exportFace.url.includes(font.bold)) {
+      throw new Error('the export renderer has no Blackthorn Bold source');
+    }
+    const canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 150;
+    const ctx = canvas.getContext('2d');
+    const ink = weight => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = weight + ' 76px ' + font.css;
+      ctx.fillText('BLACKTHORN 06 / Café', 12, 108);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let total = 0;
+      for (let i = 3; i < pixels.length; i += 4) total += pixels[i];
+      return total;
+    };
+    const regular = ink('400'), bold = ink('700');
+    if (!regular || bold < regular * 1.06) throw new Error('Blackthorn is blank or its Bold face is not heavier');
+    if (!FM.textEdit || !FM.textEdit.start) throw new Error('the text editor did not load in the app frame');
+    const saved = FM.scene.layers.slice(), selected = FM.scene.selectedId;
+    const layer = FM.makeLayer('text', { text: 'BLACKTHORN 06', fontFamily: font.css });
+    try {
+      FM.scene.layers.push(layer); FM.selectLayer(layer.id); FM.refreshAll();
+      FM.textEdit.start(layer.id);
+      const button = document.querySelector('.te-font');
+      if (!button) throw new Error('the font picker button is missing');
+      button.click();
+      const card = Array.from(document.querySelectorAll('.te-font-card')).find(c => c.textContent.includes(font.name));
+      const sample = card && card.querySelector('.te-font-abc');
+      if (!sample || sample.style.fontFamily !== font.css) throw new Error('Blackthorn has no live picker sample');
+    } finally {
+      if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0; saved.forEach(old => FM.scene.layers.push(old));
+      FM.selectLayer(selected || null); FM.refreshAll();
+    }
+  });
+
   test('690 Frame Stutter keeps its hold phase through keyframed Rate changes', { item: 'TBD' }, function () {
     const stutter = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.framestutter;
     if (!stutter || !FM.integrateProp || FM._mfGhost) throw new Error('Frame Stutter or its rate clock is unavailable');
