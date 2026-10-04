@@ -121111,4 +121111,29 @@
     if (held[0] !== 255 || held[1] !== 0 || held[2] !== 0 || held[3] !== 255)
       throw new Error('Frame Stutter replaced a held frame when Rate stepped to a new keyframe');
   });
+
+  test('690 Laser Beam keeps its pulse phase through keyed rate changes', { item: 'TBD' }, function () {
+    const laser = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.laserbeam;
+    if (!laser || !FM.integrateProp) throw new Error('Laser Beam or the rate integrator is unavailable');
+    const strength = (pulse, time) => {
+      const strokes = [], B = {
+        globalAlpha: 1, save() {}, restore() {}, drawImage() {}, beginPath() {}, moveTo() {}, lineTo() {},
+        stroke() { strokes.push(this.globalAlpha); },
+      };
+      laser({}, B, 100, 100, { x: 0, y: 0, w: 100, h: 100 },
+        { pulse, intensity: 100, glow: 0, width: 6, x1: 10, y1: 50, x2: 90, y2: 50 },
+        time, time, null, 1, null, null);
+      if (strokes.length !== 2) throw new Error('Control: Laser Beam did not draw its core strokes');
+      return strokes[0];
+    };
+    const ramp = { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] };
+    const integrated = strength(3.5, 1.5), currentRate = strength(5, 1.5);
+    if (Math.abs(integrated - currentRate) < 0.15) throw new Error('Control: the pulse does not distinguish accumulated from current rate');
+    if (Math.abs(strength(ramp, 1.5) - integrated) > 1e-7)
+      throw new Error('Laser Beam jumped to current Pulse times elapsed time during a ramp');
+    const stepped = { kf: [{ t: 0, v: 2.5, e: 'hold' }, { t: 1.5, v: 8, e: 'hold' }] };
+    if (Math.abs(strength(stepped, 1.5) - strength(2.5, 1.5)) > 1e-7)
+      throw new Error('Laser Beam jumped at a held Pulse keyframe');
+    if (Math.abs(strength(0, 1.5) - 0.8) > 1e-7) throw new Error('Zero Pulse no longer leaves the beam steadily on');
+  });
 })();

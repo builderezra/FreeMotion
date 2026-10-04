@@ -13553,7 +13553,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var glow = Math.max(0, Math.min(1, fparam(p, 'glow', 70, t) / 100));
       var pulse = Math.max(0, Math.min(10, fparam(p, 'pulse', 0, t)));
       var clock = Math.max(0, tl == null ? t : tl);
-      var strength = intensity * (pulse ? 0.7 + 0.3 * Math.sin(clock * pulse * Math.PI * 2) : 1);
+      // A keyed Pulse changes the future beat rate without rescaling the cycles already played.
+      var cycles = pulse && FM.isAnimated(p.pulse)
+        ? FM.integrateProp(p.pulse, t - clock, t, function (u) { return Math.max(0, Math.min(10, FM.evalProp(p.pulse, u))); })
+        : clock * pulse;
+      var strength = intensity * (pulse ? 0.7 + 0.3 * Math.sin(cycles * Math.PI * 2) : 1);
       var color = p.color || '#ff4055';
       B.save(); B.globalCompositeOperation = 'lighter'; B.lineCap = 'round';
       function stroke(w, alpha, c) {
