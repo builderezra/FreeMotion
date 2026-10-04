@@ -1179,7 +1179,7 @@
          The flag is the same one that loads the test agent, and needs loopback to do anything at all. */
       window.addEventListener('load', function () {
         var hadController = !!navigator.serviceWorker.controller;   // was an app already installed?
-        navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+        navigator.serviceWorker.register('sw.js?v=1', { updateViaCache: 'none' }).then(function (reg) {
           if (reg && reg.update) { try { reg.update(); } catch (e) {} }   // check for a new build every launch
         }).catch(function () {});
         var reloaded = false;

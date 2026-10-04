@@ -95,6 +95,13 @@ function isVersionedAsset(url) {
   return url.origin === self.location.origin && url.searchParams.has('v');
 }
 
+function keepCacheWorkAlive(e, tasks) {
+  // The response can finish before these writes do. Keep the worker alive until every task settles,
+  // even when Cache Storage rejects a write (for example because the phone is out of space).
+  const settled = Promise.allSettled(tasks);
+  if (e && typeof e.waitUntil === 'function') e.waitUntil(settled);
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;                       // never cache a write
@@ -150,15 +157,11 @@ self.addEventListener('fetch', (e) => {
       }
       // Only keep a good response; a 404 or an opaque error cached here would BE the offline page.
       if (fresh && fresh.ok) {
-        c.put('index-fallback', fresh.clone());
-        c.delete(STALE_KEY);          // this load is current — nothing to warn about
-        /* `waitUntil` where it exists, plain call where it does not. A real FetchEvent always has it —
-           it keeps the worker alive while the prune finishes — but the suite drives this handler with a
-           minimal mock event, and requiring the method turned a housekeeping nicety into a hard
-           dependency that broke an existing queue 306 test. The prune is best-effort by nature: if the
-           worker is torn down mid-sweep, the next navigation simply finishes the job. */
-        const pruning = pruneSuperseded(fresh.clone(), c);
-        if (e && typeof e.waitUntil === 'function') e.waitUntil(pruning);
+        keepCacheWorkAlive(e, [
+          c.put('index-fallback', fresh.clone()),
+          c.delete(STALE_KEY),         // this load is current — nothing to warn about
+          pruneSuperseded(fresh.clone(), c),
+        ]);
         return fresh;
       }
       if (fresh) return fresh;        // a real error response is the server's answer, not ours to replace
@@ -185,7 +188,7 @@ self.addEventListener('fetch', (e) => {
     if (hit) return hit;
     try {
       const fresh = await fetch(req);
-      if (fresh && fresh.ok) c.put(req, fresh.clone());
+      if (fresh && fresh.ok) keepCacheWorkAlive(e, [c.put(req, fresh.clone())]);
       return fresh;
     } catch (err) {
       // Offline and never seen: nothing useful to give back, so fail honestly rather than

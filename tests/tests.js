@@ -120789,4 +120789,54 @@
       }
     }
   });
+
+  test('690 service worker keeps offline cache writes alive after network responses', { item: 'TBD' }, async function () {
+    const src = await fetch('../sw.js?probe=cache-lifetime').then(r => r.text());
+    async function probe(mode, path, body) {
+      const pending = [], handlers = {}, lifetimes = [];
+      const cache = {
+        match: () => Promise.resolve(undefined),
+        keys: () => Promise.resolve([]),
+        put: (key) => new Promise((resolve, reject) => pending.push({ kind:'put', key, resolve, reject })),
+        delete: (key) => new Promise((resolve, reject) => pending.push({ kind:'delete', key, resolve, reject })),
+      };
+      const scope = {
+        location: { origin: location.origin },
+        addEventListener: (type, handler) => { handlers[type] = handler; },
+      };
+      new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope,
+        { open: () => Promise.resolve(cache) },
+        () => Promise.resolve(new Response(body, { status: 200 })), Response, URL);
+      if (!handlers.fetch) throw new Error('Control: service worker has no fetch handler');
+      let answer;
+      handlers.fetch({
+        request: { method:'GET', url:location.origin + path, mode },
+        respondWith: promise => { answer = promise; },
+        waitUntil: promise => { lifetimes.push(promise); },
+      });
+      if (!answer || !(await answer).ok) throw new Error('Control: the good network response was not served');
+      await new Promise(resolve => setTimeout(resolve, 0)); // let any independent pruning finish
+      return { pending, lifetimes };
+    }
+    const nav = await probe('navigate', '/index.html', '<span class="ver">v17.22</span>');
+    if (nav.pending.length !== 2 || nav.lifetimes.length !== 1) throw new Error('Navigation did not track its fallback write and stale-note removal');
+    let navDone = false;
+    Promise.all(nav.lifetimes).then(() => { navDone = true; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (navDone) throw new Error('Navigation released the worker while the offline page and stale-note operations were still pending');
+    nav.pending.find(op => op.kind === 'put').resolve();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (navDone) throw new Error('Navigation released the worker before the stale-note operation settled');
+    nav.pending.find(op => op.kind === 'delete').resolve();
+    await Promise.all(nav.lifetimes);
+
+    const asset = await probe('same-origin', '/js/app.js?v=999', 'window.FM = {};');
+    if (asset.pending.length !== 1 || asset.lifetimes.length !== 1) throw new Error('Versioned asset cache write did not extend the worker lifetime');
+    let assetDone = false;
+    Promise.all(asset.lifetimes).then(() => { assetDone = true; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (assetDone) throw new Error('The worker ended before the versioned asset was cached');
+    asset.pending[0].reject(new Error('storage full'));
+    await Promise.all(asset.lifetimes); // a failed cache write must not invalidate the good response
+  });
 })();
