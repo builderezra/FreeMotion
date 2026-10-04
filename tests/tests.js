@@ -121464,4 +121464,26 @@
     });
   });
 
+  test('TBD Thumbs-up has separated fingers at picker and canvas size', { item: 'TBD' }, function () {
+    const polys = FM.SHAPE_POLYS && FM.SHAPE_POLYS.thumbsup;
+    const outer = polys && polys[0];
+    if (!outer || polys.length !== 2)
+      throw new Error('Thumbs-up has lost its palm and separate cuff');
+    const valleys = [[0.54, 0.58], [0.66, 0.70], [0.77, 0.81]];
+    valleys.forEach(([lo, hi]) => {
+      if (!outer.some(p => p[0] >= 0.75 && p[0] <= 0.80 && p[1] >= lo && p[1] <= hi))
+        throw new Error('Thumbs-up still merges a finger into a mitten near ' + lo);
+    });
+    [34, 300].forEach(size => {
+      const cv = offscreen(size, size), g = cv.getContext('2d', { willReadFrequently: true });
+      FM.traceShapePath(g, { shape: 'thumbsup' }, 0, 0, size, size);
+      g.fillStyle = '#fff'; g.fill();
+      const d = g.getImageData(0, 0, size, size).data;
+      const alpha = (x, y) => d[(Math.floor(y * size) * size + Math.floor(x * size)) * 4 + 3];
+      if (alpha(0.50, 0.29) < 128 || alpha(0.55, 0.71) < 128 ||
+          alpha(0.15, 0.70) < 128 || alpha(0.29, 0.70) > 128)
+        throw new Error('Thumbs-up lost its raised thumb, palm, or open cuff at ' + size + 'px');
+    });
+  });
+
 })();

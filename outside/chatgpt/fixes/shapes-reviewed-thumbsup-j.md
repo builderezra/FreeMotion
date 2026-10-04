@@ -1,0 +1,7 @@
+# Thumbs-up silhouette: separate readable fingers
+
+Starting commit: `7d7bc4ec945907a0c2e990d08c61fe8c25124265` in the isolated `codex/shapes-bomb-hand-qj-20261004` branch, itself based on clean preferred `4aa5726c78f56ae3742e3240d10d1897e92df5d5`. The shared Claude checkout was untouched.
+
+The superseding absolute-quality audit held the prior Thumbs-up because its nearly continuous fist reads as a mitten. Two blind option critics and a third critic examining FreeMotion's native 34px picker and 300px canvas independently accepted anonymous J (source option `hand.A`). It has three external valleys between four curled fingers, a distinct thumb and an open cuff. The critic noted a slightly faceted thumb cap; this is a threshold acceptance for this shape, not approval of the entire collection. Puzzle, Umbrella, Music note, Crown and Flame remain held, so the local shape set must not be released as final.
+
+Changed files: `js/compositor.js` (Thumbs-up contour only), `index.html` (compositor cache tag 274 to 275), `tests/tests.js` (one focused `{ item: 'TBD' }` regression at picker and canvas size), and this report. A baseline geometry probe showed none of the three required external finger valleys; the revised contour has all three. The focused browser regression passed 1/1 on a fresh origin after two incomplete app-frame boots; JavaScriptCore syntax and `git diff --check` passed. Native visual evidence is in `evidence/shape-native-redesign-20261004/`. Installed-phone appearance remains unverified. No push, PR or deployment.
