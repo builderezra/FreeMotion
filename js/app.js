@@ -3282,7 +3282,7 @@ window.FM = window.FM || {};
     // added shapes
     // A squircle is an app-icon shape — it's only itself when it's square. (Was 1.35:1, which made
     // the "Apple corners" pair at the top of the Shape tab spawn as a squashed rounded rectangle.)
-    squircle: [1, 1], crown: [1.3, 0.85], eye: [1.5, 0.9], pin: [0.82, 1.1],
+    squircle: [1, 1], crown: [1.25, 0.94], eye: [1.5, 0.9], pin: [0.82, 1.1],
     lock: [0.88, 1], note: [0.9, 1],
   };
   FM.addShapeLayer = function (shape, opts) {

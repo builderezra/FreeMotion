@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Full production shape collection loading</title>
+<style>
+*{box-sizing:border-box} html,body{margin:0;background:#091119;color:#ecf4f6;font:16px -apple-system,BlinkMacSystemFont,sans-serif}
+h1{margin:14px 22px 3px;font-size:22px}.sub{margin:0 22px 15px;color:#aebfc7;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(5,320px);gap:12px;margin:0 22px}
+.card{width:320px;background:#14222c;border:1px solid #344d59;border-radius:12px;overflow:hidden}
+.label{padding:10px 14px;font-weight:700;border-bottom:1px solid #344d59}
+.picker{height:270px;display:flex;justify-content:center;align-items:center;gap:25px}
+.tile{display:flex;flex-direction:column;align-items:center;gap:10px;color:#b8ced7;font-size:12px}
+.frame{width:48px;height:48px;display:grid;place-items:center;background:#1e3139;border-radius:8px}
+.frame canvas{width:34px;height:34px}.zoom{width:204px;height:204px;image-rendering:pixelated;background:#1a2b33;border-radius:6px}
+.canvas{height:322px;display:grid;place-items:center;background:#0b171d}.canvas canvas{width:310px;height:310px}
+iframe{position:absolute;left:-2000px;top:0;width:390px;height:840px}
+</style></head><body>
+<h1>Full reviewed shape collection · production paths</h1>
+<p class="sub" id="sub">Loading FreeMotion's native renderer…</p>
+<div class="grid" id="grid"></div><iframe id="app" src="../../../../index.html"></iframe>
+<script>
+'use strict';
+const shapes=[
+  ['heart','Heart'],['speech','Speech bubble'],['droplet','Droplet'],['spiral','Spiral'],['puzzle','Puzzle'],
+  ['umbrella','Umbrella'],['bomb','Bomb'],['pin','Map pin'],['lock','Lock'],['clock','Clock'],
+  ['envelope','Envelope'],['note','Music note'],['thumbsup','Thumbs up'],['crown','Crown'],['flame','Flame'],
+];
+const view=location.hash.slice(1)==='picker'?'picker':'canvas';
+document.getElementById('sub').textContent=view==='picker'
+  ?'Actual 34px Shape picker icon, then its exact pixels enlarged.'
+  :'300px canvas output from the production FreeMotion shape tracer.';
+function icon(FM,kind) {
+  const polys=FM.SHAPE_POLYS[kind],asp=FM.SHAPE_ASPECT[kind]||[1,1],k=18/Math.max(asp[0],asp[1]);
+  const bw=asp[0]*k,bh=asp[1]*k,ox=(24-bw)/2,oy=(24-bh)/2;
+  const M=p=>[ox+p[0]*bw,oy+p[1]*bh],f=q=>q[0].toFixed(2)+' '+q[1].toFixed(2);
+  const sub=pl=>{
+    const n=pl.length,closed=kind!=='spiral';let d='M'+f(M(pl[0]));
+    for(let i=0;i<(closed?n:n-1);i++){
+      const p1=pl[i],p2=closed?pl[(i+1)%n]:pl[i+1];
+      if(p1[2]!==1&&p2[2]!==1){d+=' L'+f(M(p2));continue;}
+      const c1=FM.pointCtrl(pl,i,closed).out,c2=FM.pointCtrl(pl,i+1,closed).in;
+      d+=' C'+f(M(c1))+' '+f(M(c2))+' '+f(M(p2));
+    }
+    return d+(closed?' Z':'');
+  };
+  const paint=kind==='spiral'?'fill="none" stroke="#2bdabb" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"':'fill="#2bdabb"';
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34"><path d="'+polys.map(sub).join(' ')+'" '+paint+'/></svg>';
+  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+}
+async function render(FM) {
+  const grid=document.getElementById('grid'),jobs=[];
+  for(const [key,label] of shapes){
+    const card=document.createElement('div');card.className='card';
+    const h=document.createElement('div');h.className='label';h.textContent=label;card.append(h);
+    if(view==='picker'){
+      const wrap=document.createElement('div');wrap.className='picker';
+      const left=document.createElement('div');left.className='tile';
+      const frame=document.createElement('div');frame.className='frame';
+      const actual=document.createElement('canvas');actual.width=actual.height=34;
+      frame.append(actual);left.append(frame);
+      const note=document.createElement('span');note.textContent='Actual size';left.append(note);
+      const right=document.createElement('div');right.className='tile';
+      const zoom=document.createElement('canvas');zoom.width=zoom.height=204;zoom.className='zoom';
+      right.append(zoom);const caption=document.createElement('span');caption.textContent='Pixel zoom';right.append(caption);
+      wrap.append(left,right);card.append(wrap);
+      jobs.push(new Promise(resolve=>{
+        const image=new Image();
+        image.onload=()=>{actual.getContext('2d').drawImage(image,0,0,34,34);
+          const z=zoom.getContext('2d');z.imageSmoothingEnabled=false;z.drawImage(actual,0,0,204,204);resolve();};
+        image.onerror=()=>{document.title='Full production shape collection ERROR';resolve();};
+        image.src=icon(FM,key);
+      }));
+    }else{
+      const wrap=document.createElement('div');wrap.className='canvas';
+      const cv=document.createElement('canvas');cv.width=cv.height=310;wrap.append(cv);card.append(wrap);
+      const g=cv.getContext('2d'),asp=FM.SHAPE_ASPECT[key]||[1,1],s=300/Math.max(asp[0],asp[1]);
+      const w=asp[0]*s,h=asp[1]*s,x=(310-w)/2,y=(310-h)/2;
+      const mode=FM.traceShapePath(g,{shape:key,sides:5},x,y,w,h,0);
+      g.fillStyle='#f2f7f7';g.strokeStyle='#f2f7f7';
+      if(mode==='stroke'){g.lineWidth=8;g.stroke();}else g.fill();
+    }
+    grid.append(card);
+  }
+  await Promise.all(jobs);
+  if(document.title!=='Full production shape collection ERROR')document.title='Full production shape collection READY';
+}
+let tries=0;
+const timer=setInterval(()=>{
+  let FM;try{FM=document.getElementById('app').contentWindow.FM;}catch(e){}
+  if(FM&&FM.SHAPE_POLYS&&FM.traceShapePath&&FM.pointCtrl&&FM.SHAPE_ASPECT){
+    clearInterval(timer);render(FM);
+  }else if(++tries>500){clearInterval(timer);document.title='Full production shape collection ERROR';}
+},50);
+</script></body></html>
