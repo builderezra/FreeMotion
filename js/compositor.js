@@ -14162,10 +14162,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          holds moves each boundary k by a hash of k (up to ±45% of a hold at 100%, so the boundaries can never cross and a
          hold runs 0.1× to 1.9× its length) — the uneven "on twos, then threes" of hand-made stop-motion. Hashed on the
          boundary index, never Math.random, so which hold a moment belongs to is a function of the clock alone; the first
-         boundary stays at the clip's start. At 0 and 0 this is the old `floor(tl·rate)`, byte for byte. */
+         boundary stays at the clip's start. With numeric Rate, 0 and 0 keep the old `floor(tl·rate)` byte for byte. */
       const offs = p.offset == null ? 0 : clamp01(FM.evalProp(p.offset, t) || 0);
       const irr = p.random == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.random, t) || 0)) / 100;
-      let phase = Math.max(0, tl) * rate, q, qLo = 0, qLen = 1;
+      const elapsed = Math.max(0, tl);
+      // Rate changes move future hold boundaries; they must not renumber the holds already passed.
+      let phase = FM.isAnimated(p.rate)
+        ? FM.integrateProp(p.rate, t - elapsed, t, u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u))))
+        : elapsed * rate;
+      let q, qLo = 0, qLen = 1;
       if (offs > 0) phase += offs;
       if (irr > 0) {
         const jit = k => { if (k <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };

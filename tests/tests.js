@@ -121083,4 +121083,32 @@
       FM.selectLayer(selected || null); FM.refreshAll();
     }
   });
+
+  test('690 Frame Stutter keeps its hold phase through keyframed Rate changes', { item: 'TBD' }, function () {
+    const stutter = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.framestutter;
+    if (!stutter || !FM.integrateProp || FM._mfGhost) throw new Error('Frame Stutter or its rate clock is unavailable');
+    let serial = 0;
+    const plate = color => { const c = document.createElement('canvas'); c.width = c.height = 2;
+      const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 2, 2); return c; };
+    const white = plate('#ffffff'), red = plate('#ff0000'), blue = plate('#0000ff');
+    const draw = (rate, time, mode, duty, id, source) => {
+      const b = document.createElement('canvas'); b.width = b.height = 2;
+      stutter(source || white, b.getContext('2d'), 2, 2, { x: 0, y: 0, w: 2, h: 2 },
+        { rate, mode, duty, blend: 0, offset: 0, random: 0 }, time, time,
+        { id: id || '690-stutter-' + serial++ });
+      return b.getContext('2d').getImageData(0, 0, 1, 1).data;
+    };
+    const ramp = { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] };
+    if (draw(3.5, 1.5, 1, 0.3)[3] !== 255 || draw(5, 1.5, 1, 0.3)[3] !== 0)
+      throw new Error('Control: the strobe does not distinguish integrated and current Rate');
+    if (draw(ramp, 1.5, 1, 0.3)[3] !== 255)
+      throw new Error('Frame Stutter used the current Rate for its entire strobe history');
+
+    const stepped = { kf: [{ t: 0, v: 3, e: 'hold' }, { t: 1.5, v: 8, e: 'hold' }] };
+    const id = '690-stutter-hold-' + serial++;
+    draw(stepped, 1.4, 0, 0.5, id, red); // phase 4.2, quantum 4
+    const held = draw(stepped, 1.5, 0, 0.5, id, blue); // phase 4.5, still quantum 4
+    if (held[0] !== 255 || held[1] !== 0 || held[2] !== 0 || held[3] !== 255)
+      throw new Error('Frame Stutter replaced a held frame when Rate stepped to a new keyframe');
+  });
 })();
