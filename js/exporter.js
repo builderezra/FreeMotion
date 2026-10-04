@@ -1421,6 +1421,10 @@ window.FM = window.FM || {};
         // Historical scan strips can differ from a prefix rendered before deterministic cold seeks.
         resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-timewarp-grade-1';
       }
+      if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'image' &&
+          (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp'))) {
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-image-timewarp-1';
+      }
       let sig = null, saved = null;
       if (XR) {
         try {

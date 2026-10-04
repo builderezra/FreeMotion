@@ -13446,12 +13446,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     // Time Warp Scan needs every historical crossing strip after a cold seek. Brightness is
     // point-local and history-free: it can grade the cropped source at each crossing time without
-    // reading neighbouring pixels. Other effects may need a whole plate or temporal state.
+    // reading neighbouring pixels. A decoded still image is also a synchronous immutable source;
+    // video must wait for historical decoded pictures. Other effects may need a whole plate.
     const warpIndex = fx.type === 'timewarp' && layer.effects ? layer.effects.indexOf(fx) : -1;
-    if (warpIndex >= 0 && layer.type === 'shape'
-        && layer.effects.slice(0, warpIndex).every(e => !e || e.enabled === false || e.type === 'brightness')
+    const still = layer.type === 'image' && FM.media && FM.media.get(layer.id);
+    if (warpIndex >= 0
+        && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media'
+          && layer.effects.slice(0, warpIndex).every(e => !e || e.enabled === false || e.type === 'brightness'))
+          || (still && still.kind === 'image' && still.el && !layer.crop
+            && !layer.effects.slice(0, warpIndex).some(e => e && e.enabled !== false)))
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
-        && FM.fillModeOf(layer) !== 'media' && simpleTemporalParent(layer, scene)
+        && simpleTemporalParent(layer, scene)
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
         && !(layer.mask && layer.mask.enabled)) {

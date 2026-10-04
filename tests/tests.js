@@ -122053,6 +122053,65 @@
     }
   });
 
+  test('690 Time Warp Scan cold-seeks a moving still image at the scanned crossing times', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const tex = offscreen(40, 56), g = tex.getContext('2d');
+    g.fillStyle = '#c64326'; g.fillRect(0, 0, 40, 56);
+    g.fillStyle = '#2fadd7'; g.fillRect(0, 0, 20, 28);
+    g.fillStyle = '#e3cf59'; g.fillRect(20, 28, 20, 28);
+    const layer = FM.makeLayer('image', { x: 20, y: 40, start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 100, e: 'linear' }] };
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [warp];
+    const image = await createImageBitmap(tex);
+    const png = await new Promise(resolve => tex.toBlob(resolve, 'image/png'));
+    FM.media.set(layer.id, { kind: 'image', el: image, width: 40, height: 56,
+      file: new File([png], 'scan.png', { type: 'image/png' }) });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    try {
+      for (const width of [120, 60]) for (const mode of [0, 1]) {
+        warp.params.mode = mode;
+        FM.resetMotionFlowCache();
+        let played;
+        for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+        FM.resetMotionFlowCache();
+        const cold = frame(24 / 30, width);
+        if (!same(cold, played)) {
+          const i = cold.findIndex((v, j) => v !== played[j]);
+          throw new Error((mode ? 'Reveal' : 'Freeze') + ' still-image cold seek differs at ' +
+            (i >> 2) + ': cold=' + cold[i] + ', played=' + played[i] + ', width=' + width);
+        }
+        layer.effects = [];
+        const live = frame(24 / 30, width);
+        layer.effects = [warp];
+        if (same(cold, live)) throw new Error('Control: moving image and scanned picture did not differ');
+      }
+      const XR = FM.exportResume, previousScene = FM.scene, previousSignature = XR && XR.signature;
+      const previousWorker = FM.exportWorker;
+      if (!XR || !FM.exporter || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+        throw new Error('setup: image MP4 resume identity is unavailable');
+      let renderer = null;
+      try {
+        FM.scene = scene; FM.exportWorker = null; // exercise main renderer's resumable prefix
+        XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
+        await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
+          onProgress: function () {}, onReady: async function () {} });
+        if (!renderer || !renderer.includes(';c31-image-timewarp-1'))
+          throw new Error('an interrupted image Time Warp Scan MP4 can resume an old history-based prefix');
+      } finally {
+        XR.signature = previousSignature; FM.scene = previousScene; FM.exportWorker = previousWorker;
+      }
+    } finally { FM.media.remove(layer.id); image.close(); }
+  });
+
   test('690 temporal holds cold-seek a shape driven by a moving null parent', { item: 'TBD', budgetMs: 30000 }, function () {
     const parent = FM.makeLayer('null', { name: 'moving rig', x: 0, y: 0, start: 0, duration: 2 });
     parent.start = 0; parent.duration = 2;
