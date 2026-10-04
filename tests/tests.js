@@ -122298,6 +122298,48 @@
     } finally { FM.media.remove(layer.id); image.close(); }
   });
 
+  test('690 Time Warp Scan cold-seeks a moving still through a vector mask', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const tex = offscreen(40, 56), g = tex.getContext('2d');
+    g.fillStyle = '#c64326'; g.fillRect(0, 0, 40, 56);
+    g.fillStyle = '#2fadd7'; g.fillRect(0, 0, 20, 28);
+    const image = await createImageBitmap(tex);
+    const layer = FM.makeLayer('image', { x: 20, y: 40, start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 100, e: 'linear' }] };
+    layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 28, h: 38, feather: 0, invert: false };
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, mode: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [warp];
+    FM.media.set(layer.id, { kind: 'image', el: image, width: 40, height: 56 });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    try {
+      for (const invert of [false, true]) for (const width of [120, 60]) {
+        layer.mask.invert = invert;
+        layer.effects = [];
+        const live = frame(0.8, width), earlier = frame(0.2, width);
+        if (same(live, earlier)) throw new Error('Control: masked still did not move');
+        layer.effects = [warp]; FM.resetMotionFlowCache();
+        let played;
+        for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+        FM.resetMotionFlowCache();
+        const cold = frame(0.8, width);
+        if (!same(cold, played)) {
+          const i = cold.findIndex((v, j) => v !== played[j]);
+          throw new Error('Masked still scan differs, invert=' + invert + ', width=' + width +
+            ', pixel=' + (i >> 2) + ', channel=' + (i & 3) + ', cold=' + cold[i] + ', played=' + played[i]);
+        }
+        if (same(cold, live)) throw new Error('Control: scan is only the current still picture');
+      }
+    } finally { FM.media.remove(layer.id); image.close(); }
+  });
+
   test('690 C31 Time Warp Scan cold-seeks an animated crop on a still image', { item: 'TBD', budgetMs: 30000 }, async function () {
     const tex = offscreen(40, 40), g = tex.getContext('2d');
     g.fillStyle = '#d53325'; g.fillRect(0, 0, 20, 40);
