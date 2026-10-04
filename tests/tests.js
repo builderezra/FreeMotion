@@ -121817,4 +121817,99 @@
       throw new Error('Frame Stutter cold seek lost or changed the previous hold in Trail mode');
   });
 
+  test('690 Frame Stutter cold-seeks decoded video holds through preview and Worker', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined')
+      throw new Error('setup: the indexed video fixture needs WebCodecs and the MP4 muxer');
+    const made = [], file = await hunt2dIndexedClip(30, 30);
+    const source = await hunt2dDecodeMp4(file);
+    if (source.length !== 30 || source.some((index, i) => index !== i))
+      throw new Error('Control: the source video does not contain frames 0–29 in order');
+    const rec = await hunt2dLoadWarm(file);
+    rec.stripFrames = [];
+    const layer = hunt2dClipLayer(rec, made);
+    layer.duration = 1; delete layer.trimEnd; // the Worker accepts this ordinary untrimmed clip
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    layer.effects = [stutter];
+    const sc = hunt2dScene([layer], { duration: 1 });
+    const sampler = FM.createFrameStutterSampler && FM.createFrameStutterSampler(FM.media, { maxDim: 0 });
+    const seek = async t => {
+      const target = FM.frameSeekTarget(t, rec.duration), el = rec.el;
+      if (Math.abs(el.currentTime - target) < 1e-4 && !el.seeking && el.readyState >= 2) return;
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => finish(new Error('setup: live clip seek timed out')), 8000);
+        const finish = err => { clearTimeout(timer); el.removeEventListener('seeked', check); el.removeEventListener('error', check); err ? reject(err) : resolve(); };
+        const check = () => { if (el.error) finish(new Error('setup: live clip failed to decode'));
+          else if (!el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - target) < 1e-3) finish(); };
+        el.addEventListener('seeked', check); el.addEventListener('error', check);
+        el.currentTime = target; check();
+      });
+    };
+    const frame = async t => {
+      await seek(t);
+      const prepared = sampler && await sampler.prepare(sc, t);
+      const cv = offscreen(128, 32), g = cv.getContext('2d', { willReadFrequently:true });
+      if (FM.withFrameStutterSources) FM.withFrameStutterSources(prepared, () => FM.renderScene(g, sc, t));
+      else FM.renderScene(g, sc, t);
+      return { index:hunt2dReadIndex(g, 128, 32), pixels:Array.from(g.getImageData(0, 16, 128, 1).data) };
+    };
+    try {
+      layer.effects = [];
+      const live = await frame(0.2);
+      if (live.index !== 6) throw new Error('Control: the live source at 0.2 s is not frame 6, got ' + live.index);
+      layer.effects = [stutter];
+      FM.resetMotionFlowCache();
+      const initial = await frame(0), sequential = await frame(0.2);
+      FM.resetMotionFlowCache();
+      const cold = await frame(0.2);
+      if (initial.index !== 0 || sequential.index !== 0 || cold.index !== 0 || cold.pixels.join() !== sequential.pixels.join())
+        throw new Error('Frame Stutter cold video seek rendered ' + cold.index + ' instead of the first decoded quantum frame 0');
+      const next = await frame(0.3);
+      if (next.index !== 7) throw new Error('Control: the next video hold did not advance to boundary frame 7, got ' + next.index);
+
+      // An upstream grade must be applied at the boundary once, before the hold.
+      layer.effects = [FM.fxRegistry.makeInstance('brightness'), stutter];
+      FM.resetMotionFlowCache();
+      await frame(0); const gradedSequential = await frame(0.2);
+      FM.resetMotionFlowCache();
+      const gradedCold = await frame(0.2);
+      if (gradedCold.pixels.join() !== gradedSequential.pixels.join())
+        throw new Error('Frame Stutter cold video seek changed an upstream effect stack');
+
+      if (FM.exportWorker) {
+        if (!FM.exportWorker.eligible(sc)) throw new Error('Worker fixture ineligible: ' + JSON.stringify({
+          extra:Object.keys(layer).filter(k => !('id type name visible locked solo blendMode start duration trimStart reversed effects clipColor volume fadeIn fadeOut speed frameBlend wiggle parent parentMode parentWeight transform shape shapeW shapeH fill stroke cornerRadius sides fillMode fillGradient audioFx muted audioOnly crop').split(' ').includes(k)),
+          fill:layer.fill, fillMode:layer.fillMode, stroke:layer.stroke, frameCache:!!rec.frameCache,
+          building:!!rec._building, video:[rec.kind,rec.width,rec.height,rec.el.readyState],
+          preview:FM.fxPreviewListFor && FM.fxPreviewListFor(layer), isolate:!!(FM.isolate && FM.isolate.mode)
+        }));
+        const worker = await FM.exportWorker.create(sc, { time:0.2 });
+        if (!worker) throw new Error('Control: eligible video scene did not create a Worker renderer');
+        try {
+          const cv = offscreen(128, 32), g = cv.getContext('2d', { willReadFrequently:true });
+          await worker.render(g, 0.2);
+          if (Array.from(g.getImageData(0, 16, 128, 1).data).join() !== gradedCold.pixels.join())
+            throw new Error('Frame Stutter Worker did not render the same cold held video picture');
+        } finally { worker.dispose(); }
+      }
+
+      // A real MP4 through the main export fallback must use those same decoded holds.
+      const previousScene = FM.scene, previousCreate = FM.exportWorker && FM.exportWorker.create;
+      try {
+        FM.scene = sc;
+        if (FM.exportWorker) FM.exportWorker.create = async () => null;
+        const exported = await hunt2dDecodeMp4(await hunt2dExport({ fps:30 }));
+        if (exported.length !== 30 || exported[6] !== 0 || exported[9] !== 7)
+          throw new Error('Frame Stutter main MP4 export held ' + exported[6] + '/' + exported[9] +
+            ' at output frames 6/9 instead of source boundary frames 0/7');
+      } finally {
+        FM.scene = previousScene;
+        if (FM.exportWorker) FM.exportWorker.create = previousCreate;
+      }
+    } finally {
+      if (sampler) sampler.dispose();
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+    }
+  });
+
 })();

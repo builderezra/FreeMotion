@@ -6,7 +6,7 @@
  */
 (function (root) {
   'use strict';
-  const REVISION = 'canvas-worker-18';
+  const REVISION = 'canvas-worker-19';
   const dependencies = ['render-canvas.js', 'scene.js', 'eases.js', 'compositor.js', 'fx-registry.js'];
 
   const nativeBlends = new Set('normal add screen multiply overlay darken lighten color-dodge color-burn hard-light soft-light difference exclusion hue saturation color luminosity'.split(' '));
@@ -49,6 +49,17 @@
       for (const source of frames) root.FM.media.set(source.id,
         {kind:'image', el:source.bitmap, width:source.width, height:source.height});
     }
+    function renderWithStutter(time, sources) {
+      const prepared = new Map((sources || []).map(source => [source.id, source]));
+      try {
+        root.FM.withFrameStutterSources(prepared, () => root.FM.renderScene(ctx, scene, time));
+      } finally {
+        for (const source of prepared.values()) {
+          if (source.hold) source.hold.close();
+          if (source.prior) source.prior.close();
+        }
+      }
+    }
     root.onmessage = async function (event) {
       const msg = event.data;
       let bitmap;
@@ -84,7 +95,7 @@
           if (needsRoundRect(scene) && typeof ctx.roundRect !== 'function') throw new Error('Worker rounded rectangles unavailable');
           // Probe actual compositor and bitmap support before the page selects a resume job.
           root.FM.time = msg.time;
-          root.FM.renderScene(ctx, scene, msg.time);
+          renderWithStutter(msg.time, msg.stutter);
           bitmap = canvas.transferToImageBitmap();
           bitmap.close(); bitmap = null;
           root.postMessage({id:msg.id, ready:true});
@@ -92,7 +103,7 @@
           if (!ctx || !Number.isFinite(msg.time)) throw new Error('Invalid frame request');
           setVideoFrames(msg.videos || []);
           root.FM.time = msg.time;
-          root.FM.renderScene(ctx, scene, msg.time);
+          renderWithStutter(msg.time, msg.stutter);
           bitmap = canvas.transferToImageBitmap();
           root.postMessage({id:msg.id, bitmap}, [bitmap]);
           bitmap = null; // the page now owns it
@@ -135,6 +146,7 @@
   // the shared compositor/registry; adding a parameter here requires worker parity coverage.
   const effectParams = new Map([
     ['brightness', new Set(['amount'])], ['blur', new Set(['radius'])],
+    ['framestutter', new Set(['rate', 'mode', 'blend', 'duty', 'trail', 'offset', 'random'])],
     ['gamma', new Set(['gamma', 'red', 'green', 'blue'])],
     ['posterize', new Set(['levels', 'mix', 'channels', 'gamma'])],
     ['contrast', new Set(['amount'])], ['saturate', new Set(['amount'])],
@@ -325,6 +337,12 @@
     for (const layer of scene.layers) {
       if (!layer || layer.type !== 'video' || supportedAudio(layer)) continue;
       if (!supportedVideo(layer)) return false;
+      if ((layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter')) {
+        // Worker support is intentionally narrower than the effect catalogue: every hold must
+        // have a separately decoded boundary picture. Keep unsupported stacks on the main path.
+        const probe = Math.max(0, layer.start || 0) + Math.min(0.01, (layer.duration || 1) / 2);
+        if (!FM.frameStutterVideoPlans(scene, probe, FM.media).some(plan => plan.id === layer.id)) return false;
+      }
       const media = FM.media.get(layer.id);
       videoPixels += media.width * media.height; videoBytes += media.file.size; videoCount++;
       if (!Number.isFinite(videoBytes) || videoPixels > MAX_VIDEO_PIXELS || videoBytes > MAX_VIDEO_BYTES || videoCount > 4) return false;
@@ -350,6 +368,7 @@
     }
     return scene.layers.every(l => {
       if (!l || !['shape','video','image','text','group','null'].includes(l.type)) return false;
+      if (l.type !== 'video' && (l.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter')) return false;
       if (!knownKeys(l, ['group','null'].includes(l.type) ? containerLayerKeys : l.type === 'video' ? videoLayerKeys : l.type === 'image' ? imageLayerKeys : l.type === 'text' ? textLayerKeys : layerKeys) || !knownKeys(l.transform, transformKeys)) return false;
       // JSON turns nonfinite values into null; retain main rendering for unsupported transforms.
       if (Object.keys(l.transform).some(k => k[0] !== '_' && !numericProp(l.transform[k]))) return false;
@@ -485,8 +504,8 @@
     }
     return active;
   }
-  async function videoFrames(captured, time, options) {
-    const frames = [], cancelled = options && options.shouldCancel || (() => false);
+  async function videoFrames(captured, time, options, sampler) {
+    const frames = [], stutter = [], cancelled = options && options.shouldCancel || (() => false);
     try {
       for (const id of await seekVideos(captured, time, options)) {
         // Keep decoded video frames as video sources: ImageBitmap changes transformed edge coverage.
@@ -494,8 +513,25 @@
         frames.push({id, width:media.width, height:media.height, bitmap});
         if (resources.get(captured).disposed || cancelled()) throw new Error('CANCELLED');
       }
-      return frames;
-    } catch (e) { frames.forEach(source => source.bitmap.close()); throw e; }
+      // Keep current output pictures above, and transfer clones of the separately decoded
+      // quantum pictures. The sampler retains one bounded original per hold, so every output
+      // frame in that hold avoids two redundant seeks and never moves the live capture element.
+      if (sampler) {
+        const prepared = await sampler.prepare(captured.document, time);
+        for (const [id, source] of prepared) {
+          const copy = {id, q:source.q, holdAt:source.holdAt, priorAt:source.priorAt,
+            hold:source.hold.clone(), prior:null};
+          stutter.push(copy);
+          if (source.prior) copy.prior = source.prior.clone();
+          if (resources.get(captured).disposed || cancelled()) throw new Error('CANCELLED');
+        }
+      }
+      return {frames, stutter};
+    } catch (e) {
+      frames.forEach(source => source.bitmap.close());
+      stutter.forEach(source => { source.hold.close(); if (source.prior) source.prior.close(); });
+      throw e;
+    }
   }
   function release(captured) {
     const state = resources.get(captured);
@@ -619,9 +655,15 @@
     try { blends = blendProbe(snapshot); } catch (e) { return fallback(); }
     const transparent = captured.transparent;
     let worker, pending = null, sequence = 0, closed = false, closeError = null, urls;
+    const stutterSampler = captured.videos.length && FM.createFrameStutterSampler &&
+      snapshot.layers.some(layer => layer && layer.type === 'video' &&
+        (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))
+      ? FM.createFrameStutterSampler(captured.media,
+        {maxDim:0, maxBytes:64 * 1024 * 1024, timeoutMs:20000, shouldCancel:() => closed || cancelled()}) : null;
     function dispose(error) {
       if (closed) return;
       closed = true; closeError = error || new Error('Renderer disposed');
+      if (stutterSampler) stutterSampler.dispose();
       if (worker) worker.terminate();
       if (ownsCapture) release(captured);
       if (pending) pending.finish(closeError);
@@ -642,7 +684,7 @@
         catch (e) { dispose(e); }
       });
     }
-    const imageCopies = [], initialVideos = [];
+    const imageCopies = [], initialVideos = [], initialStutter = [];
     let rendering = false;
     try {
       urls = sourceURLs();
@@ -665,14 +707,19 @@
       }
       // Preserve synchronous worker setup for the overwhelmingly common no-video path. Besides
       // avoiding a needless turn, lifecycle callers can install/cancel the first request immediately.
-      if (captured.videos.length) initialVideos.push(...await videoFrames(captured, options.time || 0, {shouldCancel:() => closed || cancelled()}));
+      if (captured.videos.length) {
+        const prepared = await videoFrames(captured, options.time || 0, {shouldCancel:() => closed || cancelled()}, stutterSampler);
+        initialVideos.push(...prepared.frames); initialStutter.push(...prepared.stutter);
+      }
       const fontData = resources.get(captured).fontData;
       const textSpacing = snapshot.layers.some(l => l.type === 'text' && l.letterSpacing)
         ? FM.textSpacingOK().letter : null;
       const media = Array.from(captured.media, ([id, source]) =>
         ({id, kind:source.kind, width:source.width, height:source.height, duration:source.duration}));
       const reply = await request('init', {urls, scene:snapshot, transparent, time:options.time || 0, media, blends,
-        images:imageCopies, videos:initialVideos, fonts:fontData, textSpacing}, imageCopies.concat(initialVideos).map(source => source.bitmap).concat(fontData.map(source => source.bytes)));
+        images:imageCopies, videos:initialVideos, stutter:initialStutter, fonts:fontData, textSpacing},
+        imageCopies.concat(initialVideos).map(source => source.bitmap)
+          .concat(initialStutter.flatMap(source => source.prior ? [source.hold, source.prior] : [source.hold]), fontData.map(source => source.bytes)));
       if (!reply.ready) throw new Error('Export worker did not initialize');
       // Once startup succeeds the Worker owns its copies; page pixels are only needed for fallback.
       closeImages(captured);
@@ -687,6 +734,10 @@
     } finally {
       // Transferred copies are detached; untransferred copies must also be closed on startup failure.
       for (const source of imageCopies.concat(initialVideos)) { try { source.bitmap.close(); } catch (e) {} }
+      for (const source of initialStutter) {
+        try { source.hold.close(); } catch (e) {}
+        if (source.prior) try { source.prior.close(); } catch (e) {}
+      }
     }
     return {
       // Include asset versions and the captured alpha setting: either can change the pixels of
@@ -700,10 +751,14 @@
         if (closed) throw new Error('Renderer disposed');
         if (rendering) throw new Error('A render is already in flight');
         rendering = true;
-        let frames = [], bitmap;
+        let frames = [], stutter = [], bitmap;
         try {
-          if (captured.videos.length) frames = await videoFrames(captured, time, {shouldCancel:() => closed || cancelled()});
-          const reply = await request('render', {time, videos:frames}, frames.map(source => source.bitmap));
+          if (captured.videos.length) {
+            const prepared = await videoFrames(captured, time, {shouldCancel:() => closed || cancelled()}, stutterSampler);
+            frames = prepared.frames; stutter = prepared.stutter;
+          }
+          const reply = await request('render', {time, videos:frames, stutter}, frames.map(source => source.bitmap)
+            .concat(stutter.flatMap(source => source.prior ? [source.hold, source.prior] : [source.hold])));
           bitmap = reply.bitmap;
           if (!bitmap || bitmap.width !== snapshot.project.width || bitmap.height !== snapshot.project.height) throw new Error('Invalid export worker frame');
           target.save();
@@ -717,6 +772,10 @@
         finally {
           if (bitmap) bitmap.close();
           for (const source of frames) { try { source.bitmap.close(); } catch (e) {} }
+          for (const source of stutter) {
+            try { source.hold.close(); } catch (e) {}
+            if (source.prior) try { source.prior.close(); } catch (e) {}
+          }
           rendering = false;
         }
       },

@@ -304,4 +304,141 @@ window.FM = window.FM || {};
     // restored clip would show a blank bar forever. undefined releases the memory AND allows a rebuild.
     delete m.stripFrames;
   };
+
+  // Frame Stutter needs two historical video pictures at once (held and, in Trail mode,
+  // previous). A separate muted decoder keeps the playback element at the live output time.
+  // The sampler retains only the current quantum's bounded snapshots, and one decoder per
+  // active media record; a new quantum closes the old frames after its replacement is ready.
+  FM.createFrameStutterSampler = function (media, opts) {
+    opts = opts || {};
+    const maxDim = opts.maxDim || 0, maxBytes = opts.maxBytes || 128 * 1024 * 1024;
+    const decoders = new Map(), identities = new WeakMap();
+    let identity = 0, active = null, pending = null, failure = null, chain = Promise.resolve(), disposed = false;
+    const cancelled = () => new Error('CANCELLED');
+    const closeFrames = map => {
+      if (!map) return;
+      const seen = new Set();
+      for (const value of map.values()) for (const frame of [value.hold, value.prior]) {
+        if (frame && !seen.has(frame)) { seen.add(frame); if (frame.close) try { frame.close(); } catch (e) {} }
+      }
+    };
+    const closeDecoder = state => {
+      try { state.el.pause(); state.el.removeAttribute('src'); state.el.load(); } catch (e) {}
+      URL.revokeObjectURL(state.url);
+    };
+    const check = signal => { if (disposed || (signal && signal.aborted) || (opts.shouldCancel && opts.shouldCancel())) throw cancelled(); };
+    const waitFor = (el, ready, signal, ms) => new Promise((resolve, reject) => {
+      let done = false, timer, cancelTimer;
+      const finish = err => {
+        if (done) return;
+        done = true; clearTimeout(timer); clearInterval(cancelTimer);
+        ['loadeddata', 'canplay', 'seeked', 'error'].forEach(ev => el.removeEventListener(ev, onEvent));
+        if (signal) signal.removeEventListener('abort', onAbort);
+        if (err) reject(err); else resolve();
+      };
+      const onAbort = () => finish(cancelled());
+      const onEvent = () => {
+        if (el.error) finish(new Error('Frame Stutter video could not be decoded'));
+        else if (ready()) finish();
+      };
+      ['loadeddata', 'canplay', 'seeked', 'error'].forEach(ev => el.addEventListener(ev, onEvent));
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+      timer = setTimeout(() => finish(new Error('Frame Stutter video seek timed out')), ms);
+      if (opts.shouldCancel) cancelTimer = setInterval(() => { if (opts.shouldCancel()) onAbort(); }, 50);
+      if (signal && signal.aborted) onAbort(); else onEvent();
+    });
+    const decoderFor = async (rec, signal) => {
+      let state = decoders.get(rec);
+      if (!state) {
+        if (!(rec.file instanceof Blob)) throw new Error('Frame Stutter video has no reusable file');
+        const url = URL.createObjectURL(rec.file), el = document.createElement('video');
+        el.muted = true; el.playsInline = true; el.preload = 'auto'; el.src = url;
+        state = { url, el }; decoders.set(rec, state);
+        el.load();
+      }
+      await waitFor(state.el, () => state.el.readyState >= 2, signal, opts.timeoutMs || 10000);
+      check(signal);
+      return state.el;
+    };
+    const captureAt = async (rec, local, signal) => {
+      const el = await decoderFor(rec, signal);
+      const target = FM.frameSeekTarget(local, rec.duration);
+      if (!(Math.abs(el.currentTime - target) < 1e-4 && !el.seeking && el.readyState >= 2)) {
+        el.currentTime = target;
+        await waitFor(el, () => !el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - target) < 1e-3,
+          signal, opts.timeoutMs || 10000);
+      }
+      check(signal);
+      if (!maxDim && typeof VideoFrame === 'function') return new VideoFrame(el, { timestamp: Math.round(local * 1e6) });
+      const w = rec.width || el.videoWidth, h = rec.height || el.videoHeight;
+      if (!(w > 0 && h > 0)) throw new Error('Frame Stutter video has no decoded size');
+      if (!maxDim || Math.max(w, h) <= maxDim) return createImageBitmap(el);
+      const scale = maxDim / Math.max(w, h), cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(w * scale)); cv.height = Math.max(1, Math.round(h * scale));
+      cv.getContext('2d').drawImage(el, 0, 0, cv.width, cv.height);
+      return createImageBitmap(cv);
+    };
+    const planState = (scene, t, given) => {
+      const plans = given || FM.frameStutterVideoPlans(scene, t, media);
+      const key = plans.map(p => {
+        const rec = media.get(p.id);
+        if (!identities.has(rec)) identities.set(rec, ++identity);
+        return identities.get(rec) + ':' + p.key;
+      }).join(';');
+      return { plans, key };
+    };
+    const prepare = (scene, t, given) => {
+      if (disposed) return Promise.reject(cancelled());
+      const { plans, key } = planState(scene, t, given);
+      if (active && active.key === key) return Promise.resolve(active.map);
+      if (pending && pending.key === key) return pending.promise;
+      if (failure && failure.key === key) return failure.promise;
+      failure = null;
+      if (pending) pending.controller.abort();
+      const controller = new AbortController();
+      const job = { key, controller, promise: null };
+      pending = job;
+      job.promise = chain = chain.catch(() => {}).then(async () => {
+        check(controller.signal);
+        const used = new Set(plans.map(p => media.get(p.id)));
+        for (const [rec, state] of decoders) if (!used.has(rec)) { closeDecoder(state); decoders.delete(rec); }
+        let estimate = 0;
+        for (const p of plans) {
+          const rec = media.get(p.id), w = rec.width || rec.el.videoWidth, h = rec.height || rec.el.videoHeight;
+          if (!(w > 0 && h > 0)) throw new Error('Frame Stutter video has no decoded size');
+          const scale = maxDim && Math.max(w, h) > maxDim ? maxDim / Math.max(w, h) : 1;
+          estimate += Math.ceil(w * scale) * Math.ceil(h * scale) * 4 * (p.priorLocal == null ? 1 : 2);
+        }
+        if (estimate > maxBytes) throw new Error('Frame Stutter video snapshots exceed the frame memory budget');
+        const map = new Map();
+        try {
+          for (const p of plans) {
+            check(controller.signal);
+            const rec = media.get(p.id);
+            const hold = await captureAt(rec, p.holdLocal, controller.signal);
+            map.set(p.id, { q: p.q, holdAt: p.holdAt, priorAt: p.priorAt, hold, prior: null });
+            if (p.priorLocal != null) map.get(p.id).prior = await captureAt(rec, p.priorLocal, controller.signal);
+          }
+          check(controller.signal);
+          closeFrames(active && active.map);
+          active = { key, map };
+          return map;
+        } catch (e) { closeFrames(map); throw e; }
+      }).catch(e => {
+        if (!controller.signal.aborted && !disposed) failure = { key, promise: job.promise };
+        throw e;
+      }).finally(() => { if (pending === job) pending = null; });
+      return job.promise;
+    };
+    return { prepare, current(scene, t, plans) {
+      if (!active || disposed) return null;
+      return active.key === planState(scene, t, plans).key ? active.map : null;
+    }, dispose() {
+      if (disposed) return;
+      disposed = true; if (pending) pending.controller.abort();
+      closeFrames(active && active.map); active = null;
+      for (const state of decoders.values()) closeDecoder(state);
+      decoders.clear();
+    } };
+  };
 })(window.FM);

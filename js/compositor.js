@@ -13007,6 +13007,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              expanded: _expPool.filter(Boolean).map(at) };
   };
 
+  let _frameStutterSources = null, _frameStutterMediaSource = null;
+  FM.withFrameStutterSources = function (sources, render) {
+    const before = _frameStutterSources;
+    _frameStutterSources = sources;
+    try { return render(); } finally { _frameStutterSources = before; }
+  };
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -13068,26 +13074,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
     expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
-    // A plain vector shape has no decoder or upstream effects to wait for. Give Frame Stutter an
-    // exact source sample at a requested clock time; the other effect paths, especially video,
-    // retain their existing capture until their media frames can be prepared asynchronously.
+    // Frame Stutter samples a boundary plate only after its source is available. Video pictures
+    // are decoded before this synchronous render; no redraw can make a live element travel in time.
+    const sampleAt = fx.type === 'framestutter' ? (at, slot, source) => {
+      const key = slot ? 'prior' : 'held';
+      let sample = _cfPool[_d][key];
+      if (!sample) sample = _cfPool[_d][key] = createCanvas();
+      if (sample.width !== W || sample.height !== H) { sample.width = W; sample.height = H; }
+      sample.__fmRS = ps; sample.__fmOX = OX; sample.__fmOY = OY;
+      const sc = _fx2d(sample);
+      baseT(sc); sc.clearRect(OX, OY, PWp, PHp);
+      sc.globalAlpha = 1; sc.globalCompositeOperation = 'source-over'; sc.filter = 'none';
+      const before = _frameStutterMediaSource;
+      if (source) _frameStutterMediaSource = { id: layer.id, source };
+      try { drawLayer(sc, tmp, at, scene); } // fx is absent in tmp: no recursive Frame Stutter
+      finally { _frameStutterMediaSource = before; }
+      return sample;
+    } : null;
     if (fx.type === 'framestutter' && layer.type === 'shape' && layer.effects && layer.effects.length === 1
         && layer.effects[0] === fx && FM.fillModeOf(layer) !== 'media' && !layer.parent
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
         && !(layer.mask && layer.mask.enabled)) {
-      expand.sampleAt = (at, slot) => {
-        const key = slot ? 'prior' : 'held';
-        let sample = _cfPool[_d][key];
-        if (!sample) sample = _cfPool[_d][key] = createCanvas();
-        if (sample.width !== W || sample.height !== H) { sample.width = W; sample.height = H; }
-        sample.__fmRS = ps; sample.__fmOX = OX; sample.__fmOY = OY;
-        const sc = _fx2d(sample);
-        baseT(sc); sc.clearRect(OX, OY, PWp, PHp);
-        sc.globalAlpha = 1; sc.globalCompositeOperation = 'source-over'; sc.filter = 'none';
-        drawLayer(sc, tmp, at, scene); // fx is absent in tmp: no recursive Frame Stutter
-        return sample;
-      };
+      expand.sampleAt = (at, slot) => sampleAt(at, slot, null);
+    } else if (fx.type === 'framestutter' && layer.type === 'video' && _frameStutterSources) {
+      const prepared = _frameStutterSources.get(layer.id);
+      if (prepared && prepared.hold) {
+        const clock = frameStutterClock(fx.params || {}, t, FM.fxLocalTime(layer, t));
+        const holdAt = clock.atPhase(clock.qLo);
+        const mode = Math.round(FM.evalProp((fx.params || {}).mode, t) || 0);
+        const trail = (fx.params || {}).trail == null ? 0.45 : clamp01(FM.evalProp(fx.params.trail, t));
+        const priorAt = mode === 2 && trail > 0 && clock.priorPhase != null ? clock.atPhase(clock.priorPhase) : null;
+        if (prepared.q === clock.q && Math.abs(prepared.holdAt - holdAt) < 1e-5
+            && ((priorAt == null && prepared.priorAt == null)
+                || (prepared.prior && prepared.priorAt != null && Math.abs(prepared.priorAt - priorAt) < 1e-5))) {
+          expand.sampleAt = (at, slot) => sampleAt(at, slot, slot ? prepared.prior : prepared.hold);
+        }
+      }
     }
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
@@ -13686,6 +13709,82 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return e && e.w > 0 && e.h > 0 ? e : bb;
   }
   const _lensMagnifierPool = [];
+  // One clock for the effect and for any asynchronous media preparation. If these two paths
+  // disagree about a quantum, a correctly decoded video frame is still the WRONG held frame.
+  function frameStutterClock(p, t, tl) {
+    const rate = Math.max(1, Math.min(30, p.rate == null ? 8 : FM.evalProp(p.rate, t)));
+    const offs = p.offset == null ? 0 : clamp01(FM.evalProp(p.offset, t) || 0);
+    const irr = p.random == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.random, t) || 0)) / 100;
+    const elapsed = Math.max(0, tl), base = t - elapsed;
+    let phase = FM.isAnimated(p.rate)
+      ? FM.integrateProp(p.rate, base, t, u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u))))
+      : elapsed * rate;
+    if (offs > 0) phase += offs;
+    const jit = k => { if (k <= 0 || irr <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
+    let q, qLo = 0, qLen = 1;
+    if (irr > 0) {
+      const f = Math.floor(phase), b0 = f + jit(f), b1 = f + 1 + jit(f + 1);
+      q = phase < b0 ? f - 1 : (phase >= b1 ? f + 1 : f);
+      qLo = q + jit(q); qLen = (q + 1 + jit(q + 1)) - qLo;
+    } else { q = Math.floor(phase); qLo = q; }
+    const atPhase = target => {
+      const want = Math.max(0, target - offs);
+      if (want <= 0) return base;
+      if (!FM.isAnimated(p.rate)) return Math.min(t, base + want / rate);
+      const speed = u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u)));
+      let lo = base, hi = t;
+      for (let i = 0; i < 28; i++) {
+        const mid = (lo + hi) / 2;
+        if (FM.integrateProp(p.rate, base, mid, speed) < want) lo = mid;
+        else hi = mid;
+      }
+      return (lo + hi) / 2;
+    };
+    return { rate, offs, irr, phase, q, qLo, qLen, atPhase,
+      priorPhase: q > 0 ? q - 1 + jit(q - 1) : null };
+  }
+
+  // Only source-local, history-free effects can be re-rendered at a hold boundary without
+  // drawing some OTHER layer's current video or mutating another temporal cache. Widen this
+  // list when a particular upstream effect has a focused boundary-time proof.
+  const STUTTER_SAFE_UPSTREAM = { brightness: 1, contrast: 1, saturate: 1, hue: 1,
+    grayscale: 1, sepia: 1, invert: 1, exposure: 1, temperature: 1, tint: 1,
+    vignette: 1, blur: 1 };
+  FM.frameStutterVideoPlans = function (scene, t, media) {
+    const plans = [];
+    if (!scene || !scene.layers || !media) return plans;
+    for (const layer of scene.layers) {
+      if (!layer || layer.type !== 'video' || layer.visible === false || !FM.isLayerVisibleAt(layer, t)
+          || layer.parent || layer.fxTimeOffset || layer._clipStart != null || layer.frameBlend
+          || (layer.masks && layer.masks.length) || (layer.mask && layer.mask.enabled)
+          || (layer.behaviors && layer.behaviors.length)) continue;
+      const m = media.get(layer.id);
+      if (!m || !m.file || !m.el || (layer.fillMode && layer.fillMode !== 'none')) continue;
+      const effects = layer.effects || [];
+      const indices = [];
+      effects.forEach((fx, i) => { if (fx && fx.enabled !== false && fx.type === 'framestutter') indices.push(i); });
+      if (indices.length !== 1) continue;
+      const index = indices[0], fx = effects[index];
+      if (effects.slice(0, index).some(e => e && e.enabled !== false && !STUTTER_SAFE_UPSTREAM[e.type])) continue;
+      // The boundary redraw includes the upstream stack; a downstream effect belongs after the
+      // held plate and would be applied twice by this nested draw. Keep that case on the old path.
+      if (effects.slice(index + 1).some(e => e && e.enabled !== false)) continue;
+      const clock = frameStutterClock(fx.params || {}, t, FM.fxLocalTime(layer, t));
+      if (!Number.isFinite(clock.q)) continue;
+      const holdAt = clock.atPhase(clock.qLo);
+      const holdLocal = FM.layerLocalTime(layer, holdAt);
+      if (holdLocal == null) continue;
+      const mode = Math.round(FM.evalProp((fx.params || {}).mode, t) || 0);
+      const trail = (fx.params || {}).trail == null ? 0.45 : clamp01(FM.evalProp(fx.params.trail, t));
+      const priorAt = mode === 2 && trail > 0 && clock.priorPhase != null ? clock.atPhase(clock.priorPhase) : null;
+      const priorLocal = priorAt == null ? null : FM.layerLocalTime(layer, priorAt);
+      if (priorAt != null && priorLocal == null) continue;
+      plans.push({ id: layer.id, q: clock.q, holdAt, priorAt, holdLocal, priorLocal,
+        key: [layer.id, clock.q, holdLocal.toFixed(6), priorLocal == null ? '' : priorLocal.toFixed(6)].join('|') });
+    }
+    return plans;
+  };
+
   const CANVAS_FX = {
     circlearray: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       var count = Math.max(2, Math.min(36, Math.round(fparam(p, 'count', 8, t))));
@@ -14477,13 +14576,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* ---- Frame Stutter -------------------------------------------------------------------------
      * Hold each frame for 1/rate of a second: stop-motion, the anime step, or a strobe on the beat.
      *
-     * Simple vector shapes sample their source at the quantum boundary on every render, so a cold
-     * seek sees the same hold and trail. Other layers keep ONE held plate per layer in the bounded
-     * LRU used by footage blur — under their own ':fs' key. Their cold-seek fallback still captures
-     * the current frame; video needs decoded boundary frames before this can be made stateless. */
+     * Simple vector shapes and prepared video sample their source at the quantum boundary on every
+     * render, so a cold seek sees the same hold and trail. Unsupported stacks keep one held plate
+     * per layer in the bounded LRU used by footage blur, under their own ':fs' key. */
     framestutter: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
       if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }   // onion-skin ghosts must not touch the hold
-      const rate = Math.max(1, Math.min(30, p.rate == null ? 8 : FM.evalProp(p.rate, t)));
+      const clock = frameStutterClock(p, t, tl);
       const mode = Math.round(FM.evalProp(p.mode, t) || 0);
       const blend = clamp01(p.blend == null ? 0 : FM.evalProp(p.blend, t));
       const duty = Math.max(0.05, Math.min(1, p.duty == null ? 0.5 : FM.evalProp(p.duty, t)));
@@ -14492,44 +14590,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          hold runs 0.1× to 1.9× its length) — the uneven "on twos, then threes" of hand-made stop-motion. Hashed on the
          boundary index, never Math.random, so which hold a moment belongs to is a function of the clock alone; the first
          boundary stays at the clip's start. With numeric Rate, 0 and 0 keep the old `floor(tl·rate)` byte for byte. */
-      const offs = p.offset == null ? 0 : clamp01(FM.evalProp(p.offset, t) || 0);
-      const irr = p.random == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.random, t) || 0)) / 100;
-      const elapsed = Math.max(0, tl);
-      // Rate changes move future hold boundaries; they must not renumber the holds already passed.
-      let phase = FM.isAnimated(p.rate)
-        ? FM.integrateProp(p.rate, t - elapsed, t, u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u))))
-        : elapsed * rate;
-      let q, qLo = 0, qLen = 1;
-      if (offs > 0) phase += offs;
-      const jit = k => { if (k <= 0 || irr <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
-      if (irr > 0) {
-        const f = Math.floor(phase), b0 = f + jit(f), b1 = f + 1 + jit(f + 1);
-        q = phase < b0 ? f - 1 : (phase >= b1 ? f + 1 : f);
-        qLo = q + jit(q); qLen = (q + 1 + jit(q + 1)) - qLo;
-      } else { q = Math.floor(phase); qLo = q; }
+      const { irr, phase, q, qLo, qLen } = clock;
       if (expand && expand.sampleAt) {
-        // Invert the same monotone rate clock that chose q. A keyed Rate needs the inverse of
-        // its integral; numeric Rate keeps the exact arithmetic used by the old quantum grid.
-        const base = t - elapsed;
-        const atPhase = target => {
-          const want = Math.max(0, target - offs);
-          if (want <= 0) return base;
-          if (!FM.isAnimated(p.rate)) return Math.min(t, base + want / rate);
-          const speed = u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u)));
-          let lo = base, hi = t;
-          for (let i = 0; i < 28; i++) {
-            const mid = (lo + hi) / 2;
-            if (FM.integrateProp(p.rate, base, mid, speed) < want) lo = mid;
-            else hi = mid;
-          }
-          return (lo + hi) / 2;
-        };
         if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > duty) return;
-        if (mode === 2 && q > 0) {
+        if (mode === 2 && clock.priorPhase != null) {
           const trail = p.trail == null ? 0.45 : clamp01(FM.evalProp(p.trail, t));
-          if (trail > 0) { B.globalAlpha = trail; B.drawImage(expand.sampleAt(atPhase(q - 1 + jit(q - 1)), 1), 0, 0); B.globalAlpha = 1; }
+          if (trail > 0) { B.globalAlpha = trail; B.drawImage(expand.sampleAt(clock.atPhase(clock.priorPhase), 1), 0, 0); B.globalAlpha = 1; }
         }
-        B.drawImage(expand.sampleAt(atPhase(qLo), 0), 0, 0);
+        B.drawImage(expand.sampleAt(clock.atPhase(qLo), 0), 0, 0);
         if (blend > 0) { B.globalAlpha = blend; B.drawImage(A, 0, 0); B.globalAlpha = 1; }
         return;
       }
@@ -19091,7 +19159,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ctx.setLineDash([]); ctx.lineDashOffset = 0;   // never leak the dash pattern to the next layer
     } else {
       const m = FM.media.get(layer.id);
-      if (m && m.el) {
+      const stutterSource = _frameStutterMediaSource && _frameStutterMediaSource.id === layer.id
+        ? _frameStutterMediaSource.source : null;
+      if (m && (m.el || stutterSource)) {
         const w = m.width, h = m.height;
         // Crop: the visible frame is the crop rect (in source px). cw/ch = frame size, cr.x/cr.y = the
         // source sub-rect to sample. Colour ops (grade/key) still process the FULL source (w×h) — only
@@ -19108,12 +19178,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           ctx.restore();
           return;
         }
-        let src = null;
+        let src = stutterSource;
         /* ⚠️ queue 690 (HUNT-a): AN ANIMATED GIF PICKS ITS FRAME FROM THE CLIP'S OWN TIME. m.el is a detached <img>, which
            only ever paints frame 0, so the frames are decoded on load (js/media.js, `anim`) and chosen here — looping,
            through layerLocalTime so a trim, a speed change and Reverse move it like a clip, and the export (same
            renderScene) matches the preview. A still image has no `anim` and takes the old path untouched. */
-        if (m.anim && m.anim.frames && m.anim.frames.length > 1 && FM.animFrameAt) {
+        if (!src && m.anim && m.anim.frames && m.anim.frames.length > 1 && FM.animFrameAt) {
           const local = FM.layerLocalTime(layer, t);
           src = FM.animFrameAt(m.anim, local == null ? 0 : local);
         }
@@ -19121,7 +19191,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
         // nearest source frames so slow motion looks smooth instead of stuttering on dupes.
         const slow = (FM.speedAt ? FM.speedAt(layer, t) : (layer.speed || 1)) < 1;   // ramped speed is an object — raw compare was always false, so frame-blend never engaged on ramps
-        if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow))) {
+        if (!src && m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow))) {
           const local = FM.layerLocalTime(layer, t);
           if (local != null) {
             const fc = m.frameCache, fpos = local * (fc.effFps || fc.fps);   // effFps spans the whole clip even past the 900-frame cap

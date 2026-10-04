@@ -1008,6 +1008,14 @@ window.FM = window.FM || {};
     if (!_tickCh) return new Promise(r => setTimeout(r, 0));
     return new Promise(r => { _tickQ.push(r); _tickCh.port2.postMessage(0); });
   }
+  function exportStutterSampler(media, scene) {
+    if (!FM.createFrameStutterSampler || !scene.layers.some(layer => layer && layer.type === 'video' &&
+        (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) return null;
+    return FM.createFrameStutterSampler(media, {
+      maxBytes: Math.min(256 * 1024 * 1024, (FM.frameCacheLimits && FM.frameCacheLimits().maxBytes) || 128 * 1024 * 1024),
+      timeoutMs: 20000, shouldCancel: () => FM._exportCancel,
+    });
+  }
 
   /* NO AUDITION SURVIVES INTO AN EXPORT (queue 916, clause 2). The audio-effect audition (the Hear
    * button, queue 653) plays a clip's element on its own frame loop with FM.playing false, so pausing
@@ -1274,7 +1282,7 @@ window.FM = window.FM || {};
 
       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
-      let delivered = false, recorder = null, poster = null, releaseVideos = null, frameRenderer = null, encoder = null;
+      let delivered = false, recorder = null, poster = null, releaseVideos = null, frameRenderer = null, encoder = null, stutterSampler = null;
       try {
       /* CANCEL DURING "Decoding frames…" STOPS HERE (queue 916, clause 3). prepareCaches breaks out of its
        * loop on the flag, and its own comment says that stops the export going on into "the audio mix,
@@ -1351,6 +1359,7 @@ window.FM = window.FM || {};
       frameRenderer = FM.exportWorker ? await FM.exportWorker.create(scene, {
         time: start, shouldCancel: () => FM._exportCancel, capture:captured
       }) : null;
+      if (!frameRenderer) stutterSampler = exportStutterSampler(captured ? captured.media : FM.media, scene);
       if (FM._exportCancel) throw new Error('CANCELLED');
       if (frameRenderer) {
         // Keep the adapter tied to the actual renderer document, including direct/custom renderer
@@ -1364,9 +1373,10 @@ window.FM = window.FM || {};
       const renderFrame = async t => {
         if (frameRenderer) await frameRenderer.render(projCtx, t);
         else {
+          const stutterSources = stutterSampler ? await stutterSampler.prepare(scene, t) : null;
           if (captured && captured.videos && captured.videos.length) await FM.exportWorker.seekVideos(captured, t, {shouldCancel:() => FM._exportCancel});
           if (!captured) await seekAllVideos(scene, t);
-          if (!captured) FM.renderScene(projCtx, scene, t);
+          if (!captured) FM.withFrameStutterSources(stutterSources, () => FM.renderScene(projCtx, scene, t));
           else {
             // The main compositor has synchronous preview globals. Scope the captured state only
             // during this draw, never over an await, and restore the editor even if drawing throws.
@@ -1375,7 +1385,7 @@ window.FM = window.FM || {};
             try {
               FM.scene=scene;FM.time=t;FM._exportTransparent=captured.transparent;
               FM.isolate=null;FM._dragOrderIds=null;FM.media=captured.media;
-              FM.renderScene(projCtx, scene, t);
+              FM.withFrameStutterSources(stutterSources, () => FM.renderScene(projCtx, scene, t));
             } finally {
               FM.scene=previous.scene;FM.time=previous.time;FM._exportTransparent=previous.transparent;
               FM.isolate=previous.isolate;FM._dragOrderIds=previous.dragOrder;FM.media=previous.media;
@@ -1393,6 +1403,12 @@ window.FM = window.FM || {};
         : (((captured ? captured.transparent : FM._exportTransparent) || !resumeDocument.project.background) ? 'main-transparent-clear-1' : null);
       if (!frameRenderer && captured && FM.exportWorker.mediaID(captured)) {
         resumeRenderer = (resumeRenderer || 'main') + ';' + FM.exportWorker.mediaID(captured);
+      }
+      if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'video' &&
+          (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
+        // C31 changes opaque main-renderer pixels too; never splice an old history-based prefix
+        // into a new stateless hold. Worker jobs carry their own bumped revision above.
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-video-boundary-1';
       }
       let sig = null, saved = null;
       if (XR) {
@@ -1697,6 +1713,7 @@ window.FM = window.FM || {};
       }
       delivered = true;
       } finally {
+        if (stutterSampler) stutterSampler.dispose();
         if (frameRenderer) frameRenderer.dispose();
         // A failed Worker frame must release the encoder too, without erasing recoverable chunks.
         if (encoder && encoder.state !== 'closed') { try { encoder.close(); } catch (e) {} }
@@ -1785,7 +1802,7 @@ window.FM = window.FM || {};
 
       const transparent = !!opts.transparent;
       FM._exporting = true;   // skip the compositor's preview-only hold-frame capture (#13,#22)
-      let releaseVideos = null;
+      let releaseVideos = null, stutterSampler = exportStutterSampler(FM.media, scene);
       try {
         if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — a Cancel during "Decoding frames…" stops here, not a frame later
         releaseVideos = await holdVideoElements(scene, s => opts.onProgress && opts.onProgress(0, s, true));   // queue 690
@@ -1802,7 +1819,8 @@ window.FM = window.FM || {};
           if (FM._exportCancel) throw new Error('CANCELLED');
           const t = start + f / fps;
           await seekAllVideos(scene, t);
-          FM.renderScene(projCtx, scene, t);
+          const stutterSources = stutterSampler ? await stutterSampler.prepare(scene, t) : null;
+          FM.withFrameStutterSources(stutterSources, () => FM.renderScene(projCtx, scene, t));
           outCtx.clearRect(0, 0, outW, outH);
           blit(outCtx);
           const data = outCtx.getImageData(0, 0, outW, outH).data;
@@ -1813,6 +1831,7 @@ window.FM = window.FM || {};
         const blob = gif.finish();
         download(blob, (opts.name || 'freemotion-export') + '.gif');
       } finally {
+        if (stutterSampler) stutterSampler.dispose();
         if (releaseVideos) releaseVideos();   // queue 690
         FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
@@ -1865,7 +1884,7 @@ window.FM = window.FM || {};
 
       const transparent = !!opts.transparent;
       FM._exporting = true;
-      let releaseVideos = null;
+      let releaseVideos = null, stutterSampler = exportStutterSampler(FM.media, scene);
       try {
         if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — a Cancel during "Decoding frames…" stops here, not a frame later
         releaseVideos = await holdVideoElements(scene, s => opts.onProgress && opts.onProgress(0, s, true));   // queue 690
@@ -1876,7 +1895,8 @@ window.FM = window.FM || {};
           if (FM._exportCancel) throw new Error('CANCELLED');
           const t = start + f / fps;
           await seekAllVideos(scene, t);
-          FM.renderScene(projCtx, scene, t);
+          const stutterSources = stutterSampler ? await stutterSampler.prepare(scene, t) : null;
+          FM.withFrameStutterSources(stutterSources, () => FM.renderScene(projCtx, scene, t));
           outCtx.clearRect(0, 0, outW, outH);
           blit(outCtx);
           const blob = await new Promise(res => outCanvas.toBlob(res, 'image/png'));
@@ -1888,6 +1908,7 @@ window.FM = window.FM || {};
         const zipBlob = zip.finish();
         download(zipBlob, base + '_frames.zip');
       } finally {
+        if (stutterSampler) stutterSampler.dispose();
         if (releaseVideos) releaseVideos();   // queue 690
         FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });

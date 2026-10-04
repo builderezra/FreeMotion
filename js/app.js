@@ -90,6 +90,34 @@ window.FM = window.FM || {};
     ctx.restore();
   }
   let _frameSig = '';   // FM.adjNeedsFrame's answer at the last render ('' = nothing needs the whole frame)
+  let _stutterPreviewSampler = null, _stutterPreviewScene = null, _stutterPreviewJob = null;
+  function stutterPreviewSources(scene, t) {
+    if (FM._exporting || !FM.frameStutterVideoPlans || !FM.createFrameStutterSampler) return null;
+    const plans = FM.frameStutterVideoPlans(scene, t, FM.media);
+    if (_stutterPreviewScene !== scene || !plans.length) {
+      if (_stutterPreviewSampler) _stutterPreviewSampler.dispose();
+      _stutterPreviewSampler = null; _stutterPreviewJob = null; _stutterPreviewScene = scene;
+    }
+    if (!plans.length) return null;
+    if (!_stutterPreviewSampler) {
+      const limits = FM.frameCacheLimits ? FM.frameCacheLimits() : { maxDim: 640, maxBytes: 64 * 1024 * 1024 };
+      _stutterPreviewSampler = FM.createFrameStutterSampler(FM.media,
+        { maxDim: limits.maxDim, maxBytes: Math.min(limits.maxBytes, 64 * 1024 * 1024), timeoutMs: 5000 });
+    }
+    const sampler = _stutterPreviewSampler;
+    const ready = sampler.current(scene, t, plans);
+    if (ready) return ready;
+    const job = sampler.prepare(scene, t, plans);
+    if (job !== _stutterPreviewJob) {
+      _stutterPreviewJob = job;
+      job.then(() => {
+        const now = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time;
+        if (sampler === _stutterPreviewSampler && scene === FM.scene
+            && sampler.current(FM.scene, now)) FM.requestRender();
+      }).catch(e => { if (sampler === _stutterPreviewSampler && !/CANCELLED/i.test(e.message)) console.warn(e); });
+    }
+    return null; // the synchronous first paint remains provisional until this decoder lands
+  }
   function render() {
     if (!ctx) return;
     /* THE PREVIEW ONLY (queue 549). Ezra: "when you go to the end of a layer you can't see it anymore…
@@ -119,7 +147,12 @@ window.FM = window.FM || {};
       const fr = FM.adjNeedsFrame(FM.scene), sig = fr ? 'f' + fr.maxScale : '';
       if (sig !== _frameSig) { _frameSig = sig; FM.refreshPreviewScale(); }
     }
-    try { FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
+    const renderAt = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time;
+    const stutterSources = stutterPreviewSources(FM.scene, renderAt);
+    try {
+      if (FM.withFrameStutterSources) FM.withFrameStutterSources(stutterSources, () => FM.renderScene(ctx, FM.scene, renderAt));
+      else FM.renderScene(ctx, FM.scene, renderAt);
+    }
     finally { FM._typingCue = null; }
     if (FM.onionSkin && !FM.playing) drawOnionSkin();
     if (FM.showGuides) drawGuides();
