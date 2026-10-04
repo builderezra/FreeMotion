@@ -121703,4 +121703,58 @@
       throw new Error('Start offset still locks every Glow Scan to the same phase');
   });
 
+  test('690 Wipes fit the layer and reveal clockwise, counterclockwise or with blades', { item: 'TBD' }, function () {
+    const kernels = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!kernels || !kernels.wipe || !kernels.radialwipe) throw new Error('Wipe kernels are unavailable');
+    for (const [type, keys] of [['wipe', ['fit', 'invert']], ['radialwipe', ['fit', 'invert', 'dir', 'blades']]]) {
+      const params = FM.fxRegistry.paramsOf(type) || [], fresh = FM.fxRegistry.makeInstance(type);
+      for (const key of keys) if (!params.some(p => p.key === key) || fresh.params[key] == null)
+        throw new Error(type + ' is missing its ' + key + ' control');
+    }
+    const W = 400, H = 100, total = 100 * 40;
+    const render = (type, extra, full) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+        if (full || (x >= 20 && x < 120 && y >= 30 && y < 70)) d[(y * W + x) * 4 + 3] = 255;
+      kernels[type](d, W, H, Object.assign(type === 'wipe' ? { progress: 0.5, angle: 0 } : { progress: 0.3, start: 0 }, extra), 0, 1);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const alpha = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const count = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 127) n++; return n; };
+    if (!same(render('wipe', {}), render('wipe', { fit:0, invert:0 })) ||
+        !same(render('radialwipe', {}), render('radialwipe', { fit:0, invert:0, dir:0, blades:1 })))
+      throw new Error('new default controls changed an existing Wipe');
+    const frame = render('wipe', {}), layer = render('wipe', { fit:1 });
+    if (count(frame) !== total || count(layer) < total * 0.45 || count(layer) > total * 0.55)
+      throw new Error('Layer Fit still measures the frame instead of revealing half the 100px title');
+    const reverse = render('wipe', { fit:1, invert:1 });
+    if (alpha(reverse, 30, 50) || !alpha(reverse, 110, 50))
+      throw new Error('Reverse did not reveal the opposite side of the layer');
+    if (!alpha(render('radialwipe', { fit:1 }), 100, 50) || alpha(render('radialwipe', {}), 100, 50))
+      throw new Error('Radial Layer Fit did not move the pivot into the title');
+    const clockwise = render('radialwipe', {}, true), counter = render('radialwipe', { dir:1 }, true);
+    if (!alpha(clockwise, 200, 80) || alpha(clockwise, 200, 20) ||
+        !alpha(counter, 250, 50) || !alpha(counter, 200, 20) || alpha(counter, 200, 80))
+      throw new Error('Counterclockwise still opens clockwise');
+    const both = render('radialwipe', { dir:2 }, true);
+    if (!alpha(both, 230, 20) || !alpha(both, 230, 80) ||
+        alpha(both, 200, 20) || alpha(both, 200, 80))
+      throw new Error('Both directions did not open symmetrically from Start');
+    const blades = render('radialwipe', { blades:4, progress:0.2 }, true);
+    if (!alpha(blades, 250, 50) || !alpha(blades, 200, 20) || alpha(blades, 230, 80))
+      throw new Error('four radial blades are not repeated around the pivot');
+    const flipped = render('radialwipe', { invert:1 }, true);
+    if (!same(flipped, counter))
+      throw new Error('Reverse did not flip radial reveal order');
+    const soft = render('radialwipe', { dir:2, softness:12 }, true);
+    let partial = 0; for (let i = 3; i < soft.length; i += 4) if (soft[i] > 0 && soft[i] < 255) partial++;
+    if (partial < 10) throw new Error('the opt-in radial sweep lost its soft edge');
+    for (const [type, opts] of [['wipe', { fit:1, invert:1 }], ['radialwipe', { fit:1, dir:2, blades:4, invert:1 }]]) {
+      if (count(render(type, Object.assign({}, opts, { progress:0 }))) !== 0 ||
+          count(render(type, Object.assign({}, opts, { progress:1 }))) !== total)
+        throw new Error(type + ' opt-in controls changed the hidden and fully shown endpoints');
+    }
+  });
+
 })();

@@ -664,8 +664,8 @@ globalThis.FM = globalThis.FM || {};
        The MAX is deliberately untouched: the entry warns not to just halve it, and a range change would
        silently re-render every project that already uses these. A step change cannot — every value the
        old step could hold is still exactly representable. */
-    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the edge was a hard 1-bit cut
-    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
+    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }, { key: 'fit', label: 'Fit', options: [[0, 'Frame'], [1, 'Layer']], def: 0 }, { key: 'invert', label: 'Reverse', options: [[0, 'Off'], [1, 'On']], def: 0 }] },   // C36: fit the layer's real alpha box; reverse changes the reveal side
+    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }, { key: 'fit', label: 'Fit', options: [[0, 'Frame'], [1, 'Layer']], def: 0 }, { key: 'invert', label: 'Reverse', options: [[0, 'Off'], [1, 'On']], def: 0 }, { key: 'dir', label: 'Direction', options: [[0, 'Clockwise'], [1, 'Counterclockwise'], [2, 'Both directions']], def: 0 }, { key: 'blades', label: 'Blades', min: 1, max: 12, step: 1, def: 1 }] },   // C36: radial sweep can follow the layer and open in several directions
     { type: 'gradientwipe', label: 'Gradient Wipe', layer: true, layerLabel: 'Wipe map', desc: 'Reveal this layer in the brightness order of another layer. Use a gradient, noise or image as the map; keyframe Progress to animate the wipe.', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
       { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 10, unit: '%' },
@@ -5463,6 +5463,74 @@ globalThis.FM = globalThis.FM || {};
     const x = i / 4096;
     _rec709Encode[i] = x < 0.018 ? 4.5 * x : 1.099 * Math.pow(x, 0.45) - 0.099;
   }
+  // C36's opt-in wipe modes live beside the original kernels below so saved instances
+  // and new controls left at their defaults still take the byte-identical legacy path.
+  function wipeOption(p, key, t, fallback) {
+    const value = p[key] == null ? fallback : FM.evalProp(p[key], t);
+    return isFinite(value) ? value : fallback;
+  }
+  function wipeBox(d, W, H, fit) {
+    return fit ? alphaBBoxExact(d, W, H) : { x: 0, y: 0, w: W, h: H };
+  }
+  function wipeOptIn(d, W, H, p, t) {
+    const fit = Math.round(wipeOption(p, 'fit', t, 0)) === 1;
+    const reverse = Math.round(wipeOption(p, 'invert', t, 0)) === 1;
+    let progress = Math.max(0, Math.min(1, wipeOption(p, 'progress', t, 0.5)));
+    if (progress <= 0) { for (let i = 3; i < d.length; i += 4) d[i] = 0; return; }
+    if (progress >= 1) return;
+    const box = wipeBox(d, W, H, fit);
+    if (!box) return;
+    const angle = wipeOption(p, 'angle', t, 0) * Math.PI / 180;
+    const dx = Math.cos(angle), dy = Math.sin(angle);
+    const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+    const span = Math.max(1e-6, Math.abs(box.w * dx) + Math.abs(box.h * dy));
+    const softness = Math.max(0, wipeOption(p, 'softness', t, 0));
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4 + 3;
+      if (!d[i]) continue;
+      let position = ((x - cx) * dx + (y - cy) * dy) / span + 0.5;
+      if (reverse) position = 1 - position;
+      const cover = softness > 0 ? (progress * (span + softness) - position * span) / softness : (position <= progress ? 1 : 0);
+      if (cover < 1) d[i] = cover <= 0 ? 0 : d[i] * cover;
+    }
+  }
+  function radialWipeOptIn(d, W, H, p, t) {
+    const fit = Math.round(wipeOption(p, 'fit', t, 0)) === 1;
+    const reverse = Math.round(wipeOption(p, 'invert', t, 0)) === 1;
+    const dir = Math.max(0, Math.min(2, Math.round(wipeOption(p, 'dir', t, 0))));
+    const blades = Math.max(1, Math.min(12, Math.round(wipeOption(p, 'blades', t, 1))));
+    const progress = Math.max(0, Math.min(1, wipeOption(p, 'progress', t, 0.5)));
+    if (progress <= 0) { for (let i = 3; i < d.length; i += 4) d[i] = 0; return; }
+    if (progress >= 1) return;
+    const box = wipeBox(d, W, H, fit);
+    if (!box) return;
+    const TAU = Math.PI * 2;
+    const start = wipeOption(p, 'start', t, 0) * Math.PI / 180;
+    const cx = box.x + box.w * wipeOption(p, 'centerx', t, 50) / 100;
+    const cy = box.y + box.h * wipeOption(p, 'centery', t, 50) / 100;
+    const softness = Math.max(0, wipeOption(p, 'softness', t, 0));
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4 + 3;
+      if (!d[i]) continue;
+      const px = x - cx, py = y - cy;
+      let fraction = (Math.atan2(py, px) - start) % TAU;
+      if (fraction < 0) fraction += TAU;
+      fraction = (fraction * blades / TAU) % 1;
+      if (dir === 1) fraction = (1 - fraction) % 1;
+      else if (dir === 2) fraction = 2 * Math.min(fraction, 1 - fraction);
+      if (reverse) fraction = dir === 2 ? 1 - fraction : (1 - fraction) % 1;
+      let cover;
+      if (!softness) cover = fraction <= progress ? 1 : 0;
+      else {
+        const distance = dir === 2
+          ? (fraction <= progress ? progress - fraction : -(fraction - progress))
+          : (fraction <= progress ? Math.min(fraction, progress - fraction) : -Math.min(fraction - progress, 1 - fraction));
+        const arc = TAU * Math.hypot(px, py) / (blades * (dir === 2 ? 2 : 1));
+        cover = distance * arc / softness + 0.5;
+      }
+      if (cover < 1) d[i] = cover <= 0 ? 0 : d[i] * cover;
+    }
+  }
   const PIXEL_FX = {
     deflicker: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
       const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
@@ -8665,14 +8733,14 @@ globalThis.FM = globalThis.FM || {};
       var bd_pos = function(bx, by){ return bd_dir === 1 ? bx / bd_nx : bd_dir === 2 ? 1 - bx / bd_nx : bd_dir === 3 ? by / bd_ny : 1 - by / bd_ny; };
       var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); if(bd_seed) bd_h = bd_h ^ Math.imul(bd_seed, 0x9e3779b1); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_dir){ bd_r = bd_pos(bd_bx, bd_by)*0.7 + bd_r*0.3; } if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
-    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; if(wp_prog<=0){ for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1)return; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
+    wipe: function(d, W, H, p, t){ if(Math.round(wipeOption(p,'fit',t,0))===1 || Math.round(wipeOption(p,'invert',t,0))===1){ wipeOptIn(d,W,H,p,t); return; } var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; if(wp_prog<=0){ for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1)return; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
       /* EDGE SOFTNESS (queue 904), in project px (pxToPlate scales it). The feather is centred on the edge and multiplies the alpha, so
          a diagonal wipe is a clean gradient instead of stair-steps. 0 takes the old 1-bit cut between the exact endpoints. */
       var wp_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
       if(wp_sf > 0){ for(var wq_y=0; wq_y<H; wq_y++){ var wq_row = wq_y*W; var wq_py = (wq_y-wp_cy)*wp_dy; for(var wq_x=0; wq_x<W; wq_x++){ var wq_proj = ((wq_x-wp_cx)*wp_dx + wq_py)*wp_inv + 0.5;
           var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
       for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
-    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; if(rw_prog<=0){ for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1)return; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = wCx(p, t, W, W/2), rw_cy = wCy(p, t, H, H/2);   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
+    radialwipe: function(d, W, H, p, t){ if(Math.round(wipeOption(p,'fit',t,0))===1 || Math.round(wipeOption(p,'invert',t,0))===1 || Math.round(wipeOption(p,'dir',t,0))!==0 || Math.round(wipeOption(p,'blades',t,1))!==1){ radialWipeOptIn(d,W,H,p,t); return; } var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; if(rw_prog<=0){ for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1)return; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = wCx(p, t, W, W/2), rw_cy = wCy(p, t, H, H/2);   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
       /* EDGE SOFTNESS (queue 904): both edges of the swept wedge are feathered over an ARC of that many px at each pixel's radius,
          centred on the edge. A full sweep (progress 1) has no edge — it returns untouched rather than feathering the start seam. */
       var rw_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
