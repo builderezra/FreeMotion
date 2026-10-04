@@ -13567,6 +13567,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // effects ahead of Frame Stutter. Render that prefix at the boundary too, so a
     // keyed grade is held with the moving shape. A later active effect or another
     // temporal source still needs a different stack split and keeps the old path.
+    // Legacy vector masks, including feathered ones, are rendered into each whole plate at
+    // its own sample time. Pen masks remain excluded because they wrap the whole effect stack.
     if (stutterIndex >= 0
         && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media')
           || (stutterMedia && stutterMedia.kind === 'image' && stutterMedia.el && !layer._cropEditing))
@@ -13574,10 +13576,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         && !layer.effects.slice(stutterIndex + 1).some(e => e && e.enabled !== false)
         && simpleTemporalParent(layer, scene, true)
         && !layer.fxTimeOffset && layer._clipStart == null
-        && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
-        // A hard vector clip is part of the whole-plate redraw at the hold boundary. Feathered
-        // masks use a separate shared offscreen pass and retain the history-based fallback.
-        && !(layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0)) {
+        && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)) {
       expand.sampleAt = (at, slot) => sampleAt(at, slot, null);
     } else if (fx.type === 'framestutter' && layer.type === 'video' && _frameStutterSources) {
       const prepared = _frameStutterSources.get(layer.id);
