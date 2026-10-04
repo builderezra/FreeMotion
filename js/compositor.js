@@ -13315,6 +13315,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _frameStutterSources = sources;
     try { return render(); } finally { _frameStutterSources = before; }
   };
+  function simpleTemporalParent(layer, scene) {
+    if (!layer.parent) return true;
+    const p = scene && scene.layers && scene.layers.find(candidate => candidate && candidate.id === layer.parent);
+    // A translating null's transform is a pure function of time. Rotated/scaled parents rasterize
+    // slightly differently in the cropped scan-strip viewport; keep those on the existing path
+    // until historical whole-plate sampling can be made both exact and fast.
+    return !!(p && p.type === 'null' && !p.parent && !p.splitOf && p._clipStart == null
+      && !p.fxTimeOffset && !(p.behaviors && p.behaviors.length)
+      && !(p.wiggle && p.wiggle.enabled && p.wiggle.amp)
+      && p.transform && p.transform.rotation === 0 && p.transform.scale === 1
+      && !(p.masks && p.masks.length) && !(p.mask && p.mask.enabled));
+  }
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -13412,7 +13424,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (stutterIndex >= 0 && layer.type === 'shape'
         && layer.effects.slice(0, stutterIndex).every(e => !e || e.enabled === false || STUTTER_SAFE_UPSTREAM[e.type])
         && !layer.effects.slice(stutterIndex + 1).some(e => e && e.enabled !== false)
-        && FM.fillModeOf(layer) !== 'media' && !layer.parent
+        && FM.fillModeOf(layer) !== 'media' && simpleTemporalParent(layer, scene)
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
         && !(layer.mask && layer.mask.enabled)) {
@@ -13439,7 +13451,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (warpIndex >= 0 && layer.type === 'shape'
         && !layer.effects.slice(0, warpIndex).some(e => e && e.enabled !== false)
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
-        && FM.fillModeOf(layer) !== 'media' && !layer.parent
+        && FM.fillModeOf(layer) !== 'media' && simpleTemporalParent(layer, scene)
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
         && !(layer.mask && layer.mask.enabled)) {
