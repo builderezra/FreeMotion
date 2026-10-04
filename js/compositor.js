@@ -14284,11 +14284,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const plans = [];
     if (!scene || !scene.layers || !media) return plans;
     for (const layer of scene.layers) {
+      // Legacy vector masks and one identified upstream pen mask are redrawn on the
+      // whole historical plate. Other pen-mask stacks retain their existing path.
       if (!layer || layer.type !== 'video' || layer.visible === false || !FM.isLayerVisibleAt(layer, t)
           || layer.parent || layer.fxTimeOffset || layer._clipStart != null || layer.frameBlend
-          // Legacy vector masks are redrawn on the whole historical plate. Pen-mask
-          // stacks still need marker-order proof before entering this video path.
-          || (layer.masks && layer.masks.length)
           || (layer.behaviors && layer.behaviors.length)) continue;
       const m = media.get(layer.id);
       if (!m || !m.file || !m.el || (layer.fillMode && layer.fillMode !== 'none')) continue;
@@ -14297,7 +14296,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       effects.forEach((fx, i) => { if (fx && fx.enabled !== false && fx.type === 'framestutter') indices.push(i); });
       if (indices.length !== 1) continue;
       const index = indices[0], fx = effects[index];
-      if (effects.slice(0, index).some(e => e && e.enabled !== false && !STUTTER_SAFE_UPSTREAM[e.type])) continue;
+      const mask = layer.masks && layer.masks.length === 1 ? layer.masks[0] : null;
+      const markers = effects.filter(e => e && e.enabled !== false && e.type === 'penmask');
+      const penSafe = !!(mask && mask.enabled !== false && typeof mask.id === 'string'
+        && markers.length === 1 && markers[0].maskId === mask.id);
+      if (layer.masks && layer.masks.length && !penSafe) continue;
+      if (penSafe && layer.mask && layer.mask.enabled) continue; // combined stencil order needs separate proof
+      if (effects.slice(0, index).some(e => e && e.enabled !== false && !STUTTER_SAFE_UPSTREAM[e.type]
+          && !(penSafe && e.type === 'penmask' && e.maskId === mask.id))) continue;
       // The boundary redraw includes the upstream stack; a downstream effect belongs after the
       // held plate and would be applied twice by this nested draw. Keep that case on the old path.
       if (effects.slice(index + 1).some(e => e && e.enabled !== false)) continue;
