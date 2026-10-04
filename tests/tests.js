@@ -122022,7 +122022,7 @@
       XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
       await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
         onProgress: function () {}, onReady: async function () {} });
-      if (!renderer || !renderer.includes(';c31-shape-timewarp-grade-1'))
+      if (!renderer || !renderer.includes(';c31-shape-timewarp-grade-2'))
         throw new Error('an interrupted Time Warp Scan MP4 can resume an old history-based prefix');
     } finally { XR.signature = previousSignature; FM.scene = previousScene; }
   });
@@ -122061,6 +122061,41 @@
       const live = frame(24 / 30, width);
       layer.effects = [grade, warp];
       if (same(cold, live)) throw new Error('Control: the scan did not retain a historical plate');
+    }
+  });
+
+  test('690 Time Warp Scan cold-seeks a moving shape through a hard vector mask', { item: 'TBD', budgetMs: 30000 }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 16, y: 40, shapeW: 46, shapeH: 64,
+      fill: '#e28842', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 16, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] };
+    layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 30, h: 38, feather: 0, invert: false };
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, mode: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [warp];
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const width of [120, 60]) {
+      layer.effects = [];
+      const earlier = frame(0.2, width), live = frame(0.8, width);
+      if (same(earlier, live)) throw new Error('Control: masked shape did not move');
+      layer.effects = [warp]; FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(0.8, width);
+      if (!same(cold, played)) {
+        const i = cold.findIndex((v, j) => v !== played[j]);
+        throw new Error('Time Warp Scan masked cold seek differs from playback at width=' + width +
+          ', pixel=' + (i >> 2) + ', channel=' + (i & 3) + ', cold=' + cold[i] + ', played=' + played[i]);
+      }
+      if (same(cold, live)) throw new Error('Control: masked scan is only the current picture at width=' + width);
     }
   });
 

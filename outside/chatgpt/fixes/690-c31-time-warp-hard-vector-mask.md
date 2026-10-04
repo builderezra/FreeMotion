@@ -1,0 +1,9 @@
+# #690/C31 — Time Warp Scan cold-seeks a hard-masked shape
+
+Starting commit: `904a8aa55c9f8da43a35614c3de26fe963acd14c` on the clean Codex-only preferred checkpoint. The exact #690 brief in `REQUESTS.md` and C31 plan row were checked; no `audits/*.json` record names C31, Time Warp Scan or Frame Stutter.
+
+A moving shape under a hard legacy vector mask previously filled scanned strips with the current masked picture after a cold seek. That mask can be evaluated synchronously at each historical crossing time, so the shape scan now admits it. The redraw uses a whole source plate for this masked case: clipping the narrow strip changed edge antialiasing and failed pixel parity against sequential playback. Soft masks, pen masks, and masked media retain their existing gates. Whole-plate redraw costs more on a cold seek but does not add work to ordinary sequential frames.
+
+Changed files: `js/compositor.js` (narrow hard-mask eligibility and whole-plate redraw), `js/exporter.js` (shape Time Warp resume identity 2), `index.html` (compositor cache 324, exporter cache 142), `tests/tests.js` (one focused `{ item: 'TBD' }` regression and updated existing resume assertion), and this report.
+
+The new native Chromium regression failed before the change and passed after it at full and half preview sizes, comparing cold seek with sequential playback and a moving-source control. A cropped scratch redraw was tried first but differed at antialiased mask edges; the whole-plate redraw passed. JavaScriptCore syntax checks on all three changed scripts and `git diff --check` passed. An adjacent existing shape/MP4 regression could not reach its assertions because the app frame intermittently omitted unrelated scripts during browser bootstrap; no result is claimed for that check. No push, PR, deployment, protected-file edit or shared Claude checkout edit.

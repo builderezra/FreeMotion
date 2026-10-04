@@ -13618,8 +13618,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         && simpleTemporalParent(layer, scene)
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
-        && !(layer.mask && layer.mask.enabled)) {
-      expand.sampleAt = (at, clip) => sampleAt(at, 0, null, clip);
+        // A hard legacy shape mask is clipped in layer-local space when sampleAt redraws each
+        // historical strip. Soft and media masks need a separate offscreen/decoder proof.
+        && !(layer.mask && layer.mask.enabled && (layer.type !== 'shape'
+          || FM.fillModeOf(layer) === 'media' || (layer.mask.feather || 0) > 0))) {
+      // Mask clipping can antialias a little differently when the scratch canvas starts at a
+      // strip edge. Use the whole plate for masked shapes so cold seeks match playback pixels.
+      expand.sampleAt = (at, clip) => sampleAt(at, 0, null,
+        layer.mask && layer.mask.enabled ? null : clip);
     }
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
