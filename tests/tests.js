@@ -122171,6 +122171,57 @@
     } finally { FM.media.remove(layer.id); image.close(); }
   });
 
+  test('690 C31 Time Warp Scan holds keyed grades on a cropped still image', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const tex = offscreen(40, 40), g = tex.getContext('2d');
+    g.fillStyle = '#7b6a58'; g.fillRect(0, 0, 20, 40);
+    g.fillStyle = '#4b8a9b'; g.fillRect(20, 0, 20, 40);
+    const image = await createImageBitmap(tex);
+    const layer = FM.makeLayer('image', { x: 25, y: 40, start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 25, e: 'linear' }, { t: 2, v: 85, e: 'linear' }] };
+    layer.crop = { x: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 16, e: 'linear' }] },
+      y: 0, w: 24, h: 40 };
+    const bright = FM.fxRegistry.makeInstance('brightness');
+    bright.params.amount = { kf: [{ t: 0, v: 0.3, e: 'linear' }, { t: 1, v: 2.2, e: 'linear' }] };
+    const contrast = FM.fxRegistry.makeInstance('contrast');
+    contrast.params.amount = { kf: [{ t: 0, v: 0.6, e: 'linear' }, { t: 1, v: 1.8, e: 'linear' }] };
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, loop: 0, mode: 0 });
+    layer.effects = [bright, contrast, warp];
+    FM.media.set(layer.id, { kind: 'image', el: image, width: 40, height: 40 });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    try {
+      for (const width of [120, 60]) for (const mode of [0, 1]) {
+        warp.params.mode = mode;
+        FM.resetMotionFlowCache();
+        let played;
+        for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+        FM.resetMotionFlowCache();
+        const cold = frame(24 / 30, width);
+        if (!same(cold, played)) {
+          const i = cold.findIndex((v, j) => v !== played[j]);
+          throw new Error((mode ? 'Reveal' : 'Freeze') + ' keyed still grade differs after cold seek at pixel ' +
+            (i >> 2) + ', width=' + width + ', cold=' + cold[i] + ', played=' + played[i]);
+        }
+        if (mode === 0 && width === 120) {
+          const savedBright = bright.params.amount, savedContrast = contrast.params.amount;
+          bright.params.amount = 2.2; contrast.params.amount = 1.8;
+          FM.resetMotionFlowCache();
+          const currentGrade = frame(24 / 30, width);
+          bright.params.amount = savedBright; contrast.params.amount = savedContrast;
+          if (same(cold, currentGrade)) throw new Error('Control: historical keyed grades did not affect frozen pixels');
+        }
+      }
+    } finally { FM.media.remove(layer.id); image.close(); }
+  });
+
   test('690 temporal holds cold-seek a shape driven by a moving null parent', { item: 'TBD', budgetMs: 30000 }, function () {
     const parent = FM.makeLayer('null', { name: 'moving rig', x: 0, y: 0, start: 0, duration: 2 });
     parent.start = 0; parent.duration = 2;
