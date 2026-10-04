@@ -1421,7 +1421,7 @@ window.FM = window.FM || {};
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
         // C31 changes opaque main-renderer pixels too; never splice an old history-based prefix
         // into a new stateless hold. Worker jobs carry their own bumped revision above.
-        resumeRenderer = (resumeRenderer || 'main') + ';c31-video-boundary-4';
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-video-boundary-5';
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'shape' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {

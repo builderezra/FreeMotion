@@ -122914,7 +122914,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-4')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-5')))
           throw new Error('masked held-video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -122997,8 +122997,79 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-4')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-5')))
           throw new Error('pen-masked held-video MP4 did not use the current resume renderer');
+      } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
+    } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
+  });
+
+  test('690 Frame Stutter cold-seeks decoded video with combined keyed pen and vector masks', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createFrameStutterSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: combined-mask video fixture is unavailable');
+    const made = [], file = await hunt2dIndexedClip(30, 30), rec = await hunt2dLoadWarm(file);
+    const layer = hunt2dClipLayer(rec, made), stutter = FM.fxRegistry.makeInstance('framestutter');
+    layer.duration = 1; layer.trimEnd = 1;
+    layer.mask = { enabled:true, shape:'rect', x:-26, y:0, w:76, h:32, feather:6, invert:false };
+    const rect = x => [[x,0],[x+64,0],[x+64,32],[x,32]];
+    layer.masks = [{ id:'stutter-video-combined-pen', type:'pen', enabled:true, mode:'add', closed:true,
+      path:{ kf:[{ t:0, v:rect(40), e:'linear' }, { t:1, v:rect(104), e:'linear' }] } }];
+    const marker = { type:'penmask', maskId:'stutter-video-combined-pen' };
+    Object.assign(stutter.params, { rate:4, mode:0, blend:0, offset:0, random:0 });
+    layer.effects = [marker, stutter];
+    const scene = hunt2dScene([layer], { duration:1 });
+    const sampler = FM.createFrameStutterSampler(FM.media, { maxDim:0, timeoutMs:10000 });
+    const seek = async t => {
+      const target = FM.frameSeekTarget(t, rec.duration), el = rec.el;
+      if (Math.abs(el.currentTime - target) < 1e-4 && !el.seeking && el.readyState >= 2) return;
+      await new Promise((resolve, reject) => {
+        let timer;
+        const finish = err => { clearTimeout(timer); el.removeEventListener('seeked', on);
+          el.removeEventListener('error', on); err ? reject(err) : resolve(); };
+        const on = () => { if (el.error) finish(new Error('combined-mask video decode failed'));
+          else if (!el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - target) < 1e-3) finish(); };
+        el.addEventListener('seeked', on); el.addEventListener('error', on);
+        timer = setTimeout(() => finish(new Error('combined-mask video seek timed out')), 10000);
+        el.currentTime = target; on();
+      });
+    };
+    const render = async (t, width, sources) => {
+      await seek(t);
+      const cv = offscreen(width, width / 4), g = cv.getContext('2d', { willReadFrequently:true });
+      FM.withFrameStutterSources(sources, () => FM.renderScene(g, scene, t));
+      return Array.from(g.getImageData(0, 0, width, width / 4).data);
+    };
+    try {
+      for (const width of [128, 64]) {
+        FM.resetMotionFlowCache();
+        let played;
+        for (let f = 0; f <= 21; f++) played = await render(f / 30, width, null);
+        FM.resetMotionFlowCache();
+        const prepared = await sampler.prepare(scene, 21 / 30);
+        if (!prepared || !prepared.get(layer.id))
+          throw new Error('combined pen/vector-masked video was excluded from boundary reconstruction');
+        const cold = await render(21 / 30, width, prepared);
+        if (cold.join() !== played.join()) throw new Error('combined masks changed after a cold seek at ' + width + ' px');
+        layer.mask.enabled = false;
+        let penOnly;
+        try { FM.resetMotionFlowCache(); penOnly = await render(21 / 30, width, prepared); }
+        finally { layer.mask.enabled = true; }
+        if (penOnly.join() === cold.join()) throw new Error('Control: vector mask changed no held pixels');
+        const savedMasks = layer.masks;
+        layer.masks = []; layer.effects = [stutter];
+        let vectorOnly;
+        try { FM.resetMotionFlowCache(); vectorOnly = await render(21 / 30, width, prepared); }
+        finally { layer.masks = savedMasks; layer.effects = [marker, stutter]; }
+        if (vectorOnly.join() === cold.join()) throw new Error('Control: pen mask changed no held pixels');
+      }
+      const previousScene = FM.scene, XR = FM.exportResume, previousSignature = XR && XR.signature;
+      if (!FM.exporter) throw new Error('setup: combined-mask MP4 exporter is unavailable');
+      let renderer = '';
+      try {
+        FM.scene = scene;
+        if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
+        const exported = await hunt2dExport({ fps:30, to:1 / 30 });
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-5')))
+          throw new Error('combined-mask video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
   });

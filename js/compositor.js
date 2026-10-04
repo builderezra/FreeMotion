@@ -14284,8 +14284,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const plans = [];
     if (!scene || !scene.layers || !media) return plans;
     for (const layer of scene.layers) {
-      // Legacy vector masks and one identified upstream pen mask are redrawn on the
-      // whole historical plate. Other pen-mask stacks retain their existing path.
+      // Legacy vector masks and one identified upstream pen mask, alone or together,
+      // are redrawn on the whole historical plate. Other pen stacks keep their old path.
       if (!layer || layer.type !== 'video' || layer.visible === false || !FM.isLayerVisibleAt(layer, t)
           || layer.parent || layer.fxTimeOffset || layer._clipStart != null || layer.frameBlend
           || (layer.behaviors && layer.behaviors.length)) continue;
@@ -14301,7 +14301,6 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const penSafe = !!(mask && mask.enabled !== false && typeof mask.id === 'string'
         && markers.length === 1 && markers[0].maskId === mask.id);
       if (layer.masks && layer.masks.length && !penSafe) continue;
-      if (penSafe && layer.mask && layer.mask.enabled) continue; // combined stencil order needs separate proof
       if (effects.slice(0, index).some(e => e && e.enabled !== false && !STUTTER_SAFE_UPSTREAM[e.type]
           && !(penSafe && e.type === 'penmask' && e.maskId === mask.id))) continue;
       // The boundary redraw includes the upstream stack; a downstream effect belongs after the
