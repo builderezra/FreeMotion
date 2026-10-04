@@ -121040,4 +121040,47 @@
       if (gap(stamps[3 - g], expected) > 1e-6) throw new Error('Shake smear followed the current Speed instead of the previous keyed phase');
     }
   });
+
+  test('Aperture Stencil loads both original weights and previews its title face', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const font = FM.studioFonts.list().find(f => f.name === 'FM Aperture Stencil');
+    if (!font || font.group !== 'original' || !font.regular.endsWith('fm-aperture-stencil-regular.woff2') || !font.bold.endsWith('fm-aperture-stencil-bold.woff2')) {
+      throw new Error('the Aperture Stencil family or a bundled weight is missing');
+    }
+    await FM.studioFonts.forScene({ layers: [
+      { type: 'text', fontFamily: font.css, bold: false },
+      { type: 'caption', fontFamily: font.css, bold: true },
+    ] });
+    const loaded = weight => Array.from(document.fonts).some(face =>
+      face.family.replace(/^"|"$/g, '') === font.family && face.weight === weight && face.status === 'loaded');
+    if (!loaded('400') || !loaded('700')) throw new Error('Aperture Stencil did not load both weights');
+    const canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 140;
+    const ctx = canvas.getContext('2d');
+    const ink = weight => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = weight + ' 72px ' + font.css;
+      ctx.fillText('OPEN 08 / Café', 8, 104);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let total = 0;
+      for (let i = 3; i < pixels.length; i += 4) total += pixels[i];
+      return total;
+    };
+    const regular = ink('400'), bold = ink('700');
+    if (!regular || bold < regular * 1.08) throw new Error('Aperture Stencil ink or Bold weight is missing');
+    const saved = FM.scene.layers.slice(), selected = FM.scene.selectedId;
+    const layer = FM.makeLayer('text', { text: 'OPEN 08', fontFamily: font.css });
+    try {
+      FM.scene.layers.push(layer); FM.selectLayer(layer.id); FM.refreshAll();
+      FM.textEdit.start(layer.id);
+      const button = document.querySelector('.te-font');
+      if (!button) throw new Error('the font picker button is missing');
+      button.click();
+      const card = Array.from(document.querySelectorAll('.te-font-card')).find(c => c.textContent.includes(font.name));
+      const sample = card && card.querySelector('.te-font-abc');
+      if (!sample || sample.style.fontFamily !== font.css) throw new Error('Aperture Stencil has no live picker sample');
+    } finally {
+      if (FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0; saved.forEach(old => FM.scene.layers.push(old));
+      FM.selectLayer(selected || null); FM.refreshAll();
+    }
+  });
 })();

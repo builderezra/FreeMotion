@@ -1,0 +1,9 @@
+# FM Aperture Stencil original font
+
+Starting commit: `4051188ef8079a05f385eff3a57c96ab9b330424` on the clean reviewed branch. Isolated branch: `codex/original-aperture-stencil` in `/private/tmp/freemotion-aperture-stencil-20261004`.
+
+This adds a ninth distinct FreeMotion original family: an industrial open-counter stencil with chamfered bowls, square terminals, deliberate bridge cuts, a slashed zero and small-cap lowercase. `build_aperture_stencil.py` draws its own paths; it reads no other font, outline, glyph image or tracing input. Both Regular and Bold WOFF2 faces map 223 characters, including printable ASCII, accented Latin names and typographic signs. The source/use note records that FreeMotion can bundle and users can render videos with these files without an external font-vendor fee. The specimen was inspected at display, 48 px and 32 px sizes. The long original-font request remains open.
+
+Changed files: `fonts/original/fm-aperture-stencil-{regular,bold}.woff2`; `fonts/original/source/{build_aperture_stencil.py,render_aperture_stencil.py,fm-aperture-stencil-preview.png,fonts.css,ORIGINALITY_AND_USE.md}`; `fonts/README.md`; `js/studio-fonts.js`; `index.html` (font-script cache tag 9 → 10); `tests/tests.js` (one focused `{ item: 'TBD' }` browser regression); and this report.
+
+Checks: fontTools reopened both WOFF2 faces, confirmed complete printable ASCII, 223 mapped codepoints, weights 400/700, installable embedding, GPOS kerning, and a zero distinct from O. The focused browser test passed 1/1: both faces fetched, loaded, rendered with distinct ink weights, and the live picker sample used the new family. JavaScriptCore and Python syntax, plus `git diff --check`, passed. Installed-iPhone typography and export remain unverified. No shared Claude checkout edit, push, PR or deployment.
