@@ -330,6 +330,7 @@
        never draws. Off, every byte is what it was. */
     blur: function (srcCanvas, W, H, radiusPx, opts) {
       const premul = !!(opts && opts.premul);
+      const axis = opts && opts.axis;
       if (FM._noGL) { _stats.cpu++; return null; }
       if (!srcCanvas || !(W > 0) || !(H > 0) || !(radiusPx > 0.05)) { _stats.cpu++; return null; }
       const g = gl();
@@ -362,7 +363,7 @@
         g.vertexAttribPointer(loc, 2, g.FLOAT, false, 0, 0);
         g.uniform1i(_ub.src, 0);
         g.uniform1f(_ub.sigma, sigma);
-        g.uniform1i(_ub.taps, taps);
+        g.uniform1i(_ub.taps, axis === 'vertical' ? 0 : taps);
         g.viewport(0, 0, W, H);
 
         // pass 1 — horizontal, source canvas → framebuffer texture
@@ -382,6 +383,7 @@
         // pass 2 — vertical, framebuffer texture → the visible canvas
         g.bindFramebuffer(g.FRAMEBUFFER, null);
         g.bindTexture(g.TEXTURE_2D, _fbTex);
+        g.uniform1i(_ub.taps, axis === 'horizontal' ? 0 : taps);
         g.uniform2f(_ub.step, 0, 1 / H);
         g.uniform1f(_ub.flip, 0);      // …and pass 2 reads a framebuffer, which is already bottom-up
         g.uniform1f(_ub.unpremul, premul ? 1 : 0);

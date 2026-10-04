@@ -56,7 +56,8 @@ globalThis.FM = globalThis.FM || {};
   FM.EFFECTS = [
     { type: 'blur', label: 'Gaussian Blur', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
-      { key: 'edges', label: 'Frame edges', def: 0, options: [[0, 'Fade'], [1, 'Repeat edge pixels']] },
+      { key: 'edges', label: 'Frame edges', def: 0, options: [[0, 'Fade'], [1, 'Repeat edge pixels']], note: 'Repeat follows the order of your effects.' },
+      { key: 'dims', label: 'Blur direction', def: 0, options: [[0, 'Both'], [1, 'Horizontal'], [2, 'Vertical']], note: 'One-way blur follows the order of your effects.' },
     ] },
     { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'contrast', label: 'Contrast', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
@@ -1985,9 +1986,10 @@ globalThis.FM = globalThis.FM || {};
   FM.CSS_FX = Object.assign(Object.create(null), {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
   });
-  function gaussianRepeat(e, t) {
+  function gaussianPlate(e, t) {
     const p = e && e.params;
-    return !!(p && p.edges != null && FM.evalProp(p.edges, t) >= 0.5);
+    return !!(p && ((p.edges != null && FM.evalProp(p.edges, t) >= 0.5)
+      || (p.dims != null && FM.evalProp(p.dims, t) >= 0.5)));
   }
 
   /* ═══ DOES ctx.filter ACTUALLY WORK ON THIS DEVICE? (queue 645) ═══════════════════════════════════
@@ -2063,7 +2065,7 @@ globalThis.FM = globalThis.FM || {};
     for (let i = 0; i < n; i++) out.push(Math.max(0, ((i < m ? wl : wl + 2) - 1) / 2));
     return out;
   }
-  function cpuBlurCanvas(cv, W, H, sigma) {        // premultiplied, transparent past the edge — what 'blur()' draws
+  function cpuBlurCanvas(cv, W, H, sigma, axis) {        // premultiplied, transparent past the edge — what 'blur()' draws
     const g = cv.getContext('2d');
     let img; try { img = g.getImageData(0, 0, W, H); } catch (e) { return false; }
     const d = img.data, N = W * H;
@@ -2085,7 +2087,12 @@ globalThis.FM = globalThis.FM || {};
         }
       }
     };
-    boxesForGauss(sigma).forEach(r => { r = Math.round(r); if (r < 1) return; pass(a, b, r, true); pass(b, a, r, false); });
+    boxesForGauss(sigma).forEach(r => {
+      r = Math.round(r); if (r < 1) return;
+      if (axis === 'horizontal') { pass(a, b, r, true); const tmp = a; a = b; b = tmp; }
+      else if (axis === 'vertical') { pass(a, b, r, false); const tmp = a; a = b; b = tmp; }
+      else { pass(a, b, r, true); pass(b, a, r, false); }
+    });
     for (let i = 0; i < N; i++) {
       const j = i * 4, al = a[j + 3];
       if (al <= 0.001) { d[j] = d[j + 1] = d[j + 2] = d[j + 3] = 0; continue; }
@@ -2399,7 +2406,7 @@ globalThis.FM = globalThis.FM || {};
     const fx = layer.effects;
     if (fx && fx.length) for (const e of fx) {
       if (e.enabled === false) continue;
-      if (e.type === 'blur' && gaussianRepeat(e, t)) continue; // its ordered canvas pass owns this instance
+      if (e.type === 'blur' && gaussianPlate(e, t)) continue; // its ordered canvas pass owns this instance
       const p = e.params || {};
       const v = (k, d) => (p[k] == null ? d : FM.evalProp(p[k], t));
       // CLAMPED, and this matters more than it looks. blur/brightness/contrast/saturate/grayscale/
@@ -4024,7 +4031,7 @@ globalThis.FM = globalThis.FM || {};
    * wrong picture rather than an error. One function, both callers.
    */
   function postFxOrder(layer, t) {
-    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette' || (e.type === 'blur' && gaussianRepeat(e, t))) && e.enabled !== false   // vignette: every layer since #986 C8
+    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette' || (e.type === 'blur' && gaussianPlate(e, t))) && e.enabled !== false   // vignette: every layer since #986 C8
       && !(e.type === 'motionflow' && layer.type === '_flat'));
     /* VIGNETTE COMPOSITES INNERMOST, on every layer (#986 C8) — straight after the nine CSS effects, which already
        render before everything else whatever their row. That is where a video or photo has ALWAYS drawn it (inside the
@@ -4083,7 +4090,7 @@ globalThis.FM = globalThis.FM || {};
      * while three others went on reading raw. That is the shape this session keeps finding: the
      * machinery is right and only some of the callers got it. */
     const p = resolveFxColors(fx.params || {}, t);
-    if (fx.type === 'blur' && gaussianRepeat(fx, t)) return drawCanvasEffect(ctx, layer, t, scene, fx, CANVAS_FX.blur);
+    if (fx.type === 'blur' && gaussianPlate(fx, t)) return drawCanvasEffect(ctx, layer, t, scene, fx, CANVAS_FX.blur);
     if (fx.type === FM.FX_CONTAINER) return drawFilterContainer(ctx, layer, t, scene, fx);
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
     if (fx.type === 'pixelate') return drawPixelate(ctx, layer, t, scene, FM.evalProp(p.size, t) || 1, fx);
@@ -10819,7 +10826,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!FM.CSS_FX[e.type]) continue;
       const p = e.params || {};
       if (e.type === 'blur') {
-        if (gaussianRepeat(e, t)) continue;
+        if (gaussianPlate(e, t)) continue;
         const r = FM.evalProp(p.radius, t);
         blurs.push(Number.isFinite(r) ? r : 6);
         continue;
@@ -14258,6 +14265,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     blur: function (A, B, W, H, bb, p, t, tl, layer, ps) {
       const radius = Math.max(0, Math.min(50, fparam(p, 'radius', 6, t))) * (ps > 0 ? ps : 1);
       if (radius <= 0.05) { B.drawImage(A, 0, 0); return; }
+      const repeat = fparam(p, 'edges', 0, t) >= 0.5;
+      const dims = Math.round(fparam(p, 'dims', 0, t));
+      const axis = dims === 1 ? 'horizontal' : dims === 2 ? 'vertical' : undefined;
       const pad = Math.ceil(radius * 3) + 2, WW = W + pad * 2, HH = H + pad * 2;
       if (!_gaussRepeatPlate) _gaussRepeatPlate = createCanvas();
       const plate = _gaussRepeatPlate;
@@ -14266,15 +14276,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       C.setTransform(1, 0, 0, 1, 0, 0); C.clearRect(0, 0, WW, HH);
       C.globalAlpha = 1; C.globalCompositeOperation = 'source-over'; C.filter = 'none';
       C.drawImage(A, pad, pad);
-      C.drawImage(A, 0, 0, 1, H, 0, pad, pad, H);
-      C.drawImage(A, W - 1, 0, 1, H, pad + W, pad, pad, H);
-      C.drawImage(A, 0, 0, W, 1, pad, 0, W, pad);
-      C.drawImage(A, 0, H - 1, W, 1, pad, pad + H, W, pad);
-      C.drawImage(A, 0, 0, 1, 1, 0, 0, pad, pad);
-      C.drawImage(A, W - 1, 0, 1, 1, pad + W, 0, pad, pad);
-      C.drawImage(A, 0, H - 1, 1, 1, 0, pad + H, pad, pad);
-      C.drawImage(A, W - 1, H - 1, 1, 1, pad + W, pad + H, pad, pad);
-      if (ctxFilterOK()) {
+      if (repeat) {
+        C.drawImage(A, 0, 0, 1, H, 0, pad, pad, H);
+        C.drawImage(A, W - 1, 0, 1, H, pad + W, pad, pad, H);
+        C.drawImage(A, 0, 0, W, 1, pad, 0, W, pad);
+        C.drawImage(A, 0, H - 1, W, 1, pad, pad + H, W, pad);
+        C.drawImage(A, 0, 0, 1, 1, 0, 0, pad, pad);
+        C.drawImage(A, W - 1, 0, 1, 1, pad + W, 0, pad, pad);
+        C.drawImage(A, 0, H - 1, 1, 1, 0, pad + H, pad, pad);
+        C.drawImage(A, W - 1, H - 1, 1, 1, pad + W, pad + H, pad, pad);
+      }
+      if (!axis && ctxFilterOK()) {
         if (!_gaussRepeatBlur) _gaussRepeatBlur = createCanvas();
         const out = _gaussRepeatBlur;
         if (out.width !== WW || out.height !== HH) { out.width = WW; out.height = HH; }
@@ -14285,9 +14297,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         B.drawImage(out, pad, pad, W, H, 0, 0, W, H);
         return;
       }
-      const gpu = FM.glColor && FM.glColor.blur ? FM.glColor.blur(plate, WW, HH, radius, { premul: true }) : null;
+      const gpu = FM.glColor && FM.glColor.blur ? FM.glColor.blur(plate, WW, HH, radius, { premul: true, axis: axis }) : null;
       if (gpu) { B.drawImage(gpu, pad, pad, W, H, 0, 0, W, H); return; }
-      if (cpuBlurCanvas(plate, WW, HH, radius)) B.drawImage(plate, pad, pad, W, H, 0, 0, W, H);
+      if (cpuBlurCanvas(plate, WW, HH, radius, axis)) B.drawImage(plate, pad, pad, W, H, 0, 0, W, H);
       else B.drawImage(A, 0, 0);
     },
     circlearray: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {

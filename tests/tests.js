@@ -123129,4 +123129,26 @@
       throw new Error('Repeat did not fix the full-frame red edge in the real layer path: fade ' + at(old, 0, 48) + ', repeat ' + at(repeat, 0, 48) + '/' + at(repeat, 64, 48));
   });
 
+  test('690 Gaussian Blur direction keeps the unblurred axis sharp on GPU and CPU', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!K || !K.blur) throw new Error('Gaussian Blur plate kernel unavailable');
+    const W = 128, H = 96, src = offscreen(W, H), a = src.getContext('2d');
+    a.fillStyle = '#ffffff'; a.fillRect(62, 46, 4, 4);
+    const sample = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const run = (dims, cpu) => { const dst = offscreen(W, H), was = FM._noGL;
+      try { FM._noGL = cpu; K.blur(src, dst.getContext('2d'), W, H, { x: 0, y: 0, w: W, h: H }, { radius: 12, dims: dims, edges: 0 }, 0, null, null, 1); }
+      finally { FM._noGL = was; }
+      return dst.getContext('2d').getImageData(0, 0, W, H).data; };
+    for (const cpu of [false, true]) {
+      const h = run(1, cpu), v = run(2, cpu);
+      if (!(sample(h, 44, 47) > 0 && sample(h, 63, 30) === 0 &&
+            sample(v, 63, 30) > 0 && sample(v, 44, 47) === 0))
+        throw new Error((cpu ? 'CPU' : 'GPU') + ' one-axis blur spread along the wrong axis');
+    }
+    const e = FM.fxRegistry.makeInstance('blur'); e.params.dims = 1;
+    if (FM.effectFilter({ effects: [e] }, 0, 1) !== 'none') throw new Error('one-axis blur ran twice through CSS and plate');
+    e.params.dims = 0;
+    if (!FM.effectFilter({ effects: [e] }, 0, 1).includes('blur(')) throw new Error('saved Both blur left its CSS path');
+  });
+
 })();
