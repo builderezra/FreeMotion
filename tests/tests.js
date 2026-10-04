@@ -122914,7 +122914,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-5')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-6')))
           throw new Error('masked held-video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -122997,7 +122997,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-5')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-6')))
           throw new Error('pen-masked held-video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123068,8 +123068,74 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-5')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-6')))
           throw new Error('combined-mask video MP4 did not use the current resume renderer');
+      } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
+    } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
+  });
+
+  test('690 Frame Stutter cold-seeks decoded video beneath a keyed unmarked pen mask', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createFrameStutterSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: unmarked-mask video fixture is unavailable');
+    const made = [], file = await hunt2dIndexedClip(30, 30), rec = await hunt2dLoadWarm(file);
+    const layer = hunt2dClipLayer(rec, made), stutter = FM.fxRegistry.makeInstance('framestutter');
+    layer.duration = 1; layer.trimEnd = 1;
+    const rect = x => [[x,0],[x+64,0],[x+64,32],[x,32]];
+    layer.masks = [{ id:'stutter-video-unmarked', type:'pen', enabled:true, mode:'add', closed:true,
+      path:{ kf:[{ t:0, v:rect(40), e:'linear' }, { t:1, v:rect(104), e:'linear' }] } }];
+    Object.assign(stutter.params, { rate:4, mode:0, blend:0, offset:0, random:0 });
+    layer.effects = [stutter]; // An unmarked mask wraps the hold, so its path stays at current time.
+    const scene = hunt2dScene([layer], { duration:1 });
+    const sampler = FM.createFrameStutterSampler(FM.media, { maxDim:0, timeoutMs:10000 });
+    const seek = async t => {
+      const target = FM.frameSeekTarget(t, rec.duration), el = rec.el;
+      if (Math.abs(el.currentTime - target) < 1e-4 && !el.seeking && el.readyState >= 2) return;
+      await new Promise((resolve, reject) => {
+        let timer;
+        const finish = err => { clearTimeout(timer); el.removeEventListener('seeked', on);
+          el.removeEventListener('error', on); err ? reject(err) : resolve(); };
+        const on = () => { if (el.error) finish(new Error('unmarked-mask video decode failed'));
+          else if (!el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - target) < 1e-3) finish(); };
+        el.addEventListener('seeked', on); el.addEventListener('error', on);
+        timer = setTimeout(() => finish(new Error('unmarked-mask video seek timed out')), 10000);
+        el.currentTime = target; on();
+      });
+    };
+    const render = async (t, width, sources) => {
+      await seek(t);
+      const cv = offscreen(width, width / 4), g = cv.getContext('2d', { willReadFrequently:true });
+      FM.withFrameStutterSources(sources, () => FM.renderScene(g, scene, t));
+      return Array.from(g.getImageData(0, 0, width, width / 4).data);
+    };
+    try {
+      for (const width of [128, 64]) {
+        FM.resetMotionFlowCache();
+        let played;
+        for (let f = 0; f <= 21; f++) played = await render(f / 30, width, null);
+        FM.resetMotionFlowCache();
+        const prepared = await sampler.prepare(scene, 21 / 30);
+        if (!prepared || !prepared.get(layer.id))
+          throw new Error('video with unmarked pen mask was excluded from boundary reconstruction');
+        const boundary = await render(0.5, width, prepared);
+        const cold = await render(21 / 30, width, prepared);
+        if (cold.join() !== played.join()) throw new Error('unmarked-mask hold changed after cold seek at ' + width + ' px');
+        if (cold.join() === boundary.join()) throw new Error('Control: outer pen mask did not keep its current keyed path');
+        const masks = layer.masks;
+        layer.masks = [];
+        let unmasked;
+        try { FM.resetMotionFlowCache(); unmasked = await render(21 / 30, width, prepared); }
+        finally { layer.masks = masks; }
+        if (unmasked.join() === cold.join()) throw new Error('Control: unmarked mask changed no held pixels');
+      }
+      const previousScene = FM.scene, XR = FM.exportResume, previousSignature = XR && XR.signature;
+      if (!FM.exporter) throw new Error('setup: unmarked-mask MP4 exporter is unavailable');
+      let renderer = '';
+      try {
+        FM.scene = scene;
+        if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
+        const exported = await hunt2dExport({ fps:30, to:1 / 30 });
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-6')))
+          throw new Error('unmarked-mask video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
   });
