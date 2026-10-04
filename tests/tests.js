@@ -114752,6 +114752,23 @@
     if (Math.abs(m - e) > 1.5) throw new Error('at Damping 0.5 the half-size preview turns the bar ' + e.toFixed(1) + ' degrees at 1.25 s and the export ' + m.toFixed(1));
   });
 
+  /* #690: the clip starts at 1 s; a 0.75 → 0 Hz ramp over two seconds carries 0.75 cycles.
+     Stopping must hold the reached angle, including when Damping is enabled. */
+  test('690 Swing keyframed Speed keeps the reached angle when the rate stops', { item: 'TBD' }, function () {
+    const swing = speed => { const L = box482b([_986fx('swing', { angle: 30, speed, pivotx: 50, pivoty: 50 })], { shapeW: 120, shapeH: 16 }); L.start = 1; return L; };
+    const angle = (speed, t, damping) => {
+      const L = swing(speed); if (damping != null) L.effects[0].params.damping = damping;
+      const r = at482b([L], t); if (!r.n) throw new Error('Swing drew no bar at ' + t + ' s'); return r.ang;
+    };
+    const ramp = { kf: [{ t: 1, v: 0.75, e: 'linear' }, { t: 3, v: 0, e: 'linear' }] };
+    const steady = angle(0.375, 3), stopped = angle(ramp, 3), held = angle(ramp, 3.25);
+    if (!(steady < -25 && steady > -35)) throw new Error('control: static 0.375 Hz Swing reached ' + steady.toFixed(1) + ' degrees, not -30');
+    if (Math.abs(stopped - steady) > 1.5) throw new Error('keyframed Speed rewound Swing to ' + stopped.toFixed(1) + ' degrees instead of keeping ' + steady.toFixed(1));
+    if (Math.abs(held - stopped) > 1.5) throw new Error('Swing moved after its keyframed Speed reached zero: ' + held.toFixed(1) + ' versus ' + stopped.toFixed(1));
+    const damped = angle(ramp, 3, 0.2);
+    if (!(damped < -17 && damped > -23)) throw new Error('Damping branch lost the keyed phase: ' + damped.toFixed(1) + ' degrees instead of about -20');
+  });
+
   /* 2.2 ORBIT — Ellipse, Depth, Face direction of travel. A small box orbiting the middle of a 200x150 frame at radius 40,
      a quarter turn a second, so 0 s is the right of the path, 1 s the bottom, 2 s the left, 3 s the top. */
   test('482 2.2 Orbit - Ellipse squashes the path, Depth shrinks the layer on the far side, and Face direction of travel turns it along the path', { item: '482', budgetMs: 60000 }, function () {

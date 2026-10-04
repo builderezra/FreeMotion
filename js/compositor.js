@@ -15149,10 +15149,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const py = fy === 0 ? bb.y : bb.y + bb.h * (fy / 100);
       const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old swing exactly
       /* DAMPING (#482 polish 2.2): the swing dies away — the angle × e^(−damping × time since the clip began), a door that
-         settles or a sign that stops rocking. 0 is the old expression below, never touched. */
+         settles or a sign that stops rocking. 0 keeps the old undamped oscillation. */
       const damp = Math.max(0, fparam(p, 'damping', 0, t));
-      const ang = damp > 0 ? amp * Math.exp(-damp * Math.max(0, tl)) * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180
-        : amp * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180;
+      // A keyed Speed is a rate: keep the phase already travelled when the swing slows or stops.
+      const phaseRad = FM.isAnimated(p.speed) ? 2 * Math.PI * FM.integrateProp(p.speed, t - tl, t) + ph : 2 * Math.PI * spd * tl + ph;
+      const ang = damp > 0 ? amp * Math.exp(-damp * Math.max(0, tl)) * Math.sin(phaseRad) * Math.PI / 180
+        : amp * Math.sin(phaseRad) * Math.PI / 180;
       const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
