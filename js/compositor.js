@@ -14301,8 +14301,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const markers = effects.filter(e => e && e.enabled !== false && e.type === 'penmask');
       const penSafe = !!(mask && mask.enabled !== false && typeof mask.id === 'string'
         && markers.length === 1 && markers[0].maskId === mask.id);
+      // The legacy vector mask is baked into the boundary plate; the unmarked pen mask
+      // then wraps that held plate at current time, preserving both masks' stack order.
       const unmarkedSafe = !!(mask && mask.type === 'pen' && mask.enabled !== false
-        && !effects.some(e => e && e.type === 'penmask') && !(layer.mask && layer.mask.enabled));
+        && !effects.some(e => e && e.type === 'penmask'));
       if (layer.masks && layer.masks.length && !penSafe && !unmarkedSafe) continue;
       if (effects.slice(0, index).some(e => e && e.enabled !== false && !STUTTER_SAFE_UPSTREAM[e.type]
           && !(penSafe && e.type === 'penmask' && e.maskId === mask.id))) continue;
