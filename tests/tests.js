@@ -119747,6 +119747,38 @@
     if (differs(preview, dispatched)) throw new Error('Seed/Evolve changed reduced-preview dispatch');
   });
 
+  test('690 Roughen Edges Complexity adds detail and Border Erode shrinks the matte', { item: 'TBD' }, function () {
+    const W = 64, H = 64, kernel = FM._FX_TABLES.PIXEL_FX.roughenedges;
+    const make = (solid) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+        d[(y * W + x) * 4 + 3] = solid || (x - 32) ** 2 + (y - 32) ** 2 < 22 ** 2 ? 255 : 0;
+      return d;
+    };
+    const render = (params, ps, solid) => {
+      const d = make(solid);
+      kernel(d, W, H, params, 0, ps);
+      return d;
+    };
+    const differs = (a, b) => a.some((v, i) => v !== b[i]);
+    const base = { amount: 14, scale: 12, seed: 3, evolve: 0 };
+    const original = render(base, 1, false);
+    if (differs(original, render({ ...base, complexity: 1, border: 0 }, 1, false)))
+      throw new Error('Default Complexity/Border changed the previous Roughen Edges result');
+    if (!differs(original, render({ ...base, complexity: 4 }, 1, false)))
+      throw new Error('Complexity 4 did not add a different displacement pattern');
+    const border = render({ amount: 0, border: 2 }, 1, true);
+    const alpha = (d, x, y) => d[(y * W + x) * 4 + 3];
+    if (alpha(border, 0, 32) !== 0 || alpha(border, 1, 32) !== 0 || alpha(border, 2, 32) !== 255 || alpha(border, 32, 32) !== 255)
+      throw new Error('Border Erode did not shrink a solid matte by two project pixels');
+    const quarter = render({ amount: 0, border: 4 }, 0.25, true);
+    if (alpha(quarter, 0, 32) !== 0 || alpha(quarter, 1, 32) !== 255)
+      throw new Error('Border Erode did not scale to the reduced preview plate');
+    const params = { ...base, complexity: 3, border: 4 }, direct = render(params, 0.25, false), dispatched = make(false);
+    FM._applyPixelFx(dispatched, { type: 'roughenedges', params }, 0, W, H, 0.25);
+    if (differs(direct, dispatched)) throw new Error('Complexity/Border changed reduced-preview dispatch');
+  });
+
   test('690 Breathe speed keyframes advance by accumulated phase', { item: 'TBD' }, function () {
     const breathe = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.pulseopacity;
     if (!breathe) throw new Error('Breathe pixel kernel is missing');

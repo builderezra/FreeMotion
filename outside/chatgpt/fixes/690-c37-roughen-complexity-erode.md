@@ -1,0 +1,9 @@
+# C37: Roughen Edges Complexity and Border Erode
+
+Starting commit: clean `48200e863a0bea4ecd94c7afbe082e4b2375b2c2`; isolated branch `codex/690-c37-roughen-detail` in `/private/tmp/freemotion-c37-detail-20261004`. The standing #690 effect-polish brief is `REQUESTS.md:27375-27399`; the C37 clause and controls are `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1381` and `:777-782`. No matching Roughen Edges C37 record appears in `audits/*.json`.
+
+Complexity 1–4 now adds up to three finer noise octaves to the displaced edge. Complexity 1 keeps the Seed/Evolve renderer byte-identical. Erode 0–20 px shrinks the resulting alpha with a square minimum filter; it also works when Amount is zero and treats the image exterior as transparent. The radius uses the existing project-to-preview scale. The separable monotone-window filter takes linear time in the plate size, independent of radius.
+
+Changed files: `js/compositor.js`, `index.html` (compositor cache tag 282→283), `tests/tests.js` (one focused `{ item: 'TBD' }` regression), and this report. The filtered browser regression failed on the starting code because Complexity had no effect, then passed 1/1 after the fix; one incomplete app-frame load was retried before assertions. A direct JavaScriptCore check found absent and default controls byte-identical to the starting kernel in 12 time/preview-scale combinations, and Erode matched a square-minimum reference on a varied alpha mask. At 512² pixels, Complexity 4 with Evolve took 119 ms versus 42 ms at the old default; Erode alone took 4–5 ms at radii 1 and 20. JavaScriptCore syntax and `git diff --check` passed. No shared-Claude, preferred, protected-file, shape, push, PR, or deployment change.
+
+Of C37, Voronoi Cells still needs Seed. Speed Lines' separate Boil/re-randomise control is already present in the starting code.

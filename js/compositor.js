@@ -866,7 +866,7 @@ globalThis.FM = globalThis.FM || {};
         { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
-    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }, { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 }, { key: 'evolve', label: 'Evolve', min: 0, max: 5, step: 0.1, def: 0, unit: '×' }] },
+    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }, { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 }, { key: 'evolve', label: 'Evolve', min: 0, max: 5, step: 0.1, def: 0, unit: '×' }, { key: 'complexity', label: 'Complexity', min: 1, max: 4, step: 1, def: 1 }, { key: 'border', label: 'Erode', min: 0, max: 20, step: 1, def: 0, unit: 'px' }] },
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 0.02, max: 0.5, step: 0.01, def: 0.12 },
@@ -9040,35 +9040,89 @@ globalThis.FM = globalThis.FM || {};
       re_amt=Math.max(0,Math.min(20,re_amt))*re_ps;
       var re_scl = fparam(p, 'scale', 10, t);
       re_scl=Math.max(2,Math.min(40,re_scl))*re_ps;
-      if(re_amt<=0)return;
-      var re_s=fxSrc(d), re_inv=1/re_scl;
-      var re_seed=Math.round(Math.max(0,Math.min(999,fparam(p,'seed',0,t))));
-      var re_evolve=Math.max(0,Math.min(5,fparam(p,'evolve',0,t)));
-      // Accumulate a keyframed rate so slowing Evolve holds its current pattern.
-      var re_phase=FM.isAnimated(p.evolve)
-        ? FM.integrateProp(p.evolve,0,t,function(u){ var v=FM.evalProp(p.evolve,u); return v>0?(v<5?v:5):0; })
-        : re_evolve*t;
-      var re_frame=Math.floor(re_phase), re_mix=re_phase-re_frame;
-      re_mix=re_mix*re_mix*(3-2*re_mix);
-      // Seed 0 at phase 0 keeps the original hash salts, including saved instances with neither control.
-      var re_salt=re_seed*37+re_frame*107;
-      function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; }
-      function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; }
-      for(var re_y=0;re_y<H;re_y++){
-        for(var re_x=0;re_x<W;re_x++){
-          var re_fx=re_x*re_inv, re_fy=re_y*re_inv;
-          var re_nx=re_noise(re_fx,re_fy,11+re_salt);
-          var re_ny=re_noise(re_fx,re_fy,29+re_salt);
-          if(re_mix>0){
-            re_nx+=(re_noise(re_fx,re_fy,11+re_salt+107)-re_nx)*re_mix;
-            re_ny+=(re_noise(re_fx,re_fy,29+re_salt+107)-re_ny)*re_mix;
+      var re_complexity=Math.max(1,Math.min(4,Math.round(fparam(p,'complexity',1,t))));
+      var re_r=Math.round(Math.max(0,Math.min(20,fparam(p,'border',0,t)))*re_ps);
+      if(re_amt<=0 && re_r===0)return;
+      if(re_amt>0){
+        var re_s=fxSrc(d), re_inv=1/re_scl;
+        var re_seed=Math.round(Math.max(0,Math.min(999,fparam(p,'seed',0,t))));
+        var re_evolve=Math.max(0,Math.min(5,fparam(p,'evolve',0,t)));
+        // Accumulate a keyframed rate so slowing Evolve holds its current pattern.
+        var re_phase=FM.isAnimated(p.evolve)
+          ? FM.integrateProp(p.evolve,0,t,function(u){ var v=FM.evalProp(p.evolve,u); return v>0?(v<5?v:5):0; })
+          : re_evolve*t;
+        var re_frame=Math.floor(re_phase), re_mix=re_phase-re_frame;
+        re_mix=re_mix*re_mix*(3-2*re_mix);
+        // Seed 0 at phase 0 keeps the original hash salts, including saved instances with neither control.
+        var re_salt=re_seed*37+re_frame*107;
+        function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; }
+        function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; }
+        for(var re_y=0;re_y<H;re_y++){
+          for(var re_x=0;re_x<W;re_x++){
+            var re_fx=re_x*re_inv, re_fy=re_y*re_inv;
+            var re_nx=re_noise(re_fx,re_fy,11+re_salt);
+            var re_ny=re_noise(re_fx,re_fy,29+re_salt);
+            if(re_mix>0){
+              re_nx+=(re_noise(re_fx,re_fy,11+re_salt+107)-re_nx)*re_mix;
+              re_ny+=(re_noise(re_fx,re_fy,29+re_salt+107)-re_ny)*re_mix;
+            }
+            if(re_complexity>1){
+              var re_freq=2, re_weight=0.5;
+              for(var re_oct=1;re_oct<re_complexity;re_oct++){
+                var re_osalt=re_salt+re_oct*1009;
+                var re_hx=re_noise(re_fx*re_freq,re_fy*re_freq,11+re_osalt);
+                var re_hy=re_noise(re_fx*re_freq,re_fy*re_freq,29+re_osalt);
+                if(re_mix>0){
+                  re_hx+=(re_noise(re_fx*re_freq,re_fy*re_freq,11+re_osalt+107)-re_hx)*re_mix;
+                  re_hy+=(re_noise(re_fx*re_freq,re_fy*re_freq,29+re_osalt+107)-re_hy)*re_mix;
+                }
+                re_nx+=(re_hx-0.5)*re_weight;
+                re_ny+=(re_hy-0.5)*re_weight;
+                re_freq*=2; re_weight*=0.5;
+              }
+              if(re_nx<0)re_nx=0; else if(re_nx>1)re_nx=1;
+              if(re_ny<0)re_ny=0; else if(re_ny>1)re_ny=1;
+            }
+            var re_dx=(re_nx*2-1)*re_amt;
+            var re_dy=(re_ny*2-1)*re_amt;
+            var re_sx=re_x+(re_dx|0), re_sy=re_y+(re_dy|0);
+            if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1;
+            if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1;
+            d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3];
           }
-          var re_dx=(re_nx*2-1)*re_amt;
-          var re_dy=(re_ny*2-1)*re_amt;
-          var re_sx=re_x+(re_dx|0), re_sy=re_y+(re_dy|0);
-          if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1;
-          if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1;
-          d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3];
+        }
+      }
+      if(re_r>0){
+        // A separable square minimum shrinks alpha in O(W*H), independent of the 0–20 px radius.
+        // The image exterior is transparent, so a full-frame matte erodes at its border too.
+        if(re_r*2>=W || re_r*2>=H){
+          for(var re_i=3;re_i<d.length;re_i+=4)d[re_i]=0;
+          return;
+        }
+        var re_tmp=new Uint8Array(W*H), re_q=new Int32Array(Math.max(W,H));
+        for(var re_y2=0;re_y2<H;re_y2++){
+          var re_row=re_y2*W, re_head=0, re_tail=0;
+          for(var re_x2=0;re_x2<W;re_x2++){
+            var re_a=d[(re_row+re_x2)*4+3];
+            while(re_tail>re_head && d[(re_row+re_q[re_tail-1])*4+3]>=re_a)re_tail--;
+            re_q[re_tail++]=re_x2;
+            while(re_q[re_head]<re_x2-2*re_r)re_head++;
+            if(re_x2>=2*re_r)re_tmp[re_row+re_x2-re_r]=d[(re_row+re_q[re_head])*4+3];
+          }
+        }
+        for(var re_x3=0;re_x3<W;re_x3++){
+          var re_head2=0, re_tail2=0;
+          for(var re_y3=0;re_y3<H;re_y3++){
+            var re_a2=re_tmp[re_y3*W+re_x3];
+            while(re_tail2>re_head2 && re_tmp[re_q[re_tail2-1]*W+re_x3]>=re_a2)re_tail2--;
+            re_q[re_tail2++]=re_y3;
+            while(re_q[re_head2]<re_y3-2*re_r)re_head2++;
+            if(re_y3>=re_r){
+              var re_out=re_y3-re_r;
+              d[(re_out*W+re_x3)*4+3]=re_out<re_r?0:re_tmp[re_q[re_head2]*W+re_x3];
+            }
+          }
+          for(var re_bottom=H-re_r;re_bottom<H;re_bottom++)d[(re_bottom*W+re_x3)*4+3]=0;
         }
       }
     },
