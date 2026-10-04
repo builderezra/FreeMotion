@@ -123099,4 +123099,34 @@
       throw new Error('Behind/Ahead smear crosses to the wrong side of the source');
   });
 
+  test('690 C25 Gaussian Blur repeats full-frame edges in its ordered plate pass', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!K || !K.blur) throw new Error('Gaussian Repeat plate kernel unavailable');
+    const W = 128, H = 96, src = offscreen(W, H), a = src.getContext('2d');
+    a.fillStyle = '#e03020'; a.fillRect(0, 0, W, H);
+    const direct = offscreen(W, H), d = direct.getContext('2d');
+    K.blur(src, d, W, H, { x: 0, y: 0, w: W, h: H }, { radius: 12, edges: 1 }, 0, null, null, 1);
+    const px = (cv, x, y, c) => cv.getContext('2d').getImageData(x, y, 1, 1).data[c];
+    if (px(direct, 0, 48, 3) < 253 || Math.abs(px(direct, 0, 48, 0) - px(direct, 64, 48, 0)) > 2)
+      throw new Error('Repeat fails to keep an opaque full-frame edge as strong as its centre');
+    const wasForced = FM._forceNoCtxFilter;
+    try {
+      FM._forceNoCtxFilter = true;
+      const phone = offscreen(W, H);
+      K.blur(src, phone.getContext('2d'), W, H, { x: 0, y: 0, w: W, h: H }, { radius: 12, edges: 1 }, 0, null, null, 1);
+      if (px(phone, 0, 48, 3) < 251 || Math.abs(px(phone, 0, 48, 0) - px(phone, 64, 48, 0)) > 3)
+        throw new Error('Repeat fades the edge when ctx.filter is unavailable');
+    } finally { FM._forceNoCtxFilter = wasForced; }
+    const render = edge => { const L = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#e03020' });
+      const e = FM.fxRegistry.makeInstance('blur'); e.params.radius = 12; if (edge !== undefined) e.params.edges = edge; else delete e.params.edges;
+      L.effects = [e]; const cv = offscreen(W, H), ctx = cv.getContext('2d');
+      FM.renderScene(ctx, { project: { width: W, height: H, fps: 30, duration: 2, background: '#000000' }, layers: [L] }, 0.5);
+      return cv.getContext('2d').getImageData(0, 0, W, H).data; };
+    const old = render(undefined), fade = render(0), repeat = render(1);
+    for (let i = 0; i < old.length; i++) if (old[i] !== fade[i]) throw new Error('saved Fade picture differs at byte ' + i);
+    const at = (data, x, y) => data[(y * W + x) * 4];
+    if (!(at(repeat, 0, 48) > at(old, 0, 48) + 30 && at(repeat, 0, 48) >= at(repeat, 64, 48) - 4))
+      throw new Error('Repeat did not fix the full-frame red edge in the real layer path: fade ' + at(old, 0, 48) + ', repeat ' + at(repeat, 0, 48) + '/' + at(repeat, 64, 48));
+  });
+
 })();

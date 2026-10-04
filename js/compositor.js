@@ -54,7 +54,10 @@ globalThis.FM = globalThis.FM || {};
   // Effects implemented via canvas ctx.filter — covers a lot of Alight Motion's catalogue
   // cheaply, applies identically in preview and export, and is keyframe-able (evalProp).
   FM.EFFECTS = [
-    { type: 'blur', label: 'Gaussian Blur', param: 'radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+    { type: 'blur', label: 'Gaussian Blur', params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+      { key: 'edges', label: 'Frame edges', def: 0, options: [[0, 'Fade'], [1, 'Repeat edge pixels']] },
+    ] },
     { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'contrast', label: 'Contrast', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'saturate', label: 'Saturation', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.6 },
@@ -1982,6 +1985,10 @@ globalThis.FM = globalThis.FM || {};
   FM.CSS_FX = Object.assign(Object.create(null), {
     blur: 1, brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1, glow: 1,
   });
+  function gaussianRepeat(e, t) {
+    const p = e && e.params;
+    return !!(p && p.edges != null && FM.evalProp(p.edges, t) >= 0.5);
+  }
 
   /* ═══ DOES ctx.filter ACTUALLY WORK ON THIS DEVICE? (queue 645) ═══════════════════════════════════
    * Ezra, after three sessions of desktop testing found nothing wrong: *"I noticed that on pc the
@@ -2392,6 +2399,7 @@ globalThis.FM = globalThis.FM || {};
     const fx = layer.effects;
     if (fx && fx.length) for (const e of fx) {
       if (e.enabled === false) continue;
+      if (e.type === 'blur' && gaussianRepeat(e, t)) continue; // its ordered canvas pass owns this instance
       const p = e.params || {};
       const v = (k, d) => (p[k] == null ? d : FM.evalProp(p[k], t));
       // CLAMPED, and this matters more than it looks. blur/brightness/contrast/saturate/grayscale/
@@ -4015,8 +4023,8 @@ globalThis.FM = globalThis.FM || {};
    * symptom would be a chain collapsing effects that had something else BETWEEN them, i.e. a silently
    * wrong picture rather than an error. One function, both callers.
    */
-  function postFxOrder(layer) {
-    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette') && e.enabled !== false   // vignette: every layer since #986 C8
+  function postFxOrder(layer, t) {
+    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette' || (e.type === 'blur' && gaussianRepeat(e, t))) && e.enabled !== false   // vignette: every layer since #986 C8
       && !(e.type === 'motionflow' && layer.type === '_flat'));
     /* VIGNETTE COMPOSITES INNERMOST, on every layer (#986 C8) — straight after the nine CSS effects, which already
        render before everything else whatever their row. That is where a video or photo has ALWAYS drawn it (inside the
@@ -4075,6 +4083,7 @@ globalThis.FM = globalThis.FM || {};
      * while three others went on reading raw. That is the shape this session keeps finding: the
      * machinery is right and only some of the callers got it. */
     const p = resolveFxColors(fx.params || {}, t);
+    if (fx.type === 'blur' && gaussianRepeat(fx, t)) return drawCanvasEffect(ctx, layer, t, scene, fx, CANVAS_FX.blur);
     if (fx.type === FM.FX_CONTAINER) return drawFilterContainer(ctx, layer, t, scene, fx);
     if (fx.type === 'rgbsplit') return drawRgbSplit(ctx, layer, t, scene, FM.evalProp(p.amount, t) || 0, fx);
     if (fx.type === 'pixelate') return drawPixelate(ctx, layer, t, scene, FM.evalProp(p.size, t) || 1, fx);
@@ -10690,7 +10699,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          took the other route — the chain returns null on any trouble, so a broken chain and a working
          one both produce a correct frame. This switch is how the suite pins which path ran. */
       if (!FM._noGLChain && mapFn.glsl && FM.glWarp && FM.glWarp.available && FM.glWarp.available()) {
-        const pp = postFxOrder(layer);
+        const pp = postFxOrder(layer, t);
         if (pp.length > 1 && pp[pp.length - 1] === fx) {
           const run = [];
           for (let i = pp.length - 1; i >= 0; i--) {
@@ -10810,6 +10819,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!FM.CSS_FX[e.type]) continue;
       const p = e.params || {};
       if (e.type === 'blur') {
+        if (gaussianRepeat(e, t)) continue;
         const r = FM.evalProp(p.radius, t);
         blurs.push(Number.isFinite(r) ? r : 6);
         continue;
@@ -13242,7 +13252,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      expanded-plate cost off frames where the layer is nowhere near an edge — and the full-frame placeholder this list
      hands them made `near` always true, so all three rendered a second full plate every frame. They get the fast
      alpha scan like everything else; pixels unchanged, one drawLayer per frame again. */
-  const CFX_NO_BBOX = { vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, radiowaves: 1, laserbeam: 1, motionblur: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
+  const CFX_NO_BBOX = { blur: 1, vignette: 1, rasterextrude: 1, motionflow: 1, particles: 1, radiowaves: 1, laserbeam: 1, halation: 1, framestutter: 1, speedlines: 1, weather: 1, timewarp: 1, lightwrap: 1, temporaldenoise: 1 };   // tiles LEFT the list: Extend mode anchors on the clip's real alpha bounds
   Object.setPrototypeOf(CFX_NO_BBOX, null);   // own keys only — see POSTFX
   /* A plate is normally the size of the COMP, so anything the layer draws outside the frame is
    * clipped away before an effect ever sees it. Tiles' whole-layer repeat needs that lost content:
@@ -14241,7 +14251,45 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return plans.length === 1 ? plans : [];
   };
 
+  let _gaussRepeatPlate = null, _gaussRepeatBlur = null;
   const CANVAS_FX = {
+    // Optional Gaussian edge repeat is a plate pass so it can read real boundary pixels and
+    // respect its position among post effects. Saved Fade instances stay in the old CSS path.
+    blur: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+      const radius = Math.max(0, Math.min(50, fparam(p, 'radius', 6, t))) * (ps > 0 ? ps : 1);
+      if (radius <= 0.05) { B.drawImage(A, 0, 0); return; }
+      const pad = Math.ceil(radius * 3) + 2, WW = W + pad * 2, HH = H + pad * 2;
+      if (!_gaussRepeatPlate) _gaussRepeatPlate = createCanvas();
+      const plate = _gaussRepeatPlate;
+      if (plate.width !== WW || plate.height !== HH) { plate.width = WW; plate.height = HH; }
+      const C = plate.getContext('2d');
+      C.setTransform(1, 0, 0, 1, 0, 0); C.clearRect(0, 0, WW, HH);
+      C.globalAlpha = 1; C.globalCompositeOperation = 'source-over'; C.filter = 'none';
+      C.drawImage(A, pad, pad);
+      C.drawImage(A, 0, 0, 1, H, 0, pad, pad, H);
+      C.drawImage(A, W - 1, 0, 1, H, pad + W, pad, pad, H);
+      C.drawImage(A, 0, 0, W, 1, pad, 0, W, pad);
+      C.drawImage(A, 0, H - 1, W, 1, pad, pad + H, W, pad);
+      C.drawImage(A, 0, 0, 1, 1, 0, 0, pad, pad);
+      C.drawImage(A, W - 1, 0, 1, 1, pad + W, 0, pad, pad);
+      C.drawImage(A, 0, H - 1, 1, 1, 0, pad + H, pad, pad);
+      C.drawImage(A, W - 1, H - 1, 1, 1, pad + W, pad + H, pad, pad);
+      if (ctxFilterOK()) {
+        if (!_gaussRepeatBlur) _gaussRepeatBlur = createCanvas();
+        const out = _gaussRepeatBlur;
+        if (out.width !== WW || out.height !== HH) { out.width = WW; out.height = HH; }
+        const D = out.getContext('2d');
+        D.setTransform(1, 0, 0, 1, 0, 0); D.clearRect(0, 0, WW, HH);
+        D.globalAlpha = 1; D.globalCompositeOperation = 'source-over';
+        D.filter = 'blur(' + radius.toFixed(2) + 'px)'; D.drawImage(plate, 0, 0); D.filter = 'none';
+        B.drawImage(out, pad, pad, W, H, 0, 0, W, H);
+        return;
+      }
+      const gpu = FM.glColor && FM.glColor.blur ? FM.glColor.blur(plate, WW, HH, radius, { premul: true }) : null;
+      if (gpu) { B.drawImage(gpu, pad, pad, W, H, 0, 0, W, H); return; }
+      if (cpuBlurCanvas(plate, WW, HH, radius)) B.drawImage(plate, pad, pad, W, H, 0, 0, W, H);
+      else B.drawImage(A, 0, 0);
+    },
     circlearray: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       var count = Math.max(2, Math.min(36, Math.round(fparam(p, 'count', 8, t))));
       var frame = scene && scene.project;
@@ -19329,7 +19377,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (scene && layer.effects) {
       // vignette joins this stack on EVERY layer, innermost (#986 C8 — see postFxOrder and CANVAS_FX.vignette); media
       // layers used to draw it inline in the media branch, first vignette only.
-      const pp = postFxOrder(layer);
+      const pp = postFxOrder(layer, t);
       const outer = pp[pp.length - 1];
       /* MOTION BLUR (OBJECT) DISPATCHES OUTERMOST NOW (queue 382), not at the base of the recursion.
        * Ezra: "Motion blur should work when other effects make a layer move, currently it doesn't, like
