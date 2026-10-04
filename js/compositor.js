@@ -15189,7 +15189,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          round. The pivot is Spin's, in the same units; 50/50 takes the old centre expression. All at their defaults: the old
          pulse, byte for byte. */
       const wave = Math.round(fparam(p, 'wave', 0, t));
-      const s = wave >= 1 && wave <= 4 ? 1 + amt * pulseWave(wave, spd * tl + ph / (2 * Math.PI)) : 1 + amt * Math.sin(2 * Math.PI * spd * tl + ph);
+      // A keyframed frequency advances the beat count through its changes. Using
+      // speed(now) for the whole clip would jump every wave to a different beat.
+      const cycles = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : spd * tl;
+      const s = wave >= 1 && wave <= 4 ? 1 + amt * pulseWave(wave, cycles + ph / (2 * Math.PI)) : 1 + amt * Math.sin(2 * Math.PI * cycles + ph);
       const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t), fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
       /* An off-centre pivot is measured on the layer's EXACT edges: the box handed in is the fast scan's, up to ~20 px loose,
          and a pivot on its bottom edge would sit below the floor it is meant to grow from — and the looseness is a different

@@ -120857,4 +120857,20 @@
     if (steady !== render(12, 1)) throw new Error('Static Scramble Text no longer follows elapsed time times Speed');
     if (steady === first) throw new Error('Control: this text does not expose a changing scramble');
   });
+
+  test('690 Pulse keeps its beat when keyframed Speed changes', { item: 'TBD' }, function () {
+    const beat = (speed, t, wave) => {
+      const layer = box482b([_986fx('pulse', { amount: 0.4, speed, wave: wave || 0 })]);
+      const ink = at482b([layer], t);
+      if (!ink.n) throw new Error('Control: the Pulse layer disappeared');
+      return ink.w;
+    };
+    const stepped = { kf: [{ t: 0, v: 1.5 }, { t: 2, v: 0.1, e: 'hold' }] };
+    for (const wave of [0, 4]) {
+      const before = beat(stepped, 1.999, wave), after = beat(stepped, 2, wave);
+      if (Math.abs(after - before) > 3) throw new Error('Pulse wave ' + wave + ' jumped ' + Math.abs(after - before) + ' px when Speed changed');
+      if (Math.abs(after - beat(1.5, 2, wave)) > 1.01) throw new Error('Pulse wave ' + wave + ' lost its accumulated beat at the Speed keyframe');
+    }
+    if (Math.abs(beat(1, 0.25, 0) - beat(2, 0.125, 0)) > 1.01) throw new Error('Static Pulse no longer follows Speed times elapsed clip time');
+  });
 })();
