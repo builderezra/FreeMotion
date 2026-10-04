@@ -13514,11 +13514,46 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.save();
       B.globalCompositeOperation = blend === 2 ? 'lighter' : blend === 1 ? 'screen' : 'source-over';
       B.strokeStyle = color; B.lineWidth = width; B.lineJoin = 'round';
-      // A zero rate holds one ring. Otherwise cap the active count at rate*lifetime + one birth.
-      var first = rate > 0 ? Math.max(0, Math.ceil((time - life) * rate)) : 0;
-      var last = rate > 0 ? Math.floor(time * rate) : 0;
+      // Ring numbers belong to the accumulated birth clock. Using the current keyed rate
+      // for every n/rate birth would shift every live ring when Rate changes.
+      var keyedRate = FM.isAnimated(p.rate);
+      var first, last, birthCursor = 0, phaseCursor = 0, origin = t - time;
+      var rateAt = function (u) {
+        var value = FM.evalProp(p.rate, u);
+        return isFinite(value) ? Math.max(0, Math.min(8, value)) : 0;
+      };
+      if (keyedRate) {
+        birthCursor = Math.max(0, time - life);
+        phaseCursor = FM.integrateProp(p.rate, origin, origin + birthCursor, rateAt);
+        var phaseNow = phaseCursor + FM.integrateProp(p.rate, origin + birthCursor, t, rateAt);
+        first = time < life ? 0 : Math.floor(phaseCursor + 1e-8) + 1;
+        last = Math.floor(phaseNow + 1e-8);
+      } else {
+        // Keep the exact old schedule for a numeric Rate, including the zero-rate ring.
+        first = rate > 0 ? Math.max(0, Math.ceil((time - life) * rate)) : 0;
+        last = rate > 0 ? Math.floor(time * rate) : 0;
+      }
       for (var n = first; n <= last; n++) {
-        var age = time - (rate > 0 ? n / rate : 0);
+        var birth = rate > 0 ? n / rate : 0;
+        if (keyedRate) {
+          birth = 0;
+          if (n > 0) {
+            // The cumulative clock is monotone even across held zero-rate spans. Search
+            // for the FIRST crossing so a paused ring keeps its original birth time.
+            var lo = birthCursor, hi = time;
+            for (var search = 0; search < 20; search++) {
+              var mid = (lo + hi) * 0.5;
+              var phase = phaseCursor + FM.integrateProp(p.rate, origin + birthCursor, origin + mid, rateAt);
+              if (phase >= n - 1e-8) hi = mid; else lo = mid;
+            }
+            birth = hi;
+            // Carry the measured phase, not the ideal integer: a finite search can land a
+            // microsecond late, and resetting to n would hide the next birth on a zero-rate plateau.
+            phaseCursor += FM.integrateProp(p.rate, origin + birthCursor, origin + birth, rateAt);
+            birthCursor = birth;
+          }
+        }
+        var age = time - birth;
         if (age < 0 || age >= life) continue;
         var radius = speed * age;
         if (radius < width * 0.5) continue;

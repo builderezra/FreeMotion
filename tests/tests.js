@@ -121190,4 +121190,33 @@
     if (!last || Math.abs(last[0] - 100) > 0.001)
       throw new Error('The newest particle drifted from its birth point after Rate slowed');
   });
+
+  test('690 Radio Waves keeps earlier ring births when keyed Rate changes', { item: 'TBD' }, function () {
+    const waves = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.radiowaves;
+    if (!waves || !FM.integrateProp) throw new Error('Radio Waves or the rate integrator is unavailable');
+    const radii = (rate, now) => {
+      const seen = [], B = {
+        drawImage() {}, save() {}, restore() {}, beginPath() {},
+        arc(x, y, radius) { seen.push(radius); }, stroke() {},
+      };
+      waves({}, B, 300, 300, { x: 0, y: 0, w: 300, h: 300 },
+        { rate, speed: 100, lifetime: 2, width: 2, fade: 0, shape: 0, blend: 0 },
+        now, now - 10, null, 1, null, null);
+      return seen;
+    };
+    const step = { kf: [{ t: 10, v: 2, e: 'hold' }, { t: 11, v: 4, e: 'hold' }] };
+    const before = radii(step, 10.75), after = radii(step, 11.25);
+    const near = (actual, expected) => actual.length === expected.length &&
+      actual.every((value, index) => Math.abs(value - expected[index]) < 0.01);
+    if (!near(before, [75, 25]) || !near(after, [125, 75, 25]))
+      throw new Error('Radio Waves changed the birth time of existing rings at a keyed Rate step');
+    const stopped = { kf: [{ t: 10, v: 2, e: 'hold' }, { t: 11, v: 0, e: 'hold' }] };
+    const stoppedRadii = radii(stopped, 11.25);
+    if (!near(stoppedRadii, [125, 75, 25]))
+      throw new Error('Radio Waves erased live rings when keyed Rate stopped: ' + stoppedRadii.join(',') +
+        ' phase=' + FM.integrateProp(stopped, 10, 11.25, u => Math.max(0, Math.min(8, FM.evalProp(stopped, u)))));
+    if (!near(radii(4, 11.25), [125, 100, 75, 50, 25]))
+      throw new Error('Control: numeric Rate no longer uses the original ring schedule');
+  });
+
 })();

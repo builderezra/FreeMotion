@@ -1,0 +1,9 @@
+# Radio Waves keeps ring births when keyframed Rate changes
+
+Starting commit: `d50c7abe189ee478c05160e0581c814d3c4bb7b0` on the clean reviewed branch. Isolated work branch: `codex/690-radio-rate-phase` at `/private/tmp/freemotion-radio-phase-20261004`. No shared Claude checkout edit, push, PR or deployment.
+
+`REQUESTS.md:27375-27403` is the standing #690 effects brief. The analogous confirmed `audits/912-audit.json` → `bugs-effects.bugs[3]` finding says a keyframed rate multiplied by all elapsed time rewinds or jumps prior animation. The existing Radio Waves design in `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1236` includes a keyframable Waves-per-second control, and its prior local report covered creation and viewport alignment, not rate changes.
+
+Radio Waves previously computed every ring's birth from its index divided by the current Rate. A held 2→4 Hz step inserted rings into the past; a drop to zero erased still-live rings. Animated Rate now integrates a monotone birth clock from the effect's local start and finds each live ring's first crossing. The numeric and zero-numeric schedules stay exact. The 8 Hz and eight-second limits bound the search to at most 65 rings. A one-off maximum-window direct-kernel probe averaged 0.703 ms per keyed frame on this machine; the probe was removed.
+
+Changed files: `js/compositor.js`, `index.html` (compositor cache tag 268 → 269 in isolation, advanced to 270 after the separate Particle Emitter change was integrated), `tests/tests.js` (one focused `{ item: 'TBD' }` regression), and this report. The new regression failed before the fix, then passed 1/1 after the stopped-rate boundary was corrected. The existing Radio Waves numeric/zero-rate control passed 1/1. JavaScriptCore syntax and `git diff --check` passed. Installed-device rendering remains unverified.
