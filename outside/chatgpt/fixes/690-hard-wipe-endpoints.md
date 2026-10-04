@@ -20,3 +20,5 @@ Starting commit: `ffb3742e4c70943b589844ae9bf89907377f33c5` on `chatgpt/690-all-
 - JavaScriptCore syntax parse of changed JavaScript and `git diff --check`: passed.
 
 The endpoint fix changes saved hard-edge wipes at exactly Progress 0 from a visible sliver to fully hidden, as requested. No export video was rendered; export visual parity is UNVERIFIED.
+
+Integration note: the expanded browser regression passed on the reviewed branch alongside the shape hold, Cloud Pop and service-worker checks (4/4). The combined compositor cache tag is `v=258`.
