@@ -122380,6 +122380,72 @@
     }
   });
 
+  test('690 Time Warp Scan video uses historical source frames at constant forward speeds', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createTimeWarpVideoSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: retimed indexed video fixture cannot be made');
+    const file=await hunt2dIndexedClip(30,30), rec=await hunt2dLoadWarm(file), made=[];
+    const layer=hunt2dClipLayer(rec,made), warp=FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params,{duration:1,direction:0,mode:0,loop:0,barwidth:0,glow:0});
+    layer.effects=[warp]; layer.trimEnd=1;
+    const sc=hunt2dScene([layer],{duration:1});
+    const sampler=FM.createTimeWarpVideoSampler(FM.media,{timeoutMs:10000});
+    const seekLive=async t=>{
+      const local=FM.layerLocalTime(layer,t), target=FM.frameSeekTarget(local,rec.duration), el=rec.el;
+      if(Math.abs(el.currentTime-target)<1e-4&&!el.seeking&&el.readyState>=2)return;
+      await new Promise((resolve,reject)=>{
+        let timer;
+        const finish=err=>{clearTimeout(timer);el.removeEventListener('seeked',on);
+          el.removeEventListener('error',on);err?reject(err):resolve();};
+        const on=()=>{if(el.error)finish(new Error('retimed source decode failed'));
+          else if(!el.seeking&&el.readyState>=2&&Math.abs(el.currentTime-target)<1e-3)finish();};
+        el.addEventListener('seeked',on);el.addEventListener('error',on);
+        timer=setTimeout(()=>finish(new Error('retimed source seek timed out')),10000);
+        el.currentTime=target;on();
+      });
+    };
+    const render=async(t,width,prepared)=>{
+      await seekLive(t);
+      const cv=offscreen(width,width/4),g=cv.getContext('2d',{willReadFrequently:true});
+      FM.withTimeWarpVideoSources(prepared,()=>FM.renderScene(g,sc,t));
+      return Array.from(g.getImageData(0,0,width,width/4).data);
+    };
+    try {
+      for(const speed of [0.5,2]) {
+        layer.speed=speed;
+        layer.duration=speed===2?0.5:1;
+        warp.params.duration=layer.duration;
+        sc.project.duration=layer.duration;
+        const frame=speed===2?12:24, at=frame/30;
+        for(const width of [128,64]) {
+          FM.resetMotionFlowCache();
+          let played;
+          for(let f=0;f<=frame;f++)played=await render(f/30,width,null);
+          FM.resetMotionFlowCache();
+          const prepared=await sampler.prepare(sc,at,width/128);
+          if(!prepared||!prepared.get(layer.id))throw new Error('retimed video was excluded at speed '+speed);
+          const cold=await render(at,width,prepared);
+          if(cold.join()!==played.join())throw new Error('speed '+speed+' historical scan differs at '+width+' px');
+        }
+      }
+      layer.speed=0.5;layer.duration=1;warp.params.duration=1;sc.project.duration=1;
+      FM.resetMotionFlowCache();
+      const expected=[];
+      for(let f=0;f<30;f++) {
+        const pixels=await render(f/30,128,null);
+        let index=-1;
+        for(let b=0;b<8;b++)if(pixels[(16*128+b*16+8)*4]>128)index+=1<<b;
+        expected.push(index);
+      }
+      const before=FM.scene;
+      try {
+        FM.scene=sc;
+        const exported=await hunt2dDecodeMp4(await hunt2dExport({fps:30,to:1}));
+        if(exported.length!==30||exported.some((v,i)=>v!==expected[i]))
+          throw new Error('half-speed MP4 differs from continuous scan: expected '+expected+' got '+exported);
+      } finally {FM.scene=before;}
+    } finally {sampler.dispose();made.forEach(id=>{try{FM.media.remove(id);}catch(e){}});}
+  });
+
   test('690 Time Warp Scan video holds keyed upstream Brightness at crossing time', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (!FM.createTimeWarpVideoSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
       throw new Error('setup: graded video fixture cannot be made');
