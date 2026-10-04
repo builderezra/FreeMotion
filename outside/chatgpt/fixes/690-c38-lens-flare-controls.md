@@ -7,3 +7,5 @@ Lens Flare now offers Core size, Rays, Rotation, Ghosts, Ring and Anamorphic str
 Changed files: `js/compositor.js`, `js/fx-registry.js`, `js/inspector.js`, `index.html` (compositor 287→288, registry 25.53→25.54, inspector 416→417), `tests/tests.js` (one focused `{ item: 'TBD' }` regression), and this report.
 
 Checks: new focused browser regression passed 1/1, including eight ray peaks and visible responses from all new controls; existing queue 474 exact six-ray comparison passed 1/1. JavaScriptCore syntax and diff checks passed. No shared Claude/protected-file edit, push, PR, deployment or release. The separate zoom/crop audit and installed-device appearance remain unverified.
+
+Integrated into the reviewed local branch as `0cae1018` after reconciling the C37 Roughen registry and compositor cache tag 290. The new focused regression and existing exact six-ray comparison each passed 1/1 on the combined branch; JavaScriptCore syntax and diff checks passed. The first legacy check encountered a transient incomplete test-frame load, and its retry passed.
