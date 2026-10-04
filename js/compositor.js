@@ -13471,15 +13471,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       }
     }
-    // Time Warp Scan needs every historical crossing strip after a cold seek. Brightness is
-    // point-local and history-free: it can grade the cropped source at each crossing time without
-    // reading neighbouring pixels. A decoded still image is also a synchronous immutable source;
+    // Time Warp Scan needs every historical crossing strip after a cold seek. Brightness and
+    // contrast are point-local and history-free: they can grade the cropped source at each
+    // crossing time without reading neighbouring pixels. A decoded still image is also a synchronous immutable source;
     // video must wait for historical decoded pictures. Other effects may need a whole plate.
     const warpIndex = fx.type === 'timewarp' && layer.effects ? layer.effects.indexOf(fx) : -1;
     const still = layer.type === 'image' && FM.media && FM.media.get(layer.id);
     if (warpIndex >= 0
         && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media'
-          && layer.effects.slice(0, warpIndex).every(e => !e || e.enabled === false || e.type === 'brightness'))
+          && layer.effects.slice(0, warpIndex).every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'))
           || (still && still.kind === 'image' && still.el && !layer.crop
             && !layer.effects.slice(0, warpIndex).some(e => e && e.enabled !== false)))
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
@@ -14177,8 +14177,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const rec = media.get(layer.id), effects = layer.effects || [];
       if (!rec || !(rec.file instanceof Blob) || rec.kind !== 'video' || !rec.el) continue;
       const active = effects.filter(fx => fx && fx.enabled !== false);
-      if (!((active.length === 1 && active[0].type === 'timewarp')
-          || (active.length === 2 && active[0].type === 'brightness' && active[1].type === 'timewarp'))) continue;
+      if (!active.length || active[active.length - 1].type !== 'timewarp'
+          || active.slice(0, -1).some(fx => fx.type !== 'brightness' && fx.type !== 'contrast')) continue;
       const p = active[active.length - 1].params || {};
       if (['duration','direction','mode','loop'].some(k => FM.isAnimated && FM.isAnimated(p[k]))) continue;
       const dur = Math.max(0.05, p.duration == null ? 2.5 : FM.evalProp(p.duration, t));

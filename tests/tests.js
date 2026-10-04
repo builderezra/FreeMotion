@@ -122468,6 +122468,102 @@
     }
   });
 
+  test('690 Time Warp Scan video preserves keyed Brightness and Contrast order at crossing time', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createTimeWarpVideoSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: graded video fixture cannot be made');
+    const muxer = new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),
+      video:{codec:'avc',width:128,height:32},fastStart:'in-memory'});
+    let failure = null;
+    const encoder = new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta),
+      error:e=>{failure=e;}});
+    encoder.configure({codec:'avc1.42e01e',width:128,height:32,bitrate:2e6,framerate:30});
+    const plate = new OffscreenCanvas(128,32), pg = plate.getContext('2d');
+    for (let f = 0; f < 30; f++) {
+      pg.fillStyle = '#666666'; pg.fillRect(0,0,128,32);
+      pg.fillStyle = '#cccccc'; pg.fillRect(8 + f * 3,0,16,32);
+      const frame = new VideoFrame(plate,{timestamp:Math.round(f*1e6/30),duration:Math.round(1e6/30)});
+      encoder.encode(frame,{keyFrame:f%10===0}); frame.close();
+    }
+    await encoder.flush(); encoder.close();
+    if (failure) throw new Error('setup: contrast fixture encode failed: ' + failure);
+    muxer.finalize();
+    const file = new File([muxer.target.buffer],'graded-contrast-scan.mp4',{type:'video/mp4'});
+    const rec = await hunt2dLoadWarm(file), made = [];
+    const layer = hunt2dClipLayer(rec, made);
+    layer.duration = 1; layer.trimEnd = 1;
+    const grade = FM.fxRegistry.makeInstance('brightness');
+    grade.params.amount = 1.1;
+    const contrast = FM.fxRegistry.makeInstance('contrast');
+    contrast.params.amount = {kf:[{t:0,v:0.4,e:'linear'},{t:1,v:1.8,e:'linear'}]};
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params,{duration:1,direction:0,mode:0,loop:0,barwidth:0,glow:0});
+    layer.effects = [grade,contrast,warp];
+    const sc = hunt2dScene([layer],{duration:1});
+    const sampler = FM.createTimeWarpVideoSampler(FM.media,{timeoutMs:10000});
+    const seekLive = async t => {
+      const el=rec.el, target=FM.frameSeekTarget(t,rec.duration);
+      if (Math.abs(el.currentTime-target)<1e-4 && !el.seeking && el.readyState>=2) return;
+      await new Promise((resolve,reject)=>{
+        let timer;
+        const finish=err=>{clearTimeout(timer);el.removeEventListener('seeked',on);
+          el.removeEventListener('error',on);err?reject(err):resolve();};
+        const on=()=>{if(el.error)finish(new Error('contrast source decode failed'));
+          else if(!el.seeking&&el.readyState>=2&&Math.abs(el.currentTime-target)<1e-3)finish();};
+        el.addEventListener('seeked',on);el.addEventListener('error',on);
+        timer=setTimeout(()=>finish(new Error('contrast source seek timed out')),10000);
+        el.currentTime=target;on();
+      });
+    };
+    const render=async(t,width,prepared)=>{
+      await seekLive(t);
+      const cv=offscreen(width,width/4),g=cv.getContext('2d',{willReadFrequently:true});
+      FM.withTimeWarpVideoSources(prepared,()=>FM.renderScene(g,sc,t));
+      return Array.from(g.getImageData(0,0,width,width/4).data);
+    };
+    try {
+      let expectedExportRed = null, currentGradeRed = null;
+      for (const width of [128,64]) {
+        FM.resetMotionFlowCache();
+        let played;
+        for(let f=0;f<=24;f++)played=await render(f/30,width,null);
+        FM.resetMotionFlowCache();
+        const prepared=await sampler.prepare(sc,24/30,width/128);
+        const cold=await render(24/30,width,prepared);
+        if(cold.join()!==played.join()) {
+          let count=0, max=0, first=-1;
+          for(let i=0;i<cold.length;i++) if(cold[i]!==played[i]) {
+            count++;max=Math.max(max,Math.abs(cold[i]-played[i]));if(first<0)first=i;
+          }
+          throw new Error('keyed contrast differs between video playback and cold scan at '+width+
+            ' px: '+count+' channels, max '+max+', first '+first+' got '+cold[first]+' expected '+played[first]);
+        }
+        const saved=contrast.params.amount;
+        contrast.params.amount=3;
+        FM.resetMotionFlowCache();
+        const currentGrade=await render(24/30,width,await sampler.prepare(sc,24/30,width/128));
+        contrast.params.amount=saved;
+        if(currentGrade.join()===cold.join())
+          throw new Error('Control: historical keyed contrast has no visible effect on the scanned video');
+        if(width===128) {
+          expectedExportRed=cold[(8*128+64)*4];
+          currentGradeRed=currentGrade[(8*128+64)*4];
+        }
+      }
+      const savedScene=FM.scene;
+      try {
+        FM.scene=sc;
+        const exported=await hunt2dDecodeMp4(await hunt2dExport({fps:30,to:1}),
+          (g)=>g.getImageData(64,8,1,1).data[0]);
+        if(exported.length!==30 || Math.abs(exported[24]-expectedExportRed)>12
+            || Math.abs(exported[24]-currentGradeRed)<15)
+          throw new Error('main MP4 lost the historical video contrast: expected about '+
+            expectedExportRed+', current-time contrast '+currentGradeRed+', got '+exported[24]);
+      } finally {FM.scene=savedScene;}
+    } finally {
+      sampler.dispose();made.forEach(id=>{try{FM.media.remove(id);}catch(e){}});
+    }
+  });
+
   test('690 Frame Stutter cold-seeks a moving shape with an upstream keyed grade', { item: 'TBD', budgetMs: 30000 }, async function () {
     const layer = FM.makeLayer('shape', {
       shape: 'rect', x: 10, y: 20, shapeW: 12, shapeH: 12,
