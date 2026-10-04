@@ -123031,7 +123031,7 @@
         if (exported.length !== 30 || exported.some((v, i) => v !== expected[i]))
           throw new Error('main MP4 scan differs from continuous playback: expected ' +
             expected.join(',') + ', got ' + exported.join(','));
-        if (!renderer.includes(';c31-video-timewarp-2'))
+        if (!renderer.includes(';c31-video-timewarp-3'))
           throw new Error('old MP4 resume parts can splice into a new video scan');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally {
@@ -123099,8 +123099,76 @@
         layer.mask.feather = 6; layer.mask.invert = false; FM.scene = sc;
         XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1/30 });
-        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-2'))
+        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-3'))
           throw new Error('masked-video MP4 did not render with the current scan resume identity');
+      } finally { XR.signature = previousSignature; FM.scene = previousScene; }
+    } finally {
+      sampler.dispose();
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+    }
+  });
+
+  test('690 Time Warp Scan cold-seeks decoded video through a keyed upstream pen mask', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createTimeWarpVideoSampler || !FM.buildMaskAlpha || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: keyed-mask indexed video fixture is unavailable');
+    const made = [], file = await hunt2dIndexedClip(30, 30), rec = await hunt2dLoadWarm(file);
+    const layer = hunt2dClipLayer(rec, made), warp = FM.fxRegistry.makeInstance('timewarp');
+    layer.duration = 1; layer.trimEnd = 1;
+    const rect = x => [[x, 0], [x + 64, 0], [x + 64, 32], [x, 32]];
+    layer.masks = [{ id:'video-scan-pen', type:'pen', enabled:true, mode:'add', closed:true,
+      path:{ kf:[{ t:0, v:rect(0), e:'linear' }, { t:1, v:rect(64), e:'linear' }] } }];
+    const marker = { type:'penmask', maskId:'video-scan-pen' };
+    Object.assign(warp.params, { duration:1, direction:0, mode:0, loop:0, barwidth:0, glow:0 });
+    layer.effects = [marker, warp];
+    const sc = hunt2dScene([layer], { duration:1 });
+    const sampler = FM.createTimeWarpVideoSampler(FM.media, { timeoutMs:10000 });
+    const seekLive = async t => {
+      const target = FM.frameSeekTarget(t, rec.duration), el = rec.el;
+      if (Math.abs(el.currentTime - target) < 1e-4 && !el.seeking && el.readyState >= 2) return;
+      await new Promise((resolve, reject) => {
+        let timer;
+        const finish = err => { clearTimeout(timer); el.removeEventListener('seeked', on);
+          el.removeEventListener('error', on); err ? reject(err) : resolve(); };
+        const on = () => { if (el.error) finish(new Error('pen-masked source decode failed'));
+          else if (!el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - target) < 1e-3) finish(); };
+        el.addEventListener('seeked', on); el.addEventListener('error', on);
+        timer = setTimeout(() => finish(new Error('pen-masked source seek timed out')), 10000);
+        el.currentTime = target; on();
+      });
+    };
+    const render = async (t, width, prepared) => {
+      await seekLive(t);
+      const cv = offscreen(width, width / 4), ctx = cv.getContext('2d', { willReadFrequently:true });
+      FM.withTimeWarpVideoSources(prepared, () => FM.renderScene(ctx, sc, t));
+      return Array.from(ctx.getImageData(0, 0, width, width / 4).data);
+    };
+    try {
+      for (const width of [128, 64]) {
+        FM.resetMotionFlowCache();
+        let played;
+        for (let f = 0; f <= 24; f++) played = await render(f / 30, width, null);
+        if (!played.some((v, i) => i % 4 === 0 && v > 40))
+          throw new Error('Control: keyed pen mask removed all video picture, width=' + width);
+        FM.resetMotionFlowCache();
+        const prepared = await sampler.prepare(sc, 24 / 30, width / 128);
+        if (!prepared || !prepared.get(layer.id))
+          throw new Error('keyed upstream pen mask was excluded from historical video scan');
+        const cold = await render(24 / 30, width, prepared);
+        if (cold.join() !== played.join()) {
+          const i = cold.findIndex((v, j) => v !== played[j]);
+          throw new Error('keyed pen-masked video cold seek differs at pixel ' + (i >> 2) +
+            ', width=' + width + ', cold=' + cold[i] + ', played=' + played[i]);
+        }
+      }
+      const XR = FM.exportResume, previousScene = FM.scene, previousSignature = XR && XR.signature;
+      if (!XR || !FM.exporter) throw new Error('setup: pen-masked video MP4 resume identity is unavailable');
+      let renderer = '';
+      try {
+        FM.scene = sc;
+        XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
+        const exported = await hunt2dExport({ fps:30, to:1/30 });
+        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-3'))
+          throw new Error('pen-masked video MP4 did not use the current historical scan renderer');
       } finally { XR.signature = previousSignature; FM.scene = previousScene; }
     } finally {
       sampler.dispose();

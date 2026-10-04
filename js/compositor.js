@@ -14330,13 +14330,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
               && layer.speed.kf.every((k, i, keys) => k && Number.isFinite(k.t) && Number.isFinite(k.v)
                 && k.v > 0 && (!k.e || k.e === 'linear') && (!i || k.t > keys[i - 1].t))))
           || layer.fillMode && layer.fillMode !== 'none'
-          || layer.masks && layer.masks.length
           || layer.behaviors && layer.behaviors.length) continue;
       const rec = media.get(layer.id), effects = layer.effects || [];
       if (!rec || !(rec.file instanceof Blob) || rec.kind !== 'video' || !rec.el) continue;
       const active = effects.filter(fx => fx && fx.enabled !== false);
+      // A single identified pen mask before the scan can be reconstructed with its
+      // historical path. Unmarked or additional masks still wrap the stack differently.
+      const mask = layer.masks && layer.masks.length === 1 ? layer.masks[0] : null;
+      const markers = active.filter(fx => fx.type === 'penmask');
+      const penSafe = !!(mask && mask.enabled !== false && typeof mask.id === 'string'
+        && markers.length === 1 && markers[0].maskId === mask.id);
+      if (layer.masks && layer.masks.length && !penSafe) continue;
+      if (penSafe && layer.mask && layer.mask.enabled) continue; // combined stencil order needs its own proof
       if (!active.length || active[active.length - 1].type !== 'timewarp'
-          || active.slice(0, -1).some(fx => fx.type !== 'brightness' && fx.type !== 'contrast')) continue;
+          || active.slice(0, -1).some(fx => fx.type !== 'brightness' && fx.type !== 'contrast'
+            && !(penSafe && fx.type === 'penmask' && fx.maskId === mask.id))) continue;
       const p = active[active.length - 1].params || {};
       if (['duration','direction','mode','loop'].some(k => FM.isAnimated && FM.isAnimated(p[k]))) continue;
       const dur = Math.max(0.05, p.duration == null ? 2.5 : FM.evalProp(p.duration, t));
