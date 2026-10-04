@@ -92,6 +92,58 @@ def design(bold=False):
         bridge((135,701),(260,759),(453,755),(559,706),55,33,12),
         bridge((151,367),(250,412),(386,386),(493,414),51,27,8),
         bridge((133,24),(280,-32),(486,4),(570,80),61,31,18))
+    put('B', 675, reed(117),
+        bridge((143,709),(294,785),(520,717),(527,553),70,73,13),
+        bridge((527,553),(526,423),(363,391),(145,390),73,72,8),
+        bridge((145,390),(357,430),(581,347),(565,174),74,99,16),
+        bridge((565,174),(545,-8),(336,-36),(129,20),99,102,18))
+    put('C', 687, o.difference(Polygon([(483,252),(780,252),(780,527),(483,527)])),
+        bridge((516,566),(562,585),(591,625),(611,663),76,8),
+        bridge((514,198),(571,168),(593,119),(610,92),85,12))
+    put('F', 613, reed(120),
+        bridge((136,706),(269,767),(461,757),(546,700),53,29,15),
+        bridge((151,366),(272,409),(405,376),(491,422),53,23,8))
+    put('J', 627, reed(499),
+        stroke((519,98),(473,-105),(156,-85),(97,119),q(116),q(15),q(31)),
+        bridge((248,731),(336,771),(487,749),(554,712),35,42,14))
+    put('K', 669, reed(118),
+        stroke((155,341),(257,377),(431,692),(533,754),q(55),q(13),q(17)),
+        stroke((154,331),(313,315),(502,47),(583,-20),q(47),q(130),q(31)))
+    put('L', 600, reed(122),
+        bridge((143,24),(283,-40),(476,-3),(557,83),63,23,16))
+    put('M', 855, reed(112), reed(742),
+        stroke((145,704),(260,560),(328,255),(428,202),q(65),q(96),q(12)),
+        stroke((428,202),(515,286),(613,615),(735,707),q(92),q(12),q(20)))
+    put('P', 641, reed(115),
+        bridge((144,711),(296,786),(532,700),(540,533),70,72,13),
+        bridge((540,533),(524,399),(363,365),(145,399),72,76,11))
+    put('Q', 722, o,
+        stroke((437,169),(499,65),(543,-16),(624,-117),q(47),q(113),q(16)))
+    put('S', 652,
+        stroke((544,628),(438,849),(74,716),(263,401),q(13),q(98),q(34)),
+        stroke((263,401),(580,184),(509,-93),(79,117),q(95),q(13),q(35)))
+    put('U', 716,
+        stroke((104,746),(77,465),(115,-29),(352,-29),q(14),q(138),q(30)),
+        stroke((352,-29),(609,-22),(639,463),(617,746),q(138),q(12),q(28)))
+    put('V', 673,
+        stroke((86,749),(163,497),(247,131),(337,-27),q(13),q(148),q(24)),
+        stroke((337,-27),(427,141),(506,528),(593,746),q(146),q(13),q(27)))
+    put('W', 917,
+        stroke((66,743),(116,466),(138,124),(235,-26),q(16),q(130),q(20)),
+        stroke((235,-26),(300,106),(373,453),(457,485),q(127),q(41),q(10)),
+        stroke((457,485),(528,364),(581,118),(673,-22),q(40),q(129),q(18)),
+        stroke((673,-22),(762,157),(803,520),(857,746),q(125),q(12),q(18)))
+    put('X', 660,
+        stroke((85,741),(239,567),(445,154),(575,-24),q(13),q(139),q(22)),
+        stroke((566,741),(416,558),(202,188),(88,-23),q(14),q(134),q(16)))
+    put('Y', 658,
+        stroke((84,743),(163,561),(268,386),(329,351),q(14),q(93),q(15)),
+        stroke((575,743),(481,563),(389,394),(329,351),q(13),q(89),q(15)),
+        stroke((329,351),(375,212),(343,69),(300,-29),q(93),q(142),q(9)))
+    put('Z', 655,
+        bridge((88,704),(236,770),(477,755),(570,700),47,36,16),
+        stroke((554,704),(408,533),(216,190),(85,21),q(18),q(116),q(22)),
+        bridge((85,22),(221,-39),(464,-27),(576,55),62,25,15))
     put(' ', 280)
     put('!', 300, reed(150, 738),
         oval(160, 38, 44, 44, 11, 11))
@@ -154,21 +206,24 @@ def build(style):
 
 
 def specimen(regular, bold):
-    image = Image.new('RGB', (1500, 920), '#0b171c')
+    image = Image.new('RGB', (1500, 1050), '#0b171c')
     draw = ImageDraw.Draw(image)
     label = ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf', 23)
     draw.text((48, 30), 'FM REED / original type proof', font=label, fill='#91a7ac')
     for y, size, style, phrase in [
-        (100, 96, bold, 'NIGHT GARDEN'),
-        (280, 64, regular, 'GOOD NIGHT'),
-        (410, 48, bold, 'GARDEN NIGHT'),
-        (525, 32, regular, 'NIGHT GARDEN'),
-        (610, 24, regular, 'GOOD NIGHT'),
+        (100, 96, bold, 'BRIGHT WAVES'),
+        (280, 64, regular, 'NIGHT GARDEN'),
+        (410, 48, bold, 'GOOD NIGHT'),
+        (525, 32, regular, 'WILD GARDEN'),
+        (610, 24, regular, 'BRIGHT WAVES'),
     ]:
         draw.text((48, y-30), f'{size} px / '+('Bold' if style==bold else 'Regular'), font=label, fill='#91a7ac')
         draw.text((48, y+12), phrase, font=ImageFont.truetype(style, size), fill='#f1e6d0')
-    draw.text((48, 750), 'Mapped proof glyphs: A D E G H I N O R T ! ?', font=label, fill='#e4b975')
-    draw.text((48, 835), 'Lowercase, remaining capitals, numerals and accents are not drawn yet.', font=label, fill='#91a7ac')
+    draw.text((48, 733), 'UPPERCASE / 34 px regular', font=label, fill='#91a7ac')
+    draw.text((48, 777), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', font=ImageFont.truetype(regular, 34), fill='#e4b975')
+    draw.text((48, 876), 'UPPERCASE / 34 px bold', font=label, fill='#91a7ac')
+    draw.text((48, 918), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', font=ImageFont.truetype(bold, 34), fill='#e4b975')
+    draw.text((48, 1000), 'Lowercase, numerals, most punctuation and accents are not drawn yet.', font=label, fill='#91a7ac')
     image.save(HERE/'specimen.png')
 
     comparison = Image.new('RGB', (1500, 760), '#f2ede1')
