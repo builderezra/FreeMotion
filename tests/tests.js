@@ -120866,6 +120866,67 @@
     if (!same(render(ramp, 2), render(4, 2))) throw new Error('Lightning did not accumulate a Flicker ramp');
   });
 
+  test('690 C34 Lightning endpoints, glow, core and draw-on scope', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.lightning;
+    const reg = FM.fxRegistry && FM.fxRegistry.get('lightning');
+    if (!K || !reg) throw new Error('Lightning kernel or inspector controls are unavailable');
+    const controls = Object.fromEntries(reg.params.map(q => [q.key, q]));
+    for (const key of ['mode', 'x1', 'y1', 'x2', 'y2', 'glow', 'segments', 'drawon', 'color2']) {
+      if (!controls[key]) throw new Error('Lightning is missing ' + key + ' in the effects inspector');
+    }
+    if (controls.mode.default !== 0 || controls.glow.default !== 100 || controls.segments.default !== 20 || controls.drawon.default !== 0)
+      throw new Error('Lightning new controls changed the saved Down the layer / Layer pixels default');
+    const W = 120, H = 80;
+    const pixel = (d, x, y) => (y * W + x) * 4;
+    const run = (params, body) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = pixel(d, x, y); d[i] = d[i + 1] = d[i + 2] = 20;
+        d[i + 3] = body === 'full' || (body === 'box' && x >= 25 && x < 95 && y >= 15 && y < 65) ? 255 : 0;
+      }
+      K(d, W, H, Object.assign({ count: 1, intensity: 1, jitter: 0, forks: 0, flicker: 0, seed: 3, color: '#96c8ff' }, params), 0);
+      return d;
+    };
+    const same = (a, b) => a.every((value, i) => value === b[i]);
+    const saved = run({}, 'box');
+    const declared = run({ mode: 0, glow: 100, segments: 20, drawon: 0, color2: '#eaf4ff' }, 'box');
+    if (!same(saved, declared)) throw new Error('The new default controls changed an existing Lightning picture');
+    const oldCustom = { type: 'lightning', params: { color: '#ff3300', count: 1, intensity: 1, jitter: 0, forks: 0, flicker: 0, seed: 3 } };
+    const beforeFill = run(oldCustom.params, 'box');
+    FM._fillFxParams(oldCustom);
+    if (oldCustom.params.color2 !== undefined || !same(beforeFill, run(oldCustom.params, 'box')))
+      throw new Error('Filling an old custom-colour Lightning changed its core or picture');
+    if (controls.color2.follows !== 'color' || FM.fxRegistry.makeInstance('lightning').params.color2 !== undefined
+        || FM.lightningCoreColor('#ff3300') !== '#ffd6cc')
+      throw new Error('An untouched Core colour does not visibly follow the effective glow colour');
+    const empty = run({}, 'empty');
+    if (empty.some((value, i) => i % 4 === 3 ? value !== 0 : value !== 20))
+      throw new Error('Layer pixels painted an empty layer');
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (x >= 25 && x < 95 && y >= 15 && y < 65) continue;
+      const i = pixel(saved, x, y);
+      if (saved[i] !== 20 || saved[i + 1] !== 20 || saved[i + 2] !== 20 || saved[i + 3] !== 0)
+        throw new Error('The default bolt escaped the layer alpha gate at ' + x + ',' + y);
+    }
+    const aim = { mode: 1, x1: 10, y1: 50, x2: 90, y2: 50, drawon: 1, glow: 0, segments: 8, color2: '#ff2000' };
+    const red = run(aim, 'empty'), green = run(Object.assign({}, aim, { color2: '#20ff00' }), 'empty');
+    const atStart = pixel(red, 12, 40), atEnd = pixel(red, 108, 40), atCentre = pixel(red, 60, 40);
+    if (red[atStart + 3] < 20 || red[atEnd + 3] < 10 || red[atCentre + 3] < 20)
+      throw new Error('Point to point did not draw its selected endpoints on a transparent layer');
+    const rows = new Set(), cols = new Set();
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (red[pixel(red, x, y) + 3] > 8) { rows.add(y); cols.add(x); }
+    if (!(cols.size > rows.size * 8)) throw new Error('Point to point still strikes vertically (' + rows.size + ' rows, ' + cols.size + ' columns)');
+    if (!(red[atCentre] > red[atCentre + 1] + 60 && green[atCentre + 1] > green[atCentre] + 60))
+      throw new Error('Core colour does not change the drawn channel');
+    if (red[pixel(red, 60, 20) + 3] !== 0) throw new Error('Everywhere lit a pixel far from the chosen segment');
+    const wide = run(Object.assign({}, aim, { glow: 400 }), 'empty');
+    const lit = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; };
+    if (!(lit(wide) > lit(red) * 2)) throw new Error('Glow 400% did not widen the halo');
+    const rough = { mode: 1, x1: 10, y1: 10, x2: 90, y2: 90, drawon: 1, jitter: 2, glow: 100 };
+    if (same(run(Object.assign({}, rough, { segments: 8 }), 'empty'), run(Object.assign({}, rough, { segments: 60 }), 'empty')))
+      throw new Error('Segments does not alter Lightning path detail');
+  });
+
   test('690 hard Wipe and Radial Wipe fully hide the first frame', { item: 'TBD' }, function () {
     const fx = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
     if (!fx || !fx.wipe || !fx.radialwipe) throw new Error('Wipe kernels are unavailable');

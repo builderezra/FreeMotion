@@ -1406,8 +1406,17 @@ globalThis.FM = globalThis.FM || {};
       { key: 'forks', label: 'Branches', min: 0, max: 8, step: 1, def: 3 },
       { key: 'flicker', label: 'Flicker', min: 0, max: 24, step: 1, def: 8, unit: '/s' },
       { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
-      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°' },   // queue 904: it could only strike straight down
-    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour' },
+      { key: 'mode', label: 'Path', def: 0, options: [[0, 'Down the layer'], [1, 'Point to point']] },
+      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'mode', liveWhen: 0 },
+      { key: 'x1', label: 'Start X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'y1', label: 'Start Y', min: 0, max: 100, step: 1, def: 0, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'x2', label: 'End X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'y2', label: 'End Y', min: 0, max: 100, step: 1, def: 100, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'glow', label: 'Glow', min: 0, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'segments', label: 'Segments', min: 8, max: 60, step: 1, def: 20 },
+      { key: 'drawon', label: 'Draw on', def: 0, options: [[0, 'Layer pixels'], [1, 'Everywhere']] },
+    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour', color2: true,
+       defColor2: '#eaf4ff', color2Label: 'Core colour', color2Follows: 'color' },
     // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
     { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
@@ -3091,6 +3100,11 @@ globalThis.FM = globalThis.FM || {};
   function easeOutCubic(p) { return 1 - Math.pow(1 - p, 3); }
   function easeOutBack(p) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); }
   function hexToRGB(h) { h = String(h || '#000000').replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; return [parseInt(h.slice(0, 2), 16) || 0, parseInt(h.slice(2, 4), 16) || 0, parseInt(h.slice(4, 6), 16) || 0]; }
+  // The inspector shows the effective core when Core colour is absent. An absent
+  // swatch follows the glow colour, while an explicitly chosen core stays fixed.
+  FM.lightningCoreColor = function (color) {
+    return '#' + hexToRGB(color).map(v => Math.round(v + (255 - v) * 0.8).toString(16).padStart(2, '0')).join('');
+  };
   /* ═══ THE COLOURING CARD'S OPACITY, FOR TEXT (queue 690, fourth hunt) ═══════════════════════════════════════════
    * fillPanel gives a text layer the same Opacity row as a shape, and the card's readout follows it (#FFFFFF 30%) —
    * but only paintFillInPath, the SHAPE fill, ever read layer.fillOpacity. Every text path set its colour and filled
@@ -9959,10 +9973,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const forkN = Math.max(0, Math.min(8, Math.round(_num(p.forks, 3))));
       const flick = Math.max(0, Math.min(24, Math.round(_num(p.flicker, 8))));
       const seed0 = Math.round(_num(p.seed, 0)) | 0;
+      const pointMode = Math.round(_num(p.mode, 0)) === 1;
+      const everywhere = Math.round(_num(p.drawon, 0)) === 1;
+      const glow = Math.max(0, Math.min(4, _num(p.glow, 100) / 100));
+      const segments = Math.max(8, Math.min(60, Math.round(_num(p.segments, 20))));
       const col = hexToRGB(p.color) || [150, 200, 255];
-      // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
-      // blown out; the tint lives in the glow around it, which is what this keeps.
-      const core = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      // Absent core colour is the original colour pushed 80 % toward white; saved
+      // effects keep following their glow colour until the user chooses a core.
+      const legacyCore = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      const core = p.color2 == null ? legacyCore : (hexToRGB(p.color2) || legacyCore);
       // Flicker is strikes per second. A keyed rate accumulates its strikes, so easing it to zero
       // holds the last bolt instead of jumping back to the first; plain rates keep their old phase.
       const phase = FM.isAnimated(p.flicker)
@@ -9987,10 +10006,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          pixel is scaled by the alpha ALREADY THERE, so nothing is painted outside the layer's coverage.
          Scaling by the existing alpha (rather than merely clipping to the box) is what makes it strike the
          SHAPE — a bolt across a circle stops at the circle, not at its bounding square. */
-      const bb = alphaBBox(d, W, H);
-      const BX = bb.w > 2 ? bb.x : 0, BY = bb.h > 2 ? bb.y : 0;
-      const BW = bb.w > 2 ? bb.w : W, BH = bb.h > 2 ? bb.h : H;
+      // Everywhere uses the entire plate and can draw on a completely transparent
+      // layer. The default still uses only existing layer pixels (#403).
+      const bb = everywhere ? null : alphaBBox(d, W, H);
+      if (!everywhere && !bb) return;
+      const BX = everywhere ? 0 : (bb.w > 2 ? bb.x : 0), BY = everywhere ? 0 : (bb.h > 2 ? bb.y : 0);
+      const BW = everywhere ? W : (bb.w > 2 ? bb.w : W), BH = everywhere ? H : (bb.h > 2 ? bb.h : H);
       const unit = Math.max(1, Math.min(BW, BH));
+      const pct = (key, fallback) => Math.max(0, Math.min(100, _num(p[key], fallback))) / 100;
+      const X1 = BX + pct('x1', 50) * BW, Y1 = BY + pct('y1', 0) * BH;
+      const X2 = BX + pct('x2', 50) * BW, Y2 = BY + pct('y2', 100) * BH;
+      const LX = X2 - X1, LY = Y2 - Y1, pathLen = Math.hypot(LX, LY);
+      if (pointMode && pathLen < 1) return;
+      const alongX = pointMode ? LX / pathLen : 0, alongY = pointMode ? LY / pathLen : 1;
+      const acrossX = -alongY, acrossY = alongX;
       const stamp = (cx, cy, rad, amp, rgb) => {
         if (rad < 0.4 || amp <= 0.004) return;
         const r = Math.ceil(rad);
@@ -10007,18 +10036,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             if (g <= 0.004) continue;
             const i = (y * W + x) * 4;
             const a0 = d[i + 3];
-            if (!a0) continue;                     // outside the layer: not ours to light (queue 403)
-            g *= a0 / 255;                         // …and fade with the layer's own edge, so it strikes the SHAPE
-            d[i]     = 255 - (255 - d[i])     * (1 - rgb[0] / 255 * g);
-            d[i + 1] = 255 - (255 - d[i + 1]) * (1 - rgb[1] / 255 * g);
-            d[i + 2] = 255 - (255 - d[i + 2]) * (1 - rgb[2] / 255 * g);
+            if (everywhere) {
+              // Opt-in source-over on straight RGBA: new ink remains coloured
+              // on transparent pixels instead of multiplying its colour by alpha twice.
+              const add = Math.min(1, g), old = (a0 / 255) * (1 - add), next = old + add;
+              d[i] = (d[i] * old + rgb[0] * add) / next;
+              d[i + 1] = (d[i + 1] * old + rgb[1] * add) / next;
+              d[i + 2] = (d[i + 2] * old + rgb[2] * add) / next;
+              d[i + 3] = next * 255;
+            } else {
+              if (!a0) continue;                   // outside the layer: not ours to light (queue 403)
+              g *= a0 / 255;                       // …and fade with the layer's own edge, so it strikes the SHAPE
+              d[i]     = 255 - (255 - d[i])     * (1 - rgb[0] / 255 * g);
+              d[i + 1] = 255 - (255 - d[i + 1]) * (1 - rgb[1] / 255 * g);
+              d[i + 2] = 255 - (255 - d[i + 2]) * (1 - rgb[2] / 255 * g);
+            }
           }
         }
       };
 
       /* STRIKES FROM (queue 904): the whole bolt — channel and forks — is turned about the middle of the layer's box, so 0 is the
          old straight-down strike exactly (the rotation is skipped), 90 strikes from the right, -90 from the left, 180 from below. */
-      const angD = _num(p.angle, 0), rotOn = (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);
+      const angD = _num(p.angle, 0), rotOn = !pointMode && (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);
       const RCX = BX + BW / 2, RCY = BY + BH / 2;
       // Walk a path, stamping along it. `taper` fades width and brightness toward the far end, which
       // is what makes a fork read as dying out rather than as being cut off.
@@ -10033,7 +10072,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             let x = a[0] + (b[0] - a[0]) * (k / steps);
             let y = a[1] + (b[1] - a[1]) * (k / steps);
             if (rotOn) { const ux = x - RCX, uy = y - RCY; x = RCX + ux * rCos - uy * rSin; y = RCY + ux * rSin + uy * rCos; }
-            stamp(x, y, unit * 0.016 * wScale * thick * taper, 0.16 * intensity * aScale * taper, col);
+            if (glow) stamp(x, y, unit * 0.016 * wScale * thick * taper * glow, 0.16 * intensity * aScale * taper * glow, col);
             stamp(x, y, unit * 0.0035 * wScale * thick * taper + 0.6, 0.95 * intensity * aScale * taper, core);
           }
         }
@@ -10043,11 +10082,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const seed = (b * 131 + phase * 977 + seed0 * 7919) | 0;
         const startX = BX + (0.12 + 0.76 * rnd(seed, 1)) * BW;
         const lean = (rnd(seed, 2) - 0.5) * BW * 0.4;
-        const SEGS = 20;
+        const SEGS = segments;
         const main = [];
         for (let s = 0; s <= SEGS; s++) {
           const f = s / SEGS;
-          main.push([startX + lean * f + (rnd(seed, 10 + s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
+          if (pointMode) {
+            // Jitter normal to the chosen segment, with exact endpoints. The
+            // existing angle is intentionally ignored: endpoints own the path.
+            const rough = (rnd(seed, 10 + s) - 0.5) * unit * 0.1 * jag * Math.sin(Math.PI * f);
+            main.push([X1 + LX * f + acrossX * rough, Y1 + LY * f + acrossY * rough]);
+          } else {
+            main.push([startX + lean * f + (rnd(seed, 10 + s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
+          }
         }
         draw(main, 1, 1);
 
@@ -10061,8 +10107,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const fp = [main[at]];
           for (let s = 1; s <= len; s++) {
             const prev = fp[s - 1];
-            fp.push([prev[0] + dir * BW * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag,
-                     prev[1] + (BH / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7)]);
+            const side = dir * (pointMode ? unit : BW) * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag;
+            const forward = (pointMode ? pathLen : BH) / SEGS * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7);
+            fp.push(pointMode
+              ? [prev[0] + acrossX * side + alongX * forward, prev[1] + acrossY * side + alongY * forward]
+              : [prev[0] + side, prev[1] + forward]);
           }
           draw(fp, 0.45, 0.6);
         }

@@ -1877,7 +1877,11 @@ window.FM = window.FM || {};
            The row is asked for the value through evalProp and writes through setProp, so a static colour
            stays a plain string and only becomes a keyframe object when he presses the ◆. */
         else if (p.type === 'color') {
-          const crow = kfColorRow(fx.params, p.key, p.label, p.follows ? () => (FM.evalProp(fx.params[p.follows], FM.time) || p.default) : p.default);   // follows: #482 polish 1.2
+          const followedColor = p.follows ? () => {
+            const value = FM.evalProp(fx.params[p.follows], FM.time) || p.default;
+            return fx.type === 'lightning' && p.key === 'color2' ? FM.lightningCoreColor(value) : value;
+          } : p.default;
+          const crow = kfColorRow(fx.params, p.key, p.label, followedColor);   // follows: #482 polish 1.2
           colourRows[p.key] = crow;
           /* …and a following row re-reads as he changes the colour it follows: the leader's swatch and hex box fire input/change,
              which bubble to its row AFTER the row has written the new value (review of polish 1.2 — the edge stayed orange). */
