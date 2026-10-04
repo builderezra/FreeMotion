@@ -121317,4 +121317,32 @@
     }));
   });
 
+  test('690 Scanlines keeps its rolled position when keyed Roll stops', { item: 'TBD' }, function () {
+    const scanlines = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.scanlines;
+    if (!scanlines || !FM.integrateProp) throw new Error('Scanlines or the rate integrator is unavailable');
+    const render = (roll, time, spacing, thickness) => {
+      const pixels = new Uint8ClampedArray(18 * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 200;
+        pixels[i + 3] = 255;
+      }
+      scanlines(pixels, 1, 18, { amount: 1, roll, spacing, thickness }, time);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, index) => value === b[index]);
+    const stopped = { kf: [{ t: 0, v: 5, e: 'hold' }, { t: 0.5, v: 0, e: 'hold' }] };
+    [[6, 2], [2, 1]].forEach(([spacing, thickness]) => {
+      const atStop = render(stopped, 1.25, spacing, thickness);
+      if (same(atStop, render(stopped, 0, spacing, thickness)))
+        throw new Error('Scanlines rewound when keyed Roll stopped at pitch ' + spacing);
+      // Five px/s for half a second travelled 2.5px, exactly as numeric Roll 2 at 1.25s.
+      if (!same(atStop, render(2, 1.25, spacing, thickness)))
+        throw new Error('Scanlines used current Roll for its past at pitch ' + spacing);
+      if (!same(atStop, render(stopped, 2, spacing, thickness)))
+        throw new Error('Scanlines moved after keyed Roll reached zero at pitch ' + spacing);
+      if (!same(render(0, 0, spacing, thickness), render(0, 2, spacing, thickness)))
+        throw new Error('Control: numeric zero Roll changed its stationary pattern');
+    });
+  });
+
 })();

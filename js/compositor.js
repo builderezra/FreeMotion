@@ -6795,12 +6795,13 @@ globalThis.FM = globalThis.FM || {};
       const sp = p.spacing == null ? 2 : Math.max(2, Math.round(FM.evalProp(p.spacing, t)));
       const th = p.thickness == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.thickness, t)));
       const roll = p.roll == null ? 0 : FM.evalProp(p.roll, t);
-      const plain = sp === 2 && th === 1 && !roll;
+      const off = FM.isAnimated(p.roll) ? FM.integrateProp(p.roll, 0, t) : roll ? roll * t : 0;
+      const plain = sp === 2 && th === 1 && !roll && off === 0;
       /* A LINE NEVER FILLS ITS OWN PITCH (queue 904). Weight was clamped to Pitch, so at the default Pitch of 2, weights 2-20 — 19 of the
          slider's 20 stops — all darkened EVERY row: a flat wash, no lines. Now a weight at or past the pitch widens the pitch to keep a
          one-row gap, so every stop draws visible scanlines, heavier as it goes. Weight below Pitch is untouched (byte-identical). */
       const spE = th >= sp ? th + 1 : sp;
-      const off = roll ? roll * t : 0, lo = spE - th, k = 1 - amt;
+      const lo = spE - th, k = 1 - amt;
       for (let y = 0; y < H; y++) {
         if (plain) { if (y % 2 === 0) continue; }                 // darken every other row
         else { const ph = ((y - off) % spE + spE) % spE; if (ph < lo) continue; }
