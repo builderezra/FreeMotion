@@ -144,12 +144,188 @@ def design(bold=False):
         bridge((88,704),(236,770),(477,755),(570,700),47,36,16),
         stroke((554,704),(408,533),(216,190),(85,21),q(18),q(116),q(22)),
         bridge((85,22),(221,-39),(464,-27),(576,55),62,25,15))
+
+    # The lowercase has its own x-height, rounder bowls, rising shoulders and
+    # long descender curls; it is neither reduced capitals nor a monoline clone.
+    def sprout(x, height=520, bottom=0):
+        return stroke((x+24,bottom),(x+55,bottom+177),(x-39,height-124),(x+9,height),
+                      q(102),q(11),q(27))
+    def bowl(cx=270, cy=253, rx=201, ry=263):
+        extra = 27 if bold else 0
+        return oval(cx,cy,rx,ry,rx-79-extra,ry-91-extra,-10,16)
+    def dot(x): return oval(x,688,39,42,8,9)
+    def shoulder(x1,x2,top=520):
+        return bridge((x1,399),(x1+77,542),(x2-95,556),(x2,389),40,44,13)
+    little_o = bowl()
+    put('a', 562,little_o,sprout(468))
+    put('b', 579,sprout(111,765),bowl(321))
+    put('c', 545,little_o.difference(Polygon([(404,187),(600,187),(600,383),(404,383)])))
+    put('d', 584,little_o,sprout(484,765))
+    put('e', 552,little_o.difference(Polygon([(412,285),(620,285),(620,510),(412,510)])),
+        bridge((103,259),(233,288),(370,284),(471,263),31,38,8))
+    put('f', 396,sprout(211,766),
+        bridge((201,700),(248,778),(338,787),(367,744),31,8,8),
+        bridge((67,456),(178,482),(299,473),(368,465),37,25,6))
+    put('g', 572,little_o,
+        stroke((475,497),(475,270),(486,-102),(349,-192),q(12),q(111),q(25)),
+        bridge((349,-192),(249,-225),(124,-178),(109,-113),100,9,5))
+    put('h', 594,sprout(111,765),sprout(493),shoulder(129,492))
+    put('i', 285,sprout(132),dot(148))
+    put('j', 312,sprout(161,520,-175),dot(175),
+        bridge((166,-161),(131,-216),(68,-217),(54,-184),65,10,5))
+    put('k', 558,sprout(112,765),
+        stroke((140,229),(236,269),(371,464),(458,520),q(36),q(12),q(10)),
+        stroke((173,246),(296,225),(411,37),(500,-23),q(31),q(105),q(13)))
+    put('l', 287,sprout(140,765))
+    put('m', 814,sprout(105),sprout(392),sprout(706),shoulder(117,390),shoulder(405,704))
+    put('n', 588,sprout(106),sprout(495),shoulder(118,493))
+    put('o', 558,little_o)
+    put('p', 583,sprout(109,520,-184),bowl(321))
+    put('q', 581,little_o,sprout(485,520,-184))
+    put('r', 447,sprout(111),
+        bridge((128,393),(185,527),(342,564),(401,462),39,13,7))
+    put('s', 535,
+        stroke((448,432),(369,569),(83,525),(217,261),q(10),q(79),q(22)),
+        stroke((217,261),(530,98),(385,-74),(75,101),q(78),q(12),q(23)))
+    put('t', 427,sprout(214,682),
+        bridge((70,462),(187,494),(312,476),(384,463),37,22,7))
+    put('u', 591,
+        stroke((95,513),(74,300),(98,-33),(302,-19),q(11),q(107),q(25)),
+        stroke((302,-19),(486,-10),(517,301),(502,515),q(105),q(11),q(24)))
+    put('v', 545,
+        stroke((82,518),(131,327),(179,89),(272,-25),q(11),q(112),q(16)),
+        stroke((272,-25),(365,87),(407,327),(476,517),q(108),q(11),q(17)))
+    put('w', 741,
+        stroke((65,516),(110,290),(126,80),(206,-25),q(12),q(100),q(15)),
+        stroke((206,-25),(257,87),(305,318),(374,348),q(96),q(31),q(9)),
+        stroke((374,348),(429,264),(475,74),(544,-24),q(32),q(103),q(13)),
+        stroke((544,-24),(632,117),(645,351),(691,517),q(100),q(11),q(16)))
+    put('x', 539,
+        stroke((76,516),(192,383),(361,128),(473,-21),q(11),q(108),q(16)),
+        stroke((465,516),(354,377),(170,133),(77,-22),q(11),q(104),q(12)))
+    put('y', 557,
+        stroke((77,518),(134,305),(211,113),(283,5),q(11),q(103),q(16)),
+        stroke((482,518),(430,331),(364,117),(283,5),q(11),q(103),q(13)),
+        stroke((283,5),(248,-153),(164,-218),(65,-162),q(104),q(10),q(12)))
+    put('z', 533,
+        bridge((77,481),(212,539),(371,537),(463,488),38,21,11),
+        stroke((446,484),(343,370),(187,129),(76,13),q(13),q(98),q(16)),
+        bridge((74,16),(200,-33),(365,-22),(471,55),53,18,11))
+    # Figures share the capitals' cap height, but the open terminals and
+    # unequal shoulders give them a separate, readable rhythm in timecodes.
+    zero = oval(314,365,229,389,135-(23 if bold else 0),273-(21 if bold else 0),-12,16)
+    put('0', 625,zero)
+    put('1', 419,reed(228),
+        bridge((78,560),(124,597),(182,681),(240,738),34,13,10),
+        bridge((104,18),(208,-28),(321,-17),(370,36),47,21,12))
+    put('2', 628,
+        bridge((86,551),(84,780),(514,835),(532,564),61,82,12),
+        stroke((528,565),(436,430),(187,150),(91,20),q(77),q(92),q(16)),
+        bridge((94,20),(236,-37),(477,-24),(550,54),65,27,12))
+    put('3', 625,
+        bridge((98,676),(221,788),(478,775),(523,604),47,68,8),
+        bridge((523,604),(537,481),(403,376),(248,376),72,54,8),
+        bridge((246,376),(435,386),(552,266),(530,131),53,85,11),
+        bridge((530,131),(476,-49),(225,-49),(91,81),85,37,13))
+    put('4', 654,
+        stroke((420,748),(308,610),(182,380),(84,251),q(11),q(104),q(17)),
+        bridge((87,257),(223,227),(406,242),(557,270),45,35,9),
+        reed(451))
+    put('5', 622,
+        bridge((93,714),(229,765),(447,744),(538,716),51,30,11),
+        stroke((128,702),(112,563),(102,461),(94,394),q(61),q(89),q(8)),
+        bridge((100,400),(252,480),(523,412),(543,240),76,72,12),
+        bridge((543,240),(557,63),(261,-84),(87,86),76,36,14))
+    put('6', 638,bowl(315,246,221,253),
+        stroke((156,318),(93,519),(305,804),(542,739),q(73),q(12),q(19)))
+    put('7', 619,
+        bridge((85,702),(235,777),(475,757),(543,703),53,31,12),
+        stroke((539,704),(430,499),(301,182),(230,-19),q(17),q(129),q(21)))
+    put('8', 636,
+        oval(317,570,202,210,111-(18 if bold else 0),120-(16 if bold else 0),-6,6),
+        oval(317,183,227,229,132-(22 if bold else 0),137-(19 if bold else 0),-10,8))
+    put('9', 638,bowl(307,505,217,251),
+        stroke((463,430),(548,242),(459,-68),(159,16),q(61),q(12),q(19)))
     put(' ', 280)
     put('!', 300, reed(150, 738),
         oval(160, 38, 44, 44, 11, 11))
     put('?', 610, bridge((79,593),(127,829),(516,844),(516,585),74,73,15),
         bridge((516,585),(495,435),(328,421),(303,266),74,29,10),
         oval(305, 40, 43, 43, 10, 10))
+    # Punctuation is drawn with the same blunt-root / fine-tip pen grammar.
+    period = oval(154,36,45,48,10,11)
+    put('.', 304,period)
+    put(',', 322,period,
+        stroke((164,32),(175,-37),(129,-94),(80,-118),q(52),q(8),q(8)))
+    put(':', 304,period,oval(154,437,43,45,9,9))
+    put(';', 322,oval(154,437,43,45,9,9),period,
+        stroke((164,32),(175,-37),(129,-94),(80,-118),q(52),q(8),q(8)))
+    put("'", 286,stroke((165,758),(160,642),(116,603),(94,578),q(58),q(7),q(8)))
+    quote = stroke((126,758),(121,650),(79,602),(58,580),q(50),q(7),q(8))
+    put('"', 432,quote,
+        stroke((324,758),(318,650),(277,602),(255,580),q(50),q(7),q(8)))
+    put('`', 306,stroke((80,744),(108,671),(160,640),(212,618),q(9),q(57),q(8)))
+    put('-', 432,bridge((67,299),(155,322),(274,313),(355,303),48,19,7))
+    put('_', 514,bridge((60,-112),(178,-142),(358,-141),(452,-113),50,26,8))
+    put('/', 552,stroke((80,-83),(213,176),(339,530),(476,765),q(92),q(9),q(18)))
+    put('\\', 552,stroke((76,765),(207,564),(356,172),(479,-83),q(9),q(92),q(18)))
+    put('|', 301,reed(150,759))
+    put('(', 359,stroke((281,795),(68,632),(69,149),(281,-123),q(10),q(86),q(16)))
+    put(')', 359,stroke((74,795),(292,632),(292,149),(74,-123),q(10),q(86),q(16)))
+    put('[', 355,reed(76,757),
+        bridge((78,733),(146,775),(224,756),(290,746),44,15),
+        bridge((82,-4),(157,-29),(233,-15),(290,15),47,16))
+    put(']', 355,reed(264,757),
+        bridge((74,748),(148,774),(221,765),(268,733),18,43),
+        bridge((74,14),(157,-29),(234,-21),(269,-3),17,45))
+    put('{', 418,
+        bridge((343,768),(143,799),(162,588),(171,455),13,65),
+        bridge((171,455),(163,389),(128,378),(76,369),65,12),
+        bridge((76,369),(153,352),(161,296),(170,237),12,65),
+        bridge((170,237),(141,-40),(239,-55),(343,-25),65,13))
+    put('}', 418,
+        bridge((76,768),(276,799),(257,588),(248,455),13,65),
+        bridge((248,455),(256,389),(291,378),(343,369),65,12),
+        bridge((343,369),(266,352),(258,296),(249,237),12,65),
+        bridge((249,237),(278,-40),(180,-55),(76,-25),65,13))
+    put('+', 573,reed(286,548),
+        bridge((83,284),(207,314),(364,299),(482,278),51,29,8))
+    put('=', 572,
+        bridge((78,380),(194,404),(375,390),(492,379),46,25,7),
+        bridge((78,196),(205,219),(369,205),(492,190),48,27,7))
+    put('<', 543,
+        stroke((457,562),(319,477),(178,348),(82,284),q(12),q(69),q(12)),
+        stroke((82,284),(198,214),(356,91),(457,28),q(69),q(12),q(12)))
+    put('>', 543,
+        stroke((86,562),(224,477),(365,348),(461,284),q(12),q(69),q(12)),
+        stroke((461,284),(345,214),(187,91),(86,28),q(69),q(12),q(12)))
+    put('^', 506,
+        stroke((75,452),(170,576),(213,692),(253,743),q(68),q(9),q(10)),
+        stroke((253,743),(336,608),(393,507),(431,452),q(9),q(68),q(10)))
+    put('~', 566,
+        stroke((68,335),(172,474),(242,280),(305,343),q(15),q(62),q(12)),
+        stroke((305,343),(360,411),(424,359),(502,427),q(62),q(11),q(10)))
+    put('*', 508,
+        stroke((251,739),(236,623),(254,513),(267,426),q(8),q(70),q(10)),
+        stroke((86,651),(175,579),(324,526),(431,489),q(10),q(60),q(7)),
+        stroke((427,664),(338,588),(183,521),(83,471),q(10),q(60),q(7)))
+    put('#', 678,
+        stroke((267,758),(254,516),(185,169),(153,-23),q(11),q(95),q(12)),
+        stroke((509,758),(478,505),(421,156),(391,-23),q(11),q(95),q(12)),
+        bridge((72,482),(207,514),(480,504),(604,470),53,32,8),
+        bridge((72,227),(216,254),(472,245),(604,218),56,32,8))
+    put('$', 665,glyphs['S'][1],reed(327,832))
+    put('%', 759,
+        oval(189,581,104,141,55-(11 if bold else 0),80-(11 if bold else 0)),
+        oval(569,142,104,141,55-(11 if bold else 0),80-(11 if bold else 0)),
+        stroke((110,-46),(295,177),(457,519),(642,774),q(86),q(9),q(14)))
+    put('&', 743,
+        oval(291,566,169,186,79-(11 if bold else 0),92-(11 if bold else 0)),
+        stroke((385,507),(69,299),(81,-54),(351,-29),q(58),q(109),q(16)),
+        stroke((351,-29),(504,22),(550,215),(629,405),q(109),q(11),q(15)))
+    put('@', 899,oval(450,364,373,392,280,297),
+        bowl(448,356,166,183),
+        stroke((596,531),(593,302),(612,172),(771,255),q(50),q(11),q(8)))
     # A visible missing-glyph box is better than silent blanks while this is a proof.
     put('\ufffd', 620, bridge((87,5),(75,350),(75,735),(87,750),28,28),
         bridge((87,750),(300,750),(518,750),(532,750),28,28),
@@ -206,16 +382,16 @@ def build(style):
 
 
 def specimen(regular, bold):
-    image = Image.new('RGB', (1500, 1050), '#0b171c')
+    image = Image.new('RGB', (1500, 1710), '#0b171c')
     draw = ImageDraw.Draw(image)
     label = ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf', 23)
     draw.text((48, 30), 'FM REED / original type proof', font=label, fill='#91a7ac')
     for y, size, style, phrase in [
         (100, 96, bold, 'BRIGHT WAVES'),
-        (280, 64, regular, 'NIGHT GARDEN'),
-        (410, 48, bold, 'GOOD NIGHT'),
-        (525, 32, regular, 'WILD GARDEN'),
-        (610, 24, regular, 'BRIGHT WAVES'),
+        (280, 64, regular, 'Night garden'),
+        (410, 48, bold, 'Good night'),
+        (525, 32, regular, 'wild garden'),
+        (610, 24, regular, 'bright waves'),
     ]:
         draw.text((48, y-30), f'{size} px / '+('Bold' if style==bold else 'Regular'), font=label, fill='#91a7ac')
         draw.text((48, y+12), phrase, font=ImageFont.truetype(style, size), fill='#f1e6d0')
@@ -223,12 +399,22 @@ def specimen(regular, bold):
     draw.text((48, 777), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', font=ImageFont.truetype(regular, 34), fill='#e4b975')
     draw.text((48, 876), 'UPPERCASE / 34 px bold', font=label, fill='#91a7ac')
     draw.text((48, 918), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', font=ImageFont.truetype(bold, 34), fill='#e4b975')
-    draw.text((48, 1000), 'Lowercase, numerals, most punctuation and accents are not drawn yet.', font=label, fill='#91a7ac')
+    draw.text((48, 1006), 'LOWERCASE / 34 px regular', font=label, fill='#91a7ac')
+    draw.text((48, 1050), 'abcdefghijklmnopqrstuvwxyz', font=ImageFont.truetype(regular, 34), fill='#d0efc9')
+    draw.text((48, 1147), 'LOWERCASE / 34 px bold', font=label, fill='#91a7ac')
+    draw.text((48, 1190), 'abcdefghijklmnopqrstuvwxyz', font=ImageFont.truetype(bold, 34), fill='#d0efc9')
+    draw.text((48, 1280), 'FIGURES / 34 px regular and bold', font=label, fill='#91a7ac')
+    draw.text((48, 1320), '0123456789', font=ImageFont.truetype(regular, 34), fill='#eccf99')
+    draw.text((48, 1390), '0123456789', font=ImageFont.truetype(bold, 34), fill='#eccf99')
+    draw.text((48, 1472), 'PUNCTUATION / 34 px regular', font=label, fill='#91a7ac')
+    draw.text((48, 1512), '!?.,:; -_ /\\ +={}[]() @#&%$', font=ImageFont.truetype(regular, 34), fill='#f1e6d0')
+    draw.text((48, 1590), 'PUNCTUATION / 34 px bold', font=label, fill='#91a7ac')
+    draw.text((48, 1630), '!?.,:; -_ /\\ +={}[]() @#&%$', font=ImageFont.truetype(bold, 34), fill='#f1e6d0')
     image.save(HERE/'specimen.png')
 
     comparison = Image.new('RGB', (1500, 760), '#f2ede1')
     comp = ImageDraw.Draw(comparison)
-    comp.text((48, 24), 'ACTUAL-SIZE TYPE COMPARISON / GOOD NIGHT', font=label, fill='#52636a')
+    comp.text((48, 24), 'ACTUAL-SIZE TYPE COMPARISON / Good night', font=label, fill='#52636a')
     with tempfile.TemporaryDirectory(prefix='reed-comparison-') as tmp:
         rivals = [('FM Blackthorn', 'fm-blackthorn-regular.woff2'),
                   ('FM Ribbon Script', 'fm-ribbon-script-regular.woff2'),
@@ -243,7 +429,7 @@ def specimen(regular, bold):
             for i, (title, font_path) in enumerate(font_rows):
                 y = top+i*(82 if size==48 else 64)
                 comp.text((48,y), f'{title} / {size} px', font=label, fill='#52636a')
-                comp.text((365,y-5), 'GOOD NIGHT', font=ImageFont.truetype(font_path,size), fill='#14232a')
+                comp.text((365,y-5), 'Good night', font=ImageFont.truetype(font_path,size), fill='#14232a')
     comparison.save(HERE/'comparison.png')
 
 
