@@ -73,6 +73,7 @@ globalThis.FM = globalThis.FM || {};
     { type: 'vignette', label: 'Vignette', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'size', label: 'Size', min: 0, max: 95, step: 1, def: 35, unit: '%' },
+      { key: 'round', label: 'Roundness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'chromakey', label: 'Chroma Key', color: true, defColor: '#00ff00', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0, max: 1, step: 0.02, def: 0.3 },
@@ -14481,6 +14482,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.globalCompositeOperation = 'source-atop'; B.globalAlpha = 1; B.filter = 'none';
       B.setTransform(s, 0, 0, s, -oX * s, -oY * s);            // project units → this plate's pixels
       let cx = proj.width / 2, cy = proj.height / 2, R = Math.hypot(proj.width, proj.height) / 2;
+      let frameW = proj.width, frameH = proj.height;
       let cover = [oX, oY, W / s, H / s];                      // the whole plate, in the space the gradient is drawn in
       if (M && sz && sz.w > 0 && sz.h > 0) {
         let I = null; try { I = M.inverse(); } catch (e) { I = null; }
@@ -14488,6 +14490,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           B.transform(M.a, M.b, M.c, M.d, M.e, M.f);           // …and the clip's own space on top of that
           const tr = layer.transform || {};
           cx = sz.w * (0.5 - anchorX(tr)); cy = sz.h * (0.5 - anchorY(tr)); R = Math.hypot(sz.w, sz.h) / 2;
+          frameW = sz.w; frameH = sz.h;
           /* ONLY THE CLIP'S OWN FRAME, the rect the inline vignette always filled. What the media draw puts on this
              plate OUTSIDE the frame — Glow's halo, the layer's own shadow — is not the picture, and a plate-wide fill
              darkened it, by the full Amount past the half-diagonal (#986 review, measured: the halo round a clip at
@@ -14496,11 +14499,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       }
       if (R > 0) {
-        const grad = B.createRadialGradient(cx, cy, R * vgIn, cx, cy, R);
-        grad.addColorStop(0, 'rgba(0,0,0,0)');
-        grad.addColorStop(1, 'rgba(0,0,0,' + vgA + ')');
-        B.fillStyle = grad;
-        B.fillRect(cover[0], cover[1], cover[2], cover[3]);
+        const round = Math.max(0, Math.min(100, fparam(p, 'round', 100, t)));
+        if (round === 100) {
+          // Saved projects keep the original circular gradient and draw path exactly.
+          const grad = B.createRadialGradient(cx, cy, R * vgIn, cx, cy, R);
+          grad.addColorStop(0, 'rgba(0,0,0,0)');
+          grad.addColorStop(1, 'rgba(0,0,0,' + vgA + ')');
+          B.fillStyle = grad;
+          B.fillRect(cover[0], cover[1], cover[2], cover[3]);
+        } else {
+          const fit = 1 - round / 100;
+          const rx = R * (1 - fit) + frameW / 2 * fit;
+          const ry = R * (1 - fit) + frameH / 2 * fit;
+          B.translate(cx, cy); B.scale(rx, ry);
+          const grad = B.createRadialGradient(0, 0, vgIn, 0, 0, 1);
+          grad.addColorStop(0, 'rgba(0,0,0,0)');
+          grad.addColorStop(1, 'rgba(0,0,0,' + vgA + ')');
+          B.fillStyle = grad;
+          B.fillRect((cover[0] - cx) / rx, (cover[1] - cy) / ry, cover[2] / rx, cover[3] / ry);
+        }
       }
       B.restore();
     },

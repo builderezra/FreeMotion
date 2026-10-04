@@ -123008,4 +123008,26 @@
       throw new Error('softness changed highlights above its transition');
   });
 
+  test('690 C50 Vignette fits a 9:16 ellipse without changing saved circles', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!K || !K.vignette) throw new Error('Vignette canvas kernel unavailable');
+    const round = FM.fxRegistry.paramsOf('vignette').find(p => p.key === 'round');
+    if (!round || round.default !== 100) throw new Error('Roundness must default to the saved circle');
+    const W = 180, H = 320, src = offscreen(W, H), a = src.getContext('2d');
+    a.fillStyle = '#ffffff'; a.fillRect(0, 0, W, H);
+    const base = { amount: 0.8, size: 35 };
+    const run = p => { const dst = offscreen(W, H), b = dst.getContext('2d');
+      K.vignette(src, b, W, H, null, p, 0, null, null, 1, false, { project: { width: W, height: H } });
+      return b.getImageData(0, 0, W, H).data; };
+    const saved = run(base), circle = run({ ...base, round: 100 }), ellipse = run({ ...base, round: 0 });
+    for (let i = 0; i < saved.length; i++) if (saved[i] !== circle[i])
+      throw new Error('saved Vignette differs from explicit round circle at byte ' + i);
+    const at = (d, x, y) => d[(y * W + x) * 4];
+    const side = at(ellipse, 27, 160), top = at(ellipse, 90, 48);
+    if (Math.abs(side - top) > 10 || side >= 245 || top >= 245)
+      throw new Error('frame-fitted ellipse has uneven 15% insets: side ' + side + ', top ' + top);
+    if (!(at(circle, 90, 48) < at(circle, 27, 160) - 25))
+      throw new Error('circular 9:16 control did not show the old top/bottom band');
+  });
+
 })();
