@@ -6,6 +6,6 @@ Light Glow and Soft Glow now offer **Blend** Screen (saved/default), Add, and So
 
 Changed files: `js/compositor.js` (controls and two kernels), `index.html` (compositor cache 314), `tests/tests.js` (one focused `TBD` regression), and this report.
 
-Checks: actual-kernel JavaScriptCore checks confirmed distinct Add/Screen/Soft light output in both white and tinted glows, and missing versus Screen byte identity. Default-output hashes for both kernels matched the starting commit. Changed-script syntax and `git diff --check` passed. Native Chromium regression remains unrun because this sandbox denied local socket binding; no browser pass is claimed. Exact #690/C23 §6.2 sources were checked; no separate matching audit JSON finding was found.
+Checks: actual-kernel JavaScriptCore checks confirmed distinct Add/Screen/Soft light output in both white and tinted glows, and missing versus Screen byte identity. Default-output hashes for both kernels matched the starting commit. Changed-script syntax and `git diff --check` passed. A later focused native Chromium run passed this regression after localhost test access was granted. Exact #690/C23 §6.2 sources were checked; no separate matching audit JSON finding was found.
 
 Local checkpoint only; no shared Claude checkout, protected file, push, PR or deployment was touched.

@@ -6,6 +6,6 @@ Light, Soft and Dark Glow now offer **Smoothness** 1–3 passes. One is the unch
 
 Changed files: `js/compositor.js` (controls, shared extra-pass blur and crop margin), `index.html` (compositor cache 313), `tests/tests.js` (one focused `TBD` regression), and this report.
 
-Checks: the real three kernels and registry passed a direct JavaScriptCore point-source test: three-pass halos descend beyond the original one-pass reach, and omitted versus explicit one-pass output is byte-identical. Default-output hashes for all three kernels matched the starting commit. Changed-script syntax and `git diff --check` passed. Native Chromium regression remains unrun because this sandbox denied local socket binding at the previous attempt; no browser pass is claimed. Exact #690/C23 §6.2 sources were checked, with no separate matching `audits/*.json` threshold/smoothness finding.
+Checks: the real three kernels and registry passed a direct JavaScriptCore point-source test: three-pass halos descend beyond the original one-pass reach, and omitted versus explicit one-pass output is byte-identical. Default-output hashes for all three kernels matched the starting commit. Changed-script syntax and `git diff --check` passed. A later focused native Chromium run passed this regression after localhost test access was granted. Exact #690/C23 §6.2 sources were checked, with no separate matching `audits/*.json` threshold/smoothness finding.
 
 Local checkpoint only; no shared Claude checkout, protected file, push, PR or deployment was touched.
