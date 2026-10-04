@@ -123079,6 +123079,28 @@
     }
   });
 
+  test('690 C23 Light and Soft Glow blend modes preserve saved Screen', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K) throw new Error('glow kernels unavailable');
+    const W = 9, H = 9;
+    const make = () => { const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i+1] = d[i+2] = 120; d[i+3] = 255; }
+      return d; };
+    const at = d => d[(4 * W + 4) * 4];
+    for (const type of ['lightglow', 'softglow']) {
+      const blend = FM.fxRegistry.paramsOf(type).find(p => p.key === 'blend');
+      if (!blend || blend.default !== 0) throw new Error(type + ' must default to saved Screen');
+      const base = { amount: 0.35, radius: type === 'softglow' ? 10 : 1, threshold: 20, color: '#ffffff' };
+      const run = p => { const d = make(); K[type](d, W, H, p, 0, 1); return d; };
+      const saved = run(base), screen = run({ ...base, blend: 0 });
+      const add = run({ ...base, blend: 1 }), soft = run({ ...base, blend: 2 });
+      for (let i = 0; i < saved.length; i++) if (saved[i] !== screen[i])
+        throw new Error(type + ' changed saved Screen output at byte ' + i);
+      if (!(at(add) > at(screen) && at(screen) > at(soft) && at(soft) > 120))
+        throw new Error(type + ' Add, Screen and Soft light are not distinct usable blends');
+    }
+  });
+
   test('690 C50 Vignette fits a 9:16 ellipse without changing saved circles', { item: 'TBD' }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
     if (!K || !K.vignette) throw new Error('Vignette canvas kernel unavailable');
