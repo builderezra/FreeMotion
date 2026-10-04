@@ -122418,7 +122418,7 @@
         XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
         await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
           onProgress: function () {}, onReady: async function () {} });
-        if (!renderer || !renderer.includes(';c31-image-timewarp-4'))
+        if (!renderer || !renderer.includes(';c31-image-timewarp-5'))
           throw new Error('an interrupted image Time Warp Scan MP4 can resume an old history-based prefix');
       } finally {
         XR.signature = previousSignature; FM.scene = previousScene; FM.exportWorker = previousWorker;
@@ -122735,6 +122735,50 @@
         }
       }
     }
+  });
+
+  test('690 Time Warp Scan cold-seeks a decoded still beneath a rotating null parent', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const tex = offscreen(40, 40), g = tex.getContext('2d');
+    g.fillStyle = '#eb593c'; g.fillRect(0, 0, 20, 40);
+    g.fillStyle = '#3e9dd2'; g.fillRect(20, 0, 20, 40);
+    const image = await createImageBitmap(tex);
+    const parent = FM.makeLayer('null', { name: 'still rig', x: 8, y: 4, start: 0, duration: 2 });
+    parent.start = 0; parent.duration = 2;
+    parent.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] };
+    parent.transform.scale = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 1.35, e: 'linear' }] };
+    const child = FM.makeLayer('image', { x: 31, y: 24, start: 0, duration: 2 });
+    child.start = 0; child.duration = 2; child.parent = parent.id;
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, mode: 0, loop: 0 });
+    child.effects = [warp];
+    FM.media.set(child.id, { kind: 'image', el: image, width: 40, height: 40 });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [parent, child], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    try {
+      child.effects = [];
+      if (same(frame(0.2, 120), frame(0.8, 120)))
+        throw new Error('Control: rotating parent did not move the decoded still');
+      child.effects = [warp];
+      for (const mode of [0, 1]) for (const width of [120, 60]) {
+        warp.params.mode = mode;
+        FM.resetMotionFlowCache();
+        let played;
+        for (let f = 0; f <= 24; f++) played = frame(f / 30, width);
+        FM.resetMotionFlowCache();
+        const cold = frame(24 / 30, width);
+        if (!same(cold, played)) {
+          let differing = 0;
+          for (let i = 0; i < cold.length; i++) if (cold[i] !== played[i]) differing++;
+          throw new Error('Decoded-still ' + (mode ? 'Reveal' : 'Freeze') + ' differs after cold seek under a rotating parent at ' + width + ' px: ' + differing + ' channels');
+        }
+      }
+    } finally { FM.media.remove(child.id); image.close(); }
   });
 
   test('690 Frame Stutter cold-seeks a shape under a rotating and scaling null parent', { item: 'TBD', budgetMs: 30000 }, function () {

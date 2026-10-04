@@ -13716,7 +13716,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
               || e.type === 'levels'
               || (warpPenSafe && e.type === 'penmask' && e.maskId === warpMask.id))))
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
-        && simpleTemporalParent(layer, scene, layer.type === 'shape')
+        && simpleTemporalParent(layer, scene, true)
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length)
         && (!(layer.masks && layer.masks.length) || warpPenSafe)
@@ -13724,9 +13724,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // historical whole-plate sample. Video masks still need a decoder proof.
         && !(layer.mask && layer.mask.enabled && !warpLegacyMaskSafe)) {
       // Clipping and feathering can differ when the scratch canvas starts at a strip edge.
-      // A transformed shape parent also needs whole-project coordinates at every crossing.
+      // A transformed parent needs whole-project coordinates at every crossing,
+      // whether its child is a shape or a decoded still image.
       expand.sampleAt = (at, clip) => sampleAt(at, 0, null,
-        (layer.mask && layer.mask.enabled) || warpPenSafe || (layer.type === 'shape' && layer.parent)
+        (layer.mask && layer.mask.enabled) || warpPenSafe || !!layer.parent
           ? null : clip);
     }
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
