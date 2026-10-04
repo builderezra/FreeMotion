@@ -121441,4 +121441,27 @@
     });
   });
 
+  test('TBD Bomb joins its fuse to a readable spark at picker and canvas size', { item: 'TBD' }, function () {
+    const polys = FM.SHAPE_POLYS && FM.SHAPE_POLYS.bomb;
+    if (!polys || polys.length !== 2 || polys[1].length < 17)
+      throw new Error('Bomb still separates its fuse and tiny spark into different pieces');
+    [34, 300].forEach(size => {
+      const cv = offscreen(size, size), g = cv.getContext('2d', { willReadFrequently: true });
+      FM.traceShapePath(g, { shape: 'bomb' }, 0, 0, size, size);
+      g.fillStyle = '#fff'; g.fill();
+      const d = g.getImageData(0, 0, size, size).data;
+      const ink = (x0, y0, x1, y1) => {
+        let count = 0;
+        for (let y = Math.floor(y0 * size); y < Math.ceil(y1 * size); y++)
+          for (let x = Math.floor(x0 * size); x < Math.ceil(x1 * size); x++)
+            if (d[(y * size + x) * 4 + 3] > 127) count++;
+        return count;
+      };
+      if (ink(0.18, 0.49, 0.61, 0.86) < size * size * 0.04 ||
+          ink(0.60, 0.21, 0.72, 0.41) < 1 ||
+          ink(0.72, 0.07, 0.93, 0.26) < 1)
+        throw new Error('Bomb lost its shell, curved fuse, or ignition star at ' + size + 'px');
+    });
+  });
+
 })();

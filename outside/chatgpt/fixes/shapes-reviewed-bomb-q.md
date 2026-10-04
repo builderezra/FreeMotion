@@ -1,0 +1,7 @@
+# Bomb silhouette: connected fuse and readable spark
+
+Starting commit: `4aa5726c78f56ae3742e3240d10d1897e92df5d5` on the clean preferred `codex/690-reviewed-local` branch. This is an isolated local fix in `/private/tmp/freemotion-shape-qj-20261004`; the Claude checkout was untouched.
+
+Ezra's shape-quality request calls for independent criticism before any redraw enters a final version. A stricter absolute-quality audit held the existing Bomb for its stiff disconnected fuse and tiny spark. In a separate design study, two blind critics and a third critic viewing FreeMotion's native 34px picker and 300px canvas independently accepted anonymous option Q (source option `bomb.A`). Its orb, curved fuse and ignition rays read as one joined form. This does not approve the rest of the shape set: Puzzle, Umbrella, Music note, Thumbs-up, Crown and Flame remain held at this checkpoint, and the local branch must not be released as a completed shape collection.
+
+Changed files: `js/compositor.js` (Bomb contour only), `index.html` (compositor cache tag 273 to 274), `tests/tests.js` (one focused `{ item: 'TBD' }` regression at 34px and 300px), and this report. The regression failed on the starting geometry and passed 1/1 after the change. JavaScript syntax and `git diff --check` passed. Native visual evidence is in `evidence/shape-native-redesign-20261004/`; no installed-phone visual check, push, PR or deployment.
