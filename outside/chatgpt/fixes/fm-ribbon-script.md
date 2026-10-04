@@ -1,0 +1,9 @@
+# FM Ribbon Script original font
+
+Starting commit: `d50c7abe189ee478c05160e0581c814d3c4bb7b0` on the clean reviewed branch. Isolated branch: `codex/fm-font10-original` in `/private/tmp/freemotion-font10-20261004`.
+
+This adds a tenth distinct FreeMotion original family. FM Ribbon Script is slanted sign-writing for introductions and end cards, drawn from hand-placed broad downstrokes, fine return strokes and asymmetric ovals. Its skeletons and metrics are generated here without reading or tracing another font, outline or image. Regular and Bold WOFF2 faces each map 227 characters, including all printable ASCII and common accented Latin characters. The 32 px and 48 px specimen was visually inspected; an early version's stray baseline joins were removed before integration. The original-font request remains open for more distinct designs.
+
+Changed files: `fonts/original/fm-ribbon-script-{regular,bold}.woff2`; `fonts/original/source/{build_ribbon_script.py,render_ribbon_script.py,fm-ribbon-script-preview.png,fonts.css,ORIGINALITY_AND_USE.md}`; `fonts/README.md`; `js/studio-fonts.js`; `index.html` (font-script cache tag 10 → 11); `tests/tests.js` (one `{ item: 'TBD' }` regression); and this report.
+
+Checks: fontTools reopened both WOFF2 files and confirmed 227 mapped codepoints, full printable ASCII with nonempty glyphs, weights 400/700, installable embedding, and GPOS kerning. The focused browser regression passed 1/1: both weights loaded and rendered with different ink, the export font source resolved to Bold, and the live picker showed the family. JavaScriptCore and Python syntax plus `git diff --check` passed. The browser harness had several incomplete app-frame boots before this focused pass; no product assertion failed on the complete boot. Installed-iPhone appearance and a full video export remain unverified. No shared Claude checkout edit, push, PR or deployment.
