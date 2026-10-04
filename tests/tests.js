@@ -121569,4 +121569,39 @@
     });
   });
 
+  test('690 Border Frame smooths both rounded edges without dark transparent fringes', { item: 'TBD' }, function () {
+    const border = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.border;
+    if (!border) throw new Error('the real Border Frame kernel is unavailable');
+    const controls = FM.fxRegistry.paramsOf('border') || [];
+    const fresh = FM.fxRegistry.makeInstance('border');
+    if (!controls.some(p => p.key === 'smooth') || !fresh || fresh.params.smooth !== 1)
+      throw new Error('Smooth corners is missing from new Border Frame instances');
+    const W = 64, H = 64, base = { width: 8, inset: 3, radius: 20, color: '#e35b19', opacity: 100 };
+    const render = params => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      border(d, W, H, Object.assign({}, base, params), 0, 1);
+      return d;
+    };
+    const hard = render({ smooth: 0 }), soft = render({ smooth: 1 });
+    let hardMiddle = 0, softMiddle = 0, solid = 0;
+    for (let i = 0; i < soft.length; i += 4) {
+      if (hard[i + 3] > 0 && hard[i + 3] < 255) hardMiddle++;
+      if (soft[i + 3] > 0 && soft[i + 3] < 255) {
+        softMiddle++;
+        if (Math.abs(soft[i] - 227) > 1 || Math.abs(soft[i + 1] - 91) > 1 || Math.abs(soft[i + 2] - 25) > 1)
+          throw new Error('a translucent rounded edge darkened the frame colour on clear footage');
+      }
+      if (soft[i + 3] === 255) solid++;
+    }
+    if (hardMiddle !== 0) throw new Error('Off no longer keeps the original binary corner');
+    if (softMiddle < 16 || solid < 100) throw new Error('Smooth corners remain binary or lost the frame: ' + softMiddle + '/' + solid);
+    const px = (d, x, y) => d[(y * W + x) * 4 + 3];
+    if (px(soft, 0, 0) !== 0 || px(soft, 32, 3) !== 255 || px(soft, 32, 32) !== 0)
+      throw new Error('rounding moved the outer box, straight top edge, or hollow centre');
+    const squareOff = render({ inset: 0, radius: 0, smooth: 0 });
+    const squareOn = render({ inset: 0, radius: 0, smooth: 1 });
+    for (let i = 0; i < squareOff.length; i++) if (squareOff[i] !== squareOn[i])
+      throw new Error('the legacy square frame changed when Smooth corners is On');
+  });
+
 })();

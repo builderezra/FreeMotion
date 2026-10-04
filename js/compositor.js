@@ -1102,6 +1102,7 @@ globalThis.FM = globalThis.FM || {};
       { key: 'width', label: 'Width', min: 1, max: 180, step: 1, def: 10, unit: 'px' },
       { key: 'inset', label: 'Inset', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'radius', label: 'Corner radius', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'smooth', label: 'Smooth corners', options: [[0, 'Off'], [1, 'On']], def: 1 },
       { key: 'opacity', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     // ---- batch 21 ----
@@ -9608,27 +9609,42 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if(bx1-bx0<2||by1-by0<2) return;
       var bmx=Math.floor(Math.min(bx1-bx0,by1-by0)/2); var bw=w>bmx?bmx:w; if(bw<1) return;
       var br=Math.round(bdRad*(ps||1)); var brMax=Math.floor(Math.min(bx1-bx0,by1-by0)/2); if(br>brMax)br=brMax;
-      var bk=bdOp/100;
+      var bk=bdOp/100, bs=br>0&&(p.smooth==null||FM.evalProp(p.smooth,t)!==0);
       /* Rounded corners come from a distance test against the inner corner circles, which is the same
-         idea as the round stroke in round 21 — inside the outer radius and outside the inner one is
-         the band, and everything else is left alone. */
+         idea as the round stroke in round 21. Smooth corners uses the pixel-centre distance to give
+         both circular edges one pixel of coverage; Off keeps the original binary contour exactly. */
       for(var by=by0;by<by1;by++){ var brow=by*W*4;
         for(var bx=bx0;bx<bx1;bx++){
-          var inFrame, dxc=0, dyc=0;
+          var inFrame, bc=1, dxc=0, dyc=0;
           if(br>0){
             if(bx<bx0+br) dxc=bx0+br-bx; else if(bx>=bx1-br) dxc=bx-(bx1-br-1);
             if(by<by0+br) dyc=by0+br-by; else if(by>=by1-br) dyc=by-(by1-br-1);
           }
           if(br>0&&dxc>0&&dyc>0){                       // in a corner quadrant: use the radius
-            var dd=Math.sqrt(dxc*dxc+dyc*dyc);
-            if(dd>br) continue;                          // outside the rounded corner entirely
-            inFrame = dd > br-bw;
+            if(bs){
+              var dd=Math.sqrt((dxc-0.5)*(dxc-0.5)+(dyc-0.5)*(dyc-0.5));
+              var bo=br+0.5-dd, bn=dd-(br-bw)+0.5;
+              if(bo<=0||bn<=0)continue;
+              bc=Math.min(1,bo)*Math.min(1,bn);
+              inFrame=true;
+            } else {
+              var dd=Math.sqrt(dxc*dxc+dyc*dyc);
+              if(dd>br) continue;                        // outside the rounded corner entirely
+              inFrame = dd > br-bw;
+            }
           } else {
             inFrame = (by<by0+bw||by>=by1-bw||bx<bx0+bw||bx>=bx1-bw);
           }
           if(!inFrame) continue;
           var bi2=brow+bx*4;
-          if(bk>=1){ d[bi2]=cr; d[bi2+1]=cg; d[bi2+2]=cb; if(d[bi2+3]<255)d[bi2+3]=255; }
+          var bmix=bk*bc;
+          if(bmix>=1){ d[bi2]=cr; d[bi2+1]=cg; d[bi2+2]=cb; if(d[bi2+3]<255)d[bi2+3]=255; }
+          else if(bs){
+            // The frame is drawn OVER the layer. On a transparent edge its RGB stays the frame
+            // colour while alpha carries the coverage, avoiding a dark fringe on export.
+            var sa=d[bi2+3]/255, oa=bmix+sa*(1-bmix), sw=sa*(1-bmix)/oa, fw=bmix/oa;
+            d[bi2]=cr*fw+d[bi2]*sw; d[bi2+1]=cg*fw+d[bi2+1]*sw; d[bi2+2]=cb*fw+d[bi2+2]*sw; d[bi2+3]=oa*255;
+          }
           else { d[bi2]=d[bi2]+(cr-d[bi2])*bk; d[bi2+1]=d[bi2+1]+(cg-d[bi2+1])*bk; d[bi2+2]=d[bi2+2]+(cb-d[bi2+2])*bk;
                  if(d[bi2+3]<255) d[bi2+3]=d[bi2+3]+(255-d[bi2+3])*bk; }
         } } },
