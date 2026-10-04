@@ -4852,6 +4852,22 @@ globalThis.FM = globalThis.FM || {};
     _fxScratch.set(d);
     return _fxScratch;
   }
+  // Displacement cannot bring nonzero alpha beyond this expanded source bound.
+  // A uniform plate needs no noise at all, even when it fills the frame.
+  function roughenAlphaBounds(d,W,H,reach){
+    var first=d[3], uniform=true, minX=W, minY=H, maxX=-1, maxY=-1;
+    for(var y=0;y<H;y++)for(var x=0;x<W;x++){
+      var a=d[(y*W+x)*4+3];
+      if(a!==first)uniform=false;
+      if(a>0){
+        if(x<minX)minX=x; if(x>maxX)maxX=x;
+        if(y<minY)minY=y; if(y>maxY)maxY=y;
+      }
+    }
+    if(uniform)return false;
+    return { x0:Math.max(0,minX-reach), y0:Math.max(0,minY-reach),
+      x1:Math.min(W,maxX+reach+1), y1:Math.min(H,maxY+reach+1) };
+  }
   FM._fxScratchInfo = function () { return { bytes: _fxScratch ? _fxScratch.length : 0 }; };   // suite seam
 
   // Glow kernels run synchronously and fill both planes before reading them; Dark Glow
@@ -9043,6 +9059,12 @@ globalThis.FM = globalThis.FM || {};
       var re_complexity=Math.max(1,Math.min(4,Math.round(fparam(p,'complexity',1,t))));
       var re_r=Math.round(Math.max(0,Math.min(20,fparam(p,'border',0,t)))*re_ps);
       if(re_amt<=0 && re_r===0)return;
+      var re_x0=0, re_y0=0, re_x1=W, re_y1=H;
+      if(re_amt>0 && re_complexity>1){
+        var re_bounds=roughenAlphaBounds(d,W,H,Math.ceil(re_amt));
+        if(re_bounds===false)re_amt=0;
+        else {re_x0=re_bounds.x0;re_y0=re_bounds.y0;re_x1=re_bounds.x1;re_y1=re_bounds.y1;}
+      }
       if(re_amt>0){
         var re_s=fxSrc(d), re_inv=1/re_scl;
         var re_seed=Math.round(Math.max(0,Math.min(999,fparam(p,'seed',0,t))));
@@ -9057,8 +9079,8 @@ globalThis.FM = globalThis.FM || {};
         var re_salt=re_seed*37+re_frame*107;
         function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; }
         function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; }
-        for(var re_y=0;re_y<H;re_y++){
-          for(var re_x=0;re_x<W;re_x++){
+        for(var re_y=re_y0;re_y<re_y1;re_y++){
+          for(var re_x=re_x0;re_x<re_x1;re_x++){
             var re_fx=re_x*re_inv, re_fy=re_y*re_inv;
             var re_nx=re_noise(re_fx,re_fy,11+re_salt);
             var re_ny=re_noise(re_fx,re_fy,29+re_salt);
