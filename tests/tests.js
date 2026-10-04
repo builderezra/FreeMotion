@@ -122503,6 +122503,80 @@
     } finally {sampler.dispose();made.forEach(id=>{try{FM.media.remove(id);}catch(e){}});}
   });
 
+  test('690 Time Warp Scan cold-seeks a positive linear video speed ramp', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createTimeWarpVideoSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: indexed video fixture cannot be made');
+    const file=await hunt2dIndexedClip(30,30), rec=await hunt2dLoadWarm(file), made=[];
+    const layer=hunt2dClipLayer(rec,made), warp=FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params,{duration:1,direction:0,mode:0,loop:0,barwidth:0,glow:0});
+    layer.effects=[warp]; layer.duration=1; layer.trimEnd=1;
+    layer.speed={kf:[{t:0,v:0.5,e:'linear'},{t:1,v:1.5,e:'linear'}],loopMode:'none'};
+    const sc=hunt2dScene([layer],{duration:1});
+    const sampler=FM.createTimeWarpVideoSampler(FM.media,{timeoutMs:10000});
+    const seekLive=async t=>{
+      const target=FM.frameSeekTarget(FM.layerLocalTime(layer,t),rec.duration), el=rec.el;
+      if(Math.abs(el.currentTime-target)<1e-4&&!el.seeking&&el.readyState>=2)return;
+      await new Promise((resolve,reject)=>{
+        let timer;
+        const finish=err=>{clearTimeout(timer);el.removeEventListener('seeked',on);
+          el.removeEventListener('error',on);err?reject(err):resolve();};
+        const on=()=>{if(el.error)finish(new Error('ramped source decode failed'));
+          else if(!el.seeking&&el.readyState>=2&&Math.abs(el.currentTime-target)<1e-3)finish();};
+        el.addEventListener('seeked',on);el.addEventListener('error',on);
+        timer=setTimeout(()=>finish(new Error('ramped source seek timed out')),10000);
+        el.currentTime=target;on();
+      });
+    };
+    const render=async(t,width,prepared)=>{
+      await seekLive(t);
+      const cv=offscreen(width,width/4),g=cv.getContext('2d',{willReadFrequently:true});
+      FM.withTimeWarpVideoSources(prepared,()=>FM.renderScene(g,sc,t));
+      return Array.from(g.getImageData(0,0,width,width/4).data);
+    };
+    try {
+      const sourceIndex=async t=>{
+        await seekLive(t);
+        const cv=offscreen(128,32),g=cv.getContext('2d',{willReadFrequently:true});
+        g.drawImage(rec.el,0,0,128,32);
+        const pixels=g.getImageData(0,0,128,32).data;
+        let index=0;
+        for(let b=0;b<8;b++)if(pixels[(16*128+b*16+8)*4]>128)index+=1<<b;
+        return index;
+      };
+      const firstSource=await sourceIndex(0), laterSource=await sourceIndex(24/30);
+      if(firstSource!==1 || laterSource!==22)
+        throw new Error('control: ramped clip source indices '+firstSource+' then '+laterSource+', expected 1 then 22');
+      for(const width of [128,64]) {
+        FM.resetMotionFlowCache();
+        let played;
+        for(let f=0;f<=24;f++)played=await render(f/30,width,null);
+        FM.resetMotionFlowCache();
+        const prepared=await sampler.prepare(sc,24/30,width/128);
+        if(!prepared||!prepared.get(layer.id))throw new Error('linear speed ramp was excluded');
+        const cold=await render(24/30,width,prepared);
+        if(cold.join()!==played.join()){
+          const i=cold.findIndex((v,j)=>v!==played[j]);
+          throw new Error('ramped historical scan differs at '+width+' px, channel '+i+': cold='+cold[i]+' played='+played[i]);
+        }
+      }
+      FM.resetMotionFlowCache();
+      const expected=[];
+      for(let f=0;f<30;f++) {
+        const pixels=await render(f/30,128,null);
+        let index=-1;
+        for(let b=0;b<8;b++)if(pixels[(16*128+b*16+8)*4]>128)index+=1<<b;
+        expected.push(index);
+      }
+      const before=FM.scene;
+      try {
+        FM.scene=sc;
+        const exported=await hunt2dDecodeMp4(await hunt2dExport({fps:30,to:1}));
+        if(exported.length!==30||exported.some((v,i)=>v!==expected[i]))
+          throw new Error('ramped MP4 differs from continuous scan: expected '+expected+' got '+exported);
+      } finally {FM.scene=before;}
+    } finally {sampler.dispose();made.forEach(id=>{try{FM.media.remove(id);}catch(e){}});}
+  });
+
   test('690 Time Warp Scan video holds keyed upstream Brightness at crossing time', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (!FM.createTimeWarpVideoSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
       throw new Error('setup: graded video fixture cannot be made');
