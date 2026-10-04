@@ -1427,7 +1427,7 @@ window.FM = window.FM || {};
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
         // The shape boundary redraw changes main-renderer pixels for the same saved project.
         // Invalidate an interrupted prefix made before that redraw could handle upstream grades.
-        resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-upstream-1';
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-upstream-2';
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'image' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {

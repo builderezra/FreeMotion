@@ -122324,6 +122324,38 @@
       throw new Error('Time Warp Scan cold seek painted the moving parent at the current time across its old strips');
   });
 
+  test('690 Frame Stutter cold-seeks a shape under a rotating and scaling null parent', { item: 'TBD', budgetMs: 30000 }, function () {
+    const parent = FM.makeLayer('null', { name: 'animated rig', x: 8, y: 4, start: 0, duration: 2 });
+    parent.start = 0; parent.duration = 2;
+    parent.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'linear' }] };
+    parent.transform.scale = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 1.5, e: 'linear' }] };
+    const child = FM.makeLayer('shape', { shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 34,
+      fill: '#ffffff', start: 0, duration: 2 });
+    child.start = 0; child.duration = 2; child.parent = parent.id;
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [parent, child], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    for (const width of [120, 60]) {
+      child.effects = [];
+      const boundary = frame(0.5, width), live = frame(0.7, width);
+      if (same(boundary, live)) throw new Error('Control: parent rotation and scale did not move the shape');
+      child.effects = [stutter]; FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 21; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(0.7, width);
+      if (!same(cold, boundary) || !same(cold, played))
+        throw new Error('Frame Stutter did not hold the animated parent at 0.5s, width=' + width);
+    }
+  });
+
   test('690 Frame Stutter cold-seeks decoded video holds through preview and Worker', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined')
       throw new Error('setup: the indexed video fixture needs WebCodecs and the MP4 muxer');

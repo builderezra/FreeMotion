@@ -13461,16 +13461,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       FM._exporting = before.exporting; FM.isolate = before.isolate; FM._dragOrderIds = before.order;
     }
   };
-  function simpleTemporalParent(layer, scene) {
+  function simpleTemporalParent(layer, scene, wholePlate) {
     if (!layer.parent) return true;
     const p = scene && scene.layers && scene.layers.find(candidate => candidate && candidate.id === layer.parent);
-    // A translating null's transform is a pure function of time. Rotated/scaled parents rasterize
-    // slightly differently in the cropped scan-strip viewport; keep those on the existing path
-    // until historical whole-plate sampling can be made both exact and fast.
+    // Rotated/scaled parents rasterize differently in Time Warp Scan's cropped strip viewport.
+    // Frame Stutter samples a whole plate, so it can redraw those transforms at the hold boundary.
     return !!(p && p.type === 'null' && !p.parent && !p.splitOf && p._clipStart == null
       && !p.fxTimeOffset && !(p.behaviors && p.behaviors.length)
       && !(p.wiggle && p.wiggle.enabled && p.wiggle.amp)
-      && p.transform && p.transform.rotation === 0 && p.transform.scale === 1
+      && p.transform && (wholePlate || (p.transform.rotation === 0 && p.transform.scale === 1))
       && !(p.masks && p.masks.length) && !(p.mask && p.mask.enabled));
   }
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
@@ -13573,7 +13572,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           || (stutterMedia && stutterMedia.kind === 'image' && stutterMedia.el && !layer._cropEditing))
         && layer.effects.slice(0, stutterIndex).every(e => !e || e.enabled === false || STUTTER_SAFE_UPSTREAM[e.type])
         && !layer.effects.slice(stutterIndex + 1).some(e => e && e.enabled !== false)
-        && simpleTemporalParent(layer, scene)
+        && simpleTemporalParent(layer, scene, true)
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
         && !(layer.mask && layer.mask.enabled)) {
