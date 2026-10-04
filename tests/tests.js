@@ -122940,4 +122940,29 @@
       throw new Error('saved 45-degree Long Shadow changed at byte ' + i);
   });
 
+  test('690 C45 Tilt Shift gains a true sharp band and smoother optional blur without changing saved defaults', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.tiltshift) throw new Error('Tilt Shift kernel unavailable');
+    const W = 100, H = 100;
+    const make = () => { const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4; d[i] = d[i+1] = d[i+2] = x >= 50 && x <= 52 ? 255 : 0; d[i+3] = 255;
+      } return d; };
+    const run = p => { const d = make(); K.tiltshift(d,W,H,p,0,1); return d; };
+    const at = (d,x,y) => d[(y*W+x)*4];
+    const defs = Object.fromEntries(FM.fxRegistry.paramsOf('tiltshift').map(p => [p.key, p]));
+    if (defs.band.default !== 0 || defs.quality.default !== 1) throw new Error('new controls would change saved Tilt Shift defaults');
+    const base = {center:0.5,softness:0.5,blur:1,angle:0};
+    const saved = run(base), explicit = run({...base,band:0,quality:1});
+    for (let i=0;i<saved.length;i++) if (saved[i] !== explicit[i])
+      throw new Error('missing new controls no longer match the old Tilt Shift at byte '+i);
+    const band = run({...base,band:0.15});
+    if (at(saved,51,60) >= 255 || at(band,51,60) !== 255 || at(band,54,60) !== 0)
+      throw new Error('Sharp band did not preserve original detail 10% of frame height from focus');
+    if (at(band,51,5) !== at(saved,51,5)) throw new Error('Sharp band changed fully defocused pixels');
+    const smooth = run({...base,quality:3});
+    if (at(saved,63,5) !== 0 || at(smooth,63,5) <= 0)
+      throw new Error('three-pass blur did not soften the box edge beyond the old single pass');
+  });
+
 })();

@@ -608,7 +608,7 @@ globalThis.FM = globalThis.FM || {};
       { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
       { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
-    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
+    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'band', label: 'Sharp band', min: 0, max: 0.3, step: 0.01, def: 0 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'quality', label: 'Blur quality', min: 1, max: 3, step: 1, def: 1, unit: ' passes' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
     // ---- batch 12 ----
     { type: 'dropshadow', label: 'Drop Shadow', params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 18, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' }, { key: 'softness', label: 'Softness', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: Opacity — every shadow was full strength
     { type: 'chromaticaberration', label: 'Chromatic Aberration', params: [{ key: 'amount', label: 'Amount', min: 0, max: 30, step: 1, def: 8, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
@@ -8632,27 +8632,32 @@ globalThis.FM = globalThis.FM || {};
       var tsBB=arguments[6];
       var tsCenter = fparam(p, 'center', 0.5, t); tsCenter=tsCenter<0?0:(tsCenter>1?1:tsCenter);
       var tsSoft = fparam(p, 'softness', 0.5, t); tsSoft=tsSoft<0?0:(tsSoft>1?1:tsSoft);
+      var tsBand = fparam(p, 'band', 0, t); tsBand=tsBand<0?0:(tsBand>0.3?0.3:tsBand);
       /* BLUR AMOUNT (queue 904): the radius was a fixed 8 with no control. A MULTIPLE of it rather than a px value, so the
          default 1× is the old radius exactly and the param is not a px key pxToPlate would have to learn about. */
       var tsAmt = fparam(p, 'blur', 1, t); tsAmt = tsAmt < 0.25 ? 0.25 : (tsAmt > 4 ? 4 : tsAmt);
-      var tsW4=W*4, tsLen=d.length, tsR=Math.max(1, Math.round(8 * tsAmt)), tsWin=tsR*2+1;
-      var tsPad=tsR+1;
+      var tsQuality = Math.round(fparam(p, 'quality', 1, t)); tsQuality=tsQuality<1?1:(tsQuality>3?3:tsQuality);
+      var tsW4=W*4, tsLen=d.length, tsR=Math.max(1, Math.round(8 * tsAmt / Math.sqrt(tsQuality))), tsWin=tsR*2+1;
+      var tsPad=tsR*tsQuality+1;
       var tsY0=tsBB?Math.max(0,tsBB.y-tsPad):0, tsY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad):H-1;
-      var tsX0=tsBB?Math.max(0,tsBB.x):0,       tsX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1):W-1;
+      var tsXPad=tsQuality>1?tsPad:0;
+      var tsX0=tsBB?Math.max(0,tsBB.x-tsXPad):0, tsX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1+tsXPad):W-1;
       var tsSrc=fxSrc(d); var tsTmp=new Float32Array(tsLen); var tsBlur=new Float32Array(tsLen);
       var tsx,tsy,tsc,tsi,tsBase,tsRow,tsSum;
+      var tsPassSrc=tsSrc;
+      for(var tsPass=0;tsPass<tsQuality;tsPass++){
       /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
          is what the tap loop's index clamping produced. */
       for(tsy=tsY0;tsy<=tsY1;tsy++){
         tsRow=tsy*tsW4;
         for(tsc=0;tsc<4;tsc++){
           tsSum=0;
-          for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=tsSrc[tsRow+tsnx*4+tsc]; }
+          for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=tsPassSrc[tsRow+tsnx*4+tsc]; }
           for(tsx=0;tsx<W;tsx++){
             tsTmp[tsRow+tsx*4+tsc]=tsSum/tsWin;
             var tsOut=tsx-tsR; if(tsOut<0)tsOut=0; else if(tsOut>=W)tsOut=W-1;
             var tsIn=tsx+tsR+1; if(tsIn<0)tsIn=0; else if(tsIn>=W)tsIn=W-1;
-            tsSum+=tsSrc[tsRow+tsIn*4+tsc]-tsSrc[tsRow+tsOut*4+tsc];
+            tsSum+=tsPassSrc[tsRow+tsIn*4+tsc]-tsPassSrc[tsRow+tsOut*4+tsc];
           }
         }
       }
@@ -8670,6 +8675,8 @@ globalThis.FM = globalThis.FM || {};
           }
         }
       }
+      tsPassSrc=tsBlur;
+      }
       var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001;
       /* ANGLE (queue 904): the focus band was welded horizontal. It now turns about the point it always passed through — the middle
          of the frame at the Focus height — and the distance from it is measured square to the band, still as a fraction of H so
@@ -8678,11 +8685,11 @@ globalThis.FM = globalThis.FM || {};
       if (tsAng % 180 !== 0) { var tsRa = tsAng * Math.PI / 180, tsCa = Math.cos(tsRa), tsSa = Math.sin(tsRa), tsMx = W / 2;
         for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowA = tsy * tsW4, tsDy = tsy - tsLine;
           for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowA + tsx * 4; if (d[tsi + 3] <= 0) continue;
-            var tsBa = Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H / tsDenom; if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
+            var tsBa = (Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H - tsBand) / tsDenom; if (tsBa < 0) tsBa = 0; else if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
             d[tsi] = tsSrc[tsi] * tsIa + tsBlur[tsi] * tsBa; d[tsi + 1] = tsSrc[tsi + 1] * tsIa + tsBlur[tsi + 1] * tsBa; d[tsi + 2] = tsSrc[tsi + 2] * tsIa + tsBlur[tsi + 2] * tsBa; } }
         return; }
       for(tsy=tsY0;tsy<=tsY1;tsy++){
-        var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
+        var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=(tsDist-tsBand)/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
         var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
         for(tsx=tsX0;tsx<=tsX1;tsx++){
           tsi=tsRowI+tsx*4;
