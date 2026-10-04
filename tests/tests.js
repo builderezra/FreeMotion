@@ -121531,4 +121531,42 @@
     if (averaged * 8 >= centre) throw new Error('one speck still blackens most of the cell: ' + averaged + '/' + centre);
   });
 
+  test('690 Checker Grid and Stripes soften diagonal boundaries', { item: 'TBD' }, function () {
+    const kernels = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!kernels || !kernels.checker || !kernels.grid || !kernels.stripes)
+      throw new Error('the real pattern kernels are unavailable');
+    const W = 32, H = 32;
+    const render = (type, params) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 255;
+      kernels[type](d, W, H, params, 0, 1);
+      let middle = 0, black = 0, white = 0, dark = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] !== 255) throw new Error(type + ' changed the source alpha');
+        if (d[i] === 0) black++;
+        else if (d[i] === 255) white++;
+        else middle++;
+        dark += (255 - d[i]) / 255;
+      }
+      return { middle, black, white, dark };
+    };
+    const cases = [
+      ['checker', { size: 8, color: '#000000', mix: 1, ratio: 1, angle: 30 },
+        { size: 8, color: '#000000', mix: 1, ratio: 1, angle: 0 }, 493],
+      ['grid', { size: 16, thickness: 20, mix: 1, color: '#000000', angle: 30 },
+        { size: 16, thickness: 20, mix: 1, color: '#000000', angle: 0 }, 347],
+      ['stripes', { size: 16, color: '#000000', strength: 1, duty: 0.5, direction: 0 },
+        { size: 16, color: '#000000', strength: 1, duty: 0.5, direction: 2 }, 512],
+    ];
+    cases.forEach(([type, diagonal, aligned, oldDark]) => {
+      const turned = render(type, diagonal), straight = render(type, aligned);
+      if (turned.middle < 20 || turned.black < 50 || turned.white < 50)
+        throw new Error(type + ' still has a binary diagonal edge or lost its interior');
+      if (Math.abs(turned.dark - oldDark) > 10)
+        throw new Error(type + ' softened its edge by shifting too much of the pattern');
+      if (straight.middle !== 0)
+        throw new Error(type + ' changed its pixel-aligned hard pattern');
+    });
+  });
+
 })();

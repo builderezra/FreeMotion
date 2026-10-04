@@ -7572,13 +7572,24 @@ globalThis.FM = globalThis.FM || {};
       var chkSzY=chkRatio===1?chkSz:Math.max(1,Math.round(chkSz/chkRatio));
       var chkAng=p.angle==null?0:FM.evalProp(p.angle,t); var chkRot=((chkAng%360)+360)%360!==0;
       var chkRad=chkAng*Math.PI/180, chkCos=Math.cos(chkRad), chkSin=Math.sin(chkRad);
-      for(var chkY=0;chkY<H;chkY++){ var chkRow=(chkY/chkSzY)|0; var chkBase=chkY*W*4;
-        for(var chkX=0;chkX<W;chkX++){ var chkOn;
+      // Only turned cells have diagonal pixel edges. Keep the old axis-aligned bytes. The
+      // fraction of each pixel on either side of the two turned cell axes gives a smooth edge
+      // without four full pattern lookups for every boundary pixel.
+      var chkFoot=0.5*(Math.abs(chkCos)+Math.abs(chkSin)), chkHalf=chkFoot*0.5;
+      for(var chkY=0;chkY<H;chkY++){ var chkRow=(chkY/chkSzY)|0, chkBase=chkY*W*4;
+        for(var chkX=0;chkX<W;chkX++){ var chkCov;
           if(chkRot){ var chkU=chkX*chkCos+chkY*chkSin, chkV=-chkX*chkSin+chkY*chkCos;
-            chkOn=((Math.floor(chkU/chkSz)+Math.floor(chkV/chkSzY))&1)!==0; }
-          else chkOn=((((chkX/chkSz)|0)+chkRow)&1)!==0;
-          if(chkOn){ var chkI=chkBase+chkX*4; if(d[chkI+3]>0){
-            d[chkI]=d[chkI]+(chkR-d[chkI])*chkMix; d[chkI+1]=d[chkI+1]+(chkG-d[chkI+1])*chkMix; d[chkI+2]=d[chkI+2]+(chkB-d[chkI+2])*chkMix; } } } } },
+            var chkIx=Math.floor(chkU/chkSz), chkIy=Math.floor(chkV/chkSzY);
+            var chkDu=chkU-chkIx*chkSz, chkDv=chkV-chkIy*chkSzY;
+            var chkOu=chkIx&1, chkOv=chkIy&1;
+            if(chkDu<chkHalf){ var chkPrev=1-chkOu; chkOu=chkPrev+(chkOu-chkPrev)*(0.5+chkDu/chkFoot); }
+            else if(chkSz-chkDu<chkHalf){ var chkNext=1-chkOu; chkOu=chkNext+(chkOu-chkNext)*(0.5+(chkSz-chkDu)/chkFoot); }
+            if(chkDv<chkHalf){ var chkPrevV=1-chkOv; chkOv=chkPrevV+(chkOv-chkPrevV)*(0.5+chkDv/chkFoot); }
+            else if(chkSzY-chkDv<chkHalf){ var chkNextV=1-chkOv; chkOv=chkNextV+(chkOv-chkNextV)*(0.5+(chkSzY-chkDv)/chkFoot); }
+            chkCov=chkOu+chkOv-2*chkOu*chkOv;
+          } else chkCov=((((chkX/chkSz)|0)+chkRow)&1)?1:0;
+          if(chkCov){ var chkI=chkBase+chkX*4; if(d[chkI+3]>0){ var chkA=chkMix*chkCov;
+            d[chkI]=d[chkI]+(chkR-d[chkI])*chkA; d[chkI+1]=d[chkI+1]+(chkG-d[chkI+1])*chkA; d[chkI+2]=d[chkI+2]+(chkB-d[chkI+2])*chkA; } } } } },
     /* The 4..160 clamp is in PLATE pixels for the reason hexarray's is (queue 913), floored at 2 so a fine grid on the
        phone's 28% plate still draws a line and a gap rather than a solid fill. At ps 1 it is the old 4 and 160. */
     grid: function(d,W,H,p,t){ var grPs=arguments[5]>0?arguments[5]:1; var grSize=FM.evalProp(p.size,t); grSize=(grSize==null?32:grSize); grSize=Math.round(grSize); var grLo=Math.max(2,Math.round(4*grPs)), grHi=Math.round(160*grPs); if(grSize<grLo)grSize=grLo; if(grSize>grHi)grSize=grHi;
@@ -7592,15 +7603,25 @@ globalThis.FM = globalThis.FM || {};
       var grRad=grAng*Math.PI/180, grCos=Math.cos(grRad), grSin=Math.sin(grRad);
       var grCol=hexToRGB(p.color)||[255,255,255]; var grR=grCol[0],grG=grCol[1],grB=grCol[2];
       var grFull=grMix===1;
+      var grFoot=0.5*(Math.abs(grCos)+Math.abs(grSin)), grHalf=grFoot*0.5;
       for(var grY=0;grY<H;grY++){ var grYOn=grRot?false:((grY%grSize)<grLW); var grRow=grY*W*4;
-        for(var grX=0;grX<W;grX++){ var grOn;
+        for(var grX=0;grX<W;grX++){ var grCov;
           if(grRot){ var grU=grX*grCos+grY*grSin, grV=-grX*grSin+grY*grCos;
-            var grMu=grU%grSize; if(grMu<0)grMu+=grSize; var grMv=grV%grSize; if(grMv<0)grMv+=grSize;
-            grOn=(grMu<grLW)||(grMv<grLW); }
-          else grOn=grYOn||((grX%grSize)<grLW);
-          if(grOn){ var grI=grRow+grX*4; if(d[grI+3]>0){
-            if(grFull){ d[grI]=grR; d[grI+1]=grG; d[grI+2]=grB; }
-            else { d[grI]=d[grI]+(grR-d[grI])*grMix; d[grI+1]=d[grI+1]+(grG-d[grI+1])*grMix; d[grI+2]=d[grI+2]+(grB-d[grI+2])*grMix; } } } } } },
+            var grMu=grU%grSize; if(grMu<0)grMu+=grSize;
+            var grMv=grV%grSize; if(grMv<0)grMv+=grSize;
+            // Fractional coverage at the leading, trailing and wrapped edges of each bar.
+            var grCu=grMu<grLW?1:0, grCv=grMv<grLW?1:0;
+            if(grMu<grHalf)grCu=0.5+grMu/grFoot;
+            else if(grSize-grMu<grHalf)grCu=0.5-(grSize-grMu)/grFoot;
+            else if(Math.abs(grMu-grLW)<grHalf)grCu=0.5+(grLW-grMu)/grFoot;
+            if(grMv<grHalf)grCv=0.5+grMv/grFoot;
+            else if(grSize-grMv<grHalf)grCv=0.5-(grSize-grMv)/grFoot;
+            else if(Math.abs(grMv-grLW)<grHalf)grCv=0.5+(grLW-grMv)/grFoot;
+            grCov=grCu+grCv-grCu*grCv;
+          } else grCov=grYOn||((grX%grSize)<grLW)?1:0;
+          if(grCov){ var grI=grRow+grX*4; if(d[grI+3]>0){ var grA=grMix*grCov;
+            if(grA===1){ d[grI]=grR; d[grI+1]=grG; d[grI+2]=grB; }
+            else { d[grI]=d[grI]+(grR-d[grI])*grA; d[grI+1]=d[grI+1]+(grG-d[grI+1])*grA; d[grI+2]=d[grI+2]+(grB-d[grI+2])*grA; } } } } } },
     // ---- batch 7 (pixel) ----
     mosaic: function(d,W,H,p,t,ps){ var moBs=Math.round(FM.evalProp(p.size,t)||16); if(moBs<2)moBs=2; if(moBs>100)moBs=100; moBs=Math.max(2,Math.round(moBs*(ps||1)));   /* block size is PROJECT px — see plateScale */ var moS=fxSrc(d),moW4=W*4;
       /* Square, averaged, gapless blocks and nothing else — no wide scanline cells, no tile grid, and
@@ -7813,7 +7834,17 @@ globalThis.FM = globalThis.FM || {};
       var stp_ik=1-stp_k;
       for(var stp_y=0;stp_y<H;stp_y++){ var stp_row=stp_y*W*4; for(var stp_x=0;stp_x<W;stp_x++){ var stp_i=stp_row+stp_x*4; if(d[stp_i+3]<=0)continue;
         var stp_v=stp_dir===1?(stp_x-stp_y):(stp_dir===2?stp_y:(stp_dir===3?stp_x:(stp_x+stp_y)));
-        var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
+        var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period;
+        var stp_cov=stp_m<stp_half?1:0;
+        if(stp_dir===0||stp_dir===1){
+          // A diagonal bar has a one-pixel projected edge. Coverage is half at either boundary;
+          // horizontal/vertical bars keep their old exact pixel-aligned bytes.
+          if(stp_m<0.5)stp_cov=0.5+stp_m;
+          else if(stp_period-stp_m<0.5)stp_cov=0.5-(stp_period-stp_m);
+          else if(Math.abs(stp_m-stp_half)<0.5)stp_cov=0.5+(stp_half-stp_m);
+        }
+        if(stp_cov){ var stp_a=stp_k*stp_cov, stp_ia=1-stp_a;
+          d[stp_i]=d[stp_i]*stp_ia+stp_r*stp_a; d[stp_i+1]=d[stp_i+1]*stp_ia+stp_g*stp_a; d[stp_i+2]=d[stp_i+2]*stp_ia+stp_b*stp_a; } } } },
     // ---- batch 9 (pixel) ----
     darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); var dgN=W*H, dgScratch=glowScratch(dgN), dgDark=dgScratch[0]; dgDark.fill(0,0,dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=dgScratch[1]; var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
     stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>60)st_w=60; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0;
