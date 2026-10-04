@@ -121486,4 +121486,49 @@
     });
   });
 
+  test('690 Halftone Dots smooths edges and averages a noisy screen cell', { item: 'TBD' }, function () {
+    const halftone = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.halftone;
+    if (!halftone) throw new Error('the real Halftone Dots kernel is unavailable');
+    const controls = FM.fxRegistry.paramsOf('halftone') || [];
+    if (!controls.some(p => p.key === 'aa') || !controls.some(p => p.key === 'sample'))
+      throw new Error('the two Halftone controls are missing from the effect panel');
+    const fresh = FM.fxRegistry.makeInstance('halftone');
+    if (!fresh || fresh.params.aa !== 0 || fresh.params.sample !== 0)
+      throw new Error('new Halftone instances no longer keep the established default look');
+    const W = 32, H = 32;
+    const source = value => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = value; pixels[i + 3] = 255;
+      }
+      return pixels;
+    };
+    const render = (pixels, params) => {
+      const out = new Uint8ClampedArray(pixels);
+      halftone(out, W, H, Object.assign({ size: 16, angle: 0, gain: 1.45, shape: 0 }, params), 0, 1);
+      return out;
+    };
+    const middle = pixels => {
+      let count = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 0 && pixels[i] < 255) count++;
+      return count;
+    };
+    const mid = source(128);
+    if (middle(render(mid, { aa: 0 })) !== 0) throw new Error('control: the legacy hard dot edge changed');
+    if (middle(render(mid, { aa: 1 })) < 8) throw new Error('Smooth dots still has a binary, jagged edge');
+    if (middle(render(mid, { aa: 1, angle: 45 })) < 8) throw new Error('rotated dots still have binary edges');
+    const speck = source(255);
+    const spot = (8 * W + 8) * 4;
+    speck[spot] = speck[spot + 1] = speck[spot + 2] = 0;
+    const ink = pixels => {
+      let count = 0;
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (pixels[(y * W + x) * 4] === 0) count++;
+      return count;
+    };
+    const centre = ink(render(speck, { sample: 0 }));
+    const averaged = ink(render(speck, { sample: 1 }));
+    if (centre < 32) throw new Error('control: the centre speck did not blacken its cell');
+    if (averaged * 8 >= centre) throw new Error('one speck still blackens most of the cell: ' + averaged + '/' + centre);
+  });
+
 })();

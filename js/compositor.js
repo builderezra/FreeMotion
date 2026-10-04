@@ -202,6 +202,8 @@ globalThis.FM = globalThis.FM || {};
       { key: 'angle', label: 'Screen angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
       { key: 'gain', label: 'Ink gain', min: 0.5, max: 2.5, step: 0.05, def: 1.45, unit: '×' },
       { key: 'shape', label: 'Dot shape', def: 0, options: [[0, 'Round'], [1, 'Square'], [2, 'Diamond']] },
+      { key: 'aa', label: 'Smooth dots', min: 0, max: 2, step: 0.1, def: 0, unit: 'px' },
+      { key: 'sample', label: 'Samples', def: 0, options: [[0, 'Centre'], [1, 'Cell average']] },
     ] },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', params: [
@@ -7006,32 +7008,63 @@ globalThis.FM = globalThis.FM || {};
       let gain = p.gain == null ? 1.45 : FM.evalProp(p.gain, t);
       if (gain < 0.5) gain = 0.5; if (gain > 2.5) gain = 2.5;
       const shape = p.shape == null ? 0 : (Math.round(FM.evalProp(p.shape, t)) | 0);
+      const aa = p.aa == null ? 0 : Math.max(0, Math.min(2, FM.evalProp(p.aa, t) || 0));
+      const feather = aa > 0 ? 1 + aa * (ps || 1) : 0;
+      const average = p.sample != null && Math.round(FM.evalProp(p.sample, t)) === 1;
+      let sums, counts, firstX = 0, firstY = 0, cellsWide = 0;
+      if (average) {
+        // One source-pixel pass makes the true mean of each turned screen cell. Sampling only its
+        // centre lets one noisy/video pixel change an entire dot, which visibly flickers on motion.
+        const x1 = W - 1, y1 = H - 1;
+        const us = [0, x1 * ca, y1 * sa, x1 * ca + y1 * sa];
+        const vs = [0, -x1 * sa, y1 * ca, -x1 * sa + y1 * ca];
+        firstX = Math.floor(Math.min.apply(null, us) / size);
+        firstY = Math.floor(Math.min.apply(null, vs) / size);
+        cellsWide = Math.floor(Math.max.apply(null, us) / size) - firstX + 1;
+        const cellsHigh = Math.floor(Math.max.apply(null, vs) / size) - firstY + 1;
+        sums = new Float64Array(cellsWide * cellsHigh);
+        counts = new Uint32Array(cellsWide * cellsHigh);
+        for (let sy = 0; sy < H; sy++) for (let sx = 0; sx < W; sx++) {
+          const u = rot ? sx * ca + sy * sa : sx;
+          const v = rot ? -sx * sa + sy * ca : sy;
+          const cell = (Math.floor(v / size) - firstY) * cellsWide + Math.floor(u / size) - firstX;
+          const j = (sy * W + sx) * 4;
+          sums[cell] += (s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114) / 255;
+          counts[cell]++;
+        }
+      }
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
-          let cx0, cy0, dx, dy, ccx, ccy;
+          let cx0, cy0, dx, dy, ccx, ccy, cellX, cellY;
           if (rot) {
             // All the cell maths happens in the ROTATED frame; the tone for a cell is then sampled by
             // mapping its centre back into the image, so the dots sit on a turned lattice while still
             // reporting the brightness of what is underneath them.
             const u = x * ca + y * sa, v2 = -x * sa + y * ca;
-            cx0 = Math.floor(u / size) * size + r2; cy0 = Math.floor(v2 / size) * size + r2;
+            cellX = Math.floor(u / size); cellY = Math.floor(v2 / size);
+            cx0 = cellX * size + r2; cy0 = cellY * size + r2;
             dx = u - cx0; dy = v2 - cy0;
             ccx = Math.min(W - 1, Math.max(0, Math.round(cx0 * ca - cy0 * sa)));
             ccy = Math.min(H - 1, Math.max(0, Math.round(cx0 * sa + cy0 * ca)));
           } else {
             // the legacy expressions, verbatim: for an ODD size `size >> 1` and `r2` are NOT the same
             // number, and the sample centre uses the first while the distance uses the second.
-            ccx = Math.min(W - 1, Math.floor(x / size) * size + (size >> 1));
-            ccy = Math.min(H - 1, Math.floor(y / size) * size + (size >> 1));
-            dx = x - (Math.floor(x / size) * size + r2); dy = y - (Math.floor(y / size) * size + r2);
+            cellX = Math.floor(x / size); cellY = Math.floor(y / size);
+            ccx = Math.min(W - 1, cellX * size + (size >> 1));
+            ccy = Math.min(H - 1, cellY * size + (size >> 1));
+            dx = x - (cellX * size + r2); dy = y - (cellY * size + r2);
           }
           const ci = (ccy * W + ccx) * 4;
-          const l = (s[ci] * 0.299 + s[ci + 1] * 0.587 + s[ci + 2] * 0.114) / 255;
+          const cell = average ? (cellY - firstY) * cellsWide + cellX - firstX : 0;
+          const l = average && counts[cell] ? sums[cell] / counts[cell]
+            : (s[ci] * 0.299 + s[ci + 1] * 0.587 + s[ci + 2] * 0.114) / 255;
           const dist = shape === 1 ? Math.max(Math.abs(dx), Math.abs(dy))
                      : shape === 2 ? Math.abs(dx) + Math.abs(dy)
                      : Math.hypot(dx, dy);
-          const v = dist < (1 - l) * r2 * gain ? 0 : 255;
+          const edge = (1 - l) * r2 * gain - dist;
+          const v = feather ? Math.round(255 * (1 - clamp01(0.5 + edge / feather)))
+                            : (edge > 0 ? 0 : 255);
           d[i] = v; d[i + 1] = v; d[i + 2] = v;
         }
       }
