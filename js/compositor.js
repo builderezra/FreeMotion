@@ -13444,12 +13444,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       }
     }
-    // Time Warp Scan needs every historical crossing strip after a cold seek. The cropped source
-    // redraw is safe and fast for an isolated shape; effects ahead of it may read outside the strip
-    // or require whole-plate work, while media needs prepared decoded snapshots.
+    // Time Warp Scan needs every historical crossing strip after a cold seek. Brightness is
+    // point-local and history-free: it can grade the cropped source at each crossing time without
+    // reading neighbouring pixels. Other effects may need a whole plate or temporal state.
     const warpIndex = fx.type === 'timewarp' && layer.effects ? layer.effects.indexOf(fx) : -1;
     if (warpIndex >= 0 && layer.type === 'shape'
-        && !layer.effects.slice(0, warpIndex).some(e => e && e.enabled !== false)
+        && layer.effects.slice(0, warpIndex).every(e => !e || e.enabled === false || e.type === 'brightness')
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
         && FM.fillModeOf(layer) !== 'media' && simpleTemporalParent(layer, scene)
         && !layer.fxTimeOffset && layer._clipStart == null
