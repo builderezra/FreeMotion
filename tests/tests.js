@@ -123033,6 +123033,31 @@
       throw new Error('softness changed highlights above its transition');
   });
 
+  test('690 C23 Soft and Dark Glow soften thresholds without changing saved projects', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.softglow || !K.darkglow) throw new Error('glow kernels unavailable');
+    const W = 256, H = 5;
+    const make = () => { const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4; d[i] = d[i+1] = d[i+2] = x; d[i+3] = 255;
+      } return d; };
+    const at = (d, x) => d[(2 * W + x) * 4];
+    for (const [type, threshold, inside, outside] of [['softglow', 35, 80, 130], ['darkglow', 40, 112, 140]]) {
+      const knee = FM.fxRegistry.paramsOf(type).find(p => p.key === 'knee');
+      if (!knee || knee.default !== 0) throw new Error(type + ' softness must default to zero');
+      const base = { amount: 1, radius: 1, threshold };
+      const run = p => { const d = make(); K[type](d, W, H, p, 0, 1); return d; };
+      const saved = run(base), hard = run({ ...base, knee: 0 }), soft = run({ ...base, knee: 20 });
+      for (let i = 0; i < saved.length; i++) if (saved[i] !== hard[i])
+        throw new Error(type + ' changed saved-project output at byte ' + i);
+      const delta = d => Math.abs(at(d, inside) - inside);
+      if (!(delta(soft) > delta(hard)))
+        throw new Error(type + ' did not soften the former hard threshold');
+      if (at(soft, outside) !== at(hard, outside))
+        throw new Error(type + ' changed pixels outside its knee');
+    }
+  });
+
   test('690 C50 Vignette fits a 9:16 ellipse without changing saved circles', { item: 'TBD' }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
     if (!K || !K.vignette) throw new Error('Vignette canvas kernel unavailable');
