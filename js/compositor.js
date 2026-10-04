@@ -2744,7 +2744,15 @@ globalThis.FM = globalThis.FM || {};
     textrandomizer: function (st, p, t) {
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
       var spd = fparam(p, 'speed', 12, t);
-      var s = st.text, n = Math.floor(s.length * pr), frame = Math.floor(t * spd), out = '';
+      // An animated rate advances through patterns; reaching zero holds the current
+      // scramble instead of jumping back to the first pattern. Keep static timing exact.
+      var frame = FM.isAnimated(p.speed)
+        ? Math.floor(FM.integrateProp(p.speed, 0, t, function (u) {
+            var rate = FM.evalProp(p.speed, u);
+            return rate > 0 ? (rate < 30 ? rate : 30) : 0;
+          }))
+        : Math.floor(t * spd);
+      var s = st.text, n = Math.floor(s.length * pr), out = '';
       var mode = p.chars == null ? 0 : (Math.round(FM.evalProp(p.chars, t)) | 0);
       for (var i = 0; i < s.length; i++) {
         var c = s[i];

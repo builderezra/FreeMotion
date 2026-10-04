@@ -120839,4 +120839,22 @@
     asset.pending[0].reject(new Error('storage full'));
     await Promise.all(asset.lifetimes); // a failed cache write must not invalidate the good response
   });
+
+  test('690 Scramble Text holds its pattern when animated Speed stops', { item: 'TBD' }, function () {
+    const fx = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    if (!fx || !fx.textrandomizer) throw new Error('Scramble Text kernel is unavailable');
+    const source = 'Aurora motion across the 6074 skyline';
+    const render = (speed, t) => {
+      const state = { text: source };
+      fx.textrandomizer(state, { progress: 0.15, speed, chars: 1 }, t);
+      return state.text;
+    };
+    const ramp = { kf: [{ t: 0, v: 12 }, { t: 2, v: 0, e: 'linear' }] };
+    const first = render(ramp, 0), stopped = render(ramp, 2);
+    if (stopped === first) throw new Error('Scramble Text rewound to its first pattern when Speed reached zero');
+    if (render(ramp, 2.5) !== stopped) throw new Error('Scramble Text changed after animated Speed stopped');
+    const steady = render(6, 2);
+    if (steady !== render(12, 1)) throw new Error('Static Scramble Text no longer follows elapsed time times Speed');
+    if (steady === first) throw new Error('Control: this text does not expose a changing scramble');
+  });
 })();
