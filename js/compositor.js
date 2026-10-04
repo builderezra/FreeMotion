@@ -590,7 +590,9 @@ globalThis.FM = globalThis.FM || {};
     // something that knew the movement would not need to be told the direction. The type id stays
     // 'motionblur' so saved projects, presets and the AI vocabulary all still resolve.
     { type: 'motionblur', label: 'Directional Blur', desc: 'A fixed smear along an angle you choose. It does not read movement — a still clip blurs exactly as much as a moving one.',
-      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' }] },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
+      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' },
+        { key: 'side', label: 'Direction', def: 0, options: [[0, 'Both ways'], [1, 'Behind'], [2, 'Ahead']] },
+        { key: 'edges', label: 'Frame edges', def: 0, options: [[0, 'Fade'], [1, 'Repeat edge pixels']] }] },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
     { type: 'colorbalance', label: 'Colour Balance', /* queue 904: Affects — it was one flat offset, no tonal range */ params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }, { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] },
       /* #482 polish 1.7: a push of red also BRIGHTENED (about +17 levels on a grey ramp at Red 100), and the tonal ranges
          had one fixed width. Keep brightness puts every pixel back at its own luma; Range width is an exponent on the
@@ -15686,15 +15688,35 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const rad = Math.max(0, Math.min(360, ang)) * Math.PI / 180;
       // QUALITY (queue 904): the tap count was welded at 9, so a 60px smear showed as nine separate ghosts. 9 is the old loop exactly.
       const N = p.samples == null ? 9 : Math.max(4, Math.min(32, Math.round(FM.evalProp(p.samples, t)) || 9)), half = (N - 1) / 2;
-      const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / (N - 1);
+      const dx = Math.cos(rad), dy = Math.sin(rad);
+      const side = p.side == null ? 0 : Math.round(FM.evalProp(p.side, t));
+      const repeat = p.edges != null && FM.evalProp(p.edges, t) >= 0.5;
+      // For Repeat, extend the actual boundary pixels into a temporary plate. Transparent boundary
+      // pixels stay transparent; a full-frame clip instead retains its edge colour and alpha.
+      let sample = A, pad = 0;
+      if (repeat) {
+        pad = Math.ceil(dist) + 2;
+        sample = createCanvas(); sample.width = W + 2 * pad; sample.height = H + 2 * pad;
+        const C = sample.getContext('2d');
+        C.drawImage(A, pad, pad);
+        C.drawImage(A, 0, 0, 1, H, 0, pad, pad, H);
+        C.drawImage(A, W - 1, 0, 1, H, pad + W, pad, pad, H);
+        C.drawImage(A, 0, 0, W, 1, pad, 0, W, pad);
+        C.drawImage(A, 0, H - 1, W, 1, pad, pad + H, W, pad);
+        C.drawImage(A, 0, 0, 1, 1, 0, 0, pad, pad);
+        C.drawImage(A, W - 1, 0, 1, 1, pad + W, 0, pad, pad);
+        C.drawImage(A, 0, H - 1, 1, 1, 0, pad + H, pad, pad);
+        C.drawImage(A, W - 1, H - 1, 1, 1, pad + W, pad + H, pad, pad);
+      }
       // additive 'lighter' at 1/N each = true premultiplied MEAN of the N taps — successive-alpha
       // source-over skews partial-coverage edge pixels to full opacity (hard edge, no smear)
       B.save();
       B.globalCompositeOperation = 'lighter';
       B.globalAlpha = 1 / N;
       for (let k = 0; k < N; k++) {
-        const off = (k - half) * step;
-        B.drawImage(A, dx * off, dy * off);
+        const off = side === 1 ? (k / (N - 1) - 1) * dist : side === 2 ? k / (N - 1) * dist : (k - half) * dist / (N - 1);
+        if (repeat) B.drawImage(sample, pad - dx * off, pad - dy * off, W, H, 0, 0, W, H);
+        else B.drawImage(A, dx * off, dy * off);
       }
       B.restore();
     },

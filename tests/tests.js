@@ -123073,4 +123073,30 @@
     }
   });
 
+  test('690 C25 Directional Blur repeats full-frame edges and chooses smear side', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!K || !K.motionblur) throw new Error('Directional Blur canvas kernel unavailable');
+    const W = 96, H = 64, src = offscreen(W, H), a = src.getContext('2d');
+    const run = p => { const dst = offscreen(W, H), b = dst.getContext('2d');
+      K.motionblur(src, b, W, H, { x: 0, y: 0, w: W, h: H }, p, 0, null, null, 1);
+      return b.getImageData(0, 0, W, H).data; };
+    const alpha = (d, x, y) => d[(y * W + x) * 4 + 3];
+    a.fillStyle = '#d94433'; a.fillRect(0, 0, W, H);
+    const base = { distance: 40, angle: 0, samples: 9 };
+    const saved = run(base), explicit = run({ ...base, side: 0, edges: 0 });
+    for (let i = 0; i < saved.length; i++) if (saved[i] !== explicit[i])
+      throw new Error('saved Directional Blur changed at byte ' + i);
+    const repeated = run({ ...base, edges: 1 });
+    const centre = alpha(repeated, 48, 30);
+    if (!(alpha(saved, 0, 30) < 245 && centre >= 250 &&
+          Math.abs(alpha(repeated, 0, 30) - centre) <= 1 && Math.abs(alpha(repeated, 95, 30) - centre) <= 1))
+      throw new Error('Repeat does not keep both full-frame edge columns as opaque as the centre: fade ' + alpha(saved, 0, 30) + ', repeat ' + alpha(repeated, 0, 30) + '/' + centre + '/' + alpha(repeated, 95, 30));
+    a.clearRect(0, 0, W, H); a.fillStyle = '#ffffff'; a.fillRect(46, 10, 4, 44);
+    const behind = run({ ...base, side: 1 }), ahead = run({ ...base, side: 2 });
+    const sum = (d, x0, x1) => { let n = 0; for (let x = x0; x < x1; x++) n += alpha(d, x, 30); return n; };
+    if (!(sum(behind, 5, 45) > 0 && sum(behind, 52, 90) === 0 &&
+          sum(ahead, 52, 90) > 0 && sum(ahead, 5, 45) === 0))
+      throw new Error('Behind/Ahead smear crosses to the wrong side of the source');
+  });
+
 })();
