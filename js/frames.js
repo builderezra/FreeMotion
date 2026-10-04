@@ -392,7 +392,7 @@ window.FM = window.FM || {};
       const { plans, key } = planState(scene, t, given);
       if (active && active.key === key) return Promise.resolve(active.map);
       if (pending && pending.key === key) return pending.promise;
-      if (failure && failure.key === key) return failure.promise;
+      if (failure && failure.key === key && Date.now() < failure.retryAt) return failure.promise;
       failure = null;
       if (pending) pending.controller.abort();
       const controller = new AbortController();
@@ -425,7 +425,14 @@ window.FM = window.FM || {};
           return map;
         } catch (e) { closeFrames(map); throw e; }
       }).catch(e => {
-        if (!controller.signal.aborted && !disposed) failure = { key, promise: job.promise };
+        if (!controller.signal.aborted && !disposed) {
+          // A slow first decoder seek can time out once, especially after a cold load.
+          // Keep the failed promise briefly to avoid a repaint storm, then permit a
+          // retry at the same paused playhead. Structural errors remain cached.
+          const transient = /timed out|could not be decoded/i.test(String(e && e.message));
+          failure = { key, promise: job.promise,
+            retryAt: transient ? Date.now() + Math.max(1, opts.retryDelayMs || 1000) : Infinity };
+        }
         throw e;
       }).finally(() => { if (pending === job) pending = null; });
       return job.promise;

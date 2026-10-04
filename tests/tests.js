@@ -121832,6 +121832,27 @@
     Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
     layer.effects = [stutter];
     const sc = hunt2dScene([layer], { duration: 1 });
+    // A single cold decoder timeout must not pin a paused preview to its
+    // provisional live frame forever. Retry the same quantum after the brief
+    // backoff, using the real fixture decoder on the second attempt.
+    const retrySampler = FM.createFrameStutterSampler(FM.media, { maxDim: 0, retryDelayMs: 20 });
+    const seekTarget = FM.frameSeekTarget;
+    let failSeek = true;
+    try {
+      FM.frameSeekTarget = function (local, duration) {
+        if (failSeek) { failSeek = false; throw new Error('Frame Stutter video seek timed out'); }
+        return seekTarget(local, duration);
+      };
+      const first = retrySampler.prepare(sc, 0.2);
+      const timedOut = await first.then(() => null, e => e);
+      if (!timedOut || !/timed out/i.test(timedOut.message) || retrySampler.prepare(sc, 0.2) !== first)
+        throw new Error('Transient Frame Stutter decoder failure was not briefly de-duplicated');
+      FM.frameSeekTarget = seekTarget;
+      await new Promise(resolve => setTimeout(resolve, 30));
+      const recovered = await retrySampler.prepare(sc, 0.2);
+      if (!recovered || !recovered.get(layer.id) || !recovered.get(layer.id).hold)
+        throw new Error('Frame Stutter could not retry a paused hold after a transient timeout');
+    } finally { FM.frameSeekTarget = seekTarget; retrySampler.dispose(); }
     const sampler = FM.createFrameStutterSampler && FM.createFrameStutterSampler(FM.media, { maxDim: 0 });
     const seek = async t => {
       const target = FM.frameSeekTarget(t, rec.duration), el = rec.el;

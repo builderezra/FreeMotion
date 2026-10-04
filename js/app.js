@@ -91,14 +91,18 @@ window.FM = window.FM || {};
   }
   let _frameSig = '';   // FM.adjNeedsFrame's answer at the last render ('' = nothing needs the whole frame)
   let _stutterPreviewSampler = null, _stutterPreviewScene = null, _stutterPreviewJob = null;
+  let _stutterPreviewRetryKey = '', _stutterPreviewRetries = 0;
   function stutterPreviewSources(scene, t) {
     if (FM._exporting || !FM.frameStutterVideoPlans || !FM.createFrameStutterSampler) return null;
     const plans = FM.frameStutterVideoPlans(scene, t, FM.media);
     if (_stutterPreviewScene !== scene || !plans.length) {
       if (_stutterPreviewSampler) _stutterPreviewSampler.dispose();
       _stutterPreviewSampler = null; _stutterPreviewJob = null; _stutterPreviewScene = scene;
+      _stutterPreviewRetryKey = ''; _stutterPreviewRetries = 0;
     }
     if (!plans.length) return null;
+    const retryKey = plans.map(plan => plan.key).join(';');
+    if (_stutterPreviewRetryKey !== retryKey) { _stutterPreviewRetryKey = retryKey; _stutterPreviewRetries = 0; }
     if (!_stutterPreviewSampler) {
       const limits = FM.frameCacheLimits ? FM.frameCacheLimits() : { maxDim: 640, maxBytes: 64 * 1024 * 1024 };
       _stutterPreviewSampler = FM.createFrameStutterSampler(FM.media,
@@ -114,7 +118,20 @@ window.FM = window.FM || {};
         const now = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time;
         if (sampler === _stutterPreviewSampler && scene === FM.scene
             && sampler.current(FM.scene, now)) FM.requestRender();
-      }).catch(e => { if (sampler === _stutterPreviewSampler && !/CANCELLED/i.test(e.message)) console.warn(e); });
+      }).catch(e => {
+        if (sampler !== _stutterPreviewSampler || /CANCELLED/i.test(e.message)) return;
+        console.warn(e);
+        // One delayed repaint retries a transient cold-decoder failure while the
+        // playhead is parked. A broken source cannot start an endless seek loop.
+        if (scene !== FM.scene || !/timed out|could not be decoded/i.test(e.message)
+            || _stutterPreviewRetryKey !== retryKey || _stutterPreviewRetries++) return;
+        setTimeout(() => {
+          if (sampler !== _stutterPreviewSampler || scene !== FM.scene) return;
+          const now = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time;
+          const current = FM.frameStutterVideoPlans(FM.scene, now, FM.media);
+          if (current.map(plan => plan.key).join(';') === retryKey) FM.requestRender();
+        }, 1100);
+      });
     }
     return null; // the synchronous first paint remains provisional until this decoder lands
   }
