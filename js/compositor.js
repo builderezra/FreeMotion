@@ -58,6 +58,8 @@ globalThis.FM = globalThis.FM || {};
       { key: 'radius', label: 'Radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
       { key: 'edges', label: 'Frame edges', def: 0, options: [[0, 'Fade'], [1, 'Repeat edge pixels']], note: 'Repeat follows the order of your effects.' },
       { key: 'dims', label: 'Blur direction', def: 0, options: [[0, 'Both'], [1, 'Horizontal'], [2, 'Vertical']], note: 'One-way blur follows the order of your effects.' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%', note: 'A custom mix follows the order of your effects.' },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Screen'], [2, 'Soft light']], note: 'Screen and Soft light follow the order of your effects.' },
     ] },
     { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'contrast', label: 'Contrast', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
@@ -1989,7 +1991,9 @@ globalThis.FM = globalThis.FM || {};
   function gaussianPlate(e, t) {
     const p = e && e.params;
     return !!(p && ((p.edges != null && FM.evalProp(p.edges, t) >= 0.5)
-      || (p.dims != null && FM.evalProp(p.dims, t) >= 0.5)));
+      || (p.dims != null && FM.evalProp(p.dims, t) >= 0.5)
+      || (p.mix != null && FM.evalProp(p.mix, t) < 99.999)
+      || (p.blend != null && FM.evalProp(p.blend, t) >= 0.5)));
   }
 
   /* ═══ DOES ctx.filter ACTUALLY WORK ON THIS DEVICE? (queue 645) ═══════════════════════════════════
@@ -14268,6 +14272,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const repeat = fparam(p, 'edges', 0, t) >= 0.5;
       const dims = Math.round(fparam(p, 'dims', 0, t));
       const axis = dims === 1 ? 'horizontal' : dims === 2 ? 'vertical' : undefined;
+      const mix = Math.max(0, Math.min(1, fparam(p, 'mix', 100, t) / 100));
+      const blend = Math.round(fparam(p, 'blend', 0, t));
+      if (mix <= 0) { B.drawImage(A, 0, 0); return; }
+      const finish = (source, sx, sy) => {
+        if (mix >= 1 && blend === 0) { B.drawImage(source, sx, sy, W, H, 0, 0, W, H); return; }
+        B.save();
+        B.globalAlpha = 1; B.globalCompositeOperation = 'source-over'; B.drawImage(A, 0, 0);
+        if (blend === 0) {
+          // Normal mixes premultiplied colour and alpha, including a transparent blur halo.
+          B.globalCompositeOperation = 'destination-out';
+          B.fillStyle = 'rgba(0,0,0,' + mix + ')'; B.fillRect(0, 0, W, H);
+          B.globalCompositeOperation = 'lighter';
+        } else B.globalCompositeOperation = blend === 1 ? 'screen' : 'soft-light';
+        B.globalAlpha = mix; B.drawImage(source, sx, sy, W, H, 0, 0, W, H);
+        B.restore();
+      };
       const pad = Math.ceil(radius * 3) + 2, WW = W + pad * 2, HH = H + pad * 2;
       if (!_gaussRepeatPlate) _gaussRepeatPlate = createCanvas();
       const plate = _gaussRepeatPlate;
@@ -14294,12 +14314,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         D.setTransform(1, 0, 0, 1, 0, 0); D.clearRect(0, 0, WW, HH);
         D.globalAlpha = 1; D.globalCompositeOperation = 'source-over';
         D.filter = 'blur(' + radius.toFixed(2) + 'px)'; D.drawImage(plate, 0, 0); D.filter = 'none';
-        B.drawImage(out, pad, pad, W, H, 0, 0, W, H);
+        finish(out, pad, pad);
         return;
       }
       const gpu = FM.glColor && FM.glColor.blur ? FM.glColor.blur(plate, WW, HH, radius, { premul: true, axis: axis }) : null;
-      if (gpu) { B.drawImage(gpu, pad, pad, W, H, 0, 0, W, H); return; }
-      if (cpuBlurCanvas(plate, WW, HH, radius, axis)) B.drawImage(plate, pad, pad, W, H, 0, 0, W, H);
+      if (gpu) { finish(gpu, pad, pad); return; }
+      if (cpuBlurCanvas(plate, WW, HH, radius, axis)) finish(plate, pad, pad);
       else B.drawImage(A, 0, 0);
     },
     circlearray: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {

@@ -123151,4 +123151,31 @@
     if (!FM.effectFilter({ effects: [e] }, 0, 1).includes('blur(')) throw new Error('saved Both blur left its CSS path');
   });
 
+  test('690 Gaussian Blur mix and blend produce ordered Orton controls', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!K || !K.blur) throw new Error('Gaussian Blur plate kernel unavailable');
+    const W = 96, H = 72, source = offscreen(W, H), a = source.getContext('2d');
+    a.fillStyle = '#505050'; a.fillRect(0, 0, W, H);
+    a.fillStyle = '#f0f0f0'; a.fillRect(42, 28, 12, 16);
+    const run = (mix, blend) => { const cv = offscreen(W, H);
+      K.blur(source, cv.getContext('2d'), W, H, { x: 0, y: 0, w: W, h: H }, { radius: 10, mix, blend }, 0, null, null, 1);
+      return cv.getContext('2d').getImageData(0, 0, W, H).data; };
+    const at = (d, x, y) => d[(y * W + x) * 4];
+    const original = source.getContext('2d').getImageData(0, 0, W, H).data;
+    const zero = run(0, 0), half = run(50, 0), full = run(100, 0);
+    for (let i = 0; i < zero.length; i++) if (zero[i] !== original[i]) throw new Error('Mix 0 did not preserve the original at byte ' + i);
+    const x = 38, y = 36, v0 = at(zero, x, y), vh = at(half, x, y), v1 = at(full, x, y);
+    if (!(v0 < vh && vh < v1)) throw new Error('Normal Mix 50 is not between source and blur: ' + [v0, vh, v1]);
+    const screen = run(100, 1), soft = run(100, 2);
+    if (!(at(screen, x, y) > v1 && at(soft, x, y) !== v1))
+      throw new Error('Screen or Soft light did not change the blurred grade: ' + [v1, at(screen, x, y), at(soft, x, y)]);
+    const fx = FM.fxRegistry.makeInstance('blur');
+    for (const [key, value] of [['mix', 50], ['blend', 1]]) {
+      fx.params.mix = 100; fx.params.blend = 0; fx.params[key] = value;
+      if (FM.effectFilter({ effects: [fx] }, 0, 1) !== 'none') throw new Error(key + ' was applied twice through CSS and plate');
+    }
+    fx.params.mix = 100; fx.params.blend = 0;
+    if (!FM.effectFilter({ effects: [fx] }, 0, 1).includes('blur(')) throw new Error('saved default Blur left its CSS path');
+  });
+
 })();
