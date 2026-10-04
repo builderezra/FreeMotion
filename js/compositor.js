@@ -13603,10 +13603,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       }
     }
-    // Time Warp Scan needs every historical crossing strip after a cold seek. Brightness and
-    // contrast are point-local and history-free: they can grade the cropped source at each
-    // crossing time without reading neighbouring pixels. A decoded still image is also a synchronous immutable source;
-    // video must wait for historical decoded pictures. Other effects may need a whole plate.
+    // Time Warp Scan needs every historical crossing strip after a cold seek. Brightness,
+    // contrast and Levels are point-local and history-free on a shape: they can grade the
+    // cropped source at each crossing time without reading neighbouring pixels. A decoded
+    // still image is also a synchronous immutable source; video must wait for historical
+    // decoded pictures. Other effects may need a whole plate.
     const warpIndex = fx.type === 'timewarp' && layer.effects ? layer.effects.indexOf(fx) : -1;
     const still = layer.type === 'image' && FM.media && FM.media.get(layer.id);
     const warpUpstream = warpIndex >= 0 ? layer.effects.slice(0, warpIndex) : [];
@@ -13622,6 +13623,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (warpIndex >= 0
         && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media'
           && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'
+            || e.type === 'levels'
             || (warpPenSafe && e.type === 'penmask' && e.maskId === warpMask.id)))
           || (still && still.kind === 'image' && still.el && !layer._cropEditing
             && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'
