@@ -14,7 +14,8 @@ from shapely.affinity import scale, translate
 from shapely.ops import unary_union
 
 HERE=Path(__file__).resolve().parent
-ROOT=HERE.parents[3]
+ROOT=next(parent for parent in HERE.parents if (parent/'index.html').exists())
+ASSET_DIR=HERE if HERE.parent.name=='font-study' else HERE.parent
 
 def cubic(a,b,c,d,steps=25):
     return [((1-t)**3*a[0]+3*(1-t)**2*t*b[0]+3*(1-t)*t*t*c[0]+t**3*d[0],
@@ -512,7 +513,9 @@ def build(style):
         pos W a -25; pos W o -23; pos Y a -31; pos Y o -33;
         pos L T -31; pos L Y -30; pos P a -22;
     } kern;''')
-    path=HERE/('fm-stormbrush-'+style.lower()+'.ttf');f.save(path);return path
+    path=HERE/('fm-stormbrush-'+style.lower()+'.ttf');f.save(path)
+    f.flavor='woff2';f.save(ASSET_DIR/('fm-stormbrush-'+style.lower()+'.woff2'))
+    return path
 
 def specimen(regular,bold):
     img=Image.new('RGB',(1450,2470),'#11120f');d=ImageDraw.Draw(img)
