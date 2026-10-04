@@ -121964,6 +121964,43 @@
     }
   });
 
+  test('690 Frame Stutter cold-seeks a moving shape with an upstream keyed grade', { item: 'TBD' }, function () {
+    const layer = FM.makeLayer('shape', {
+      shape: 'rect', x: 10, y: 20, shapeW: 12, shapeH: 12,
+      fill: '#777777', start: 0, duration: 1,
+    });
+    layer.start = 0; layer.duration = 1;
+    layer.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 1, v: 110, e: 'linear' }] };
+    const grade = FM.fxRegistry.makeInstance('brightness');
+    grade.params.amount = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 2, e: 'linear' }] };
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    const scene = { project: { width: 120, height: 40, fps: 30, duration: 1, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const row = t => {
+      const cv = offscreen(120, 40), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return Array.from(ctx.getImageData(0, 20, 120, 1).data);
+    };
+    const left = pixels => {
+      for (let x = 0; x < 120; x++) if (pixels[x * 4] > 100) return x;
+      return -1;
+    };
+    layer.effects = [grade];
+    const sourceStart = row(0), sourceCurrent = row(0.2);
+    if (!(left(sourceStart) >= 0 && left(sourceCurrent) > left(sourceStart) + 10))
+      throw new Error('Control: the graded source did not move within the hold');
+    layer.effects = [grade, stutter];
+    FM.resetMotionFlowCache();
+    const initial = row(0), sequential = row(0.2);
+    if (initial.join() !== sequential.join())
+      throw new Error('Control: continuous playback failed to hold the graded boundary plate');
+    FM.resetMotionFlowCache();
+    const cold = row(0.2);
+    if (cold.join() !== sequential.join() || left(cold) !== left(sourceStart))
+      throw new Error('Frame Stutter cold seek used the current graded shape instead of its boundary plate');
+  });
+
   test('690 Border Frame dashes dots and draws on around its perimeter', { item: 'TBD' }, function () {
     const draw = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.border;
     if (!draw) throw new Error('Border Frame kernel is unavailable');
