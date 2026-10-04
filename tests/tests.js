@@ -123030,4 +123030,22 @@
       throw new Error('circular 9:16 control did not show the old top/bottom band');
   });
 
+  test('690 original Palais Deco middle dot renders as a native glyph in both weights', { item: 'TBD' }, async function () {
+    const css = '"FM Palais Deco", sans-serif';
+    if (!FM.studioFonts) throw new Error('bundled font catalogue unavailable');
+    for (const bold of [false, true]) {
+      const src = FM.studioFonts.source(css, bold);
+      if (!src || !src.url.includes('?v=2')) throw new Error('Palais Deco asset cache tag did not advance');
+      await FM.studioFonts.load(css, bold);
+      const c = offscreen(110, 110), ctx = c.getContext('2d');
+      ctx.font = (bold ? '700 ' : '400 ') + '96px ' + css;
+      const width = ctx.measureText('·').width;
+      if (!(width > 10 && width < 40)) throw new Error('Palais Deco middle dot has missing-glyph width ' + width);
+      ctx.fillText('·', 20, 90);
+      const pixels = ctx.getImageData(0, 0, 110, 110).data;
+      let ink = 0; for (let i = 3; i < pixels.length; i += 4) if (pixels[i]) ink++;
+      if (ink < 15) throw new Error('Palais Deco middle dot drew no visible ink');
+    }
+  });
+
 })();

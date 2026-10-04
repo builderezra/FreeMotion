@@ -212,6 +212,7 @@ def design(bold=False):
     put('“',371,stroke([(105,747),(77,533)],bar,False),stroke([(273,747),(245,533)],bar,False))
     put('”',371,stroke([(105,747),(77,533)],bar,False),stroke([(273,747),(245,533)],bar,False))
     put('•',320,dot(160,271,51))
+    put('·',228,dot(114,350))
     put('°',352,stroke(ell(176,598,88,102),bar,False,True))
     put('€',615,arc(307,374,204,374,45,315),stroke([(80,464),(399,464)],bar,False),
         stroke([(80,281),(399,281)],bar,False))
