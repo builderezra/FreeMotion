@@ -122099,6 +122099,45 @@
     }
   });
 
+  test('690 Time Warp Scan cold-seeks a moving shape through a feathered vector mask', { item: 'TBD', budgetMs: 30000 }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 16, y: 40, shapeW: 46, shapeH: 64,
+      fill: '#e28842', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 16, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] };
+    layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 30, h: 38, feather: 9, invert: false };
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, mode: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [warp];
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const invert of [false, true]) for (const width of [120, 60]) {
+      layer.mask.invert = invert;
+      layer.effects = [];
+      const live = frame(0.8, width);
+      layer.mask.feather = 0;
+      const hard = frame(0.8, width);
+      layer.mask.feather = 9;
+      if (same(live, hard)) throw new Error('Control: feathering did not alter the mask');
+      layer.effects = [warp]; FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(0.8, width);
+      if (!same(cold, played)) {
+        const i = cold.findIndex((v, j) => v !== played[j]);
+        throw new Error('Feathered ' + (invert ? 'inverted ' : '') + 'mask scan differs at width=' + width +
+          ', pixel=' + (i >> 2) + ', channel=' + (i & 3) + ', cold=' + cold[i] + ', played=' + played[i]);
+      }
+      if (same(cold, live)) throw new Error('Control: feathered scan is only the current picture');
+    }
+  });
+
   test('690 C31 Frame Stutter holds a cropped still at the quantum boundary after a cold seek', { item: 'TBD', budgetMs: 90000 }, async function () {
     const tex = offscreen(40, 40), g = tex.getContext('2d');
     g.fillStyle = '#dd5935'; g.fillRect(0, 0, 20, 40);
