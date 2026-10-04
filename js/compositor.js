@@ -15351,8 +15351,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
     },
     // ---- Particles — deterministic generative emitter ----
-    // A pure function of tl: particle i is born at bornT = i/rate and evolved from a hash of i, keeping
-    // NO cross-frame state (no arrays, no Math.random, no Date.now). So the same scene time always
+    // A pure function of tl: particle i is born when the accumulated rate reaches i (i/rate when static)
+    // and evolves from a hash of i. There is NO cross-frame state (no arrays, no Math.random, no Date.now).
+    // So the same scene time always
     // yields the same frame — scrubbing repeats exactly and the frame-stepping exporter matches the
     // preview. Only the alive window [lo,hi] is iterated and a hard cap thins it, so the loop is bounded
     // no matter how large rate*lifetime gets.
@@ -15396,11 +15397,40 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cr = cs[0], cg = cs[1], cb = cs[2], dcr = ce[0] - cr, dcg = ce[1] - cg, dcb = ce[2] - cb;
 
       const maxLife = lifetime * 1.3;   // life_i = lifetime*(0.7..1.3) → the longest a particle can live
-      const hi = Math.floor(tl * rate);
+      const keyedRate = FM.isAnimated(p.rate), effectStart = t - tl;
+      const rateAt = function (when) {
+        let v = FM.evalProp(p.rate, when);
+        if (!isFinite(v)) v = 40;
+        return Math.max(1, Math.min(200, v));
+      };
+      const phaseAt = when => FM.integrateProp(p.rate, effectStart, when, rateAt);
+      const windowStart = Math.max(effectStart, t - maxLife);
+      const windowPhase = keyedRate ? phaseAt(windowStart) : 0;
+      const hi = Math.floor(keyedRate ? phaseAt(t) + 1e-9 : tl * rate);
       if (hi < 0) return;
-      let lo = Math.ceil((tl - maxLife) * rate); if (lo < 0) lo = 0;
+      let lo = keyedRate ? Math.ceil(windowPhase - 1e-9) : Math.ceil((tl - maxLife) * rate);
+      if (lo < 0) lo = 0;
       const CAP = 2000; let step = 1; const count = hi - lo + 1;
       if (count > CAP) step = Math.ceil(count / CAP);   // thin the loop so we never draw > CAP sprites
+
+      // Invert the monotone birth clock only for live keyed-rate particles. Each root is bracketed
+      // between the preceding birth and now; Newton uses the current rate as its slope, with a
+      // bisection fallback for abrupt hold keyframes. Static projects keep their exact i/rate path.
+      let birthTime = windowStart, birthPhase = windowPhase;
+      const keyedBirth = function (index) {
+        if (index <= birthPhase + 1e-9) return birthTime - effectStart;
+        let low = birthTime, high = t;
+        let guess = Math.min(high, birthTime + (index - birthPhase) / rateAt(birthTime));
+        for (let iter = 0; iter < 24; iter++) {
+          const error = birthPhase + FM.integrateProp(p.rate, birthTime, guess, rateAt) - index;
+          if (Math.abs(error) < 1e-5) break;
+          if (error < 0) low = guess; else high = guess;
+          const next = guess - error / rateAt(guess);
+          guess = next >= low && next <= high ? next : (low + high) / 2;
+        }
+        birthTime = guess; birthPhase = index;
+        return guess - effectStart;
+      };
 
       const start = (layer && layer.start) || 0;
       const trx = (layer && layer.transform) ? layer.transform.x : null;
@@ -15417,7 +15447,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (add) B.globalCompositeOperation = 'lighter';
       B.lineCap = 'round';
       for (let i = lo; i <= hi; i += step) {
-        const bornT = i / rate, age = tl - bornT;
+        const bornT = keyedRate ? keyedBirth(i) : i / rate, age = tl - bornT;
         if (age < 0) continue;
         const life = lifetime * (0.7 + 0.6 * pHash(i * 4 + 2));
         if (age > life) continue;   // already dead this frame

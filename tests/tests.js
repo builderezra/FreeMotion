@@ -121158,4 +121158,36 @@
     if (![119, 130, 141, 152].some(y => countBands(300, canvas, y) >= 2))
       throw new Error('Flame renders as one droplet-like tongue at canvas size');
   });
+
+  test('690 Particles keeps existing births when keyframed Rate changes', { item: 'TBD' }, function () {
+    const particles = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.particles;
+    if (!particles || !FM.integrateProp) throw new Error('Particles or the rate integrator is unavailable');
+    const draw = (rate, time) => {
+      const places = [], B = {
+        save() {}, restore() {}, drawImage() {}, rotate() {}, beginPath() {}, arc() {}, closePath() {}, fill() {},
+        translate(x, y) { places.push([x, y]); },
+      };
+      particles({}, B, 400, 400, { x: 90, y: 90, w: 20, h: 20 },
+        { rate, lifetime: 8, direction: 0, spread: 0, speed: 100, gravity: 0,
+          sizeStart: 8, sizeEnd: 8, opacityStart: 1, opacityEnd: 1, shape: 0 },
+        time, time, { start: 0, transform: { x: 100, y: 100 } }, 1);
+      return places;
+    };
+    const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const step = { kf: [{ t: 0, v: 20, e: 'hold' }, { t: 1, v: 40, e: 'hold' }] };
+    const before = draw(step, 1), later = draw(step, 1.25);
+    if (before.length !== 21 || later.length !== 31)
+      throw new Error('Particles created earlier births again when Rate stepped: ' + before.length + '/' + later.length);
+    if (gap(later[10], draw(20, 1.25)[10]) > 0.001)
+      throw new Error('An existing particle changed age when Rate stepped');
+    if (gap(later[25], draw(40, 0.75)[25]) > 0.001)
+      throw new Error('A particle born after the Rate step has the wrong age');
+    const constant = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 20, e: 'linear' }] };
+    if (gap(draw(constant, 1.25)[10], draw(20, 1.25)[10]) > 0.001)
+      throw new Error('A constant keyed Rate differs from the saved numeric Rate');
+    const slowing = { kf: [{ t: 0, v: 200, e: 'hold' }, { t: 1, v: 1, e: 'hold' }] };
+    const slowed = draw(slowing, 51), last = slowed[slowed.length - 1];
+    if (!last || Math.abs(last[0] - 100) > 0.001)
+      throw new Error('The newest particle drifted from its birth point after Rate slowed');
+  });
 })();
