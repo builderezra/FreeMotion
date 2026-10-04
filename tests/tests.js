@@ -121011,4 +121011,33 @@
     const stepped = { kf: [{ t: 0, v: 1.5, e: 'hold' }, { t: 1.6, v: 3, e: 'hold' }] };
     if (distance(position(stepped, 1.6), position(1.5, 1.6)) > 1.5) throw new Error('Wiggle jumped at a held Speed keyframe');
   });
+
+  test('690 Shake preserves keyed Speed phase and smear velocity', { item: 'TBD' }, function () {
+    const shake = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.shake;
+    if (!shake || !FM.integrateProp) throw new Error('Shake kernel or rate integrator is unavailable');
+    const frame = { project: { width: 240, height: 160, fps: 10 } };
+    const draw = (speed, time, smear) => {
+      const moves = [], B = {
+        globalAlpha: 1, save() {}, restore() {}, rotate() {}, scale() {}, drawImage() {},
+        translate(x, y) { moves.push([x, y]); },
+      };
+      shake({}, B, 240, 160, { x: 20, y: 20, w: 80, h: 60 },
+        { amount: 70, speed, twist: 0, zoom: 0, jitter: 1, smear, seed: 0 },
+        time, time, null, 1, null, frame);
+      return moves.filter((_, i) => i % 2 === 0); // one placement, then one return translation per stamp
+    };
+    const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const ramp = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 3, e: 'linear' }] };
+    const integrated = draw(2, 2, 0)[0], currentRate = draw(3, 2, 0)[0];
+    if (gap(integrated, currentRate) < 5) throw new Error('Control: Shake positions do not distinguish integrated from current Speed');
+    if (gap(draw(ramp, 2, 0)[0], integrated) > 1e-6) throw new Error('Shake jumped to current Speed times elapsed time');
+
+    const before = draw(ramp, 1.9, 0)[0], stamps = draw(ramp, 2, 1);
+    if (stamps.length !== 4 || gap(stamps[3], before) < 2) throw new Error('Control: this Shake did not produce a visible smear');
+    for (let g = 3; g >= 1; g--) {
+      const expected = [integrated[0] - (integrated[0] - before[0]) * g / 4,
+        integrated[1] - (integrated[1] - before[1]) * g / 4];
+      if (gap(stamps[3 - g], expected) > 1e-6) throw new Error('Shake smear followed the current Speed instead of the previous keyed phase');
+    }
+  });
 })();

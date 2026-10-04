@@ -15054,7 +15054,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         : function (u, off) { return (1 - jit) * (smooth ? smooth(u, off) : wnoise(u + off)) + jit * ihash((Math.floor(u * 2) + ((off * 131) | 0) + Math.imul(sd, 7919)) | 0); };   // ×2: a step per half-cycle keeps perceived speed
       const dampX = dir === 2 ? 0.12 : 1, dampY = dir === 1 ? 0.12 : 1;   // axis lock leaves a whisper of cross-shake so it doesn't read robotic
       const disp = function (u) { return [amt * noise(u, 0) * dampX, amt * noise(u, 55) * dampY]; };
-      const u0 = tl * spd;
+      // Speed is a rate: keep the travelled noise phase when a keyframe slows or stops the shake.
+      const keyedSpeed = FM.isAnimated(p.speed);
+      const u0 = keyedSpeed ? FM.integrateProp(p.speed, t - tl, t) : tl * spd;
       const d0 = disp(u0);
       let px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;   // `let`: Hide edges re-centres on the layer's own middle below
       const rot = tw * noise(u0, 200) * Math.PI / 180;
@@ -15127,7 +15129,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (smear > 0) {
         // Thumbnail/template renders can pass a scene other than the editor's active FM.scene.
         const fps = (scene && scene.project && scene.project.fps) || 30;
-        const d1 = disp((tl - 1 / fps) * spd);   // the same pattern (it lives in `noise`) one frame ago
+        const u1 = keyedSpeed ? FM.integrateProp(p.speed, t - tl, t - 1 / fps) : (tl - 1 / fps) * spd;
+        const d1 = disp(u1);   // the same pattern (it lives in `noise`) one frame ago
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
           /* SMEAR LENGTH (queue 904): how many frames of motion the trail reaches back, with ghosts added in proportion so a long smear
