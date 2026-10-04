@@ -122120,7 +122120,7 @@
         XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
         await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
           onProgress: function () {}, onReady: async function () {} });
-        if (!renderer || !renderer.includes(';c31-image-boundary-1'))
+        if (!renderer || !renderer.includes(';c31-image-boundary-2'))
           throw new Error('an interrupted image Frame Stutter MP4 can resume an old history-based prefix');
       } finally {
         XR.signature = previousSignature; FM.scene = previousScene; FM.exportWorker = previousWorker;
@@ -122448,6 +122448,37 @@
       const cold = frame(0.7, width);
       if (!same(cold, boundary) || !same(cold, played))
         throw new Error('Frame Stutter did not hold the upstream pen mask at 0.5s, width=' + width);
+    }
+  });
+
+  test('690 Frame Stutter holds keyed Levels on a moving shape at the exact boundary', { item: 'TBD', budgetMs: 30000 }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 28, shapeH: 28,
+      fill: '#777777', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 1, v: 80, e: 'linear' }] };
+    const levels = FM.fxRegistry.makeInstance('levels');
+    levels.params.inblack = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] };
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const width of [120, 60]) {
+      layer.effects = [levels];
+      const boundary = frame(0.5, width), live = frame(0.7, width);
+      if (same(boundary, live)) throw new Error('Control: keyed Levels and movement did not change the source');
+      layer.effects = [levels, stutter]; FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 21; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(0.7, width);
+      if (!same(cold, boundary) || !same(cold, played))
+        throw new Error('Frame Stutter held current Levels instead of boundary Levels at width=' + width);
     }
   });
 
@@ -123127,7 +123158,7 @@
       XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
       await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
         onProgress: function () {}, onReady: async function () {} });
-      if (!renderer || !renderer.includes(';c31-shape-upstream-1'))
+      if (!renderer || !renderer.includes(';c31-shape-upstream-6'))
         throw new Error('an interrupted shape Frame Stutter MP4 can resume an old history-based prefix');
     } finally { XR.signature = previousSignature; FM.scene = previousScene; }
   });
