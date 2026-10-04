@@ -12,3 +12,5 @@ Focused browser checks on localhost with the isolated clone:
 - `?only=Lightning%20strikes%20the%20layer`: existing #403 layer-bound regression 1/1 passed.
 
 JavaScript syntax parsing and `git diff --check` passed. No broad suite or release action was run. The starting snapshot's other pending work is outside this change.
+
+Consolidated local integration: cherry-picked onto clean `d8f4998b` as `545389fa`, then raised the compositor cache tag to 280 because Glow Scan had already used 279. The focused C34 browser regression passed 1/1 in that checkpoint; an initial app-frame load omitted `renderScene` before assertions, and the warm retry passed. Changed JavaScript syntax and diff checks passed. This remains local and unreleased.
