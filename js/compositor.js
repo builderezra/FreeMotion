@@ -1113,6 +1113,10 @@ globalThis.FM = globalThis.FM || {};
       { key: 'inset', label: 'Inset', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'radius', label: 'Corner radius', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'smooth', label: 'Smooth corners', options: [[0, 'Off'], [1, 'On']], def: 1 },
+      { key: 'style', label: 'Style', options: [[0, 'Solid'], [1, 'Dashed'], [2, 'Dotted']], def: 0 },
+      { key: 'dash', label: 'Dash length', min: 2, max: 200, step: 1, def: 20, unit: 'px', overriddenBy: 'style', liveWhen: 1 },
+      { key: 'gap', label: 'Gap length', min: 2, max: 200, step: 1, def: 10, unit: 'px', overriddenBy: 'style', liveWhen: [1, 2] },
+      { key: 'progress', label: 'Draw on', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'opacity', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     // ---- batch 21 ----
@@ -5531,6 +5535,94 @@ globalThis.FM = globalThis.FM || {};
       if (cover < 1) d[i] = cover <= 0 ? 0 : d[i] * cover;
     }
   }
+  // Border Frame's opt-in styles trace the centre of the existing inward stroke. Keeping
+  // this mask path separate leaves all saved/default rectangular and rounded frames on
+  // their original pixel kernels, including their exact alpha and corner behaviour.
+  function borderStyled(d, W, H, p, t, ps, x0, y0, x1, y1, width, inset, radius, opacity, style, progress) {
+    if (progress <= 0 || opacity <= 0) return;
+    const margin = Math.round(inset * (ps || 1));
+    const bx0 = x0 + margin, by0 = y0 + margin, bx1 = x1 - margin, by1 = y1 - margin;
+    if (bx1 - bx0 < 2 || by1 - by0 < 2) return;
+    const bw = Math.min(width, Math.floor(Math.min(bx1 - bx0, by1 - by0) / 2));
+    if (bw < 1) return;
+    const br = Math.min(Math.round(radius * (ps || 1)), Math.floor(Math.min(bx1 - bx0, by1 - by0) / 2));
+    const l = bx0 + bw / 2, top = by0 + bw / 2, r = bx1 - bw / 2, bottom = by1 - bw / 2;
+    const rad = Math.max(0, Math.min(br - bw / 2, (r - l) / 2, (bottom - top) / 2));
+    const q = Math.PI / 2;
+    const segments = [
+      { x:r-rad, y:top, len:r-l-2*rad },
+      { cx:r-rad, cy:top+rad, a:-q, len:rad*q },
+      { x:r, y:bottom-rad, len:bottom-top-2*rad },
+      { cx:r-rad, cy:bottom-rad, a:0, len:rad*q },
+      { x:l+rad, y:bottom, len:r-l-2*rad },
+      { cx:l+rad, cy:bottom-rad, a:q, len:rad*q },
+      { x:l, y:top+rad, len:bottom-top-2*rad },
+      { cx:l+rad, cy:top+rad, a:Math.PI, len:rad*q }
+    ];
+    const perimeter = segments.reduce((sum, part) => sum + Math.max(0, part.len), 0);
+    if (perimeter <= 0) return;
+    const rw = bx1-bx0, rh = by1-by0;
+    const mask = createCanvas(); mask.width = rw; mask.height = rh;
+    const g = mask.getContext('2d', { willReadFrequently:true });
+    g.translate(-bx0, -by0);
+    g.strokeStyle = '#ffffff'; g.lineWidth = bw;
+    g.lineJoin = rad > 0 ? 'round' : 'miter';
+    g.lineCap = style === 2 ? 'round' : 'butt';
+    if (style === 1) {
+      const dash = Math.max(1, (p.dash == null ? 20 : FM.evalProp(p.dash,t)) * (ps || 1));
+      const gap = Math.max(1, (p.gap == null ? 10 : FM.evalProp(p.gap,t)) * (ps || 1));
+      g.setLineDash([dash, gap]);
+    } else if (style === 2) {
+      const gap = Math.max(1, (p.gap == null ? 10 : FM.evalProp(p.gap,t)) * (ps || 1));
+      g.setLineDash([0.01, bw + gap]);
+    }
+    g.beginPath(); g.moveTo(l + rad, top);
+    let remaining = perimeter * Math.min(100, progress) / 100;
+    let px = l + rad, py = top;
+    for (const part of segments) {
+      if (part.len <= 0) continue;
+      const fraction = Math.min(1, remaining / part.len);
+      if ('cx' in part) {
+        g.arc(part.cx, part.cy, rad, part.a, part.a + q * fraction);
+        px = part.cx + rad * Math.cos(part.a + q * fraction);
+        py = part.cy + rad * Math.sin(part.a + q * fraction);
+      }
+      else {
+        px += (part.x - px) * fraction;
+        py += (part.y - py) * fraction;
+        g.lineTo(px, py);
+      }
+      remaining -= part.len * fraction;
+      if (fraction < 1 || remaining <= 1e-6) break;
+    }
+    if (progress >= 100) g.closePath();
+    g.stroke();
+    const alpha = g.getImageData(0, 0, rw, rh).data;
+    const [cr,cg,cb] = hexToRGB(p.color), strength = opacity / 100;
+    const smooth = br <= 0 || p.smooth == null || FM.evalProp(p.smooth,t) !== 0;
+    // A radius smaller than half the stroke has a square centreline, but the
+    // existing Border Frame still rounds its OUTER silhouette at that radius.
+    const clipSmallRound = br > 0 && br < bw / 2;
+    for (let y=0; y<rh; y++) for (let x=0; x<rw; x++) {
+      let edge = alpha[(y*rw+x)*4+3] / 255;
+      if (edge > 0 && clipSmallRound) {
+        const gx=bx0+x+0.5, gy=by0+y+0.5;
+        const cx=gx<bx0+br?bx0+br:gx>bx1-br?bx1-br:gx;
+        const cy=gy<by0+br?by0+br:gy>by1-br?by1-br:gy;
+        if (cx!==gx && cy!==gy)
+          edge *= Math.max(0, Math.min(1, br+0.5-Math.hypot(gx-cx,gy-cy)));
+      }
+      if (!smooth) edge = edge >= 0.5 ? 1 : 0;
+      const cover = edge * strength;
+      if (cover <= 0) continue;
+      const i = ((by0+y)*W+bx0+x)*4;
+      if (cover >= 1) { d[i]=cr; d[i+1]=cg; d[i+2]=cb; d[i+3]=255; continue; }
+      const old = d[i+3]/255, out = cover + old*(1-cover);
+      const source = cover/out, behind = old*(1-cover)/out;
+      d[i] = cr*source+d[i]*behind; d[i+1] = cg*source+d[i+1]*behind;
+      d[i+2] = cb*source+d[i+2]*behind; d[i+3] = out*255;
+    }
+  }
   const PIXEL_FX = {
     deflicker: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
       const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
@@ -9748,6 +9840,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bdIn=p.inset==null?0:FM.evalProp(p.inset,t); if(bdIn<0)bdIn=0; if(bdIn>200)bdIn=200;
       var bdRad=p.radius==null?0:FM.evalProp(p.radius,t); if(bdRad<0)bdRad=0; if(bdRad>200)bdRad=200;
       var bdOp=p.opacity==null?100:FM.evalProp(p.opacity,t); if(bdOp<0)bdOp=0; if(bdOp>100)bdOp=100; if(bdOp<=0)return;
+      var bdStyle=p.style==null?0:Math.round(FM.evalProp(p.style,t));
+      var bdProgress=p.progress==null?100:FM.evalProp(p.progress,t);
+      if(bdStyle!==0||bdProgress<100){
+        borderStyled(d,W,H,p,t,ps,x0,y0,x1,y1,w,bdIn,bdRad,bdOp,bdStyle,bdProgress);
+        return;
+      }
       if(bdIn===0&&bdRad===0&&bdOp===100){
         for(var y=y0;y<y1;y++){ var ey=(y<y0+w||y>=y1-w); var row=y*W*4; for(var x=x0;x<x1;x++){ if(ey||x<x0+w||x>=x1-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } }
         return;

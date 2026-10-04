@@ -1,0 +1,9 @@
+# Border Frame: broken outlines and Draw on
+
+Starting commit: clean preferred `1ac40d1fcad4ecce2e703d32cde3e729637f3566`; isolated clone `/private/tmp/freemotion-border-style-20261004`, branch `codex/690-border-style`. The standing #690 request is `REQUESTS.md:27375-27403`; Border Frame §12.5 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:816-820`. Its earlier C33 rounded-corner defect was already fixed. No matching Border Frame finding occurs in `audits/*.json`.
+
+Border Frame now offers Solid, Dashed and Dotted styles, adjustable Dash and Gap lengths, and keyframable Draw on from 0–100%. The opt-in styles trace the inward border perimeter, including rounded corners, so 50% leaves half that perimeter empty. The default Solid/100% route uses the original pixel kernel exactly; existing saved borders and the prior Smooth corners switch keep their rendering. The styled route composites the chosen colour over transparency without dark fringes.
+
+An independent code review found three opt-in issues: a small positive radius could square off on a thick styled stroke, a small layer allocated a full-frame mask, and Gap stayed active for Solid. All three were corrected before integration. The bounded mask is pixel-identical when the same border is drawn at the origin or at a layer-box offset.
+
+Changed files: `js/compositor.js`, `tests/tests.js` (one focused `{ item:'TBD' }` regression), `index.html` (compositor cache tag 281→282), and this report. The new focused browser regression passed 1/1 after review fixes, including the layer-box, tight-radius and Smooth corners Off cases; the existing rounded-edge regression passed 1/1 before the styled-only review fixes. One cold browser frame omitted `fx-registry.js` and was retried successfully. JavaScript syntax and `git diff --check` passed. No shared Claude checkout or protected-file edit, push, PR or deployment.

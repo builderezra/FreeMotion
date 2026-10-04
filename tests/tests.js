@@ -121933,4 +121933,62 @@
     }
   });
 
+  test('690 Border Frame dashes dots and draws on around its perimeter', { item: 'TBD' }, function () {
+    const draw = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.border;
+    if (!draw) throw new Error('Border Frame kernel is unavailable');
+    const controls = FM.fxRegistry.paramsOf('border') || [];
+    for (const key of ['style', 'dash', 'gap', 'progress'])
+      if (!controls.some(control => control.key === key)) throw new Error('Border Frame lacks ' + key);
+    const gapControl = controls.find(control => control.key === 'gap');
+    if (gapControl.overriddenBy !== 'style' || String(gapControl.liveWhen) !== '1,2')
+      throw new Error('Gap length should be inactive for a solid border');
+    const W = 80, H = 60, base = { width:6, inset:4, radius:0, opacity:100, color:'#ffffff' };
+    const render = extra => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      draw(pixels, W, H, Object.assign({}, base, extra), 0, 1);
+      return pixels;
+    };
+    const alpha = (pixels,x,y) => pixels[(y*W+x)*4+3];
+    const count = pixels => { let n=0; for(let i=3;i<pixels.length;i+=4) if(pixels[i]>127)n++; return n; };
+    const full = render({}), defaults = render({ style:0, dash:20, gap:10, progress:100 });
+    if (!full.every((v,i) => v === defaults[i])) throw new Error('new default controls changed an existing solid border');
+    const half = render({ progress:50 });
+    if (Math.abs(count(half)/count(full)-0.5) > 0.09 || !alpha(half,40,7) || !alpha(half,73,30)
+        || alpha(half,40,53) || alpha(half,7,30))
+      throw new Error('Draw on 50% did not leave half of the frame perimeter empty');
+    if (count(render({ progress:0 })) !== 0) throw new Error('Draw on 0% still paints the border');
+    const dashed = render({ style:1, dash:8, gap:8 });
+    const dotted = render({ style:2, gap:6 });
+    if (!(count(dashed) < count(full)*0.7 && count(dashed) > count(full)*0.3 &&
+          count(dotted) < count(dashed) && count(dotted) > count(full)*0.15))
+      throw new Error('Dashed or Dotted did not produce a distinct broken outline');
+    let runs=0, on=false;
+    for (let x=8; x<72; x++) { const lit=alpha(dashed,x,7)>127; if(lit&&!on) runs++; on=lit; }
+    if (runs < 3) throw new Error('Dash length and gap did not repeat along the top edge');
+    const box = { x:18, y:12, w:36, h:28 }, layerStyle = { ...base, style:1, dash:8, gap:8 };
+    const bounded = new Uint8ClampedArray(W * H * 4);
+    const local = new Uint8ClampedArray(box.w * box.h * 4);
+    draw(bounded, W, H, layerStyle, 0, 1, box);
+    draw(local, box.w, box.h, layerStyle, 0, 1);
+    for (let y=0; y<box.h; y++) for (let x=0; x<box.w; x++) for (let c=0; c<4; c++)
+      if (bounded[((box.y+y)*W+box.x+x)*4+c] !== local[(y*box.w+x)*4+c])
+        throw new Error('styled frame shifted when restricted to a small layer box');
+    if (!count(local)) throw new Error('small layer box produced no styled border');
+    const rounded = render({ style:1, dash:200, gap:2, radius:18, opacity:50 });
+    let edge=0;
+    for(let i=0;i<rounded.length;i+=4) if(rounded[i+3]>0 && rounded[i+3]<127) {
+      edge++;
+      if(rounded[i]!==255 || rounded[i+1]!==255 || rounded[i+2]!==255)
+        throw new Error('the translucent rounded outline has a dark fringe');
+    }
+    if(edge<4) throw new Error('styled rounded corners lost their fractional edge');
+    const tightRadius = render({ style:1, dash:200, gap:2, width:26, radius:9 });
+    if (alpha(tightRadius,4,4) || !alpha(tightRadius,40,4))
+      throw new Error('a small positive corner radius became square on a thick styled border');
+    const sharp = render({ style:1, dash:200, gap:2, radius:18, smooth:0 });
+    for (let i=3; i<sharp.length; i+=4)
+      if (sharp[i] !== 0 && sharp[i] !== 255)
+        throw new Error('Smooth corners Off left fractional alpha on a styled outline');
+  });
+
 })();
