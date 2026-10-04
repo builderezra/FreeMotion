@@ -14342,7 +14342,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const penSafe = !!(mask && mask.enabled !== false && typeof mask.id === 'string'
         && markers.length === 1 && markers[0].maskId === mask.id);
       if (layer.masks && layer.masks.length && !penSafe) continue;
-      if (penSafe && layer.mask && layer.mask.enabled) continue; // combined stencil order needs its own proof
+      // The decoded historical source redraws the whole plate, preserving the order of
+      // the upstream pen stencil and the layer's legacy vector stencil.
       if (!active.length || active[active.length - 1].type !== 'timewarp'
           || active.slice(0, -1).some(fx => fx.type !== 'brightness' && fx.type !== 'contrast' && fx.type !== 'levels'
             && !(penSafe && fx.type === 'penmask' && fx.maskId === mask.id))) continue;
