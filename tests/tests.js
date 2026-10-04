@@ -122984,4 +122984,28 @@
     }
   });
 
+  test('690 C49 Light Glow softens the threshold without changing saved glow', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.lightglow) throw new Error('Light Glow kernel unavailable');
+    const knee = FM.fxRegistry.paramsOf('lightglow').find(p => p.key === 'knee');
+    if (!knee || knee.default !== 0) throw new Error('Threshold softness must default to legacy zero');
+    const W = 256, H = 5;
+    const make = () => { const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4; d[i] = d[i+1] = d[i+2] = x; d[i+3] = 255;
+      } return d; };
+    const run = p => { const d = make(); K.lightglow(d, W, H, p, 0, 1); return d; };
+    const base = { amount: 1, radius: 1, threshold: 60 };
+    const saved = run(base), hard = run({ ...base, knee: 0 }), soft = run({ ...base, knee: 20 });
+    for (let i = 0; i < saved.length; i++) if (saved[i] !== hard[i])
+      throw new Error('saved Light Glow differs from explicit zero softness at byte ' + i);
+    const lift = (d, x) => d[(2 * W + x) * 4] - x;
+    if (lift(hard, 140) !== 0 || lift(hard, 160) <= 0)
+      throw new Error('hard-threshold control did not retain the original contour');
+    if (!(lift(soft, 140) > 0 && lift(soft, 145) > lift(soft, 140) && lift(soft, 150) > lift(soft, 145)))
+      throw new Error('soft threshold does not grow smoothly below the former hard edge');
+    if (lift(soft, 180) !== lift(hard, 180))
+      throw new Error('softness changed highlights above its transition');
+  });
+
 })();
