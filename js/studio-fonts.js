@@ -20,6 +20,7 @@
     { id: 'fm-palais-deco', name: 'FM Palais Deco', family: 'FM Palais Deco', css: '"FM Palais Deco", sans-serif', regular: 'original/fm-palais-deco-regular.woff2', bold: 'original/fm-palais-deco-bold.woff2', version: 2, group: 'original' },
     { id: 'fm-blackthorn', name: 'FM Blackthorn', family: 'FM Blackthorn', css: '"FM Blackthorn", serif', regular: 'original/fm-blackthorn-regular.woff2', bold: 'original/fm-blackthorn-bold.woff2', version: 2, group: 'original' },
     { id: 'fm-reed', name: 'FM Reed', family: 'FM Reed', css: '"FM Reed", sans-serif', regular: 'original/fm-reed-regular.woff2', bold: 'original/fm-reed-bold.woff2', group: 'original' },
+    { id: 'fm-stormbrush', name: 'FM Stormbrush', family: 'FM Stormbrush', css: '"FM Stormbrush", sans-serif', regular: 'original/fm-stormbrush-regular.woff2', bold: 'original/fm-stormbrush-bold.woff2', group: 'original' },
     { id: 'inter', name: 'Inter', family: 'Inter', css: 'Inter, sans-serif', regular: 'open/inter/Inter-Regular.woff2', bold: 'open/inter/Inter-Bold.woff2', group: 'open' },
     { id: 'outfit', name: 'Outfit', family: 'Outfit', css: '"Outfit", sans-serif', regular: 'open/outfit/Outfit-Regular.woff2', bold: 'open/outfit/Outfit-Bold.woff2', group: 'open' },
     { id: 'space-grotesk', name: 'Space Grotesk', family: 'Space Grotesk', css: '"Space Grotesk", sans-serif', regular: 'open/space-grotesk/SpaceGrotesk-Regular.woff2', bold: 'open/space-grotesk/SpaceGrotesk-Bold.woff2', group: 'open' },

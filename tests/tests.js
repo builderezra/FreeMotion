@@ -121426,6 +121426,51 @@
     }
   });
 
+  test('FM Stormbrush keeps its original Latin faces in the picker and export', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const font = FM.studioFonts.list().find(f => f.name === 'FM Stormbrush');
+    if (!font || font.group !== 'original' || !font.regular.endsWith('fm-stormbrush-regular.woff2') ||
+        !font.bold.endsWith('fm-stormbrush-bold.woff2')) throw new Error('FM Stormbrush or a bundled weight is missing');
+    await FM.studioFonts.forScene({ layers: [
+      { type: 'text', fontFamily: font.css, bold: false },
+      { type: 'caption', fontFamily: font.css, bold: true },
+    ] });
+    const loaded = weight => Array.from(document.fonts).some(face =>
+      face.family.replace(/^"|"$/g, '') === font.family && face.weight === weight && face.status === 'loaded');
+    if (!loaded('400') || !loaded('700')) throw new Error('FM Stormbrush did not load both faces');
+    const exportFace = FM.studioFonts.source(font.css, true);
+    if (!exportFace || exportFace.family !== font.family || exportFace.weight !== '700' ||
+        !exportFace.url.includes(font.bold)) throw new Error('the export renderer has no FM Stormbrush Bold source');
+    const canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 130;
+    const ctx = canvas.getContext('2d');
+    const ink = weight => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = weight + ' 76px ' + font.css;
+      ctx.fillText('Café Noël 2026', 8, 95);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let total = 0;
+      for (let i = 3; i < data.length; i += 4) total += data[i];
+      return total;
+    };
+    const regular = ink('400'), bold = ink('700');
+    if (!regular || bold < regular * 1.04) throw new Error('FM Stormbrush is blank or its bold weight is not distinct');
+    const saved = FM.scene.layers.slice(), selected = FM.scene.selectedId;
+    const layer = FM.makeLayer('text', { text: 'Café Noël 2026', fontFamily: font.css });
+    try {
+      FM.scene.layers.push(layer); FM.selectLayer(layer.id); FM.refreshAll();
+      FM.textEdit.start(layer.id);
+      const button = document.querySelector('.te-font');
+      if (!button) throw new Error('the font picker button is missing');
+      button.click();
+      const card = Array.from(document.querySelectorAll('.te-font-card')).find(c => c.textContent.includes(font.name));
+      const sample = card && card.querySelector('.te-font-abc');
+      if (!sample || sample.style.fontFamily !== font.css) throw new Error('FM Stormbrush has no live picker sample');
+    } finally {
+      if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.scene.layers.length = 0; saved.forEach(old => FM.scene.layers.push(old));
+      FM.selectLayer(selected || null); FM.refreshAll();
+    }
+  });
+
   test('690 Frame Stutter keeps its hold phase through keyframed Rate changes', { item: 'TBD' }, function () {
     const stutter = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.framestutter;
     if (!stutter || !FM.integrateProp || FM._mfGhost) throw new Error('Frame Stutter or its rate clock is unavailable');
