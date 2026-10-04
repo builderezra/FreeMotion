@@ -13551,7 +13551,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!layer.parent) return true;
     const p = scene && scene.layers && scene.layers.find(candidate => candidate && candidate.id === layer.parent);
     // Rotated/scaled parents rasterize differently in Time Warp Scan's cropped strip viewport.
-    // Frame Stutter samples a whole plate, so it can redraw those transforms at the hold boundary.
+    // A whole-plate historical sample can redraw those transforms at their actual sample time.
     return !!(p && p.type === 'null' && !p.parent && !p.splitOf && p._clipStart == null
       && !p.fxTimeOffset && !(p.behaviors && p.behaviors.length)
       && !(p.wiggle && p.wiggle.enabled && p.wiggle.amp)
@@ -13716,7 +13716,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
               || e.type === 'levels'
               || (warpPenSafe && e.type === 'penmask' && e.maskId === warpMask.id))))
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
-        && simpleTemporalParent(layer, scene)
+        && simpleTemporalParent(layer, scene, layer.type === 'shape')
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length)
         && (!(layer.masks && layer.masks.length) || warpPenSafe)
@@ -13724,9 +13724,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // historical whole-plate sample. Video masks still need a decoder proof.
         && !(layer.mask && layer.mask.enabled && !warpLegacyMaskSafe)) {
       // Clipping and feathering can differ when the scratch canvas starts at a strip edge.
-      // Use the whole plate for masks so cold seeks match playback pixels at stencil edges.
+      // A transformed shape parent also needs whole-project coordinates at every crossing.
       expand.sampleAt = (at, clip) => sampleAt(at, 0, null,
-        (layer.mask && layer.mask.enabled) || warpPenSafe ? null : clip);
+        (layer.mask && layer.mask.enabled) || warpPenSafe || (layer.type === 'shape' && layer.parent)
+          ? null : clip);
     }
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.

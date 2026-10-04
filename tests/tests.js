@@ -122112,7 +122112,7 @@
       XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
       await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
         onProgress: function () {}, onReady: async function () {} });
-      if (!renderer || !renderer.includes(';c31-shape-timewarp-grade-5'))
+      if (!renderer || !renderer.includes(';c31-shape-timewarp-grade-6'))
         throw new Error('an interrupted Time Warp Scan MP4 can resume an old history-based prefix');
     } finally { XR.signature = previousSignature; FM.scene = previousScene; }
   });
@@ -122695,6 +122695,46 @@
     FM.resetMotionFlowCache();
     if (!same(frame(24 / 30), sequentialScan))
       throw new Error('Time Warp Scan cold seek painted the moving parent at the current time across its old strips');
+  });
+
+  test('690 Time Warp Scan cold-seeks a shape beneath a rotating and scaling null parent', { item: 'TBD', budgetMs: 30000 }, function () {
+    const parent = FM.makeLayer('null', { name: 'turning rig', x: 8, y: 4, start: 0, duration: 2 });
+    parent.start = 0; parent.duration = 2;
+    parent.transform.rotation = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] };
+    parent.transform.scale = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 1.35, e: 'linear' }] };
+    const child = FM.makeLayer('shape', { shape: 'rect', x: 31, y: 24, shapeW: 20, shapeH: 32,
+      fill: '#ffffff', start: 0, duration: 2 });
+    child.start = 0; child.duration = 2; child.parent = parent.id;
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, mode: 0, loop: 0 });
+    child.effects = [warp];
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [parent, child], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const mode of [0, 1]) {
+      warp.params.mode = mode;
+      for (const width of [120, 60]) {
+        child.effects = [];
+        if (same(frame(0.2, width), frame(0.8, width)))
+          throw new Error('Control: the parent transform did not move the source shape');
+        child.effects = [warp];
+        FM.resetMotionFlowCache();
+        let played;
+        for (let f = 0; f <= 24; f++) played = frame(f / 30, width);
+        FM.resetMotionFlowCache();
+        const cold = frame(24 / 30, width);
+        if (!same(cold, played)) {
+          let mismatches = 0;
+          for (let i = 0; i < cold.length; i++) if (cold[i] !== played[i]) mismatches++;
+          throw new Error('Time Warp Scan ' + (mode ? 'Reveal' : 'Freeze') + ' differs after a cold seek under a rotating parent at ' + width + ' px: ' + mismatches + ' channels');
+        }
+      }
+    }
   });
 
   test('690 Frame Stutter cold-seeks a shape under a rotating and scaling null parent', { item: 'TBD', budgetMs: 30000 }, function () {
