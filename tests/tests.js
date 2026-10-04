@@ -121136,4 +121136,26 @@
       throw new Error('Laser Beam jumped at a held Pulse keyframe');
     if (Math.abs(strength(0, 1.5) - 0.8) > 1e-7) throw new Error('Zero Pulse no longer leaves the beam steadily on');
   });
+
+  test('TBD Flame keeps two readable tongues in the 34px Shape picker and on canvas', { item: 'TBD' }, function () {
+    const countBands = (size, box, y) => {
+      const canvas = offscreen(size, size), ctx = canvas.getContext('2d');
+      FM.traceShapePath(ctx, { shape: 'flame' }, box.x, box.y, box.w, box.h);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      const data = ctx.getImageData(0, y, size, 1).data;
+      let bands = 0, inside = false;
+      for (let x = 0; x < size; x++) {
+        const filled = data[x * 4 + 3] > 100;
+        if (filled && !inside) bands++;
+        inside = filled;
+      }
+      return bands;
+    };
+    const picker = { x: 8, y: 8, w: 18, h: 18 };
+    if (![15, 16, 17, 18].some(y => countBands(34, picker, y) >= 2))
+      throw new Error('Flame loses its smaller tongue at the 34px picker size');
+    const canvas = { x: 10, y: 10, w: 280, h: 280 };
+    if (![119, 130, 141, 152].some(y => countBands(300, canvas, y) >= 2))
+      throw new Error('Flame renders as one droplet-like tongue at canvas size');
+  });
 })();

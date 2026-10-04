@@ -16622,9 +16622,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     S.house = [[[0.5,0.04],[0.96,0.44],[0.86,0.44],[0.86,0.96],[0.6,0.96],[0.6,0.66],[0.4,0.66],[0.4,0.96],[0.14,0.96],[0.14,0.44],[0.04,0.44]]];
     (function(){ const polys=[[[0.55,0.98],[0.50,0.98],[0.365,0.06],[0.415,0.05]]]; const sa=Math.atan2(-0.9,-0.14); for(let i=0;i<6;i++){ const f=0.15+i*0.14, cx=0.525-0.14*f, cy=0.98-0.9*f; [[1,sa+0.7],[-1,sa-0.7]].forEach(([sgn,ang])=>{ const lx=cx+sgn*0.078, ly=cy-sgn*0.012; polys.push(rot(circleS(lx,ly,0.095,0.034,6),lx,ly,ang)); }); } S.laurel=polys; })();
     S.bookmark = [[[0.22,0.02],[0.78,0.02],[0.78,0.96],[0.5,0.72],[0.22,0.96]]];
-    // flame: leaning tip → concave lick-notch on the right → swelling belly → round bottom —
-    // the old 14-point blob read as a garlic bulb with a wisp.
-    S.flame = [[[0.575,0.03],[0.565,0.30,1,-0.02,0.115],[0.83,0.66,1,0.005,0.135],[0.50,0.965,1,-0.155,0],[0.17,0.66,1,0.005,-0.135],[0.30,0.32,1,0.045,-0.13]]];
+    // Flame: tall leaning tip, smaller left flicker, swelling belly and round bottom.
+    // The smaller left flicker gives this silhouette two readable tongues at picker size.
+    S.flame = [
+      [[0.575,0.03],[0.565,0.30,1,-0.02,0.115],
+       [0.83,0.66,1,0.005,0.135],[0.50,0.965,1,-0.155,0],
+       [0.17,0.66,1,0.005,-0.135],[0.25,0.43,1,0.025,0],
+       [0.35,0.525,1,0.035,0],
+       [0.39,0.30,1,0,-0.10]],
+    ];
     S.banner = [[[0.02,0.24],[0.98,0.24],[0.86,0.5],[0.98,0.76],[0.02,0.76],[0.14,0.5]]];
     // Silk ribbon (queue 484, decided under rule 16 as a SHAPE beside the banner and flag): a wave with swallowtail
     // ends — the notches are what reads as "ribbon" at 24px, where a plain wave reads as a banner. Smooth points
