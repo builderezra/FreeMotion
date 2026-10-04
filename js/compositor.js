@@ -13563,14 +13563,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       return clip ? { canvas: sample, x: cx, y: cy } : sample;
     } : null;
     const stutterIndex = fx.type === 'framestutter' && layer.effects ? layer.effects.indexOf(fx) : -1;
-    // A shape can be redrawn at the hold boundary with source-local, history-free
+    const stutterMedia = layer.type === 'image' && FM.media && FM.media.get(layer.id);
+    // A shape or decoded image can be redrawn at the hold boundary with source-local, history-free
     // effects ahead of Frame Stutter. Render that prefix at the boundary too, so a
     // keyed grade is held with the moving shape. A later active effect or another
     // temporal source still needs a different stack split and keeps the old path.
-    if (stutterIndex >= 0 && layer.type === 'shape'
+    if (stutterIndex >= 0
+        && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media')
+          || (stutterMedia && stutterMedia.kind === 'image' && stutterMedia.el && !layer._cropEditing))
         && layer.effects.slice(0, stutterIndex).every(e => !e || e.enabled === false || STUTTER_SAFE_UPSTREAM[e.type])
         && !layer.effects.slice(stutterIndex + 1).some(e => e && e.enabled !== false)
-        && FM.fillModeOf(layer) !== 'media' && simpleTemporalParent(layer, scene)
+        && simpleTemporalParent(layer, scene)
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
         && !(layer.mask && layer.mask.enabled)) {

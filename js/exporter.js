@@ -1429,6 +1429,11 @@ window.FM = window.FM || {};
         // Invalidate an interrupted prefix made before that redraw could handle upstream grades.
         resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-upstream-1';
       }
+      if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'image' &&
+          (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
+        // Historical image holds change main-renderer pixels; never join an older cached prefix.
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-image-boundary-1';
+      }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'shape' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp'))) {
         // Historical scan strips can differ from a prefix rendered before deterministic cold seeks.

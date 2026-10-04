@@ -115542,7 +115542,9 @@
   const HEAD482B = {
     'flashdark/image': '873fb6dd/8c8f6a5e/48a39cd0/1cf893d7', 'flashdark/shape': 'c09bbdd7/f34bde0f/39d600d1/cd6ebd73',
     'objectblur/image': '28851006/a32fd362/0171bed1', 'objectblur/shape': 'e4b1831f/6e4e1f21/cb7963c0',
-    'framestutter0/image': 'd6c619cd', 'framestutter1/image': '755ef8d5', 'framestutter2/image': '83e9eef1',
+    // C31: image holds now sample their true boundary; former v17.18 history-based hashes
+    // were d6c619cd / 755ef8d5 / 83e9eef1.
+    'framestutter0/image': 'ce56ef21', 'framestutter1/image': '52e66bf9', 'framestutter2/image': 'c68ce8d9',
     // C31: a simple shape now samples the exact hold boundary. The former v17.18 hashes were
     // cce99039 / 6b0cf5fd / aa1b606d, captured one project frame after off-grid boundaries.
     'framestutter0/shape': 'e81c4609', 'framestutter1/shape': '6972d7c5', 'framestutter2/shape': '9875e595',
@@ -122060,6 +122062,70 @@
       layer.effects = [grade, warp];
       if (same(cold, live)) throw new Error('Control: the scan did not retain a historical plate');
     }
+  });
+
+  test('690 C31 Frame Stutter holds a cropped still at the quantum boundary after a cold seek', { item: 'TBD', budgetMs: 90000 }, async function () {
+    const tex = offscreen(40, 40), g = tex.getContext('2d');
+    g.fillStyle = '#dd5935'; g.fillRect(0, 0, 20, 40);
+    g.fillStyle = '#35b6da'; g.fillRect(20, 0, 20, 40);
+    const image = await createImageBitmap(tex);
+    const png = await new Promise(resolve => tex.toBlob(resolve, 'image/png'));
+    const layer = FM.makeLayer('image', { x: 20, y: 40, start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 100, e: 'linear' }] };
+    layer.crop = { x: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 16, e: 'linear' }] },
+      y: 0, w: 24, h: 40 };
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0, trail: 0.45 });
+    layer.effects = [stutter];
+    FM.media.set(layer.id, { kind: 'image', el: image, width: 40, height: 40,
+      file: new File([png], 'stutter.png', { type: 'image/png' }) });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    try {
+      layer.effects = [];
+      const boundary = frame(0.5, 120), live = frame(0.55, 120);
+      layer.effects = [stutter];
+      if (same(boundary, live)) throw new Error('Control: the moving, cropped source does not change within one hold');
+      let held;
+      for (const width of [120, 60]) for (const mode of [0, 2]) {
+        stutter.params.mode = mode;
+        FM.resetMotionFlowCache();
+        let played;
+        for (let i = 0; i <= 33; i++) played = frame(i / 60, width);
+        FM.resetMotionFlowCache();
+        const cold = frame(0.55, width);
+        if (!same(cold, played)) throw new Error((mode ? 'Trail' : 'Hold') +
+          ' cropped still differs after cold seek at width=' + width);
+        if (width === 120 && mode === 0) {
+          held = cold;
+          if (!same(cold, boundary)) throw new Error('Hold did not sample the still at the 0.5 s boundary');
+        }
+        if (width === 120 && mode === 2 && same(cold, held))
+          throw new Error('Control: Trail did not include the preceding still-image hold');
+      }
+      const XR = FM.exportResume, previousScene = FM.scene, previousSignature = XR && XR.signature;
+      const previousWorker = FM.exportWorker;
+      if (!XR || !FM.exporter || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+        throw new Error('setup: image MP4 resume identity is unavailable');
+      let renderer = null;
+      try {
+        FM.scene = scene; FM.exportWorker = null;
+        XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
+        await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
+          onProgress: function () {}, onReady: async function () {} });
+        if (!renderer || !renderer.includes(';c31-image-boundary-1'))
+          throw new Error('an interrupted image Frame Stutter MP4 can resume an old history-based prefix');
+      } finally {
+        XR.signature = previousSignature; FM.scene = previousScene; FM.exportWorker = previousWorker;
+      }
+    } finally { FM.media.remove(layer.id); image.close(); }
   });
 
   test('690 Time Warp Scan cold-seeks a moving still image at the scanned crossing times', { item: 'TBD', budgetMs: 30000 }, async function () {
