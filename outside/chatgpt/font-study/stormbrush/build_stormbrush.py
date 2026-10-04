@@ -4,11 +4,13 @@ from pathlib import Path
 import math
 import tempfile
 from fontTools.fontBuilder import FontBuilder
+from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFont
 from shapely.geometry import Point, Polygon
 from shapely.geometry.polygon import orient
+from shapely.affinity import scale, translate
 from shapely.ops import unary_union
 
 HERE=Path(__file__).resolve().parent
@@ -355,6 +357,108 @@ def design(bold=False):
       b((233,86),(247,-40),(198,-141),(67,-112),64,19,270))
     p('~',616,b((82,300),(169,451),(267,433),(341,340),18,87,271),
       b((341,340),(427,223),(500,247),(551,391),87,17,272))
+    # Accents follow the same ragged-pen grain and sit above each drawn base.
+    def accent(kind,x,y):
+        if kind=='acute':return line(x+84,y+112,x-69,y,51,273)
+        if kind=='grave':return line(x-83,y+112,x+69,y,50,274)
+        if kind=='circumflex':return unary_union([line(x-98,y,x,y+111,49,275),
+                                                   line(x,y+111,x+101,y,49,276)])
+        if kind=='tilde':return b((x-107,y+35),(x-41,y+139),(x+13,y-24),(x+111,y+79),51,44,277)
+        if kind=='diaeresis':return unary_union([dot(x-78,y+60,34),dot(x+78,y+60,34)])
+        if kind=='ring':return Point(x,y+72).buffer(68,resolution=16).difference(
+            Point(x,y+72).buffer(28 if bold else 34,resolution=16))
+        if kind=='cedilla':return b((x+38,-21),(x+81,-126),(x-84,-182),(x-85,-92),64,15,278)
+        if kind=='macron':return line(x-101,y+71,x+101,y+68,52,279)
+        if kind=='breve':return b((x-103,y+111),(x-98,y+22),(x+85,y+11),(x+107,y+110),52,13,280)
+        if kind=='dot':return dot(x,y+65,33)
+        if kind=='caron':return unary_union([line(x-99,y+111,x,y,49,281),
+                                            line(x,y,x+101,y+111,49,282)])
+        raise ValueError(kind)
+    variants={
+      'A':{'grave':'À','acute':'Á','circumflex':'Â','tilde':'Ã','diaeresis':'Ä','ring':'Å'},
+      'C':{'cedilla':'Ç'},
+      'E':{'grave':'È','acute':'É','circumflex':'Ê','diaeresis':'Ë'},
+      'I':{'grave':'Ì','acute':'Í','circumflex':'Î','diaeresis':'Ï'},
+      'N':{'tilde':'Ñ'},
+      'O':{'grave':'Ò','acute':'Ó','circumflex':'Ô','tilde':'Õ','diaeresis':'Ö'},
+      'U':{'grave':'Ù','acute':'Ú','circumflex':'Û','diaeresis':'Ü'},
+      'Y':{'acute':'Ý'},
+      'a':{'grave':'à','acute':'á','circumflex':'â','tilde':'ã','diaeresis':'ä','ring':'å'},
+      'c':{'cedilla':'ç'},
+      'e':{'grave':'è','acute':'é','circumflex':'ê','diaeresis':'ë'},
+      'i':{'grave':'ì','acute':'í','circumflex':'î','diaeresis':'ï'},
+      'n':{'tilde':'ñ'},
+      'o':{'grave':'ò','acute':'ó','circumflex':'ô','tilde':'õ','diaeresis':'ö'},
+      'u':{'grave':'ù','acute':'ú','circumflex':'û','diaeresis':'ü'},
+      'y':{'acute':'ý','diaeresis':'ÿ'},
+    }
+    for base,forms in variants.items():
+        advance,shape=glyphs[base]
+        if base=='i':shape=shape.difference(Polygon([(-100,540),(400,540),(400,850),(-100,850)]))
+        for mark,ch in forms.items():
+            y=795 if base.isupper() else 586
+            p(ch,advance,shape,accent(mark,advance/2,y))
+    # A few common non-ASCII forms also need real contours in mixed-language titles.
+    p('Ø',700,glyphs['O'][1],line(72,-42,624,773,73,283))
+    p('ø',562,glyphs['o'][1],line(57,-43,512,539,66,284))
+    p('Ð',716,glyphs['D'][1],line(53,394,372,394,66,285))
+    p('ð',562,glyphs['o'][1],line(83,489,482,818,59,286),line(350,785,498,694,43,287))
+    p('Þ',665,
+      b((128,-18),(149,220),(175,520),(144,752),140,18,288),
+      b((163,567),(329,679),(535,582),(546,415),80,110,289),
+      b((546,415),(540,212),(320,173),(153,278),110,15,290))
+    p('þ',565,glyphs['p'][1],line(113,739,115,-233,61,289))
+    p('ß',600,
+      b((113,-13),(131,227),(131,546),(220,674),133,23,291),
+      b((220,674),(350,833),(532,749),(455,535),23,100,292),
+      b((455,535),(386,404),(361,373),(473,285),100,25,293),
+      b((473,285),(635,56),(454,-84),(295,44),25,109,294))
+    p('Æ',1025,glyphs['A'][1],
+      line(454,715,932,713,75,294),line(605,377,864,375,72,295),
+      line(462,12,956,16,80,296),line(601,720,599,-15,113,297))
+    p('æ',827,glyphs['a'][1],
+      b((404,262),(500,367),(668,386),(758,315),23,99,298),
+      b((758,315),(732,520),(533,536),(472,343),99,22,299),
+      b((472,343),(399,127),(552,-77),(771,49),22,104,300))
+    p('Œ',1095,glyphs['O'][1],line(614,715,1029,711,74,301),
+      line(635,372,936,374,72,302),line(618,7,1030,15,78,303),line(623,710,620,7,112,304))
+    p('œ',863,glyphs['o'][1],b((442,262),(523,389),(684,393),(792,316),23,99,305),
+      b((792,316),(776,527),(552,530),(484,339),99,22,306),
+      b((484,339),(405,116),(592,-83),(806,49),22,103,307))
+    p('€',647,b((581,627),(386,814),(114,685),(124,384),20,122,308),
+      b((124,384),(87,84),(358,-97),(586,78),122,14,309),
+      line(66,480,410,477,55,310),line(57,253,405,253,55,311))
+    p('£',604,b((472,603),(367,817),(121,704),(162,465),17,106,312),
+      b((162,465),(218,222),(245,103),(92,23),106,78,313),
+      line(90,338,432,337,57,314),line(88,19,529,20,74,315))
+    p('¥',668,line(90,748,330,391,53,316),line(571,747,330,391,53,317),
+      line(330,391,321,-22,102,318),line(174,314,494,311,57,319),
+      line(166,211,499,208,57,320))
+    p('¢',556,glyphs['c'][1],line(282,571,272,-87,47,321))
+    p('°',338,Point(168,632).buffer(79,resolution=16).difference(
+      Point(168,632).buffer(37 if bold else 43,resolution=16)))
+    p('•',307,dot(153,349,61))
+    p('¡',305,dot(157,665,45),b((154,492),(130,308),(128,108),(158,-29),16,133,322))
+    p('¿',607,dot(303,666,46),b((300,481),(324,318),(130,339),(108,157),19,103,323),
+      b((108,157),(107,-51),(408,-117),(519,92),103,13,324))
+    p('‘',263,dot(146,688,42),b((146,691),(137,756),(190,812),(207,825),62,14,325))
+    p('’',263,dot(123,686,42),b((123,683),(131,615),(91,565),(72,553),62,14,326))
+    p('“',438,glyphs['‘'][1],translate(glyphs['‘'][1],xoff=171))
+    p('”',438,glyphs['’'][1],translate(glyphs['’'][1],xoff=171))
+    p('‚',273,dot(131,37,43),b((130,34),(133,-39),(88,-91),(67,-104),62,13,327))
+    p('„',444,glyphs['‚'][1],translate(glyphs['‚'][1],xoff=173))
+    p('–',630,line(70,279,562,280,67,328))
+    p('—',875,line(70,279,807,281,70,329))
+    p('…',870,dot(145,40,42),dot(435,40,42),dot(725,40,42))
+    p('·',295,dot(148,352,38))
+    p('×',538,line(84,523,455,149,63,330),line(455,523,84,149,63,331))
+    p('÷',538,line(80,333,458,333,62,332),dot(267,542,38),dot(267,126,38))
+    p('©',781,Point(390,377).buffer(338,resolution=28).difference(
+      Point(390,377).buffer(291 if bold else 296,resolution=28)),
+      translate(scale(glyphs['C'][1],xfact=.58,yfact=.57,origin=(0,0)),xoff=192,yoff=151))
+    p('®',781,Point(390,377).buffer(338,resolution=28).difference(
+      Point(390,377).buffer(291 if bold else 296,resolution=28)),
+      translate(scale(glyphs['R'][1],xfact=.56,yfact=.57,origin=(0,0)),xoff=185,yoff=151))
     p(' ',290)
     p('!',305,b((158,220),(190,407),(188,605),(164,744),133,13,39),dot(165,36,45))
     p('?',607,b((82,576),(147,823),(505,804),(510,590),45,94,41),
@@ -385,7 +489,7 @@ def contour(shape):
 
 def build(style):
     g=design(style=='Bold')
-    name=lambda ch: '.notdef' if ch=='\ufffd' else 'space' if ch==' ' else ch if ch.isalnum() else 'uni%04X'%ord(ch)
+    name=lambda ch: '.notdef' if ch=='\ufffd' else 'space' if ch==' ' else ch if ch.isascii() and ch.isalnum() else 'uni%04X'%ord(ch)
     fb=FontBuilder(1000,isTTF=True)
     fb.setupGlyphOrder(['.notdef']+[name(ch) for ch in g if ch!='\ufffd'])
     fb.setupCharacterMap({ord(ch):name(ch) for ch in g if ch!='\ufffd'})
@@ -400,10 +504,18 @@ def build(style):
     fb.setupPost(italicAngle=0,underlinePosition=-140,underlineThickness=70);fb.setupMaxp()
     f=fb.font;f.recalcTimestamp=False;f['head'].macStyle=1 if style=='Bold' else 0
     f['head'].created=f['head'].modified=3873903662
+    addOpenTypeFeaturesFromString(f, '''feature kern {
+        pos A V -43; pos A W -37; pos A Y -40; pos A T -26;
+        pos V A -44; pos W A -37; pos Y A -42; pos T A -26;
+        pos T a -29; pos T o -33; pos T e -28;
+        pos V a -29; pos V o -28; pos V e -24;
+        pos W a -25; pos W o -23; pos Y a -31; pos Y o -33;
+        pos L T -31; pos L Y -30; pos P a -22;
+    } kern;''')
     path=HERE/('fm-stormbrush-'+style.lower()+'.ttf');f.save(path);return path
 
 def specimen(regular,bold):
-    img=Image.new('RGB',(1450,2030),'#11120f');d=ImageDraw.Draw(img)
+    img=Image.new('RGB',(1450,2470),'#11120f');d=ImageDraw.Draw(img)
     label=ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf',22)
     d.text((48,24),'FM STORMBRUSH / original dry-brush proof',font=label,fill='#a4a498')
     for top,size,path,phrase in [(107,96,bold,'STORM FIRE'),(300,64,regular,'WILD MOTION'),
@@ -431,6 +543,13 @@ def specimen(regular,bold):
     d.text((48,1853),'< = > ? @ [ \\ ] ^ _ ` { | } ~',font=ImageFont.truetype(regular,34),fill='#c7dbee')
     d.text((48,1930),'MIXED CASE AND SYMBOLS / 32 px bold',font=label,fill='#a4a498')
     d.text((48,1970),'Storm fire / wild motion! 2026 & beyond?',font=ImageFont.truetype(bold,32),fill='#f6b879')
+    d.text((48,2054),'LATIN ACCENTS / 34 px regular',font=label,fill='#a4a498')
+    d.text((48,2100),'À Á Â Ä Å Ç É Ê Ë Ñ Ó Ö Ø Ü Ý',font=ImageFont.truetype(regular,34),fill='#c7dbee')
+    d.text((48,2160),'à á â ä å ç é ê ë ñ ó ö ø ü ý ÿ',font=ImageFont.truetype(regular,34),fill='#c7dbee')
+    d.text((48,2220),'Café Noël à Zürich',font=ImageFont.truetype(bold,32),fill='#f6b879')
+    d.text((48,2305),'LIGATURES AND SYMBOLS / 34 px regular',font=label,fill='#a4a498')
+    d.text((48,2350),'Æ æ Œ œ ß Ð ð Þ þ € £ ¥ ¢ © ® °',font=ImageFont.truetype(regular,34),fill='#c7dbee')
+    d.text((48,2415),'“Brush” — €25… ¿Sí? ¡Sí!',font=ImageFont.truetype(bold,32),fill='#f6b879')
     img.save(HERE/'specimen.png')
     comparison=Image.new('RGB',(1450,510),'#f2ede1');c=ImageDraw.Draw(comparison)
     c.text((48,20),'ACTUAL-SIZE COMPARISON / STORM FIRE',font=label,fill='#56636b')
