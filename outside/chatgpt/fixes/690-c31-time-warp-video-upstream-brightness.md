@@ -1,0 +1,7 @@
+# C31 — keyed Brightness before video Time Warp Scan
+
+Starting commit: `93b499ce21307fbd701a9c99d37c1950832764cb` on fresh isolated `codex/690-c31-video-grade`. Exact `REQUESTS.md` #690 and the C31 idle-backlog row were rechecked; no matching `audits/*.json` entry.
+
+A straight video with Brightness before Time Warp Scan now redraws the grade at each historical crossing time. The decoder still uses cropped strips and the existing bounded accumulator. Only that point-local upstream effect is admitted; other active effects remain on the old path until their spatial/temporal behavior is proved. Keyed Brightness changes the scan as it plays, so a cold seek and export now show the same historical grades.
+
+Changed files: `js/compositor.js` (narrow eligibility and historical upstream redraw), `index.html` (compositor cache tag 297), one `tests/tests.js` regression tagged `TBD`, and this report. The new graded-video browser regression passed byte-for-byte Freeze cold-seek parity at full and half preview size, distinguished historical from current-time grade, and compared decoded MP4 output against the historical preview pixel with H.264 tolerance. The prior indexed-video scan regression passed. JavaScriptCore syntax and diff checks passed. This is a local C31 increment, not a release; other effects, crop, masks, parents, reverse/speed stacks, simultaneous scans and Worker-native video scan remain open.

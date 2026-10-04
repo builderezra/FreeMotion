@@ -13325,7 +13325,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   FM.renderTimeWarpVideoSource = function (ctx, scene, layer, at, media) {
     const before = { media: FM.media, transparent: FM._exportTransparent,
       exporting: FM._exporting, isolate: FM.isolate, order: FM._dragOrderIds };
-    const sourceLayer = Object.assign({}, layer, { blendMode:'normal', effects:[],
+    const sourceLayer = Object.assign({}, layer, { blendMode:'normal',
+      effects:(layer.effects || []).filter(fx => fx && fx.type !== 'timewarp'),
       behaviors:sansOpacityBehaviors(layer),
       transform:Object.assign({}, layer.transform, {opacity:1}) });
     try {
@@ -14176,8 +14177,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const rec = media.get(layer.id), effects = layer.effects || [];
       if (!rec || !(rec.file instanceof Blob) || rec.kind !== 'video' || !rec.el) continue;
       const active = effects.filter(fx => fx && fx.enabled !== false);
-      if (active.length !== 1 || active[0].type !== 'timewarp') continue;
-      const p = active[0].params || {};
+      if (!((active.length === 1 && active[0].type === 'timewarp')
+          || (active.length === 2 && active[0].type === 'brightness' && active[1].type === 'timewarp'))) continue;
+      const p = active[active.length - 1].params || {};
       if (['duration','direction','mode','loop'].some(k => FM.isAnimated && FM.isAnimated(p[k]))) continue;
       const dur = Math.max(0.05, p.duration == null ? 2.5 : FM.evalProp(p.duration, t));
       const dir = Math.round(FM.evalProp(p.direction, t) || 0);
