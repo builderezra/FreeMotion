@@ -1,0 +1,7 @@
+# C37: Roughen Edges Seed and Evolve
+
+Starting commit: clean preferred `1ac40d1fcad4ecce2e703d32cde3e729637f3566`; isolated branch `codex/690-c37-roughen` in `/private/tmp/freemotion-c37-roughen-20261004`. The standing effect-polish brief is `REQUESTS.md:27375-27399`. The C37 finding and scoped controls are `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1381` and `:777-782`. No matching Roughen Edges C37 record appears in `audits/*.json`.
+
+Roughen Edges now offers Seed (0–999, default 0) and Evolve (0–5×, default 0). Seed selects a deterministic displacement field. Evolve smoothly morphs between fields, with keyed rates accumulated over time so slowing the rate holds its current pattern. Saved instances with absent controls and explicit zero controls retain the original pixels, including reduced-preview scaling. Complexity, Border Erode, and the separate Voronoi and Speed Lines clauses remain outside this scoped change.
+
+Changed files: `js/compositor.js`, `index.html` (compositor cache tag 281→282), `tests/tests.js` (one focused `{ item: 'TBD' }` regression), and this report. The filtered browser regression failed on the starting code because Seed did not change the pattern, then passed 1/1 after the fix. A direct JavaScriptCore comparison of the original and new kernels found zero/absent controls byte-identical in 12 time/preview-scale combinations; syntax and `git diff --check` passed. No protected-file or shared-Claude edit, push, PR, or deployment.

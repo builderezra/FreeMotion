@@ -866,7 +866,7 @@ globalThis.FM = globalThis.FM || {};
         { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
-    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
+    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }, { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 }, { key: 'evolve', label: 'Evolve', min: 0, max: 5, step: 0.1, def: 0, unit: '×' }] },
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 0.02, max: 0.5, step: 0.01, def: 0.12 },
@@ -9033,7 +9033,44 @@ globalThis.FM = globalThis.FM || {};
       }
     },
     lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
-    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
+    roughenedges: function(d,W,H,p,t,ps){
+      var re_ps=(ps>0)?ps:1;
+      var re_amt = fparam(p, 'amount', 6, t);
+      re_amt=Math.max(0,Math.min(20,re_amt))*re_ps;
+      var re_scl = fparam(p, 'scale', 10, t);
+      re_scl=Math.max(2,Math.min(40,re_scl))*re_ps;
+      if(re_amt<=0)return;
+      var re_s=fxSrc(d), re_inv=1/re_scl;
+      var re_seed=Math.round(Math.max(0,Math.min(999,fparam(p,'seed',0,t))));
+      var re_evolve=Math.max(0,Math.min(5,fparam(p,'evolve',0,t)));
+      // Accumulate a keyframed rate so slowing Evolve holds its current pattern.
+      var re_phase=FM.isAnimated(p.evolve)
+        ? FM.integrateProp(p.evolve,0,t,function(u){ var v=FM.evalProp(p.evolve,u); return v>0?(v<5?v:5):0; })
+        : re_evolve*t;
+      var re_frame=Math.floor(re_phase), re_mix=re_phase-re_frame;
+      re_mix=re_mix*re_mix*(3-2*re_mix);
+      // Seed 0 at phase 0 keeps the original hash salts, including saved instances with neither control.
+      var re_salt=re_seed*37+re_frame*107;
+      function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; }
+      function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; }
+      for(var re_y=0;re_y<H;re_y++){
+        for(var re_x=0;re_x<W;re_x++){
+          var re_fx=re_x*re_inv, re_fy=re_y*re_inv;
+          var re_nx=re_noise(re_fx,re_fy,11+re_salt);
+          var re_ny=re_noise(re_fx,re_fy,29+re_salt);
+          if(re_mix>0){
+            re_nx+=(re_noise(re_fx,re_fy,11+re_salt+107)-re_nx)*re_mix;
+            re_ny+=(re_noise(re_fx,re_fy,29+re_salt+107)-re_ny)*re_mix;
+          }
+          var re_dx=(re_nx*2-1)*re_amt;
+          var re_dy=(re_ny*2-1)*re_amt;
+          var re_sx=re_x+(re_dx|0), re_sy=re_y+(re_dy|0);
+          if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1;
+          if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1;
+          d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3];
+        }
+      }
+    },
     /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
        catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
        and silently drop the scaling (#691). Clamping at a flat 8 turned the default 24 (6.72 plate px at the 28%

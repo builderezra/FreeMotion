@@ -119716,6 +119716,37 @@
       throw new Error('Reduced-preview dispatch changed Roughen Edges scale or displacement');
   });
 
+  test('690 Roughen Edges Seed and Evolve change a held edge without changing zero controls', { item: 'TBD' }, function () {
+    const W = 64, H = 64, kernel = FM._FX_TABLES.PIXEL_FX.roughenedges;
+    const make = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = 110; d[i + 1] = 180; d[i + 2] = 220;
+        d[i + 3] = (x - 32) ** 2 + (y - 32) ** 2 < 22 ** 2 ? 255 : 0;
+      }
+      return d;
+    };
+    const render = (params, time, previewScale) => {
+      const d = make();
+      kernel(d, W, H, params, time, previewScale);
+      return d;
+    };
+    const differs = (a, b) => a.some((v, i) => v !== b[i]);
+    const base = { amount: 12, scale: 8 };
+    const still = render(base, 0, 1);
+    if (differs(still, render(base, 0.5, 1)) || differs(still, render({ ...base, seed: 0, evolve: 0 }, 0.5, 1)))
+      throw new Error('Absent and zero Seed/Evolve must keep the original stationary edge');
+    if (!differs(still, render({ ...base, seed: 3 }, 0, 1)))
+      throw new Error('Seed did not select a different Roughen Edges pattern');
+    if (!differs(still, render({ ...base, evolve: 1 }, 0.5, 1)))
+      throw new Error('Evolve did not change the held edge after half a second');
+    const preview = render({ ...base, seed: 3, evolve: 1 }, 0.5, 0.25);
+    const dispatched = make();
+    FM._applyPixelFx(dispatched, { type: 'roughenedges', params: { ...base, seed: 3, evolve: 1 } }, 0.5, W, H, 0.25);
+    if (differs(preview, dispatched)) throw new Error('Seed/Evolve changed reduced-preview dispatch');
+  });
+
   test('690 Breathe speed keyframes advance by accumulated phase', { item: 'TBD' }, function () {
     const breathe = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.pulseopacity;
     if (!breathe) throw new Error('Breathe pixel kernel is missing');
