@@ -1410,6 +1410,12 @@ window.FM = window.FM || {};
         // into a new stateless hold. Worker jobs carry their own bumped revision above.
         resumeRenderer = (resumeRenderer || 'main') + ';c31-video-boundary-1';
       }
+      if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'shape' &&
+          (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
+        // The shape boundary redraw changes main-renderer pixels for the same saved project.
+        // Invalidate an interrupted prefix made before that redraw could handle upstream grades.
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-upstream-1';
+      }
       let sig = null, saved = null;
       if (XR) {
         try {

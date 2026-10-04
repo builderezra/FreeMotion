@@ -121964,7 +121964,7 @@
     }
   });
 
-  test('690 Frame Stutter cold-seeks a moving shape with an upstream keyed grade', { item: 'TBD' }, function () {
+  test('690 Frame Stutter cold-seeks a moving shape with an upstream keyed grade', { item: 'TBD', budgetMs: 30000 }, async function () {
     const layer = FM.makeLayer('shape', {
       shape: 'rect', x: 10, y: 20, shapeW: 12, shapeH: 12,
       fill: '#777777', start: 0, duration: 1,
@@ -121999,6 +121999,21 @@
     const cold = row(0.2);
     if (cold.join() !== sequential.join() || left(cold) !== left(sourceStart))
       throw new Error('Frame Stutter cold seek used the current graded shape instead of its boundary plate');
+
+    // A resumed MP4 made before this new boundary redraw must never splice its
+    // history-based prefix onto the new picture for the same shape project.
+    const XR = FM.exportResume, previousScene = FM.scene, previousSignature = XR && XR.signature;
+    if (!XR || !FM.exporter || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: MP4 resume identity is unavailable');
+    let renderer = null;
+    try {
+      FM.scene = scene;
+      XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
+      await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
+        onProgress: function () {}, onReady: async function () {} });
+      if (!renderer || !renderer.includes(';c31-shape-upstream-1'))
+        throw new Error('an interrupted shape Frame Stutter MP4 can resume an old history-based prefix');
+    } finally { XR.signature = previousSignature; FM.scene = previousScene; }
   });
 
   test('690 Border Frame dashes dots and draws on around its perimeter', { item: 'TBD' }, function () {
