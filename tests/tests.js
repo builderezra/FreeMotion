@@ -121971,6 +121971,7 @@
       return ctx.getImageData(0, 0, cv.width, cv.height).data;
     };
     const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    let loopSequential;
     for (const [mode, direction, loop, targetFrame] of [[0, 0, 0, 24], [1, 0, 0, 24], [0, 2, 1, 54]]) {
       fx.params.mode = mode; fx.params.direction = direction; fx.params.loop = loop;
       FM.resetMotionFlowCache();
@@ -121987,7 +121988,13 @@
       const live = render(target);
       layer.effects = [fx];
       if (same(cold, live)) throw new Error('Control: the moving source and scan did not differ from the live picture');
+      if (loop) loopSequential = sequential;
     }
+    fx.params.mode = 0; fx.params.direction = 2; fx.params.loop = 1;
+    FM.resetMotionFlowCache();
+    render(24 / 30);
+    if (!same(render(54 / 30), loopSequential))
+      throw new Error('a jump by one whole scan cycle reused the earlier frozen band at the same phase');
     fx.params.mode = 0; fx.params.direction = 0; fx.params.loop = 0;
     FM.resetMotionFlowCache();
     let halfSequential;

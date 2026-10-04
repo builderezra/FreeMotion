@@ -14642,7 +14642,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const acc = rec.cv, ac = acc.getContext('2d');
       ac.setTransform(1, 0, 0, 1, 0, 0);
       ac.globalAlpha = 1; ac.globalCompositeOperation = 'source-over'; ac.filter = 'none';
-      const jumped = rec.u == null || u < rec.u - 1e-6 || (u - rec.u) > 0.34;
+      // A whole-cycle seek can land at the SAME phase, so progress alone cannot detect it.
+      const jumped = rec.u == null || u < rec.u - 1e-6 || (u - rec.u) > 0.34
+        || (rec.scanTime != null && (t < rec.scanTime - 1e-6 || t - rec.scanTime > 0.34))
+        || rec.scanMode !== mode || rec.scanDir !== dir || rec.scanLoop !== loop;
       if (jumped) {
         ac.clearRect(0, 0, W, H);
         if (expand && expand.sampleAt && Number.isFinite(tl) && Number.isFinite(t)) {
@@ -14683,7 +14686,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const rg = region(rec.u * span, pos);                // just the strip the bar crossed
         if (rg) ac.drawImage(A, rg[0], rg[1], rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]);
       }
-      rec.u = u; rec.at = performance.now();
+      rec.u = u; rec.scanTime = t; rec.scanMode = mode; rec.scanDir = dir; rec.scanLoop = loop;
+      rec.at = performance.now();
       // Inside the scanned band the frozen frame REPLACES the live one — it cannot be composited
       // over it. A layer with transparent areas (any shape, any keyed clip) would otherwise show
       // both its frozen position and its live one at once, which reads as a ghost, not a freeze.
