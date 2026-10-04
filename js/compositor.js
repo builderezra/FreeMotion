@@ -13563,6 +13563,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } : null;
     const stutterIndex = fx.type === 'framestutter' && layer.effects ? layer.effects.indexOf(fx) : -1;
     const stutterMedia = layer.type === 'image' && FM.media && FM.media.get(layer.id);
+    const stutterUpstream = stutterIndex >= 0 ? layer.effects.slice(0, stutterIndex) : [];
+    const stutterMask = layer.masks && layer.masks.length === 1 ? layer.masks[0] : null;
+    // A single mask marker BEFORE Frame Stutter belongs in the held picture. The mask's path
+    // (including keyframes) is evaluated by drawPenMaskAt when sampleAt redraws at the boundary.
+    // An unmarked/extra mask may wrap the whole stack and must retain its existing order.
+    const stutterPenFx = stutterMask && typeof stutterMask.id === 'string' && stutterUpstream.filter(e => e && e.enabled !== false
+      && e.type === 'penmask' && e.maskId === stutterMask.id);
+    const stutterPenSafe = !!(stutterPenFx && stutterPenFx.length === 1 && stutterMask.enabled !== false);
     // A shape or decoded image can be redrawn at the hold boundary with source-local, history-free
     // effects ahead of Frame Stutter. Render that prefix at the boundary too, so a
     // keyed grade is held with the moving shape. A later active effect or another
@@ -13572,11 +13580,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (stutterIndex >= 0
         && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media')
           || (stutterMedia && stutterMedia.kind === 'image' && stutterMedia.el && !layer._cropEditing))
-        && layer.effects.slice(0, stutterIndex).every(e => !e || e.enabled === false || STUTTER_SAFE_UPSTREAM[e.type])
+        && stutterUpstream.every(e => !e || e.enabled === false || STUTTER_SAFE_UPSTREAM[e.type]
+          || (stutterPenSafe && e.type === 'penmask' && e.maskId === stutterMask.id))
         && !layer.effects.slice(stutterIndex + 1).some(e => e && e.enabled !== false)
         && simpleTemporalParent(layer, scene, true)
         && !layer.fxTimeOffset && layer._clipStart == null
-        && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)) {
+        && !(layer.behaviors && layer.behaviors.length)
+        && (!(layer.masks && layer.masks.length) || stutterPenSafe)) {
       expand.sampleAt = (at, slot) => sampleAt(at, slot, null);
     } else if (fx.type === 'framestutter' && layer.type === 'video' && _frameStutterSources) {
       const prepared = _frameStutterSources.get(layer.id);

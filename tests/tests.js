@@ -122418,6 +122418,39 @@
     }
   });
 
+  test('690 Frame Stutter holds a keyed pen mask placed before it in the effects stack', { item: 'TBD', budgetMs: 30000 }, function () {
+    if (!FM.buildMaskAlpha) throw new Error('the pen-mask renderer is unavailable');
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 40, shapeW: 120, shapeH: 80,
+      fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    const rect = x => [[x, 20], [x + 30, 20], [x + 30, 60], [x, 60]];
+    layer.masks = [{ id: 'stutter-pen', type: 'pen', enabled: true, mode: 'add', closed: true,
+      path: { kf: [{ t: 0, v: rect(0), e: 'linear' }, { t: 1, v: rect(60), e: 'linear' }] } }];
+    const marker = { type: 'penmask', maskId: 'stutter-pen' };
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const width of [120, 60]) {
+      layer.effects = [marker];
+      const boundary = frame(0.5, width), live = frame(0.7, width);
+      if (same(boundary, live)) throw new Error('Control: keyed pen mask did not move');
+      layer.effects = [marker, stutter]; FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 21; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(0.7, width);
+      if (!same(cold, boundary) || !same(cold, played))
+        throw new Error('Frame Stutter did not hold the upstream pen mask at 0.5s, width=' + width);
+    }
+  });
+
   test('690 Frame Stutter cold-seeks decoded video holds through preview and Worker', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined')
       throw new Error('setup: the indexed video fixture needs WebCodecs and the MP4 muxer');
