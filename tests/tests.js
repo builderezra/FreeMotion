@@ -121954,6 +121954,61 @@
       throw new Error('Frame Stutter cold seek lost or changed the previous hold in Trail mode');
   });
 
+  test('690 Time Warp Scan cold seek reconstructs the scanned shape at its crossing frames', { item: 'TBD', budgetMs: 30000 }, async function () {
+    if (!FM.resetMotionFlowCache || !FM.fxRegistry) throw new Error('Time Warp Scan test setup is unavailable');
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 28, shapeH: 72,
+      fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 100, e: 'linear' }] };
+    const fx = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(fx.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [fx];
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const render = (t, w = 120) => {
+      const cv = offscreen(w, Math.round(w * 2 / 3)), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const [mode, direction, loop, targetFrame] of [[0, 0, 0, 24], [1, 0, 0, 24], [0, 2, 1, 54]]) {
+      fx.params.mode = mode; fx.params.direction = direction; fx.params.loop = loop;
+      FM.resetMotionFlowCache();
+      let sequential;
+      for (let frame = 0; frame <= targetFrame; frame++) sequential = render(frame / 30);
+      FM.resetMotionFlowCache();
+      const target = targetFrame / 30;
+      const cold = render(target);
+      if (!same(cold, sequential)) {
+        const first = cold.findIndex((v, i) => v !== sequential[i]);
+        throw new Error((mode ? 'Reveal' : 'Freeze') + ' cold seek replaced historical shape pixels with the picture at the playhead; first differing pixel (' + ((first >> 2) % 120) + ',' + Math.floor((first >> 2) / 120) + ') cold=' + cold[first] + ' sequential=' + sequential[first]);
+      }
+      layer.effects = [];
+      const live = render(target);
+      layer.effects = [fx];
+      if (same(cold, live)) throw new Error('Control: the moving source and scan did not differ from the live picture');
+    }
+    fx.params.mode = 0; fx.params.direction = 0; fx.params.loop = 0;
+    FM.resetMotionFlowCache();
+    let halfSequential;
+    for (let frame = 0; frame <= 24; frame++) halfSequential = render(frame / 30, 60);
+    FM.resetMotionFlowCache();
+    if (!same(render(24 / 30, 60), halfSequential))
+      throw new Error('a half-size preview cold seek differs from sequential scan playback');
+    const XR = FM.exportResume, previousScene = FM.scene, previousSignature = XR && XR.signature;
+    if (!XR || !FM.exporter || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: MP4 resume identity is unavailable');
+    let renderer = null;
+    try {
+      FM.scene = scene;
+      XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
+      await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
+        onProgress: function () {}, onReady: async function () {} });
+      if (!renderer || !renderer.includes(';c31-shape-timewarp-1'))
+        throw new Error('an interrupted Time Warp Scan MP4 can resume an old history-based prefix');
+    } finally { XR.signature = previousSignature; FM.scene = previousScene; }
+  });
+
   test('690 Frame Stutter cold-seeks decoded video holds through preview and Worker', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined')
       throw new Error('setup: the indexed video fixture needs WebCodecs and the MP4 muxer');

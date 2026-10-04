@@ -13376,22 +13376,33 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
     expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
-    // Frame Stutter samples a boundary plate only after its source is available. Video pictures
+    // Temporal effects sample a historical plate only after its source is available. Video pictures
     // are decoded before this synchronous render; no redraw can make a live element travel in time.
-    const sampleAt = fx.type === 'framestutter' ? (at, slot, source) => {
+    const sampleAt = (fx.type === 'framestutter' || fx.type === 'timewarp') ? (at, slot, source, clip) => {
       const key = slot ? 'prior' : 'held';
       let sample = _cfPool[_d][key];
       if (!sample) sample = _cfPool[_d][key] = createCanvas();
-      if (sample.width !== W || sample.height !== H) { sample.width = W; sample.height = H; }
-      sample.__fmRS = ps; sample.__fmOX = OX; sample.__fmOY = OY;
+      // Plain shapes can rasterize directly into a scan-strip-sized viewport instead of clearing
+      // and repainting a full 1080p plate for every output frame in a long sweep.
+      const cx = clip ? Math.max(0, Math.floor(clip[0]) - 2) : 0;
+      const cy = clip ? Math.max(0, Math.floor(clip[1]) - 2) : 0;
+      const cw = clip ? Math.min(W - cx, Math.ceil(clip[0] + clip[2]) - cx + 2) : W;
+      const ch = clip ? Math.min(H - cy, Math.ceil(clip[1] + clip[3]) - cy + 2) : H;
+      if ((!clip && (sample.width !== W || sample.height !== H)) ||
+          (clip && (sample.width < cw || sample.height < ch))) {
+        sample.width = cw; sample.height = ch;
+      }
+      sample.__fmRS = ps; sample.__fmOX = OX + cx / ps; sample.__fmOY = OY + cy / ps;
       const sc = _fx2d(sample);
-      baseT(sc); sc.clearRect(OX, OY, PWp, PHp);
+      sc.setTransform(1, 0, 0, 1, 0, 0);
+      sc.clearRect(0, 0, sample.width, sample.height);
+      baseT(sc);
       sc.globalAlpha = 1; sc.globalCompositeOperation = 'source-over'; sc.filter = 'none';
       const before = _frameStutterMediaSource;
       if (source) _frameStutterMediaSource = { id: layer.id, source };
       try { drawLayer(sc, tmp, at, scene); } // fx is absent in tmp: no recursive Frame Stutter
       finally { _frameStutterMediaSource = before; }
-      return sample;
+      return clip ? { canvas: sample, x: cx, y: cy } : sample;
     } : null;
     const stutterIndex = fx.type === 'framestutter' && layer.effects ? layer.effects.indexOf(fx) : -1;
     // A shape can be redrawn at the hold boundary with source-local, history-free
@@ -13420,6 +13431,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           expand.sampleAt = (at, slot) => sampleAt(at, slot, slot ? prepared.prior : prepared.hold);
         }
       }
+    }
+    // Time Warp Scan needs every historical crossing strip after a cold seek. The cropped source
+    // redraw is safe and fast for an isolated shape; effects ahead of it may read outside the strip
+    // or require whole-plate work, while media needs prepared decoded snapshots.
+    const warpIndex = fx.type === 'timewarp' && layer.effects ? layer.effects.indexOf(fx) : -1;
+    if (warpIndex >= 0 && layer.type === 'shape'
+        && !layer.effects.slice(0, warpIndex).some(e => e && e.enabled !== false)
+        && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
+        && FM.fillModeOf(layer) !== 'media' && !layer.parent
+        && !layer.fxTimeOffset && layer._clipStart == null
+        && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
+        && !(layer.mask && layer.mask.enabled)) {
+      expand.sampleAt = (at, clip) => sampleAt(at, 0, null, clip);
     }
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
@@ -14591,11 +14615,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * side of the bar it supplies: Freeze fills it strip by strip and draws it over the live frame;
      * Reveal fills it once with the whole frame and lets the live frame punch through behind the bar.
      *
-     * Seeking is the hard case. A jump forward or backwards means the strips in between were never
-     * captured, so the accumulator is rebuilt from the current frame — the scanned region freezes at
-     * where you landed rather than at where the bar actually was. It is wrong for one seek and right
-     * from the next frame on, which is the same bargain motionflow makes. */
-    timewarp: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+     * On a cold seek, a history-free shape can redraw the source at each output frame where the bar
+     * crossed a strip. Media and complex stacks still need historical decoded/source plates. */
+    timewarp: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }
       const dur = Math.max(0.05, p.duration == null ? 2.5 : FM.evalProp(p.duration, t));
       const dir = Math.round(FM.evalProp(p.direction, t) || 0);
@@ -14623,7 +14645,39 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const jumped = rec.u == null || u < rec.u - 1e-6 || (u - rec.u) > 0.34;
       if (jumped) {
         ac.clearRect(0, 0, W, H);
-        if (mode === 1) ac.drawImage(A, 0, 0);               // Reveal holds the WHOLE frame
+        if (expand && expand.sampleAt && Number.isFinite(tl) && Number.isFinite(t)) {
+          const fps = Math.max(1, Math.min(240, +(scene && scene.project && scene.project.fps) || 30));
+          const cycleStart = t - Math.max(0, tl) + (loop ? Math.floor(Math.max(0, tl) / dur) * dur : 0);
+          const firstFrame = Math.ceil((cycleStart - 1e-9) * fps);
+          const firstAt = Math.min(t, firstFrame / fps);
+          if (mode === 1) {
+            ac.drawImage(expand.sampleAt(firstAt), 0, 0); // Reveal holds the first frame of this sweep
+          } else {
+            let previous = 0;
+            // Playback fills a strip on each output frame with THAT frame's picture. Reconstruct the
+            // same strips on a seek, including the last partial frame for a non-grid preview time.
+            const through = Math.floor((Math.min(t, cycleStart + dur) + 1e-9) * fps);
+            for (let frame = firstFrame; frame <= through; frame++) {
+              const at = Math.min(t, frame / fps);
+              const next = Math.min(u, Math.max(0, (at - cycleStart) / dur));
+              const rg = region(previous * span, next * span);
+              if (rg) {
+                const source = expand.sampleAt(at, rg);
+                ac.drawImage(source.canvas || source, rg[0] - (source.x || 0), rg[1] - (source.y || 0),
+                  rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]);
+              }
+              previous = next;
+            }
+            if (previous < u - 1e-9) {
+              const rg = region(previous * span, pos);
+              if (rg) {
+                const source = expand.sampleAt(t, rg);
+                ac.drawImage(source.canvas || source, rg[0] - (source.x || 0), rg[1] - (source.y || 0),
+                  rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]);
+              }
+            }
+          }
+        } else if (mode === 1) ac.drawImage(A, 0, 0);
         else { const rg = region(0, pos); if (rg) ac.drawImage(A, rg[0], rg[1], rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]); }
       } else if (mode === 0 && u > rec.u) {
         const rg = region(rec.u * span, pos);                // just the strip the bar crossed
