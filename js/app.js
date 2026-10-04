@@ -135,6 +135,42 @@ window.FM = window.FM || {};
     }
     return null; // the synchronous first paint remains provisional until this decoder lands
   }
+  let _warpPreviewSampler = null, _warpPreviewScene = null, _warpPreviewJob = null;
+  let _warpPreviewRetryKey = '', _warpPreviewRetries = 0;
+  function timeWarpPreviewSources(scene, t) {
+    if (FM._exporting || !FM.timeWarpVideoPlans || !FM.createTimeWarpVideoSampler) return null;
+    const scale = Math.min(1, ctx.canvas.__fmRS || ctx.canvas.width / scene.project.width || 1);
+    const plans = FM.timeWarpVideoPlans(scene, t, FM.media, scale);
+    if (_warpPreviewScene !== scene || !plans.length) {
+      if (_warpPreviewSampler) _warpPreviewSampler.dispose();
+      _warpPreviewSampler = null; _warpPreviewJob = null; _warpPreviewScene = scene;
+      _warpPreviewRetryKey = ''; _warpPreviewRetries = 0;
+    }
+    if (!plans.length || FM.playing) return null;
+    const key = plans[0].key;
+    if (_warpPreviewRetryKey !== key) { _warpPreviewRetryKey = key; _warpPreviewRetries = 0; }
+    if (!_warpPreviewSampler) _warpPreviewSampler = FM.createTimeWarpVideoSampler(FM.media, { timeoutMs:5000 });
+    const sampler = _warpPreviewSampler, ready = sampler.current(scene, t, scale);
+    if (ready) return ready;
+    const job = sampler.prepare(scene, t, scale);
+    if (job !== _warpPreviewJob) {
+      _warpPreviewJob = job;
+      job.then(() => {
+        const now = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time;
+        if (sampler === _warpPreviewSampler && scene === FM.scene
+            && sampler.current(scene, now, scale)) FM.requestRender();
+      }).catch(e => {
+        if (sampler !== _warpPreviewSampler || /CANCELLED/i.test(e.message)) return;
+        console.warn(e);
+        if (scene !== FM.scene || !/timed out|could not be decoded/i.test(e.message)
+            || _warpPreviewRetryKey !== key || _warpPreviewRetries++) return;
+        setTimeout(() => {
+          if (sampler === _warpPreviewSampler && scene === FM.scene && !FM.playing) FM.requestRender();
+        }, 1100);
+      });
+    }
+    return null; // provisional synchronous picture; repaint when the current scan lands
+  }
   function render() {
     if (!ctx) return;
     /* THE PREVIEW ONLY (queue 549). Ezra: "when you go to the end of a layer you can't see it anymore…
@@ -166,9 +202,12 @@ window.FM = window.FM || {};
     }
     const renderAt = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time;
     const stutterSources = stutterPreviewSources(FM.scene, renderAt);
+    const warpSources = timeWarpPreviewSources(FM.scene, renderAt);
     try {
-      if (FM.withFrameStutterSources) FM.withFrameStutterSources(stutterSources, () => FM.renderScene(ctx, FM.scene, renderAt));
-      else FM.renderScene(ctx, FM.scene, renderAt);
+      const paint = () => FM.renderScene(ctx, FM.scene, renderAt);
+      const stutterPaint = () => FM.withFrameStutterSources ? FM.withFrameStutterSources(stutterSources, paint) : paint();
+      if (FM.withTimeWarpVideoSources) FM.withTimeWarpVideoSources(warpSources, stutterPaint);
+      else stutterPaint();
     }
     finally { FM._typingCue = null; }
     if (FM.onionSkin && !FM.playing) drawOnionSkin();

@@ -337,6 +337,11 @@
     for (const layer of scene.layers) {
       if (!layer || layer.type !== 'video' || supportedAudio(layer)) continue;
       if (!supportedVideo(layer)) return false;
+      if ((layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp')) {
+        // Historical video scan plates are prepared by the main-thread decoder. Until a
+        // transferred Worker plate is proven identical, route this export through main.
+        return false;
+      }
       if ((layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter')) {
         // Worker support is intentionally narrower than the effect catalogue: every hold must
         // have a separately decoded boundary picture. Keep unsupported stacks on the main path.

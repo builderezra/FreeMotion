@@ -13309,11 +13309,37 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              expanded: _expPool.filter(Boolean).map(at) };
   };
 
-  let _frameStutterSources = null, _frameStutterMediaSource = null;
+  let _frameStutterSources = null, _frameStutterMediaSource = null, _timeWarpVideoSources = null;
   FM.withFrameStutterSources = function (sources, render) {
     const before = _frameStutterSources;
     _frameStutterSources = sources;
     try { return render(); } finally { _frameStutterSources = before; }
+  };
+  FM.withTimeWarpVideoSources = function (sources, render) {
+    const before = _timeWarpVideoSources;
+    _timeWarpVideoSources = sources;
+    try { return render(); } finally { _timeWarpVideoSources = before; }
+  };
+  // The async decoder draws only the crossed strip on the same project pixel grid as a normal
+  // effect plate. Its source is swapped only during this synchronous draw; no global crosses an await.
+  FM.renderTimeWarpVideoSource = function (ctx, scene, layer, at, media) {
+    const before = { media: FM.media, transparent: FM._exportTransparent,
+      exporting: FM._exporting, isolate: FM.isolate, order: FM._dragOrderIds };
+    const sourceLayer = Object.assign({}, layer, { blendMode:'normal', effects:[],
+      behaviors:sansOpacityBehaviors(layer),
+      transform:Object.assign({}, layer.transform, {opacity:1}) });
+    try {
+      FM.media = media; FM._exportTransparent = true; FM._exporting = true;
+      FM.isolate = null; FM._dragOrderIds = null;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      baseT(ctx);
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
+      drawLayer(ctx, sourceLayer, at, scene);
+    } finally {
+      FM.media = before.media; FM._exportTransparent = before.transparent;
+      FM._exporting = before.exporting; FM.isolate = before.isolate; FM._dragOrderIds = before.order;
+    }
   };
   function simpleTemporalParent(layer, scene) {
     if (!layer.parent) return true;
@@ -14134,6 +14160,45 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     return plans;
   };
+  FM.timeWarpVideoPlans = function (scene, t, media, scale) {
+    if (!scene || !scene.project || !scene.layers || !media || !Number.isFinite(t)) return [];
+    // A camera, parent, crop, speed ramp or other active effect changes the source plate and needs
+    // its own historical-sampling proof. This first video path is deliberately straight.
+    if (scene.layers.some(l => l && l.type === 'camera' && l.visible !== false)) return [];
+    const plans = [];
+    for (const layer of scene.layers) {
+      if (!layer || layer.type !== 'video' || layer.visible === false || !FM.isLayerVisibleAt(layer, t)
+          || layer.parent || layer.crop || layer.reversed || layer.frameBlend || layer.fxTimeOffset
+          || layer._clipStart != null || layer.splitOf || layer.speed && layer.speed !== 1
+          || layer.fillMode && layer.fillMode !== 'none'
+          || layer.masks && layer.masks.length || layer.mask && layer.mask.enabled
+          || layer.behaviors && layer.behaviors.length) continue;
+      const rec = media.get(layer.id), effects = layer.effects || [];
+      if (!rec || !(rec.file instanceof Blob) || rec.kind !== 'video' || !rec.el) continue;
+      const active = effects.filter(fx => fx && fx.enabled !== false);
+      if (active.length !== 1 || active[0].type !== 'timewarp') continue;
+      const p = active[0].params || {};
+      if (['duration','direction','mode','loop'].some(k => FM.isAnimated && FM.isAnimated(p[k]))) continue;
+      const dur = Math.max(0.05, p.duration == null ? 2.5 : FM.evalProp(p.duration, t));
+      const dir = Math.round(FM.evalProp(p.direction, t) || 0);
+      const mode = Math.round(FM.evalProp(p.mode, t) || 0);
+      const loop = Math.round(FM.evalProp(p.loop, t) || 0) === 1;
+      const tl = FM.fxLocalTime(layer, t);
+      if (!Number.isFinite(tl) || !Number.isFinite(dur) || dir < 0 || dir > 3 || mode < 0 || mode > 1) continue;
+      let u = Math.max(0, tl) / dur;
+      u = loop ? u - Math.floor(u) : Math.min(1, u);
+      const cycleStart = t - Math.max(0, tl) + (loop ? Math.floor(Math.max(0, tl) / dur) * dur : 0);
+      const fps = Math.max(1, Math.min(240, +scene.project.fps || 30));
+      const ps = Math.max(0.01, Math.min(1, scale || 1));
+      const W = Math.max(1, Math.round(scene.project.width * ps));
+      const H = Math.max(1, Math.round(scene.project.height * ps));
+      const baseKey = [layer.id, cycleStart.toFixed(6), ps.toFixed(6), fps,
+        dir, mode, loop ? 1 : 0, JSON.stringify(layer)].join('|');
+      plans.push({ id: layer.id, layer, t, dur, dir, mode, loop, u, cycleStart, fps, ps, W, H,
+        baseKey, key: baseKey + '|' + t.toFixed(6) });
+    }
+    return plans.length === 1 ? plans : [];
+  };
 
   const CANVAS_FX = {
     circlearray: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
@@ -14660,12 +14725,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ac.setTransform(1, 0, 0, 1, 0, 0);
       ac.globalAlpha = 1; ac.globalCompositeOperation = 'source-over'; ac.filter = 'none';
       // A whole-cycle seek can land at the SAME phase, so progress alone cannot detect it.
+      const videoSource = _timeWarpVideoSources && _timeWarpVideoSources.get(layer.id);
+      const sourceKey = videoSource && Math.abs(videoSource.t - t) < 1e-6
+        && videoSource.canvas.width === W && videoSource.canvas.height === H ? videoSource.key : '';
       const jumped = rec.u == null || u < rec.u - 1e-6 || (u - rec.u) > 0.34
         || (rec.scanTime != null && (t < rec.scanTime - 1e-6 || t - rec.scanTime > 0.34))
-        || rec.scanMode !== mode || rec.scanDir !== dir || rec.scanLoop !== loop;
+        || rec.scanMode !== mode || rec.scanDir !== dir || rec.scanLoop !== loop
+        || rec.scanSourceKey !== sourceKey;
       if (jumped) {
         ac.clearRect(0, 0, W, H);
-        if (expand && expand.sampleAt && Number.isFinite(tl) && Number.isFinite(t)) {
+        if (sourceKey) ac.drawImage(videoSource.canvas, 0, 0);
+        else if (expand && expand.sampleAt && Number.isFinite(tl) && Number.isFinite(t)) {
           const fps = Math.max(1, Math.min(240, +(scene && scene.project && scene.project.fps) || 30));
           const cycleStart = t - Math.max(0, tl) + (loop ? Math.floor(Math.max(0, tl) / dur) * dur : 0);
           const firstFrame = Math.ceil((cycleStart - 1e-9) * fps);
@@ -14704,6 +14774,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         if (rg) ac.drawImage(A, rg[0], rg[1], rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]);
       }
       rec.u = u; rec.scanTime = t; rec.scanMode = mode; rec.scanDir = dir; rec.scanLoop = loop;
+      rec.scanSourceKey = sourceKey;
       rec.at = performance.now();
       // Inside the scanned band the frozen frame REPLACES the live one — it cannot be composited
       // over it. A layer with transparent areas (any shape, any keyed clip) would otherwise show

@@ -448,4 +448,177 @@ window.FM = window.FM || {};
       decoders.clear();
     } };
   };
+  // C31: a Time Warp Scan cold seek needs every crossed video picture, but never needs to
+  // retain those pictures. Decode on a separate element and accumulate only the scan plate.
+  FM.createTimeWarpVideoSampler = function (media, opts) {
+    opts = opts || {};
+    let disposed = false, pending = null, active = null, decoder = null, chain = Promise.resolve();
+    const aborted = signal => disposed || signal.aborted || (opts.shouldCancel && opts.shouldCancel());
+    const cancelled = () => new Error('CANCELLED');
+    const release = cv => { if (cv) { cv.width = 0; cv.height = 0; } };
+    const closeDecoder = () => {
+      if (!decoder) return;
+      decoder.el.pause(); decoder.el.removeAttribute('src'); decoder.el.load();
+      URL.revokeObjectURL(decoder.url); decoder = null;
+    };
+    const waitFor = (el, ready, signal) => new Promise((resolve, reject) => {
+      let timer, poll, done = false;
+      const finish = err => {
+        if (done) return;
+        done = true; clearTimeout(timer); clearInterval(poll);
+        for (const ev of ['loadeddata','canplay','seeked','error']) el.removeEventListener(ev, onEvent);
+        signal.removeEventListener('abort', onAbort);
+        if (err) reject(err); else resolve();
+      };
+      const onAbort = () => finish(cancelled());
+      const onEvent = () => {
+        if (el.error) finish(new Error('Time Warp Scan video could not be decoded'));
+        else if (ready()) finish();
+      };
+      for (const ev of ['loadeddata','canplay','seeked','error']) el.addEventListener(ev, onEvent);
+      signal.addEventListener('abort', onAbort, { once: true });
+      timer = setTimeout(() => finish(new Error('Time Warp Scan video seek timed out')), opts.timeoutMs || 10000);
+      if (opts.shouldCancel) poll = setInterval(() => { if (opts.shouldCancel()) onAbort(); }, 50);
+      if (aborted(signal)) onAbort(); else onEvent();
+    });
+    const decoderFor = async (rec, signal) => {
+      if (decoder && decoder.rec !== rec) closeDecoder();
+      if (!decoder) {
+        const url = URL.createObjectURL(rec.file), el = document.createElement('video');
+        el.muted = true; el.playsInline = true; el.preload = 'auto'; el.src = url;
+        decoder = { rec, url, el }; el.load();
+      }
+      await waitFor(decoder.el, () => decoder.el.readyState >= 2, signal);
+      if (aborted(signal)) throw cancelled();
+      return decoder.el;
+    };
+    const seek = async (rec, local, signal) => {
+      const el = await decoderFor(rec, signal);
+      const target = FM.frameSeekTarget(local, rec.duration || el.duration);
+      if (Math.abs(el.currentTime - target) >= 1e-4 || el.seeking || el.readyState < 2) {
+        el.currentTime = target;
+        await waitFor(el, () => !el.seeking && el.readyState >= 2
+          && Math.abs(el.currentTime - target) < 1e-3, signal);
+      }
+      if (aborted(signal)) throw cancelled();
+      return el;
+    };
+    const makeCanvas = (w, h) => {
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h; return cv;
+    };
+    const region = (plan, from, to) => {
+      if (to <= from) return null;
+      const {W, H, dir} = plan;
+      if (dir === 0) return [0, from, W, to - from];
+      if (dir === 1) return [0, H - to, W, to - from];
+      if (dir === 2) return [from, 0, to - from, H];
+      return [W - to, 0, to - from, H];
+    };
+    const sample = async (scene, plan, rec, at, source, rg, signal) => {
+      const ps = plan.ps;
+      const x = rg ? Math.max(0, Math.floor(rg[0]) - 2) : 0;
+      const y = rg ? Math.max(0, Math.floor(rg[1]) - 2) : 0;
+      const w = rg ? Math.min(plan.W - x, Math.ceil(rg[0] + rg[2]) - x + 2) : plan.W;
+      const h = rg ? Math.min(plan.H - y, Math.ceil(rg[1] + rg[3]) - y + 2) : plan.H;
+      if (source.width < w || source.height < h) {
+        source.width = Math.max(source.width, w); source.height = Math.max(source.height, h);
+      }
+      source.__fmRS = ps; source.__fmOX = x / ps; source.__fmOY = y / ps;
+      const local = FM.layerLocalTime(plan.layer, at);
+      if (local == null) {
+        source.getContext('2d').clearRect(0, 0, source.width, source.height);
+        return {x, y};
+      }
+      const el = await seek(rec, local, signal);
+      if (aborted(signal)) throw cancelled();
+      const sourceMedia = new Map([[plan.id, Object.assign({}, rec, {el})]]);
+      FM.renderTimeWarpVideoSource(source.getContext('2d'), scene, plan.layer, at, sourceMedia);
+      return {x, y};
+    };
+    const build = async (scene, plan, rec, signal) => {
+      const acc = makeCanvas(plan.W, plan.H), ac = acc.getContext('2d');
+      const source = makeCanvas(plan.W, plan.H);
+      const span = plan.dir < 2 ? plan.H : plan.W;
+      try {
+        const previous = active && active.rec === rec && active.plan.baseKey === plan.baseKey
+          && plan.t > active.plan.t && plan.t - active.plan.t <= 1.5 / plan.fps
+          && plan.u >= active.plan.u ? active.plan : null;
+        if (previous) ac.drawImage(active.canvas, 0, 0);
+        if (plan.mode === 1) {
+          if (!previous) {
+            const firstAt = Math.min(plan.t, Math.ceil((plan.cycleStart - 1e-9) * plan.fps) / plan.fps);
+            await sample(scene, plan, rec, firstAt, source, null, signal);
+            ac.drawImage(source, 0, 0);
+          }
+        } else if (previous) {
+          // Sequential export/playback adds only its new strip. A cold jump runs the loop below.
+          const rg = region(plan, previous.u * span, plan.u * span);
+          if (rg) {
+            const origin = await sample(scene, plan, rec, plan.t, source, rg, signal);
+            ac.drawImage(source, rg[0] - origin.x, rg[1] - origin.y, rg[2], rg[3], ...rg);
+          }
+        } else {
+          let prior = 0;
+          const first = Math.ceil((plan.cycleStart - 1e-9) * plan.fps);
+          const through = Math.floor((Math.min(plan.t, plan.cycleStart + plan.dur) + 1e-9) * plan.fps);
+          for (let frame = first; frame <= through; frame++) {
+            if (aborted(signal)) throw cancelled();
+            const at = Math.min(plan.t, frame / plan.fps);
+            const next = Math.min(plan.u, Math.max(0, (at - plan.cycleStart) / plan.dur));
+            const rg = region(plan, prior * span, next * span);
+            if (rg) {
+              const origin = await sample(scene, plan, rec, at, source, rg, signal);
+              ac.drawImage(source, rg[0] - origin.x, rg[1] - origin.y, rg[2], rg[3], ...rg);
+            }
+            prior = next;
+          }
+          if (prior < plan.u - 1e-9) {
+            const rg = region(plan, prior * span, plan.u * span);
+            if (rg) {
+              const origin = await sample(scene, plan, rec, plan.t, source, rg, signal);
+              ac.drawImage(source, rg[0] - origin.x, rg[1] - origin.y, rg[2], rg[3], ...rg);
+            }
+          }
+        }
+        if (aborted(signal)) throw cancelled();
+        return acc;
+      } catch (e) { release(acc); throw e; }
+      finally { release(source); }
+    };
+    const state = (scene, t, scale) => {
+      const plans = FM.timeWarpVideoPlans(scene, t, media, scale);
+      const plan = plans[0] || null, rec = plan && media.get(plan.id);
+      return {plan, rec, key: plan && plan.key};
+    };
+    const prepare = (scene, t, scale) => {
+      if (disposed) return Promise.reject(cancelled());
+      const {plan, rec, key} = state(scene, t, scale);
+      if (!plan) return Promise.resolve(null);
+      if (active && active.key === key && active.rec === rec)
+        return Promise.resolve(new Map([[plan.id, active]]));
+      if (pending && pending.key === key && pending.rec === rec) return pending.promise;
+      if (pending) pending.controller.abort();
+      const controller = new AbortController(), job = {key, rec, controller, promise:null};
+      pending = job;
+      job.promise = chain = chain.catch(() => {}).then(async () => {
+        if (aborted(controller.signal)) throw cancelled();
+        const canvas = await build(scene, plan, rec, controller.signal);
+        if (active && active.canvas !== canvas) release(active.canvas);
+        active = {key, rec, plan, canvas, t:plan.t};
+        return new Map([[plan.id, active]]);
+      }).finally(() => { if (pending === job) pending = null; });
+      return job.promise;
+    };
+    return {prepare, current(scene, t, scale) {
+      const {key, rec, plan} = state(scene, t, scale);
+      return active && plan && active.key === key && active.rec === rec
+        ? new Map([[plan.id, active]]) : null;
+    }, dispose() {
+      if (disposed) return;
+      disposed = true; if (pending) pending.controller.abort();
+      if (active) release(active.canvas);
+      active = null; closeDecoder();
+    }};
+  };
 })(window.FM);

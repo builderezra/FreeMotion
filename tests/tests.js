@@ -122264,6 +122264,122 @@
     }
   });
 
+  test('690 Time Warp Scan cold-seeks indexed video with bounded decoded scan plates', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createTimeWarpVideoSampler || !FM.timeWarpVideoPlans || !window.Mp4Muxer || typeof VideoEncoder === 'undefined')
+      throw new Error('setup: video scan decoder or indexed MP4 fixture is unavailable');
+    const made = [], file = await hunt2dIndexedClip(30, 30);
+    const source = await hunt2dDecodeMp4(file);
+    if (source.length !== 30 || source.some((v, i) => v !== i))
+      throw new Error('Control: indexed source does not contain frames 0–29');
+    const rec = await hunt2dLoadWarm(file), layer = hunt2dClipLayer(rec, made);
+    layer.duration = 1; layer.trimEnd = 1;
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration:1, direction:0, mode:0, loop:0, barwidth:0, glow:0 });
+    layer.effects = [warp];
+    const sc = hunt2dScene([layer], {duration:1});
+    const sampler = FM.createTimeWarpVideoSampler(FM.media, {timeoutMs:10000});
+    const seekLive = async t => {
+      const target = FM.frameSeekTarget(t, rec.duration), el = rec.el;
+      if (Math.abs(el.currentTime - target) < 1e-4 && !el.seeking && el.readyState >= 2) return;
+      await new Promise((resolve, reject) => {
+        let timer;
+        const finish = err => { clearTimeout(timer); el.removeEventListener('seeked', on);
+          el.removeEventListener('error', on); err ? reject(err) : resolve(); };
+        const on = () => { if (el.error) finish(new Error('live indexed video failed to decode'));
+          else if (!el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - target) < 1e-3) finish(); };
+        el.addEventListener('seeked', on); el.addEventListener('error', on);
+        timer = setTimeout(() => finish(new Error('live indexed video seek timed out')), 10000);
+        el.currentTime = target; on();
+      });
+    };
+    const render = async (t, width, prepared) => {
+      await seekLive(t);
+      const cv = offscreen(width, width / 4), ctx = cv.getContext('2d', {willReadFrequently:true});
+      FM.withTimeWarpVideoSources(prepared, () => FM.renderScene(ctx, sc, t));
+      return Array.from(ctx.getImageData(0, 0, cv.width, cv.height).data);
+    };
+    try {
+      for (const width of [128, 64]) for (const mode of [0, 1]) {
+        warp.params.mode = mode;
+        FM.resetMotionFlowCache();
+        let played;
+        for (let f = 0; f <= 24; f++) played = await render(f / 30, width, null);
+        FM.resetMotionFlowCache();
+        const prepared = await sampler.prepare(sc, 24 / 30, width / 128);
+        const entry = prepared && prepared.get(layer.id);
+        if (!entry || entry.canvas.width !== width || entry.canvas.height !== width / 4)
+          throw new Error('video scan did not retain one output-sized accumulator');
+        const cold = await render(24 / 30, width, prepared);
+        if (cold.join() !== played.join())
+          throw new Error((mode ? 'Reveal' : 'Freeze') + ' indexed video cold seek differs from sequential playback at ' + width + ' px');
+      }
+      warp.params.mode = 0;
+      layer.transform.x = {kf:[{t:0,v:48,e:'linear'},{t:1,v:80,e:'linear'}]};
+      FM.resetMotionFlowCache();
+      let moved;
+      for (let f = 0; f <= 24; f++) moved = await render(f / 30, 128, null);
+      FM.resetMotionFlowCache();
+      const movedSources = await sampler.prepare(sc, 24 / 30, 1);
+      if ((await render(24 / 30, 128, movedSources)).join() !== moved.join())
+        throw new Error('moving video was not sampled at its historical position in crossed strips');
+      layer.transform.x = 64;
+      warp.params.direction = 2;
+      FM.resetMotionFlowCache();
+      let sideways;
+      for (let f = 0; f <= 24; f++) sideways = await render(f / 30, 128, null);
+      FM.resetMotionFlowCache();
+      const sidewaysSources = await sampler.prepare(sc, 24 / 30, 1);
+      if ((await render(24 / 30, 128, sidewaysSources)).join() !== sideways.join())
+        throw new Error('horizontal video scan changed historical source strips');
+      warp.params.direction = 0;
+      warp.params.duration = 0.4; warp.params.loop = 1;
+      FM.resetMotionFlowCache();
+      let looped;
+      for (let f = 0; f <= 21; f++) looped = await render(f / 30, 128, null);
+      FM.resetMotionFlowCache();
+      const loopSources = await sampler.prepare(sc, 21 / 30, 1);
+      if ((await render(21 / 30, 128, loopSources)).join() !== looped.join())
+        throw new Error('looped video scan reused a plate from an earlier sweep');
+      warp.params.duration = 1; warp.params.loop = 0;
+      if (FM.exportWorker && FM.exportWorker.eligible(sc))
+        throw new Error('video scan entered Worker before historical plate parity was proved there');
+      warp.params.mode = 0;
+      const superseded = sampler.prepare(sc, 0.9, 1);
+      const latest = sampler.prepare(sc, 0.6, 1);
+      const cancelled = await superseded.then(() => false, e => /CANCELLED/.test(e.message));
+      if (!cancelled || !(await latest).get(layer.id) || sampler.current(sc, 0.9, 1))
+        throw new Error('a superseded scan job kept or published a stale video plate');
+      FM.resetMotionFlowCache();
+      const expected = [];
+      for (let f = 0; f < 30; f++) {
+        const pixels = await render(f / 30, 128, null);
+        let index = -1;
+        for (let b = 0; b < 8; b++) {
+          const x = b * 16 + 8, red = pixels[(16 * 128 + x) * 4];
+          if (red > 128) index += 1 << b;
+        }
+        expected.push(index);
+      }
+      const previousScene = FM.scene, XR = FM.exportResume;
+      const previousSignature = XR && XR.signature;
+      let renderer = '';
+      try {
+        FM.scene = sc;
+        if (!XR) throw new Error('setup: MP4 resume identity is unavailable');
+        XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
+        const exported = await hunt2dDecodeMp4(await hunt2dExport({fps:30, to:1}));
+        if (exported.length !== 30 || exported.some((v, i) => v !== expected[i]))
+          throw new Error('main MP4 scan differs from continuous playback: expected ' +
+            expected.join(',') + ', got ' + exported.join(','));
+        if (!renderer.includes(';c31-video-timewarp-1'))
+          throw new Error('old MP4 resume parts can splice into a new video scan');
+      } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
+    } finally {
+      sampler.dispose();
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+    }
+  });
+
   test('690 Frame Stutter cold-seeks a moving shape with an upstream keyed grade', { item: 'TBD', budgetMs: 30000 }, async function () {
     const layer = FM.makeLayer('shape', {
       shape: 'rect', x: 10, y: 20, shapeW: 12, shapeH: 12,
