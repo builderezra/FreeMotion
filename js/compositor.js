@@ -14343,7 +14343,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (layer.masks && layer.masks.length && !penSafe) continue;
       if (penSafe && layer.mask && layer.mask.enabled) continue; // combined stencil order needs its own proof
       if (!active.length || active[active.length - 1].type !== 'timewarp'
-          || active.slice(0, -1).some(fx => fx.type !== 'brightness' && fx.type !== 'contrast'
+          || active.slice(0, -1).some(fx => fx.type !== 'brightness' && fx.type !== 'contrast' && fx.type !== 'levels'
             && !(penSafe && fx.type === 'penmask' && fx.maskId === mask.id))) continue;
       const p = active[active.length - 1].params || {};
       if (['duration','direction','mode','loop'].some(k => FM.isAnimated && FM.isAnimated(p[k]))) continue;
