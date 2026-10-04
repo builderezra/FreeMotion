@@ -9,6 +9,7 @@ from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFont
 from shapely.geometry import Polygon, GeometryCollection
+from shapely.affinity import translate, scale as affine_scale
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
@@ -326,6 +327,146 @@ def design(bold=False):
     put('@', 899,oval(450,364,373,392,280,297),
         bowl(448,356,166,183),
         stroke((596,531),(593,302),(612,172),(771,255),q(50),q(11),q(8)))
+    def mark(kind, center, y):
+        if kind == 'grave':
+            return stroke((center-79,y+111),(center-53,y+58),(center+21,y+9),(center+69,y),q(11),q(62),q(7))
+        if kind == 'acute':
+            return stroke((center+81,y+113),(center+44,y+57),(center-26,y+11),(center-75,y),q(11),q(63),q(7))
+        if kind == 'circumflex':
+            return unary_union([stroke((center-106,y),(center-56,y+55),(center-24,y+102),(center,y+111),q(62),q(10),q(5)),
+                stroke((center,y+111),(center+28,y+94),(center+75,y+29),(center+109,y),q(10),q(59),q(5))])
+        if kind == 'tilde':
+            return stroke((center-109,y+23),(center-61,y+116),(center-3,y-2),(center+36,y+46),q(12),q(50),q(9)).union(
+                stroke((center+36,y+46),(center+69,y+89),(center+94,y+55),(center+117,y+83),q(48),q(11),q(5)))
+        if kind == 'diaeresis':
+            return unary_union([oval(center-78,y+56,36,43,8,9),oval(center+78,y+56,36,43,8,9)])
+        if kind == 'ring':
+            return oval(center,y+73,69,70,30-(7 if bold else 0),31-(7 if bold else 0))
+        if kind == 'cedilla':
+            return stroke((center+34,-20),(center+42,-147),(center-105,-133),(center-88,-76),q(64),q(8),q(7))
+        raise ValueError(kind)
+    accented = {
+        'A': {'grave':'À','acute':'Á','circumflex':'Â','tilde':'Ã','diaeresis':'Ä','ring':'Å'},
+        'C': {'cedilla':'Ç'},
+        'E': {'grave':'È','acute':'É','circumflex':'Ê','diaeresis':'Ë'},
+        'I': {'grave':'Ì','acute':'Í','circumflex':'Î','diaeresis':'Ï'},
+        'N': {'tilde':'Ñ'},
+        'O': {'grave':'Ò','acute':'Ó','circumflex':'Ô','tilde':'Õ','diaeresis':'Ö'},
+        'U': {'grave':'Ù','acute':'Ú','circumflex':'Û','diaeresis':'Ü'},
+        'Y': {'acute':'Ý'},
+        'a': {'grave':'à','acute':'á','circumflex':'â','tilde':'ã','diaeresis':'ä','ring':'å'},
+        'c': {'cedilla':'ç'},
+        'e': {'grave':'è','acute':'é','circumflex':'ê','diaeresis':'ë'},
+        'i': {'grave':'ì','acute':'í','circumflex':'î','diaeresis':'ï'},
+        'n': {'tilde':'ñ'},
+        'o': {'grave':'ò','acute':'ó','circumflex':'ô','tilde':'õ','diaeresis':'ö'},
+        'u': {'grave':'ù','acute':'ú','circumflex':'û','diaeresis':'ü'},
+        'y': {'acute':'ý','diaeresis':'ÿ'},
+    }
+    for base, variants in accented.items():
+        advance, original = glyphs[base]
+        if base == 'i': original = sprout(132)
+        for accent_name, ch in variants.items():
+            position = (advance/2, 849 if base.isupper() else 625)
+            put(ch, advance, original, mark(accent_name,*position))
+    put('Ø', 700,glyphs['O'][1],
+        stroke((111,-37),(273,226),(449,527),(594,793),q(77),q(9),q(10)))
+    put('ø', 558,glyphs['o'][1],
+        stroke((94,-40),(185,122),(363,389),(475,554),q(61),q(9),q(10)))
+    # A small set of single-glyph ligatures and regionally common symbols is
+    # drawn explicitly; display fonts should not silently fall back mid-title.
+    put('Æ', 1010,
+        glyphs['A'][1].difference(Polygon([(420,-180),(780,-180),(780,940),(420,940)])),
+        translate(glyphs['E'][1],xoff=386))
+    put('æ', 857,
+        glyphs['a'][1].difference(Polygon([(427,-170),(740,-170),(740,830),(427,830)])),
+        translate(glyphs['e'][1],xoff=311))
+    put('Œ', 1095,
+        glyphs['O'][1].difference(Polygon([(514,-170),(790,-170),(790,940),(514,940)])),
+        translate(glyphs['E'][1],xoff=467))
+    put('œ', 886,
+        glyphs['o'][1].difference(Polygon([(420,-170),(660,-170),(660,820),(420,820)])),
+        translate(glyphs['e'][1],xoff=332))
+    put('Ð', 707,glyphs['D'][1],bridge((56,379),(165,410),(315,396),(414,383),40,23,5))
+    put('ð', 584,glyphs['d'][1],bridge((359,657),(440,706),(514,693),(558,667),34,10,3))
+    put('Þ', 646,reed(116),
+        bridge((146,579),(310,658),(534,571),(540,402),71,73,12),
+        bridge((540,402),(529,235),(333,207),(145,259),73,78,10))
+    put('þ', 582,sprout(111,769,-184),bowl(323))
+    put('ß', 568,sprout(113,765),
+        bridge((155,657),(273,807),(511,713),(468,544),40,66,11),
+        bridge((468,544),(406,418),(356,395),(443,341),66,45,7),
+        bridge((443,341),(558,219),(511,-28),(303,7),45,13,8))
+    put('¡', 300,oval(160,696,44,44,11,11),sprout(151,520))
+    put('¿', 610,oval(303,699,43,43,10,10),
+        bridge((303,481),(328,320),(504,307),(516,157),29,73,10),
+        bridge((516,157),(516,-115),(128,-119),(79,112),73,74,15))
+    put('£', 636,
+        bridge((135,564),(128,819),(511,837),(540,614),55,50,10),
+        stroke((366,584),(283,452),(320,169),(197,21),q(62),q(83),q(13)),
+        bridge((85,314),(216,339),(376,326),(518,318),39,19,5),
+        bridge((85,17),(241,-28),(426,-17),(557,55),57,22,9))
+    put('¢', 620,glyphs['c'][1],sprout(327,635,-108))
+    put('¥', 658,glyphs['Y'][1],
+        bridge((170,292),(279,317),(420,307),(502,290),37,22,5),
+        bridge((185,173),(282,194),(411,183),(486,169),38,22,5))
+    put('€', 686,glyphs['C'][1],
+        bridge((48,452),(201,469),(375,454),(500,450),39,20,5),
+        bridge((48,281),(201,302),(375,292),(500,282),41,21,5))
+    put('°', 355,oval(178,670,104,108,51-(10 if bold else 0),52-(10 if bold else 0)))
+    put('±', 574,glyphs['+'][1],bridge((80,48),(207,76),(375,63),(493,47),46,26,7))
+    put('×', 574,
+        stroke((91,469),(201,385),(366,213),(484,105),q(10),q(68),q(9)),
+        stroke((480,474),(359,362),(206,190),(90,100),q(10),q(68),q(9)))
+    put('÷', 574,glyphs['-'][1],oval(283,495,35,37,8,8),oval(283,106,35,37,8,8))
+    put('§', 640,glyphs['S'][1],translate(glyphs['S'][1],yoff=-265))
+    put('µ', 627,glyphs['u'][1],
+        stroke((112,129),(109,-59),(101,-150),(63,-205),q(81),q(11),q(12)))
+    put('«', 576,
+        stroke((283,496),(180,391),(132,288),(226,162),q(13),q(66),q(9)),
+        stroke((467,496),(364,391),(316,288),(410,162),q(13),q(66),q(9)))
+    put('»', 576,
+        stroke((109,496),(212,391),(260,288),(166,162),q(13),q(66),q(9)),
+        stroke((293,496),(396,391),(444,288),(350,162),q(13),q(66),q(9)))
+    put('·', 304,oval(154,341,43,45,9,9))
+    put('¬', 551,bridge((72,410),(199,438),(378,423),(482,406),44,24,6),
+        stroke((480,409),(485,329),(482,257),(481,201),q(25),q(50),q(5)))
+    put('¯', 491,bridge((65,711),(186,735),(323,724),(427,711),39,22,5))
+    put('´', 304,mark('acute',152,700))
+    put('¨', 304,mark('diaeresis',152,700))
+    put('¸', 304,mark('cedilla',152,0))
+    put('ª', 401,bowl(193,550,131,161),sprout(322,700))
+    put('º', 401,oval(199,553,136,165,70-(9 if bold else 0),97-(9 if bold else 0)))
+    def mini(ch,x,y):
+        return translate(affine_scale(glyphs[ch][1],xfact=.45,yfact=.45,origin=(0,0)),xoff=x,yoff=y)
+    put('¹', 310,mini('1',76,444))
+    put('²', 370,mini('2',55,444))
+    put('³', 370,mini('3',55,444))
+    def fraction(top,bottom):
+        return (mini(top,70,423),mini(bottom,411,0),
+            stroke((236,-30),(337,180),(454,505),(559,773),q(68),q(9),q(10)))
+    put('¼', 755,*fraction('1','4'))
+    put('½', 755,*fraction('1','2'))
+    put('¾', 755,*fraction('3','4'))
+    put('¤', 686,oval(341,367,170,189,91-(12 if bold else 0),103-(12 if bold else 0)),
+        stroke((92,679),(151,591),(220,505),(270,463),q(11),q(48),q(8)),
+        stroke((588,679),(530,591),(461,505),(412,463),q(11),q(48),q(8)),
+        stroke((92,47),(151,129),(220,213),(270,264),q(11),q(48),q(8)),
+        stroke((588,47),(530,129),(461,213),(412,264),q(11),q(48),q(8)))
+    put('¦', 301,
+        stroke((160,746),(178,687),(145,579),(151,481),q(9),q(54),q(7)),
+        stroke((157,270),(175,206),(146,99),(151,-10),q(58),q(92),q(8)))
+    copyright_ring = oval(360,365,301,328,247,276)
+    put('©', 721,copyright_ring,
+        translate(affine_scale(glyphs['C'][1],xfact=.47,yfact=.48,origin=(0,0)),xoff=190,yoff=184))
+    put('®', 721,copyright_ring,
+        translate(affine_scale(glyphs['R'][1],xfact=.47,yfact=.48,origin=(0,0)),xoff=190,yoff=184))
+    put('¶', 667,
+        bridge((118,583),(97,819),(549,784),(573,579),62,69,12),
+        bridge((573,579),(581,436),(378,342),(253,382),69,74,12),
+        reed(398,746),reed(536,746))
+    put('\u00ad', 432,glyphs['-'][1])
+    put('\u00a0', 280)
     # A visible missing-glyph box is better than silent blanks while this is a proof.
     put('\ufffd', 620, bridge((87,5),(75,350),(75,735),(87,750),28,28),
         bridge((87,750),(300,750),(518,750),(532,750),28,28),
@@ -352,7 +493,7 @@ def contour(shape):
 def build(style):
     glyphs = design(style == 'Bold')
     def name(ch):
-        return '.notdef' if ch == '\ufffd' else 'space' if ch == ' ' else ch if ch.isalnum() else 'uni%04X' % ord(ch)
+        return '.notdef' if ch == '\ufffd' else 'space' if ch == ' ' else ch if ch.isascii() and ch.isalnum() else 'uni%04X' % ord(ch)
     order = ['.notdef'] + [name(ch) for ch in glyphs if ch != '\ufffd']
     fb = FontBuilder(1000, isTTF=True)
     fb.setupGlyphOrder(order)
@@ -382,7 +523,7 @@ def build(style):
 
 
 def specimen(regular, bold):
-    image = Image.new('RGB', (1500, 1710), '#0b171c')
+    image = Image.new('RGB', (1500, 2050), '#0b171c')
     draw = ImageDraw.Draw(image)
     label = ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf', 23)
     draw.text((48, 30), 'FM REED / original type proof', font=label, fill='#91a7ac')
@@ -410,6 +551,12 @@ def specimen(regular, bold):
     draw.text((48, 1512), '!?.,:; -_ /\\ +={}[]() @#&%$', font=ImageFont.truetype(regular, 34), fill='#f1e6d0')
     draw.text((48, 1590), 'PUNCTUATION / 34 px bold', font=label, fill='#91a7ac')
     draw.text((48, 1630), '!?.,:; -_ /\\ +={}[]() @#&%$', font=ImageFont.truetype(bold, 34), fill='#f1e6d0')
+    draw.text((48, 1720), 'ACCENTS / 34 px regular and bold', font=label, fill='#91a7ac')
+    draw.text((48, 1760), 'ÀÁÂÃÄÅ ÇÈÉÊË ÑÒÓÔÕÖ ØÙÚÛÜ', font=ImageFont.truetype(regular, 34), fill='#d0efc9')
+    draw.text((48, 1817), 'àáâãäå çèéêë ñòóôõö øùúûü ýÿ', font=ImageFont.truetype(bold, 34), fill='#d0efc9')
+    draw.text((48, 1900), 'LIGATURES AND SYMBOLS / 34 px regular', font=label, fill='#91a7ac')
+    draw.text((48, 1940), 'Ææ Œœ Ðð Þþ ß  £¢¥€ ©®¶ ¼½¾', font=ImageFont.truetype(regular, 34), fill='#f1e6d0')
+    draw.text((48, 1995), 'Ææ Œœ Ðð Þþ ß  £¢¥€ ©®¶ ¼½¾', font=ImageFont.truetype(bold, 34), fill='#f1e6d0')
     image.save(HERE/'specimen.png')
 
     comparison = Image.new('RGB', (1500, 760), '#f2ede1')
