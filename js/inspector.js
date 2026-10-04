@@ -1118,10 +1118,15 @@ window.FM = window.FM || {};
   // AM signature control: the ruler scrubber + an editable value box.
   function fxScrubber(fx, p, layer, fxIdx) {
     const row = el('div', 'fx-scrub-row');
+    // Some saved effect values are fractions but are clearer as percentages in the panel.
+    // Convert only at the control boundary so old positions and animated values keep rendering exactly.
+    const displayScale = p.displayScale || 1;
+    const displayMin = p.min * displayScale, displayMax = p.max * displayScale;
+    const displayStep = p.step * displayScale;
     /* Decimals follow the step, and the third tier is not decoration: queue 559 takes the wipes to a
        0.005 step, and at 2dp every second value it can hold would render as the same number — a readout
        that lies about what the slider is doing is worse than a coarse slider. */
-    const prec = p.step >= 1 ? 0 : (p.step >= 0.1 ? 1 : (p.step >= 0.01 ? 2 : 3));
+    const prec = displayStep >= 1 ? 0 : (displayStep >= 0.1 ? 1 : (displayStep >= 0.01 ? 2 : 3));
     // An ABSENT param renders at the effect's own fallback — `legacy` where the schema declares one
     // (a param added to an existing effect keeps that effect's original hardcoded value), otherwise
     // the default. Same rule fxSegment already follows; a slider that displays a number the renderer
@@ -1130,7 +1135,7 @@ window.FM = window.FM || {};
     /* …and a slider that FOLLOWS another (#482 polish 2.1, Wiggle's Vertical amount) renders, while absent, at the value of the
        slider it names, so that is what it shows — the Light Leak edge-colour rule on a number. */
     const followed = p.follows ? () => { const c = fx.params[p.follows]; const v = c == null ? NaN : FM.evalProp(c, FM.time); return isFinite(v) ? v : fallback; } : null;
-    const read = () => { const c = fx.params[p.key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : (followed ? followed() : fallback)); };
+    const read = () => { const c = fx.params[p.key]; return (FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : (followed ? followed() : fallback))) * displayScale; };
     // keyframe gutter (only for keyframable params)
     if (p.keyframable) {
       const c = fx.params[p.key];
@@ -1161,17 +1166,17 @@ window.FM = window.FM || {};
        the pill's INSET, not the pill: there is nothing to select until it has a value. Only where its neighbours are pills. */
     if (!nameEl.classList.contains('kf-selectable') && fx.params && fx.params[p.key] == null && layer && Object.keys(fx.params).some(k => kfInScope(layer, 'fx:' + k))) nameEl.classList.add('kf-inset');
     row.appendChild(nameEl);
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, displayMin);
     function apply(v, commit) {
-      v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
-      FM.setProp(fx.params, p.key, v, FM.time);
+      v = Math.max(displayMin, Math.min(displayMax, Math.round(v / displayStep) * displayStep));
+      FM.setProp(fx.params, p.key, v / displayScale, FM.time);
       valBox.value = v.toFixed(prec) + (p.unit || '');
       FM.requestRender();
       if (commit && FM.history) FM.history.commit();
       row.dispatchEvent(new CustomEvent('fx-range-set'));   // a slider that follows this one re-reads it (#482 polish 2.1)
     }
     const strip = tickStrip({
-      min: p.min, max: p.max, step: p.step, unit: p.unit, dflt: p.default, read: read, q: p.q,
+      min: displayMin, max: displayMax, step: displayStep, unit: p.unit, dflt: p.default * displayScale, read: read, q: p.q,
       apply: v => apply(v, false),
       // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
       release: () => { if (FM.isAnimated(fx.params[p.key])) afterFx(); else if (FM.history) FM.history.commit(); },

@@ -121489,6 +121489,52 @@
       throw new Error('Control: numeric Rate no longer uses the original ring schedule');
   });
 
+  test('690 Lens Flare controls change optics while saved positions and six rays stay intact', { item: 'TBD' }, function () {
+    const defs = FM.fxRegistry.paramsOf('lensflare') || [];
+    const byKey = Object.fromEntries(defs.map(d => [d.key, d]));
+    for (const key of ['size', 'rays', 'rotation', 'ghosts', 'halo', 'streak'])
+      if (!byKey[key] || byKey[key].keyframable === false) throw new Error(key + ' is not an animatable Lens Flare control');
+    if (byKey.x.displayScale !== 100 || byKey.y.displayScale !== 100 || byKey.x.max !== 1 || byKey.y.max !== 1)
+      throw new Error('Light X/Y must display percent without changing saved 0–1 positions');
+    const W = 128, H = 128, source = { x: 0.5, y: 0.5, intensity: 0.75 };
+    const render = extra => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 12; d[i + 3] = 255; }
+      FM._pixelFx.lensflare(d, W, H, Object.assign({}, source, extra), 0.25, 1);
+      return d;
+    };
+    const at = (d, x, y) => d[(Math.round(y) * W + Math.round(x)) * 4];
+    const legacy = render({});
+    const explicit = render({ size: 100, rays: 6, rotation: 0, ghosts: 0, halo: 0, streak: 0 });
+    for (let i = 0; i < legacy.length; i++) if (legacy[i] !== explicit[i])
+      throw new Error('new default at byte ' + i + ' changed the legacy six-ray output');
+    const eight = render({ rays: 8 });
+    const none = render({ rays: 0 });
+    const radius = 42, cx = source.x * W, cy = source.y * H;
+    for (let k = 0; k < 8; k++) {
+      const angle = k * Math.PI / 4, between = angle + Math.PI / 8;
+      const peak = at(eight, cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
+      const valley = at(eight, cx + radius * Math.cos(between), cy + radius * Math.sin(between));
+      if (peak < valley + 8) throw new Error('ray ' + k + ' has no clear peak over its neighbour');
+    }
+    if (at(eight, cx + radius, cy) <= at(none, cx + radius, cy) + 8)
+      throw new Error('Rays 0 did not remove the radial light');
+    if (at(render({ size: 200 }), cx + 30, cy + 20) <= at(legacy, cx + 30, cy + 20))
+      throw new Error('Core size does not widen the flare');
+    const rotated = render({ rays: 8, rotation: 22.5 });
+    if (at(rotated, cx + radius, cy) >= at(eight, cx + radius, cy))
+      throw new Error('Rotation did not turn the ray pattern');
+    if (at(render({ halo: 1 }), cx + 35, cy + 4) <= at(legacy, cx + 35, cy + 4))
+      throw new Error('Ring does not add a visible halo');
+    if (at(render({ streak: 1, rays: 0 }), cx + 56, cy) <= at(none, cx + 56, cy))
+      throw new Error('Anamorphic streak does not add a horizontal beam');
+    const offAxis = { x: 0.2, y: 0.35 };
+    const noGhost = render(Object.assign({}, offAxis, { rays: 0 }));
+    const withGhost = render(Object.assign({}, offAxis, { rays: 0, ghosts: 3 }));
+    if (at(withGhost, W * 0.5, H * 0.5) <= at(noGhost, W * 0.5, H * 0.5))
+      throw new Error('Ghosts add no secondary light along the lens axis');
+  });
+
   test('690 Voronoi Cells Seed changes the field without changing saved defaults', { item: 'TBD' }, function () {
     const seed = FM.fxRegistry.paramsOf('voronoi').find(param => param.key === 'seed');
     if (!seed || seed.min !== 0 || seed.max !== 999 || seed.default !== 0)

@@ -865,7 +865,18 @@ globalThis.FM = globalThis.FM || {};
         { key: 'dither', label: 'Dither', def: 0, options: [[0, 'Off'], [1, 'On']] },
         { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
-    { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
+    { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays', params: [
+      // Percent presentation only: saved positions and keyframes stay in their original 0–1 units.
+      { key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3, unit: '%', displayScale: 100 },
+      { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3, unit: '%', displayScale: 100 },
+      { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 },
+      { key: 'size', label: 'Core size', min: 20, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'rays', label: 'Rays', min: 0, max: 16, step: 1, def: 6 },
+      { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, def: 0, unit: '°' },
+      { key: 'ghosts', label: 'Ghosts', min: 0, max: 8, step: 1, def: 0 },
+      { key: 'halo', label: 'Ring', min: 0, max: 1, step: 0.05, def: 0 },
+      { key: 'streak', label: 'Anamorphic streak', min: 0, max: 1, step: 0.05, def: 0 },
+    ] },
     { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }, { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 }, { key: 'evolve', label: 'Evolve', min: 0, max: 5, step: 0.1, def: 0, unit: '×' }, { key: 'complexity', label: 'Complexity', min: 1, max: 4, step: 1, def: 1 }, { key: 'border', label: 'Erode', min: 0, max: 20, step: 1, def: 0, unit: 'px' }] },
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
@@ -5640,6 +5651,77 @@ globalThis.FM = globalThis.FM || {};
       d[i+2] = cb*source+d[i+2]*behind; d[i+3] = out*255;
     }
   }
+  // Opt-in optics for Lens Flare. The old six-ray kernel below remains untouched for every
+  // saved/default flare, including its exact byte-level queue 474 comparison.
+  function drawLensFlareCustom(d, W, H, p, t, size, rays, rotation, ghosts, halo, streak) {
+    const x = Math.max(0, Math.min(1, fparam(p, 'x', 0.3, t))) * W;
+    const y = Math.max(0, Math.min(1, fparam(p, 'y', 0.3, t))) * H;
+    const intensity = Math.max(0, Math.min(2, fparam(p, 'intensity', 1, t)));
+    if (intensity <= 0) return;
+    const sig = Math.max(1, W * 0.18 * size / 100);
+    const den = 2 * sig * sig;
+    const maxR = Math.hypot(W, H) || 1;
+    const flare = hexToRGB(p.color || '#fff0d2');
+    const raysColor = hexToRGB(p.color2 || '#fff0d2');
+    const rad = rotation * Math.PI / 180;
+    const cosR = Math.cos(rad), sinR = Math.sin(rad);
+    const step = rays ? Math.PI * 2 / rays : 0;
+    const legacyRay = rays === 6 && rotation === 0;
+    const ringR = sig * 1.5, ringW = Math.max(1, sig * 0.16);
+    const streakW = Math.max(1, sig * 0.055);
+    const ghostCenters = [];
+    for (let n = 0; n < ghosts; n++) {
+      const travel = 2 * (n + 1) / (ghosts + 1);
+      const gx = x + (W * 0.5 - x) * travel;
+      const gy = y + (H * 0.5 - y) * travel;
+      const radius = Math.max(2, sig * (0.14 + 0.055 * n));
+      ghostCenters.push({ x: gx, y: gy, den: 2 * radius * radius,
+        limit2: 9 * radius * radius, strength: 66 / (1 + n * 0.3) });
+    }
+    for (let py = 0; py < H; py++) {
+      for (let px = 0; px < W; px++) {
+        const i = (py * W + px) * 4;
+        if (!d[i + 3]) continue;
+        const dx = px - x, dy = py - y, d2 = dx * dx + dy * dy;
+        const dist = Math.sqrt(d2);
+        let core = intensity * 255 * Math.exp(-d2 / den);
+        let ray = 0;
+        if (rays && dist > 0.5) {
+          const angle = Math.atan2(dy, dx) - rad;
+          // Six unrotated rays retain queue 474's nearest-ray angle and five-squaring path.
+          const rayStep = legacyRay ? 1.0471975512 : step;
+          const delta = angle - Math.round(angle / rayStep) * rayStep;
+          const aligned = Math.cos(delta);
+          if (aligned > 0) {
+            const b2 = aligned * aligned, b4 = b2 * b2, b8 = b4 * b4, b16 = b8 * b8;
+            ray = intensity * 150 * b16 * b16 * Math.exp(-dist / (maxR * 0.35));
+          }
+        }
+        if (halo) {
+          const v = (dist - ringR) / ringW;
+          if (Math.abs(v) < 4) core += intensity * halo * 95 * Math.exp(-v * v * 0.5);
+        }
+        if (streak) {
+          const along = dx * cosR + dy * sinR;
+          const across = dy * cosR - dx * sinR;
+          if (Math.abs(across) < streakW * 5)
+            ray += intensity * streak * 130 * Math.exp(-Math.abs(across) / streakW)
+              * Math.exp(-Math.abs(along) / (maxR * 0.48));
+        }
+        if (ghostCenters.length) for (const g of ghostCenters) {
+          const gx = px - g.x, gy = py - g.y, gd2 = gx * gx + gy * gy;
+          if (gd2 < g.limit2) ray += intensity * g.strength * Math.exp(-gd2 / g.den);
+        }
+        const addR = (flare[0] * core + raysColor[0] * ray) / 255;
+        const addG = (flare[1] * core + raysColor[1] * ray) / 255;
+        const addB = (flare[2] * core + raysColor[2] * ray) / 255;
+        d[i] = 255 - (255 - d[i]) * (255 - addR) / 255;
+        d[i + 1] = 255 - (255 - d[i + 1]) * (255 - addG) / 255;
+        d[i + 2] = 255 - (255 - d[i + 2]) * (255 - addB) / 255;
+      }
+    }
+  }
+
   const PIXEL_FX = {
     deflicker: function (d, W, H, p, t, ps, bb, layer, scene, fx) {
       const strength = clamp01(fparam(p, 'strength', 100, t) / 100);
@@ -9049,7 +9131,7 @@ globalThis.FM = globalThis.FM || {};
         }
       }
     },
-    lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
+    lensflare: function(d,W,H,p,t){ var lfSize=Math.max(20,Math.min(400,fparam(p,'size',100,t))); var lfRays=Math.max(0,Math.min(16,Math.round(fparam(p,'rays',6,t)))); var lfRotation=Math.max(-180,Math.min(180,fparam(p,'rotation',0,t))); var lfGhosts=Math.max(0,Math.min(8,Math.round(fparam(p,'ghosts',0,t)))); var lfHalo=Math.max(0,Math.min(1,fparam(p,'halo',0,t))); var lfStreak=Math.max(0,Math.min(1,fparam(p,'streak',0,t))); if(lfSize!==100||lfRays!==6||lfRotation!==0||lfGhosts!==0||lfHalo!==0||lfStreak!==0){ drawLensFlareCustom(d,W,H,p,t,lfSize,lfRays,lfRotation,lfGhosts,lfHalo,lfStreak); return; } var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
     roughenedges: function(d,W,H,p,t,ps){
       var re_ps=(ps>0)?ps:1;
       var re_amt = fparam(p, 'amount', 6, t);
