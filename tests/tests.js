@@ -122356,6 +122356,36 @@
     }
   });
 
+  test('690 Frame Stutter holds a moving shape through a hard vector mask', { item: 'TBD', budgetMs: 30000 }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 52, shapeH: 44,
+      fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 1, v: 80, e: 'linear' }] };
+    layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 40, h: 32, feather: 0, invert: false };
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    for (const invert of [false, true]) for (const width of [120, 60]) {
+      layer.mask.invert = invert; layer.effects = [];
+      const boundary = frame(0.5, width), live = frame(0.7, width);
+      if (same(boundary, live)) throw new Error('Control: masked shape did not move');
+      layer.effects = [stutter]; FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 21; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(0.7, width);
+      if (!same(cold, boundary) || !same(cold, played))
+        throw new Error('Hard mask lost the exact hold boundary, invert=' + invert + ', width=' + width);
+    }
+  });
+
   test('690 Frame Stutter cold-seeks decoded video holds through preview and Worker', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined' || typeof window.Mp4Muxer === 'undefined')
       throw new Error('setup: the indexed video fixture needs WebCodecs and the MP4 muxer');

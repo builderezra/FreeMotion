@@ -13575,7 +13575,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         && simpleTemporalParent(layer, scene, true)
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
-        && !(layer.mask && layer.mask.enabled)) {
+        // A hard vector clip is part of the whole-plate redraw at the hold boundary. Feathered
+        // masks use a separate shared offscreen pass and retain the history-based fallback.
+        && !(layer.mask && layer.mask.enabled && (layer.mask.feather || 0) > 0)) {
       expand.sampleAt = (at, slot) => sampleAt(at, slot, null);
     } else if (fx.type === 'framestutter' && layer.type === 'video' && _frameStutterSources) {
       const prepared = _frameStutterSources.get(layer.id);
