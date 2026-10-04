@@ -1350,6 +1350,7 @@ globalThis.FM = globalThis.FM || {};
     ], color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'voronoi', label: 'Voronoi Cells', params: [
       { key: 'cells', label: 'Cells', min: 4, max: 48, step: 1, def: 16 },
+      { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
       { key: 'edge', label: 'Edge', min: 0, max: 1, step: 0.02, def: 0.35 },
       /* Queue 350. Default 0.4, not 0 — he asked for it to move, so a cell field you have just added
          should already be alive; 0 is still there for anyone who wants the frozen pattern, and an
@@ -10035,7 +10036,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
-    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
+    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); var vcSeed=Math.round(fparam(p,'seed',0,t)); if(vcSeed<0)vcSeed=0; else if(vcSeed>999)vcSeed=999; function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+(k+vcSeed*101)*74.7)*43758.5453; return n-Math.floor(n); }
       /* MOTION (queue 350). Ezra: "Voronoi cells needs the ability to make them move, and I want it to
          actually move in a cool way and not just a drag it up and down, like they're alive."
          "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field, which

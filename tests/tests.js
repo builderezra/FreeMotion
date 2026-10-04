@@ -121457,6 +121457,34 @@
       throw new Error('Control: numeric Rate no longer uses the original ring schedule');
   });
 
+  test('690 Voronoi Cells Seed changes the field without changing saved defaults', { item: 'TBD' }, function () {
+    const seed = FM.fxRegistry.paramsOf('voronoi').find(param => param.key === 'seed');
+    if (!seed || seed.min !== 0 || seed.max !== 999 || seed.default !== 0)
+      throw new Error('Voronoi Cells has no Seed 0–999 control');
+    const kernel = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.voronoi;
+    if (!kernel) throw new Error('Voronoi Cells kernel is unavailable');
+    const W = 64, H = 48;
+    const render = (params, time) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = (x * 19 + y * 7) % 256;
+        d[i + 1] = (x * 3 + y * 29) % 256;
+        d[i + 2] = (x * 11 + y * 13) % 256;
+        d[i + 3] = 255;
+      }
+      kernel(d, W, H, { cells: 9, edge: 0.5, motion: 0.4, speed: 0.5, ...params }, time);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    for (const time of [0, 1.25]) {
+      const previous = render({}, time), zero = render({ seed: 0 }, time), third = render({ seed: 3 }, time);
+      if (!same(previous, zero)) throw new Error('Seed 0 changed an existing Voronoi field at t=' + time);
+      if (same(zero, third)) throw new Error('Seed 3 did not change Voronoi cells at t=' + time);
+      if (!same(third, render({ seed: 3 }, time))) throw new Error('Voronoi Seed is not deterministic at t=' + time);
+    }
+  });
+
   test('690 Voronoi Cells keeps its wandering pattern when keyed Speed stops', { item: 'TBD' }, function () {
     const voronoi = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.voronoi;
     if (!voronoi || !FM.integrateProp) throw new Error('Voronoi Cells or the rate integrator is unavailable');

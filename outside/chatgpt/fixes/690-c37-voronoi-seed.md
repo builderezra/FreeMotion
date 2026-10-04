@@ -1,0 +1,7 @@
+#690 / C37 — Voronoi Cells Seed
+
+Starting commit: clean `a08764295ec87f3741d67fddcfb13d1ceb9f2b25` on the preferred Codex-only checkpoint. This change is isolated on `codex/690-c37-voronoi-seed` and has not been integrated or released.
+
+The standing #690 request is at `REQUESTS.md:27375-27403`. The exact C37 finding at `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1381` says Voronoi has no seed; plan §11.5 at `:762-768` requires Seed 0–999 and a different field for 3 versus 0. No separate Voronoi Seed record was found in `audits/*.json`. Voronoi already had Cells, Edge, Motion, Speed and Wall thickness, so this adds only Seed. Seed 0 preserves the old cell-position and motion-phase hashes; another seed shifts their hash channels deterministically without turning independent cell motion into a whole-field slide.
+
+Changed files: `js/compositor.js`, `index.html` (compositor cache tag 285→286), `tests/tests.js` (one focused `{ item: 'TBD' }` regression), and this report. The new regression failed 0/1 before implementation because the control was absent, then passed 1/1 in the isolated browser. It compares saved/zero and Seed 3 at still and moving times and requires repeatability. An attempted existing Voronoi motion control did not reach assertions because the app frame omitted core scripts; two other app-frame starts did the same before a fresh local origin completed the new check. JavaScriptCore syntax and `git diff --check` passed. No installed-device rendering was checked.
