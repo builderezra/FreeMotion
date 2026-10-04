@@ -14990,7 +14990,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const S = ps || 1;
       const amt = fparam(p, 'amount', 40, t) * S, spd = fparam(p, 'speed', 2, t);
       const ay = p.amounty == null ? amt : Math.max(0, FM.evalProp(p.amounty, t)) * S;   // Vertical amount: absent = Amount (it follows)
-      const sd = Math.round(fparam(p, 'seed', 0, t)), u = tl * spd;
+      const sd = Math.round(fparam(p, 'seed', 0, t));
+      const u = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : tl * spd;
       const oct = Math.max(1, Math.min(4, fparam(p, 'octaves', 1, t)));
       /* One noise per channel: 0 sideways, 1 up and down, 2 rotation, 3 scale. Pattern 0's sideways and up-down are the old
          wiggle's own lines — wnoise at u and u + 100 — and every other channel, and every channel of any other Pattern, draws
