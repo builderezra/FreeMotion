@@ -13599,7 +13599,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (warpIndex >= 0
         && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media'
           && layer.effects.slice(0, warpIndex).every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'))
-          || (still && still.kind === 'image' && still.el && !layer.crop
+          || (still && still.kind === 'image' && still.el && !layer._cropEditing
             && !layer.effects.slice(0, warpIndex).some(e => e && e.enabled !== false)))
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
         && simpleTemporalParent(layer, scene)
