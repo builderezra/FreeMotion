@@ -119628,6 +119628,31 @@
       throw new Error('Dark Glow failed to darken or retained luminance from the intervening glow');
   });
 
+  test('690 Dark Glow can cast a dark halo past transparent edges', { item: 'TBD' }, function () {
+    const W = 120, H = 90, kernel = FM._FX_TABLES.PIXEL_FX.darkglow;
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 40; y < 50; y++) for (let x = 55; x < 65; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = 30; d[i + 3] = 255;
+      }
+      return d;
+    }
+    const params = { amount: 1, radius: 6, threshold: 40 };
+    const old = source(), off = source(), on = source();
+    kernel(old, W, H, params, 0);
+    kernel(off, W, H, { ...params, outside: 0 }, 0);
+    kernel(on, W, H, { ...params, outside: 1 }, 0);
+    const edge = (45 * W + 52) * 4;
+    if (old.some((v, i) => v !== off[i]) || old[edge + 3] !== 0)
+      throw new Error('The default Dark Glow changed saved-project transparency');
+    if (on[edge + 3] <= 0 || on[edge] || on[edge + 1] || on[edge + 2])
+      throw new Error('Dark Glow did not cast a black halo three pixels outside the shape');
+    const crop = FM._cropIdentity('darkglow', source(), W, H, { ...params, outside: 1 }, 0, 1);
+    if (!crop.same || crop.area >= crop.plate)
+      throw new Error('The cropped Dark Glow clipped its outside halo');
+  });
+
   test('690 glow scratch releases its largest frame after rendering stops', { item: 'TBD' }, function () {
     const info = FM._glowScratchInfo, release = FM._releaseGlowScratch;
     if (!info || !release) throw new Error('Glow idle-release controls are unavailable');
