@@ -103931,6 +103931,51 @@
       });
     });
   });
+  test('TBD Heart and Ring thumbnails match the shapes they add, with no stray polygon centre dot', { item: 'TBD' }, async function () {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    try {
+      FM.addMenu.render(host, { variant: 'panel' });
+      const tab = host.querySelector('.addmenu-tab[data-key="shape"]');
+      if (!tab) throw new Error('the Shape tab is missing');
+      tab.click(); await sleep(80);
+      const tile = name => {
+        const b = [...host.querySelectorAll('button')].find(el => el.title === name);
+        if (!b) throw new Error(name + ' tile is missing');
+        return b;
+      };
+      // Compare the REAL menu path and compositor at the same 18x18 box. Filling the
+      // Heart outline for this comparison checks its contour, independently of icon paint.
+      const agreement = (name, kind) => {
+        const path = tile(name).querySelector('.addmenu-ic svg path');
+        if (!path || !path.getAttribute('d')) throw new Error(name + ' has no shape path');
+        const icon = offscreen(240, 240), real = offscreen(240, 240);
+        const a = icon.getContext('2d'), b = real.getContext('2d');
+        a.scale(10, 10); a.fill(new Path2D(path.getAttribute('d')), path.getAttribute('fill-rule') || 'nonzero');
+        b.scale(10, 10); FM.traceShapePath(b, { shape: kind }, 3, 3, 18, 18); b.fill();
+        const A = a.getImageData(0, 0, 240, 240).data, B = b.getImageData(0, 0, 240, 240).data;
+        let both = 0, either = 0;
+        for (let i = 3; i < A.length; i += 4) {
+          const x = A[i] > 127, y = B[i] > 127;
+          if (x && y) both++;
+          if (x || y) either++;
+        }
+        return either ? both / either : 0;
+      };
+      const heart = agreement('Heart', 'heart');
+      if (heart < 0.97) throw new Error('Heart tile differs from the actual heart (silhouette agreement ' + heart.toFixed(3) + ')');
+      const ring = tile('Ring'), ringPath = ring.querySelector('.addmenu-ic svg path');
+      if (!ringPath || ringPath.getAttribute('fill') !== 'currentColor' || ringPath.getAttribute('fill-rule') !== 'evenodd') {
+        throw new Error('Ring tile is not a filled band with a transparent hole');
+      }
+      const ringMatch = agreement('Ring', 'ring');
+      if (ringMatch < 0.97) throw new Error('Ring tile differs from the actual annulus (silhouette agreement ' + ringMatch.toFixed(3) + ')');
+      ['Hexagon', 'Polygon'].forEach(name => {
+        if (tile(name).querySelector('.addmenu-ic circle')) throw new Error(name + ' tile has a centre dot the added shape does not');
+      });
+    } finally { host.remove(); }
+  });
   /* ---------------- queue 960: Import media and Import audio match ----------------
    * His words: "The import media button and the import audio button both have some discrepancies. Like they both look
    * different. I think you should make them both have like the shiny look that the import media button has. But also
