@@ -9,3 +9,5 @@ The first specimen was held by an independent visual critic because its 32 px ra
 Changed files: `fonts/original/fm-palais-deco-{regular,bold}.woff2`; `fonts/original/source/{build_palais_deco.py,render_palais_deco.py,fm-palais-deco-preview.png,fonts.css,ORIGINALITY_AND_USE.md}`; `fonts/README.md`; `js/studio-fonts.js`; `index.html` (font-script cache tag 11 → 12); `tests/tests.js` (one `{ item: 'TBD' }` regression); and this report.
 
 Checks: fontTools reopened both WOFF2 files and confirmed 227 mapped characters, complete printable ASCII with nonempty glyphs, weights 400/700, installable embedding and GPOS kerning. The focused browser regression passed 1/1 for both weights, canvas ink, export source and live picker. JavaScriptCore and Python syntax plus `git diff --check` passed. Installed-iPhone appearance and full video export remain unverified. No shared Claude checkout edit, push, PR or deployment.
+
+Integrated on the reviewed local branch as `63b21924`; the same focused browser regression passed 1/1 there, with changed-script syntax and diff checks. The branch remains local and unreleased.
