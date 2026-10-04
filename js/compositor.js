@@ -219,6 +219,7 @@ globalThis.FM = globalThis.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
       { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' },   // queue 904: welded to the horizontal/vertical axes
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },
     ] },
     { type: 'titlewarp', label: 'Title Warp', desc: 'Bend a title around its own visible bounds, with ten arc, wave and shape presets. Also works on shapes and images.', params: [
       { key: 'style', label: 'Shape', options: [[0, 'Arc'], [1, 'Arch'], [2, 'Bulge'], [3, 'Flag'], [4, 'Wave'], [5, 'Fish'], [6, 'Rise'], [7, 'Inflate'], [8, 'Squeeze'], [9, 'Twist']], def: 0 },
@@ -231,6 +232,9 @@ globalThis.FM = globalThis.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },
+      { key: 'decay', label: 'Falloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'reach', label: 'Radius', min: 0, max: 200, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'twirl', label: 'Twirl', params: [
       { key: 'amount', label: 'Twist', min: -360, max: 360, step: 1, def: 140, unit: '°' },
@@ -528,6 +532,9 @@ globalThis.FM = globalThis.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },
+      { key: 'decay', label: 'Falloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'reach', label: 'Radius', min: 0, max: 200, step: 1, def: 0, unit: '%' },
     ] },
     // ---- batch 10 ----
     { type: 'bumpmap', label: 'Bump Map', params: [
@@ -12220,7 +12227,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // ratio (46 = 38 * 1.2105…) so a single control moves both without changing the default look.
       const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
       const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
-      const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+      const ph = pre ? pre.ph : warpWavePhase(p, t);
       const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
       /* ANGLE (queue 904): the same two sines, in axes turned by the angle — the wave runs along the turned x, the cross wave along the
          turned y — so a flag or banner can wave on a diagonal. 0 is the line below, untouched; a turned wave is not separable, so its
@@ -12258,7 +12265,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ripple: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
       const C = pre || WARP_FX.ripple.prep(W, H, cx, cy, maxR, p, t, ps);
       const dx = x - C.cx, dy = y - C.cy, r = Math.hypot(dx, dy) || 1e-6;
-      const off = C.amp * Math.sin(r / C.wl - C.ph);   // minus: rising phase sends the rings OUTWARD
+      if (C.reach && r > C.reach) return [x, y];
+      let off = C.amp * Math.sin(r / C.wl - C.ph);   // minus: rising phase sends the rings OUTWARD
+      if (C.decay) off *= Math.exp(-C.decay * r * C.imaxR);
+      if (C.reach) { const f = 1 - r / C.reach; off *= f * f * (3 - 2 * f); }
       return [x + (dx / r) * off, y + (dy / r) * off];
     },
     _rippleLegacy: function (x, y, W, H, cx, cy, maxR, p, t, ps) {
@@ -12394,7 +12404,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the same point by different float arithmetic, 42 of 1365 sampled coordinates truncated to a
      * NEIGHBOURING source pixel. A 1-pixel resample across 3% of a warp is a fine price for twirl's
      * 1.89x and a poor one for 1.11x. The `prep` hoist below stays — that part is free and exact. */
-    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
+    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); if(C.reach&&cuR>C.reach)return [x,y]; var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); if(C.decay)cuSw*=Math.exp(-C.decay*cuR*C.imaxR); if(C.reach){var f=1-cuR/C.reach;cuSw*=f*f*(3-2*f);} var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
     /* THE GENUINE PRE-PREP CURL (queue 779) — the kernel as it was before v13.28 hoisted its constants, resolving amount /
      * wavelength / phase per call. It is the reference the tol-0 equality row measures the prepped kernel against.
      * History, because it was got wrong twice: v13.29 added `_curlLegacy` as a copy of the ALREADY-prepped curl, so the
@@ -12716,12 +12726,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * frame constant becoming a multiply by its reciprocal, which is exact for the values involved.
    * These three were the 4th, 5th and 11th dearest effects of 198 (curl 33.9 ms, fractalwarp 28.3,
    * tunnel 21.0, measured at half resolution by `tools/_phoneprobe.py --sweep`). */
+  function warpWavePhase(p, t) {
+    let ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+    if (p.speed == null) return ph;
+    const rate = v => Number.isFinite(v) ? Math.max(-720, Math.min(720, v)) : 0;
+    const travel = FM.isAnimated(p.speed)
+      ? FM.integrateProp(p.speed, 0, t, u => rate(FM.evalProp(p.speed, u)))
+      : rate(FM.evalProp(p.speed, t)) * t;
+    if (travel) ph += travel * Math.PI / 180;
+    return ph;
+  }
   WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
     var ccx = wCx(p, t, W, cx), ccy = wCy(p, t, H, cy);
     var amt = fparam(p, 'amount', 0.5, t); if (amt < -1) amt = -1; if (amt > 1) amt = 1;
     var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
-    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph };
+    var ph = warpWavePhase(p, t);
+    var decay = fparam(p, 'decay', 0, t); decay = decay > 0 ? Math.min(100, decay) / 25 : 0;
+    var reach = fparam(p, 'reach', 0, t); reach = reach > 0 ? Math.min(200, reach) * maxR / 100 : 0;
+    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph, decay: decay, reach: reach, imaxR: 1 / maxR };
   };
 
   WARP_FX.innerpinch.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -12738,8 +12760,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var rcx = wCx(p, t, W, cx), rcy = wCy(p, t, H, cy);
     var amp = (FM.evalProp(p.amount, t) || 0) * k;
     var wl = (p.wavelength == null ? 20 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
-    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph };
+    var ph = warpWavePhase(p, t);
+    var decay = fparam(p, 'decay', 0, t); decay = decay > 0 ? Math.min(100, decay) / 25 : 0;
+    var reach = fparam(p, 'reach', 0, t); reach = reach > 0 ? Math.min(200, reach) * maxR / 100 : 0;
+    return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph, decay: decay, reach: reach, imaxR: 1 / maxR };
   };
 
   WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -12797,7 +12821,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   WARP_FX.ripple.glsl = [
     'vec2 dxy = xy - vec2(u_cx, u_cy);',
     'float r = max(length(dxy), 1e-6);',
+    'if (u_reach > 0.0 && r > u_reach) return xy;',
     'float off = u_amp * sin(r / u_wl - u_ph);',
+    'if (u_decay > 0.0) off *= exp(-u_decay * r * u_imaxR);',
+    'if (u_reach > 0.0) { float f = 1.0 - r / u_reach; off *= f * f * (3.0 - 2.0 * f); }',
     'return xy + (dxy / r) * off;'
   ].join('\n');
 
@@ -13021,7 +13048,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'vec2 dxy = xy - c;',
     'float r = length(dxy);',
     'if (r < 1e-6) return c;',
+    'if (u_reach > 0.0 && r > u_reach) return xy;',
     'float sw = u_amt * 0.6 * sin(r / u_wl - u_ph);',
+    'if (u_decay > 0.0) sw *= exp(-u_decay * r * u_imaxR);',
+    'if (u_reach > 0.0) { float f = 1.0 - r / u_reach; sw *= f * f * (3.0 - 2.0 * f); }',
     'float a = atan(dxy.y, dxy.x) + sw;',
     'return c + vec2(cos(a), sin(a)) * r;'
   ].join('\n');
@@ -13118,7 +13148,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const amp = (FM.evalProp(p.amount, t) || 0) * k;
     const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
     const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
-    const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+    const ph = warpWavePhase(p, t);
     const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
     const SX = new Float64Array(H), SY = new Float64Array(W);
     for (let y = 0; y < H; y++) SX[y] = amp * Math.sin(y / wl + ph);          // the x shift, by ROW

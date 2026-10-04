@@ -124720,4 +124720,56 @@
       throw new Error('zero-degree turn does not retain the original picture');
   });
 
+  test('690 C30 Ripple and Curl fall off smoothly and keyed wave speed integrates', { item: 'TBD' }, function () {
+    const warp = FM._warpFx, W = 240, H = 240, cx = 120, cy = 120, maxR = Math.hypot(cx, cy);
+    const map = (type, p, x, y, t) => {
+      const k = warp[type], pre = k.prep(W, H, cx, cy, maxR, p, t, 1);
+      return k(x, y, W, H, cx, cy, maxR, p, t, 1, pre);
+    };
+    const dist = (type, p, x, y) => { const q = map(type, p, x, y, 0); return Math.hypot(q[0] - x, q[1] - y); };
+    for (const type of ['wave', 'ripple', 'curl']) {
+      const def = FM.EFFECTS.find(d => d.type === type);
+      if (!def || !def.params.some(p => p.key === 'speed' && p.def === 0)) throw new Error(type + ' is missing Wave speed');
+      const base = { amount: type === 'curl' ? 0.5 : 22, wavelength: 40, phase: 0 };
+      const keyed = { kf: [{ t: 0, v: 0 }, { t: 1, v: 180 }] };
+      const at90 = map(type, Object.assign({}, base, { phase: 90 }), 130, 140, 1);
+      for (const speed of [90, keyed]) {
+        const got = map(type, Object.assign({}, base, { speed }), 130, 140, 1);
+        if (Math.hypot(got[0] - at90[0], got[1] - at90[1]) > 1e-5)
+          throw new Error(type + ' treats speed as current rate times all elapsed time: ' + [got, at90]);
+      }
+    }
+    for (const type of ['ripple', 'curl']) {
+      const def = FM.EFFECTS.find(d => d.type === type);
+      if (!['decay', 'reach'].every(key => def.params.some(p => p.key === key && p.def === 0)))
+        throw new Error(type + ' lacks compatible Falloff/Radius controls');
+      const p = { amount: type === 'ripple' ? 22 : 0.5, wavelength: 40, phase: 90 };
+      const explicit = Object.assign({}, p, { decay: 0, reach: 0, speed: 0 });
+      const near = [130, 120], far = [239, 239];
+      if (map(type, p, ...near, 0).join() !== map(type, explicit, ...near, 0).join())
+        throw new Error(type + ' changed its saved default mapping');
+      const nearBase = dist(type, p, ...near), farBase = dist(type, p, ...far);
+      const damped = Object.assign({}, p, { decay: 100 });
+      if (!(nearBase > 0.1 && farBase > 0.1 && dist(type, damped, ...near) / nearBase > 0.6 &&
+            dist(type, damped, ...far) / farBase < 0.1))
+        throw new Error(type + ' Falloff does not damp the corner relative to the centre');
+      const finite = Object.assign({}, p, { reach: 30 });
+      if (!(dist(type, finite, ...near) > 0 && dist(type, finite, ...near) < nearBase &&
+            dist(type, finite, ...far) === 0))
+        throw new Error(type + ' Radius does not taper smoothly to its boundary');
+    }
+    if (FM.glWarp && FM.glWarp.available && FM.glWarp.available()) {
+      const plate = document.createElement('canvas'); plate.width = W; plate.height = H;
+      const c = plate.getContext('2d');
+      for (let x = 0; x < W; x++) { c.fillStyle = 'rgb(' + x + ',0,0)'; c.fillRect(x, 0, 1, H); }
+      const p = { amount: 22, wavelength: 40, phase: 90, reach: 30 };
+      const k = warp.ripple, result = FM.glWarp.run(plate, W, H, k.glsl, k.prep(W, H, cx, cy, maxR, p, 0, 1));
+      if (!result) throw new Error('available Ripple shader fell back with Radius uniforms');
+      const out = document.createElement('canvas'); out.width = W; out.height = H;
+      const o = out.getContext('2d'); o.drawImage(result, 0, 0);
+      const near = o.getImageData(130, 120, 1, 1).data[0], far = o.getImageData(200, 200, 1, 1).data[0];
+      if (!(near < 125 && Math.abs(far - 200) <= 1)) throw new Error('Ripple GPU Radius did not move near pixels while preserving far pixels: ' + [near, far]);
+    }
+  });
+
 })();
