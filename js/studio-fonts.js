@@ -17,6 +17,7 @@
     { id: 'fm-signal-pixel', name: 'FM Signal Pixel', family: 'FM Signal Pixel', css: '"FM Signal Pixel", sans-serif', regular: 'original/fm-signal-pixel-regular.woff2', bold: 'original/fm-signal-pixel-bold.woff2', group: 'original' },
     { id: 'fm-aperture-stencil', name: 'FM Aperture Stencil', family: 'FM Aperture Stencil', css: '"FM Aperture Stencil", sans-serif', regular: 'original/fm-aperture-stencil-regular.woff2', bold: 'original/fm-aperture-stencil-bold.woff2', group: 'original' },
     { id: 'fm-ribbon-script', name: 'FM Ribbon Script', family: 'FM Ribbon Script', css: '"FM Ribbon Script", cursive', regular: 'original/fm-ribbon-script-regular.woff2', bold: 'original/fm-ribbon-script-bold.woff2', group: 'original' },
+    { id: 'fm-palais-deco', name: 'FM Palais Deco', family: 'FM Palais Deco', css: '"FM Palais Deco", sans-serif', regular: 'original/fm-palais-deco-regular.woff2', bold: 'original/fm-palais-deco-bold.woff2', group: 'original' },
     { id: 'inter', name: 'Inter', family: 'Inter', css: 'Inter, sans-serif', regular: 'open/inter/Inter-Regular.woff2', bold: 'open/inter/Inter-Bold.woff2', group: 'open' },
     { id: 'outfit', name: 'Outfit', family: 'Outfit', css: '"Outfit", sans-serif', regular: 'open/outfit/Outfit-Regular.woff2', bold: 'open/outfit/Outfit-Bold.woff2', group: 'open' },
     { id: 'space-grotesk', name: 'Space Grotesk', family: 'Space Grotesk', css: '"Space Grotesk", sans-serif', regular: 'open/space-grotesk/SpaceGrotesk-Regular.woff2', bold: 'open/space-grotesk/SpaceGrotesk-Bold.woff2', group: 'open' },

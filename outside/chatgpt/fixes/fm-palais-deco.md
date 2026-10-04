@@ -1,0 +1,11 @@
+# FM Palais Deco original font
+
+Starting commit: `ecba735dd15b744c034af715d8ae669b83f0a614` on the clean reviewed branch. Isolated branch: `codex/fm-font11-original` in `/private/tmp/freemotion-font11-20261004`.
+
+This adds an eleventh distinct original FreeMotion family: tall narrow Art Deco capitals and numerals with continuous engraved channels inside solid-ended stems, plus matching 80%-height small-cap lowercase. It is visibly separate from Aperture Stencil's broken chamfered forms and the existing serif, geometric, marker, script and pixel designs. All glyph skeletons and metrics are drawn in `build_palais_deco.py`, with no external font, outline, image or metrics input. Regular and Bold WOFF2 faces each map 227 characters, including printable ASCII and common accented Latin characters.
+
+The first specimen was held by an independent visual critic because its 32 px rails were too fine and its solid rounded lowercase clashed with the engraved capitals. The rails were thickened and the lowercase was changed to matching engraved small caps. A fresh independent review accepted the revised 32 px and 48 px specimen as coherent, readable and distinct, with no visible clipping or collisions. The engraved detail needs enough size and contrast in video; use it for titles and labels at roughly 32 px or larger. The original-font request remains open for more distinct designs.
+
+Changed files: `fonts/original/fm-palais-deco-{regular,bold}.woff2`; `fonts/original/source/{build_palais_deco.py,render_palais_deco.py,fm-palais-deco-preview.png,fonts.css,ORIGINALITY_AND_USE.md}`; `fonts/README.md`; `js/studio-fonts.js`; `index.html` (font-script cache tag 11 → 12); `tests/tests.js` (one `{ item: 'TBD' }` regression); and this report.
+
+Checks: fontTools reopened both WOFF2 files and confirmed 227 mapped characters, complete printable ASCII with nonempty glyphs, weights 400/700, installable embedding and GPOS kerning. The focused browser regression passed 1/1 for both weights, canvas ink, export source and live picker. JavaScriptCore and Python syntax plus `git diff --check` passed. Installed-iPhone appearance and full video export remain unverified. No shared Claude checkout edit, push, PR or deployment.
