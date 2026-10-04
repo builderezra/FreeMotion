@@ -13618,7 +13618,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const warpPenSafe = !!(warpPenFx && warpPenFx.length === 1 && warpMask.enabled !== false);
     const warpLegacyMaskSafe = !!(layer.mask && layer.mask.enabled
       && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media')
-        || (still && still.kind === 'image' && still.el && !layer.mask.feather)));
+        || (still && still.kind === 'image' && still.el)));
     if (warpIndex >= 0
         && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media'
           && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'
@@ -13631,8 +13631,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         && !layer.fxTimeOffset && layer._clipStart == null
         && !(layer.behaviors && layer.behaviors.length)
         && (!(layer.masks && layer.masks.length) || warpPenSafe)
-        // Legacy vector masks are evaluated at each historical sample. Decoded stills
-        // can use a hard mask; feathered stills and video need separate renderer proofs.
+        // Legacy vector masks, including feathered still masks, are evaluated at each
+        // historical whole-plate sample. Video masks still need a decoder proof.
         && !(layer.mask && layer.mask.enabled && !warpLegacyMaskSafe)) {
       // Clipping and feathering can differ when the scratch canvas starts at a strip edge.
       // Use the whole plate for masks so cold seeks match playback pixels at stencil edges.
