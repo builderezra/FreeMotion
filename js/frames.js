@@ -517,10 +517,10 @@ window.FM = window.FM || {};
     };
     const sample = async (scene, plan, rec, at, source, rg, signal) => {
       const ps = plan.ps;
-      // Masks and transformed null parents depend on project-space geometry. A strip-sized
+      // Crops, masks and transformed null parents depend on project-space geometry. A strip-sized
       // scratch viewport changes their edge/path, so redraw the whole historical picture
       // and copy only the crossed strip into the accumulator.
-      if (plan.layer.parent || (plan.layer.mask && plan.layer.mask.enabled)
+      if (plan.layer.parent || plan.layer.crop || (plan.layer.mask && plan.layer.mask.enabled)
           || (plan.layer.masks && plan.layer.masks.length)) rg = null;
       const x = rg ? Math.max(0, Math.floor(rg[0]) - 2) : 0;
       const y = rg ? Math.max(0, Math.floor(rg[1]) - 2) : 0;

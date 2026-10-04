@@ -14416,15 +14416,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   };
   FM.timeWarpVideoPlans = function (scene, t, media, scale) {
     if (!scene || !scene.project || !scene.layers || !media || !Number.isFinite(t)) return [];
-    // A camera, crop or other active effect changes the source plate and needs its own
-    // historical-sampling proof. A simple null parent can be redrawn on a whole historical
+    // A camera or other active effect changes the source plate and needs its own
+    // historical-sampling proof. A source crop is evaluated by drawLayer at each crossing;
+    // the sampler uses a whole historical plate to keep its project-space geometry.
+    // A simple null parent can also be redrawn on a whole historical
     // plate. A finite positive linear speed ramp uses the same integrated
     // layerLocalTime as playback and export at each crossing.
     if (scene.layers.some(l => l && l.type === 'camera' && l.visible !== false)) return [];
     const plans = [];
     for (const layer of scene.layers) {
       if (!layer || layer.type !== 'video' || layer.visible === false || !FM.isLayerVisibleAt(layer, t)
-          || !simpleTemporalParent(layer, scene, true) || layer.crop || layer.frameBlend || layer.fxTimeOffset
+          || !simpleTemporalParent(layer, scene, true) || layer._cropEditing || layer.frameBlend || layer.fxTimeOffset
           || layer._clipStart != null || layer.splitOf
           || (layer.speed != null && !(typeof layer.speed === 'number' && Number.isFinite(layer.speed) && layer.speed > 0)
             && !(FM.isAnimated(layer.speed) && (!layer.speed.loopMode || layer.speed.loopMode === 'none')

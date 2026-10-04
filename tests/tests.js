@@ -123521,7 +123521,7 @@
         if (exported.length !== 30 || exported.some((v, i) => v !== expected[i]))
           throw new Error('main MP4 scan differs from continuous playback: expected ' +
             expected.join(',') + ', got ' + exported.join(','));
-        if (!renderer.includes(';c31-video-timewarp-6'))
+        if (!renderer.includes(';c31-video-timewarp-7'))
           throw new Error('old MP4 resume parts can splice into a new video scan');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally {
@@ -123610,6 +123610,77 @@
     }
   });
 
+  test('690 Time Warp Scan cold-seeks an animated crop on decoded video', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createTimeWarpVideoSampler || !FM.timeWarpVideoPlans || !window.Mp4Muxer || typeof VideoEncoder === 'undefined')
+      throw new Error('setup: decoded video scan fixture is unavailable');
+    const made = [], rec = await hunt2dLoadWarm(await hunt2dIndexedClip(30, 30));
+    const layer = hunt2dClipLayer(rec, made), warp = FM.fxRegistry.makeInstance('timewarp');
+    layer.start = 0; layer.duration = 1; layer.trimEnd = 1;
+    layer.crop = { x: { kf:[{t:0,v:0,e:'linear'},{t:1,v:28,e:'linear'}] }, y:0, w:92, h:32 };
+    Object.assign(warp.params, {duration:1,direction:0,mode:0,loop:0,barwidth:0,glow:0});
+    layer.effects = [warp];
+    const sc = hunt2dScene([layer], {duration:1});
+    const sampler = FM.createTimeWarpVideoSampler(FM.media,{timeoutMs:10000});
+    const seekLive = async t => {
+      const el=rec.el,target=FM.frameSeekTarget(t,rec.duration);
+      if(Math.abs(el.currentTime-target)<1e-4&&!el.seeking&&el.readyState>=2)return;
+      await new Promise((resolve,reject)=>{
+        let timer;
+        const finish=err=>{clearTimeout(timer);el.removeEventListener('seeked',on);el.removeEventListener('error',on);err?reject(err):resolve();};
+        const on=()=>{if(el.error)finish(new Error('cropped video decode failed'));
+          else if(!el.seeking&&el.readyState>=2&&Math.abs(el.currentTime-target)<1e-3)finish();};
+        el.addEventListener('seeked',on);el.addEventListener('error',on);
+        timer=setTimeout(()=>finish(new Error('cropped video seek timed out')),10000);
+        el.currentTime=target;on();
+      });
+    };
+    const render=async(t,width,prepared)=>{
+      await seekLive(t);
+      const cv=offscreen(width,width/4),g=cv.getContext('2d',{willReadFrequently:true});
+      FM.withTimeWarpVideoSources(prepared,()=>FM.renderScene(g,sc,t));
+      return Array.from(g.getImageData(0,0,width,width/4).data);
+    };
+    try {
+      layer.effects=[];
+      const cropped=await render(0.8,128,null),savedCrop=layer.crop;
+      layer.crop=null;
+      const whole=await render(0.8,128,null);
+      layer.crop=Object.assign({},savedCrop,{x:0});
+      const fixedCrop=await render(0.8,128,null);
+      layer.crop=savedCrop;layer.effects=[warp];
+      if(cropped.join()===whole.join())throw new Error('Control: animated crop did not change the video picture');
+      if(cropped.join()===fixedCrop.join())throw new Error('Control: animated crop position was not evaluated');
+      for(const width of [128,64])for(const mode of [0,1]){
+        warp.params.mode=mode;
+        FM.resetMotionFlowCache();
+        let played;
+        for(let f=0;f<=24;f++)played=await render(f/30,width,null);
+        FM.resetMotionFlowCache();
+        const prepared=await sampler.prepare(sc,24/30,width/128);
+        if(!prepared||!prepared.get(layer.id))throw new Error('Time Warp Scan excluded cropped decoded video');
+        const cold=await render(24/30,width,prepared);
+        if(cold.join()!==played.join()){
+          let n=0;for(let i=0;i<cold.length;i++)if(cold[i]!==played[i])n++;
+          throw new Error((mode?'Reveal':'Freeze')+' cropped video cold seek differs at '+width+' px: '+n+' channels');
+        }
+      }
+      warp.params.mode=0;
+      FM.resetMotionFlowCache();
+      const expected=await render(24/30,128,await sampler.prepare(sc,24/30,1));
+      if(FM.exportWorker&&FM.exportWorker.eligible(sc))throw new Error('Cropped video scan entered unproved Worker path');
+      const savedScene=FM.scene;
+      try{
+        FM.scene=sc;
+        const exported=await hunt2dDecodeMp4(await hunt2dExport({fps:30,to:1}),
+          g=>Array.from(g.getImageData(0,0,128,32).data));
+        if(exported.length!==30)throw new Error('Cropped Time Warp Scan MP4 has '+exported.length+' frames');
+        let total=0;
+        for(let i=0;i<expected.length;i+=4)for(let c=0;c<3;c++)total+=Math.abs(expected[i+c]-exported[24][i+c]);
+        if(total/(128*32*3)>6)throw new Error('Cropped Time Warp Scan MP4 differs from historical preview');
+      }finally{FM.scene=savedScene;}
+    }finally{sampler.dispose();made.forEach(id=>{try{FM.media.remove(id);}catch(e){}});}
+  });
+
   test('690 Time Warp Scan cold-seeks a masked decoded video across crossed strips', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (!FM.createTimeWarpVideoSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
       throw new Error('setup: indexed video scan fixture is unavailable');
@@ -123669,7 +123740,7 @@
         layer.mask.feather = 6; layer.mask.invert = false; FM.scene = sc;
         XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1/30 });
-        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-6'))
+        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-7'))
           throw new Error('masked-video MP4 did not render with the current scan resume identity');
       } finally { XR.signature = previousSignature; FM.scene = previousScene; }
     } finally {
@@ -123737,7 +123808,7 @@
         FM.scene = sc;
         XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1/30 });
-        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-6'))
+        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-7'))
           throw new Error('pen-masked video MP4 did not use the current historical scan renderer');
       } finally { XR.signature = previousSignature; FM.scene = previousScene; }
     } finally {
@@ -123815,7 +123886,7 @@
         FM.scene = sc;
         XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1/30 });
-        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-6'))
+        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-7'))
           throw new Error('combined-mask video MP4 did not use the current historical scan renderer');
       } finally { XR.signature = previousSignature; FM.scene = previousScene; }
     } finally {
