@@ -122907,4 +122907,37 @@
       throw new Error('Opacity 0 still painted a shadow');
   });
 
+  test('690 C43 Long Shadow reaches beyond 80 px with smooth angled edges and saved 45-degree output', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.longshadow) throw new Error('Long Shadow kernel unavailable');
+    const W = 200, H = 150;
+    const source = () => { const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 50; y < 70; y++) for (let x = 10; x < 30; x++) d[(y * W + x) * 4 + 3] = 255;
+      return d; };
+    const run = (angle, length) => { const d = source(); K.longshadow(d, W, H, { angle, length, color: '#2255aa' }, 0); return d; };
+    const alpha = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const defs = Object.fromEntries(FM.fxRegistry.paramsOf('longshadow').map(p => [p.key, p]));
+    if (defs.length.max < 200) throw new Error('Length control is still capped near 80 px');
+    const right = run(0, 120);
+    if (alpha(right, 130, 60) !== 255 || alpha(right, 170, 60) !== 0)
+      throw new Error('horizontal Long Shadow did not honour the 120 px reach');
+    const slant = run(23, 120);
+    let far = 0, feather = 0;
+    for (let y = 0; y < H; y++) for (let x = 110; x < W; x++) {
+      const a = alpha(slant, x, y); if (a) far++; if (a > 0 && a < 255) feather++;
+    }
+    if (far < 150) throw new Error('23-degree Long Shadow still stops around the old 80 px cap');
+    if (feather < 20) throw new Error('angled Long Shadow still has only jagged binary edges');
+    const diagonal = run(45, 30), old = source();
+    for (let start = 0; start < W + H - 1; start++) {
+      let x = start < W ? start : 0, y = start < W ? 0 : start - W + 1, count = 30;
+      while (x < W && y < H) { const i = (y * W + x) * 4;
+        if (old[i + 3]) count = 0;
+        else if (count < 30) { count++; old[i] = 34; old[i + 1] = 85; old[i + 2] = 170; old[i + 3] = 255; }
+        x++; y++; }
+    }
+    for (let i = 0; i < old.length; i++) if (diagonal[i] !== old[i])
+      throw new Error('saved 45-degree Long Shadow changed at byte ' + i);
+  });
+
 })();

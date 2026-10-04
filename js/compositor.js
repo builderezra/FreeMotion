@@ -411,7 +411,7 @@ globalThis.FM = globalThis.FM || {};
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 60, unit: '%' },
     ] },
-    { type: 'longshadow', label: 'Long Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
+    { type: 'longshadow', label: 'Long Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 400, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
     { type: 'halftonelines', label: 'Halftone Lines', params: [
       { key: 'size', label: 'Line pitch', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Screen angle', min: 0, max: 180, step: 1, def: 0, unit: '°' },
@@ -8012,15 +8012,36 @@ globalThis.FM = globalThis.FM || {};
     // ---- batch 8 (pixel) ----
     lightglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904): it was hardcoded white. A missing colour is WHITE, not hexToRGB(undefined) — that
        returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgScratch=glowScratch(lgN), lgBright=lgScratch[0], lgTmp=lgScratch[1], lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(d[lgp4+3]===0){ d[lgp4]=lgWh?255:lgC[0]; d[lgp4+1]=lgWh?255:lgC[1]; d[lgp4+2]=lgWh?255:lgC[2]; d[lgp4+3]=lgGlow; continue; } if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
-    longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
-       shadow is byte-identical; any other angle marches back from each empty pixel along the throw, up to Length steps, and is
-       shadowed if it meets the layer — the same rule the walk applies, in any direction. */
+    longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(400,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): preserve the original 45° diagonal walk byte-for-byte for saved projects. Other angles use
+       major-axis rays with subpixel interpolation across adjacent rays, so slanted edges are smooth without a length-times-pixels search. */
       var lsAng=p.angle==null?45:FM.evalProp(p.angle,t); lsAng=((lsAng%360)+360)%360;
-      if(lsAng!==45){ var lsDx=Math.cos(lsAng*Math.PI/180), lsDy=Math.sin(lsAng*Math.PI/180), lsM=Math.max(Math.abs(lsDx),Math.abs(lsDy)); lsDx/=lsM; lsDy/=lsM;
-        for(var lsPy=0;lsPy<H;lsPy++){ for(var lsPx=0;lsPx<W;lsPx++){ var lsJ=(lsPy*W+lsPx)*4; if(s[lsJ+3]>0)continue;
-          for(var lsK=1;lsK<=lsLen;lsK++){ var lsQx=Math.round(lsPx-lsDx*lsK), lsQy=Math.round(lsPy-lsDy*lsK); if(lsQx<0||lsQy<0||lsQx>=W||lsQy>=H)break;
-            if(s[(lsQy*W+lsQx)*4+3]>0){ d[lsJ]=lsR; d[lsJ+1]=lsG; d[lsJ+2]=lsB; d[lsJ+3]=255; break; } } } }
-        return; } var lsND=W+H-1, lsDiag; for(lsDiag=0;lsDiag<lsND;lsDiag++){ var lsX0,lsY0; if(lsDiag<W){lsX0=lsDiag;lsY0=0;}else{lsX0=0;lsY0=lsDiag-W+1;} var lsX=lsX0,lsY=lsY0,lsCount=lsLen; while(lsX<W&&lsY<H){ var lsI=(lsY*W+lsX)*4; if(s[lsI+3]>0){lsCount=0;}else if(lsCount<lsLen){ lsCount++; d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=255; } lsX++; lsY++; } } },
+      if(lsAng!==45){
+        var lsRad=lsAng*Math.PI/180, lsVx=Math.cos(lsRad), lsVy=Math.sin(lsRad);
+        var lsXM=Math.abs(lsVx)>=Math.abs(lsVy), lsMajor=lsXM?W:H, lsMinor=lsXM?H:W;
+        var lsForward=(lsXM?lsVx:lsVy)>=0, lsSlope=(lsXM?lsVy:lsVx)/Math.max(Math.abs(lsXM?lsVx:lsVy),1e-9);
+        var lsThrow=lsSlope*(lsMajor-1), lsMin=Math.floor(-Math.max(0,lsThrow))-2;
+        var lsMax=lsMinor-1-Math.floor(Math.min(0,lsThrow))+2;
+        var lsLast=new Int32Array(lsMax-lsMin+1), lsLive=new Uint8Array(lsLast.length);
+        lsLast.fill(-1000000);
+        for(var lsStep=0;lsStep<lsMajor;lsStep++){
+          var lsCoord=lsForward?lsStep:lsMajor-1-lsStep, lsOffset=lsSlope*lsStep;
+          for(var lsRay=lsMin;lsRay<=lsMax;lsRay++){
+            var lsMinorAt=lsRay+lsOffset, lsLo=Math.floor(lsMinorAt), lsFrac=lsMinorAt-lsLo;
+            if(lsLo>=0&&lsLo<lsMinor){ var lsSrc=(lsXM?(lsLo*W+lsCoord):(lsCoord*W+lsLo))*4+3;
+              if(s[lsSrc]>0 && (1-lsFrac)>0)lsLast[lsRay-lsMin]=lsStep; }
+            if(lsFrac>0&&lsLo+1>=0&&lsLo+1<lsMinor){ var lsSrc2=(lsXM?((lsLo+1)*W+lsCoord):(lsCoord*W+lsLo+1))*4+3;
+              if(s[lsSrc2]>0)lsLast[lsRay-lsMin]=lsStep; }
+            lsLive[lsRay-lsMin]=lsStep-lsLast[lsRay-lsMin]<=lsLen?1:0;
+          }
+          for(var lsN=0;lsN<lsMinor;lsN++){ var lsI=(lsXM?(lsN*W+lsCoord):(lsCoord*W+lsN))*4;
+            if(s[lsI+3]>0)continue;
+            var lsV=lsN-lsOffset, lsR0=Math.floor(lsV), lsF=lsV-lsR0, lsIdx=lsR0-lsMin;
+            var lsCoverage=(1-lsF)*lsLive[lsIdx]+lsF*lsLive[lsIdx+1];
+            if(lsCoverage>0){ d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=Math.round(255*lsCoverage); }
+          }
+        }
+        return;
+      } var lsND=W+H-1, lsDiag; for(lsDiag=0;lsDiag<lsND;lsDiag++){ var lsX0,lsY0; if(lsDiag<W){lsX0=lsDiag;lsY0=0;}else{lsX0=0;lsY0=lsDiag-W+1;} var lsX=lsX0,lsY=lsY0,lsCount=lsLen; while(lsX<W&&lsY<H){ var lsI=(lsY*W+lsX)*4; if(s[lsI+3]>0){lsCount=0;}else if(lsCount<lsLen){ lsCount++; d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=255; } lsX++; lsY++; } } },
     halftonelines: function(d,W,H,p,t,ps){ var htlSize=FM.evalProp(p.size,t); if(htlSize==null||isNaN(htlSize))htlSize=8; htlSize=Math.max(3,Math.min(40,Math.round(htlSize))); /* FLOOR THE SCALED PERIOD AT 2, NOT 1 (queue 261). A stripe needs two rows: at a period of 1 every
        row has the same rowMod of 0, the threshold beats it for any luminance below pure white, and the
        whole layer is written BLACK. Measured on a 1080x1920 project at size 3 — full res 64,800 white
