@@ -1195,6 +1195,10 @@ globalThis.FM = globalThis.FM || {};
       { key: 'keep', label: 'Keep original', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'pivotx', label: 'Hinge X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'pivoty', label: 'Hinge Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'angle', label: 'Flip', min: 0, max: 360, step: 1, def: 180, unit: '°' },
+      { key: 'persp', label: 'Perspective', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'back', label: 'Back', def: 0, options: [[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']] },
+      { key: 'backcolor', label: 'Back colour', swatch: true, def: '#20242b' },
     ] },
     { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
@@ -13300,7 +13304,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   let _cfDepth = 0;
   const _expPool = [];
   let _expDepth = 0;
-  let _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _wxSprite = null, _wxSpriteCol = '', _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
+  let _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _flBack = null, _wxSprite = null, _wxSpriteCol = '', _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
@@ -13827,7 +13831,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const cX = Math.cos(o.rx), sX = Math.sin(o.rx);
     const cY = Math.cos(o.ry), sY = Math.sin(o.ry);
     const cZ = Math.cos(o.rz), sZ = Math.sin(o.rz);
-    const n = verts.length, F = 3.2;   // focal length in solid radii (weak perspective)
+    const n = verts.length, F = o.focal == null ? 3.2 : o.focal;   // focal length in solid radii (weak perspective)
     const P = new Array(n), RZ = new Float32Array(n), RX3 = new Float32Array(n), RY3 = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const v = verts[i];
@@ -13836,7 +13840,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       w = x * cY + z * sY; z = -x * sY + z * cY; x = w;         // rotate Y
       w = x * cZ - y * sZ; y = x * sZ + y * cZ; x = w;          // rotate Z
       RX3[i] = x; RY3[i] = y; RZ[i] = z;
-      const f = F / (F - z);                                    // z+ toward viewer
+      const f = F === Infinity ? 1 : F / (F - z);                 // z+ toward viewer
       P[i] = [o.cx + x * f * o.R, o.cy + y * f * o.R];
     }
     const order = [];
@@ -15689,7 +15693,41 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
       const keep = (p.keep == null ? 0 : (Math.round(FM.evalProp(p.keep, t)) | 0)) === 1;
+      const angle = Math.max(0, Math.min(360, fparam(p, 'angle', 180, t)));
+      const back = Math.max(0, Math.min(2, Math.round(fparam(p, 'back', 0, t))));
+      if (angle === 0 || angle === 360) { B.drawImage(A, 0, 0); return; }
       if (keep) B.drawImage(A, 0, 0);            // the original stays, the reflection joins it
+      // The old 180° mirror is an exact compatibility path, including an off-centre hinge.
+      if (angle !== 180 || back !== 0) {
+        const turn = angle * Math.PI / 180;
+        const backFacing = m !== 2 && Math.cos(turn) < -1e-7;
+        if (backFacing && back === 2) return;
+        let tex = extractTex(A, bb);
+        if (backFacing && back === 1) {
+          if (!_flBack) _flBack = createCanvas();
+          if (_flBack.width !== bb.w || _flBack.height !== bb.h) { _flBack.width = bb.w; _flBack.height = bb.h; }
+          const bc = _flBack.getContext('2d'); baseT(bc); bc.clearRect(0, 0, bb.w, bb.h);
+          bc.fillStyle = p.backcolor || '#20242b'; bc.fillRect(0, 0, bb.w, bb.h);
+          tex = _flBack;
+        }
+        const R = Math.max(bb.w, bb.h) / 2;
+        const hx = px - bb.x, hy = py - bb.y;
+        const mesh = bParam((u, v) => [(u * bb.w - hx) / R, (v * bb.h - hy) / R, 0], 8, 8);
+        const perspective = Math.max(0, Math.min(100, fparam(p, 'persp', 50, t)));
+        const farthest = Math.hypot(Math.max(hx, bb.w - hx), Math.max(hy, bb.h - hy)) / R;
+        const focal = perspective === 0 ? Infinity : Math.max(1.2 + 100 / perspective, farthest + 0.3);
+        // A mathematical zero-width quad is rasterised away; show its one-pixel edge.
+        if (m !== 2 && Math.abs(Math.cos(turn)) < 1e-7) {
+          if (m === 0) B.drawImage(tex, Math.floor(bb.w / 2), 0, 1, bb.h, Math.round(px), bb.y, 2, bb.h);
+          else B.drawImage(tex, 0, Math.floor(bb.h / 2), bb.w, 1, bb.x, Math.round(py), bb.w, 2);
+          return;
+        }
+        renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, {
+          cx: px, cy: py, R, rx: m === 0 ? 0 : turn, ry: m === 1 ? 0 : turn,
+          rz: 0, shading: 0, focal
+        });
+        return;
+      }
       B.save();
       B.translate(px, py);
       B.scale(m === 1 ? 1 : -1, m === 0 ? 1 : -1);

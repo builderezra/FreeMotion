@@ -124689,4 +124689,35 @@
     }
   });
 
+  test('690 C29 Card Flip turns through an edge-on frame and keeps the legacy mirror', { item: 'TBD' }, function () {
+    const def = FM.EFFECTS.find(d => d.type === 'fliplayer');
+    if (!def || !['angle', 'persp', 'back', 'backcolor'].every(k => def.params.some(p => p.key === k)))
+      throw new Error('Card Flip is missing its new controls');
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const legacy = cfxRun('fliplayer', { mode: 0, pivotx: 50, pivoty: 50 });
+    if (!same(legacy, cfxRun('fliplayer', { mode: 0, pivotx: 50, pivoty: 50, angle: 180, persp: 50, back: 0 })))
+      throw new Error('saved 180-degree mirror changed');
+    const full = cfxLit(legacy), quarter = cfxRun('fliplayer', { mode: 0, angle: 45 });
+    const edge = cfxRun('fliplayer', { mode: 0, angle: 90 });
+    let edgeLo = CFX.W, edgeHi = -1;
+    for (let y = 0; y < CFX.H; y++) for (let x = 0; x < CFX.W; x++) {
+      if (edge[(y * CFX.W + x) * 4 + 3]) { edgeLo = Math.min(edgeLo, x); edgeHi = Math.max(edgeHi, x); }
+    }
+    if (!(full > 1000 && cfxLit(quarter) > 150 && cfxLit(quarter) < full &&
+          cfxLit(edge) > 0 && edgeHi - edgeLo + 1 < 5))
+      throw new Error('Card Flip still jumps straight to a mirror instead of narrowing through its edge: ' +
+        [full, cfxLit(quarter), cfxLit(edge), edgeLo, edgeHi]);
+    if (same(quarter, cfxRun('fliplayer', { mode: 0, angle: 45, persp: 0 })) ||
+        same(quarter, cfxRun('fliplayer', { mode: 1, angle: 45 })))
+      throw new Error('perspective or horizontal/vertical axis has no visible effect');
+    const solid = cfxRun('fliplayer', { mode: 0, angle: 180, back: 1, backcolor: '#19cc71' });
+    const mid = (42 * CFX.W + 45) * 4;
+    if (!(solid[mid] < 80 && solid[mid + 1] > 170 && solid[mid + 2] < 150))
+      throw new Error('solid back did not show its chosen colour: ' + Array.from(solid.slice(mid, mid + 4)));
+    if (cfxLit(cfxRun('fliplayer', { mode: 0, angle: 180, back: 2 })) !== 0)
+      throw new Error('transparent back still shows the reversed picture');
+    if (!same(cfxRun('fliplayer', { mode: 0, angle: 0 }), cfxSource().getContext('2d').getImageData(0, 0, CFX.W, CFX.H).data))
+      throw new Error('zero-degree turn does not retain the original picture');
+  });
+
 })();
