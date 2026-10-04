@@ -120717,4 +120717,33 @@
     const ramp = { kf:[{ t:0, v:8 }, { t:2, v:0, e:'linear' }] };
     if (!same(render(ramp, 2), render(4, 2))) throw new Error('Lightning did not accumulate a Flicker ramp');
   });
+
+  test('690 hard Wipe and Radial Wipe fully hide the first frame', { item: 'TBD' }, function () {
+    const fx = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!fx || !fx.wipe || !fx.radialwipe) throw new Error('Wipe kernels are unavailable');
+    const W = 80, H = 60;
+    const run = (type, progress, extra, softness) => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = 200;
+        pixels[i + 3] = 255;
+      }
+      const params = Object.assign({ progress }, extra);
+      if (softness !== undefined) params.softness = softness;
+      fx[type](pixels, W, H, params, 0);
+      return pixels;
+    };
+    for (const [type, extra] of [['wipe', { angle:0 }], ['radialwipe', { start:0, centerx:50, centery:50 }]]) {
+      for (const softness of [undefined, 0]) {
+        const hidden = run(type, 0, extra, softness);
+        for (let i = 3; i < hidden.length; i += 4) {
+          if (hidden[i] !== 0) throw new Error(type + ' leaves pixels visible at Progress 0');
+        }
+        const shown = run(type, 1, extra, softness);
+        for (let i = 3; i < shown.length; i += 4) {
+          if (shown[i] !== 255) throw new Error(type + ' hides pixels at Progress 1');
+        }
+      }
+    }
+  });
 })();
