@@ -1358,6 +1358,8 @@ globalThis.FM = globalThis.FM || {};
       { key: 'reach', label: 'Reach', min: 0, max: 100, step: 1, def: 40 },
       { key: 'x', label: 'Light X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Light Y', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },
+      { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, legacy: 200 / 255 * 100, unit: '%' },
     ], color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'voronoi', label: 'Voronoi Cells', params: [
       { key: 'cells', label: 'Cells', min: 4, max: 48, step: 1, def: 16 },
@@ -10171,7 +10173,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          transparent (`if(rsS[rsi+3]>0) continue`), so it can never touch the layer itself; and since
          v14.84 the incoming box is exact at `alpha > 0`, so no faint caster is missed. A caster at
          alpha 3 throws a FULL-STRENGTH shadow here — the old `alpha > 8` box would have dropped it. */
-      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0]; var rsS=fxSrc(d), rsTaps=10, rsK=rsR/100*0.9;
+      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0]; var rsS=fxSrc(d), rsTaps=Math.round(fparam(p,'samples',10,t)), rsK=rsR/100*0.9;
+      if(rsTaps<4)rsTaps=4; else if(rsTaps>32)rsTaps=32;
+      // Saved effects without Opacity retain the old 200/255 ceiling; newly added ones can reach 255.
+      var rsOpacity=p.opacity==null?200/255*100:FM.evalProp(p.opacity,t);
+      if(!isFinite(rsOpacity))rsOpacity=200/255*100;
+      var rsCap=Math.round(Math.max(0,Math.min(100,rsOpacity))*255/100);
+      if(rsCap===0)return;
       var rsY0=0, rsY1=H-1, rsX0=0, rsX1=W-1;
       if(rsBB && isFinite(rsLx) && isFinite(rsLy) && isFinite(rsK)){
         var rsSmax=1+rsK, rsBx0=rsBB.x, rsBy0=rsBB.y, rsBx1=rsBB.x+rsBB.w-1, rsBy1=rsBB.y+rsBB.h-1;
@@ -10190,7 +10198,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         rsX0=Math.max(0,Math.floor(rsMinX)-rsSl); rsX1=Math.min(W-1,Math.ceil(rsMaxX)+rsSl);
         rsY0=Math.max(0,Math.floor(rsMinY)-rsSl); rsY1=Math.min(H-1,Math.ceil(rsMaxY)+rsSl);
       }
-      for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(200,rsHit); } } } },
+      for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(rsCap,rsHit); } } } },
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.

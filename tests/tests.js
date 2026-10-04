@@ -122180,4 +122180,40 @@
         throw new Error('Smooth corners Off left fractional alpha on a styled outline');
   });
 
+  test('690 Radial Shadow quality and opacity release the fixed tap and alpha ceilings without changing saved looks', { item: 'TBD' }, function () {
+    const P = FM._pixelFx;
+    const old = { reach: 100, x: 50, y: 10, color: '#000000' };
+    const W = 80, H = 80;
+    function render(extra) {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 30; y < 40; y++) for (let x = 29; x < 36; x++) {
+        const i = (y * W + x) * 4; d[i] = 220; d[i+1] = 150; d[i+2] = 70; d[i+3] = 255;
+      }
+      P.radialshadow(d, W, H, { ...old, ...extra }, 0);
+      return d;
+    }
+    const defs = Object.fromEntries(FM.fxRegistry.paramsOf('radialshadow').map(p => [p.key, p]));
+    if (defs.samples.default !== 10 || defs.opacity.default !== 100)
+      throw new Error('new instances did not expose the Quality and Opacity controls');
+    const saved = render({}), legacyExplicit = render({ samples: 10, opacity: 200 / 255 * 100 });
+    let shadow = 0;
+    for (let i = 0; i < saved.length; i += 4) {
+      if (saved[i+3] > 0 && saved[i+3] < 255) shadow++;
+      for (let c = 0; c < 4; c++) if (saved[i+c] !== legacyExplicit[i+c])
+        throw new Error('the saved legacy shadow changed when old values were made explicit');
+    }
+    if (!shadow) throw new Error('the fixture did not cast a shadow');
+    const full = render({ opacity: 100 });
+    let lifted = 0;
+    for (let i = 3; i < saved.length; i += 4) if (saved[i] === 200 && full[i] > 200) lifted++;
+    if (!lifted) throw new Error('Opacity 100 did not remove the old 200/255 ceiling');
+    const fine = render({ opacity: 100, samples: 32 });
+    let changed = 0;
+    for (let i = 3; i < fine.length; i += 4) if (fine[i] !== full[i]) changed++;
+    if (!changed) throw new Error('Quality 32 did not change the fixed ten-tap shadow');
+    const clear = render({ opacity: 0 });
+    for (let i = 0; i < clear.length; i += 4) if (clear[i+3] > 0 && !(Math.floor(i/4)%W >= 29 && Math.floor(i/4)%W < 36 && Math.floor(i/4/W) >= 30 && Math.floor(i/4/W) < 40))
+      throw new Error('Opacity 0 still painted a shadow');
+  });
+
 })();
