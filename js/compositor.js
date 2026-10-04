@@ -13068,6 +13068,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
     expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
+    // A plain vector shape has no decoder or upstream effects to wait for. Give Frame Stutter an
+    // exact source sample at a requested clock time; the other effect paths, especially video,
+    // retain their existing capture until their media frames can be prepared asynchronously.
+    if (fx.type === 'framestutter' && layer.type === 'shape' && layer.effects && layer.effects.length === 1
+        && layer.effects[0] === fx && FM.fillModeOf(layer) !== 'media' && !layer.parent
+        && !layer.fxTimeOffset && layer._clipStart == null
+        && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
+        && !(layer.mask && layer.mask.enabled)) {
+      expand.sampleAt = (at, slot) => {
+        const key = slot ? 'prior' : 'held';
+        let sample = _cfPool[_d][key];
+        if (!sample) sample = _cfPool[_d][key] = createCanvas();
+        if (sample.width !== W || sample.height !== H) { sample.width = W; sample.height = H; }
+        sample.__fmRS = ps; sample.__fmOX = OX; sample.__fmOY = OY;
+        const sc = _fx2d(sample);
+        baseT(sc); sc.clearRect(OX, OY, PWp, PHp);
+        sc.globalAlpha = 1; sc.globalCompositeOperation = 'source-over'; sc.filter = 'none';
+        drawLayer(sc, tmp, at, scene); // fx is absent in tmp: no recursive Frame Stutter
+        return sample;
+      };
+    }
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
@@ -14456,19 +14477,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* ---- Frame Stutter -------------------------------------------------------------------------
      * Hold each frame for 1/rate of a second: stop-motion, the anime step, or a strobe on the beat.
      *
-     * It is temporal, so it keeps ONE held plate per layer in the same bounded LRU the footage blur
-     * uses — under its own ':fs' key, because a layer can carry both and they must not overwrite
-     * each other's canvas. Playback and export both advance frame by frame, so the held plate is
-     * always the frame from the start of the current quantum. Seeking straight into the middle of
-     * one shows the live frame instead of a stale one, which is the honest fallback: the next
-     * quantum boundary re-captures and it is correct from there on. */
-    framestutter: function (A, B, W, H, bb, p, t, tl, layer) {
+     * Simple vector shapes sample their source at the quantum boundary on every render, so a cold
+     * seek sees the same hold and trail. Other layers keep ONE held plate per layer in the bounded
+     * LRU used by footage blur — under their own ':fs' key. Their cold-seek fallback still captures
+     * the current frame; video needs decoded boundary frames before this can be made stateless. */
+    framestutter: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
       if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }   // onion-skin ghosts must not touch the hold
       const rate = Math.max(1, Math.min(30, p.rate == null ? 8 : FM.evalProp(p.rate, t)));
       const mode = Math.round(FM.evalProp(p.mode, t) || 0);
       const blend = clamp01(p.blend == null ? 0 : FM.evalProp(p.blend, t));
       const duty = Math.max(0.05, Math.min(1, p.duty == null ? 0.5 : FM.evalProp(p.duty, t)));
-      const rec = _mfRec(((layer && layer.id) || '_anon') + ':fs', W, H);
       /* PHASE and IRREGULAR HOLDS (#482 polish 2.4). Phase slides every hold boundary by a fraction of a hold. Irregular
          holds moves each boundary k by a hash of k (up to ±45% of a hold at 100%, so the boundaries can never cross and a
          hold runs 0.1× to 1.9× its length) — the uneven "on twos, then threes" of hand-made stop-motion. Hashed on the
@@ -14483,12 +14501,39 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         : elapsed * rate;
       let q, qLo = 0, qLen = 1;
       if (offs > 0) phase += offs;
+      const jit = k => { if (k <= 0 || irr <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
       if (irr > 0) {
-        const jit = k => { if (k <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
         const f = Math.floor(phase), b0 = f + jit(f), b1 = f + 1 + jit(f + 1);
         q = phase < b0 ? f - 1 : (phase >= b1 ? f + 1 : f);
         qLo = q + jit(q); qLen = (q + 1 + jit(q + 1)) - qLo;
       } else { q = Math.floor(phase); qLo = q; }
+      if (expand && expand.sampleAt) {
+        // Invert the same monotone rate clock that chose q. A keyed Rate needs the inverse of
+        // its integral; numeric Rate keeps the exact arithmetic used by the old quantum grid.
+        const base = t - elapsed;
+        const atPhase = target => {
+          const want = Math.max(0, target - offs);
+          if (want <= 0) return base;
+          if (!FM.isAnimated(p.rate)) return Math.min(t, base + want / rate);
+          const speed = u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u)));
+          let lo = base, hi = t;
+          for (let i = 0; i < 28; i++) {
+            const mid = (lo + hi) / 2;
+            if (FM.integrateProp(p.rate, base, mid, speed) < want) lo = mid;
+            else hi = mid;
+          }
+          return (lo + hi) / 2;
+        };
+        if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > duty) return;
+        if (mode === 2 && q > 0) {
+          const trail = p.trail == null ? 0.45 : clamp01(FM.evalProp(p.trail, t));
+          if (trail > 0) { B.globalAlpha = trail; B.drawImage(expand.sampleAt(atPhase(q - 1 + jit(q - 1)), 1), 0, 0); B.globalAlpha = 1; }
+        }
+        B.drawImage(expand.sampleAt(atPhase(qLo), 0), 0, 0);
+        if (blend > 0) { B.globalAlpha = blend; B.drawImage(A, 0, 0); B.globalAlpha = 1; }
+        return;
+      }
+      const rec = _mfRec(((layer && layer.id) || '_anon') + ':fs', W, H);
       if (rec.t !== q) {
         // New quantum: the frame before it becomes the trail, this frame becomes the hold.
         if (mode === 2) {

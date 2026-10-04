@@ -115543,7 +115543,9 @@
     'flashdark/image': '873fb6dd/8c8f6a5e/48a39cd0/1cf893d7', 'flashdark/shape': 'c09bbdd7/f34bde0f/39d600d1/cd6ebd73',
     'objectblur/image': '28851006/a32fd362/0171bed1', 'objectblur/shape': 'e4b1831f/6e4e1f21/cb7963c0',
     'framestutter0/image': 'd6c619cd', 'framestutter1/image': '755ef8d5', 'framestutter2/image': '83e9eef1',
-    'framestutter0/shape': 'cce99039', 'framestutter1/shape': '6b0cf5fd', 'framestutter2/shape': 'aa1b606d',
+    // C31: a simple shape now samples the exact hold boundary. The former v17.18 hashes were
+    // cce99039 / 6b0cf5fd / aa1b606d, captured one project frame after off-grid boundaries.
+    'framestutter0/shape': 'e81c4609', 'framestutter1/shape': '6972d7c5', 'framestutter2/shape': '9875e595',
   };
   function make482b(kind, type, over, ids) {
     const L = kind === 'image' ? FM.makeLayer('image', { name: 'r482', x: 120, y: 90, start: 0, duration: 4 })
@@ -121755,6 +121757,64 @@
           count(render(type, Object.assign({}, opts, { progress:1 }))) !== total)
         throw new Error(type + ' opt-in controls changed the hidden and fully shown endpoints');
     }
+  });
+
+  test('690 Frame Stutter holds the same source frame after a cold seek', { item: 'TBD' }, function () {
+    if (!FM.resetMotionFlowCache || !FM.fxRegistry) throw new Error('Frame Stutter test setup is unavailable');
+    const layer = FM.makeLayer('shape', {
+      shape: 'rect', x: 10, y: 20, shapeW: 12, shapeH: 12,
+      fill: '#ffffff', start: 0, duration: 1,
+    });
+    layer.start = 0; layer.duration = 1;
+    layer.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 1, v: 110, e: 'linear' }] };
+    const effect = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(effect.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    layer.effects = [effect];
+    const scene = { project: { width: 120, height: 40, fps: 30, duration: 1, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const row = t => {
+      const cv = offscreen(120, 40), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 20, 120, 1).data;
+    };
+    const left = t => {
+      const pixels = row(t);
+      for (let x = 0; x < 120; x++) if (pixels[x * 4] > 200) return x;
+      return -1;
+    };
+    layer.effects = [];
+    const sourceAtStart = left(0), sourceInsideHold = left(0.2);
+    layer.effects = [effect];
+    if (!(sourceAtStart >= 0 && sourceInsideHold > sourceAtStart + 10))
+      throw new Error('Control: the source does not visibly move within one hold');
+    FM.resetMotionFlowCache();
+    const first = left(0), sequential = left(0.2);
+    if (first !== sequential) throw new Error('Control: sequential playback did not hold the first frame');
+    FM.resetMotionFlowCache();
+    const cold = left(0.2);
+    if (cold !== sequential)
+      throw new Error('Frame Stutter cold seek showed the current source at x=' + cold +
+        ' instead of the held boundary source at x=' + sequential);
+    if (cold !== sourceAtStart) throw new Error('Frame Stutter did not hold the source at the quantum boundary');
+    if (left(0.25) <= cold + 10) throw new Error('Control: the next hold did not advance');
+
+    // A keyed Rate must invert its integrated clock, not the current rate multiplied by elapsed.
+    effect.params.rate = { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] };
+    layer.effects = [];
+    const keyedBoundary = left(Math.SQRT2 - 1); // integral of 2 + 2t reaches phase 1 here
+    layer.effects = [effect]; FM.resetMotionFlowCache();
+    if (left(0.55) !== keyedBoundary)
+      throw new Error('Frame Stutter keyed Rate did not sample the integrated quantum boundary');
+
+    effect.params.rate = 4; effect.params.mode = 2; effect.params.trail = 0.45;
+    FM.resetMotionFlowCache(); row(0); row(0.25);
+    const sequentialTrail = row(0.55);
+    FM.resetMotionFlowCache();
+    const coldTrail = row(0.55);
+    if (sequentialTrail[32 * 4] < 110 || sequentialTrail[32 * 4] > 120)
+      throw new Error('Control: the previous hold is not visible at the expected trail strength');
+    if (coldTrail.join() !== sequentialTrail.join())
+      throw new Error('Frame Stutter cold seek lost or changed the previous hold in Trail mode');
   });
 
 })();
