@@ -13609,23 +13609,33 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // video must wait for historical decoded pictures. Other effects may need a whole plate.
     const warpIndex = fx.type === 'timewarp' && layer.effects ? layer.effects.indexOf(fx) : -1;
     const still = layer.type === 'image' && FM.media && FM.media.get(layer.id);
+    const warpUpstream = warpIndex >= 0 ? layer.effects.slice(0, warpIndex) : [];
+    const warpMask = layer.masks && layer.masks.length === 1 ? layer.masks[0] : null;
+    // A single marked pen mask before the scan is part of each historical source plate.
+    // Unmarked, extra and downstream masks keep their existing effect-order path.
+    const warpPenFx = warpMask && typeof warpMask.id === 'string' && warpUpstream.filter(e => e && e.enabled !== false
+      && e.type === 'penmask' && e.maskId === warpMask.id);
+    const warpPenSafe = !!(warpPenFx && warpPenFx.length === 1 && warpMask.enabled !== false);
     if (warpIndex >= 0
         && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media'
-          && layer.effects.slice(0, warpIndex).every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'))
+          && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'
+            || (warpPenSafe && e.type === 'penmask' && e.maskId === warpMask.id)))
           || (still && still.kind === 'image' && still.el && !layer._cropEditing
-            && layer.effects.slice(0, warpIndex).every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast')))
+            && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'
+              || (warpPenSafe && e.type === 'penmask' && e.maskId === warpMask.id))))
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
         && simpleTemporalParent(layer, scene)
         && !layer.fxTimeOffset && layer._clipStart == null
-        && !(layer.behaviors && layer.behaviors.length) && !(layer.masks && layer.masks.length)
+        && !(layer.behaviors && layer.behaviors.length)
+        && (!(layer.masks && layer.masks.length) || warpPenSafe)
         // Legacy vector masks, hard or feathered, are evaluated at each historical sample.
         // Media masks still need a separate decoder proof.
         && !(layer.mask && layer.mask.enabled && (layer.type !== 'shape'
           || FM.fillModeOf(layer) === 'media'))) {
       // Clipping and feathering can differ when the scratch canvas starts at a strip edge.
-      // Use the whole plate for masked shapes so cold seeks match playback pixels.
+      // Use the whole plate for masks so cold seeks match playback pixels at stencil edges.
       expand.sampleAt = (at, clip) => sampleAt(at, 0, null,
-        layer.mask && layer.mask.enabled ? null : clip);
+        (layer.mask && layer.mask.enabled) || warpPenSafe ? null : clip);
     }
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.

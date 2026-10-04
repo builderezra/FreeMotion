@@ -122138,6 +122138,43 @@
     }
   });
 
+  test('690 Time Warp Scan cold-seeks a keyed pen mask placed before it', { item: 'TBD', budgetMs: 30000 }, function () {
+    if (!FM.buildMaskAlpha) throw new Error('the pen-mask renderer is unavailable');
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 40, shapeW: 120, shapeH: 80,
+      fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    const rect = x => [[x, 20], [x + 30, 20], [x + 30, 60], [x, 60]];
+    layer.masks = [{ id: 'scan-pen', type: 'pen', enabled: true, mode: 'add', closed: true,
+      path: { kf: [{ t: 0, v: rect(0), e: 'linear' }, { t: 1, v: rect(60), e: 'linear' }] } }];
+    const marker = { type: 'penmask', maskId: 'scan-pen' };
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, mode: 0, barwidth: 0, glow: 0, loop: 0 });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const width of [120, 60]) {
+      layer.effects = [marker];
+      const live = frame(0.8, width), earlier = frame(0.2, width);
+      if (same(live, earlier)) throw new Error('Control: keyed pen mask did not move');
+      layer.effects = [marker, warp]; FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(0.8, width);
+      if (!same(cold, played)) {
+        const i = cold.findIndex((v, j) => v !== played[j]);
+        throw new Error('Upstream pen mask scan differs at width=' + width +
+          ', pixel=' + (i >> 2) + ', channel=' + (i & 3) + ', cold=' + cold[i] + ', played=' + played[i]);
+      }
+      if (same(cold, live)) throw new Error('Control: scan is only the current pen mask');
+    }
+  });
+
   test('690 C31 Frame Stutter holds a cropped still at the quantum boundary after a cold seek', { item: 'TBD', budgetMs: 90000 }, async function () {
     const tex = offscreen(40, 40), g = tex.getContext('2d');
     g.fillStyle = '#dd5935'; g.fillRect(0, 0, 20, 40);
