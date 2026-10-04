@@ -9687,7 +9687,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          FEWER transcendentals than the static version it replaces. */
       var vcM=FM.evalProp(p.motion,t); if(vcM==null||isNaN(vcM))vcM=0; vcM=vcM<0?0:(vcM>1?1:vcM);
       var vcSp=FM.evalProp(p.speed,t); if(vcSp==null||isNaN(vcSp))vcSp=0.5; vcSp=vcSp<0?0:(vcSp>2?2:vcSp);
-      var vcR=vcM*0.34, vcW=(t<0?0:t)*vcSp*6.2831853, vcTAU=6.2831853;
+      /* A keyed Speed is a rate: carry the cells' traveled phase through a slowdown or stop.
+         Keep the numeric clock unchanged so saved, unkeyed looks render exactly as before. */
+      var vcTime=t<0?0:t;
+      var vcR=vcM*0.34, vcW=(FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,vcTime,function(u){ var k=FM.evalProp(p.speed,u); return k<0?0:(k>2?2:k); }):vcTime*vcSp)*6.2831853, vcTAU=6.2831853;
       var vcGX=Math.ceil(W/vcG)+2, vcGY=Math.ceil(H/vcG)+2;
       var vcPX=new Float64Array(vcGX*vcGY), vcPY=new Float64Array(vcGX*vcGY);
       for(var vcgy=0;vcgy<vcGY;vcgy++)for(var vcgx=0;vcgx<vcGX;vcgx++){

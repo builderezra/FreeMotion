@@ -121267,4 +121267,32 @@
       throw new Error('Control: numeric Rate no longer uses the original ring schedule');
   });
 
+  test('690 Voronoi Cells keeps its wandering pattern when keyed Speed stops', { item: 'TBD' }, function () {
+    const voronoi = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.voronoi;
+    if (!voronoi || !FM.integrateProp) throw new Error('Voronoi Cells or the rate integrator is unavailable');
+    const W = 120, H = 120;
+    const render = (speed, time, motion) => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = 143; pixels[i + 1] = 212; pixels[i + 2] = 255; pixels[i + 3] = 255;
+      }
+      const params = { cells: 6, edge: 1, speed };
+      if (motion !== undefined) params.motion = motion;
+      voronoi(pixels, W, H, params, time);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, index) => value === b[index]);
+    const stopped = { kf: [
+      { t: 0, v: 0.5, e: 'linear' }, { t: 1, v: 0.5, e: 'linear' },
+      { t: 2, v: 0, e: 'linear' },
+    ] };
+    const atStop = render(stopped, 2, 1);
+    if (same(atStop, render(stopped, 0, 1))) throw new Error('Voronoi cells rewound to their first-frame positions');
+    if (!same(atStop, render(stopped, 3, 1))) throw new Error('Voronoi cells kept moving after Speed reached zero');
+    // Half a cycle in the first second plus a quarter-cycle ramp equals 0.75 cycles.
+    if (!same(atStop, render(0.5, 1.5, 1))) throw new Error('Voronoi used the current Speed for all elapsed time');
+    if (!same(render(stopped, 0), render(stopped, 3)))
+      throw new Error('Control: an old Voronoi instance without Motion no longer stays frozen');
+  });
+
 })();
