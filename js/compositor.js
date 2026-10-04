@@ -8511,7 +8511,13 @@ globalThis.FM = globalThis.FM || {};
         } else fdV = fdHit(fdU);
       } else {
         var fdT = (t < 0) ? 0 : t;
-        var fdStep = Math.floor(fdT * fdS), fdFrac = fdT * fdS - fdStep;
+        /* Random also uses Speed as a rate. Keyframes advance the random sequence from the
+           flashes already elapsed; numeric Speed keeps the original shared-project clock. */
+        var fdClock = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, 0, fdT, function (u) {
+          var k = FM.evalProp(p.speed, u); if (k == null || isNaN(k)) k = 10;
+          return k < 1 ? 1 : (k > 30 ? 30 : k);
+        }) : fdT * fdS;
+        var fdStep = Math.floor(fdClock), fdFrac = fdClock - fdStep;
         var fdSeed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fdSeed) fdStep = (fdStep + Math.imul(fdSeed, 7919)) | 0;   // PATTERN (queue 904); 0 = the old sequence
         var fd0 = fdN(fdStep), fd1 = fdN(fdStep + 1);
         var fdSmooth = fd0 + (fd1 - fd0) * (0.5 - 0.5 * Math.cos(Math.PI * fdFrac));

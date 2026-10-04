@@ -121295,4 +121295,26 @@
       throw new Error('Control: an old Voronoi instance without Motion no longer stays frozen');
   });
 
+  test('690 Flash Random advances by accumulated keyed Speed', { item: 'TBD' }, function () {
+    const flash = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.flashdark;
+    if (!flash || !FM.integrateProp) throw new Error('Flash (darken) or the rate integrator is unavailable');
+    const read = (speed, time, soft) => {
+      const pixels = new Uint8ClampedArray([200, 200, 200, 255]);
+      flash(pixels, 1, 1, { amount: 1, speed, soft, floor: 0, rhythm: 0, seed: 0 }, time);
+      if (pixels[3] !== 255) throw new Error('Flash changed the layer alpha');
+      return pixels[0];
+    };
+    const step = { kf: [{ t: 0, v: 8, e: 'hold' }, { t: 1, v: 16, e: 'hold' }] };
+    // At 1.5s: 8 cycles before the step plus 8 after it. Current Speed × 1.5s would give 24.
+    const cases = [[1.5, 2], [1.53125, 2.0625]];
+    [0, 1].forEach(soft => cases.forEach(([keyedTime, numericTime]) => {
+      const expected = read(8, numericTime, soft);
+      const wrong = read(16, keyedTime, soft);
+      if (expected === wrong) throw new Error('Control: the phase choices rendered identically');
+      const got = read(step, keyedTime, soft);
+      if (got !== expected) throw new Error('Flash Random used current Speed for its past ' +
+        (soft ? 'smooth' : 'hard') + ' flashes: ' + got + ' instead of ' + expected);
+    }));
+  });
+
 })();
