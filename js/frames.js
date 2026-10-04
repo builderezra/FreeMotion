@@ -517,6 +517,10 @@ window.FM = window.FM || {};
     };
     const sample = async (scene, plan, rec, at, source, rg, signal) => {
       const ps = plan.ps;
+      // A legacy vector mask is composited in layer-local space. A strip-sized scratch
+      // viewport changes the mask edge (especially with feather), so redraw its whole
+      // historical picture and copy only the crossed strip into the accumulator.
+      if (plan.layer.mask && plan.layer.mask.enabled) rg = null;
       const x = rg ? Math.max(0, Math.floor(rg[0]) - 2) : 0;
       const y = rg ? Math.max(0, Math.floor(rg[1]) - 2) : 0;
       const w = rg ? Math.min(plan.W - x, Math.ceil(rg[0] + rg[2]) - x + 2) : plan.W;

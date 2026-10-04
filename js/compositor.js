@@ -14330,7 +14330,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
               && layer.speed.kf.every((k, i, keys) => k && Number.isFinite(k.t) && Number.isFinite(k.v)
                 && k.v > 0 && (!k.e || k.e === 'linear') && (!i || k.t > keys[i - 1].t))))
           || layer.fillMode && layer.fillMode !== 'none'
-          || layer.masks && layer.masks.length || layer.mask && layer.mask.enabled
+          || layer.masks && layer.masks.length
           || layer.behaviors && layer.behaviors.length) continue;
       const rec = media.get(layer.id), effects = layer.effects || [];
       if (!rec || !(rec.file instanceof Blob) || rec.kind !== 'video' || !rec.el) continue;
