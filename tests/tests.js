@@ -19763,6 +19763,34 @@
     if (a !== b) throw new Error('the same nested scene rendered ' + a + ' with the outer group first and ' + b + ' with the inner group first — group flattening is still sensitive to scene order');
   });
 
+  test('three and four styled group levels each draw once and keep every fade', { item: '1041' }, function () {
+    function render(depth, outerFirst) {
+      const groups = Array.from({ length: depth }, (_, i) => FM.makeLayer('group', { name: 'G' + i }));
+      groups.forEach((g, i) => { g.transform.opacity = 0.5; if (i) g.parent = groups[i - 1].id; });
+      const leaf = FM.makeLayer('shape', { shape: 'rect', name: 'white leaf', x: 60, y: 45, shapeW: 60, shapeH: 40, fill: '#ffffff' });
+      if (depth) leaf.parent = groups[depth - 1].id;
+      const layers = (outerFirst ? groups : groups.slice().reverse()).concat(leaf);
+      const sc = scene(layers); sc.project = { width: 120, height: 90, fps: 30, duration: 5, background: '#000000' };
+      const canvas = offscreen(120, 90), ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const original = FM.makeLayer; let builds = 0;
+      try {
+        FM.makeLayer = function (type, props) { if (type === '_flat') builds++; return original(type, props); };
+        FM.renderScene(ctx, sc, 0);
+      } finally { FM.makeLayer = original; }
+      return { red: ctx.getImageData(60, 45, 1, 1).data[0], builds };
+    }
+    for (const depth of [1, 2, 3, 4]) {
+      const want = Math.round(255 * Math.pow(0.5, depth));
+      for (const outerFirst of [true, false]) {
+        const got = render(depth, outerFirst);
+        if (Math.abs(got.red - want) > 2)
+          throw new Error(depth + ' styled groups (' + (outerFirst ? 'outer' : 'inner') + ' first) render ' + got.red + ', expected ' + want);
+        if (got.builds !== depth)
+          throw new Error(depth + ' styled groups built ' + got.builds + ' flattened units, expected exactly ' + depth);
+      }
+    }
+  });
+
   test('effects: Tiles “Whole clip” does not throw away the other effect on the layer', { item: 'tiles-scratch' }, function () {
     /* drawCanvasEffect renders the clean layer into scratch A, hands A to the effect fn to write
      * into B, then blits B into ctx. Those were module singletons, defended by a comment arguing a
