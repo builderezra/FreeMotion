@@ -85,6 +85,7 @@ window.FM = window.FM || {};
       cid: 0,
       online: true,
       active: true,
+      hostClockOffsetMs: null,                 // guest: host wall time minus local wall time, estimated from a pong
       /* diagnostics / assertions */
       stats: { tx: 0, batches: 0, skipped: 0, deferredN: 0, adopted: 0, reasserted: 0, structWins: 0, resyncs: 0, queued: 0, forcedN: 0 }
     };
@@ -179,6 +180,7 @@ window.FM = window.FM || {};
        suite never goes quiet by itself, and a guest ticked by hand in a test would read a long pause
        between two ticks as the host going silent. The UI turns it on for the links it makes. */
     let liveness = false, lastHeard = now(), lastPing = 0, pingN = 0, lastTick = 0;
+    let pingSentN = 0, pingSentAt = null;
     let quiet = null;                          // #967: the link this guest went Offline on by SILENCE and kept open
 
     /* ── hot set (§9) ────────────────────────────────────────────────────────────────────────── */
@@ -861,7 +863,16 @@ window.FM = window.FM || {};
          Queued behind an export, a `lease-no` would leave the text editor open on a layer somebody else
          holds for as long as the export runs. */
       if (C.presence && C.presence.onCtl(S, 'h', msg)) return;
-      if (msg.t === 'pong') return;                 // S6: consumed by the silence clock above, never queued
+      if (msg.t === 'pong') {
+        // The host stamps comments with its clock. A guest clock can be hours wrong, so use the
+        // midpoint of a matching ping/pong to translate those timestamps for relative labels.
+        if (msg.n === pingSentN && pingSentAt != null && typeof msg.hc === 'number' && isFinite(msg.hc)) {
+          const receivedAt = now(), roundTrip = receivedAt - pingSentAt;
+          if (roundTrip >= 0 && roundTrip < LIM.OFFLINE_AFTER)
+            S.hostClockOffsetMs = msg.hc - (pingSentAt + receivedAt) / 2;
+        }
+        return;                                    // S6: never queued behind a frozen document
+      }
       /* §8.9: a guest queues WHOLE incoming messages while frozen or busy, so an export or a half-built
          paste never sees a document somebody else is changing underneath it. */
       if ((frozen() || busy()) && msg.t !== 'welcome') { holdMessage({ kind: 'msg', msg: msg }); return; }
@@ -1566,16 +1577,22 @@ window.FM = window.FM || {};
        owner brings it back (S.onMessage). Only a silence as long as LINK_GRACE — the same grace a 'failed' peer
        connection gets in collab-link.js — closes it. */
     function linkGrace() { return (C.link && C.link.grace) ? C.link.grace() : (LIM.LINK_GRACE || 120000); }
+    function sendPing(t) {
+      lastPing = t;
+      pingSentN = ++pingN;
+      pingSentAt = t;
+      sendToHost({ t: 'ping', n: pingSentN });
+    }
     function liveTick() {
       if (!liveness || isOwner || !link || !link.open || (!S.online && quiet !== link)) { lastTick = 0; return; }
       const t = now();
       const gap = lastTick ? t - lastTick : 0;
       lastTick = t;
-      if (gap > 2 * LIM.PING) { lastHeard = t; lastPing = t; sendToHost({ t: 'ping', n: ++pingN }); return; }
+      if (gap > 2 * LIM.PING) { lastHeard = t; sendPing(t); return; }
       const silent = t - lastHeard;
       if (silent > linkGrace()) { quiet = null; try { link.close('silence'); } catch (e) {} return; }
       if (S.online && silent > LIM.OFFLINE_AFTER) { quiet = link; markOffline(); }
-      if (t - lastPing >= LIM.PING) { lastPing = t; sendToHost({ t: 'ping', n: ++pingN }); }
+      if (t - lastPing >= LIM.PING) sendPing(t);
     }
     /* The owner side: one endpoint per member. The mid is minted HERE and never taken from the peer —
        a guest that could name its own mid could name the owner's and inherit his permissions. */

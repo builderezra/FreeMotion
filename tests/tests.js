@@ -127065,4 +127065,29 @@
       throw new Error('the main preview surface has no accessible image name');
   });
 
+  test('TBD: guest comment age uses the host clock estimated by a matching pong', { item: 'TBD' }, function () {
+    const C = FM.collab, priorSession = C.session, priorActive = C.active;
+    const inv = C.bridge.invariants();
+    const doc = { project: { width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [] };
+    let guestNow = Date.now();
+    const G = C.Session({ adapter: plainAdapter921(jclone921(doc), inv), role: 'editor', mid: 'm1', base: jclone921(doc), now: function () { return guestNow; } });
+    const link = { open: true, send: function (ch, msg) {
+      if (ch === 'ctl' && msg.t === 'ping') {
+        guestNow += 40; // a 40 ms round trip, with the host three hours ahead
+        link.onmessage('ctl', { t: 'pong', n: msg.n, hc: guestNow - 20 + 3 * 3600000 });
+      }
+      return true;
+    } };
+    try {
+      G.setLink(link); G.setLiveness(true); G.tick('hot');
+      if (Math.abs(G.hostClockOffsetMs - 3 * 3600000) > 1) throw new Error('matching pong did not estimate the host clock');
+      C.session = G; C.active = true;
+      const hostNow = Date.now() + 3 * 3600000;
+      if (C.comments._relativeTime(hostNow) !== 'just now') throw new Error('a fresh host-stamped comment reads old on the guest');
+      if (C.comments._relativeTime(hostNow - 10 * 60000) !== '10 min ago') throw new Error('an older host-stamped comment has the wrong age');
+    } finally {
+      C.session = priorSession; C.active = priorActive;
+    }
+  });
+
 })();
