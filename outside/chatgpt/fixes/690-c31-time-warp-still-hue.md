@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Hue Shift before moving-still Time Warp Scan
+
+Starting commit: clean preferred Codex-only `e8e0f807bdd57f7e4847349ad8ef64bdfa36185f`; isolated branch `codex/690-c31-scan-hue-still`. The exact standing #690 is `REQUESTS.md:27375-27403`, and C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. No `audits/*.json` record names C31, Time Warp Scan or Hue Shift.
+
+A decoded still is synchronously available, and Hue Shift is source-local and history-free, but the still-image historical gate excluded it. A cold Time Warp Scan seek therefore used the current colour where playback had frozen an earlier hue. The still gate now admits keyed Hue Shift at each historical crossing; moving-shape support was fixed separately, while decoded video retains its own gate. The new `{ item: 'TBD' }` Chromium regression failed before (`cold=0, played=107` at a strip pixel) and passed after in Freeze/Reveal at 120/60 px, including a current-picture control. Adjacent keyed Exposure still-image regression passed. Two incomplete local browser bootstraps were discarded before the successful checks. Main-MP4 still-scan resume identity advances 9→10.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 371→372; exporter 180→181), `tests/tests.js` (one focused regression and updated resume-identity expectation), and this report. Node syntax and `git diff --check` passed. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
