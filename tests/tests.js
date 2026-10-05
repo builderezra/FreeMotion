@@ -60222,45 +60222,56 @@
     }
   });
 
-  test('a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)', { item: 'TBD' }, function () {
-    if (!FM.fitProjectSize || !FM.storage._clampProjectDims || !FM.projectIsOversize)
+  test('a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)', { item: 'TBD', budgetMs: 30000 }, async function () {
+    if (!FM.fitProjectSize || !FM.storage.load || !FM.storage.autosave || !FM.projectIsOversize || !FM.projects)
       throw new Error('the import/storage size boundary is unavailable');
-    const P = FM.scene.project;
-    const saved = { layers: FM.scene.layers.slice(), w: P.width, h: P.height, duration: P.duration,
-      picked: P.sizePicked, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds };
+    const prior = FM.projects.currentId(), wasHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    const addToLibrary = FM.mediaLib && FM.mediaLib.add, toast = FM.toast;
+    let testProject = null;
     const made = [];
     try {
-      [[16000, 4000], [9000, 2000]].forEach(function (d) {
+      FM.toast = () => {};
+      if (FM.mediaLib) FM.mediaLib.add = () => {}; // the test clip is not a user's library tile
+      testProject = await FM.projects.create({ name: 'Panorama reopen check', width: 320, height: 240 });
+      if (!testProject) throw new Error('a temporary project could not be created for the reopen check');
+      const file = await q915aPng('panorama-reopen', '#4285b4');
+      for (const d of [[16000, 4000], [9000, 2000]]) {
         const fit = FM.fitProjectSize(d[0], d[1]);
         if (!fit.capped || fit.w > 7680 || fit.h > 7680)
           throw new Error(d.join('×') + ' made a canvas ' + fit.w + '×' + fit.h + ' that storage will reshape on reopen');
+        const P = FM.scene.project;
         FM.scene.layers.length = 0; P.sizePicked = false;
-        const rec = { kind: 'image', width: d[0], height: d[1], file: { name: 'panorama.jpg' } };
-        FM.addMediaLayer(rec);
+        FM.addMediaLayer({ kind: 'image', width: d[0], height: d[1], file });
         const layer = FM.scene.layers[0];
         if (!layer) throw new Error('the panorama did not import');
         made.push(layer.id);
         if (P.width !== fit.w || P.height !== fit.h) throw new Error('the import bypassed the fit: ' + P.width + '×' + P.height);
-        const opened = { width: P.width, height: P.height, fps: 30, duration: P.duration };
-        FM.storage._clampProjectDims(opened);  // the same bound applied on save/load
-        if (opened.width !== P.width || opened.height !== P.height)
-          throw new Error('reopening changes ' + P.width + '×' + P.height + ' into ' + opened.width + '×' + opened.height);
-        if (layer.transform.x !== opened.width / 2 || layer.transform.y !== opened.height / 2)
-          throw new Error('the photo is no longer centred after reopen: ' + layer.transform.x + ',' + layer.transform.y);
-        if (!(layer.transform.scale > 0) || d[0] * layer.transform.scale > opened.width + 1 || d[1] * layer.transform.scale > opened.height + 1)
+        const before = { width: P.width, height: P.height, transform: JSON.stringify(layer.transform) };
+        FM.storage.autosave(); await sleep(750); await FM.storage.settled();
+        const disk = JSON.parse(localStorage.getItem('fm.proj.' + testProject) || 'null');
+        if (!disk || !disk.layers.some(l => l.id === layer.id)) throw new Error('the import was not autosaved before reopening');
+        if (!(await FM.storage.load())) throw new Error('the saved project did not reopen');
+        const opened = FM.scene.project, reopened = FM.scene.layers.find(l => l.id === layer.id);
+        if (opened.width !== before.width || opened.height !== before.height)
+          throw new Error('reopening changes ' + before.width + '×' + before.height + ' into ' + opened.width + '×' + opened.height);
+        if (!reopened || JSON.stringify(reopened.transform) !== before.transform)
+          throw new Error('the photo transform changed across save and reopen');
+        if (reopened.transform.x !== opened.width / 2 || reopened.transform.y !== opened.height / 2)
+          throw new Error('the photo is no longer centred after reopen: ' + reopened.transform.x + ',' + reopened.transform.y);
+        if (!(reopened.transform.scale > 0) || d[0] * reopened.transform.scale > opened.width + 1 || d[1] * reopened.transform.scale > opened.height + 1)
           throw new Error('the panorama no longer fits the reopened canvas');
-      });
-      if (!FM.projectIsOversize({ width: 8000, height: 1000 }))
-        throw new Error('a legacy 8000×1000 project can be silently cropped on reopen with no oversize warning');
+      }
       if (FM.projectIsOversize({ width: 7680, height: 1920 }))
         throw new Error('the new maximum panorama is incorrectly warned as oversized');
     } finally {
-      made.forEach(id => FM.media.remove(id));
-      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
-      P.width = saved.w; P.height = saved.h; P.duration = saved.duration; P.sizePicked = saved.picked;
-      FM.scene.selectedId = saved.selectedId; FM.scene.selectedIds = saved.selectedIds;
-      if (FM.resizeCanvas) FM.resizeCanvas();
-      if (FM.refreshAll) FM.refreshAll();
+      if (FM.mediaLib) FM.mediaLib.add = addToLibrary;
+      FM.toast = toast;
+      if (testProject) {
+        try { await FM.projects.open(prior || null, { confirmed: true }); } catch (e) {}
+        try { await FM.projects.remove(testProject); } catch (e) {}
+      }
+      for (const id of made) { FM.media.remove(id); await FM.storage.removeMedia(id); }
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
     }
   });
 

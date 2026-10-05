@@ -3064,10 +3064,9 @@ window.FM = window.FM || {};
    * about a project the app can identify by itself in one comparison. Same failure as queue 129's
    * console.warn: the app knows and does not say.
    *
-   * The bar: only a project BIGGER THAN THE APP WILL AUTO-CREATE, which is exactly the condition
-   * fitProjectSize() refuses to create. So this can never fire on a comp the app made, or on
-   * anything a person deliberately typed in that is within range — only on the ones that were built
-   * unasked before v9.27, which is the case it exists for. Once per project per session. */
+   * The bar: a project BIGGER THAN THE APP WILL AUTO-CREATE, which is exactly the condition
+   * fitProjectSize() refuses to create. It can be an older auto-sized project or a deliberate
+   * custom size; either way, offer the size remedy once per project per session. */
   let _oversizeTold = '';
   FM.projectIsOversize = function (P) {
     P = P || (FM.scene && FM.scene.project);
