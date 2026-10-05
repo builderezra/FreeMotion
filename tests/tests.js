@@ -127261,4 +127261,40 @@
     });
   });
 
+  test('TBD: rotating from phone width into Studio keeps selection, inspector and playhead', { item: 'TBD', budgetMs: 15000 }, async function () {
+    const frame = window.frameElement;
+    if (!frame) throw new Error('setup: this test needs the resizable run.html iframe');
+    const oldWidth = frame.style.width, oldHeight = frame.style.height;
+    const homeWasOpen = FM.home && FM.home.isOpen && FM.home.isOpen();
+    const layers = FM.scene.layers.slice(), selected = FM.scene.selectedId, time = FM.time;
+    const panel = document.getElementById('inspector-panel');
+    try {
+      if (homeWasOpen) FM.home.close();
+      FM.scene.layers.length = 0;
+      const layer = FM.makeLayer('shape', { name: 'rotation target', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, start: 0, duration: 3 });
+      FM.scene.layers.push(layer); FM.refreshAll();
+      frame.style.width = '390px'; frame.style.height = '844px';
+      await sleep(350);
+      if (!matchMedia('(max-width: 700px)').matches) throw new Error('setup: 390px did not enter the phone layout');
+      FM.selectLayer(layer.id); FM.setTime(1.25);
+      await sleep(150);
+      if (!panel.classList.contains('open')) throw new Error('setup: the selected layer did not open its phone inspector');
+      const before = FM.time;
+      frame.style.width = '844px'; frame.style.height = '390px';
+      await sleep(450);
+      if (matchMedia('(max-width: 700px)').matches) throw new Error('setup: 844px did not enter Studio');
+      if (FM.scene.selectedId !== layer.id) throw new Error('rotation into Studio lost the selected layer');
+      const bounds = panel.getBoundingClientRect();
+      if (getComputedStyle(panel).display === 'none' || bounds.width < 100 || !document.getElementById('inspector').textContent.trim())
+        throw new Error('rotation into Studio lost the selected layer’s inspector panel');
+      if (Math.abs(FM.time - before) > 1 / (FM.scene.project.fps || 30))
+        throw new Error('rotation into Studio moved the playhead from ' + before.toFixed(3) + ' to ' + FM.time.toFixed(3));
+    } finally {
+      frame.style.width = oldWidth; frame.style.height = oldHeight;
+      FM.scene.layers.length = 0; layers.forEach(layer => FM.scene.layers.push(layer));
+      FM.selectLayer(selected || null); FM.setTime(time); FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
 })();
