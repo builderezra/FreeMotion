@@ -6,6 +6,6 @@ The result of the browser's persistence request is retained as `FM.storagePersis
 
 Changed: `js/storage.js`, `js/settings.js`, `tests/tests.js`, `index.html` (storage/settings cache tags 70→71 and 53→54).
 
-Node syntax for both changed scripts and the test file, plus `git diff --check`, passed. Browser verification is pending because the shared `.ship-in-progress` marker reappeared before the focused run; no browser regression was run and this commit must not be fast-forwarded to the preferred branch yet.
+Node syntax for both changed scripts and the test file, plus `git diff --check`, passed. The focused muted Chromium regression later passed (1/1) with the ship lock absent. Its first run had no `FM.settings` because that script was missing from the app frame; the retry loaded completely and passed. The temporary mute-driver edit was restored.
 
 Local only; no shared Claude checkout edit, push, PR or deployment.
