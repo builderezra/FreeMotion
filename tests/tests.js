@@ -123666,7 +123666,7 @@
         if (exported.length !== 30 || exported.some((v, i) => v !== expected[i]))
           throw new Error('main MP4 scan differs from continuous playback: expected ' +
             expected.join(',') + ', got ' + exported.join(','));
-        if (!renderer.includes(';c31-video-timewarp-7'))
+        if (!renderer.includes(';c31-video-timewarp-8'))
           throw new Error('old MP4 resume parts can splice into a new video scan');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally {
@@ -123885,7 +123885,7 @@
         layer.mask.feather = 6; layer.mask.invert = false; FM.scene = sc;
         XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1/30 });
-        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-7'))
+        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-8'))
           throw new Error('masked-video MP4 did not render with the current scan resume identity');
       } finally { XR.signature = previousSignature; FM.scene = previousScene; }
     } finally {
@@ -123953,7 +123953,7 @@
         FM.scene = sc;
         XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1/30 });
-        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-7'))
+        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-8'))
           throw new Error('pen-masked video MP4 did not use the current historical scan renderer');
       } finally { XR.signature = previousSignature; FM.scene = previousScene; }
     } finally {
@@ -124031,7 +124031,7 @@
         FM.scene = sc;
         XR.signature = function (options) { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1/30 });
-        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-7'))
+        if (!exported || !exported.size || !renderer.includes(';c31-video-timewarp-8'))
           throw new Error('combined-mask video MP4 did not use the current historical scan renderer');
       } finally { XR.signature = previousSignature; FM.scene = previousScene; }
     } finally {
@@ -124424,6 +124424,96 @@
         if(exported.length!==30 || Math.abs(exported[24]-expectedExportRed)>12
             || Math.abs(exported[24]-currentGradeRed)<15)
           throw new Error('main MP4 lost the historical video Levels: expected about '+
+            expectedExportRed+', current-time grade '+currentGradeRed+', got '+exported[24]);
+      } finally {FM.scene=savedScene;}
+    } finally {
+      sampler.dispose();made.forEach(id=>{try{FM.media.remove(id);}catch(e){}});
+    }
+  });
+
+  test('690 C31 Time Warp Scan video holds keyed Gamma at crossing time', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createTimeWarpVideoSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: graded video fixture cannot be made');
+    const muxer = new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),
+      video:{codec:'avc',width:128,height:32},fastStart:'in-memory'});
+    let failure = null;
+    const encoder = new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta),
+      error:e=>{failure=e;}});
+    encoder.configure({codec:'avc1.42e01e',width:128,height:32,bitrate:2e6,framerate:30});
+    const plate = new OffscreenCanvas(128,32), pg = plate.getContext('2d');
+    for (let f = 0; f < 30; f++) {
+      pg.fillStyle = '#777777'; pg.fillRect(0,0,128,32);
+      pg.fillStyle = '#999999'; pg.fillRect(8 + f * 3,0,16,32);
+      const frame = new VideoFrame(plate,{timestamp:Math.round(f*1e6/30),duration:Math.round(1e6/30)});
+      encoder.encode(frame,{keyFrame:f%10===0}); frame.close();
+    }
+    await encoder.flush(); encoder.close();
+    if (failure) throw new Error('setup: graded fixture encode failed: ' + failure);
+    muxer.finalize();
+    const file = new File([muxer.target.buffer],'graded-scan.mp4',{type:'video/mp4'});
+    const rec = await hunt2dLoadWarm(file), made = [];
+    const layer = hunt2dClipLayer(rec, made);
+    layer.duration = 1; layer.trimEnd = 1;
+    const grade = FM.fxRegistry.makeInstance('gamma');
+    grade.params.gamma = {kf:[{t:0,v:0.55,e:'linear'},{t:1,v:3.4,e:'linear'}]};
+    grade.params.red = 1.5;
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params,{duration:1,direction:0,mode:0,loop:0,barwidth:0,glow:0});
+    layer.effects = [grade,warp];
+    const sc = hunt2dScene([layer],{duration:1});
+    const sampler = FM.createTimeWarpVideoSampler(FM.media,{timeoutMs:10000});
+    const seekLive = async t => {
+      const el=rec.el, target=FM.frameSeekTarget(t,rec.duration);
+      if (Math.abs(el.currentTime-target)<1e-4 && !el.seeking && el.readyState>=2) return;
+      await new Promise((resolve,reject)=>{
+        let timer;
+        const finish=err=>{clearTimeout(timer);el.removeEventListener('seeked',on);
+          el.removeEventListener('error',on);err?reject(err):resolve();};
+        const on=()=>{if(el.error)finish(new Error('graded source decode failed'));
+          else if(!el.seeking&&el.readyState>=2&&Math.abs(el.currentTime-target)<1e-3)finish();};
+        el.addEventListener('seeked',on);el.addEventListener('error',on);
+        timer=setTimeout(()=>finish(new Error('graded source seek timed out')),10000);
+        el.currentTime=target;on();
+      });
+    };
+    const render=async(t,width,prepared)=>{
+      await seekLive(t);
+      const cv=offscreen(width,width/4),g=cv.getContext('2d',{willReadFrequently:true});
+      FM.withTimeWarpVideoSources(prepared,()=>FM.renderScene(g,sc,t));
+      return Array.from(g.getImageData(0,0,width,width/4).data);
+    };
+    try {
+      let expectedExportRed = null, currentGradeRed = null;
+      for (const width of [128,64]) {
+        FM.resetMotionFlowCache();
+        let played;
+        for(let f=0;f<=24;f++)played=await render(f/30,width,null);
+        FM.resetMotionFlowCache();
+        const prepared=await sampler.prepare(sc,24/30,width/128);
+        if (!prepared || !prepared.get(layer.id)) throw new Error('keyed Gamma video plan was excluded');
+        const cold=await render(24/30,width,prepared);
+        if(cold.join()!==played.join())
+          throw new Error('keyed Gamma differs between video playback and cold scan at '+width+' px');
+        const saved=grade.params.gamma;
+        grade.params.gamma=0.7;
+        FM.resetMotionFlowCache();
+        const currentGrade=await render(24/30,width,await sampler.prepare(sc,24/30,width/128));
+        grade.params.gamma=saved;
+        if(currentGrade.join()===cold.join())
+          throw new Error('Control: historical keyed Gamma has no visible effect on the scanned video');
+        if(width===128) {
+          expectedExportRed=cold[(16*128+64)*4];
+          currentGradeRed=currentGrade[(16*128+64)*4];
+        }
+      }
+      const savedScene=FM.scene;
+      try {
+        FM.scene=sc;
+        const exported=await hunt2dDecodeMp4(await hunt2dExport({fps:30,to:1}),
+          (g)=>g.getImageData(64,16,1,1).data[0]);
+        if(exported.length!==30 || Math.abs(exported[24]-expectedExportRed)>12
+            || Math.abs(exported[24]-currentGradeRed)<15)
+          throw new Error('main MP4 lost the historical video Gamma: expected about '+
             expectedExportRed+', current-time grade '+currentGradeRed+', got '+exported[24]);
       } finally {FM.scene=savedScene;}
     } finally {
