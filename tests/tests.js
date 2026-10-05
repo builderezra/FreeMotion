@@ -120003,6 +120003,35 @@
     }
   });
 
+  test('a project file without a layer transform survives import, save and reopen', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const prior = FM.projects.currentId(), wasHome = FM.home && FM.home.isOpen && FM.home.isOpen(), made = [];
+    try {
+      for (const mode of ['missing', 'null']) {
+        const layer = FM.makeLayer('shape', { name: 'Missing transform ' + mode, x: 90, y: 70 });
+        if (mode === 'missing') delete layer.transform; else layer.transform = null;
+        const file = { app: 'freemotion', project: { name: 'Transform repair ' + mode, width: 180, height: 140, duration: 2, fps: 30 }, layers: [layer], media: {} };
+        if (!(await FM.storage.importObject(file, null, { quiet: true, confirmed: true })))
+          throw new Error('the ' + mode + '-transform project was refused');
+        made.push(FM.projects.currentId());
+        const check = where => {
+          const got = FM.scene.layers.find(l => l.name === layer.name);
+          if (!got || !got.transform || typeof got.transform !== 'object' ||
+              !Number.isFinite(got.transform.scale) || !Number.isFinite(got.transform.anchorX))
+            throw new Error(where + ': the ' + mode + ' transform was not rebuilt');
+          FM.animatedProps(got); // the old timeline crash was Object.keys(layer.transform)
+          FM.refreshAll();
+        };
+        check('import');
+        await FM.storage.save();
+        if (FM.storage.settled) await FM.storage.settled();
+        if (!(await FM.storage.load())) throw new Error('the saved ' + mode + '-transform project did not reopen');
+        check('reopen');
+      }
+    } finally {
+      await hfCleanup(made, prior, wasHome);
+    }
+  });
+
   test('690 deeply nested project files are rejected before creating a project', { item: 'TBD' }, async function () {
     const oldProjects = FM.projects, oldToast = FM.toast;
     let created = 0;
