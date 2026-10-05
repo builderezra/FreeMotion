@@ -127441,4 +127441,37 @@
     }
   });
 
+  test('690 a multi-file pick is one Undo step while a single pick remains one', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realTileAdd = FM.mediaLib && FM.mediaLib.add;
+    try {
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: 'Multi-file Undo check', width: 320, height: 240 });
+      made.push(pid);
+      if (!pid) throw new Error('setup: could not make the import project');
+      if (FM.mediaLib) FM.mediaLib.add = function () {}; // this checks the timeline, not library tiles
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 8;
+      canvas.getContext('2d').fillRect(0, 0, 8, 8);
+      const png = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!png) throw new Error('setup: could not make the import photos');
+      const photo = name => new File([png], name, { type: 'image/png' });
+      const before = FM.history._steps().len;
+      await FM._handleFiles([photo('one.png'), photo('two.png'), photo('three.png')]);
+      if (FM.scene.layers.length !== 3) throw new Error('the multi-file pick did not add all three images');
+      if (FM.history._steps().len !== before + 1)
+        throw new Error('the multi-file pick used ' + (FM.history._steps().len - before) + ' Undo steps instead of one');
+      FM.history.undo();
+      if (FM.scene.layers.length) throw new Error('one Undo did not remove the three imported images');
+      FM.history.redo();
+      if (FM.scene.layers.length !== 3) throw new Error('one Redo did not restore all three imported images');
+      const next = FM.history._steps().len;
+      await FM._handleFiles([photo('four.png')]);
+      if (FM.scene.layers.length !== 4 || FM.history._steps().len !== next + 1)
+        throw new Error('a single-file pick stopped being one Undo step');
+    } finally {
+      if (FM.mediaLib) FM.mediaLib.add = realTileAdd;
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();

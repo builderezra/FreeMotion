@@ -5694,9 +5694,13 @@ window.FM = window.FM || {};
     // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
     const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
     const pickedIn = FM.startedIn(), notAdded = [];   // queue 690 (hunt 5): see FM.stillIn above
+    // Finish the asynchronous reads before inserting a multi-pick. The short insertion pass can then
+    // be one undo step without muting history while the user edits during a slow video/audio decode.
+    const batch = files.length > 1, ready = [];
     const add = function (rec, file) {
       if (!FM.stillIn(pickedIn)) { FM.letGoMedia(rec); notAdded.push(file); return false; }
-      FM.addMediaLayer(rec);
+      if (batch) ready.push({ rec: rec, file: file });
+      else FM.addMediaLayer(rec);
       return true;
     };
     for (const file of files) {
@@ -5726,6 +5730,28 @@ window.FM = window.FM || {};
         // importer being broken rather than the file being unsupported.
         else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
       } catch (e) { FM.reportError('importing “' + (file && file.name || 'a file') + '”', e, 'FreeMotion could not open “' + (file && file.name || 'that file') + '”.\n\nIf it plays elsewhere on this device it is usually the format — try exporting it as MP4 (video) or WAV/M4A (audio) and importing that.'); }
+    }
+    if (ready.length) {
+      if (!FM.stillIn(pickedIn)) {
+        for (const item of ready) { FM.letGoMedia(item.rec); notAdded.push(item.file); }
+      } else {
+        const hist = FM.history, job = FM.jobBegin ? FM.jobBegin('multi-file import') : null;
+        let landed = 0;
+        if (hist && hist.mute) hist.mute();
+        try {
+          for (const item of ready) {
+            try { FM.addMediaLayer(item.rec); landed++; }
+            catch (e) {
+              FM.letGoMedia(item.rec);
+              FM.reportError('importing “' + (item.file && item.file.name || 'a file') + '”', e);
+            }
+          }
+        } finally {
+          if (hist && hist.unmute) hist.unmute();
+          if (job && FM.jobEnd) FM.jobEnd(job);
+        }
+        if (landed && hist) hist.commit();
+      }
     }
     if (notAdded.length && FM.toast) {
       FM.toast(notAdded.length === 1
