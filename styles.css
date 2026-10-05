@@ -11812,7 +11812,9 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 .sm-band { position: absolute; top: 2px; height: 52px; border-radius: 6px; border: 1px dashed #5a667a; color: #aeb8c8; cursor: pointer; overflow: hidden; white-space: nowrap;
   background: repeating-linear-gradient(135deg, #0b0f16 0 6px, #141a24 6px 12px); font: 600 10px/1 system-ui, sans-serif; display: flex; align-items: center; padding: 0 8px; }
 .sm-band-hint { padding: 16px; color: var(--text-dim); font: 600 13px/1.4 system-ui, sans-serif; }
-@media (max-width: 700px) { #sm-say.sm-say-has-b { padding-right: 0; } #sm-say.sm-say-has-b .sm-line { padding-right: 56px; } }
+/* §3.12 rule 5 at EVERY width (980 review finding 23): from 2.2 the PC line also takes the tray's place in the band, so 🗑's
+   56 px stay free of buttons there too — a re-click where 🗑 was pressed Do it anyway and deleted a locked clip */
+#sm-say.sm-say-has-b { padding-right: 0; } #sm-say.sm-say-has-b .sm-line { padding-right: 56px; }
 @media (min-width: 701px) {
   body.ed-simple #tl-centerline { bottom: 0; }                                  /* #sm-say left the timeline for the band */
   #inspector-panel > #sm-bar { border-top: 1px solid var(--line); }

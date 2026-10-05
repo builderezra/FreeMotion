@@ -122457,4 +122457,26 @@
       }, width);
     }
   });
+
+
+  test('simple P2.2 · review on PC a second click where 🗑 was cannot press Do it anyway on a locked clip (§3.12 rule 5 at every width)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atWideWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H, { locked: true }), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        FM.selectLayer(v.L('C').id); await v.sleep(80);
+        const bin = smTool('delete');
+        if (!bin || document.getElementById('sm-bar').parentNode !== document.getElementById('inspector-panel')) throw new Error('CONTROL: no PC tray with 🗑 in the band');
+        const r = bin.getBoundingClientRect();
+        bin.click(); await v.idle();
+        if (!/locked/.test(v.say())) throw new Error('CONTROL: no locked line: “' + v.say() + '”');
+        await v.sleep(450);                                                   // armed
+        document.querySelectorAll('#sm-say .sm-say-b').forEach(b => { const q = b.getBoundingClientRect();
+          if (q.right > r.left + 0.5 && q.left < r.right - 0.5) throw new Error('“' + b.textContent + '” lies over 🗑’s old place: ' + Math.round(q.left) + '–' + Math.round(q.right) + ' vs ' + Math.round(r.left) + '–' + Math.round(r.right)); });
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (hit) hit.click(); await v.idle();
+        const C = v.L('C');
+        if (!C || C.locked !== true) throw new Error('a second click where 🗑 was deleted or unlocked the locked clip');
+      });
+    }, 1280);
+  });
 })();
