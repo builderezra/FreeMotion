@@ -2954,11 +2954,12 @@ window.FM = window.FM || {};
    * measurement in queue 202 — 8 layers, 2 effects, 4 cores, half-second frame stalls — and it is a
    * photograph's shape, not a video's. No export target is a 12 MP still-shaped video.
    *
-   * The cap is on the SHORT side because that is what the picker's "2160p" means for a portrait comp.
-   * Aspect is preserved and both sides come out even, which H.264 requires. Anyone who genuinely wants
-   * bigger can still type it into Canvas settings — this governs only the size the app picks unasked.
+   * The short side stops at 2160, the picker's "2160p" bound. The long side must also stop at 7680:
+   * storage caps each side there, so a wider panorama would change shape when reopened. Aspect is
+   * preserved and both sides come out even, which H.264 requires.
    */
   const MAX_AUTO_SHORT = 2160;
+  const MAX_AUTO_LONG = 7680;
 
   /* ═══ TELL HIM HIS PROJECT IS THE PROBLEM, ON THE DEVICE (queue 202 Finding 1, and 125 / 95).
    *
@@ -2974,15 +2975,14 @@ window.FM = window.FM || {};
    * about a project the app can identify by itself in one comparison. Same failure as queue 129's
    * console.warn: the app knows and does not say.
    *
-   * The bar: only a project BIGGER THAN THE APP'S OWN PICKER OFFERS, which is exactly the condition
-   * fitProjectSize() already refuses to create. So this can never fire on a comp the app made, or on
-   * anything a person deliberately typed in that is within range — only on the ones that were built
-   * unasked before v9.27, which is the case it exists for. Once per project per session. */
+   * The bar: a project BIGGER THAN THE APP WILL AUTO-CREATE, which is exactly the condition
+   * fitProjectSize() refuses to create. It can be an older auto-sized project or a deliberate
+   * custom size; either way, offer the size remedy once per project per session. */
   let _oversizeTold = '';
   FM.projectIsOversize = function (P) {
     P = P || (FM.scene && FM.scene.project);
     if (!P || !P.width || !P.height) return false;
-    return Math.min(P.width, P.height) > MAX_AUTO_SHORT;
+    return Math.min(P.width, P.height) > MAX_AUTO_SHORT || Math.max(P.width, P.height) > MAX_AUTO_LONG;
   };
   FM.warnOversizeProject = function () {
     const P = FM.scene && FM.scene.project;
@@ -3019,9 +3019,9 @@ window.FM = window.FM || {};
   const evenDim = v => Math.max(2, Math.round(v / 2) * 2);
   FM.fitProjectSize = function (w, h) {
     w = Math.max(2, Math.round(w || 0)); h = Math.max(2, Math.round(h || 0));
-    const short = Math.min(w, h);
-    if (!isFinite(short) || short <= MAX_AUTO_SHORT) return { w: evenDim(w), h: evenDim(h), capped: false };
-    const k = MAX_AUTO_SHORT / short;
+    const short = Math.min(w, h), long = Math.max(w, h);
+    const k = Math.min(1, MAX_AUTO_SHORT / short, MAX_AUTO_LONG / long);
+    if (k >= 1) return { w: evenDim(w), h: evenDim(h), capped: false };
     return { w: evenDim(w * k), h: evenDim(h * k), capped: true };
   };
 
@@ -6273,6 +6273,7 @@ window.FM = window.FM || {};
         'mix-failed': 'the soundtrack could not be built',
         'aac-unavailable': 'this browser cannot encode AAC',
         'encode-failed': 'the audio encoder failed',
+        'no-chunks': 'the audio encoder produced no sound frames',
         // v14.35, #215: this reason had NO flag at all, so an export whose entire soundtrack failed to
         // decode fell through to 'no soundtrack' — the same words a project with no audio gets.
         'all-unreadable': 'none of the audio clips could be read',

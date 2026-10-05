@@ -902,6 +902,36 @@ window.FM = window.FM || {};
       return lands[0];
     } catch (e) { return 0; }
   }
+  // The encoder's chunk count proves a track exists, but a stream of silent AAC frames still sounds
+  // like a lost soundtrack. Decode what will be muxed, using the config carried by its first kept
+  // chunk, so the next device report can distinguish encoded silence from audible samples.
+  async function decodedAACPeak(chunks) {
+    const Dec = window.AudioDecoder;
+    if (typeof Dec !== 'function' || !chunks || !chunks.length) return null;
+    const first = chunks.find(a => a.meta && a.meta.decoderConfig);
+    if (!first) return null;
+    let peak = 0, error = null, dec = null;
+    try {
+      dec = new Dec({
+        output: ad => {
+          try {
+            for (let c = 0; c < ad.numberOfChannels; c++) {
+              const samples = new Float32Array(ad.numberOfFrames);
+              ad.copyTo(samples, { planeIndex: c, format: 'f32-planar' });
+              for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+            }
+          } catch (e) { error = e; }
+          finally { ad.close(); }
+        },
+        error: e => { error = e; },
+      });
+      dec.configure(first.meta.decoderConfig);
+      chunks.forEach(a => dec.decode(a.chunk));
+      await dec.flush();
+      return error ? null : peak;
+    } catch (e) { return null; }
+    finally { if (dec && dec.state !== 'closed') try { dec.close(); } catch (e) {} }
+  }
   /* Drops the `skip` warm-up frames, re-times what is left from 0, keeps only the frames the mix fills,
      and cuts the last one's duration to the mix's own end. The decoder description rides the first frame
      KEPT — the muxer takes it from whichever chunk carries it, and the one that did has been dropped. */
@@ -1350,11 +1380,42 @@ window.FM = window.FM || {};
        * The cost is holding the encoded audio in memory for the render — AAC at 160kbps is about
        * 1.2MB a minute, which is nothing beside the video, and it is freed as soon as it is muxed. */
       let audioChunks = null;
+      let audioFramesWritten = 0, audioBytesWritten = 0, audioDurationUs = 0;
+      let decodedPeak = null, lateAAC = 0, droppedAudioBeforeMux = false, reportMarker = null;
+      const lateLine = () => 'late AAC   ' + lateAAC + ' chunk' + (lateAAC === 1 ? '' : 's') + ' arrived after the track was dropped';
+      const noteLateAAC = () => {
+        lateAAC++;
+        console.warn('[export] AAC chunk arrived after the sound track was dropped (' + lateAAC + ')');
+        // An encoder callback can arrive even after the ready card/report was built. Update only
+        // this export's saved report, never one from a later export.
+        if (!reportMarker) return;
+        try {
+          const old = localStorage.getItem('fm.lastExportReport');
+          if (!old || !old.includes(reportMarker)) return;
+          const line = lateLine();
+          localStorage.setItem('fm.lastExportReport', /^late AAC   /m.test(old)
+            ? old.replace(/^late AAC   .*$/m, line)
+            : old.replace(/^(audio      .*\n)/m, '$1' + line + '\n'));
+        } catch (e) {}
+      };
       if (mix) {
         audioChunks = [];
         try {
-          await encodeAudio((chunk, meta) => audioChunks.push({ chunk: chunk, meta: meta }), mix);
+          await encodeAudio((chunk, meta) => {
+            if (droppedAudioBeforeMux) { noteLateAAC(); return; }
+            if (audioChunks) audioChunks.push({ chunk: chunk, meta: meta });
+          }, mix);
+          // A resolved flush is not proof that the encoder emitted anything. Declaring a track
+          // here would put an empty soun/mp4a track in the file while the ready card says Sound ✓.
+          if (!audioChunks.length) {
+            droppedAudioBeforeMux = true;
+            FM._audioTrackDropped = 'no-chunks';
+            exportSay('The audio encoder produced no sound frames — exporting WITHOUT SOUND');
+            if (FM.toast) FM.toast('The audio encoder produced no sound frames — exporting WITHOUT SOUND', 6000);
+            mix = null; audioChunks = null;
+          } else decodedPeak = await decodedAACPeak(audioChunks);
         } catch (e) {
+          droppedAudioBeforeMux = true;
           console.warn('[export] the soundtrack failed to encode — exporting video only', e);
           FM._audioTrackDropped = 'encode-failed';
           // v14.35: toast-only until now, so on a phone this one was painted under the overlay and
@@ -1531,9 +1592,17 @@ window.FM = window.FM || {};
        * Kept as a swallow on purpose — a failed soundtrack must not throw away a render that may have
        * taken minutes — but it says so now, and it distinguishes itself from the other two paths so the
        * toast alone tells you which half of the pipeline broke. */
-      /* Nothing can fail here any more: these chunks were produced before the muxer was built, and the
-         muxer only declared an audio track BECAUSE they exist. Adding a chunk is a byte copy. */
-      if (audioChunks) { for (const a of audioChunks) muxer.addAudioChunk(a.chunk, a.meta); audioChunks = null; }
+      /* The muxer declared an audio track only after at least one chunk existed. Count bytes and
+         duration as they are fed so the report describes the track actually written. */
+      if (audioChunks) {
+        for (const a of audioChunks) {
+          muxer.addAudioChunk(a.chunk, a.meta);
+          audioFramesWritten++;
+          audioBytesWritten += a.chunk.byteLength || 0;
+          audioDurationUs += a.chunk.duration || AAC_FRAME / mix.sampleRate * 1e6;
+        }
+        audioChunks = null;
+      }
       muxer.finalize();
       /* HAND THE FILE OVER, or hand it to whoever asked to present it (queue 141 part 4).
        * `onReady` lets the caller put its own card in front of the OS save sheet — which is the whole
@@ -1572,15 +1641,20 @@ window.FM = window.FM || {};
          * ⚠️ Wrapped in try/catch and never awaited: a full storage quota or a private-mode throw must
          * not be able to fail an export that has otherwise just succeeded. */
         try {
+          reportMarker = 'when       ' + new Date().toISOString();
           const rep = [
             'FreeMotion export report',
-            'when       ' + new Date().toISOString(),
+            reportMarker,
             'file       ' + outName + '  ' + Math.round(outBlob.size / 1024) + ' KB',
             'video      ' + outW + 'x' + outH + ' @' + fps + 'fps, ' + Math.max(0, end - start).toFixed(2) + 's',
-            'audio      ' + (mix ? 'TRACK WRITTEN' : 'NO TRACK'),
+            'audio      ' + (audioFramesWritten > 0
+              ? 'TRACK WRITTEN · ' + audioFramesWritten + ' AAC frames · ' + (audioBytesWritten / 1024).toFixed(1) + ' KB · ' + (audioDurationUs / 1e6).toFixed(2) + 's'
+              : 'NO TRACK'),
+            ...(lateAAC ? [lateLine()] : []),
             'dropped    ' + (FM._audioTrackDropped || 'no'),
             'mix peak   ' + (FM._lastMixRawPeak == null ? '-' : FM._lastMixRawPeak.toFixed(3)) +
               (FM._lastMixGain != null && FM._lastMixGain < 1 ? '  (limited: x' + FM._lastMixGain.toFixed(3) + ' at the loudest overlap only)' : ''),
+            'decoded peak ' + (audioFramesWritten > 0 ? (decodedPeak == null ? 'unavailable' : decodedPeak.toFixed(3)) : '-'),
             'drops      ' + JSON.stringify(FM._lastAudioDrops || []),
             'suppressed ' + JSON.stringify(FM._lastAudioSuppressed || []),
             'AAC encode ' + (typeof AudioEncoder === 'undefined' ? 'AudioEncoder MISSING in this browser' : 'AudioEncoder present'),
@@ -1617,7 +1691,7 @@ window.FM = window.FM || {};
         await opts.onReady({
           blob: outBlob, name: outName, poster: poster,
           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
-          hasAudio: !!mix, audioDropped: FM._audioTrackDropped || null,
+          hasAudio: audioFramesWritten > 0, audioDropped: FM._audioTrackDropped || null,
           resumedPct: resumedPct, resumedParts: resumedParts,
           protected: !recorder ? null : (recorder.recording ? true : recorder.capped ? 'capped' : false),
           save: () => deliver(outBlob, outName),

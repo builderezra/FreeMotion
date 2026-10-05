@@ -119734,5 +119734,142 @@
     if (src.indexOf(old) > src.indexOf('lsSide<lsSides')) throw new Error('the side loop comes before the v17.21 loop, so it is still in the path One way takes');
   });
 
+  /* ═══ #1013 / #1014 — ChatGPT's verified fixes (f25e15d3 + f3109105, 3170a94c + 3c712a1d), landed by the builder (#1067).
+     The tests are ChatGPT's final versions, pasted as blocks and retagged; the PM verified both pairs (INBOX 5 Oct 17:22, 19:50). */
+  test('export: a zero-chunk AAC encode cannot masquerade as a soundtrack (batch2 1a)', { item: '1013' }, async function () {
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height,
+      toast: FM.toast, encoder: window.AudioEncoder, warn: console.warn, report: localStorage.getItem('fm.lastExportReport') };
+    let song = null;
+    let lateOutput = null;
+    const warnings = [];
+    const runProbe = async () => {
+      let ready = null, card = '';
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'aac-count-probe', onReady: async out => {
+        ready = out;
+        const cardDone = FM._showExportReady(out);
+        card = document.getElementById('xr-meta').textContent;
+        document.getElementById('xr-discard').click();
+        await cardDone;
+      } });
+      return { ready, card, report: localStorage.getItem('fm.lastExportReport') || '' };
+    };
+    try {
+      FM.toast = () => {};
+      console.warn = (...args) => { warnings.push(args.map(String).join(' ')); };
+      P.duration = 0.3; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.3; FM.scene.layers.push(box);
+      song = FM.makeLayer('video', { name: 'audible tone' });
+      song.start = 0; song.duration = 0.3; song.trimStart = 0; song.trimEnd = 0.3; FM.scene.layers.push(song);
+      const tone = new AudioBuffer({ numberOfChannels: 2, length: 14400, sampleRate: 48000 });
+      for (let c = 0; c < 2; c++) {
+        const data = tone.getChannelData(c);
+        for (let i = 0; i < data.length; i++) data[i] = Math.sin(i * 2 * Math.PI * 440 / 48000) * 0.4;
+      }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.3, audioBuffer: tone });
+
+      // Positive control: this exact audible scene must produce actual AAC data and a truthful card.
+      const good = await runProbe();
+      const healthy = await q215TrackScan(good.ready.blob);
+      if (!healthy.vide || !healthy.soun || !healthy.mp4a || !good.ready.hasAudio ||
+          !/Sound ✓/.test(good.card) || !/^audio\s+TRACK WRITTEN/m.test(good.report))
+        throw new Error('the real encoder control did not prove a counted audio track: ' + JSON.stringify({ healthy, card: good.card, report: good.report }));
+      const count = /audio\s+TRACK WRITTEN · (\d+) AAC frames/m.exec(good.report);
+      if (!count || +count[1] < 13 || +count[1] > 17)
+        throw new Error('the 0.3s positive control should contain about 15 AAC frames: ' + good.report);
+      const peak = /decoded peak\s+(\d+\.\d+)/m.exec(good.report);
+      if (!peak || +peak[1] < 0.1) throw new Error('the encoded audible tone did not decode back to an audible peak: ' + good.report);
+
+      // A browser can claim AAC support, resolve flush(), and still emit nothing. The MP4 must not
+      // advertise a track and the ready card/report must not tell Ezra the file has sound.
+      function EmptyEncoder(opts) { lateOutput = opts.output; }
+      EmptyEncoder.isConfigSupported = async () => ({ supported: true });
+      EmptyEncoder.prototype.configure = function () {};
+      EmptyEncoder.prototype.encode = function () {};
+      EmptyEncoder.prototype.flush = async function () {};
+      EmptyEncoder.prototype.close = function () {};
+      window.AudioEncoder = EmptyEncoder;
+      const empty = await runProbe();
+      const dry = await q215TrackScan(empty.ready.blob);
+      if (!dry.vide || dry.soun || dry.mp4a) throw new Error('zero AAC chunks still left a declared audio track in the MP4: ' + JSON.stringify(dry));
+      if (FM._audioTrackDropped !== 'no-chunks' || empty.ready.hasAudio || empty.ready.audioDropped !== 'no-chunks')
+        throw new Error('zero AAC chunks were reported as sound: ' + JSON.stringify({ dropped: FM._audioTrackDropped, ready: empty.ready.audioDropped, hasAudio: empty.ready.hasAudio }));
+      if (!/NO SOUND/.test(empty.card) || /Sound ✓/.test(empty.card)) throw new Error('the actual ready card claims the empty track has sound: ' + empty.card);
+      if (/^audio\s+TRACK WRITTEN/m.test(empty.report) || !/^audio\s+NO TRACK/m.test(empty.report))
+        throw new Error('the export report claims the empty track was written: ' + empty.report);
+      if (!/^audio\s+TRACK WRITTEN · [1-9]\d* AAC frames ·/m.test(good.report))
+        throw new Error('the healthy export report omits the encoded frame count: ' + good.report);
+      if (!lateOutput) throw new Error('the empty encoder callback was not captured');
+      lateOutput(new EncodedAudioChunk({ type: 'key', timestamp: 0, data: new Uint8Array([1]) }));
+      const lateReport = localStorage.getItem('fm.lastExportReport') || '';
+      if (!/late AAC\s+1 chunk arrived after the track was dropped/.test(lateReport) ||
+          !warnings.some(w => /AAC chunk arrived after the sound track was dropped/.test(w)))
+        throw new Error('a late AAC callback was neither warned nor added to this export report: ' + lateReport);
+    } finally {
+      window.AudioEncoder = saved.encoder; FM.toast = saved.toast; console.warn = saved.warn;
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      if (song) FM.media.remove(song.id);
+      P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      if (saved.report == null) localStorage.removeItem('fm.lastExportReport');
+      else localStorage.setItem('fm.lastExportReport', saved.report);
+      FM._audioTrackDropped = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)', { item: '1014', budgetMs: 30000 }, async function () {
+    if (!FM.fitProjectSize || !FM.storage.load || !FM.storage.autosave || !FM.projectIsOversize || !FM.projects)
+      throw new Error('the import/storage size boundary is unavailable');
+    const prior = FM.projects.currentId(), wasHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    const addToLibrary = FM.mediaLib && FM.mediaLib.add, toast = FM.toast;
+    let testProject = null;
+    const made = [];
+    try {
+      FM.toast = () => {};
+      if (FM.mediaLib) FM.mediaLib.add = () => {}; // the test clip is not a user's library tile
+      testProject = await FM.projects.create({ name: 'Panorama reopen check', width: 320, height: 240 });
+      if (!testProject) throw new Error('a temporary project could not be created for the reopen check');
+      const file = await q915aPng('panorama-reopen', '#4285b4');
+      for (const d of [[16000, 4000], [9000, 2000]]) {
+        const fit = FM.fitProjectSize(d[0], d[1]);
+        if (!fit.capped || fit.w > 7680 || fit.h > 7680)
+          throw new Error(d.join('×') + ' made a canvas ' + fit.w + '×' + fit.h + ' that storage will reshape on reopen');
+        const P = FM.scene.project;
+        FM.scene.layers.length = 0; P.sizePicked = false;
+        FM.addMediaLayer({ kind: 'image', width: d[0], height: d[1], file });
+        const layer = FM.scene.layers[0];
+        if (!layer) throw new Error('the panorama did not import');
+        made.push(layer.id);
+        if (P.width !== fit.w || P.height !== fit.h) throw new Error('the import bypassed the fit: ' + P.width + '×' + P.height);
+        const before = { width: P.width, height: P.height, transform: JSON.stringify(layer.transform) };
+        FM.storage.autosave(); await sleep(750); await FM.storage.settled();
+        const disk = JSON.parse(localStorage.getItem('fm.proj.' + testProject) || 'null');
+        if (!disk || !disk.layers.some(l => l.id === layer.id)) throw new Error('the import was not autosaved before reopening');
+        if (!(await FM.storage.load())) throw new Error('the saved project did not reopen');
+        const opened = FM.scene.project, reopened = FM.scene.layers.find(l => l.id === layer.id);
+        if (opened.width !== before.width || opened.height !== before.height)
+          throw new Error('reopening changes ' + before.width + '×' + before.height + ' into ' + opened.width + '×' + opened.height);
+        if (!reopened || JSON.stringify(reopened.transform) !== before.transform)
+          throw new Error('the photo transform changed across save and reopen');
+        if (reopened.transform.x !== opened.width / 2 || reopened.transform.y !== opened.height / 2)
+          throw new Error('the photo is no longer centred after reopen: ' + reopened.transform.x + ',' + reopened.transform.y);
+        if (!(reopened.transform.scale > 0) || d[0] * reopened.transform.scale > opened.width + 1 || d[1] * reopened.transform.scale > opened.height + 1)
+          throw new Error('the panorama no longer fits the reopened canvas');
+      }
+      if (FM.projectIsOversize({ width: 7680, height: 1920 }))
+        throw new Error('the new maximum panorama is incorrectly warned as oversized');
+    } finally {
+      if (FM.mediaLib) FM.mediaLib.add = addToLibrary;
+      FM.toast = toast;
+      if (testProject) {
+        try { await FM.projects.open(prior || null, { confirmed: true }); } catch (e) {}
+        try { await FM.projects.remove(testProject); } catch (e) {}
+      }
+      for (const id of made) { FM.media.remove(id); await FM.storage.removeMedia(id); }
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
 
 })();
