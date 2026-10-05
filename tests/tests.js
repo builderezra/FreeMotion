@@ -122175,4 +122175,23 @@
       if (!(z(Ov.id) < z(v.L('Bg').id)) || !(z(Ov.id) < z(v.L('A').id))) throw new Error('Into row after a card dropped the clip to z ' + z(Ov.id) + ' (Bg ' + z(v.L('Bg').id) + ', A ' + z(v.L('A').id) + ')');
     }, { media: [{ name: 'Bg', rec: bgRec(320, 240) }] });
   });
+
+
+  test('simple P2.2 · review Move earlier lands the hairline that closes up behind the moved clip, so no black frame opens where it was (§3.1 a)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('D', 15.24, 3, W, H), smV('C', 4.03, 11.21, W, H), smV('B', 2, 2.02, W, H), smV('A', 0, 2, W, H)], async function (v) {
+      const black = () => smBlackFrames(FM.spine.classify(FM.scene));
+      const R0 = FM.spine.classify(FM.scene);
+      if (R0.main[2].seam.kind !== 'hairline' || black().length) throw new Error('CONTROL: B|C is not a frame-free hairline: ' + JSON.stringify(R0.main[2].seam) + ' ' + black());
+      const doc0 = v.doc();
+      FM.selectLayer(v.L('C').id); await v.sleep(60);
+      smTool('earlier').click(); await v.idle();
+      const A = v.L('A'), B = v.L('B'), C = v.L('C'), D = v.L('D');
+      const order = FM.spine.classify(FM.scene).main.filter(e => !e.slot).map(e => FM.layerById(FM.scene, e.id).name).join('');
+      if (order !== 'ACBD') throw new Error('CONTROL: Move earlier gave ' + order + ' (it said “' + v.say() + '”)');
+      if (D.start !== B.start + B.duration || black().length) throw new Error('the hairline closed up behind C was moved and left open: B ends ' + (B.start + B.duration) + ', D starts ' + D.start + ', black frames at ' + black());
+      FM.history.undo(); await v.sleep(30);
+      if (v.doc() !== doc0) throw new Error('one undo did not restore the document');
+    }, { fps: 30 });
+  });
 })();

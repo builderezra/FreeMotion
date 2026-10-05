@@ -1105,7 +1105,10 @@ window.FM = window.FM || {};
       else {
         const prop = e.start + dOf(k) + acc;
         const gap = prevEnd == null ? null : prop - prevEnd;
-        if (gap != null && ((Math.abs(gap) < 1e-9 && gap !== 0) || (gap > 0 && gap <= R.eps && e.seam && e.seam.kind === 'hairline'))) { acc += prevEnd - prop; ns = prevEnd; }
+        /* the entry that closes up behind c meets p across the removed c: its seam is p|c's, not its own c|n (Delete reads
+           isFloatJoin(R, i) the same way) — a p|c hairline was read as a join, moved off the grid and left open (finding 7) */
+        const sk = (k === i + 1 && i > 0) ? R.main[i].seam : e.seam;
+        if (gap != null && ((Math.abs(gap) < 1e-9 && gap !== 0) || (gap > 0 && gap <= R.eps && sk && sk.kind === 'hairline'))) { acc += prevEnd - prop; ns = prevEnd; }
         else if (pos > 0 && order[pos - 1] === i && Math.abs(gap) <= R.eps) { acc += prevEnd - prop; ns = prevEnd; }   // the seam after c is new: land it
         else ns = prop;
       }
