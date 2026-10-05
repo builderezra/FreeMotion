@@ -127627,4 +127627,50 @@
     }
   });
 
+  test('690 long unbroken text wraps at the same cuts without quadratic measuring', { item: 'TBD', budgetMs: 30000 }, function () {
+    // The old character walk is retained here only as a short-string output oracle.
+    function oldLines(ctx, src, width) {
+      const out = [], paraOf = [], paras = src.split('\n');
+      const trim = s => s.replace(/\s+$/, '');
+      const fits = s => ctx.measureText(s).width <= width;
+      function chop(s) {
+        while (trim(s).length > 1 && !fits(trim(s))) {
+          const solid = trim(s); let cut = 1;
+          while (cut < solid.length && fits(solid.slice(0, cut + 1))) cut++;
+          out.push(solid.slice(0, cut));
+          s = solid.slice(cut) + s.slice(solid.length);
+        }
+        return s;
+      }
+      paras.forEach((para, pi) => {
+        while (paraOf.length < out.length) paraOf.push(pi - 1);
+        if (para === '') { out.push(''); return; }
+        const words = para.match(/\S+\s*/g) || [para]; let line = '';
+        words.forEach(w => {
+          if (line === '') { line = chop(w); return; }
+          if (fits(trim(line + w))) { line += w; return; }
+          out.push(trim(line)); line = chop(w);
+        });
+        out.push(trim(line));
+      });
+      while (paraOf.length < out.length) paraOf.push(paras.length - 1);
+      out.para = paraOf; return out;
+    }
+    const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+    ctx.font = '20px sans-serif';
+    for (const src of ['abcdefghijklmnopqrstuvwxyz', '東京の夜と明日の朝'.repeat(5), 'Café and 你好世界 together', 'abc   def\n\nlonglonglongword  ']) {
+      for (const width of [7, 24, 70, 140]) {
+        const actual = FM.textLines(ctx, { wrapWidth: width }, src);
+        const expected = oldLines(ctx, src, width);
+        if (JSON.stringify(actual) !== JSON.stringify(expected) || JSON.stringify(actual.para) !== JSON.stringify(expected.para))
+          throw new Error('text cuts changed at width ' + width + ' for ' + src.slice(0, 20));
+      }
+    }
+    let measured = 0;
+    const counting = { font: '20px monospace', measureText(s) { measured += s.length; return { width: s.length }; } };
+    const n = 30000, lines = FM.textLines(counting, { wrapWidth: 80 }, 'x'.repeat(n));
+    if (lines.join('') !== 'x'.repeat(n) || measured >= 40 * n)
+      throw new Error('unbroken run measured ' + measured + ' characters for ' + n + ' input characters');
+  });
+
 })();

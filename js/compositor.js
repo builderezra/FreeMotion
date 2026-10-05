@@ -21517,14 +21517,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // handling it only in the "does not fit after the current line" branch leaves a paragraph whose
     // very first word is over-long running straight off the frame.
     const chop = s => {
-      while (trim(s).length > 1 && !fits(trim(s))) {
-        const solid = trim(s);
-        let cut = 1;
-        while (cut < solid.length && fits(solid.slice(0, cut + 1))) cut++;
-        out.push(solid.slice(0, cut));
-        s = solid.slice(cut) + s.slice(solid.length);
+      const solid = trim(s), tail = s.slice(solid.length);
+      let at = 0;
+      while (solid.length - at > 1) {
+        const left = solid.length - at;
+        // Probe only as far as this column can hold. Measuring the entire remainder on every
+        // line made a long unbroken paste quadratic; a growing bound plus binary search keeps
+        // the same cut points without repeatedly measuring the unrendered suffix.
+        let cut = 1, probe = 2;
+        while (probe < left && fits(solid.slice(at, at + probe))) { cut = probe; probe *= 2; }
+        if (probe >= left && fits(solid.slice(at))) break;
+        let lo = cut + 1, hi = Math.min(probe, left - 1);
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (fits(solid.slice(at, at + mid))) { cut = mid; lo = mid + 1; }
+          else hi = mid - 1;
+        }
+        out.push(solid.slice(at, at + cut));
+        at += cut;
       }
-      return s;
+      return solid.slice(at) + tail;
     };
     /* WHICH PARAGRAPH EACH LINE CAME FROM (queue 690, fourth hunt), kept on the array as `lines.para`. Stacked
        captions are one cue per paragraph, and a caption track's animation runs on each cue's own clock
