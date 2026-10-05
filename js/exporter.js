@@ -1421,18 +1421,18 @@ window.FM = window.FM || {};
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
         // C31 changes opaque main-renderer pixels too; never splice an old history-based prefix
         // into a new stateless hold. Worker jobs carry their own bumped revision above.
-        resumeRenderer = (resumeRenderer || 'main') + ';c31-video-boundary-8';
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-video-boundary-9';
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'shape' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
         // The shape boundary redraw changes main-renderer pixels for the same saved project.
         // Invalidate an interrupted prefix made before that redraw could handle upstream grades.
-        resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-upstream-6';
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-upstream-7';
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'image' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
         // Historical image holds change main-renderer pixels; never join an older cached prefix.
-        resumeRenderer = (resumeRenderer || 'main') + ';c31-image-boundary-2';
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-image-boundary-3';
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'shape' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp'))) {

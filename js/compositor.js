@@ -14367,7 +14367,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // list when a particular upstream effect has a focused boundary-time proof.
   const STUTTER_SAFE_UPSTREAM = { brightness: 1, contrast: 1, saturate: 1, hue: 1,
     grayscale: 1, sepia: 1, invert: 1, exposure: 1, temperature: 1, tint: 1,
-    vignette: 1, blur: 1, levels: 1 };
+    vignette: 1, blur: 1, levels: 1, gamma: 1 };
   FM.frameStutterVideoPlans = function (scene, t, media) {
     const plans = [];
     if (!scene || !scene.layers || !media) return plans;
