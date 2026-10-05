@@ -121566,4 +121566,49 @@
       if (!fullId || !(await FM.storage.readMedia(fullId))) throw new Error('CONTROL: Full’s duplicate is not on disk either — the check cannot tell');
     }, { media: [{ name: 'P', rec: img }] });
   });
+
+  test('simple P2.1 · review Do it anyway keeps the lock on every piece it makes: both halves of a split, both pieces of a cut song, and a copy (D7)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [], part = async (fn) => { try { await fn(); } catch (e) { fails.push(e.message); } };
+    const anyway = async v => {
+      const btn = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).find(b => b.textContent === 'Do it anyway');
+      if (!btn) throw new Error('no Do it anyway button (it said “' + v.say() + '”)');
+      await v.sleep(450); btn.click(); await v.idle();
+    };
+    /* (1) ✂ / S on a locked clip */
+    await part(() => smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H, { locked: true })], async function (v) {
+      const A = v.L('A'), n0 = v.steps();
+      FM.selectLayer(A.id); FM.time = 1.5;
+      v.key('KeyS', 's'); await v.idle();
+      if (!/That clip is locked/.test(v.say())) throw new Error('(split) no locked line: “' + v.say() + '”');
+      await anyway(v);
+      const halves = FM.scene.layers.filter(l => l.splitOf && l.splitOf === A.splitOf);
+      if (halves.length !== 2) throw new Error('(split) CONTROL: Do it anyway did not split the clip: ' + halves.length + ' piece(s)');
+      if (halves.some(l => l.locked !== true)) throw new Error('(split) a half lost the lock: ' + JSON.stringify(halves.map(l => [l.start, l.locked])));
+      if (v.steps() !== n0 + 1) throw new Error('(split) unlock, split and re-lock should be one step, got ' + (v.steps() - n0));
+    }));
+    /* (2) Delete that cuts a locked song running across the deleted clip (case iii) */
+    await part(() => smP2((W, H) => [smSong('Song', 2, 8, W, H, { locked: true }), smV('D', 12, 2, W, H), smV('C', 8, 4, W, H), smV('B', 4, 4, W, H), smV('A', 0, 4, W, H)], async function (v) {
+      FM.selectLayer(v.L('B').id);
+      v.key('Backspace'); await v.idle();
+      if (!/locked/.test(v.say())) throw new Error('(cut) no locked line: “' + v.say() + '”');
+      await anyway(v);
+      if (v.L('B')) throw new Error('(cut) CONTROL: Do it anyway did not delete B');
+      const songs = FM.scene.layers.filter(l => l.name === 'Song');
+      if (songs.length !== 2) throw new Error('(cut) CONTROL: the song was not cut in two: ' + songs.length);
+      if (songs.some(l => l.locked !== true)) throw new Error('(cut) a piece of the locked song came out unlocked: ' + JSON.stringify(songs.map(l => [l.start, l.locked])));
+    }));
+    /* (3) ⌘D on a locked clip: the copy is locked, as Full's duplicate makes it */
+    await part(() => smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H, { locked: true })], async function (v) {
+      const A = v.L('A');
+      FM.selectLayer(A.id);
+      v.key('KeyD', 'd', true); await v.idle();
+      if (!/That clip is locked/.test(v.say())) throw new Error('(copy) no locked line: “' + v.say() + '”');
+      await anyway(v);
+      const copy = FM.scene.layers.find(l => l.type === 'video' && l !== A && l.name !== 'B');
+      if (!copy || copy.start !== 3) throw new Error('(copy) CONTROL: Do it anyway made no copy after A');
+      if (copy.locked !== true || A.locked !== true) throw new Error('(copy) the lock was lost: original ' + A.locked + ', copy ' + copy.locked + ' (Full’s duplicate keeps it)');
+    }));
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();

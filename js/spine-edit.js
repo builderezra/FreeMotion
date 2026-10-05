@@ -273,7 +273,8 @@ window.FM = window.FM || {};
   function newPlan(label) {
     return { label: label, moves: new Map(), lands: new Map(), keyless: new Set(), removes: new Set(), touched: new Set(),
              resized: new Set(), writes: [], pre: [], post: [], arranges: true, adopts: true, time: null, live: null, say: null, sayButtons: null, counts: {},
-             mints: false };   // mints: the plan made a new media record ({noSave}), so the runner saves its file at once
+             mints: false, copies: [] };   // mints: the plan made a new media record ({noSave}), so the runner saves its file at once;
+                                           // copies: [sourceId, copyId] pairs a duplicate made (a copy of a locked clip is locked, D7)
   }
   function addMove(p, id, d) { p.moves.set(id, (p.moves.get(id) || 0) + d); p.touched.add(id); }
   function addLand(p, id, t) { p.lands.set(id, t); p.touched.add(id); }
@@ -636,13 +637,14 @@ window.FM = window.FM || {};
       const dupId = await FM.duplicateLayer(L.id, false, { noSave: true });
       const dup = dupId && FM.layerById(FM.scene, dupId);
       if (!dup) throw new Error('duplicate refused');
-      plan.mints = true;
+      plan.mints = true; plan.copies.push([L.id, dupId]);
       S.setFlag(dup, 'main', true);                         // put back after onCopy stripped it: the one route that does (§12.2)
       const d = target - (+dup.start || 0); dup.start = target; S.shiftKeys(dup, d);
       for (const t of twins) {
         const tid = await FM.duplicateLayer(t.id, true, { noSave: true });
         const td = tid && FM.layerById(FM.scene, tid);
         if (!td) continue;
+        plan.copies.push([t.id, tid]);
         const dd = target - (+td.start || 0); td.start = target; S.shiftKeys(td, dd);
         if (td.karaokeOf === L.id) td.karaokeOf = dupId;
       }
@@ -825,21 +827,24 @@ window.FM = window.FM || {};
       if (FM.playing && FM.pause) FM.pause();
       const pre = beginEdit(); muted = true;
       const sel0 = FM.scene.selectedId;
+      /* D7's Do it anyway: the ids it unlocked are held HERE, never as a mark on the layer — FM.cloneLayer drops every '_' key,
+         so a split's second half, a cut item's piece and a copy all came out unlocked (review finding 14) */
+      const ids0 = new Set(FM.scene.layers.map(l => l.id)), relock = new Set();
       let ok = false, notes = [];
       try {
-        if (opts.unlock) lk.forEach(id => unitLayers(id, map).forEach(l => { if (l.locked) { l.locked = false; l._smRelock = true; } }));
+        if (opts.unlock) lk.forEach(id => unitLayers(id, map).forEach(l => { if (l.locked) { l.locked = false; relock.add(l.id); } }));
         if (!R.adopted && plan.adopts) S.adopt(R);
         if (gated) S.pinStrays(R);
         await applyPlan(plan);
         const R2 = S.classify(FM.scene);
         if (gated) { notes = S.fitTails(R2, plan); pinTailsAfter(R2); refitTransparentGroups(R2); }
         markCuts(plan.touched);
-        FM.scene.layers.forEach(l => { if (l._smRelock) { l.locked = true; delete l._smRelock; } });
+        if (relock.size) relockAfter(relock, ids0, plan);
         ok = true;
       } catch (e) {
         if (FM.reportError) { try { FM.reportError('Simple edit failed: ' + label, e); } catch (x) {} }
       } finally { FM.history.unmute(); muted = false; }
-      if (!ok) { FM.scene.layers.forEach(l => { delete l._smRelock; }); restorePreEdit(pre); return refuse('failed'); }
+      if (!ok) { restorePreEdit(pre); return refuse('failed'); }   // the document from before the unlock: every lock as it was
       if (plan.selectNone) { FM.scene.selectedId = null; FM.scene.selectedIds = []; }
       else if (plan.selectId && FM.layerById(FM.scene, plan.selectId)) { FM.scene.selectedId = plan.selectId; FM.scene.selectedIds = [plan.selectId]; }
       else if (sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = [sel0]; }
@@ -859,6 +864,17 @@ window.FM = window.FM || {};
       S.drain();
     }
   };
+  /* D7, "one step, the lock kept": every layer Do it anyway unlocked is locked again, and so is every piece this edit made of
+     one — a split half (a NEW layer of an unlocked layer's split lineage) and a duplicate's copy, as Full's duplicate keeps
+     the lock. Older pieces of the same lineage that were never locked stay as they were. */
+  function relockAfter(relock, ids0, plan) {
+    const lin = new Set();
+    FM.scene.layers.forEach(l => { if (relock.has(l.id) && l.splitOf) lin.add(l.splitOf); });
+    const copyOf = new Set((plan.copies || []).filter(pr => relock.has(pr[0])).map(pr => pr[1]));
+    FM.scene.layers.forEach(l => {
+      if (relock.has(l.id) || copyOf.has(l.id) || (!ids0.has(l.id) && l.splitOf && lin.has(l.splitOf))) l.locked = true;
+    });
+  }
   /* §4.3: a unit pinned in this step whose span now ends at the new track end follows it from here on (pictures only). */
   function pinTailsAfter(R2) {
     const map = byIdMap();
