@@ -127163,4 +127163,29 @@
     }
   });
 
+  test('TBD: one unreadable file is named and later files in the same pick still import', { item: 'TBD' }, async function () {
+    const saved = { load: FM.loadImageFile, add: FM.addMediaLayer, report: FM.reportError, audioOnly: FM._wantAudioOnly };
+    const failed = new File([new Uint8Array([0, 1, 2])], 'unreadable.png', { type: 'image/png' });
+    const good = new File([new Uint8Array([3, 4, 5])], 'readable.png', { type: 'image/png' });
+    const imported = [], errors = [];
+    try {
+      FM._wantAudioOnly = false;
+      FM.loadImageFile = async file => {
+        if (file === failed) throw new Error('decode failed');
+        return { sourceFile: file };
+      };
+      FM.addMediaLayer = record => { imported.push(record.sourceFile); };
+      FM.reportError = (where, error, message) => { errors.push({ where, error, message }); };
+      await FM._handleFiles([failed, good]);
+      if (errors.length !== 1 || !errors[0].where.includes('unreadable.png') || !errors[0].message.includes('unreadable.png'))
+        throw new Error('the unreadable file was not named in its import error');
+      if (errors[0].error.message !== 'decode failed') throw new Error('the original read error was lost');
+      if (imported.length !== 1 || imported[0] !== good)
+        throw new Error('a bad file stopped the rest of the multi-file pick from importing');
+    } finally {
+      FM.loadImageFile = saved.load; FM.addMediaLayer = saved.add; FM.reportError = saved.report;
+      FM._wantAudioOnly = saved.audioOnly;
+    }
+  });
+
 })();
