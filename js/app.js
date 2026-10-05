@@ -5549,8 +5549,7 @@ window.FM = window.FM || {};
     if (!layer) { if (FM.toast) FM.toast('Select a layer first'); return; }
     const name = prompt('Preset name:', layer.name + ' look');
     if (!name || !name.trim()) return;
-    FM.layerPresets.save(name.trim(), layer);
-    if (FM.toast) FM.toast('Preset saved — apply it from any layer’s Presets section');
+    if (FM.layerPresets.save(name.trim(), layer) && FM.toast) FM.toast('Preset saved — apply it from any layer’s Presets section');
   };
   // Save the current selection as a reusable ELEMENT (insertable from Add → Object/Element).
   FM.saveElementPrompt = async function () {

@@ -376,8 +376,8 @@ window.FM = window.FM || {};
     builtins: [],
     saved() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
     list() { return this.builtins.concat(this.saved()); },
-    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { return; } presetsChanged(); },
-    save(name, effects) { if (!name) return; const arr = this.saved().filter(p => p.name !== name); arr.push({ name: name, effects: JSON.parse(JSON.stringify(effects || [], FM.jsonReplacer)) }); this._write(arr); },   // jsonReplacer strips _expanded etc. from presets
+    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved'); return false; } presetsChanged(); return true; },
+    save(name, effects) { if (!name) return false; const arr = this.saved().filter(p => p.name !== name); arr.push({ name: name, effects: JSON.parse(JSON.stringify(effects || [], FM.jsonReplacer)) }); return this._write(arr); },   // jsonReplacer strips _expanded etc. from presets
     get(name) { return this.list().find(p => p.name === name); },
     /* Refused rather than resolved when the new name is taken: the name IS the key, so writing over it
        would silently merge two saved looks into one and lose whichever lost. */
@@ -388,11 +388,11 @@ window.FM = window.FM || {};
       if (!p) return false;
       if (this.get(to)) { if (FM.toast) FM.toast('There is already a preset called “' + to + '”'); return false; }
       p.name = to;
+      if (!this._write(arr)) return false;
       FM.presetTags.move('fp:' + oldName, 'fp:' + to);
-      this._write(arr);
       return true;
     },
-    remove(name) { FM.presetTags.forget('fp:' + name); this._write(this.saved().filter(p => p.name !== name)); }   // built-ins are not removable
+    remove(name) { if (!this._write(this.saved().filter(p => p.name !== name))) return false; FM.presetTags.forget('fp:' + name); return true; }   // built-ins are not removable
   };
 
   // Copy/paste for ONE effect (v5.39, Ezra: "in the three dots for each effect, add options to copy
@@ -568,9 +568,9 @@ window.FM = window.FM || {};
   FM.layerPresets = {
     _key: 'fm.layerpresets',
     list() { try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch (e) { return []; } },
-    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved'); return; } presetsChanged(); },
+    _write(arr) { try { localStorage.setItem(this._key, JSON.stringify(arr)); } catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved'); return false; } presetsChanged(); return true; },
     save(name, layer) {
-      if (!name || !layer) return;
+      if (!name || !layer) return false;
       const tr = layer.transform || {};
       /* THE EFFECTS' ANIMATION IS RE-ANCHORED TOO (queue 690). The transform below has always gone through shiftKf, and
          the comment above it is the rule; the effect stack beside it was stored raw, at the source clip's absolute times.
@@ -591,7 +591,7 @@ window.FM = window.FM || {};
       };
       const arr = this.list().filter(p => p.name !== name);
       arr.unshift({ name: name, data: data });
-      this._write(arr);
+      return this._write(arr);
     },
     rename(oldName, newName) {
       const to = String(newName || '').trim();
@@ -600,8 +600,8 @@ window.FM = window.FM || {};
       if (!p) return false;
       if (arr.some(x => x !== p && x.name === to)) { if (FM.toast) FM.toast('There is already a preset called “' + to + '”'); return false; }
       p.name = to;
+      if (!this._write(arr)) return false;
       FM.presetTags.move('lp:' + oldName, 'lp:' + to);
-      this._write(arr);
       return true;
     },
     apply(name, layer) {
@@ -633,8 +633,7 @@ window.FM = window.FM || {};
     update(name, layer) {
       if (!name || !layer) return false;
       if (!this.list().some(x => x.name === name)) return false;
-      this.save(name, layer);          // save() already replaces a preset of the same name
-      return true;
+      return this.save(name, layer);  // save() already replaces a preset of the same name
     },
     /* WHAT APPLYING ACTUALLY DOES, with no side effects — split out of apply() so the PREVIEW can run
      * the very same code on a throwaway clone. That is the whole point of the preview: it has to show
@@ -666,7 +665,7 @@ window.FM = window.FM || {};
       if (dt.xDelta) tr.x = shiftKf(xyRebase(dt.xDelta, FM.evalProp(tr.x, FM.time)), t0);   // relative motion from HERE, timed from the clip's start
       if (dt.yDelta) tr.y = shiftKf(xyRebase(dt.yDelta, FM.evalProp(tr.y, FM.time)), t0);
     },
-    remove(name) { FM.presetTags.forget('lp:' + name); this._write(this.list().filter(p => p.name !== name)); },
+    remove(name) { if (!this._write(this.list().filter(p => p.name !== name))) return false; FM.presetTags.forget('lp:' + name); return true; },
   };
 
   // ===== AM-style ruler scrubber (ONE implementation shared by fxScrubber + kfNumRow) =====
@@ -2384,7 +2383,7 @@ window.FM = window.FM || {};
        word away if he would rather have it and lose the contrast. */
     const sv = el('button', 'fx-act', 'Save effects only as preset'); sv.disabled = !(layer.effects && layer.effects.length);
     sv.title = 'Save every effect on this layer as one preset — without its animation';
-    sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
+    sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; if (FM.fxPresets.save(name.trim(), layer.effects) && FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
     tools.appendChild(cp); tools.appendChild(pa); tools.appendChild(sv);
     s.appendChild(tools);
     return s;
@@ -6554,7 +6553,7 @@ window.FM = window.FM || {};
     const sv = el('button', 'fx-act', 'Save effects only as preset'); sv.disabled = !(layer.effects && layer.effects.length);
     sv.title = 'Save every effect on this layer as one preset — without its animation';
       // No refresh() here: the store fires presetsChanged on write (queue 330).
-      sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; FM.fxPresets.save(name.trim(), layer.effects); if (FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
+      sv.addEventListener('click', () => { const name = prompt('Preset name:', 'My look'); if (!name || !name.trim()) return; if (FM.fxPresets.save(name.trim(), layer.effects) && FM.toast) FM.toast('Saved preset “' + name.trim() + '”'); });
       pwrap.appendChild(sv);
       // A row is only APPLICABLE if it carries at least one effect this build can actually build.
       // 'fm.fxpresets' is written by more than one code path and nothing validates another's shape,

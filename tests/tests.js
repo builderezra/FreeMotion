@@ -127508,4 +127508,38 @@
     }
   });
 
+  test('690 a refused preset write never says saved or changes the list', { item: 'TBD' }, function () {
+    const token = String(Date.now()), fxName = 'FX 1045 ' + token, layerName = 'Layer 1045 ' + token;
+    const layer = FM.makeLayer('shape', { name: 'preset source', shape: 'rect' });
+    const realSet = Storage.prototype.setItem, realToast = FM.toast, realPrompt = window.prompt;
+    const beforeFx = JSON.stringify(FM.fxPresets.saved()), beforeLayer = JSON.stringify(FM.layerPresets.list());
+    const said = [];
+    try {
+      FM.toast = message => { said.push(String(message)); };
+      window.prompt = () => layerName;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === 'fm.fxpresets' || key === 'fm.layerpresets')
+          throw new DOMException('full in test', 'QuotaExceededError');
+        return realSet.call(this, key, value);
+      };
+      if (FM.fxPresets.save(fxName, [])) throw new Error('refused effect preset reported success');
+      FM.savePresetPrompt(layer);
+      if (JSON.stringify(FM.fxPresets.saved()) !== beforeFx || JSON.stringify(FM.layerPresets.list()) !== beforeLayer)
+        throw new Error('a refused write changed a preset list');
+      if (said.filter(s => /Storage full — preset not saved/.test(s)).length !== 2 || said.some(s => /Saved preset|Preset saved/.test(s)))
+        throw new Error('the full phone said a missing preset was saved: ' + said.join(' / '));
+
+      Storage.prototype.setItem = realSet;
+      if (!FM.fxPresets.save(fxName, []) || !FM.layerPresets.save(layerName, layer))
+        throw new Error('control: presets did not save after storage returned');
+      if (!FM.fxPresets.saved().some(p => p.name === fxName) || !FM.layerPresets.list().some(p => p.name === layerName))
+        throw new Error('control: successful presets are missing from their lists');
+    } finally {
+      Storage.prototype.setItem = realSet;
+      window.prompt = realPrompt; FM.toast = realToast;
+      if (FM.fxPresets.saved().some(p => p.name === fxName)) FM.fxPresets.remove(fxName);
+      if (FM.layerPresets.list().some(p => p.name === layerName)) FM.layerPresets.remove(layerName);
+    }
+  });
+
 })();
