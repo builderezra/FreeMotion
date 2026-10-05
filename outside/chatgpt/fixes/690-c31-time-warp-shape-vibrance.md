@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Vibrance before Time Warp Scan on a moving shape
+
+Starting commit: clean preferred Codex-only `21e587b70a1453d5c1d08b4c56060f806ee01fe4`; isolated branch `codex/690-c31-scan-vibrance-shape`. Exact standing #690 is `REQUESTS.md:27375-27403`, and C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. No `audits/*.json` record names C31 or Time Warp Scan.
+
+Vibrance is a source-local, history-free grade on vector shapes. Before the fix, keyed Vibrance ahead of Time Warp Scan missed the shape historical-source gate: Freeze at 0.8 seconds differed between playback and a cold seek (`cold=0, played=127` at pixel 605). The shape gate now admits Vibrance, so each historical scan strip evaluates the moving shape and grade at its own time. Still-image and decoded-video gates remain separate. The shape MP4 resume identity advances from 7 to 8 so interrupted exports cannot reuse earlier prefixes.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 360→361; exporter 169→170), `tests/tests.js` (one new `{ item: 'TBD' }` regression and existing resume-identity expectation), and this report. The focused native Chromium regression failed before the fix and passed afterward at full and half preview size in Freeze and Reveal; adjacent keyed-Saturation regression passed. JavaScriptCore syntax checks for changed scripts and `git diff --check` passed. C31 remains open for other source/effect combinations. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
