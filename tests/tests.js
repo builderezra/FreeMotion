@@ -122479,4 +122479,28 @@
       });
     }, 1280);
   });
+
+
+  test('simple P2.2 · review a tap on the edge of Simple’s ⋯ or Sound list, between its choices, keeps the selection (the list is not empty background)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('C', 7, 2, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const tap = el => { const r = el.getBoundingClientRect(), x = r.left + 3, y = r.top + 3, o = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerType: 'touch', isPrimary: true };
+        el.dispatchEvent(new PointerEvent('pointerdown', o)); el.dispatchEvent(new PointerEvent('pointerup', o)); };
+      const B = v.L('B');
+      for (const open of ['opts', 'sound']) {
+        FM.selectLayer(B.id); await v.sleep(60);
+        if (open === 'opts') document.getElementById('btn-opts').click(); else smTool('sound').click();
+        await v.sleep(60);
+        const menu = document.querySelector('.sm-menu');
+        if (!menu) throw new Error('CONTROL: the ' + open + ' list did not open');
+        tap(menu); await v.sleep(60);
+        if (FM.scene.selectedId !== B.id) throw new Error('a tap on the padding of Simple’s ' + (open === 'opts' ? '⋯' : 'Sound') + ' list deselected the clip');
+        if (FM.simpleTools._menu()) FM.simpleTools._reset();
+      }
+      /* CONTROL: the same tap on the empty page still clears the selection, as in Full */
+      FM.selectLayer(B.id); await v.sleep(60);
+      tap(document.body); await v.sleep(60);
+      if (FM.scene.selectedId) throw new Error('CONTROL: a tap on empty background no longer deselects');
+    });
+  });
 })();

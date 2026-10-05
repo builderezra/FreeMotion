@@ -9235,7 +9235,9 @@ window.FM = window.FM || {};
         // Simple's timeline and the line it speaks in (980 Phase 2 review): a tap on the line's text "does nothing" (DESIGN
         // §3.12 rule 2), and pressing the selected clip must not deselect it before its own click. Simple clears the selection
         // itself on a tap of its empty timeline (#sm-inner's click). display:none outside Simple, so Full never matches it.
-        ' #sm-timeline';
+        // 2.2: Simple's tray and project tools wherever they sit (#sm-bar), and its ⋯ / Sound list (.sm-menu, on body: a tap on
+        // its padding between choices deselected the clip). Neither exists or shows outside Simple.
+        ' #sm-timeline, #sm-bar, .sm-menu';
       let dx = 0, dy = 0, keepAtDown = false, armed = false;
       document.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }
