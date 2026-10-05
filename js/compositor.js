@@ -14376,7 +14376,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // are redrawn on the whole historical plate. A single unmarked pen mask wraps
       // that held plate at the current time, preserving its different stack order.
       if (!layer || layer.type !== 'video' || layer.visible === false || !FM.isLayerVisibleAt(layer, t)
-          || layer.parent || layer.fxTimeOffset || layer._clipStart != null || layer.frameBlend
+          || !simpleTemporalParent(layer, scene, true) || layer.fxTimeOffset || layer._clipStart != null || layer.frameBlend
           || (layer.behaviors && layer.behaviors.length)) continue;
       const m = media.get(layer.id);
       if (!m || !m.file || !m.el || (layer.fillMode && layer.fillMode !== 'none')) continue;

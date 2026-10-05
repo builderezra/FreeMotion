@@ -122939,6 +122939,68 @@
     }
   });
 
+  test('690 Frame Stutter cold-seeks decoded video beneath a rotating null parent', { item: 'TBD', budgetMs: 90000 }, async function () {
+    if (!FM.createFrameStutterSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: parented-video fixture is unavailable');
+    const made = [], file = await hunt2dIndexedClip(30, 30), rec = await hunt2dLoadWarm(file);
+    const parent = FM.makeLayer('null', { name:'video rig', x:0, y:0, start:0, duration:1 });
+    parent.start = 0; parent.duration = 1;
+    parent.transform.rotation = { kf:[{ t:0, v:0, e:'linear' }, { t:1, v:28, e:'linear' }] };
+    parent.transform.scale = { kf:[{ t:0, v:0.75, e:'linear' }, { t:1, v:0.95, e:'linear' }] };
+    const layer = hunt2dClipLayer(rec, made), stutter = FM.fxRegistry.makeInstance('framestutter');
+    layer.duration = 1; layer.trimEnd = 1; layer.parent = parent.id;
+    Object.assign(stutter.params, { rate:4, mode:0, blend:0, offset:0, random:0 });
+    layer.effects = [stutter];
+    const sc = hunt2dScene([parent, layer], { duration:1 });
+    const sampler = FM.createFrameStutterSampler(FM.media, { maxDim:0, timeoutMs:10000 });
+    const seek = async t => {
+      const target = FM.frameSeekTarget(t, rec.duration), el = rec.el;
+      if (Math.abs(el.currentTime - target) < 1e-4 && !el.seeking && el.readyState >= 2) return;
+      await new Promise((resolve, reject) => {
+        let timer;
+        const finish = err => { clearTimeout(timer); el.removeEventListener('seeked', on);
+          el.removeEventListener('error', on); err ? reject(err) : resolve(); };
+        const on = () => { if (el.error) finish(new Error('parented video decode failed'));
+          else if (!el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - target) < 1e-3) finish(); };
+        el.addEventListener('seeked', on); el.addEventListener('error', on);
+        timer = setTimeout(() => finish(new Error('parented video seek timed out')), 10000);
+        el.currentTime = target; on();
+      });
+    };
+    const render = async (t, width, sources) => {
+      await seek(t);
+      const cv = offscreen(width, width / 4), g = cv.getContext('2d', { willReadFrequently:true });
+      FM.withFrameStutterSources(sources, () => FM.renderScene(g, sc, t));
+      return Array.from(g.getImageData(0, 0, width, width / 4).data);
+    };
+    try {
+      for (const width of [128, 64]) {
+        layer.effects = [];
+        const boundary = await render(0.5, width, null), live = await render(0.7, width, null);
+        if (boundary.join() === live.join()) throw new Error('Control: parent transform did not move the video');
+        layer.effects = [stutter]; FM.resetMotionFlowCache();
+        await render(0.5, width, null);
+        const played = await render(0.7, width, null);
+        FM.resetMotionFlowCache();
+        const prepared = await sampler.prepare(sc, 0.7);
+        if (!prepared || !prepared.get(layer.id))
+          throw new Error('parented decoded video was excluded from boundary reconstruction');
+        const cold = await render(0.7, width, prepared);
+        if (cold.join() !== played.join() || cold.join() !== boundary.join())
+          throw new Error('parented held video changed after cold seek at ' + width + ' px');
+      }
+      const oldScene = FM.scene, XR = FM.exportResume, oldSignature = XR && XR.signature;
+      let renderer = '';
+      try {
+        FM.scene = sc;
+        if (XR) XR.signature = options => { renderer = options.renderer || ''; return oldSignature(options); };
+        const exported = await hunt2dExport({ fps:30, to:1 / 30 });
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-8')))
+          throw new Error('parented held-video MP4 did not use the current renderer');
+      } finally { FM.scene = oldScene; if (XR) XR.signature = oldSignature; }
+    } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
+  });
+
   test('690 Frame Stutter cold-seeks decoded video through a feathered vector mask', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (!FM.createFrameStutterSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
       throw new Error('setup: masked video fixture is unavailable');
@@ -122998,7 +123060,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-7')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-8')))
           throw new Error('masked held-video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123081,7 +123143,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-7')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-8')))
           throw new Error('pen-masked held-video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123152,7 +123214,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-7')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-8')))
           throw new Error('combined-mask video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123226,7 +123288,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-7')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-8')))
           throw new Error('unmarked/vector-mask video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123292,7 +123354,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-7')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-8')))
           throw new Error('unmarked-mask video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
