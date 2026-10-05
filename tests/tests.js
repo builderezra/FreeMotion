@@ -122194,4 +122194,31 @@
       if (v.doc() !== doc0) throw new Error('one undo did not restore the document');
     }, { fps: 30 });
   });
+
+
+  test('simple P2.2 · review Stay put on seven selected lines pins all seven in ONE undo step and keeps the selection (§3.2 rule 2, §8.5b)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => {
+      const out = [];
+      for (let k = 0; k < 7; k++) out.push(smT('Line ' + k, 0.5 + k * 1.2, 1.2, W, H));
+      return out.concat([smV('B', 5, 5, W, H), smV('A', 0, 5, W, H)]);
+    }, async function (v) {
+      const ids = []; for (let k = 0; k < 7; k++) ids.push(v.L('Line ' + k).id);
+      if (ids.some(id => { const l = FM.layerById(FM.scene, id); return l.sm && l.sm.stay; })) throw new Error('CONTROL: a line starts pinned');
+      FM.scene.selectedIds = ids.slice(); FM.scene.selectedId = ids[0]; FM.refreshAll(); await v.sleep(60);
+      const b = smTool('stay');
+      if (!b) throw new Error('CONTROL: no Stay put in the tray for 7 lines: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(x => x.dataset.tool));
+      const s0 = v.steps();
+      b.click();
+      for (let i = 0; i < 300 && (FM.spine.running || FM.spine.queue.length); i++) await v.sleep(10);
+      await v.idle();
+      const pinned = ids.filter(id => { const l = FM.layerById(FM.scene, id); return l.sm && l.sm.stay; }).length;
+      if (pinned !== 7) throw new Error('Stay put on 7 lines pinned ' + pinned + ' (it said “' + v.say() + '”)');
+      if (v.steps() !== s0 + 1) throw new Error('Stay put on 7 lines made ' + (v.steps() - s0) + ' undo steps');
+      if ((FM.scene.selectedIds || []).length !== 7) throw new Error('the 7-line selection dropped to ' + (FM.scene.selectedIds || []).length);
+      FM.history.undo(); await v.sleep(30);
+      const still = ids.filter(id => { const l = FM.layerById(FM.scene, id); return l.sm && l.sm.stay; }).length;
+      if (still) throw new Error('one undo left ' + still + ' line(s) pinned');
+    });
+  });
 })();

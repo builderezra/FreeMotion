@@ -840,7 +840,7 @@ window.FM = window.FM || {};
       if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush();
       if (FM.playing && FM.pause) FM.pause();
       const pre = beginEdit(); muted = true;
-      const sel0 = FM.scene.selectedId;
+      const sel0 = FM.scene.selectedId, sels0 = (FM.scene.selectedIds || []).slice();
       /* D7's Do it anyway: the ids it unlocked are held HERE, never as a mark on the layer — FM.cloneLayer drops every '_' key,
          so a split's second half, a cut item's piece and a copy all came out unlocked (review finding 14) */
       const ids0 = new Set(FM.scene.layers.map(l => l.id)), relock = new Set();
@@ -861,6 +861,7 @@ window.FM = window.FM || {};
       if (!ok) { restorePreEdit(pre); return refuse('failed'); }   // the document from before the unlock: every lock as it was
       if (plan.selectNone) { FM.scene.selectedId = null; FM.scene.selectedIds = []; }
       else if (plan.selectId && FM.layerById(FM.scene, plan.selectId)) { FM.scene.selectedId = plan.selectId; FM.scene.selectedIds = [plan.selectId]; }
+      else if (plan.keepSel && sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0.filter(x => FM.layerById(FM.scene, x)); }   // a tray action on 2+ keeps them (§8.5b)
       else if (sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = [sel0]; }
       FM.refreshAll();
       if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); }
@@ -1201,15 +1202,18 @@ window.FM = window.FM || {};
     plan.pulse = [id];
     return plan;
   };
-  /* STAY PUT (a flag; nothing moves). */
-  S.planStay = function (R, id, on) {
-    const map = byIdMap(), l = map.get(id);
-    if (!l || R.isMain(id)) return refusePlan('gone');
-    const plan = newPlan(on ? 'Stay put' : 'Follow clip'); plan.arranges = false; plan.adopts = false;
-    plan.post.push(() => { S.setFlag(l, 'stay', !!on); if (!on) S.setFlag(l, 'tail', false); });
+  /* STAY PUT (a flag; nothing moves). Several at once (§8.5b "Stay put (all)") are ONE plan: one undo step, one collab
+     transaction. A forEach of single edits made one step per item and dropped every tap past the runner's queue of four
+     (review findings 8 / 24). Refused whole when any is gone or main (§3.2 rule 6); the selection is kept. */
+  S.planStayMany = function (R, ids, on) {
+    const map = byIdMap(), ls = ids.map(id => map.get(id));
+    if (!ls.length || ls.some((l, k) => !l || R.isMain(ids[k]))) return refusePlan('gone');
+    const plan = newPlan(on ? 'Stay put' : 'Follow clip'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    plan.post.push(() => ls.forEach(l => { S.setFlag(l, 'stay', !!on); if (!on) S.setFlag(l, 'tail', false); }));
     plan.live = on ? line('stays') : line('follows');
     return plan;
   };
+  S.planStay = function (R, id, on) { return S.planStayMany(R, [id], on); };
   /* FORWARD / BACK for an overlay or text (z one step among the items it overlaps; it never crosses the clip row, §3.6.1). */
   S.planZ = function (R, id, dir) {
     const map = byIdMap(), l = map.get(id);
@@ -1340,6 +1344,7 @@ window.FM = window.FM || {};
     lift(id) { return S.edit('Lift off', R => S.planLift(R, id)); },
     intoRow(id) { return S.edit('Put in the clip row', R => S.planIntoRow(R, id)); },
     stay(id, on) { return S.edit(on ? 'Stay put' : 'Follow clip', R => S.planStay(R, id, on)); },
+    stayMany(ids, on) { ids = ids.slice(); return S.edit(on ? 'Stay put' : 'Follow clip', R => S.planStayMany(R, ids, on)); },
     z(id, dir) { return S.edit(dir > 0 ? 'Forward' : 'Back', R => S.planZ(R, id, dir)); },
     closeAll() { return S.edit('Close all gaps', R => S.planCloseAll(R)); },
     endWithVideo() { return S.edit('End with the video', R => S.planEndWithVideo(R)); },
