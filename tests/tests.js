@@ -60137,6 +60137,48 @@
     }
   });
 
+  test('a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)', { item: 'TBD' }, function () {
+    if (!FM.fitProjectSize || !FM.storage._clampProjectDims || !FM.projectIsOversize)
+      throw new Error('the import/storage size boundary is unavailable');
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), w: P.width, h: P.height, duration: P.duration,
+      picked: P.sizePicked, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds };
+    const made = [];
+    try {
+      [[16000, 4000], [9000, 2000]].forEach(function (d) {
+        const fit = FM.fitProjectSize(d[0], d[1]);
+        if (!fit.capped || fit.w > 7680 || fit.h > 7680)
+          throw new Error(d.join('×') + ' made a canvas ' + fit.w + '×' + fit.h + ' that storage will reshape on reopen');
+        FM.scene.layers.length = 0; P.sizePicked = false;
+        const rec = { kind: 'image', width: d[0], height: d[1], file: { name: 'panorama.jpg' } };
+        FM.addMediaLayer(rec);
+        const layer = FM.scene.layers[0];
+        if (!layer) throw new Error('the panorama did not import');
+        made.push(layer.id);
+        if (P.width !== fit.w || P.height !== fit.h) throw new Error('the import bypassed the fit: ' + P.width + '×' + P.height);
+        const opened = { width: P.width, height: P.height, fps: 30, duration: P.duration };
+        FM.storage._clampProjectDims(opened);  // the same bound applied on save/load
+        if (opened.width !== P.width || opened.height !== P.height)
+          throw new Error('reopening changes ' + P.width + '×' + P.height + ' into ' + opened.width + '×' + opened.height);
+        if (layer.transform.x !== opened.width / 2 || layer.transform.y !== opened.height / 2)
+          throw new Error('the photo is no longer centred after reopen: ' + layer.transform.x + ',' + layer.transform.y);
+        if (!(layer.transform.scale > 0) || d[0] * layer.transform.scale > opened.width + 1 || d[1] * layer.transform.scale > opened.height + 1)
+          throw new Error('the panorama no longer fits the reopened canvas');
+      });
+      if (!FM.projectIsOversize({ width: 8000, height: 1000 }))
+        throw new Error('a legacy 8000×1000 project can be silently cropped on reopen with no oversize warning');
+      if (FM.projectIsOversize({ width: 7680, height: 1920 }))
+        throw new Error('the new maximum panorama is incorrectly warned as oversized');
+    } finally {
+      made.forEach(id => FM.media.remove(id));
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      P.width = saved.w; P.height = saved.h; P.duration = saved.duration; P.sizePicked = saved.picked;
+      FM.scene.selectedId = saved.selectedId; FM.scene.selectedIds = saved.selectedIds;
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('the onion-skin ghost plate is target-sized and is not reallocated every frame', { item: 'proj-cap' }, async function () {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
     var layers0 = FM.scene.layers.slice(), onion0 = FM.onionSkin;
