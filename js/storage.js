@@ -26,6 +26,7 @@ window.FM = window.FM || {};
   // localStorage at every write, so a second tab opening another project made this tab's next
   // autosave overwrite THAT project's doc with this tab's scene.
   let boundId = null;
+  let unreadableId = null;   // a stored project this tab could not parse must never be autosaved over
   /* ⚠️ …AND ONCE load() HAS RUN, boundId IS THE ANSWER EVEN WHEN IT IS NULL (queue 936 review). `boundId || curId()`
      fell back to the SHARED pointer whenever this tab had nothing open — unreachable while every boot minted a project,
      live the moment "nothing open" became real: a second window that made a project turned an empty window's next flush
@@ -108,6 +109,7 @@ window.FM = window.FM || {};
   // The ONE place a scene doc is written. Returns true only if the bytes actually landed.
   function writeScene() {
     if (!curKey()) { _writeFail = null; return true; }   // queue 936: no project open — nothing to save, and nothing lost
+    if (unreadableId === tabId()) { _writeFail = 'unreadable'; return false; }
     if (_stale) { _writeFail = 'stale'; return false; }
     const raw = diskRaw(), dr = revOf(raw);
     if (dr > lastRev) {
@@ -893,12 +895,25 @@ window.FM = window.FM || {};
     async load() {
       if (FM.projects) FM.projects.migrate();   // legacy single-project fm.scene → indexed project (one-time)
       boundId = curId(); _bound = true;         // pin every future save in this tab to the project being loaded — or to none (queue 936)
+      unreadableId = null;
       adoptRev(0);                              // a project with no doc yet must not inherit the previous one's rev (#306)
       if (FM.fonts) FM.fonts.rehydrateAll();     // register imported custom fonts (idempotent; re-renders when ready)
       if (!boundId) return false;                // queue 936: no project open — a fresh start, or the last one deleted
       const raw = diskRaw();      // the text as well as the doc: writeScene compares against it (queue 690, hunt 5)
       let scene = null; try { scene = raw ? JSON.parse(raw) : null; } catch (e) { scene = null; }
-      if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
+      if (!scene || !scene.project) {
+        if (raw) {
+          unreadableId = boundId;
+          // Preserve the original bytes even if the user later switches projects. The write guard
+          // matters most when the backup cannot fit on an already full device.
+          try {
+            const backupKey = 'fm.proj.' + boundId + '.unreadable';
+            if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, raw);
+          } catch (e) {}
+          if (FM.toast) FM.toast('This project could not be opened. Its stored file was kept; this tab will not save over it.', 8000);
+        }
+        return false;
+      }   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
       adoptRev(scene.rev, raw);   // this tab is now level with what is on disk (#306)
       /* RE-CLAMP ON EVERY OPEN (queue 470). This is the door EVERY project comes through, every time, and
          until now it trusted whatever was in storage — the note just below says as much about layers.

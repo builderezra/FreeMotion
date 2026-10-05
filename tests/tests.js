@@ -128025,4 +128025,26 @@
     }
   });
 
+  test('TBD: an unreadable stored project survives load and pagehide flush', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const prior = FM.projects.currentId(), made = [], corrupt = 'garbage{';
+    try {
+      const id = await FM.projects.create({ name: 'Unreadable project probe' });
+      if (!id) throw new Error('probe project could not be created');
+      made.push(id);
+      const key = 'fm.proj.' + id;
+      localStorage.setItem(key, corrupt);
+      if (await FM.storage.load() !== false) throw new Error('corrupt project unexpectedly loaded');
+      if (FM.storage.flushSync() !== false || localStorage.getItem(key) !== corrupt)
+        throw new Error('pagehide-style flush overwrote the unreadable project');
+      if (localStorage.getItem(key + '.unreadable') !== corrupt)
+        throw new Error('the unreadable source was not copied for recovery');
+    } finally {
+      try { await FM.projects.open(prior || null, { confirmed: true }); } catch (e) {}
+      for (const id of made) {
+        try { await FM.projects.remove(id); } catch (e) {}
+        localStorage.removeItem('fm.proj.' + id + '.unreadable');
+      }
+    }
+  });
+
 })();
