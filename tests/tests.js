@@ -128047,4 +128047,21 @@
     }
   });
 
+  test('TBD: boot media cleanup stops when any project document is unreadable', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const mediaKey = 'prune-unreadable-' + Date.now(), brokenKey = 'fm.proj.prune-broken-' + Date.now();
+    try {
+      if (!(await FM.storage.writeMedia(mediaKey, { file: new Blob(['keep me']), kind: 'image', rev: 0 })))
+        throw new Error('orphan media fixture could not be stored');
+      localStorage.setItem(brokenKey, '{"rev":1,"project":');
+      await FM.projects.pruneOrphans();
+      if (!(await FM.storage.readMedia(mediaKey))) throw new Error('unreadable project allowed boot cleanup to delete media');
+      localStorage.removeItem(brokenKey);
+      await FM.projects.pruneOrphans();
+      if (await FM.storage.readMedia(mediaKey)) throw new Error('control: readable projects did not allow orphan cleanup');
+    } finally {
+      localStorage.removeItem(brokenKey);
+      try { await FM.storage.removeMedia(mediaKey); } catch (e) {}
+    }
+  });
+
 })();

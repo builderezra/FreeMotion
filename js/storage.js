@@ -3110,15 +3110,18 @@ window.FM = window.FM || {};
          * project and no media-library entry — so the keep-set below reads them as orphans and deletes
          * them at the first boot after a crash, which is the exact boot on which they are the point.
          * They are exempted from the scan (see the prefix list) and reaped by their own rules instead. */
-        if (FM.exportResume && FM.exportResume.sweep) { try { await FM.exportResume.sweep(); } catch (e) {} }
         const projIds = new Set();   // EVERY stored project doc — scanned from localStorage, not just the index (an unindexed doc's media must never be mass-deleted)
         const collectKeep = () => {
           const keep = new Set();
           for (let i = 0; i < localStorage.length; i++) {
             const lk = localStorage.key(i);
-            if (lk && lk.indexOf('fm.proj.') === 0) {
+            if (lk && lk.indexOf('fm.proj.') === 0 && !lk.endsWith('.unreadable')) {
               projIds.add(lk.slice(8));
-              const d = readJSON(lk, null); if (d && d.layers) d.layers.forEach(l => keep.add(l.id));
+              const d = readJSON(lk, null);
+              // An unreadable project may still own any media key. Never guess which blobs
+              // are orphaned while its layer list cannot be read; retry on the next boot.
+              if (!d || typeof d !== 'object' || !Array.isArray(d.layers)) return { keep, unreadable: true };
+              d.layers.forEach(l => { if (l && l.id) keep.add(l.id); });
             }
           }
           FM.scene.layers.forEach(l => keep.add(l.id));
@@ -3126,9 +3129,12 @@ window.FM = window.FM || {};
           // file stays available after the project that introduced it is deleted. Without this the
           // library would quietly rot to broken tiles at the next boot.
           if (FM.mediaLib && FM.mediaLib.keys) FM.mediaLib.keys().forEach(k => keep.add(k));
-          return keep;
+          return { keep, unreadable: false };
         };
-        const keep = collectKeep();
+        const first = collectKeep();
+        if (first.unreadable) return;
+        if (FM.exportResume && FM.exportResume.sweep) { try { await FM.exportResume.sweep(); } catch (e) {} }
+        const keep = first.keep;
         /* ⚠️ queue 921 S0: A SAVE POINT IS A REFERENCE (spec §12.4, §24). `collab:ckpt:*` holds the
            document as it was before a share started, so every layer id inside one is still reachable
            through "Earlier versions…" — and collectKeep above only reads `fm.proj.*`, which a checkpoint
@@ -3174,7 +3180,9 @@ window.FM = window.FM || {};
         }
         if (candidates.length) {
           if (FM._mediaBusy) { db.close(); return; }   // something started writing mid-scan
-          const keep2 = collectKeep();                  // fresh snapshot at delete time
+          const fresh = collectKeep();                   // fresh snapshot at delete time
+          if (fresh.unreadable) { db.close(); return; }
+          const keep2 = fresh.keep;
           // A font/template/element can arrive while the asynchronous IDB scan above runs. Refresh
           // their indexes as well, or this sweep can delete a blob just committed by an import.
           const tplIds2 = new Set((FM.templates.list() || []).map(t => t.id));
