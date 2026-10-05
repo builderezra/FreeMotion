@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Exposure before moving-shape Time Warp Scan
+
+Starting commit: clean preferred Codex-only `6d0f235f45a0e2f77cbaa596020cdb251dff7862`; isolated branch `codex/690-c31-scan-exposure-shape`. The exact standing #690 is `REQUESTS.md:27375-27403`, and C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. No `audits/*.json` record names Time Warp Scan or this Exposure combination.
+
+Exposure is a source-local, history-free grade, but the moving-shape historical gate excluded it. A keyed Exposure before Time Warp Scan therefore showed different strips after a cold seek. The gate now admits Exposure for moving shapes. A new `{ item: 'TBD' }` native Chromium regression failed before (`cold=0, played=45` at a strip pixel) and passed after in Freeze and Reveal at 120/60 px; it also checked that the scan differs from the current unscanned picture. The adjacent keyed Colour Balance shape regression passed. The shape main-MP4 resume identity advances from 9 to 10 to invalidate interrupted prefixes.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 367→368, exporter 176→177), `tests/tests.js` (one new regression and one existing resume-identity expectation), and this report. Node syntax and `git diff --check` passed. Still-image and decoded-video Exposure remain separate unproven gates. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
