@@ -1895,8 +1895,20 @@ window.FM = window.FM || {};
     } finally { try { if (db) db.close(); } catch (e) {} }
     return true;
   };
+  // Keep the name he chose, including non-Latin scripts and emoji. Remove only characters a
+  // downloaded filename cannot use; slice code points so a long name never ends in half an emoji.
+  function safeFileName(value, fallback) {
+    const chars = Array.from(String(value == null ? '' : value)).filter(ch => {
+      const cp = ch.codePointAt(0);
+      return cp < 0xD800 || cp > 0xDFFF; // discard malformed lone surrogates, not valid pairs
+    });
+    const safe = chars.join('').replace(/[\u0000-\u001f\u007f-\u009f\\\/:*?"<>|]/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+    return Array.from(safe).slice(0, 80).join('').replace(/^\.+|\.+$/g, '').trim() || fallback;
+  }
+  FM.storage._safeFileName = safeFileName;
   function saveProjectFile(obj) {
-    const name = (((obj.project && obj.project.name) || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
+    const name = safeFileName(obj.project && obj.project.name, 'project');
     const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = name + '.fmotion.json';
@@ -3250,7 +3262,7 @@ window.FM = window.FM || {};
       // Share the project file's embedding and named-omission rules: a template with a
       // large clip must tell its sender and recipient which footage is missing.
       const obj = await serializeWith({ project: project, layers: pack.layers }, lid => pack.media && pack.media[lid]);
-      const safe = String(project.name).replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'template';
+      const safe = safeFileName(project.name, 'template');
       const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';

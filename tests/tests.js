@@ -127474,4 +127474,38 @@
     }
   });
 
+  test('690 project and template downloads keep Unicode filenames', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const safe = FM.storage._safeFileName;
+    if (!safe) throw new Error('the shared download filename helper is missing');
+    for (const name of ['Привет', '東京の夜', 'مشروع', 'Café Noir', '🎬 Reel'])
+      if (safe(name, 'project') !== name) throw new Error('filename changed the chosen name ' + name);
+    if (safe('a/b:c*?', 'project') !== 'a b c' || safe('...', 'project') !== 'project')
+      throw new Error('filename did not replace filesystem characters or use the fallback');
+    const long = safe('🎬'.repeat(300), 'project');
+    if (Array.from(long).length !== 80 || Array.from(long).some(ch => ch.codePointAt(0) >= 0xD800 && ch.codePointAt(0) <= 0xDFFF))
+      throw new Error('long filename was not capped at whole code points');
+
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const click = HTMLAnchorElement.prototype.click, downloads = [];
+    let tid = null;
+    try {
+      HTMLAnchorElement.prototype.click = function () { downloads.push(this.download); };
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: '東京の夜', width: 320, height: 240 });
+      if (!pid) throw new Error('setup: could not make the export project');
+      made.push(pid);
+      FM.scene.project.name = '東京の夜';
+      await FM.storage.exportFile();
+      if (!(await FM.templates.save('🎬 Reel', pid))) throw new Error('setup: could not save a template');
+      tid = FM.templates.list().find(t => t.name === '🎬 Reel').id;
+      if (!(await FM.templates.exportFile(tid))) throw new Error('setup: could not export a template');
+      if (downloads[0] !== '東京の夜.fmotion.json' || downloads[1] !== '🎬 Reel.fmotion.json')
+        throw new Error('the real downloads lost their chosen Unicode names: ' + downloads.join(', '));
+    } finally {
+      HTMLAnchorElement.prototype.click = click;
+      if (tid) { try { await FM.templates.remove(tid); } catch (e) {} }
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();
