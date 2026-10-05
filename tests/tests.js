@@ -31849,6 +31849,43 @@
     });
   });
 
+  test('offline guest edits made during reconnect still use clash checks, including Undo (batch2 1b.3)', { item: 'TBD', budgetMs: 60000 }, async function () {
+    for (const kind of ['edit', 'undo']) {
+      await withCollab921([layer921('A')], async function (c) {
+        const g = c.addGuest();
+        const sent = [];
+        const orig = g.loop.b.send;
+        g.loop.b.send = function (ch, msg) { if (msg && msg.t === 'tx') sent.push(msg); return orig.call(g.loop.b, ch, msg); };
+        try {
+          g.G.setOnline(false);
+          g.doc.layers[0].name = 'Sam offline';
+          g.G.tick('full');
+          if (kind === 'undo') g.G.afterCommit();
+          const offline = g.G._outstanding();
+          if (offline.length !== 1 || offline[0].sent) throw new Error(kind + ': the first change was not parked while offline');
+          FM.scene.layers[0].name = 'Ezra online';
+          FM.history.commit();
+          if (c.S.base.layers[0].name !== 'Ezra online') throw new Error(kind + ': the owner change did not reach the host');
+
+          g.G.setOnline(true); // hello is in flight; the tail/snapshot has not reached the guest
+          if (kind === 'edit') { g.doc.layers[0].name = 'Sam reconnect'; g.G.tick('full'); }
+          else if (!g.G.undo()) throw new Error('the offline change could not be undone before catch-up');
+          const pending = g.G._outstanding();
+          if (pending.length < 2) throw new Error(kind + ': no second transaction was made during catch-up');
+          const next = sent.find(m => m.cid === pending[pending.length - 1].cid);
+          if (!next) throw new Error(kind + ': the second transaction was never sent');
+          if (next.q !== 1) throw new Error(kind + ': the reconnect-time transaction went as q:' + next.q + ', bypassing the host clash check');
+          g.loop.settle(); g.loop.settle();
+          if (!sent.some(m => m.cid === offline[0].cid && m.q === 1))
+            throw new Error(kind + ': the first offline transaction was not replayed with a clash check');
+          if (c.S.base.layers[0].name !== 'Ezra online')
+            throw new Error(kind + ': the guest overwrote the owner during reconnect: ' + c.S.base.layers[0].name + ' / ' + JSON.stringify(sent.map(m => ({ cid: m.cid, q: m.q, ops: m.ops }))));
+          if (!g.G.lastClash) throw new Error(kind + ': the stale guest change was not reported as a clash');
+        } finally { g.loop.b.send = orig; }
+      });
+    }
+  });
+
   test('921 S2 a persisted guest base answers for the WRITE, not for having asked for one', { item: '921', budgetMs: 45000 }, async function () {
     const C = need921('the guest base');
     const realPut = FM.storage.collabPut;
