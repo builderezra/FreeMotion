@@ -345,9 +345,12 @@
      until 700 ms pass with none. So the probe waits for 900 ms with no render asked for (FM.requestRender is watched, see
      BOOT) and no motion, puts the ladder back to the top, and asks for ONE render — alone, so it cannot start a burst. */
   var LAST_RENDER_ASK = 0;
-  async function previewState() {
-    var pv = D.getElementById('preview');
-    if (!pv) return { pv: null };
+  /* The preview back at the top of its quality ladder, its motion window closed and one fresh render drawn. Used before a
+     measurement of the preview AND before every tap a tool maps through it (FM.eventToProject divides by the backing
+     store's own size over its render scale, which moves with the ladder: measured 6 Oct, a mask point tapped at 70% of the
+     preview's height landed at y 447.19 on one run of HEAD and 449.32 on the next, because the taps before it had started
+     a motion window and the preview was shedding pixels on one run and not the other). */
+  async function previewSettled() {
     try {
       await until('the preview to stop shedding pixels', function () {
         var s = FM._perfState ? FM._perfState() : null;
@@ -357,6 +360,11 @@
     if (FM._resetPlayQuality) FM._resetPlayQuality();
     if (FM.requestRender) FM.requestRender();
     await raf2(); await raf2();
+  }
+  async function previewState() {
+    var pv = D.getElementById('preview');
+    if (!pv) return { pv: null };
+    await previewSettled();
     var st = FM._perfState ? FM._perfState() : {};
     var info = { w: pv.width, h: pv.height, rs: Math.round((pv.__fmRS || 0) * 1e4) / 1e4, ox: Math.round((pv.__fmOX || 0) * 100) / 100,
       oy: Math.round((pv.__fmOY || 0) * 100) / 100, crop: !!pv.__fmCrop, tier: st.tier, factor: st.factor, motion: !!st.inMotion };
@@ -1078,12 +1086,18 @@
     var p = L.transform[k];
     if (!FM.isAnimated(p) || p.kf.length < 2) throw new Error('could not put two ' + k + ' keys on ' + L.name);
   }
-  /* A jump on the channel a layer's newest Bounce rings on: +35% on a scale, 160 units on a position or a turn. */
-  function jumpOn(L, t0, t1) {
+  /* A jump on the channel a layer's newest Bounce rings on: +35% on a scale, 160 units on a position or a turn. With
+     `tHold`, a third key at that time holding the jump's value (the curve is flat after the jump, so only the ring moves). */
+  function jumpOn(L, t0, t1, tHold) {
     var b = (L.behaviors || []).filter(function (x) { return x.type === 'bounce'; }).slice(-1)[0];
     if (!b) throw new Error(L.name + ' has no Bounce');
     var k = b.prop || 'y', p = L.transform[k], v = typeof p === 'number' ? p : FM.evalProp(p, t0);
-    keyTwo(L, k, t0, v, t1, /scale/i.test(k) ? v * 1.35 : v + 160);
+    var v1 = /scale/i.test(k) ? v * 1.35 : v + 160;
+    keyTwo(L, k, t0, v, t1, v1);
+    if (tHold != null) {
+      FM.setTransform(L, k, v1, tHold);
+      if (L.transform[k].kf.length < 3) throw new Error('could not put a third ' + k + ' key on ' + L.name);
+    }
   }
   /* An effect added the way he adds one: the selected layer's Effects card, + Add Effect, the browser's search, the tile,
      the browser's Add. `fallback` runs only when the tile is not on screen (and the step is marked as having fallen back). */
@@ -1276,8 +1290,9 @@
           var ov = el('#mask-overlay', 'the mask overlay'), pv = el('#preview', 'the preview');
           var pts = [[0.35, 0.35], [0.65, 0.4], [0.5, 0.7]];
           for (var i = 0; i < pts.length; i++) {
-            /* where the preview is NOW, once it has stopped moving (measured 6 Oct: on the phone the stage was still
-               settling after the first taps, so a rect read once put the third point 2 px apart on two runs of HEAD) */
+            /* where the preview is NOW, once it has stopped moving AND its backing store is back at the top of the
+               quality ladder (see previewSettled: a tap maps through the backing store's size) */
+            await previewSettled();
             var pr = await stableRect(pv);
             var x = pr.left + pr.width * pts[i][0], y = pr.top + pr.height * pts[i][1];
             pe(ov, 'pointerdown', x, y, 1); peBoth('pointerup', x, y, 0);
@@ -1380,13 +1395,17 @@
       /* B4/B5's GUARDS (DESIGN FU2: "a Follow on a split target and a luma matte on a split source rendered past the
          cut; Bounce on a camera with split keys"). Each renders frames on both sides of its cut. The Follow and the Bounce
          go through the Position / Scale card's + Add behavior; the matte's source is set the way its picker writes it. */
-      /* The follower is Clip A, which is on screen across the cut (v2 put it on a text inside the masking group, so
-         nothing it did reached a frame: its three frames were one picture). The target, Clip B's first half, really
-         carries two x keys — v2's FM.setTransform on an unkeyed prop only sets the value, so it moved nothing. */
-      ['a Follow on a split target (Clip A follows Clip B’s first half: + Add behavior → Follow, its layer list), frames past the cut', async function () {
+      /* The follower is Pick D: the one picture on screen on both sides of the cut (an image live from 1 s to 6 s, high in
+         the stack, opaque). Measured 6 Oct, twice over: v2 put the Follow on a text inside the masking group, and the
+         first fix on Clip A — which by then plays from 0.3 s to 0.85 s, nowhere near the cut, under Pick D — so its three
+         frames were one picture and a planted Follow-through-the-lineage passed. The target, Clip B's first half,
+         really carries two x keys (v2's FM.setTransform on an unkeyed prop only sets the value, so it moved nothing). */
+      ['a Follow on a split target (Pick D follows Clip B’s first half: + Add behavior → Follow, its layer list), frames past the cut', async function () {
         var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip B'; });
         var B1 = halves.slice().sort(function (a, b) { return a.start - b.start; })[0];
-        var T = byName('Clip A');
+        var T = FM.scene.layers.filter(function (l) { return /Pick D/.test(l.name); })[0];
+        if (!T) throw new Error('no Pick D to follow with');
+        if (!(T.start < B1.start + B1.duration - 0.1 && T.start + T.duration > B1.start + B1.duration + 0.45)) throw new Error('Pick D (' + T.start + '–' + (T.start + T.duration) + ' s) does not span the cut at ' + (B1.start + B1.duration) + ' s');
         keyTwo(B1, 'x', B1.start, B1.transform.x, B1.start + B1.duration, (typeof B1.transform.x === 'number' ? B1.transform.x : 0) + 90);
         FM.history.commit();
         FM.selectLayer(T.id); FM.setTime(B1.start + B1.duration - 0.2); await settle();
@@ -1401,7 +1420,7 @@
         if (sel) setInput(sel, B1.id);
         else { fellOnly('the Follow layer picker was not on screen'); var b = (T.behaviors || []).filter(function (x) { return x.type === 'follow'; })[0]; if (b) { b.params = b.params || {}; b.params.targetId = B1.id; } FM.history.commit(); }
         var fb = (T.behaviors || []).filter(function (x) { return x.type === 'follow'; }).slice(-1)[0];
-        if (!fb || !fb.params || fb.params.targetId !== B1.id) throw new Error('Clip A does not follow Clip B’s first half');
+        if (!fb || !fb.params || fb.params.targetId !== B1.id) throw new Error('Pick D does not follow Clip B’s first half');
         await settle(200);
         ctx.times = [B1.start + B1.duration - 0.05, B1.start + B1.duration + 0.05, B1.start + B1.duration + 0.4];
       }, { times: function () { return ctx.times; }, mustMove: true }],
@@ -1460,10 +1479,17 @@
         FM.history.commit(); await settle(200);
         ctx.times = [1.05, 1.2, 1.5];
       }, { times: function () { return ctx.times; }, mustMove: true }],
-      ['Bounce across a split (Clip C’s second half: + Add behavior → Bounce, two keys on its channel, S after them), frames past the cut', async function () {
+      /* THREE keys, the cut between the second and the third (measured 6 Oct: with both keys before the cut the tail half
+         holds ONE key, the seam, and bounceDelta returns 0 on a single key before it ever reads the lineage — on HEAD the
+         ring stops at such a cut, so its three frames were one picture and B5's guard measured nothing). With a key after
+         the cut the tail carries two, the lineage's keys are merged with the seams dropped (B5), and the ring set off by
+         the jump before the cut carries on past it; the third key holds the jump's value, so only the ring moves. */
+      ['Bounce across a split (Clip C’s second half: + Add behavior → Bounce, three keys on its channel, S between the last two), frames past the cut', async function () {
         var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return a.start - b.start; });
         var C = halves[halves.length - 1];
         var k0 = C.start + 0.1, k1 = C.start + Math.min(0.3, C.duration * 0.3), cut = C.start + Math.min(0.45, C.duration * 0.5);
+        var kHold = cut + Math.min(0.35, (C.start + C.duration - cut) * 0.85);
+        if (!(kHold > cut + 0.25)) throw new Error('Clip C’s second half (' + C.start + '–' + (C.start + C.duration) + ' s) is too short to key past the cut at ' + cut + ' s');
         FM.selectLayer(C.id); FM.setTime(k0); await settle();
         if (!(await openCard(/Position/))) fellOnly('Clip C’s Position / Scale card was not on screen');
         var add = byText('#inspector-panel .fx-add-btn', /Add behavior/);
@@ -1472,7 +1498,7 @@
         var pick = byText('#inspector-panel .be-pick-btn', /^Bounce$/);
         await via('the Bounce tile', pick, async function () { C.behaviors = (C.behaviors || []).concat([FM.behaviorRegistry.makeInstance('bounce', 'y')]); FM.history.commit(); });
         await settle(200);
-        jumpOn(C, k0, k1);
+        jumpOn(C, k0, k1, kHold);
         FM.history.commit();
         FM.setTime(cut); await settle();
         key('KeyS', 's'); await settle(200);
