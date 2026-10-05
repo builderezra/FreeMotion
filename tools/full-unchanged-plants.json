@@ -1,5 +1,5 @@
 {
-  "_": "THE FULL-UNCHANGED SELF-TEST'S PLANTS (queue 980; DESIGN.md §0.4.5 'The gate, structurally'; the 1 Oct review). Changes Full must never get. tools/full-unchanged.sh plants each one in a COPY of the tree on every run, measures it with the groups and widths named here, and refuses PASS unless each turns the comparison red FOR ITS OWN REASON: a difference line that starts with the width and carries every string in `sig` — sig[0] says WHERE (a screen, a step, a key) and every later string must be in WHAT the line says differs (after the step's name), so a step whose name happens to contain a word cannot catch anything by its name (6 Oct: 'Bounce on a camera … frames on the ring' matched sig ['Bounce on a camera', 'frames'] on a jitter line while the planted decay drew nothing). A red that names something else is luck, not a catch. DESIGN's three (a picture margin, a toast word, the split floor) and EVERY change the 1 Oct review slipped past v1 (its blocker's nineteen: P1 overlay, P12 icon, P3 hover, P4 sheetmotion, P13 cropbar, V1 halfres, P5 shift34, Q2 key, Q3 addtab, P6 touch, P10 group, P11 uiroute, T1 speedtoast, P7 colour, P8 export, P9 bounce, R1 manifest, S1 sanitiser, E1 endnudge), DESIGN's B4 and B5 guards (matte, follow, seam), which v1 had no step for; and the review's Q1 (zoomstep: finding 4 found the timeline zoom unrecorded, so a changed zoom step was red only by accident). `groups` is always a PREFIX of the probe's order (FU1, FU2, FU3, FU6, FU4, FU5, FU7), so a plant's run reaches its group exactly as the full run did. `old` must appear EXACTLY once in `file` (tests.js '980 FU lock: every self-test plant still lands exactly once' checks it, so a plant cannot rot silently); `append` adds to the end instead.",
+  "_": "THE FULL-UNCHANGED SELF-TEST'S PLANTS (queue 980; DESIGN.md §0.4.5 'The gate, structurally'; the 1 Oct review). Changes Full must never get. tools/full-unchanged.sh plants each one in a COPY of the tree on every run, measures it with the groups and widths named here, and refuses PASS unless each turns the comparison red FOR ITS OWN REASON: a difference line that starts with the width and carries every string in `sig` — sig[0] says WHERE (a screen, a step, a key) and every later string must be in WHAT the line says differs (after the step's name), so a step whose name happens to contain a word cannot catch anything by its name (6 Oct: 'Bounce on a camera … frames on the ring' matched sig ['Bounce on a camera', 'frames'] on a jitter line while the planted decay drew nothing). A red that names something else is luck, not a catch — and so is a signature broad enough to be met by another change's lines (6 Oct: with the review's nineteen replayed as ONE release, 'state.doc' and 'key.state' were met by the colour plant's clipColor lines), so each names the field its own change moves. DESIGN's three (a picture margin, a toast word, the split floor) and EVERY change the 1 Oct review slipped past v1 (its blocker's nineteen: P1 overlay, P12 icon, P3 hover, P4 sheetmotion, P13 cropbar, V1 halfres, P5 shift34, Q2 key, Q3 addtab, P6 touch, P10 group, P11 uiroute, T1 speedtoast, P7 colour, P8 export, P9 bounce, R1 manifest, S1 sanitiser, E1 endnudge), DESIGN's B4 and B5 guards (matte, follow, seam), which v1 had no step for; and the review's Q1 (zoomstep: finding 4 found the timeline zoom unrecorded, so a changed zoom step was red only by accident). `groups` is always a PREFIX of the probe's order (FU1, FU2, FU3, FU6, FU4, FU5, FU7), so a plant's run reaches its group exactly as the full run did. `old` must appear EXACTLY once in `file` (tests.js '980 FU lock: every self-test plant still lands exactly once' checks it, so a plant cannot rot silently); `append` adds to the end instead.",
   "plants": [
     {
       "name": "margin",
@@ -42,7 +42,7 @@
       "groups": "FU1,FU2",
       "sig": [
         "split Clip C 0.05 s from its start",
-        "state.doc"
+        "state.doc.layers: "
       ]
     },
     {
@@ -99,7 +99,8 @@
       "groups": "FU1,FU2",
       "sig": [
         "drag Clip B along the timeline",
-        "state.doc"
+        "state.doc.layers[",
+        ".start: "
       ]
     },
     {
@@ -114,7 +115,8 @@
       "groups": "FU1,FU2",
       "sig": [
         "speed 2× on Clip A",
-        "state.doc"
+        "state.doc.layers[",
+        ".kf["
       ]
     },
     {
@@ -231,7 +233,7 @@
       "groups": "FU1,FU2,FU3",
       "sig": [
         "FU3 \"nothing selected · shift+Digit3\"",
-        "key.state"
+        "drawMode"
       ]
     },
     {
@@ -276,7 +278,8 @@
       "groups": "FU1,FU2",
       "sig": [
         "group Clip A and the song",
-        "state.doc"
+        "state.doc.layers[",
+        "maskGroup"
       ]
     },
     {

@@ -433,7 +433,7 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                         layout_diff(va.get('layout') or [], vb.get('layout') or [], where + ' (hovered)', out, limit, fields)
                         if va.get('motion') != vb.get('motion'):
                             local = []
-                            json_diff(va.get('motion'), vb.get('motion'), 'motion', local, 3)
+                            json_diff(va.get('motion'), vb.get('motion'), 'motion', local, max(3, per_step))
                             out += ['%s (hovered): %s' % (where, x) for x in local]
                     continue
                 layout_diff(sa.get('layout') or [], sb.get('layout') or [], '%s %s' % (w, name), out, limit, fields)
@@ -442,7 +442,7 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                         out.append('%s %s: %s %s → %s' % (w, name, {'pv': 'the preview’s backing store', 'pvHash': 'what the preview drew'}.get(k, k), short(sa.get(k)), short(sb.get(k))))
                 if sa.get('motion') != sb.get('motion'):
                     local = []
-                    json_diff(sa.get('motion'), sb.get('motion'), 'what it animated', local, 4)
+                    json_diff(sa.get('motion'), sb.get('motion'), 'what it animated', local, max(4, per_step))
                     out += ['%s %s: %s' % (w, name, x) for x in local]
         if 'FU2' in groups:
             sa, sb = A.get('fu2') or [], B.get('fu2') or []
@@ -473,7 +473,10 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                     out.append('%s FU3 "%s": missing on the tree' % (w, ra['name']))
                     break
                 local = []
-                json_diff(ra, rb, 'key', local, 4)
+                # per_step, as FU2's steps (6 Oct: a fixed 4 let one change's lines hide another's — with the review's
+                # nineteen replayed as ONE release, every key's first four lines were the colour plant's clipColor and
+                # the remapped 3's inspectorView / addTab never reached the report)
+                json_diff(ra, rb, 'key', local, max(4, per_step))
                 for x in local:
                     out.append('%s FU3 "%s": %s' % (w, ra['name'], x))
                 if len(out) >= limit:
