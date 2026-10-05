@@ -58,26 +58,29 @@ manifest.dur     # I7  its duration, same
 '
 
 # ═══ THE TOLERANCES — MEASURED, NOT CHOSEN (memory: "set float tolerances from measurement") ═══════════════════════════
-# Measured 1 Oct 2026 on v17.21 (HEAD d0cee3c), headless Chrome + SwiftShader, every FU1 picture (the screen, and the
-# screen with the preview hidden) at 380 (touch) and 1280, with `tools/full-unchanged.sh --measure`: HEAD rendered twice,
-# every group, and the #transport 1 px margin. See the numbers it printed in the commit that set these.
-#   · records, HEAD against HEAD, every group: IDENTICAL (anything else is a probe bug, and --measure says where)
-#   · pictures, the most pixels any one picture differed by, HEAD against HEAD:  FU_JITTER_PX at FU_CHAN,
-#     FU_FAINT_JITTER_PX at FU_FAINT_CHAN
-#   · the smallest real change at FU_CHAN (the #transport margin's least-changed picture): FU_SMALLEST_REAL_PX
-#   · a decoded export frame, HEAD against HEAD: FU_GRID_JITTER levels at most in any cell of its 12x12 grid
+# MEASURED 6 Oct 2026 on v17.23 (b46b47d3), headless Chrome + SwiftShader on this Mac, every FU1 picture (the screen, and
+# the screen with the preview hidden — 64 pictures over both widths) at 380 (touch) and 1280, with
+# `tools/full-unchanged.sh --measure` (HEAD rendered twice, every group, and the #transport 1 px margin). Its table:
+#     chan       0    1    2    4    6    8   12   16   24   32   64
+#     jitter    28   10    6    4    4    2    2    2    0    0    0     (the most px any one picture moved, HEAD vs HEAD)
+#     smallest  67  311  199   94   30  105   77   68   58   35   22     (the margin's least-changed picture that moved)
+# (1 Oct, v1's measurement of the same: 0–2 px of jitter at 24.) The decoded export, HEAD against HEAD: 0 levels in every
+# cell at both widths. The records, HEAD against HEAD: 18 differences in v2's probe, every one a probe bug, each fixed and
+# named where it was (a glint caught mid-sweep, an id inside an op path, the doc checksum, a hover's shadow mid-
+# transition, the encoder's bytes) — the run that set these numbers is the one PASS below re-checks on every run, because
+# the tree it compares with HEAD is, for the app, HEAD itself until a Simple release changes it.
 # v1 sat at 12 px over 24 levels, which hid a 6 px line moved by 1 px (12 px) and every recolour of 24 levels or less (a
 # panel border 20 levels lighter counted 0). Now: just above the jitter, a second faint threshold for wide recolours, and
 # tools/_fu_compare.py proves on every run that a 4 px line moved 1 px and a 20-level border recolour are both seen.
-FU_JITTER_PX=2              # HEAD against itself at FU_CHAN: the most pixels any one picture differed by
+FU_JITTER_PX=2              # HEAD against itself at FU_CHAN: 0 px measured 6 Oct, 2 on 1 Oct — the larger is written
 FU_SMALLEST_REAL_PX=58      # the smallest real change at FU_CHAN: the #transport 1 px margin, its least-changed picture
 FU_CHAN=24                  # a pixel counts as changed when any channel moved by more than this …
 FU_TOL_PX=3                 # … and a picture may have at most this many: just above the jitter (a 4 px line moved 1 px = 8)
 FU_FAINT_CHAN=8             # a pixel counts as FAINTLY changed when a channel moved by more than this …
-FU_FAINT_JITTER_PX=8        # … HEAD against itself at FU_FAINT_CHAN …
-FU_FAINT_TOL_PX=40          # … and a picture may have at most this many (a 40 px panel's border recoloured 20 levels = 156)
-FU_GRID_JITTER=0            # a decoded export cell, HEAD against itself
-FU_GRID_TOL=6               # … and the most a cell may move
+FU_FAINT_JITTER_PX=2        # … HEAD against itself at FU_FAINT_CHAN: 2 px measured 6 Oct …
+FU_FAINT_TOL_PX=8           # … and a picture may have at most this many (a 40 px panel's border recoloured 20 levels = 156)
+FU_GRID_JITTER=0            # a decoded export cell, HEAD against itself: 0 levels measured 6 Oct, both widths
+FU_GRID_TOL=4               # … and the most a cell may move (the saturate plant moves cells by tens of levels)
 export FU_INVISIBLE FU_TOL_PX FU_CHAN FU_FAINT_TOL_PX FU_FAINT_CHAN FU_GRID_TOL
 
 ROOT="${FU_ROOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"

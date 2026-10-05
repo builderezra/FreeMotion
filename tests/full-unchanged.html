@@ -209,6 +209,21 @@
   var motionLog = null;
   function motionStart() { motionLog = Object.create(null); }
   function motionTake() { var m = motionLog ? Object.keys(motionLog).sort() : []; motionLog = null; return m; }
+  /* …and every animation that never ends and is running on the screen now, whenever it started (a spinner, a glint, a
+     pulse started at boot sends no animationstart while the screen is reached): its timing and its keyframes, so a change
+     to an infinite animation is seen even though the picture freezes it at its first frame. */
+  function infiniteNow() {
+    var out = {};
+    D.getAnimations().forEach(function (a) {
+      try {
+        var ef = a.effect, ct = ef.getComputedTiming();
+        if (isFinite(ct.endTime) || !ef.target || !ef.target.getClientRects().length) return;
+        var kf = JSON.stringify(ef.getKeyframes().map(function (k) { var o = {}; Object.keys(k).sort().forEach(function (x) { if (x !== 'computedOffset') o[x] = k[x]; }); return o; }));
+        out[JSON.stringify(['I', pathOf(ef.target) + (ef.pseudoElement || ''), a.animationName || a.transitionProperty || '', ct.duration, ct.delay, ct.easing, String(ct.iterations), kf.slice(0, 1500)])] = 1;
+      } catch (e) {}
+    });
+    return Object.keys(out).sort();
+  }
   function noteMotion(e) {
     if (!motionLog) return;
     try {
@@ -363,7 +378,7 @@
     step('capture ' + name);
     if (!opts.keepToast && FM.hideToast) FM.hideToast();
     await settle(opts.wait);
-    var motion = motionTake();
+    var motion = motionTake().concat(infiniteNow());
     var quiet = await canvasesQuiet();
     var pvs = opts.noPreview ? {} : await previewState();
     var fr = freezeInfinite();
@@ -429,12 +444,19 @@
     (layers || []).forEach(function (l, i) { if (l && typeof l.id === 'string' && !map[l.id]) map[l.id] = '@L' + i; });
     (function walk(v, depth) {
       if (!v || typeof v !== 'object' || depth > 40) return;
-      if (Array.isArray(v)) { v.forEach(function (x) { walk(x, depth + 1); }); return; }
+      if (Array.isArray(v)) { v.forEach(function (x) { idRef(x); walk(x, depth + 1); }); return; }
       Object.keys(v).forEach(function (k) {
         if (ID_KEYS[k] && typeof v[k] === 'string' && v[k].length >= 4 && !map[v[k]]) map[v[k]] = '@' + k + (n++);
+        idRef(v[k]);
         walk(v[k], depth + 1);
       });
     })(obj, 0);
+    /* An id can travel with no key of its own: a live op's path addresses a list item as "#i:<id>" (a mask, measured
+       6 Oct: `mask_250cq_…` on one run, `mask_252cn_…` on the next). By first appearance, like every other id. */
+    function idRef(x) {
+      var m = typeof x === 'string' ? /^#i:(.{4,})$/.exec(x) : null;
+      if (m && !map[m[1]]) map[m[1]] = '@i' + (n++);
+    }
     var ids = Object.keys(map).sort(function (a, b) { return b.length - a.length; });
     var re = ids.length ? new RegExp(ids.map(function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|'), 'g') : null;
     function sub(s) { return re ? s.replace(re, function (m) { return map[m]; }) : s; }
@@ -544,6 +566,7 @@
       shortcuts: !!(FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen()), ctxMenu: !!(FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen()),
       textEdit: !!(FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()), crop: !!(FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()),
       maskTool: !!(FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()), drawing: !!(FM.drawTool && FM.drawTool.active),
+      drawMode: FM.drawTool && FM.drawTool.active ? String(FM.drawTool.mode) : '',
       optBar: up('opt-bar'), home: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), settings: !!(FM.settings && FM.settings.isOpen && FM.settings.isOpen()),
       inspectorView: view, addTab: tab ? (tab.getAttribute('data-key') || tab.textContent.trim()) : '',
       tlZoom: FM.timeline && FM.timeline.getZoom ? Math.round(FM.timeline.getZoom() * 1e4) / 1e4 : null,
@@ -634,8 +657,21 @@
     if (!tl) return;
     var r = target.getBoundingClientRect(), tr = tl.getBoundingClientRect();
     tl.scrollLeft += Math.round((r.left + r.width / 2) - (tr.left + tr.width / 2));
+    /* …and DOWN to it (measured 6 Oct: after the multi-file pick, Clip B's row sat at y 792 of an 800 px phone, under the
+       bottom bar, so the finger met #timeline and never the clip — the drag measured nothing, on both sides alike). The
+       visible part of the timeline ends where the window does. */
+    var vb = Math.min(tr.bottom, w.innerHeight), vt = Math.max(tr.top, 0);
+    tl.scrollTop += Math.round((r.top + r.height / 2) - (vt + (vb - vt) * 0.4));
     tl.dispatchEvent(new w.Event('scroll'));
     await settle(150);
+  }
+  /* A finger or a mouse must land ON what it is meant to move: the element the browser hit-tests at that point has to be
+     the target or inside it, or the step throws (and an error on HEAD is a broken instrument, so the run cannot PASS). */
+  function mustHit(target, x, y, what) {
+    var at = D.elementFromPoint(x, y);
+    if (!at || !(at === target || target.contains(at))) {
+      throw new Error((what || 'the gesture') + ' would land on ' + (at ? pathOf(at) : 'nothing') + ' at ' + Math.round(x) + ',' + Math.round(y) + ', not on ' + pathOf(target));
+    }
   }
   async function dragFrom(target, x, y, dx, dy, holdMs) {
     pe(target, 'pointerdown', x, y, 1);
@@ -647,6 +683,7 @@
   /* On the phone pass a drag is a FINGER (real touch, held past Full's own timer); on the PC pass, the mouse. */
   async function gesture(target, dx, dy, holdMs) {
     var r = target.getBoundingClientRect(), x = r.left + Math.min(30, r.width / 2), y = r.top + r.height / 2;
+    mustHit(target, x, y, 'the drag');
     if (PHONE) await touchDrag(x, y, dx, dy, holdMs);
     else await dragFrom(target, x, y, dx, dy, 0);
   }
@@ -850,6 +887,15 @@
       FM.onionSkin = true; FM.showGuides = true; FM.requestRender();
     });
     FM.onionSkin = false; FM.showGuides = false; A.transform.x = JSON.parse(x0); FM.selectLayer(null); FM.refreshAll(); await settle(150);
+    /* THE PLAYHEAD PARKED ON THE VERY END (review E1: removing the preview's end-of-layer nudge, queue 549, passed — no
+       screen stood on a boundary). At the project's end nothing is live, and Full's preview shows the frame that ends
+       there instead of an empty canvas; what the preview drew is compared exactly. */
+    await screen('fu1-at-end', async function () {
+      FM.selectLayer(null);
+      // the instant the LAST layer ends: nothing is live there, and something ends exactly there
+      var end = 0; FM.scene.layers.forEach(function (l) { if (l.type !== 'group' && l.start + l.duration > end) end = l.start + l.duration; });
+      FM.setTime(end);
+    });
     /* A PLAYING frame, held still: the transport is really playing (its button, its classes), and FM.clockNow — the one
        clock the play loop reads — is pinned to 1.25 s for the instant of the measurement, so the readout and the playhead
        are the same on both sides instead of wherever the wall clock happened to be. */
@@ -898,7 +944,11 @@
         motionStart();
         await realInput([{ t: 'mouseMove', x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), ms: 60 }]);
         await settle(220);
-        rec.hovers[nm] = { target: pathOf(t), layout: layoutRecord(t), motion: motionTake() };
+        var mo = motionTake();
+        // frozen, as every screen is (measured 6 Oct: a hover's box-shadow read 5.84862px on one run, 5.84866px on the next)
+        var fr = freezeInfinite();
+        try { rec.hovers[nm] = { target: pathOf(t), layout: layoutRecord(t), motion: mo }; }
+        finally { unfreeze(fr); }
       }
     } catch (e) { rec.err = String(e && e.message || e); }
     finally {
@@ -972,7 +1022,11 @@
   function surface(label, sel) {
     var e = typeof sel === 'string' ? D.querySelector(sel) : sel;
     if (!CUR_SURF) return;
-    CUR_SURF[label] = vis(e) ? layoutRecord(e) : 'not on screen';
+    // the same frozen instant capture() measures in (measured 6 Oct: the Add tabs' glint was caught mid-sweep, at a
+    // different angle on each of two runs of the same build)
+    var fr = freezeInfinite();
+    try { CUR_SURF[label] = vis(e) ? layoutRecord(e) : 'not on screen'; }
+    finally { unfreeze(fr); }
   }
   /* An item of a menu Full opens from one of its buttons, clicked by its words (FM.contextMenu draws them as .ctx-item). */
   async function menuItem(btnIds, re, what) {
@@ -1004,6 +1058,28 @@
     if (tab && !tab.classList.contains('active')) { tab.click(); await settle(200); }
     return byText('.addmenu-card', re);
   }
+  /* An effect added the way he adds one: the selected layer's Effects card, + Add Effect, the browser's search, the tile,
+     the browser's Add. `fallback` runs only when the tile is not on screen (and the step is marked as having fallen back). */
+  async function addEffectThroughBrowser(L, query, tileRe, fallback) {
+    if (!(await openCard(/^\d*\s*Effects\b/))) fellOnly('the Effects card was not on screen');
+    var add = byText('#inspector-panel .fx-add-btn', /Add Effect/);
+    await via('the Effects card’s + Add Effect', add, async function () { FM.fxBrowser.open(L); });
+    await settle(500);
+    var sb = firstVisibleSel(['#fx-browser .fxb-search-btn']);
+    await via('the effects browser’s search', sb, async function () {});
+    await settle(250);
+    var srch = firstVisibleSel(['#fx-browser .fxb-search-input', '#fx-browser input']);
+    if (srch) { setInput(srch, query); await settle(400); } else fellOnly('the effects browser’s search box was not on screen');
+    var tile = byText('#fx-browser .fxb-tile', tileRe);
+    if (!tile) DUMP.notes.push(DUMP.step + ': no tile matched ' + tileRe + ' after searching "' + query + '"; tiles on screen: ' +
+      [].slice.call(D.querySelectorAll('#fx-browser .fxb-tile')).filter(vis).slice(0, 12).map(function (t) { return (t.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40); }).join(' | '));
+    await via('the effects browser’s ' + query + ' tile', tile, fallback);
+    await settle(250);
+    surface('the effects browser (' + query + ')', '#fx-browser');
+    var go = firstVisibleSel(['#fx-browser .fxb-commit-go']);
+    if (FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) await via('the browser’s Add', go, async function () { FM.fxBrowser.close(); });
+    await settle(400);
+  }
   async function splitButton() {
     var b = firstVisibleSel(['#btn-split', '#key-s', '.qr-btn[title="Split at playhead"]']);
     return via('the split button', b, async function () { await FM.splitLayer(FM.scene.selectedId); });
@@ -1015,7 +1091,9 @@
         FM.setTime(2);
         var c = await addCard('object', /^Text\b/);
         await via('the Add menu’s Text card', c, async function () { FM.addMenu.instant(0); });
-        await settle(200); if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop();
+        await settle(200);
+        surface('the text editor', firstVisibleSel(['.te-panel']));   // the surface a new text opens
+        if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop();
       }],
       ['one multi-file pick: an image, a video and a song (the picker’s landing route)', async function () {
         FM.setTime(1);
@@ -1033,6 +1111,7 @@
         var Cc = byName('Clip C'); FM.selectLayer(Cc.id); await settle();
         await centerOn(el(clipEl(Cc).querySelector('.clip-grip.right'), 'Clip C’s right grip'));
         var g = el(clipEl(Cc).querySelector('.clip-grip.right'), 'Clip C’s right grip'), r = g.getBoundingClientRect();
+        mustHit(g, r.left + r.width / 2, r.top + r.height / 2, 'the right grip');
         if (PHONE) await touchDrag(r.left + r.width / 2, r.top + r.height / 2, -30, 0, 500);
         else await dragFrom(g, r.left + r.width / 2, r.top + r.height / 2, -30, 0, 0);
       }],
@@ -1040,6 +1119,7 @@
         var Cc = byName('Clip C'); FM.selectLayer(Cc.id); await settle();
         await centerOn(el(clipEl(Cc).querySelector('.clip-grip.left'), 'Clip C’s left grip'));
         var g = el(clipEl(Cc).querySelector('.clip-grip.left'), 'Clip C’s left grip'), r = g.getBoundingClientRect();
+        mustHit(g, r.left + r.width / 2, r.top + r.height / 2, 'the left grip');
         if (PHONE) await touchDrag(r.left + r.width / 2, r.top + r.height / 2, 24, 0, 500);
         else await dragFrom(g, r.left + r.width / 2, r.top + r.height / 2, 24, 0, 0);
       }],
@@ -1104,6 +1184,16 @@
         else { fellOnly('the Speed % box was not on screen'); FM.setProp(A, 'speed', 2, FM.time); FM.refreshAll(); FM.history.commit(); }
         await settle();
       }],
+      /* THE SPEED CARD'S SOLVE BUTTONS (review T1: a planted change to the words of their toast passed, because no step
+         pressed one). Clip C's tail, the playhead three quarters in, the ⇥ "ENDS at the playhead" button. */
+      ['speed so Clip C ends at the playhead (the Speed card’s ⇥ button)', async function () {
+        var Cc = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return b.start - a.start; })[0];
+        FM.selectLayer(Cc.id); FM.setTime(Cc.start + Cc.duration * 0.75); await settle();
+        if (!(await openCard(/^\d*\s*Speed\b/))) fellOnly('the Speed card was not on screen');
+        var b = firstVisibleSel(['#inspector-panel .spd-solve[aria-label*="ENDS"]']);
+        await via('the Speed card’s ⇥ (ENDS at the playhead) button', b, async function () {});
+        await settle();
+      }],
       ['◆ opacity keys on Clip B (the ◆ and its box), then drag the second diamond (phone: a finger held 0.5 s)', async function () {
         var B = byName('Clip B'); FM.selectLayer(B.id); FM.setTime(B.start + 0.2); await settle();
         if (!(await openCard(/Mixing/))) fellOnly('the Mixing card was not on screen');
@@ -1120,6 +1210,7 @@
         await centerOn(dots[dots.length - 1]);
         dots = [].slice.call(clipEl(B).parentElement.querySelectorAll('.kf-dot.kf-live'));
         var d = el(dots[dots.length - 1], 'the second diamond'), r = d.getBoundingClientRect();
+        mustHit(d, r.left + r.width / 2, r.top + r.height / 2, 'the diamond drag');
         if (PHONE) await touchDrag(r.left + r.width / 2, r.top + r.height / 2, 14, 0, 500);
         else await dragFrom(d, r.left + r.width / 2, r.top + r.height / 2, 14, 0);
       }],
@@ -1143,25 +1234,10 @@
          search, the Mask tile, Add; then the mask's own controls, Edit path, three taps on the mask overlay, Close path, Done. */
       ['a mask on Clip C (Effects → + Add Effect → Mask, Edit path, three points, Done)', async function () {
         var Cc = byName('Clip C'); FM.selectLayer(Cc.id); FM.setTime(Cc.start + 0.3); await settle();
-        if (!(await openCard(/^\d*\s*Effects\b/))) fellOnly('the Effects card was not on screen');
-        var add = byText('#inspector-panel .fx-add-btn', /Add Effect/);
-        await via('the Effects card’s + Add Effect', add, async function () { FM.fxBrowser.open(Cc); });
-        await settle(500);
-        var sb = firstVisibleSel(['#fx-browser .fxb-search-btn']);
-        await via('the effects browser’s search', sb, async function () {});
-        await settle(250);
-        var srch = firstVisibleSel(['#fx-browser .fxb-search-input', '#fx-browser input']);
-        if (srch) { setInput(srch, 'mask'); await settle(400); } else fellOnly('the effects browser’s search box was not on screen');
-        var tile = byText('#fx-browser .fxb-tile', /^\s*Mask\b/);
         var mk0 = (Cc.masks || []).length;
-        await via('the effects browser’s Mask tile', tile, async function () {
+        await addEffectThroughBrowser(Cc, 'mask', /^\s*Mask\b/, async function () {
           var m = FM.masks.make('add'); Cc.masks = (Cc.masks || []).concat([m]); Cc.effects = (Cc.effects || []).concat([{ type: 'penmask', maskId: m.id }]); FM.history.commit();
         });
-        await settle(250);
-        surface('the effects browser', '#fx-browser');
-        var go = firstVisibleSel(['#fx-browser .fxb-commit-go']);
-        if (FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) await via('the browser’s Add', go, async function () { FM.fxBrowser.close(); });
-        await settle(400);
         if ((Cc.masks || []).length !== mk0 + 1) fellOnly('the Mask tile added ' + ((Cc.masks || []).length - mk0) + ' masks');
         var discs = [].slice.call(D.querySelectorAll('#inspector-panel .fx-disc')).filter(vis);
         await via('the mask’s controls', discs[discs.length - 1] || null, async function () {});
@@ -1294,16 +1370,35 @@
         await settle(200);
         ctx.times = [B1.start + B1.duration - 0.05, B1.start + B1.duration + 0.05, B1.start + B1.duration + 0.4];
       }, { times: function () { return ctx.times; } }],
-      ['a luma matte on a split source (Clip C’s first half), frames past the cut', async function () {
-        var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return a.start - b.start; });
-        var C1 = halves[0], T = byName('Text');
-        var fx = FM.fxRegistry.makeInstance('lumamatte');
-        if (!fx) throw new Error('no Luma Matte in the registry');
-        fx.params = fx.params || {}; fx.params.layerId = C1.id; fx.layer = C1.id; fx.sourceId = C1.id;
-        T.effects = (T.effects || []).concat([fx]);
-        FM.refreshAll(); FM.history.commit(); await settle(200);
-        var cut = C1.start + C1.duration;
-        ctx.times = [cut - 0.02, cut + 0.02, cut + 0.3];
+      /* The matte goes on Pick D (an image live from 1 s to 6 s, so it spans the cut) and its source is Clip B's FIRST
+         half: past the cut that half is gone, and what Full draws there is what B4 pins (a matte resolved through the
+         split lineage would use the second half). v2 wrote the source into fields the matte never reads (it reads
+         `params.source`, js/compositor.js drawLumaMatte), so its frames measured a matte with no source at all; now it
+         goes through Full's own route — the Effects card, + Add Effect, the browser's Luma Matte, its Matte layer list. */
+      ['a luma matte on a split source (Pick D, matted by Clip B’s first half: Effects → + Add Effect → Luma Matte, its Matte layer list), frames past the cut', async function () {
+        var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip B'; }).sort(function (a, b) { return a.start - b.start; });
+        var B1 = halves[0], P = FM.scene.layers.filter(function (l) { return /Pick D/.test(l.name); })[0];
+        if (!B1 || halves.length < 2) throw new Error('Clip B is not split (' + halves.length + ' halves)');
+        if (!P) throw new Error('no Pick D to matte');
+        var cut = B1.start + B1.duration;
+        FM.selectLayer(P.id); FM.setTime(cut - 0.2); await settle();
+        var n0 = (P.effects || []).length;
+        await addEffectThroughBrowser(P, 'luma matte', /Luma Matte/, function () { P.effects = (P.effects || []).concat([FM.fxRegistry.makeInstance('lumamatte')]); FM.history.commit(); });
+        var fx = (P.effects || []).filter(function (e) { return e.type === 'lumamatte'; }).slice(-1)[0];
+        if (!fx || (P.effects || []).length !== n0 + 1) throw new Error('the Luma Matte was not added to Pick D');
+        var matteList = function () { return [].slice.call(D.querySelectorAll('#inspector-panel .prop-row select')).filter(function (s) { return vis(s) && [].slice.call(s.options).some(function (o) { return o.value === B1.id; }); })[0]; };
+        var sel = matteList();
+        if (!sel) {   // a new effect may open with its controls showing; only if they are not, its disc opens them
+          var discs = [].slice.call(D.querySelectorAll('#inspector-panel .fx-disc')).filter(vis);
+          await via('the Luma Matte’s controls', discs[discs.length - 1] || null, async function () {});
+          await settle(250);
+          sel = matteList();
+        }
+        if (sel) setInput(sel, B1.id);
+        else { fellOnly('the Luma Matte’s Matte layer list was not on screen'); fx.params.source = B1.id; FM.history.commit(); }
+        if (fx.params.source !== B1.id) throw new Error('the matte’s source is ' + fx.params.source + ', not Clip B’s first half');
+        await settle(200);
+        ctx.times = [cut - 0.04, cut + 0.04, cut + 0.3];
       }, { times: function () { return ctx.times; } }],
       /* Bounce rings after a key's jump (js/behaviors.js bounceDelta). Its default channel is y, so the keys are on y: the
          camera (Add → Camera; a camera cannot be split in Full — "Only video/image/text/shape clips can be split" — so its
@@ -1411,6 +1506,9 @@
         o += size;
       }
     })(0, buf.length, 0);
+    /* NOT the file's bytes: measured 6 Oct, two exports of the same build at 1280 were 11693 and 11698 bytes — the H.264
+       encoder is not bit-exact run to run (and the box times are the wall clock). What it SHOWS is compared instead: the
+       poster exactly, the decoded frames within FU_GRID_TOL (HEAD against itself: 0 levels), and this structure. */
     return out;
   }
   /* What the exported file SHOWS, decoded by the browser: a 12x12 grid of mean colours at three times. Encoders are not
@@ -1500,7 +1598,7 @@
       var bufX = new Uint8Array(await got.blob.arrayBuffer());
       var pc = got.poster;
       xr.out = { name: got.name, width: got.width, height: got.height, fps: got.fps, seconds: Math.round((got.seconds || 0) * 1e4) / 1e4,
-        hasAudio: got.hasAudio, audioDropped: got.audioDropped, bytes: bufX.length, hash: cyrb53(bufX),
+        hasAudio: got.hasAudio, audioDropped: got.audioDropped,
         poster: pc ? (pc.width + 'x' + pc.height + ' ' + cyrb53(new Uint8Array(pc.getContext('2d').getImageData(0, 0, pc.width, pc.height).data.buffer))) : null,
         mp4: mp4Info(bufX) };
       xr.grid = await decodedGrid(got.blob, [0.05, (got.seconds || 1) / 2, Math.max(0.05, (got.seconds || 1) - 0.1)]);
@@ -1627,6 +1725,10 @@
         return msgs.map(function (m) {
           var msg = clone(m.msg || {});
           ['at', 'ts', 'now'].forEach(function (k) { delete msg[k]; });
+          /* The host's document checksum (`hash`'s `h`) is a hash OVER the ids, which are random and timed on every run, so
+             no canonicalisation can line two runs up (measured 6 Oct: different on HEAD against HEAD). That it is sent, and
+             when, stays compared; the document it sums is compared directly — every step, and the guest's at the end. */
+          if (msg.t === 'hash' && msg.h != null) msg.h = '@doc-checksum';
           return { ch: m.ch, t: msg.t, msg: canon(msg, FM.scene.layers) };
         });
       };

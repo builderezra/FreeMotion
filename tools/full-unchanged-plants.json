@@ -1,14 +1,19 @@
 {
-  "_": "THE FULL-UNCHANGED SELF-TEST'S PLANTS (queue 980; DESIGN.md §0.4.5 'The gate, structurally'; the 1 Oct review). Changes Full must never get. tools/full-unchanged.sh plants each one in a COPY of the tree on every run, measures it with the groups and widths named here, and refuses PASS unless each turns the comparison red FOR ITS OWN REASON: a difference line that starts with the width and carries every string in `sig`. A red that names something else is luck, not a catch. One per kind of change the v1 lock missed: a picture margin, a toast word and the split floor (DESIGN's three), and the review's seven categories: a preview-overlay colour, an icon path, a key remap, a touch hold, a UI-route handler, the export path and a sanitiser key. `groups` is always a PREFIX of the probe's order (FU1, FU2, FU3, FU6, FU4, FU5, FU7), so a plant's run reaches its group exactly as the full run did. `old` must appear EXACTLY once in `file` (tests.js '980 FU lock: every self-test plant still lands exactly once' checks it, so a plant cannot rot silently); `append` adds to the end instead.",
+  "_": "THE FULL-UNCHANGED SELF-TEST'S PLANTS (queue 980; DESIGN.md §0.4.5 'The gate, structurally'; the 1 Oct review). Changes Full must never get. tools/full-unchanged.sh plants each one in a COPY of the tree on every run, measures it with the groups and widths named here, and refuses PASS unless each turns the comparison red FOR ITS OWN REASON: a difference line that starts with the width and carries every string in `sig`. A red that names something else is luck, not a catch. DESIGN's three (a picture margin, a toast word, the split floor) and EVERY change the 1 Oct review slipped past v1 (its blocker's nineteen: P1 overlay, P12 icon, P3 hover, P4 sheetmotion, P13 cropbar, V1 halfres, P5 shift34, Q2 key, Q3 addtab, P6 touch, P10 group, P11 uiroute, T1 speedtoast, P7 colour, P8 export, P9 bounce, R1 manifest, S1 sanitiser, E1 endnudge), and DESIGN's B4 and B5 guards (matte, follow, seam), which v1 had no step for. `groups` is always a PREFIX of the probe's order (FU1, FU2, FU3, FU6, FU4, FU5, FU7), so a plant's run reaches its group exactly as the full run did. `old` must appear EXACTLY once in `file` (tests.js '980 FU lock: every self-test plant still lands exactly once' checks it, so a plant cannot rot silently); `append` adds to the end instead.",
   "plants": [
     {
       "name": "margin",
       "kind": "a 1 px layout move (DESIGN)",
       "file": "styles.css",
       "append": "\n/* full-unchanged self-test plant: never shipped */\n#transport { margin-top: 1px !important; }\n",
-      "widths": ["380", "1280"],
+      "widths": [
+        "380",
+        "1280"
+      ],
       "groups": "FU1",
-      "sig": ["#transport"]
+      "sig": [
+        "#transport"
+      ]
     },
     {
       "name": "toast",
@@ -16,9 +21,14 @@
       "file": "js/app.js",
       "old": "Audio extracted to its own layer — original muted",
       "new": "Audio extracted to its own layer — the original muted",
-      "widths": ["380"],
+      "widths": [
+        "380"
+      ],
       "groups": "FU1,FU2",
-      "sig": ["extract the audio", "toasts"]
+      "sig": [
+        "extract the audio",
+        "toasts"
+      ]
     },
     {
       "name": "floor",
@@ -26,18 +36,26 @@
       "file": "js/app.js",
       "old": "if (t <= layer.start + 0.02 || t >= end - 0.02) {",
       "new": "if (t <= layer.start + 0.1 || t >= end - 0.1) {",
-      "widths": ["380"],
+      "widths": [
+        "380"
+      ],
       "groups": "FU1,FU2",
-      "sig": ["split Clip C 0.05 s from its start"]
+      "sig": [
+        "split Clip C 0.05 s from its start"
+      ]
     },
     {
       "name": "overlay",
       "kind": "a preview-overlay colour (review P1: the selection box dashed red)",
       "file": "styles.css",
       "append": "\n/* full-unchanged self-test plant: never shipped */\n#select-box { border-style: dashed !important; border-color: #ff3b30 !important; }\n",
-      "widths": ["1280"],
+      "widths": [
+        "1280"
+      ],
       "groups": "FU1",
-      "sig": ["#select-box"]
+      "sig": [
+        "#select-box"
+      ]
     },
     {
       "name": "icon",
@@ -45,9 +63,13 @@
       "file": "index.html",
       "old": "<button id=\"m-del\" class=\"m-tbtn\" aria-label=\"Delete layer\"><svg viewBox=\"0 0 24 24\" class=\"m-ico\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 7h16M9 7V5h6v2",
       "new": "<button id=\"m-del\" class=\"m-tbtn\" aria-label=\"Delete layer\"><svg viewBox=\"0 0 24 24\" class=\"m-ico\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 7h16M9 7V5h5v2",
-      "widths": ["380"],
+      "widths": [
+        "380"
+      ],
       "groups": "FU1",
-      "sig": ["#m-del"]
+      "sig": [
+        "#m-del"
+      ]
     },
     {
       "name": "key",
@@ -55,9 +77,13 @@
       "file": "js/app.js",
       "old": "if (FM.inspector.openCategoryByIndex(n)) e.preventDefault();",
       "new": "if (FM.inspector.openCategoryByIndex(n === 3 ? 4 : n)) e.preventDefault();",
-      "widths": ["1280"],
+      "widths": [
+        "1280"
+      ],
       "groups": "FU1,FU2,FU3",
-      "sig": ["FU3 \"clip selected · Digit3\""]
+      "sig": [
+        "FU3 \"clip selected · Digit3\""
+      ]
     },
     {
       "name": "touch",
@@ -65,9 +91,13 @@
       "file": "js/timeline.js",
       "old": "            }, 350);",
       "new": "            }, 1200);",
-      "widths": ["380"],
+      "widths": [
+        "380"
+      ],
       "groups": "FU1,FU2",
-      "sig": ["drag Clip B along the timeline"]
+      "sig": [
+        "drag Clip B along the timeline"
+      ]
     },
     {
       "name": "uiroute",
@@ -75,9 +105,13 @@
       "file": "js/inspector.js",
       "old": "if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);",
       "new": "if (false && durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);",
-      "widths": ["380"],
+      "widths": [
+        "380"
+      ],
       "groups": "FU1,FU2",
-      "sig": ["speed 2× on Clip A"]
+      "sig": [
+        "speed 2× on Clip A"
+      ]
     },
     {
       "name": "export",
@@ -85,9 +119,13 @@
       "file": "js/exporter.js",
       "old": "      ctx.globalCompositeOperation = 'source-over';\n      const barFill = (fit && fit.letterboxed && barFillNow) ? barFillNow() : null;",
       "new": "      ctx.globalCompositeOperation = 'source-over';\n      ctx.filter = 'saturate(0.5)';\n      const barFill = (fit && fit.letterboxed && barFillNow) ? barFillNow() : null;",
-      "widths": ["380"],
+      "widths": [
+        "380"
+      ],
       "groups": "FU1,FU2",
-      "sig": ["export (Export → MP4"]
+      "sig": [
+        "export (Export → MP4"
+      ]
     },
     {
       "name": "sanitiser",
@@ -95,9 +133,234 @@
       "file": "js/storage.js",
       "old": "      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';\n    }\n  }\n  FM.storage_sanitizeUnsafeValues",
       "new": "      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';\n    }\n    l.pick = { b: 'pk0', i: 0 };   // full-unchanged self-test plant: never shipped\n  }\n  FM.storage_sanitizeUnsafeValues",
-      "widths": ["380"],
+      "widths": [
+        "380"
+      ],
       "groups": "FU1,FU2,FU3,FU6,FU4,FU5",
-      "sig": ["FU5", "pick"]
+      "sig": [
+        "FU5",
+        "pick"
+      ]
+    },
+    {
+      "name": "hover",
+      "kind": "a hover style (review P3: every transport button red on hover)",
+      "file": "styles.css",
+      "append": "\n/* full-unchanged self-test plant: never shipped */\n.tbtn:hover { background: rgba(255,40,40,.55) !important; }\n",
+      "widths": [
+        "1280"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "fu1-hover transport",
+        "background-color"
+      ]
+    },
+    {
+      "name": "sheetmotion",
+      "kind": "a transition's timing (review P4: the Add sheet slides in over 1.2 s, not 0.22 s)",
+      "file": "styles.css",
+      "old": "transform: translateY(100%); transition: transform .22s ease;",
+      "new": "transform: translateY(100%); transition: transform 1.2s ease;",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "fu1-add-sheet",
+        "1.2s"
+      ]
+    },
+    {
+      "name": "cropbar",
+      "kind": "a surface an edit opens (review P13: the crop bar's Done moves 24 px)",
+      "file": "styles.css",
+      "append": "\n/* full-unchanged self-test plant: never shipped */\n#crop-bar .cb-done { margin-left: 24px !important; }\n",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "crop Clip B and Done",
+        "the crop bar"
+      ]
+    },
+    {
+      "name": "halfres",
+      "kind": "the preview's resolution (review V1: drawn at half resolution)",
+      "file": "js/app.js",
+      "old": "      const s = previewScale();\n      w = Math.max(1, Math.round(P.width * s));",
+      "new": "      const s = previewScale() * 0.5;\n      w = Math.max(1, Math.round(P.width * s));",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "the preview’s backing store"
+      ]
+    },
+    {
+      "name": "endnudge",
+      "kind": "the preview's draw path (review E1: the end-of-layer nudge, queue 549, removed)",
+      "file": "js/app.js",
+      "old": "    try { FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }",
+      "new": "    try { FM.renderScene(ctx, FM.scene, FM.time); }",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "fu1-at-end",
+        "what the preview drew"
+      ]
+    },
+    {
+      "name": "shift34",
+      "kind": "a key remap (review P5: Shift+3 and Shift+4 swapped)",
+      "file": "js/app.js",
+      "old": "if (e.shiftKey) { if (n <= 4 && FM.addMenu && FM.addMenu.instant) { e.preventDefault(); FM.addMenu.instant(n - 1); } }",
+      "new": "if (e.shiftKey) { if (n <= 4 && FM.addMenu && FM.addMenu.instant) { e.preventDefault(); FM.addMenu.instant(n === 3 ? 3 : n === 4 ? 2 : n - 1); } }",
+      "widths": [
+        "1280"
+      ],
+      "groups": "FU1,FU2,FU3",
+      "sig": [
+        "FU3 \"nothing selected · shift+Digit3\""
+      ]
+    },
+    {
+      "name": "addtab",
+      "kind": "a key remap (review Q3: 3 with nothing selected opens Add tab 2)",
+      "file": "js/app.js",
+      "old": "FM.addMenu.openTab(FM.addMenu.TAB_KEYS[n - 1]);",
+      "new": "FM.addMenu.openTab(FM.addMenu.TAB_KEYS[n === 3 ? 1 : n - 1]);",
+      "widths": [
+        "1280"
+      ],
+      "groups": "FU1,FU2,FU3",
+      "sig": [
+        "FU3 \"nothing selected · Digit3\"",
+        "addTab"
+      ]
+    },
+    {
+      "name": "group",
+      "kind": "a phone button's handler (review P10: the phone Group button makes a masking group)",
+      "file": "js/mobile.js",
+      "old": "if (mGroup) mGroup.addEventListener('click', function () { if (FM.groupSelection) FM.groupSelection(); });",
+      "new": "if (mGroup) mGroup.addEventListener('click', function () { if (FM.groupSelection) FM.groupSelection({ mask: true }); });",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "group Clip A and the song"
+      ]
+    },
+    {
+      "name": "speedtoast",
+      "kind": "a toast's words (review T1: the Speed-solve toast reads 'Speed now')",
+      "file": "js/inspector.js",
+      "old": "if (FM.toast) FM.toast('Speed ' + (Math.round(sp * 100) / 100) + '×', 1600);",
+      "new": "if (FM.toast) FM.toast('Speed now ' + (Math.round(sp * 100) / 100) + '×', 1600);",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "speed so Clip C ends at the playhead",
+        "toasts"
+      ]
+    },
+    {
+      "name": "colour",
+      "kind": "how new layers are coloured (review P7: every new layer gets the same bar colour)",
+      "file": "js/scene.js",
+      "old": "      clipColor: CLIP_COLORS[_colorIdx++ % CLIP_COLORS.length],",
+      "new": "      clipColor: CLIP_COLORS[0],",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "FU2",
+        "clipColor"
+      ]
+    },
+    {
+      "name": "bounce",
+      "kind": "a behaviour's maths (review P9: Bounce decays 1.5x faster)",
+      "file": "js/behaviors.js",
+      "old": "Math.exp(-decay * dt)",
+      "new": "Math.exp(-decay * dt * 1.5)",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "Bounce on a camera",
+        "frames"
+      ]
+    },
+    {
+      "name": "manifest",
+      "kind": "the live wire (review R1: the media manifest is sent without names)",
+      "file": "js/collab-media.js",
+      "old": "mime: e.mime, kind: e.kind, name: e.name, lm: e.lm",
+      "new": "mime: e.mime, kind: e.kind, name: '', lm: e.lm",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2,FU3,FU6,FU4",
+      "sig": [
+        "FU4",
+        ".name:"
+      ]
+    },
+    {
+      "name": "matte",
+      "kind": "a layer-reference source resolved through the split lineage (DESIGN B4, dropped: the luma matte past the cut uses the second half)",
+      "file": "js/compositor.js",
+      "old": "    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });\n    const srcId = fx.params && fx.params.source;\n    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;",
+      "new": "    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });\n    const srcId = fx.params && fx.params.source;\n    const mLayer = (srcId && scene && scene.layers) ? (function () { const s0 = scene.layers.find(l => l.id === srcId && l.id !== layer.id); const live = s0 && scene.layers.find(l => l.name === s0.name && l.id !== layer.id && t >= l.start && t < l.start + l.duration); return live || s0; })() : null;   // full-unchanged self-test plant: never shipped",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "a luma matte on a split source",
+        "frames"
+      ]
+    },
+    {
+      "name": "follow",
+      "kind": "a Follow resolved through the split lineage (DESIGN B4, dropped: past the cut it follows the second half)",
+      "file": "js/behaviors.js",
+      "old": "    const target = FM.layerById(scene, targetId);",
+      "new": "    const target = (function () { const t0 = FM.layerById(scene, targetId); const live = t0 && scene.layers.find(l => l.name === t0.name && t >= l.start && t < l.start + l.duration); return live || t0; })();   // full-unchanged self-test plant: never shipped",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "a Follow on a split target",
+        "frames"
+      ]
+    },
+    {
+      "name": "seam",
+      "kind": "Bounce reads a split's boundary key as a move (DESIGN B5: the ring stops at the cut)",
+      "file": "js/behaviors.js",
+      "old": "const merged = pk.concat(kf).filter(k => k && !k.split);",
+      "new": "const merged = pk.concat(kf).filter(k => k);",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "Bounce across a split",
+        "frames"
+      ]
     }
   ]
 }

@@ -119798,12 +119798,18 @@
     if (fewer.has('Digit3+shift') || !want.has('Digit3+shift')) throw new Error('CONTROL: a probe that stops pressing Shift+3 was not read as missing it');
   });
 
-  test('980 FU lock: every self-test plant still lands exactly once in Full’s source, so the lock can still prove it sees (the margin, the toast, the floor, and one of each kind the 1 Oct review slipped past v1)', { item: '980' }, async function () {
+  test('980 FU lock: every self-test plant still lands exactly once in Full’s source, so the lock can still prove it sees (the margin, the toast, the floor, and all nineteen changes the 1 Oct review slipped past v1)', { item: '980' }, async function () {
     const raw = await fetch('tools/full-unchanged-plants.json', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
     if (!raw) throw new Error('tools/full-unchanged-plants.json is missing — the Full-unchanged lock (queue 980) has no self-test, so a green verdict would mean nothing');
     const plants = JSON.parse(raw).plants || [];
     const names = plants.map(function (p) { return p.name; });
-    ['margin', 'toast', 'floor', 'overlay', 'icon', 'key', 'touch', 'uiroute', 'export', 'sanitiser'].forEach(function (n) {
+    /* DESIGN's three, and the review's blocker — a Simple release carrying these nineteen changes to Full passed v1 — one
+       plant each: P1 overlay, P12 icon, P3 hover, P4 sheetmotion, P13 cropbar, V1 halfres, P5 shift34, Q2 key, Q3 addtab,
+       P6 touch, P10 group, P11 uiroute, T1 speedtoast, P7 colour, P8 export, P9 bounce, R1 manifest, S1 sanitiser, E1
+       endnudge; and DESIGN's B4 / B5 guards, which v1 had no step for: matte, follow, seam. Each must turn the lock red BY
+       NAME on every run (tools/_fu_compare.py judge). */
+    ['margin', 'toast', 'floor', 'overlay', 'icon', 'hover', 'sheetmotion', 'cropbar', 'halfres', 'shift34', 'key', 'addtab', 'touch',
+     'group', 'uiroute', 'speedtoast', 'colour', 'export', 'bounce', 'manifest', 'sanitiser', 'endnudge', 'matte', 'follow', 'seam'].forEach(function (n) {
       if (names.indexOf(n) < 0) throw new Error('the self-test lost its "' + n + '" plant — the lock can no longer prove it sees that kind of change');
     });
     const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
@@ -119812,7 +119818,8 @@
       const src = await fetch(p.file, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
       if (!src) throw new Error('the ' + p.name + ' plant edits ' + p.file + ', which cannot be read');
       if (p.append != null) {
-        const sel = (/(#[\w-]+)\s*\{/.exec(p.append) || [])[1];
+        // the rule's first selector (an id or a class) must still be something Full has, or the plant styles nothing
+        const sel = (/\n\s*([#.][\w-]+)[^{\n]*\{/.exec(p.append) || [])[1];
         const idHome = sel ? (await fetch('index.html', { cache: 'no-store' }).then(function (r) { return r.text(); })) + src : '';
         if (!sel || idHome.indexOf(sel.slice(1)) < 0) throw new Error('the ' + p.name + ' plant styles ' + sel + ', which Full no longer has');
       } else {
@@ -119857,7 +119864,15 @@
       ['the ◆', "via('the Opacity ◆'"],
       ['a real finger on the phone pass', "t: 'touchStart'"],
       ['a hover on the PC pass', "t: 'mouseMove'"],
-      ['the preview with its overlays', "shot(name + '~nopv')"]
+      ['the preview with its overlays', "shot(name + '~nopv')"],
+      /* 6 Oct, the blocker's last ways past (T1, E1, P5) and the B4 guard as Full routes it, each with its plant */
+      ['the Speed card’s solve button (T1)', 'speed so Clip C ends at the playhead (the Speed card’s ⇥ button)'],
+      ['the playhead parked on the last layer’s end (E1, queue 549)', "screen('fu1-at-end'"],
+      ['which drawing tool a key opened (P5)', 'drawMode: FM.drawTool && FM.drawTool.active'],
+      ['the luma matte through the effects browser and its Matte layer list (B4)', "addEffectThroughBrowser(P, 'luma matte'"],
+      ['a finger that misses its target fails the step', 'function mustHit(target, x, y, what)'],
+      ['the text editor a new text opens', "surface('the text editor'"],
+      ['every infinite animation on screen, with its keyframes', 'function infiniteNow()']
     ];
     need.forEach(function (n) { if (probe.indexOf(n[1]) < 0) missing.push(n[0]); });
     if (cmp.indexOf("rec.get('fell')") < 0 || cmp.indexOf('FELL BACK') < 0) missing.push('the comparer refusing a step that fell back');
