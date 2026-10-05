@@ -11777,3 +11777,41 @@ body.ed-simple #sm-timeline { display: flex; }
 @media (prefers-reduced-motion: reduce) { .sm-item.sm-pulse { animation: none; outline: 2px solid #fff; } }
 /* While a Simple command runs (§3.7) nothing else can write: the canvas, the timeline and the open panel are inert */
 body.sm-running #sm-timeline, body.sm-running #stage, body.sm-running #inspector-panel { pointer-events: none; }
+
+/* ═══ SIMPLE MODE, PHASE 2.2 — the tray row and the project tools (D10), Simple's ⋯ menu and the black band ══════════════
+   (BUILD-PLAN-PHASE2.md §4). Every rule hangs on an element only Simple builds (#sm-bar, #sm-tray, #sm-tools, .sm-menu,
+   .sm-band, .sm-band-hint) or on body.ed-simple, so Full matches none of them. */
+#sm-bar { display: none; }
+body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; background: var(--panel); }
+#sm-say { padding: 0; }
+#sm-say .sm-line { display: none; flex: 1 1 auto; min-width: 0; align-items: center; gap: 10px; padding: 0 12px; height: 100%; }
+#sm-say.sm-saying .sm-line { display: flex; }
+#sm-say.sm-saying #sm-tray { display: none; }
+#sm-tray { display: flex; align-items: stretch; flex: 1 1 auto; min-width: 0; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+#sm-tray::-webkit-scrollbar { display: none; }
+.sm-tool { position: relative; flex: 0 0 auto; min-width: 54px; padding: 0 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border: 0; background: transparent; color: var(--text); font: 600 10px/1.1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-tool .sm-ico { width: 22px; height: 22px; flex: none; }
+.sm-tool .sm-tool-l { white-space: nowrap; }
+.sm-tool[aria-disabled="true"] { opacity: .38; }
+.sm-tool[aria-pressed="true"] { color: var(--accent); }
+.sm-tool.sm-pin { position: sticky; right: 0; margin-left: auto; padding-left: 16px; background: linear-gradient(90deg, rgba(0,0,0,0), var(--panel) 14px); }
+.sm-quiet { display: flex; align-items: center; padding: 0 12px; font: 600 12.5px/1 system-ui, sans-serif; color: var(--text-dim); white-space: nowrap; }
+#sm-tray.sm-tray-len { align-items: center; }
+.sm-len-v { flex: none; width: 72px; height: 36px; margin: 0 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  font: 700 14px/1 system-ui, sans-serif; text-align: center; }
+#sm-tools { display: flex; align-items: stretch; flex: 0 0 56px; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: content-box; }
+#sm-tools .sm-tool { flex: 1 1 0; min-width: 0; }
+.sm-menu { position: fixed; z-index: 120; min-width: 210px; padding: 6px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line);
+  box-shadow: 0 16px 40px rgba(0,0,0,.5); display: flex; flex-direction: column; }
+.sm-menu-i { min-height: 44px; text-align: left; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: 600 14px/1 system-ui, sans-serif; cursor: pointer; }
+.sm-menu-i:hover, .sm-menu-i:focus-visible { background: rgba(255,255,255,.07); }
+.sm-band { position: absolute; top: 2px; height: 52px; border-radius: 6px; border: 1px dashed #5a667a; color: #aeb8c8; cursor: pointer; overflow: hidden; white-space: nowrap;
+  background: repeating-linear-gradient(135deg, #0b0f16 0 6px, #141a24 6px 12px); font: 600 10px/1 system-ui, sans-serif; display: flex; align-items: center; padding: 0 8px; }
+.sm-band-hint { padding: 16px; color: var(--text-dim); font: 600 13px/1.4 system-ui, sans-serif; }
+@media (max-width: 700px) { #sm-say.sm-say-has-b { padding-right: 0; } #sm-say.sm-say-has-b .sm-line { padding-right: 56px; } }
+@media (min-width: 701px) {
+  body.ed-simple #tl-centerline { bottom: 0; }                                  /* #sm-say left the timeline for the band */
+  #inspector-panel > #sm-bar { border-top: 1px solid var(--line); }
+  body.ed-simple #sm-say { flex-basis: 52px; border-top: 0; }
+}

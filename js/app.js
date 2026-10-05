@@ -1009,6 +1009,7 @@ window.FM = window.FM || {};
     document.body.classList.toggle('sel-mode', !simple && selOwns);
     document.body.classList.toggle('m-editing', !simple && phone && n === 1 && !selOwns);
     document.body.classList.toggle('sm-has-sel', simple && n >= 1);
+    if (simple && FM.simpleTools && FM.simpleTools.sync) FM.simpleTools.sync();   // Simple mode P2.2: the tray shows the selection's tools
     /* ⚠️ AND THE BACK BUTTON MUST SAY WHAT IT ACTUALLY DOES (queue 654, v14.40). `#m-back` carries a
        fixed `aria-label="Projects / file"` in index.html — but js/mobile.js branches on these very
        classes and, in BOTH `sel-mode` and `m-editing`, that button does not go to Projects at all: it
@@ -3126,7 +3127,7 @@ window.FM = window.FM || {};
     refreshAll();
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
-    if (FM.storage && FM.storage.save) FM.storage.save();   // write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab background/close
+    if (FM.storage && FM.storage.save && !(opts && opts.noSave)) FM.storage.save();   // write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab background/close (Simple mode P2: {noSave} — its runner's one commit saves)
     // Remember it in the Media library so it's one tap away next time — no picker, no Photos app.
     if (FM.mediaLib && rec.file) FM.mediaLib.add(rec, layer.id);
     // A clip the browser can OPEN but can't give a picture for (videoWidth/Height 0) renders as an

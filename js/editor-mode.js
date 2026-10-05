@@ -242,6 +242,11 @@ window.FM = window.FM || {};
       /* PHASE 2 (DESIGN.md §8.3's table). A / D ripple-trim a main clip with the playhead inside it, else the main clip under
          the playhead (selected first); S splits the selected item, else that main clip; Delete and ⌘D on one main clip are
          Simple's delete and duplicate. An overlay, text or caption item keeps Full's own A / D / Delete / ⌘D (no ripple). */
+      /* Phase 2.2 (§8.3): Alt+← / Alt+→ are Move earlier / Move later on one selected main clip (free keys in Full) */
+      if (mode === 'simple' && e.altKey && !(e.metaKey || e.ctrlKey) && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && FM.spine && FM.spine.cmd && FM.spine.cmd.move) {
+        const sel = FM.selectionIds ? FM.selectionIds() : [];
+        if (sel.length === 1 && FM.spine.read(FM.scene).isMain(sel[0])) { e.preventDefault(); if (!e.repeat) FM.spine.cmd.move(sel[0], e.code === 'ArrowLeft' ? -1 : 1); return true; }
+      }
       if (mode !== 'simple' || e.altKey) return false;
       const mod = e.metaKey || e.ctrlKey;
       const S = FM.spine;

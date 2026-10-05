@@ -120233,7 +120233,9 @@
         /* NOTHING MOVES ON SELECT, AND THE PANEL DOCKS UNDER THE SIMPLE TIMELINE (DESIGN T19, Phase 1 clauses): the clip row, the
            sound row and #sm-say keep their y to the pixel, and today's panel starts below #sm-say with room to use. */
         const tops0 = ['sm-main', 'sm-sound', 'sm-say'].map(id => document.getElementById(id).getBoundingClientRect().top);
-        FM.selectLayer(v.c2.id); await v.sleep(120);
+        FM.selectLayer(v.c2.id); await v.sleep(60);
+        if (FM.simpleTools && FM.simpleTools.openPanel) FM.simpleTools.openPanel(v.c2.id);   // Phase 2.2 (D10): a panel opens from the tray's More, not on select
+        await v.sleep(120);
         document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });   // the panel RISES into place (a transition): measure where it lands
         const tops1 = ['sm-main', 'sm-sound', 'sm-say'].map(id => document.getElementById(id).getBoundingClientRect().top);
         if (tops0.some((t, i) => Math.abs(t - tops1[i]) > 0.5)) throw new Error('selecting a clip moved the Simple rows (clip row, sound, #sm-say tops ' + tops0.map(Math.round) + ' → ' + tops1.map(Math.round) + ')');
@@ -121462,6 +121464,237 @@
       if (pieces !== 3) throw new Error('A should be in three pieces after two splits, it is in ' + pieces);
       if (!v.L('B')) throw new Error('the queued ⌘Z did not undo the last command (the delete of B)');
       if (!FM.history.canRedo()) throw new Error('the delete should be on the redo stack');
+    });
+  });
+
+  /* ═══ SIMPLE MODE, PHASE 2 RELEASE 2.2 — THE TRAY ROW AND THE PROJECT TOOLS (D10), and the commands they carry: Append,
+     Insert, Move earlier / later, Lift off, Into row, Length, Stay put, Simple's ⋯ (Close all gaps) and the black band
+     (D17 B) (queue 980 (partial); BUILD-PLAN-PHASE2.md §4) ═══════════════════════════════════════════════════════════ */
+  const smPng = (color, name) => new Promise(res => { const c = offscreen(32, 32), x = c.getContext('2d'); x.fillStyle = color; x.fillRect(0, 0, 32, 32); c.toBlob(b => res(new File([b], name || color.slice(1) + '.png', { type: 'image/png' })), 'image/png'); });
+  const smTool = id => document.querySelector('#sm-tray .sm-tool[data-tool="' + id + '"]') || document.querySelector('#sm-tools .sm-tool[data-tool="' + id + '"]');
+  const smTops = ids => ids.map(id => { const e = document.getElementById(id); return e ? Math.round(e.getBoundingClientRect().top) : NaN; });
+
+  async function smTrayCheck(width) {
+    await (width <= 700 ? atPhoneWidth : atWideWidth)(async function () {
+      await smP2((W, H) => [smT('On B', 3.5, 1, W, H), smV('C', 5, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const rows = width <= 700 ? ['sm-main', 'sm-sound', 'sm-say', 'sm-tools'] : ['sm-main', 'sm-sound'];
+        const y0 = smTops(rows);
+        FM.selectLayer(v.L('B').id); await v.sleep(120);
+        document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+        const want = ['length', 'earlier', 'later', 'lift', 'duplicateClip', 'crop', 'more', 'delete'];
+        const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
+        if (want.some(t => got.indexOf(t) < 0)) throw new Error(width + ' px: the main clip tray is ' + JSON.stringify(got) + ', want ' + JSON.stringify(want));
+        const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
+        if (tools !== 'clips,text,sound,overlay') throw new Error(width + ' px: the project tools are ' + tools);
+        if (smTops(rows).some((y, i) => Math.abs(y - y0[i]) > 0.5)) throw new Error(width + ' px: selecting moved a row: ' + y0 + ' → ' + smTops(rows));
+        const tray = document.getElementById('sm-tray').getBoundingClientRect(), tb = document.getElementById('sm-tools').getBoundingClientRect();
+        if (tray.height < 44 || tb.height < 44) throw new Error(width + ' px: a row is under 44 px tall (tray ' + tray.height + ', tools ' + tb.height + ')');
+        Array.from(document.querySelectorAll('#sm-tools .sm-tool')).forEach(b => { const r = b.getBoundingClientRect(); if (r.width < 44 || r.right > innerWidth + 0.5) throw new Error(width + ' px: tool ' + b.dataset.tool + ' is ' + Math.round(r.width) + ' px wide or off screen'); });
+        const bin = smTool('delete').getBoundingClientRect();
+        if (bin.right > innerWidth + 0.5 || bin.width < 44) throw new Error(width + ' px: 🗑 is not on screen at the right end: ' + JSON.stringify([bin.left, bin.width]));
+        const insp = document.getElementById('inspector-panel');
+        if (width <= 700) {
+          if (insp.classList.contains('open')) throw new Error('380 px: selecting a clip raised today’s panel — the tray is the selection’s home (D10)');
+          smTool('more').click(); await v.sleep(200);
+          document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+          if (!insp.classList.contains('open')) throw new Error('380 px: More did not raise today’s panel');
+          if (insp.getBoundingClientRect().top < document.getElementById('sm-say').getBoundingClientRect().bottom - 0.5) throw new Error('380 px: the panel covers the tray');
+        } else {
+          const bar = document.getElementById('sm-bar');
+          if (bar.parentNode !== insp) throw new Error('1280 px: the tray and tools are not in the left band');
+          if (!document.querySelector('#inspector .sm-band-hint')) throw new Error('1280 px: the band shows Full’s editor for a selection nobody asked a panel for');
+          smTool('more').click(); await v.sleep(120);
+          if (document.querySelector('#inspector .sm-band-hint')) throw new Error('1280 px: More did not open today’s panel in the band (D20 A)');
+        }
+        /* CONTROL — Full: a selection in Full raises today's panel (phone) and draws today's layer editor in the band (PC), and
+           no Simple row shows. A, whose More was never pressed, so a panel Simple left open cannot answer for Full (the
+           review's G2 / G3: with B here, removing isSimple() from sheetHeld or bandIdle survived). */
+        FM.editor.apply('full', { force: true, quiet: true }); FM.selectLayer(null); FM.selectLayer(v.L('A').id); await v.sleep(120);
+        if (width <= 700 && !insp.classList.contains('open')) throw new Error('CONTROL: in Full selecting a clip no longer raises its panel');
+        if (document.querySelector('#inspector .sm-band-hint')) throw new Error('CONTROL: in Full the band shows Simple’s hint instead of the layer editor');
+        if (getComputedStyle(document.getElementById('sm-bar')).display !== 'none' && document.getElementById('sm-bar').getClientRects().length) throw new Error('CONTROL: the Simple rows show in Full');
+      });
+    }, width);
+  }
+  test('simple P2.2 · at 380 a selected clip’s tools fill the tray row under the timeline, the project tools stay below it, nothing moves, More raises today’s panel', { item: '980', budgetMs: 60000 }, async function () { await smTrayCheck(380); });
+  test('simple P2.2 · at 1280 the tray and the project tools sit at the bottom of the left band and a panel opens above them only from More (D20 A)', { item: '980', budgetMs: 60000 }, async function () { await smTrayCheck(1280); });
+
+  test('simple P2.2 · Move later and Move earlier reorder a clip one slot with what is on it; the other seams keep their amounts; Alt+← moves it back', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smT('On B', 3.5, 0.5, W, H), smT('On D', 10.5, 1, W, H), smV('D', 10, 2, W, H), smV('C', 5, 4, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const n0 = v.steps(), doc0 = v.doc();
+      FM.selectLayer(v.L('B').id); await v.sleep(60);
+      const later = smTool('later');
+      if (!later) throw new Error('no Move later in the tray (it reads “' + v.say() + '”)');
+      later.click(); await v.idle();
+      const A = v.L('A'), B = v.L('B'), C = v.L('C'), D = v.L('D');
+      if (C.start !== 3 || B.start !== C.start + C.duration || D.start !== 10) throw new Error('Move later did not give A C B · D: C ' + C.start + ', B ' + B.start + ', D ' + D.start);
+      if (Math.abs(v.L('On B').start - 7.5) > 1e-9 || v.L('On D').start !== 10.5) throw new Error('the title on B did not travel with it, or the one on D moved: ' + v.L('On B').start + ', ' + v.L('On D').start);
+      if (v.steps() !== n0 + 1) throw new Error('a move should be one step');
+      /* Alt+← takes it back one slot */
+      v.key('ArrowLeft', 'ArrowLeft'); /* no alt: does nothing new */
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft', key: 'ArrowLeft', altKey: true, bubbles: true })); await v.idle();
+      /* B carries its own trailing seam (the 1 s gap that was after it) back with it, as every reorder does (§3.6) */
+      if (v.L('B').start !== 3 || v.L('C').start !== 6 || v.L('D').start !== 10) throw new Error('Alt+← did not give A B · C D: B ' + v.L('B').start + ', C ' + v.L('C').start + ', D ' + v.L('D').start);
+      FM.history.undo(); FM.history.undo(); await v.sleep(30);
+      if (v.doc() !== doc0) throw new Error('two undos did not restore the document');
+    });
+  });
+
+  test('simple P2.2 · Lift off makes a clip an overlay above what slides under it and its title stays with it; Into row puts it back at the nearest cut', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smT('On B', 4, 1, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      FM.selectLayer(v.L('B').id); await v.sleep(60);
+      smTool('lift').click(); await v.idle();
+      const B = v.L('B'), C = v.L('C'), T = v.L('On B');
+      if (B.start !== 3 || (B.sm && B.sm.main)) throw new Error('Lift off moved B or left it on the clip row: ' + B.start + ' ' + JSON.stringify(B.sm));
+      if (C.start !== 3) throw new Error('C did not close up under B: ' + C.start);
+      if (T.start !== 4 || !(T.sm && T.sm.stay)) throw new Error('the title on B should stay at 4 with Stay put: ' + T.start + ' ' + JSON.stringify(T.sm));
+      const z = id => FM.scene.layers.findIndex(l => l.id === id);
+      if (!(z(B.id) < z(C.id))) throw new Error('the lifted clip is under the clip that slid beneath it');
+      if (!(z(T.id) < z(B.id))) throw new Error('the lifted clip went above its own title');
+      FM.selectLayer(B.id); await v.sleep(60);
+      smTool('into').click(); await v.idle();
+      if (!(B.sm && B.sm.main) || B.start !== 3 || C.start !== 6) throw new Error('Into row did not put B back at 3 with C after it: B ' + B.start + ' ' + JSON.stringify(B.sm) + ', C ' + C.start);
+    });
+  });
+
+  test('simple P2.2 · Length: + and − change the clip by one frame and what follows moves; a typed length trims; Start trims the head', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const A = v.L('A'), B = v.L('B');
+      FM.selectLayer(A.id); await v.sleep(60);
+      smTool('length').click(); await v.sleep(40);
+      if (!smTool('lenPlus')) throw new Error('Length did not open its row');
+      smTool('lenPlus').click(); await v.idle();
+      if (Math.abs(A.duration - (3 + 1 / 30)) > 1e-9 || B.start !== A.start + A.duration) throw new Error('+ did not lengthen A by a frame with B following: ' + A.duration + ' / ' + B.start);
+      const inp = document.querySelector('#sm-tray .sm-len-v');
+      inp.value = '2'; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await v.idle();
+      if (Math.abs(A.duration - 2) > 1e-9 || B.start !== 2) throw new Error('typing 2 did not trim A to 2 s with B at 2: ' + A.duration + ' / ' + B.start);
+      smTool('lenEdge').click(); await v.sleep(30);
+      smTool('lenMinus').click(); await v.idle();
+      if (Math.abs(A.duration - (2 - 1 / 30)) > 1e-9 || A.start !== 0 || Math.abs((A.trimStart || 0) - 1 / 30) > 1e-9) throw new Error('Start − did not trim A’s head by a frame keeping its slot: ' + [A.start, A.duration, A.trimStart]);
+    });
+  });
+
+  test('simple P2.2 · the + appends end to end BEFORE an end card, which moves along; Clips › After Clip 1 inserts at that cut', { item: '980', budgetMs: 60000 }, async function () {
+    const files = await Promise.all(['#ff0000', '#00ff00'].map(c => smPng(c)));
+    await smP2((W, H) => [smT('End', 6, 2, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const n0 = v.steps();
+      await FM.simpleTimeline.pickFiles(files); await v.idle();
+      const imgs = FM.scene.layers.filter(l => l.type === 'image').sort((a, b) => a.start - b.start);
+      if (imgs.length !== 2) throw new Error('the + added ' + imgs.length + ' clips (it said “' + v.say() + '”)');
+      const d = imgs[0].duration;
+      if (imgs[0].start !== 6 || imgs[1].start !== 6 + d) throw new Error('the clips are not end to end from 6: ' + imgs.map(l => l.start));
+      if (Math.abs(v.L('End').start - (6 + 2 * d)) > 1e-9) throw new Error('the end card did not move after the new clips: ' + v.L('End').start);
+      if (!imgs.every(l => l.sm && l.sm.main)) throw new Error('the appended clips are not on the clip row');
+      if (v.steps() !== n0 + 1) throw new Error('an append should be one step, got ' + (v.steps() - n0));
+      const z = id => FM.scene.layers.findIndex(l => l.id === id);
+      if (!(z(imgs[0].id) < z(v.L('B').id)) || !(z(v.L('End').id) < z(imgs[0].id))) throw new Error('the new clips are not just above the clip before them (and under the title)');
+      /* Insert: at 2.2 s the nearest cut is A|B (3 s) */
+      const more = await smPng('#0000ff');
+      await FM.spine.cmd.insert([more], FM.spine.insertIndexAt(FM.spine.classify(FM.scene), 2.2)); await v.idle();
+      const ins = FM.scene.layers.filter(l => l.type === 'image' && imgs.indexOf(l) < 0)[0];
+      if (!ins || ins.start !== 3 || v.L('B').start !== 3 + ins.duration) throw new Error('the insert did not land at 3 with B after it: ' + (ins && ins.start) + ' / ' + v.L('B').start);
+    });
+  });
+
+  test('simple P2.2 · Text adds at the playhead held inside the video; Overlay lands above the clip, under titles', { item: '980', budgetMs: 60000 }, async function () {
+    const pic = await smPng('#ffffff', 'logo.png');
+    await smP2((W, H) => [smT('Title', 0, 6, W, H), smV('A', 0, 6, W, H)], async function (v) {
+      FM.time = 6;   // the playhead parked at the end, where playback leaves it (§3.6 Add row)
+      smTool('text').click(); await v.idle();
+      const t = FM.scene.layers.find(l => l.type === 'text' && l.name === 'Text');
+      if (!t) throw new Error('Text added nothing (it said “' + v.say() + '”)');
+      if (t.start + t.duration > 6 + 1e-9) throw new Error('the new text runs past the end of the video: ' + t.start + '+' + t.duration);
+      if (Math.abs(t.duration - Math.min(6, FM.defaultLayerDuration())) > 1e-9) throw new Error('a text added at the very end should slide back and keep its whole length, got ' + t.duration + ' s at ' + t.start);
+      if (FM.textEdit && FM.textEdit.isActive && !FM.textEdit.isActive()) throw new Error('the new text did not open for typing');
+      if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+      FM.time = 1;
+      await FM.spine.cmd.addOverlay([pic]); await v.idle();
+      const o = FM.scene.layers.find(l => l.type === 'image');
+      const z = id => FM.scene.layers.findIndex(l => l.id === id);
+      if (!o || !(z(o.id) < z(v.L('A').id)) || !(z(v.L('Title').id) < z(o.id))) throw new Error('the overlay is not between the clip and the title in the stack: ' + FM.scene.layers.map(l => l.name).join(' / '));
+      if (o.start + o.duration > 6 + 1e-9) throw new Error('the overlay runs past the end of the video');
+    });
+  });
+
+  test('simple P2.2 · Simple’s ⋯ offers Close all gaps, which closes every gap and overlap in one step; Full’s ⋯ is untouched', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smV('C', 7.4, 2, W, H), smV('B', 4, 3.8, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const n0 = v.steps();
+      document.getElementById('btn-opts').click(); await v.sleep(60);
+      const item = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).find(b => /Close all gaps/.test(b.textContent));
+      if (!item) throw new Error('Simple’s ⋯ has no Close all gaps');
+      item.click(); await v.idle();
+      const A = v.L('A'), B = v.L('B'), C = v.L('C');
+      if (B.start !== A.start + A.duration || C.start !== B.start + B.duration) throw new Error('not every seam was closed: B ' + B.start + ', C ' + C.start);
+      if (v.steps() !== n0 + 1) throw new Error('Close all gaps should be one step');
+      /* CONTROL — Full's ⋯ opens Full's own strip, no Simple menu */
+      FM.editor.apply('full', { force: true, quiet: true });
+      document.getElementById('btn-opts').click(); await v.sleep(60);
+      if (document.querySelector('.sm-menu')) throw new Error('CONTROL: Simple’s menu opened from Full’s ⋯');
+      document.getElementById('btn-opts').click(); await v.sleep(30);
+    });
+  });
+
+  test('simple P2.2 · the black band names what runs past the last clip: End with the video fits a title, a song is named and left (D17 B)', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smT('Whole', 0, 9, W, H), smSong('Song', 0, 12, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const band = document.querySelector('#sm-main .sm-band');
+      if (!band) throw new Error('no black band while a title and a song run past the last clip');
+      band.click(); await v.sleep(30);
+      if (!/2 things run past the end/.test(v.say())) throw new Error('the band’s line is wrong: “' + v.say() + '”');
+      await v.sleep(450);
+      const b = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).find(x => /End with the video/.test(x.textContent));
+      if (!b) throw new Error('no End with the video while a picture runs past');
+      b.click(); await v.idle();
+      if (Math.abs(v.L('Whole').start + v.L('Whole').duration - 6) > 1e-9) throw new Error('the title was not fitted to the end of the video: ' + (v.L('Whole').start + v.L('Whole').duration));
+      if (v.L('Song').duration !== 12) throw new Error('the song was trimmed — D17 B: music runs on in black');
+      document.querySelector('#sm-main .sm-band').click(); await v.sleep(30);
+      if (!/the song runs 6.0 s past the last clip/.test(v.say()) || document.querySelector('#sm-say .sm-say-b')) throw new Error('the song’s line is wrong or offers to trim it: “' + v.say() + '”');
+    });
+  });
+
+  test('simple P2.2 · a crossfade stops Move, Lift off and Clips › After Clip 1 with its own words and writes nothing; a clip off the fade still moves', { item: '980', budgetMs: 60000 }, async function () {
+    const png = await smPng('#0a0', 'x.png');
+    await smP2((W, H) => [
+      (() => { const b = smV('B', 4, 5, W, H); b.transform.opacity = smKf([[4, 0], [5, 1]]); return b; })(),
+      smV('D', 13, 2, W, H), smV('C', 9, 4, W, H), smV('A', 0, 5, W, H)
+    ], async function (v) {
+      const R0 = FM.spine.read(FM.scene), sb = R0.main[1] && R0.main[1].seam;
+      if (!sb || sb.kind !== 'blend') throw new Error('CONTROL: the fixture is not a crossfade between A and B: ' + JSON.stringify(sb));
+      const doc0 = v.doc(), n0 = v.steps();
+      FM.selectLayer(v.L('B').id); await v.sleep(60);
+      smTool('later').click(); await v.idle();
+      if (!/Some clips fade into each other · move them by hand/.test(v.say())) throw new Error('Move later on a crossfaded clip said “' + v.say() + '” (DESIGN §3.11: “Some clips fade into each other · move them by hand”)');
+      smTool('lift').click(); await v.idle();
+      if (!/Some clips fade into each other · move them by hand/.test(v.say())) throw new Error('Lift off on a crossfaded clip said “' + v.say() + '”');
+      await FM.spine.cmd.insert([png], 1); await v.idle();
+      if (!/^Clips 1 and 2 fade into each other · pick another cut/.test(v.say())) throw new Error('Clips › After Clip 1 at a crossfade said “' + v.say() + '” (want “Clips 1 and 2 fade into each other · pick another cut”)');
+      if (v.doc() !== doc0 || v.steps() !== n0) throw new Error('a refused command wrote to the document or took a step');
+      /* CONTROL: D, nowhere near the fade, moves earlier past C in one step */
+      FM.selectLayer(v.L('D').id); await v.sleep(60);
+      smTool('earlier').click(); await v.idle();
+      if (v.L('D').start !== 9 || v.L('C').start !== 11 || v.steps() !== n0 + 1) throw new Error('CONTROL: Move earlier on D did not give A B D C: D ' + v.L('D').start + ', C ' + v.L('C').start + ' (it said “' + v.say() + '”)');
+    });
+  });
+
+  test('simple P2.2 · on an adopted project the + still takes a whole-video title and a watermark added in Full to the new end (§4.5, §3.6 Append row)', { item: '980', budgetMs: 60000 }, async function () {
+    const files = await Promise.all(['#ff0000', '#00ff00', '#0000ff', '#ffff00'].map(c => smPng(c)));
+    await smP2((W, H) => [smT('Whole', 0, 6, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const end = l => (+l.start || 0) + (+l.duration || 0);
+      await FM.simpleTimeline.pickFiles([files[0]]); await v.idle();          // the first append adopts the project
+      const R1 = FM.spine.read(FM.scene);
+      if (!(FM.scene.project.sm && FM.scene.project.sm.adopted)) throw new Error('CONTROL: the first append did not adopt the project');
+      if (Math.abs(end(v.L('Whole')) - R1.trackEnd) > 1e-9) throw new Error('CONTROL: the first append did not take the whole-video title to the new end: ' + end(v.L('Whole')) + ' vs ' + R1.trackEnd);
+      /* 1. an sm.tail title on an adopted project: the next append must refit it */
+      await FM.simpleTimeline.pickFiles([files[1]]); await v.idle();
+      const R2 = FM.spine.read(FM.scene);
+      if (!(R2.trackEnd > R1.trackEnd + 0.5)) throw new Error('the second append added nothing (it said “' + v.say() + '”)');
+      if (Math.abs(end(v.L('Whole')) - R2.trackEnd) > 1e-9) throw new Error('the whole-video title stopped at ' + end(v.L('Whole')) + ' while the clips now run to ' + R2.trackEnd + ' — the new clips export without it (§4.5)');
+      /* 2. no sm.tail anywhere, and a watermark added in Full after adoption (no flag) covering the whole clip row */
+      FM.deleteLayer(v.L('Whole').id);
+      FM.scene.layers.unshift(smT('Mark', 0, R2.trackEnd, v.W, v.H)); FM.history.commit(); FM.refreshAll(); await v.sleep(30);
+      await FM.simpleTimeline.pickFiles([files[2], files[3]]); await v.idle();
+      const R3 = FM.spine.read(FM.scene), M = v.L('Mark');
+      if (!(R3.trackEnd > R2.trackEnd + 0.5)) throw new Error('the third append added nothing (it said “' + v.say() + '”)');
+      if (Math.abs(end(M) - R3.trackEnd) > 1e-9 || !(M.sm && M.sm.tail)) throw new Error('the watermark added in Full after adoption was not tagged and fitted: it ends at ' + end(M) + ', the clips at ' + R3.trackEnd + ', sm ' + JSON.stringify(M.sm || null));
     });
   });
 })();
