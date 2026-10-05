@@ -6,6 +6,6 @@ All guest transactions now enter the outbox through one accounting helper, inclu
 
 Changed: `js/collab-session.js`, `tests/tests.js`, `index.html` (collab-session cache 13→14).
 
-Node syntax and `git diff --check` passed. The focused browser regression is pending because the shared `.ship-in-progress` marker is active; this commit is staged only and must not be fast-forwarded to the preferred branch until the pending browser checks pass.
+Node syntax and `git diff --check` passed. The focused muted Chromium regression passed in the 5 Oct ship gap (part of a 2/3 first run; the only red was #1020's rate-limited fixture). This commit remains staged with later changes; no release was made.
 
 Local only; no shared Claude checkout edit, push, PR or deployment.

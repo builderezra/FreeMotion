@@ -6,4 +6,4 @@ GIF and PNG-frame exports from the Export dialog now stop on the same ready card
 
 Changed files: `js/exporter.js`, `js/app.js`, `index.html` (exporter cache 187→188, app 483→484), `tests/tests.js` (one focused `{ item: 'TBD' }` regression for both formats; an existing custom-size dialog test now presses Save on the card), this report.
 
-Checks: focused production `deliver()` Node check passed for GIF and ZIP sharing with their real MIME types; changed JavaScript syntax and `git diff --check` passed. The full ready-card browser regression is pending until the shared Claude ship lock is absent; no browser or Chromium test ran under the lock.
+Checks: focused production `deliver()` Node check passed for GIF and ZIP sharing with their real MIME types; changed JavaScript syntax and `git diff --check` passed. The ready-card muted Chromium regression passed in the 5 Oct ship gap (part of a 2/3 first run; the only red was #1020's rate-limited fixture).

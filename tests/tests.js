@@ -41628,6 +41628,9 @@
         g.doc.layers[0].name = 'queued ' + i;
         g.G.tick('full');
         g.loop.settle();
+        // Host accepts 30 transactions/s; a zero-time burst tests its rate limiter,
+        // not the frozen-message queue. Stay below that limit throughout this fixture.
+        await settle921(40);
         if (ctx.S._queued() > C.LIMITS.HELD_QUEUE_MESSAGES)
           throw new Error('the frozen owner retained more than the held-message cap');
       }

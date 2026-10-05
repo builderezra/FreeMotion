@@ -6,6 +6,6 @@ The document messages held during export or another busy editor action now have 
 
 Changed: `js/collab-core.js`, `js/collab-session.js`, `tests/tests.js`, `index.html` (core/session cache tags 20→21 and 14→15).
 
-Node syntax and `git diff --check` passed. The collaboration browser regression is pending because the shared `.ship-in-progress` marker is active; under the PM's 18:35 rule no 921/collaboration browser test runs during a ship. This commit remains staged until that focused check passes.
+Node syntax and `git diff --check` passed. The first muted Chromium run exposed a test fixture that sent 264 transactions faster than the host's documented 30/s limit, so the host correctly rejected the final transaction. The fixture now paces each transaction at 40 ms; its focused rerun passed (1/1) in the ship gap. The implementation remains staged with later changes; no release was made.
 
 Local only; no shared Claude checkout edit, push, PR or deployment.
