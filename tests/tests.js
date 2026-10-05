@@ -127968,4 +127968,29 @@
     if (FM.layerSourceAdvance(staticLayer, 1.5) !== 3) throw new Error('static-speed control changed');
   });
 
+  test('TBD: a failed project import removes its new card and returns to the prior project', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const prior = FM.projects.currentId(), before = FM.projects.list().length;
+    const originalApply = FM.storage.applyScene, originalToast = FM.toast;
+    const messages = [], made = [];
+    const file = { app: 'freemotion', project: { name: 'Import rollback probe', width: 200, height: 200, fps: 30, duration: 2 }, layers: [] };
+    try {
+      FM.toast = m => messages.push(String(m));
+      FM.storage.applyScene = async () => { throw new Error('broken import probe'); };
+      if (await FM.storage.importObject(file, null, { confirmed: true }) !== false)
+        throw new Error('the throwing import reported success');
+      if (FM.projects.list().length !== before || FM.projects.currentId() !== prior ||
+          !messages.some(m => /could not be opened/i.test(m)))
+        throw new Error('a failed import left a project card, changed the current project or gave no warning');
+      FM.storage.applyScene = originalApply;
+      if (await FM.storage.importObject(file, null, { confirmed: true, quiet: true }) !== true)
+        throw new Error('the valid control import was refused');
+      made.push(FM.projects.currentId());
+      if (FM.projects.list().length !== before + 1) throw new Error('valid import did not add one project');
+    } finally {
+      FM.storage.applyScene = originalApply; FM.toast = originalToast;
+      try { await FM.projects.open(prior || null, { confirmed: true }); } catch (e) {}
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+    }
+  });
+
 })();

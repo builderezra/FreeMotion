@@ -2136,18 +2136,26 @@ window.FM = window.FM || {};
     const problem = FM.storage.sceneFileProblem(obj);
     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
     const kind = opts && opts.draft;   // queue 915 clause 8: only restoreBackup passes this, and only these two values
+    const previousId = tabId();
+    let pid = null;
     if (FM.projects) {
-      const pid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
+      pid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
         kind === 'element' ? { elementDraft: true } : kind === 'template' ? { templateDraft: true } : {}, opts && opts.confirmed ? { confirmed: true } : {}));
       /* queue 690: false = his open project could not be saved and he chose to stay. applyScene below writes the
          file INTO whatever is open, so going on would put the import over the very work he just chose to keep. */
       if (!pid) return false;
     }
     const importWarnings = opts && opts.quiet ? null : [];
-    const ok = await FM.storage.applyScene(obj, importWarnings, !!(opts && opts.inPlace));
+    let ok = false;
+    try { ok = await FM.storage.applyScene(obj, importWarnings, !!(opts && opts.inPlace)); }
+    catch (e) { /* A damaged import must not strand its just-created empty project. */ }
     if (!ok) {
-      /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
-         two ever disagree the user must still be told rather than left in an empty project. */
+      // Switch away before removing the new project, so remove() cannot choose another landing
+      // project. The previous scene was flushed by create(); only the id minted here is deleted.
+      if (pid && FM.projects) {
+        try { await FM.projects.open(previousId, { confirmed: true }); } catch (e) {}
+        try { await FM.projects.remove(pid); } catch (e) {}
+      }
       if (FM.toast) FM.toast('That project file could not be opened.', 5000);
       return false;
     }
