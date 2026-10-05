@@ -30456,6 +30456,7 @@
       'path', 'diff', 'Host', 'Session', 'bridge', 'link', 'DENY', '_viewOfProject',
       'session', 'attach', 'detach', 'share', 'join', 'leave', 'end', 'reopen', 'sameDeviceCopy', 'testMode',
       'beforeSnap', 'afterCommit', 'beforeFlush', 'undoActive', 'undo', 'redo', 'canUndo', 'canRedo',
+      'redoDepth',   // #980 Phase 1 review R3: read-only, the editor switch's redo line counts the steps a session's own redo holds
       'onReset', 'reachable', 'isGuest', 'deferReload', '_pendingReload', '_undoHandover', '_reload', '_agentTag', 'lastError',
       /* S3 (queue 921): the codes-only half of the signalling, and the UI. Both are libraries at load —
          `signal` defines functions and `ui` defines an object that builds nothing at all until
@@ -120815,7 +120816,8 @@
     const cardOf = () => (FM.projects.list() || []).find(c => c.id === pid);
     const card0 = cardOf(), ed0 = card0 ? card0.editor : undefined;
     const say = () => document.getElementById('sm-say');
-    const openFull = async () => { await new Promise(r => setTimeout(r, 450)); const b = say().querySelector('button'); if (!b) throw new Error('the line has no Open in Full button: ' + say().textContent); b.click(); await new Promise(r => setTimeout(r, 60)); };   // 450 ms: a line's buttons arm after 400 ms from Phase 2 on
+    const openFull = async () => { await new Promise(r => setTimeout(r, 450)); const b = say().querySelector('.sm-say-b');   // the LINE's button: from Phase 2 the tray's own buttons sit first in #sm-say
+      if (!b) throw new Error('the line has no Open in Full button: ' + say().textContent); b.click(); await new Promise(r => setTimeout(r, 60)); };   // 450 ms: a line's buttons arm after 400 ms from Phase 2 on
     try {
       await smCropRig(async function (r) {
         if (!pid || !card0) throw new Error('setup: the suite project has no card, so the memory cannot be read');
