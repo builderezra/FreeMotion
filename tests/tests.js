@@ -128169,4 +128169,21 @@
       throw new Error('a valid reminder changed during sanitising');
   });
 
+  test('TBD: imported numeric text keeps audio, behaviour and path values', { item: 'TBD' }, function () {
+    const layer = FM.makeLayer('shape', { name: 'Numeric import probe', shape: 'rect' });
+    layer.trimPath = { enabled: true, start: 0, end: '0.5', offset: 0 };
+    layer.stroke = { enabled: true, width: 2, color: '#ffffff', dash: { enabled: true, length: '20', gap: 8, offset: 0 } };
+    layer.repeater = { enabled: true, copies: '4', offsetX: 40, offsetY: 0, rotation: 0, scale: 1, opacity: 1 };
+    layer.audioFx = [{ type: 'delay', enabled: true, params: { time: 0.35, feedback: 0.35, mix: '0.5' } }];
+    layer.behaviors = [{ type: 'bounce', enabled: true, prop: 'x', params: { elastic: '0.7', freq: 3, decay: 4 } }];
+    FM.storage._sanitizeLayers([layer]);
+    if (layer.trimPath.end !== 0.5 || layer.stroke.dash.length !== 20 || layer.repeater.copies !== 4 ||
+        layer.audioFx[0].params.mix !== 0.5 || layer.behaviors[0].params.elastic !== 0.7)
+      throw new Error('numeric text was reset to a default during import');
+    layer.trimPath.end = ' '; layer.audioFx[0].params.mix = false;
+    FM.storage._sanitizeLayers([layer]);
+    if (layer.trimPath.end !== 1 || layer.audioFx[0].params.mix !== FM.audioFxRegistry.paramsOf('delay').find(p => p.key === 'mix').def)
+      throw new Error('blank or boolean values were accepted as imported numbers');
+  });
+
 })();

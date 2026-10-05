@@ -1257,6 +1257,14 @@ window.FM = window.FM || {};
   }
   FM.storage._keepUid = keepUid;   // suite seam: the rule itself, not a copy of it
 
+  // Imported numeric text is accepted wherever the matching effect parameter accepts it.
+  // Exclude blank strings and non-numeric JSON values before coercion (Number(null) is zero).
+  function finiteNum(v) {
+    if (typeof v !== 'number' && (typeof v !== 'string' || !v.trim())) return NaN;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
   function sanitizeAudioFx(l) {
     if (l.audioFx == null) return;
     // No registry (script failed to load) = no way to whitelist a type — drop rather than trust the file.
@@ -1268,7 +1276,8 @@ window.FM = window.FM || {};
       const params = {};
       FM.audioFxRegistry.paramsOf(f.type).forEach(pd => {
         const v = f.params && typeof f.params === 'object' ? f.params[pd.key] : undefined;
-        if (typeof v === 'number' && isFinite(v)) params[pd.key] = Math.max(pd.min, Math.min(pd.max, v));
+        const n = finiteNum(v);
+        if (Number.isFinite(n)) params[pd.key] = Math.max(pd.min, Math.min(pd.max, n));
         else {
           const kfp = pd.keyframable !== false ? safeKfProp(v, pd.min, pd.max) : null;
           params[pd.key] = kfp || pd.def;
@@ -1282,7 +1291,8 @@ window.FM = window.FM || {};
   // A number in [min,max], OR a validated animated prop, OR the default. Same untrusted-file discipline
   // as sanitizeAudioFx: file values are only adopted after a range/keyframe check.
   function numOrKf(v, min, max, def, keyframable) {
-    if (typeof v === 'number' && isFinite(v)) return Math.max(min, Math.min(max, v));
+    const n = finiteNum(v);
+    if (Number.isFinite(n)) return Math.max(min, Math.min(max, n));
     if (keyframable) { const kfp = safeKfProp(v, min, max); if (kfp) return kfp; }
     return def;
   }
@@ -1349,9 +1359,10 @@ window.FM = window.FM || {};
           if (opts) params[pd.key] = (typeof v === 'string' && opts.indexOf(v) >= 0) ? v : pd.def;
           else params[pd.key] = (typeof v === 'string' && v.length <= 64) ? v : pd.def;
         } else {
-          if (typeof v === 'number' && isFinite(v)) {
+          const n = finiteNum(v);
+          if (Number.isFinite(n)) {
             const min = isFinite(pd.min) ? pd.min : -Infinity, max = isFinite(pd.max) ? pd.max : Infinity;
-            params[pd.key] = Math.max(min, Math.min(max, v));
+            params[pd.key] = Math.max(min, Math.min(max, n));
           } else params[pd.key] = pd.def;
         }
       });
@@ -1490,10 +1501,8 @@ window.FM = window.FM || {};
       return ok ? { keep: true, value: v } : { keep: false };
     }
     const min = isFinite(pd.min) ? pd.min : -1e7, max = isFinite(pd.max) ? pd.max : 1e7;
-    if (typeof v === 'number' && isFinite(v)) return { keep: true, value: Math.max(min, Math.min(max, v)) };
-    // A numeric STRING is coerced rather than dropped. The renderer coerces it anyway (evalProp feeds
-    // arithmetic), so keeping it renders the same and dropping it would change how the layer looks.
-    if (typeof v === 'string' && v.trim() !== '' && isFinite(+v)) return { keep: true, value: Math.max(min, Math.min(max, +v)) };
+    const n = finiteNum(v);
+    if (Number.isFinite(n)) return { keep: true, value: Math.max(min, Math.min(max, n)) };
     if (pd.keyframable !== false) { const kfp = safeKfProp(v, min, max); if (kfp) return { keep: true, value: kfp }; }
     return { keep: false };
   }
