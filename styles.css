@@ -5515,7 +5515,11 @@ body.hm-selecting .hm-pin { display: none; }
   .hm-glint i, .am-glint i, .sfx-glint i, .vr-glint i { animation: none; background: rgba(150, 232, 255, .42); }
 }
 .hm-body { flex: 1; min-width: 0; }
-.hm-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-name {
+  font-size: 14.5px; font-weight: 700; line-height: 1.25;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+}
 /* AM-style meta chips: aspect · resolution · fps · layers — wraps to 2 lines on a phone */
 .hm-meta { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
 .hm-mi { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }

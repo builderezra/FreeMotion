@@ -120632,6 +120632,26 @@
     }
   });
 
+  test('long Home project names show two lines and retain the full name', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const full = 'Sunset behind the hills with the family at the waterfront on Sunday';
+    try {
+      const id = await FM.projects.create({ name: full, width: 320, height: 240 }); made.push(id);
+      FM.home.open();
+      const card = document.querySelector('#home-screen .hm-card[data-pid="' + id + '"]');
+      if (!card) throw new Error('the long-name project card did not render');
+      card.style.width = '340px'; // a phone-sized row, independent of the test runner viewport
+      const name = card.querySelector('.hm-name');
+      if (!name || name.textContent !== full || name.title !== full)
+        throw new Error('the complete project name is not available on the card and its tooltip');
+      const style = getComputedStyle(name), line = parseFloat(style.lineHeight), height = name.getBoundingClientRect().height;
+      if (style.webkitLineClamp !== '2' || !(height > line * 1.5 && height <= line * 2.15))
+        throw new Error('the phone-sized card does not show two name lines (height ' + height + ', line ' + line + ')');
+    } finally {
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
   test('Home profile Join and project Select menus work from the keyboard', { item: 'TBD', budgetMs: 30000 }, async function () {
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
     const ui = FM.collab.ui, realJoin = ui.joinDoor;

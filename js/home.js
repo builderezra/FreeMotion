@@ -1348,6 +1348,12 @@ window.FM = window.FM || {};
     return !!(U && U.switchAsk && U.switchAsk());
   }
 
+  function cardName(text) {
+    const name = el('div', 'hm-name', text);
+    name.title = text; // The complete name remains available when the two visible lines are clipped.
+    return name;
+  }
+
   function projectCard(p, subOverride) {
     // a DIV, not a button — a card is a <button> and the ⋯ is a nested <button>, which is invalid
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
@@ -1368,7 +1374,7 @@ window.FM = window.FM || {};
     const cx = collabOf(p);
     if (cx) th.appendChild(liveBadge(cx));
     // The tick is selectify's now (v6.17) — appending one here as well would put TWO in the corner.
-    const name = el('div', 'hm-name', p.name || 'Untitled');
+    const name = cardName(p.name || 'Untitled');
     // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
     const meta = el('div', 'hm-meta');
     const mi = txt => { if (txt) meta.appendChild(el('span', 'hm-mi', txt)); };
@@ -1992,7 +1998,7 @@ window.FM = window.FM || {};
     if (isPinned('templates', t.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
     card.appendChild(th);
     const body = el('div', 'hm-body');
-    body.appendChild(el('div', 'hm-name', t.name || 'Template'));
+    body.appendChild(cardName(t.name || 'Template'));
     body.appendChild(el('div', 'hm-meta', aspectLabel(t.width, t.height)));
     card.appendChild(body);
     const more = moreBtn();
@@ -2110,7 +2116,7 @@ window.FM = window.FM || {};
     if (isPinned('elements', e.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
     card.appendChild(th);
     const body = el('div', 'hm-body');
-    body.appendChild(el('div', 'hm-name', e.name || 'Element'));
+    body.appendChild(cardName(e.name || 'Element'));
     const n = e.count || 0;
     body.appendChild(el('div', 'hm-meta', n + (n === 1 ? ' layer' : ' layers')));
     card.appendChild(body);
@@ -2219,7 +2225,7 @@ window.FM = window.FM || {};
     }
     card.appendChild(dthumb);
     const body = el('div', 'hm-meta');
-    body.appendChild(el('div', 'hm-name', p.name || 'Untitled'));
+    body.appendChild(cardName(p.name || 'Untitled'));
     /* SAY WHICH KIND OF DRAFT THIS IS (queue 525). Two very different things wear this card:
        · `ofElement` set → a workspace that is EDITING an existing element (queue 505's one-workspace-
          per-element route). Closing it writes back into that element. Worth naming, because deleting it
