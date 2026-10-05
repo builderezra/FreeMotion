@@ -122196,7 +122196,7 @@
       XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
       await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
         onProgress: function () {}, onReady: async function () {} });
-      if (!renderer || !renderer.includes(';c31-shape-timewarp-grade-11'))
+      if (!renderer || !renderer.includes(';c31-shape-timewarp-grade-12'))
         throw new Error('an interrupted Time Warp Scan MP4 can resume an old history-based prefix');
     } finally { XR.signature = previousSignature; FM.scene = previousScene; }
   });
@@ -122385,6 +122385,43 @@
       const live = frame(24 / 30, width);
       layer.effects = [exposure, warp];
       if (same(cold, live)) throw new Error('Control: scan did not retain historical Exposure');
+    }
+  });
+
+  test('690 C31 Time Warp Scan holds keyed Grayscale with a moving shape', { item: 'TBD', budgetMs: 30000 }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 16, y: 40, shapeW: 30, shapeH: 70,
+      fill: '#d34a28', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 16, e: 'linear' }, { t: 2, v: 98, e: 'linear' }] };
+    const gray = FM.fxRegistry.makeInstance('grayscale');
+    gray.params.amount = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 1, e: 'linear' }] };
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [gray, warp];
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const width of [120, 60]) for (const mode of [0, 1]) {
+      warp.params.mode = mode;
+      FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(24 / 30, width);
+      if (!same(cold, played)) {
+        const i = cold.findIndex((v, j) => v !== played[j]);
+        throw new Error((mode ? 'Reveal' : 'Freeze') + ' keyed Grayscale cold seek differs at ' +
+          (i >> 2) + ': cold=' + cold[i] + ', played=' + played[i] + ', width=' + width);
+      }
+      layer.effects = [gray];
+      const live = frame(24 / 30, width);
+      layer.effects = [gray, warp];
+      if (same(cold, live)) throw new Error('Control: scan did not retain historical Grayscale');
     }
   });
 

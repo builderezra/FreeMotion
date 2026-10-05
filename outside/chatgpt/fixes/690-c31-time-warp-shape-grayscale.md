@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Grayscale before moving-shape Time Warp Scan
+
+Starting commit: clean preferred Codex-only `6ed01d4df0235d8b9f921a783dbe7deb74ff45ae`; isolated branch `codex/690-c31-scan-grayscale-shape`. The standing #690 is `REQUESTS.md:27375-27403`; C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. `audits/*.json` has no matching Grayscale scan finding; its Grayscale references concern filter recipes and registration rules.
+
+The moving-shape historical scan gate omitted source-local Grayscale, so a keyed grade ahead of Time Warp Scan used the current picture after a cold jump. The shape gate now admits Grayscale and redraws the prefix at each crossing. One new `{ item: 'TBD' }` Chromium regression failed before (`Freeze` cold 0 versus sequential 185 at a scanned pixel) and passed afterward in Freeze/Reveal at 120/60 px, including a current-picture control. The adjacent keyed Hue Shift shape regression passed. Main MP4 shape-scan resume identity advances 11→12.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 373→374, exporter 182→183), `tests/tests.js` (one new regression and one existing resume-identity expectation), and this report. Node syntax and diff checks passed. Still-image and decoded-video Grayscale scan remain separate unproved gates. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
