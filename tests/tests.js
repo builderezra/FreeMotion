@@ -120352,4 +120352,154 @@
       try { FM.timeline.rebuild(); } catch (e) {}
     }
   });
+
+  /* ═══ SIMPLE MODE P1 — THE ⚙ COG'S THIRD BLOCK (BUILD-PLAN §5.6b, COG-DESIGN §10). His rule, 1 Oct: "the option to switch
+     between the two editors should be in the settings cog, making a third section in there … it stays small unless you want the
+     explanation." Each test opens the real cog, leaves the editor, fm.cvPair and fm.editor.last as it found them, and runs at
+     1280 and 380. ═══ */
+  async function smCog(fn) {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const dlg = document.getElementById('canvas-dialog');
+    const ls = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+    const put = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} };
+    const pair0 = ls('fm.cvPair'), last0 = ls('fm.editor.last'), mode0 = FM.editor.mode();
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const land = async () => { try { dlg.getAnimations({ subtree: true }).forEach(a => { try { a.finish(); } catch (e) {} }); } catch (e) {} await sleep(60); };
+    const open = async o => { FM.openCanvasDialog(o || {}); await sleep(240); await land(); };
+    const big = () => dlg.classList.contains('cv-ed-big') ? 'editor' : dlg.classList.contains('cv-fr-big') ? 'friends' : 'canvas';
+    try {
+      if (wasHome) { FM.home.close(); await sleep(150); }
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      await open();
+      if (!document.getElementById('cv-editor')) throw new Error('the cog has no third block (#cv-editor) — BUILD-PLAN 1.3.18');
+      await fn({ dlg: dlg, sleep: sleep, land: land, open: open, big: big });
+    } finally {
+      try { if (!dlg.classList.contains('hidden')) FM.closeCanvasDialog(); } catch (e) {}
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      put('fm.cvPair', pair0); put('fm.editor.last', last0);
+      try { if (wasHome) FM.home.open(); } catch (e) {}
+      await sleep(120);
+    }
+  }
+
+  test('980 cog T9 all six swaps between Canvas, Friends and the Editor block land the right big block and tell a screen reader, Canvas and Friends are remembered and the Editor never is', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      const tap = { canvas: 'cv-mini', friends: 'cv-fr-bar', editor: 'cv-ed-what' };
+      /* every directed swap once (an Euler circuit of the three), then once more onto Friends so "last" is not the default */
+      const path = ['canvas', 'friends', 'editor', 'canvas', 'editor', 'friends', 'canvas', 'friends'];
+      for (let i = 1; i < path.length; i++) {
+        const from = path[i - 1], to = path[i];
+        if (c.big() !== from) throw new Error('setup: ' + from + ' should be big before the swap to ' + to + ', ' + c.big() + ' is');
+        const el = document.getElementById(tap[to]);
+        if (!el) throw new Error('no control to open ' + to + ' (#' + tap[to] + ')');
+        el.click(); await c.sleep(520); await c.land();
+        if (c.big() !== to) throw new Error('tapping ' + to + ' from ' + from + ' left ' + c.big() + ' big');
+        if (c.dlg.classList.contains('cv-flying')) throw new Error('the flight from ' + from + ' to ' + to + ' never landed');
+        const exp = { 'cv-ed-what': 'editor', 'cv-fr-exp': 'friends', 'cv-mini-exp': 'canvas' };
+        Object.keys(exp).forEach(function (id) {
+          const b = document.getElementById(id);
+          if (b && b.getAttribute('aria-expanded') !== String(exp[id] === to)) throw new Error('#' + id + ' says aria-expanded=' + b.getAttribute('aria-expanded') + ' with ' + to + ' big');
+        });
+        const pair = localStorage.getItem('fm.cvPair');
+        if (to === 'editor' && pair === 'editor') throw new Error('the Editor block was remembered as the last block (DESIGN §21 F7: never)');
+        if (to !== 'editor' && pair !== to) throw new Error('opening ' + to + ' was not remembered (fm.cvPair = ' + pair + ')');
+      }
+      document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
+      if (c.big() !== 'editor') throw new Error('setup: the Editor block did not open from Friends');
+      FM.closeCanvasDialog(); await c.sleep(150);
+      await c.open({ block: 'last' });
+      if (c.big() !== 'friends') throw new Error('closed on the Editor block, the cog reopened on ' + c.big() + ' — it should reopen on the last of Canvas / Friends, which was Friends');
+    });
+  });
+
+  test('980 cog T10 a tap on the switch switches and never opens the explanation, the switch says what it will do, and the bar or What should you use? opens it', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      const sw = document.querySelector('#cv-ed-bar .ed-sw');
+      if (!sw) throw new Error('the small block has no switch (#cv-ed-bar .ed-sw)');
+      if (!/Switch to Simple/.test(sw.getAttribute('aria-label') || '')) throw new Error('in Full the switch is labelled "' + sw.getAttribute('aria-label') + '" — it should name what it does (Switch to Simple editor)');
+      sw.click(); await c.sleep(120);
+      if (c.dlg.classList.contains('cv-ed-big')) throw new Error('tapping the switch opened the explanation — a tap on the switch only switches');
+      if (FM.editor.mode() !== 'simple') throw new Error('tapping the switch did not switch (mode ' + FM.editor.mode() + ')');
+      await c.sleep(400);
+      if (c.dlg.classList.contains('hidden')) await c.open();
+      const sw2 = document.querySelector('#cv-ed-bar .ed-sw');
+      if (!/Switch to Full/.test(sw2.getAttribute('aria-label') || '')) throw new Error('in Simple the switch is labelled "' + sw2.getAttribute('aria-label') + '" — it should say Switch to Full editor');
+      document.querySelector('#cv-ed-bar .ed-head').click(); await c.sleep(520); await c.land();
+      if (c.big() !== 'editor') throw new Error('a tap on the block’s bar did not open the explanation');
+      document.getElementById('cv-mini').click(); await c.sleep(520); await c.land();
+      document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
+      if (c.big() !== 'editor') throw new Error('What should you use? did not open the explanation');
+    });
+  });
+
+  test('980 cog T11 after a switch the cog closes, but not over an unapplied aspect pick, an unapplied background pick alone, or Friends open — and the pick or the Friends block is still there', { item: '980', budgetMs: 90000 }, async function () {
+    await smCog(async function (c) {
+      const sw = () => document.querySelector('#cv-ed-bar .ed-sw');
+      sw().click(); await c.sleep(600);
+      if (!c.dlg.classList.contains('hidden')) throw new Error('after a switch with nothing pending the cog stayed open (D23 A: it closes)');
+      await c.open();
+      /* an aspect pick he has not applied */
+      const P = FM.scene.project, cur = P.width > P.height ? '16:9' : '9:16', other = cur === '16:9' ? '1:1' : '16:9';
+      const chip = c.dlg.querySelector('.aspect-chip[data-aspect="' + other + '"]');
+      if (!chip) throw new Error('setup: no aspect chip ' + other + ' in the Canvas card');
+      chip.click(); await c.sleep(80);
+      sw().click(); await c.sleep(600);
+      if (c.dlg.classList.contains('hidden')) throw new Error('a switch closed the cog over an unapplied aspect pick (' + other + ') — the pick would be lost');
+      if (!chip.classList.contains('active') && !chip.classList.contains('on') && !chip.classList.contains('sel')) {
+        const on = c.dlg.querySelector('.aspect-chip.active, .aspect-chip.on, .aspect-chip.sel');
+        if (on && on.dataset.aspect !== other) throw new Error('after the switch the aspect pick went back to ' + on.dataset.aspect);
+      }
+      FM.closeCanvasDialog(); await c.sleep(120);
+      /* a background pick ALONE (DESIGN §21 F3: the summary leaves the background out) */
+      await c.open();
+      const bgNow = String(FM.scene.project.background || '').toLowerCase();
+      const swb = Array.prototype.find.call(c.dlg.querySelectorAll('.cv-bg-sw'), b => String(b.dataset.bg).toLowerCase() !== bgNow);
+      if (!swb) throw new Error('setup: no other background swatch in the Canvas card');
+      swb.click(); await c.sleep(80);
+      sw().click(); await c.sleep(600);
+      if (c.dlg.classList.contains('hidden')) throw new Error('a switch closed the cog over an unapplied background pick — the pick would be lost (the summary-based check missed it)');
+      FM.closeCanvasDialog(); await c.sleep(120);
+      /* Friends open */
+      await c.open();
+      document.getElementById('cv-fr-bar').click(); await c.sleep(520); await c.land();
+      if (c.big() !== 'friends') throw new Error('setup: Friends did not open');
+      sw().click(); await c.sleep(600);
+      if (c.dlg.classList.contains('hidden')) throw new Error('a switch closed the cog while Friends was the big block');
+      if (c.big() !== 'friends') throw new Error('after the switch the Friends block is no longer the big one (' + c.big() + ')');
+    });
+  });
+
+  test('980 cog T13 an export running refuses the switch with its line INSIDE the block, where it can be seen, never as a toast under the dialog', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      const was = FM._exporting;
+      try {
+        FM._exporting = true;
+        document.querySelector('#cv-ed-bar .ed-sw').click(); await c.sleep(150);
+        if (FM.editor.mode() !== 'full') throw new Error('the switch went through while an export was running');
+        const why = document.getElementById('cv-ed-why');
+        if (!why || !/export/i.test(why.textContent)) throw new Error('the refusal is not in the block (#cv-ed-why reads "' + (why && why.textContent) + '")');
+        /* it must be where he can see it: open the explanation and hit-test the line */
+        document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
+        const r = why.getBoundingClientRect();
+        const hit = r.width > 0 ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+        if (!hit || !(hit === why || why.contains(hit))) throw new Error('the refusal line is covered or off screen (the point hits ' + (hit ? hit.tagName + '#' + hit.id : 'nothing') + ')');
+      } finally { FM._exporting = was; }
+    });
+  });
+
+  test('980 cog T15 with reduced motion the swap is instant — no flight, no animation left running in the cog', { item: '980', budgetMs: 60000 }, async function () {
+    const mm0 = window.matchMedia;
+    try {
+      window.matchMedia = function (q) { return /prefers-reduced-motion:\s*reduce/.test(String(q)) ? { matches: true, media: q, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} } : mm0.call(window, q); };
+      await smCog(async function (c) {
+        document.getElementById('cv-ed-what').click(); await c.sleep(30);
+        if (c.big() !== 'editor') throw new Error('the swap to the Editor block did not happen at once under reduced motion');
+        if (c.dlg.classList.contains('cv-flying')) throw new Error('the swap flew under reduced motion');
+        const running = c.dlg.getAnimations({ subtree: true }).filter(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().duration > 0 && isFinite(a.effect.getComputedTiming().endTime) && (a.effect.target && a.effect.target.closest && a.effect.target.closest('#cv-editor, #cv-friends, .export-card')));
+        if (running.length) throw new Error(running.length + ' animation(s) still running in the cog under reduced motion');
+      });
+    } finally { window.matchMedia = mm0; }
+  });
+
 })();
