@@ -1428,7 +1428,7 @@ window.FM = window.FM || {};
             const had = new Set(FM.projects.list().map(x => x.id));
             const ok = await FM.projects.duplicate(p.id);
             render();
-            if (!ok) { if (FM.toast) FM.toast('Could not duplicate — storage is full'); return; }
+            if (!ok) { if (FM.toast) FM.toast('Could not duplicate this project — its files could not be read or saved. The original is unchanged.'); return; }
             const made = FM.projects.list().find(x => !had.has(x.id));
             if (made) revealCard(made.id);   // the copy lists FIRST — from down the list it landed off screen and Duplicate looked like it did nothing
           } },

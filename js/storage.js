@@ -176,7 +176,7 @@ window.FM = window.FM || {};
       r.onerror = () => rej(r.error);
     });
   }
-  function idbGet(db, key) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).get(key); rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null); } catch (e) { res(null); } }); }
+  function idbGet(db, key, strict) { return new Promise((res, rej) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).get(key); rq.onsuccess = () => res(rq.result); rq.onerror = () => strict ? rej(rq.error || new Error('Media read failed')) : res(null); } catch (e) { if (strict) rej(e); else res(null); } }); }
 
   /* ═══ THE POINTER READER (queue 915 clause 5, PHASE A) ════════════════════════════════════════════
    * His answer, 22 Sep: "Yes, one copy (Recommended)" — a clip reused from Add → Media is to be stored
@@ -216,10 +216,10 @@ window.FM = window.FM || {};
      existing "nothing stored" path handles it, and none of them can copy the dead pointer onward.
      A pointer answers `ref` too (phase B): the clip it becomes is still a pointer, so its next save, and
      every split, duplicate or paste of it, writes a few bytes instead of the whole file again. */
-  async function idbGetMedia(db, key) {
-    const v = await idbGet(db, key);
+  async function idbGetMedia(db, key, strict) {
+    const v = await idbGet(db, key, strict);
     if (!isRef(v)) return v;
-    const t = await idbGet(db, v.ref);
+    const t = await idbGet(db, v.ref, strict);
     if (!t || !t.file) return null;
     return { file: t.file, kind: v.kind || t.kind, rev: v.rev || 0, ref: v.ref };
   }
@@ -2821,13 +2821,16 @@ window.FM = window.FM || {};
       // duplicate the media blobs under the new layer ids so the copy survives deleting the original
       const wrote = [];
       let whole = true;
+      let db = null;
       try {
-        const db = await openDB();
+        db = await openDB();
         for (const oldId of Object.keys(re.map)) {
           /* queue 915 phase A: RESOLVED, so a reused clip's pointer is copied as the FILE — this release writes
              no pointers, and a whole copy is one every older build can read. A pointer at a shared copy that is
              gone answers null, like a clip with no record, and is not copied onward. */
-          const rec = await idbGetMedia(db, oldId);
+          // A failed read is not proof that the clip is absent. Roll the whole copy back;
+          // a temporary IDB error must never produce a card that claims to be complete.
+          const rec = await idbGetMedia(db, oldId, true);
           if (!rec) continue;
           /* queue 915 phase B: still the FILE, deliberately — a project copy is a whole copy any build can read,
              and it is a rare act next to a tile tap. The `ref` the reader now reports is left behind, so the copy
@@ -2837,8 +2840,8 @@ window.FM = window.FM || {};
           wrote.push(re.map[oldId]);
         }
         if (whole && id) { const th = await idbGet(db, 'thumb:' + id); if (th) { await idbPut(db, 'thumb:' + nid, th); _thumbCache.set(nid, th); } }   // copy the card thumbnail too (cosmetic — not part of "whole")
-        db.close();
       } catch (e) { whole = false; }
+      finally { if (db) db.close(); }
       if (whole) return done(true);
       try { const db = await openDB(); for (const k of wrote) await idbDel(db, k); await delThumb(db, nid); db.close(); } catch (e) {}
       try { localStorage.removeItem('fm.proj.' + nid); } catch (e) {}

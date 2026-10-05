@@ -127993,4 +127993,36 @@
     }
   });
 
+  test('TBD: a project duplicate with a media read error leaves no incomplete copy', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const prior = FM.projects.currentId(), realGet = IDBObjectStore.prototype.get, made = [];
+    const beforeKeys = () => Object.keys(localStorage).filter(k => /^fm\.proj\./.test(k)).sort().join(',');
+    try {
+      const source = await FM.projects.create({ name: 'Duplicate read probe', width: 200, height: 200 });
+      if (!source) throw new Error('source project could not be created');
+      made.push(source);
+      const clip = FM.makeLayer('image', { name: 'Stored clip' });
+      FM.scene.layers.push(clip);
+      if (!FM.storage.flushSync() || !(await FM.storage.writeMedia(clip.id, { file: new Blob(['probe'], { type: 'image/png' }), kind: 'image', rev: 0 })))
+        throw new Error('source clip was not persisted');
+      const count = FM.projects.list().length, keys = beforeKeys();
+      IDBObjectStore.prototype.get = function (key) {
+        if (key !== clip.id) return realGet.apply(this, arguments);
+        const request = { error: new DOMException('read failed', 'UnknownError') };
+        queueMicrotask(() => { if (request.onerror) request.onerror({ target: request }); });
+        return request;
+      };
+      if (await FM.projects.duplicate(source) !== false || FM.projects.list().length !== count || beforeKeys() !== keys)
+        throw new Error('the duplicate claimed success or left an incomplete project behind after IDB get failed');
+      IDBObjectStore.prototype.get = realGet;
+      if (!(await FM.projects.duplicate(source))) throw new Error('valid duplicate control was refused');
+      const copy = FM.projects.list().find(p => p.name === 'Duplicate read probe copy');
+      if (!copy) throw new Error('valid duplicate did not create its card');
+      made.push(copy.id);
+    } finally {
+      IDBObjectStore.prototype.get = realGet;
+      try { await FM.projects.open(prior || null, { confirmed: true }); } catch (e) {}
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+    }
+  });
+
 })();
