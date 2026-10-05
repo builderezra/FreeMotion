@@ -121692,4 +121692,33 @@
       if (Math.abs(run.start - 2) > 1e-9 || Math.abs(run.start + run.duration - 8) > 1e-9) throw new Error('the title that ran to 13 should now end at 8 (13 − the 5 s that went): ' + run.start + '..' + (run.start + run.duration));
     });
   });
+
+  test('simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound: refused until 2.4 moves ramps (or kept in step)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    const srcAt = (name, t) => { const l = FM.scene.layers.find(x => x.name === name && t >= x.start - 1e-9 && t < x.start + x.duration); return l ? FM.layerLocalTime(l, t) : null; };
+    /* each case: the sound that played at `was` must play at `now` after the delete — or the delete is refused, unchanged */
+    const run = async (tag, song, was, now, wantRefused) => {
+      await smP2((W, H) => [song(W, H), smV('D', 12, 2, W, H), smV('C', 8, 4, W, H), smV('B', 4, 4, W, H), smV('A', 0, 4, W, H)], async function (v) {
+        const before = was.map(t => srcAt('Song', t)), d0 = v.doc(), n0 = v.steps();
+        if (before.some(x => x == null || !isFinite(x))) throw new Error('CONTROL ' + tag + ': no source time before the delete: ' + before);
+        FM.selectLayer(v.L('B').id);
+        v.key('Backspace'); await v.idle();
+        if (!v.L('B')) {                                 // it went through: the sound must still be in step
+          if (wantRefused) { fails.push(tag + ': the delete went through'); }
+          now.forEach((t, k) => { const x = srcAt('Song', t); if (!(x != null && Math.abs(x - before[k]) < 1e-3)) fails.push(tag + ': at ' + t + ' s the song plays source ' + x + ', but ' + before[k] + ' played there before the cut (the ramp stayed behind)'); });
+        } else if (v.doc() !== d0 || v.steps() !== n0) fails.push(tag + ': a refused delete changed the document (it said “' + v.say() + '”, ' + (v.steps() - n0) + ' step(s), layers ' + JSON.stringify(FM.scene.layers.map(l => [l.name, l.start, l.duration])) + ')');
+        else if (!/has moves/.test(v.say())) fails.push(tag + ': refused without the moves line: “' + v.say() + '”');
+      });
+    };
+    const ramp = (s, e) => ({ kf: [{ t: s, v: 0.5, e: 'linear' }, { t: e, v: 2, e: 'linear' }] });
+    /* CONTROL: a song with no ramp, starting inside B (case i), is cut and stays in step */
+    await run('flat (i)', (W, H) => smSong('Song', 5, 6, W, H, { trimStart: 0 }), [8.5, 9.5, 10.5], [4.5, 5.5, 6.5], false);
+    if (fails.length) throw new Error('CONTROL failed: ' + fails.join(' · '));
+    /* (i) a ramped song starting inside the deleted clip */
+    await run('ramp (i)', (W, H) => smSong('Song', 5, 6, W, H, { trimStart: 0, speed: ramp(5, 11) }), [8.5, 9.5, 10.5], [4.5, 5.5, 6.5]);
+    /* (iii) a ramped song running across the deleted clip: split, and its later piece trimmed */
+    await run('ramp (iii)', (W, H) => smSong('Song', 2, 8, W, H, { trimStart: 0, speed: ramp(2, 10) }), [8.5, 9.5], [4.5, 5.5]);
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();

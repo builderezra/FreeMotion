@@ -410,7 +410,9 @@ window.FM = window.FM || {};
     });
     for (let k = 0; k < cut.length; k++) {
       const l = map.get(cut[k]), s = +l.start || 0, e = s + (+l.duration || 0);
-      if (S.keyCount(l) > 0) return refusePlan('cutKeys', { name: S.itemWord(l, R) });
+      /* a speed ramp is absolute-time keys like any other (keyCount leaves it out for the tail fit's sake): cutting the item would
+         leave the ramp behind its footage, so it refuses with the rest until 2.4's riderKeys moves it (review finding 19) */
+      if (S.keyCount(l) > 0 || (FM.isAnimated && FM.isAnimated(l.speed))) return refusePlan('cutKeys', { name: S.itemWord(l, R) });
       const media = l.type === 'video';
       if (s >= ca - 1e-9) {                                  // (i) starts inside the deleted span
         if (e - b < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
