@@ -1,0 +1,8 @@
+# #1013 — empty AAC track guard on v17.23
+
+- Starting commit: `b46b47d385f7189486eba0f8e540a3fbf10dcdd4` (`ssh/main`, v17.23); branch `chatgpt/1013-empty-aac` in the existing managed Codex worktree.
+- Source: shared `REQUESTS.md` #1013, batch2 `VERIFIED.md` §1a item 1, and the reviewed older-chain commits `f25e15d3` plus `f3109105`. Shared `audits/*.json` had no matching zero-chunk AAC finding. This ports their fix to the current base; the old `ed27177e` chain remains untouched.
+- Changed: `js/exporter.js`, `js/app.js`, and one focused `tests/tests.js` regression tagged `{ item: '1013' }`. No `index.html` cache tag changed; the builder bumps it from live at landing.
+- A resolved AAC flush with zero chunks now drops the MP4 audio track before the muxer is built, and the ready card/report say there is no sound. A real track reports encoded frame count, bytes, duration and decoded peak. A late encoder callback after a dropped track is warned and noted in that export's report.
+- Catching test: with the product fix temporarily reverted to v17.23, the focused muted Chromium test failed (0/1) because the zero-chunk MP4 still contained `soun` and `mp4a` (`bytes:1293`). With the fix restored it passed (1/1), including an audible positive control, empty-track card/report, decoded peak and late callback. Both runs used Codex port 8894 at about 18:05–18:08 UTC on 5 Oct; one incomplete app-frame bootstrap was discarded. Changed JavaScript syntax and diff checks passed. Temporary mute-driver edit was restored.
+- Local only. No push, merge, PR, shared-checkout edit, deployment or release.
