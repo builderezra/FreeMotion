@@ -78,7 +78,9 @@ window.FM = window.FM || {};
   function busyReason() {
     if (FM._exporting) return 'export';
     if (FM.voiceRec && FM.voiceRec.isOpen && FM.voiceRec.isOpen()) return 'recording';   // §21 F2: open at all, not only recording (refusal line: "Close the recorder first")
-    if ((FM.spine && FM.spine.running) || body().classList.contains('sm-running')) return 'busy';
+    /* a Simple add still reading its files, or Simple edits queued behind the running one, are a command in flight too (§3.7).
+       Both are only ever non-zero from Simple's own commands, so in Full this answers exactly as before. */
+    if ((FM.spine && (FM.spine.running || FM.spine.reading > 0 || (FM.spine.queue && FM.spine.queue.length))) || body().classList.contains('sm-running')) return 'busy';
     if ((FM.timeline && FM.timeline.gestureLive && FM.timeline.gestureLive()) || (FM.canvasGestureLive && FM.canvasGestureLive())) return 'drag';
     return '';
   }

@@ -122243,4 +122243,28 @@
       FM.time = 0; await FM.spine.cmd.addMusic([q921wav(1, 440, 'song.wav')]); await v.idle(); await onDisk('Sound › Music');
     });
   });
+
+
+  test('simple P2.2 · review the switch to Full waits while Simple is still reading the files an add picked, so a Simple ripple never lands after Full is on screen (§3.7)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const png = await smPng('#00ffff', 'slow.png');
+    const li0 = FM.loadImageFile;
+    try {
+      await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        let open = null;
+        FM.loadImageFile = f => new Promise(res => { open = () => res(li0.call(FM, f)); });   // a slow first read, released by hand
+        const pending = FM.spine.cmd.insert([png], 1);
+        await v.sleep(30);
+        if (!open) throw new Error('CONTROL: the insert never started reading its file');
+        const sw = await FM.editor.request('full');
+        const stillSimple = document.body.classList.contains('ed-simple');
+        open(); await pending; await v.idle();
+        const ins = FM.scene.layers.find(l => l.type === 'image');
+        if (sw !== false || !stillSimple) throw new Error('the switch to Full went through while the add was still reading its file; the insert then rippled with Full on screen (B at ' + v.L('B').start + ')');
+        if (!ins || ins.start !== 3 || v.L('B').start !== 3 + ins.duration) throw new Error('CONTROL: the insert did not land at 3 with B after it (it said “' + v.say() + '”)');
+        /* CONTROL: once nothing is reading or running, the switch goes through */
+        if ((await FM.editor.request('full')) !== true || document.body.classList.contains('ed-simple')) throw new Error('CONTROL: the switch is still refused after the add settled');
+      });
+    } finally { FM.loadImageFile = li0; }
+  });
 })();

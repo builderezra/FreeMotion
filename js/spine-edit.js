@@ -795,6 +795,7 @@ window.FM = window.FM || {};
      stores each tap's intent; never coalesced. */
   S.running = false;
   S.queue = [];
+  S.reading = 0;   // adds still reading their picked files (before the runner): the editor switch waits on it (busyReason)
   const seq = () => (FM.history && FM.history._commitSeq) ? FM.history._commitSeq() : 0;
   S.queueStep = function (kind) {
     if (S.queue.length >= 4) { S.say(line('wait')); return false; }
@@ -805,7 +806,9 @@ window.FM = window.FM || {};
   };
   S.drain = function () {
     while (S.queue.length && !S.running) {
-      if (FM.history && FM.history.isMuted && FM.history.isMuted()) return;
+      /* re-armed, never dropped: a queue left waiting on a muted history held nothing open and nothing came back for it, and the
+         switch now waits on the queue (busyReason), so a stranded entry would hold it shut (review finding 10) */
+      if (FM.history && FM.history.isMuted && FM.history.isMuted()) { setTimeout(S.drain, 30); return; }
       if (FM.jobDepth && FM.jobDepth() > 0) { setTimeout(S.drain, 30); return; }
       const e = S.queue.shift();
       if (e.kind !== 'edit' && seq() - e.seq > 1) { S.say(line('skipped')); continue; }   // an edit is an intent, re-planned now (§3.7)
@@ -1341,9 +1344,20 @@ window.FM = window.FM || {};
     return plan;
   };
 
+  /* READ, THEN RUN, with the switch held shut between (review finding 10): readPicked can take seconds (a decode, a 20 s metadata
+     wait), and S.running is not set until S.edit starts, so the cog's switch went through and the Simple ripple, its adoption
+     and its refusals (spoken into a hidden row) all landed in Full. S.edit sets S.running synchronously, so there is no gap. */
+  function afterRead(files, run) {
+    return (async () => {
+      S.reading++;
+      let picked;
+      try { picked = await S.readPicked(files); } finally { S.reading--; }
+      return run(picked);
+    })();
+  }
   Object.assign(S.cmd, {
-    append(files) { return (async () => { const picked = await S.readPicked(files); return S.edit('Add clips', R => S.planAppend(R, picked)); })(); },
-    insert(files, j) { return (async () => { const picked = await S.readPicked(files); return S.edit('Add clips', R => S.planInsert(R, picked, j)); })(); },
+    append(files) { return afterRead(files, picked => S.edit('Add clips', R => S.planAppend(R, picked))); },
+    insert(files, j) { return afterRead(files, picked => S.edit('Add clips', R => S.planInsert(R, picked, j))); },
     move(id, dir) { return S.edit('Move clip', R => { const j = S.moveIndexFor(R, id, dir); return j < 0 ? refusePlan(dir < 0 ? 'atStart' : 'atEnd') : S.planReorder(R, id, j); }); },
     lift(id) { return S.edit('Lift off', R => S.planLift(R, id)); },
     intoRow(id) { return S.edit('Put in the clip row', R => S.planIntoRow(R, id)); },
@@ -1353,8 +1367,8 @@ window.FM = window.FM || {};
     closeAll() { return S.edit('Close all gaps', R => S.planCloseAll(R)); },
     endWithVideo() { return S.edit('End with the video', R => S.planEndWithVideo(R)); },
     addText() { return S.edit('Add text', R => S.planAddText(R)); },
-    addOverlay(files) { return (async () => { const picked = await S.readPicked(files); return S.edit('Add overlay', R => S.planAddOverlay(R, picked)); })(); },
-    addMusic(files) { return (async () => { const picked = await S.readPicked(files); return S.edit('Add music', R => S.planAddMusic(R, picked)); })(); },
+    addOverlay(files) { return afterRead(files, picked => S.edit('Add overlay', R => S.planAddOverlay(R, picked))); },
+    addMusic(files) { return afterRead(files, picked => S.edit('Add music', R => S.planAddMusic(R, picked))); },
     length(id, newDur) { return S.edit('Trim clip', R => S.planTrimTail(R, id, newDur, { typed: true })); },
     trimStartBy(id, h) { return S.edit('Trim clip', R => S.planTrimHead(R, id, h, { typed: true })); }
   });
