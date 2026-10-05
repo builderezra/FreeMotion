@@ -122192,6 +122192,44 @@
     }
   });
 
+  test('690 C31 Time Warp Scan holds keyed Gamma with a moving shape', { item: 'TBD', budgetMs: 30000 }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 16, y: 40, shapeW: 30, shapeH: 70,
+      fill: '#b46c38', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 16, e: 'linear' }, { t: 2, v: 98, e: 'linear' }] };
+    const gamma = FM.fxRegistry.makeInstance('gamma');
+    gamma.params.gamma = { kf: [{ t: 0, v: 0.55, e: 'linear' }, { t: 2, v: 3.4, e: 'linear' }] };
+    gamma.params.blue = 1.6;
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [gamma, warp];
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const width of [120, 60]) for (const mode of [0, 1]) {
+      warp.params.mode = mode;
+      FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(24 / 30, width);
+      if (!same(cold, played)) {
+        const i = cold.findIndex((v, j) => v !== played[j]);
+        throw new Error((mode ? 'Reveal' : 'Freeze') + ' keyed Gamma cold seek differs at ' +
+          (i >> 2) + ': cold=' + cold[i] + ', played=' + played[i] + ', width=' + width);
+      }
+      layer.effects = [gamma];
+      const live = frame(24 / 30, width);
+      layer.effects = [gamma, warp];
+      if (same(cold, live)) throw new Error('Control: scan did not retain the historical Gamma plate');
+    }
+  });
+
   test('690 Time Warp Scan cold-seeks a moving shape through a hard vector mask', { item: 'TBD', budgetMs: 30000 }, function () {
     const layer = FM.makeLayer('shape', { shape: 'rect', x: 16, y: 40, shapeW: 46, shapeH: 64,
       fill: '#e28842', start: 0, duration: 2 });

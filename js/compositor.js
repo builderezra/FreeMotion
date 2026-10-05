@@ -13709,7 +13709,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (warpIndex >= 0
         && ((layer.type === 'shape' && FM.fillModeOf(layer) !== 'media'
           && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'
-            || e.type === 'levels'
+            || e.type === 'levels' || e.type === 'gamma'
             || (warpPenSafe && e.type === 'penmask' && e.maskId === warpMask.id)))
           || (still && still.kind === 'image' && still.el && !layer._cropEditing
             && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'
