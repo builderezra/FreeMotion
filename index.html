@@ -1181,7 +1181,7 @@
          The flag is the same one that loads the test agent, and needs loopback to do anything at all. */
       window.addEventListener('load', function () {
         var hadController = !!navigator.serviceWorker.controller;   // was an app already installed?
-        navigator.serviceWorker.register('sw.js?v=1', { updateViaCache: 'none' }).then(function (reg) {
+        navigator.serviceWorker.register('sw.js?v=2', { updateViaCache: 'none' }).then(function (reg) {
           if (reg && reg.update) { try { reg.update(); } catch (e) {} }   // check for a new build every launch
         }).catch(function () {});
         var reloaded = false;
@@ -1202,7 +1202,7 @@
         setTimeout(function () { try { if (window.FM && FM.checkStaleShell) FM.checkStaleShell(); } catch (e) {} }, 1500);
       });
     }
-    // One-tap "force latest": TAP the version label to nuke the service worker + all caches and reload
+    // One-tap "force latest": TAP the version label to clear this app's worker/cache and reload
     // fresh. The bulletproof escape hatch when an installed PWA is serving a stale build.
     /* ⚠️ queue 690 (HUNT-d): …BUT ONLY ONCE THE NEW BUILD CAN ACTUALLY BE FETCHED. With no signal (a train, or Wi-Fi
        that goes nowhere while navigator.onLine still says true) the wipe below removed the worker and its cache and
@@ -1220,6 +1220,16 @@
         var done = function (ok) { clearTimeout(t); res(ok); };
         try { fetch(url, ctl ? { cache: 'no-store', signal: ctl.signal } : { cache: 'no-store' }).then(function (r) { done(!!(r && r.ok)); }, function () { done(false); }); }
         catch (e) { done(false); }
+      });
+    }
+    function fmClearOwnOfflineCopy(sw, cacheStore, href) {
+      var scope = new URL('./', href).href;
+      return (sw ? sw.getRegistrations().then(function (rs) {
+        return Promise.all(rs.filter(function (r) { return r.scope === scope; }).map(function (r) { return r.unregister(); }));
+      }) : Promise.resolve()).then(function () {
+        return cacheStore ? cacheStore.keys().then(function (ks) {
+          return Promise.all(ks.filter(function (k) { return k.indexOf('freemotion-') === 0; }).map(function (k) { return cacheStore.delete(k); }));
+        }) : null;
       });
     }
     window.addEventListener('load', function () {
@@ -1265,8 +1275,7 @@
               // Navigate to a BRAND-NEW URL (cache-busted) rather than reload(): a reload can still be served by
               // a stuck old service worker, but a never-seen URL forces a real network fetch of every asset.
               var done = function () { var base = location.href.split('?')[0].split('#')[0]; location.replace(base + '?fresh=' + Date.now()); };
-              (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve())
-                .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; })
+              fmClearOwnOfflineCopy(navigator.serviceWorker, window.caches, location.href)
                 .then(done, done);
               });
             });

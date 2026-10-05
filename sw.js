@@ -44,7 +44,9 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.map(k => (k === CACHE ? null : caches.delete(k))));
+    // Cache Storage belongs to the whole origin, which also hosts Ezra's other apps. Only old
+    // FreeMotion caches are ours to remove when this worker activates.
+    await Promise.all(keys.filter(k => k.indexOf('freemotion-') === 0 && k !== CACHE).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });

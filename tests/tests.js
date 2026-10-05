@@ -127751,4 +127751,39 @@
     }
   });
 
+  test('690 FreeMotion offline cleanup keeps other apps’ workers and caches', { item: 'TBD', budgetMs: 15000 }, async function () {
+    const src = await fetch('../sw.js?probe=own-cache-only').then(r => r.text());
+    const handlers = {}, removed = [];
+    const worker = {
+      location: { origin: location.origin },
+      addEventListener(type, fn) { handlers[type] = fn; },
+      clients: { claim: () => Promise.resolve() }
+    };
+    const mockCaches = {
+      keys: () => Promise.resolve(['freemotion-v0', 'freemotion-v1', 'listing-kit-v92', 'other-app']),
+      delete: key => { removed.push(key); return Promise.resolve(true); }
+    };
+    new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(worker, mockCaches, fetch, Response, URL);
+    if (!handlers.activate) throw new Error('setup: service worker has no activate handler');
+    let lifetime;
+    handlers.activate({ waitUntil(p) { lifetime = p; } });
+    await lifetime;
+    if (JSON.stringify(removed) !== JSON.stringify(['freemotion-v0']))
+      throw new Error('worker deleted another app cache or retained an old FreeMotion cache: ' + removed.join(','));
+
+    if (typeof window.fmClearOwnOfflineCopy !== 'function') throw new Error('setup: version chip has no scoped cleanup');
+    const scope = new URL('./', location.href).href, unregistered = [], chipDeleted = [];
+    const registrations = [
+      { scope, unregister() { unregistered.push('FreeMotion'); return Promise.resolve(true); } },
+      { scope: new URL('/listing-kit/', location.href).href, unregister() { unregistered.push('Listing Kit'); return Promise.resolve(true); } }
+    ];
+    await window.fmClearOwnOfflineCopy(
+      { getRegistrations: () => Promise.resolve(registrations) },
+      { keys: () => Promise.resolve(['listing-kit-v92', 'freemotion-v1', 'freemotion-old']), delete(k) { chipDeleted.push(k); return Promise.resolve(true); } },
+      location.href
+    );
+    if (unregistered.join(',') !== 'FreeMotion' || chipDeleted.sort().join(',') !== 'freemotion-old,freemotion-v1')
+      throw new Error('version chip touched other apps or failed to clear its own copy: ' + unregistered + ' / ' + chipDeleted);
+  });
+
 })();
