@@ -465,7 +465,14 @@ window.FM = window.FM || {};
       jumpHead.appendChild(el('div', 'set-label', 'Reports from this device'));
       jumpHead.appendChild(el('div', 'set-hint', 'Your last playback, export, project open, scrub and blank clip — the reports the unblock list asks you to copy.'));
       const jumpBtn = el('button', 'set-action', 'Show'); jumpBtn.type = 'button';
-      jumpBtn.addEventListener('click', () => { const r = document.getElementById('set-reports'); if (r && r._open) r._open(true); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); });   // #967 batch 2: the reports are one folded row — it opens first
+      jumpBtn.addEventListener('click', () => {
+        const r = document.getElementById('set-reports');
+        if (r && r._open) r._open(true);
+        if (r && r.scrollIntoView) {
+          const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          r.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+        }
+      });   // #967 batch 2: the reports are one folded row — it opens first
       jump.append(jumpHead, jumpBtn);
       body.appendChild(group(jump));
     }

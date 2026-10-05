@@ -127132,4 +127132,35 @@
     }
   });
 
+  test('TBD: Settings reports jump respects reduced motion', { item: 'TBD' }, function () {
+    const homeWasOpen = FM.home && FM.home.isOpen && FM.home.isOpen();
+    const settingsWasOpen = FM.settings.isOpen();
+    const mediaDescriptor = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    const matchMedia = window.matchMedia && window.matchMedia.bind(window);
+    let reports, scrollDescriptor, reduce = true, options;
+    try {
+      if (homeWasOpen) FM.home.close();
+      FM.settings.open();
+      const jump = document.querySelector('.set-jump .set-action');
+      reports = document.getElementById('set-reports');
+      if (!jump || !reports) throw new Error('the project Settings reports jump is missing');
+      scrollDescriptor = Object.getOwnPropertyDescriptor(reports, 'scrollIntoView');
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: query =>
+        query === '(prefers-reduced-motion: reduce)' ? { matches: reduce } : matchMedia ? matchMedia(query) : { matches: false } });
+      reports.scrollIntoView = value => { options = value; };
+      jump.click();
+      if (!options || options.behavior !== 'auto') throw new Error('reduced-motion reports jump animated the scroll');
+      reduce = false; options = null;
+      jump.click();
+      if (!options || options.behavior !== 'smooth') throw new Error('ordinary reports jump lost its smooth scroll');
+    } finally {
+      if (reports && scrollDescriptor) Object.defineProperty(reports, 'scrollIntoView', scrollDescriptor);
+      else if (reports) delete reports.scrollIntoView;
+      if (mediaDescriptor) Object.defineProperty(window, 'matchMedia', mediaDescriptor);
+      else delete window.matchMedia;
+      if (!settingsWasOpen && FM.settings.isOpen()) FM.settings.close();
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
 })();
